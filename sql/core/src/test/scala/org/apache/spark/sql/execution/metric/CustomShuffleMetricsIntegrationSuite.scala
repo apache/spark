@@ -29,6 +29,7 @@ import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.sql.{LocalSparkSession, SparkSession}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.metric.SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN
 import org.apache.spark.util.MetricUtils
 
 /**
@@ -41,7 +42,7 @@ import org.apache.spark.util.MetricUtils
 class CustomShuffleMetricsIntegrationSuite
   extends SparkFunSuite with LocalSparkSession with AdaptiveSparkPlanHelper {
 
-  private def withPluginSession(pluginClass: Option[String])(f: SparkSession => Unit): Unit = {
+  private def withPluginSession[T](pluginClass: Option[String])(f: SparkSession => T): T = {
     val conf = new SparkConf(false)
       .setMaster("local[2]")
       .setAppName("custom-shuffle-metrics")
@@ -77,6 +78,13 @@ class CustomShuffleMetricsIntegrationSuite
       assert(!exchange.metrics.contains(TestCustomMetricShuffleDataIO.MetricName))
       // Only the built-in exchange metrics are present; no custom key leaks in.
       assert(exchange.metrics.keySet.forall(!_.startsWith("test")))
+    }
+  }
+
+  test("a custom metric colliding with a Spark-owned name is dropped and cannot shadow it") {
+    withPluginSession(Some(classOf[TestCollidingMetricShuffleDataIO].getName)) { spark =>
+      val exchange = runShuffleAndGetExchange(spark)
+      assert(exchange.metrics(SHUFFLE_RECORDS_WRITTEN).value > 0)
     }
   }
 }
@@ -147,5 +155,33 @@ class TestCustomMetricMapOutputWriter(delegate: ShuffleMapOutputWriter)
     new CustomShuffleTaskMetric {
       override def name(): String = TestCustomMetricShuffleDataIO.MetricName
       override def value(): Long = TestCustomMetricShuffleDataIO.PerTaskValue
+    })
+}
+
+/**
+ * A [[ShuffleDataIO]] that delegates all real work to the local-disk implementation but declares a
+ * custom driver metric using a Spark-owned name (`shuffleRecordsWritten`).
+ */
+class TestCollidingMetricShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
+  private val delegate = new LocalDiskShuffleDataIO(sparkConf)
+
+  override def driver(): ShuffleDriverComponents =
+    new TestCollidingMetricDriverComponents(delegate.driver())
+
+  override def executor(): ShuffleExecutorComponents = delegate.executor()
+}
+
+class TestCollidingMetricDriverComponents(delegate: ShuffleDriverComponents)
+  extends ShuffleDriverComponents {
+
+  override def initializeApplication(): JMap[String, String] = delegate.initializeApplication()
+
+  override def cleanupApplication(): Unit = delegate.cleanupApplication()
+
+  override def supportedCustomMetrics(): Array[CustomShuffleMetric] = Array(
+    new CustomShuffleMetric {
+      override def name(): String = SHUFFLE_RECORDS_WRITTEN
+      override def description(): String = "colliding shuffle records written"
+      override def metricType(): String = MetricUtils.SUM_METRIC
     })
 }

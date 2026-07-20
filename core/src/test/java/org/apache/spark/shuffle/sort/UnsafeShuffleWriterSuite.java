@@ -321,6 +321,25 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   }
 
   @Test
+  public void exposesCustomShuffleMetricsFromSingleSpillWriter() throws Exception {
+    CustomShuffleTaskMetric[] reported = new CustomShuffleTaskMetric[] {
+      new TestCustomShuffleTaskMetric("s3BytesUploaded", 4096L)
+    };
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true,
+      new CustomMetricReportingExecutorComponents(
+        new LocalDiskShuffleExecutorComponents(conf, blockManager, shuffleBlockResolver),
+        reported));
+    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
+    for (int i = 0; i < NUM_PARTITIONS; i++) {
+      dataToWrite.add(new Tuple2<>(i, i));
+    }
+    writer.write(dataToWrite.iterator());
+    writer.stop(true);
+    assertEquals(1, spillFilesCreated.size());
+    assertArrayEquals(reported, writer.currentMetricsValues());
+  }
+
+  @Test
   public void writeWithoutSpilling() throws Exception {
     // In this example, each partition should have exactly one record:
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();

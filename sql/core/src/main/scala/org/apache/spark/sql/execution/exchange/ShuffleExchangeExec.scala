@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
 import org.apache.spark._
+import org.apache.spark.internal.LogKeys.METRIC_NAME
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.serializer.Serializer
@@ -200,14 +201,25 @@ case class ShuffleExchangeExec(
   private[sql] lazy val readMetrics =
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
 
-  private lazy val customWriteMetrics: Map[String, SQLMetric] =
-    CustomShuffleMetrics.createMetrics(
-      sparkContext, sparkContext.shuffleDriverComponents.supportedCustomMetrics())
-
-  override lazy val metrics = Map(
+  private lazy val sparkMetrics: Map[String, SQLMetric] = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")
-  ) ++ readMetrics ++ writeMetrics ++ customWriteMetrics
+  ) ++ readMetrics ++ writeMetrics
+
+  // Drop plugin metrics whose names collide with Spark-owned ones so they can't shadow the real
+  // accumulators (e.g. `shuffleRecordsWritten`, which feeds AQE).
+  private lazy val customWriteMetrics: Map[String, SQLMetric] = {
+    val (reserved, allowed) = sparkContext.shuffleDriverComponents.supportedCustomMetrics()
+      .partition(metric => sparkMetrics.contains(metric.name()))
+    if (reserved.nonEmpty) {
+      logWarning(log"Ignoring custom shuffle metrics whose names collide with Spark-owned " +
+        log"Exchange metrics: " +
+        log"${MDC(METRIC_NAME, reserved.map(_.name()).sorted.mkString(", "))}.")
+    }
+    CustomShuffleMetrics.createMetrics(sparkContext, allowed)
+  }
+
+  override lazy val metrics = sparkMetrics ++ customWriteMetrics
 
   override def nodeName: String = "Exchange"
 
