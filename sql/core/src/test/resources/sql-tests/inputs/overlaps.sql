@@ -51,3 +51,15 @@ SELECT (TIMESTAMP'2024-01-01 09:00:00', TIMESTAMP'2024-01-01 12:00:00') OVERLAPS
 
 -- TIMESTAMP_NTZ overlapping periods
 SELECT (TIMESTAMP_NTZ'2024-01-01 09:00:00', TIMESTAMP_NTZ'2024-01-01 12:00:00') OVERLAPS (TIMESTAMP_NTZ'2024-01-01 11:00:00', TIMESTAMP_NTZ'2024-01-01 13:00:00');
+
+-- Error cases: mixed types rejected
+SELECT (DATE'2024-01-01', DATE'2024-06-30') OVERLAPS (TIMESTAMP'2024-03-01 00:00:00', TIMESTAMP'2024-12-31 00:00:00');
+
+-- Error cases: non-datetime types rejected
+SELECT (1, 5) OVERLAPS (3, 7);
+
+-- TIME interval overflow (interval form crossing midnight throws DATETIME_OVERFLOW)
+SELECT (TIME'23:00:00', INTERVAL '3' HOUR) OVERLAPS (TIME'01:00:00', TIME'04:00:00');
+
+-- WHERE clause filter (exercises codegen fallback path)
+SELECT * FROM VALUES (TIME'09:00:00', TIME'12:00:00'), (TIME'14:00:00', TIME'16:00:00') AS t(start_t, end_t) WHERE (start_t, end_t) OVERLAPS (TIME'11:00:00', TIME'15:00:00');

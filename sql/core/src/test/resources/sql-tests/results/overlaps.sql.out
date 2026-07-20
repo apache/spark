@@ -141,3 +141,73 @@ SELECT (TIMESTAMP_NTZ'2024-01-01 09:00:00', TIMESTAMP_NTZ'2024-01-01 12:00:00') 
 struct<(TIMESTAMP_NTZ '2024-01-01 09:00:00', TIMESTAMP_NTZ '2024-01-01 12:00:00') OVERLAPS (TIMESTAMP_NTZ '2024-01-01 11:00:00', TIMESTAMP_NTZ '2024-01-01 13:00:00'):boolean>
 -- !query output
 true
+
+
+-- !query
+SELECT (DATE'2024-01-01', DATE'2024-06-30') OVERLAPS (TIMESTAMP'2024-03-01 00:00:00', TIMESTAMP'2024-12-31 00:00:00')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.OVERLAPS_MIXED_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "sqlExpr" : "\"(DATE '2024-01-01', DATE '2024-06-30') OVERLAPS (TIMESTAMP '2024-03-01 00:00:00', TIMESTAMP '2024-12-31 00:00:00')\"",
+    "types" : "DATE, DATE, TIMESTAMP, TIMESTAMP"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 117,
+    "fragment" : "(DATE'2024-01-01', DATE'2024-06-30') OVERLAPS (TIMESTAMP'2024-03-01 00:00:00', TIMESTAMP'2024-12-31 00:00:00')"
+  } ]
+}
+
+
+-- !query
+SELECT (1, 5) OVERLAPS (3, 7)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.OVERLAPS_UNSUPPORTED_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "INT",
+    "sqlExpr" : "\"(1, 5) OVERLAPS (3, 7)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "(1, 5) OVERLAPS (3, 7)"
+  } ]
+}
+
+
+-- !query
+SELECT (TIME'23:00:00', INTERVAL '3' HOUR) OVERLAPS (TIME'01:00:00', TIME'04:00:00')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "add INTERVAL '03' HOUR to the time value TIME '23:00:00'"
+  }
+}
+
+
+-- !query
+SELECT * FROM VALUES (TIME'09:00:00', TIME'12:00:00'), (TIME'14:00:00', TIME'16:00:00') AS t(start_t, end_t) WHERE (start_t, end_t) OVERLAPS (TIME'11:00:00', TIME'15:00:00')
+-- !query schema
+struct<start_t:time(6),end_t:time(6)>
+-- !query output
+09:00:00	12:00:00
+14:00:00	16:00:00

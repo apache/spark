@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types.{BooleanType, DataType, DateType, TimestampNTZType, TimestampType, TimeType}
@@ -44,7 +44,7 @@ case class Overlaps(
     end1: Expression,
     start2: Expression,
     end2: Expression)
-  extends Expression with QuaternaryLike[Expression] {
+  extends Expression with QuaternaryLike[Expression] with CodegenFallback {
 
   override def first: Expression = start1
   override def second: Expression = end1
@@ -67,13 +67,15 @@ case class Overlaps(
     // Check all are the same datetime family (after interval resolution)
     val distinctTypes = types.map(canonicalType).distinct
     if (distinctTypes.length != 1) {
-      TypeCheckResult.TypeCheckFailure(
-        s"All endpoints in OVERLAPS must be the same datetime type, " +
-          s"but got ${types.map(_.sql).mkString(", ")}")
+      TypeCheckResult.DataTypeMismatch(
+        errorSubClass = "OVERLAPS_MIXED_TYPES",
+        messageParameters = Map(
+          "types" -> types.map(_.sql).mkString(", ")))
     } else if (!isSupportedType(distinctTypes.head)) {
-      TypeCheckResult.TypeCheckFailure(
-        s"OVERLAPS requires datetime endpoints (TIME, DATE, TIMESTAMP, or TIMESTAMP_NTZ), " +
-          s"but got ${distinctTypes.head.sql}")
+      TypeCheckResult.DataTypeMismatch(
+        errorSubClass = "OVERLAPS_UNSUPPORTED_TYPE",
+        messageParameters = Map(
+          "dataType" -> distinctTypes.head.sql))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -91,18 +93,6 @@ case class Overlaps(
 
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // Fall back to interpreted evaluation
-    val thisTerm = ctx.addReferenceObj("overlaps", this)
-    val inputTerm = ctx.INPUT_ROW
-    ev.copy(code =
-      code"""
-        Object ${ev.value}Obj = $thisTerm.eval($inputTerm);
-        boolean ${ev.isNull} = ${ev.value}Obj == null;
-        boolean ${ev.value} = ${ev.isNull} ? false : (Boolean) ${ev.value}Obj;
-      """)
-  }
-
   override def eval(input: InternalRow): Any = {
     val s1 = start1.eval(input)
     val e1 = end1.eval(input)
@@ -116,35 +106,19 @@ case class Overlaps(
 
     start1.dataType match {
       case DateType =>
-        overlapCheck(s1.asInstanceOf[Int], e1.asInstanceOf[Int],
-          s2.asInstanceOf[Int], e2.asInstanceOf[Int])
+        overlapCheck(s1.asInstanceOf[Int].toLong, e1.asInstanceOf[Int].toLong,
+          s2.asInstanceOf[Int].toLong, e2.asInstanceOf[Int].toLong)
       case _: TimeType | TimestampType | TimestampNTZType =>
         overlapCheck(s1.asInstanceOf[Long], e1.asInstanceOf[Long],
           s2.asInstanceOf[Long], e2.asInstanceOf[Long])
-      case _ => null
+      case other =>
+        throw SparkException.internalError(
+          s"Unexpected data type in OVERLAPS evaluation: ${other.sql}")
     }
   }
 
   private def overlapCheck(s1: Long, e1: Long, s2: Long, e2: Long): Boolean = {
     // Normalize: ensure start <= end
-    val (ns1, ne1) = if (s1 <= e1) (s1, e1) else (e1, s1)
-    val (ns2, ne2) = if (s2 <= e2) (s2, e2) else (e2, s2)
-
-    val isPoint1 = ns1 == ne1
-    val isPoint2 = ns2 == ne2
-
-    if (isPoint1 && isPoint2) {
-      ns1 == ns2
-    } else if (isPoint1) {
-      ns1 >= ns2 && ns1 < ne2
-    } else if (isPoint2) {
-      ns2 >= ns1 && ns2 < ne1
-    } else {
-      ns1 < ne2 && ns2 < ne1
-    }
-  }
-
-  private def overlapCheck(s1: Int, e1: Int, s2: Int, e2: Int): Boolean = {
     val (ns1, ne1) = if (s1 <= e1) (s1, e1) else (e1, s1)
     val (ns2, ne2) = if (s2 <= e2) (s2, e2) else (e2, s2)
 
