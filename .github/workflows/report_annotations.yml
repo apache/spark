@@ -80,6 +80,29 @@ jobs:
           pattern: "*-workspace-root"
           merge-multiple: true
 
+      - name: Print workspace info
+        run: |
+          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+          echo "Downloaded files:"
+          ls -la
+          echo "workspace-root.txt contents:"
+          cat workspace-root.txt 2>/dev/null || echo "(not found)"
+
+      - name: Replay logs through problem matchers (raw, no path stripping)
+        if: steps.download-logs.outcome == 'success'
+        run: |
+          # Debug replay: emit lines exactly as-is so we can see what the
+          # problem matcher receives before any path rewriting is applied.
+          for matcher in .github/problem-matchers/*.json; do
+            echo "::add-matcher::$matcher"
+          done
+
+          for log in *.log; do
+            [ -f "$log" ] || continue
+            echo "--- Replaying (raw) $log ---"
+            cat "$log"
+          done
+
       - name: Replay logs through problem matchers
         if: steps.download-logs.outcome == 'success'
         run: |
