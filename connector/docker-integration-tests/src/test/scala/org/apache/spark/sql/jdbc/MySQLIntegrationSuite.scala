@@ -422,9 +422,11 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
 
   test("SPARK-57555: MySQL TIME nanosecond write rounds to microseconds") {
     // MySQL TIME max precision is 6 (microseconds). TimeType(9) writes as TIME(6),
-    // and the sub-microsecond portion is rounded by MySQL on insert.
+    // and the sub-microsecond portion is lost on write.
+    // Use 400ns (< 500ns) so both MySQL Connector/J (rounds) and MariaDB Connector/J
+    // (truncates) produce the same microsecond result.
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
-      val data = Seq(Row(LocalTime.of(12, 0, 0, 123456789)))
+      val data = Seq(Row(LocalTime.of(12, 0, 0, 123456400)))
       val schema = new org.apache.spark.sql.types.StructType()
         .add("t_nanos", TimeType(9))
       val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
@@ -433,8 +435,8 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
       val result = spark.read.jdbc(jdbcUrl, "time_nanos_test", new Properties)
       // Read back as TimeType(6) since MySQL stores at most microseconds
       assert(result.schema("t_nanos").dataType === TimeType(6))
-      // MySQL rounds fractional seconds: 123456789ns -> 123457us (rounds up)
-      checkAnswer(result, Row(LocalTime.of(12, 0, 0, 123457000)))
+      // Sub-microsecond portion lost: 123456400ns -> 123456us
+      checkAnswer(result, Row(LocalTime.of(12, 0, 0, 123456000)))
     }
   }
 
