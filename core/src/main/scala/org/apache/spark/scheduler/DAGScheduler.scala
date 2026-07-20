@@ -3976,10 +3976,14 @@ private[spark] class DAGScheduler(
             log"pipelined consumer ${MDC(STAGE, consumer)} because its producer " +
             log"${MDC(STAGE, finishedStage)} failed; the group will be rerun")
           // Only the deferred stage/job-completion bookkeeping was buffered; the consumer's
-          // per-task effects (including its TaskEnd events) already ran inline when the tasks first
+          // per-task effects (TaskEnd, accumulator updates) already ran inline when the tasks first
           // completed. The group failed and will be rerun, so that completion bookkeeping must NOT
           // be applied -- simply discard the buffered events. (There is nothing to re-emit: unlike
-          // the coarse model, no TaskEnd was withheld.)
+          // the coarse model, no TaskEnd was withheld.) The already-applied inline accumulator
+          // deltas are NOT un-merged here -- consistent with base Spark, whose accumulators are
+          // non-transactional across an abort+rerun; the rerun re-delivers under the S5 idempotent-
+          // sink contract, and RTM SQL metrics are fresh per batch so there is no cross-batch
+          // double-count.
         } else {
           logInfo(log"Replaying ${MDC(NUM_EVENTS, events.size.toLong)} deferred completion(s) for " +
             log"pipelined consumer ${MDC(STAGE, consumer)} now that its producers have finished")
