@@ -63,20 +63,22 @@ private[spark] class ShuffleMapStage(
   val isPipelined: Boolean = shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]
 
   /**
-   * Availability tracking for a pipelined shuffle. A pipelined shuffle is transient and is NOT
-   * registered with the `MapOutputTracker` as a durable, addressable output (spec S4), so its
-   * map-stage availability cannot be read from the tracker. Instead we track completed partitions
-   * here, monotonically: a partition is added when its map task succeeds and is NEVER removed on
-   * executor/host loss.
+   * Availability tracking for a pipelined shuffle. A pipelined shuffle produces no durable,
+   * addressable map output. `createShuffleMapStage` still calls `MapOutputTracker.registerShuffle`
+   * for it (it is a `ShuffleDependency`, and an empty shuffle-status entry keeps the tracker's
+   * `containsShuffle` / `unregisterShuffle` bookkeeping uniform), but no map output is ever
+   * registered into that entry -- `registerMapOutput` runs only on the non-pipelined completion
+   * path -- so the entry stays empty. Its map-stage availability therefore cannot be read from the
+   * tracker; instead we track completed partitions here, monotonically: a partition is added when
+   * its map task succeeds and is NEVER removed on executor/host loss.
    *
    * This is the crux of avoiding the streaming-writer resubmit hang: if a pipelined shuffle's
-   * availability were
-   * read from the `MapOutputTracker`, losing an executor that held a completed (already-consumed)
-   * pipelined output would strip it there, flip `isAvailable` to false, and make the DAGScheduler
-   * resubmit the producer -- whose streaming writer then blocks forever waiting for termination
-   * acks from reducers that already finished. Keeping availability local and monotonic means
-   * executor loss never triggers such a resubmit; a genuine mid-group failure is handled
-   * group-atomically instead (S6). Unused (and empty) for a non-pipelined stage.
+   * availability were read from the `MapOutputTracker`, losing an executor that held a completed
+   * (already-consumed) pipelined output would strip it there, flip `isAvailable` to false, and make
+   * the DAGScheduler resubmit the producer -- whose streaming writer then blocks forever waiting
+   * for termination acks from reducers that already finished. Keeping availability local and
+   * monotonic means executor loss never triggers such a resubmit; a genuine mid-group failure is
+   * handled group-atomically instead (S6). Unused (and empty) for a non-pipelined stage.
    */
   private[this] val pipelinedCompletedPartitions = new HashSet[Int]
 
