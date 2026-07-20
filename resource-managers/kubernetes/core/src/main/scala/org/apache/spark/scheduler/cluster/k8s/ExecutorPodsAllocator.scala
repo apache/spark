@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -135,7 +135,8 @@ class ExecutorPodsAllocator(
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
-    warnIfRecoveryModeCannotIsolateSingleTask()
+    warnIfRecoveryModeCannotIsolateSingleTask(
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, conf.get(CPUS_PER_TASK))
     if (shouldWaitForDriverReadiness) {
       driverPod.foreach { pod =>
         // Wait until the driver pod is ready before starting executors, as the headless service
@@ -471,27 +472,28 @@ class ExecutorPodsAllocator(
 
   def setRecoveryMode(): Unit = {
     conf.setIfMissing(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
-    warnIfRecoveryModeCannotIsolateSingleTask()
+    warnIfRecoveryModeCannotIsolateSingleTask(
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, conf.get(CPUS_PER_TASK))
   }
 
-  // Recovery mode's single-task guarantee is enforced by announcing SPARK_EXECUTOR_CORES =
-  // ceil(spark.task.cpus), which must be a whole number. When the task cpus amount is 0.5 or
-  // less, the single announced core fits more than one task, so the guarantee cannot hold;
-  // log a prominent warning (at most once) instead of silently overcommitting recovery
-  // executors.
-  private val recoveryModeCpusWarned = new AtomicBoolean(false)
+  // Recovery mode's single-task guarantee is enforced by announcing SPARK_EXECUTOR_CORES equal
+  // to the ceiling of the profile's task cpus amount, which must be a whole number. When the
+  // amount is 0.5 or less, the single announced core fits more than one task, so the guarantee
+  // cannot hold; log a prominent warning (at most once per resource profile) instead of
+  // silently overcommitting recovery executors.
+  private val recoveryModeCpusWarnedProfileIds = ConcurrentHashMap.newKeySet[Int]()
 
-  private def warnIfRecoveryModeCannotIsolateSingleTask(): Unit = {
-    val taskCpus = conf.get(CPUS_PER_TASK)
+  private def warnIfRecoveryModeCannotIsolateSingleTask(rpId: Int, taskCpus: BigDecimal): Unit = {
     if (conf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).getOrElse(false) &&
-        taskCpus <= BigDecimal(0.5) && recoveryModeCpusWarned.compareAndSet(false, true)) {
+        taskCpus <= BigDecimal(0.5) && recoveryModeCpusWarnedProfileIds.add(rpId)) {
       val slots = ResourceProfile.numTasksBasedOnCores(
         CpuAmount.normalize(BigDecimal(1)), taskCpus)
-      logWarning(log"Recovery mode is enabled while spark.task.cpus = " +
-        log"${MDC(LogKeys.NUM_TASK_CPUS, CpuAmount.toDisplayString(taskCpus))} is <= 0.5. A " +
-        log"recovery-mode executor announces a single core, so it accepts up to " +
-        log"${MDC(LogKeys.NUM_SLOTS, slots)} concurrent tasks instead of only one. Set " +
-        log"spark.task.cpus above 0.5 to restore single-task recovery executors.")
+      logWarning(log"Recovery mode is enabled while the task cpus amount " +
+        log"${MDC(LogKeys.NUM_TASK_CPUS, CpuAmount.toDisplayString(taskCpus))} of resource " +
+        log"profile ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)} is <= 0.5. A recovery-mode " +
+        log"executor for this profile announces a single core, so it accepts up to " +
+        log"${MDC(LogKeys.NUM_SLOTS, slots)} concurrent tasks instead of only one. Set the " +
+        log"task cpus amount above 0.5 to restore single-task recovery executors.")
     }
   }
 
@@ -500,6 +502,9 @@ class ExecutorPodsAllocator(
       applicationId: String,
       resourceProfileId: Int,
       pvcsInUse: Set[String]): Unit = {
+    val profile = rpIdToResourceProfile(resourceProfileId)
+    warnIfRecoveryModeCannotIsolateSingleTask(
+      resourceProfileId, ResourceProfile.getTaskCpusOrDefaultForProfile(profile, conf))
     // Check reusable PVCs for this executor allocation batch
     val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
     for ( _ <- 0 until numExecutorsToAllocate) {
@@ -519,7 +524,7 @@ class ExecutorPodsAllocator(
         driverPod,
         resourceProfileId)
       val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf, secMgr,
-        kubernetesClient, rpIdToResourceProfile(resourceProfileId))
+        kubernetesClient, profile)
       val executorPod = resolvedExecutorSpec.pod
       val podWithAttachedContainer = new PodBuilder(executorPod.pod)
         .editOrNewSpec()

@@ -181,6 +181,27 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     }
     assert(!logAppender2.loggingEvents.exists(
       _.getMessage.getFormattedMessage.contains("instead of only one")))
+
+    // the warning is per resource profile: requesting executors for a custom profile whose
+    // task cpus amount is 0.5 or less warns once, naming the profile
+    val confWithRecovery = conf.clone.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
+    val allocator3 = new ExecutorPodsAllocator(confWithRecovery, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    allocator3.setExecutorPodsLifecycleManager(lifecycleManager)
+    val ereq = new ExecutorResourceRequests().cores(1).memory("1g")
+    val treq = new TaskResourceRequests().cpus(0.4)
+    val rp = new ResourceProfileBuilder().require(ereq).require(treq).build()
+    val logAppender3 = new LogAppender("recovery mode custom profile fractional cpus")
+    withLogAppender(logAppender3) {
+      allocator3.start(TEST_SPARK_APP_ID, schedulerBackend)
+      allocator3.setTotalExpectedExecutors(Map(rp -> 1))
+    }
+    val warnings3 = logAppender3.loggingEvents
+      .map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("instead of only one"))
+    assert(warnings3.size === 1)
+    assert(warnings3.head.contains(s"resource profile ${rp.id}"))
+    assert(warnings3.head.contains("2 concurrent tasks"))
   }
 
   test("SPARK-49447: Prevent small values less than 100 for batch delay") {

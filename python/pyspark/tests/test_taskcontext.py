@@ -380,7 +380,7 @@ class TaskContextTestsWithFractionalCpus(unittest.TestCase):
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
         conf = conf.set("spark.task.cpus", "0.5")
-        self.sc = SparkContext("local-cluster[1,1,1024]", class_name, conf=conf)
+        self.sc = SparkContext("local-cluster[1,2,1024]", class_name, conf=conf)
 
     def test_fractional_cpu_amount(self):
         """SPARK-58192: cpuAmount() exposes the exact fractional amount; cpus() rounds up."""
@@ -390,6 +390,21 @@ class TaskContextTestsWithFractionalCpus(unittest.TestCase):
         ).take(1)[0]
         self.assertEqual(cpu_amount, 0.5)
         self.assertEqual(cpus, 1)
+
+    def test_omp_num_threads_follows_task_cpus(self):
+        """SPARK-58192: OMP_NUM_THREADS defaults to the ceiling of the task's own cpu
+        amount, honoring stage-level resource profiles over the global spark.task.cpus."""
+        from pyspark.resource import ResourceProfileBuilder, TaskResourceRequests
+
+        rdd = self.sc.parallelize(range(2), 1)
+        omp = rdd.map(lambda _: os.environ["OMP_NUM_THREADS"]).take(1)[0]
+        self.assertEqual(omp, "1")
+
+        treqs = TaskResourceRequests().cpus(2)
+        rp = ResourceProfileBuilder().require(treqs).build
+        rdd = self.sc.parallelize(range(2), 1).withResources(rp)
+        omp = rdd.map(lambda _: os.environ["OMP_NUM_THREADS"]).take(1)[0]
+        self.assertEqual(omp, "2")
 
     def tearDown(self):
         self.sc.stop()

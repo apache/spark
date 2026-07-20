@@ -962,15 +962,15 @@ private[spark] class Executor(
           (taskStartTimeNs - deserializeStartTimeNs) + task.executorDeserializeTimeNs))
         task.metrics.setExecutorDeserializeCpuTime(
           (taskStartCpu - deserializeStartCpuTime) + task.executorDeserializeCpuTime)
-        // We need to subtract Task.run()'s deserialization time to avoid double-counting.
-        // With a fractional cpus below 1 the scaled elapsed time can be smaller than the in-run
-        // deserialization time, so clamp at zero rather than reporting a negative run time.
+        // We need to subtract Task.run()'s deserialization time to avoid double-counting:
+        // remove the in-run deserialization interval from the elapsed time first, then weight
+        // the remaining run interval by the task's cpu amount. Clamp at zero to guard against
+        // clock anomalies.
         task.metrics.setExecutorRunTime(math.max(0L, TimeUnit.NANOSECONDS.toMillis(
           // Strip trailing zeros from the scale-9 cpus so this product stays in BigDecimal's
           // compact (long-backed) form instead of inflating a long duration into a BigInteger.
-          (BigDecimal(taskFinishNs - taskStartTimeNs) *
-            CpuAmount.stripTrailingZeros(taskDescription.cpus)).toLong
-            - task.executorDeserializeTimeNs)))
+          (BigDecimal((taskFinishNs - taskStartTimeNs) - task.executorDeserializeTimeNs) *
+            CpuAmount.stripTrailingZeros(taskDescription.cpus)).toLong)))
         task.metrics.setExecutorCpuTime(
           (taskFinishCpu - taskStartCpu) - task.executorDeserializeCpuTime)
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
