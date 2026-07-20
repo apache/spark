@@ -30,6 +30,8 @@ import org.apache.spark.util.Utils
  */
 class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase {
   override def defaultNamespace: Seq[String] = Nil
+  // Extended JSON now uses TableSummary.tableType(), and TableCatalog.listTableSummaries
+  // defaults a missing V2 table type property to TableSummary.FOREIGN_TABLE_TYPE.
   override def expectedTableTypeInJson: String = TableSummary.FOREIGN_TABLE_TYPE
   override def expectsSessionTempViews: Boolean = false
 
