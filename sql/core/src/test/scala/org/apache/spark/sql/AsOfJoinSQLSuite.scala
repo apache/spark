@@ -363,7 +363,18 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |FROM VALUES (named_struct()) AS t(s) ASOF JOIN VALUES (named_struct()) AS r(s)
         |  MATCH_CONDITION (t.s >= r.s)
         |""".stripMargin
-    val e = intercept[AnalysisException](sql(sqlText))
-    assert(e.getCondition === "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE")
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
+      sqlState = Some("42K09"),
+      parameters = Map(
+        "type1" -> "\"STRUCT<>\"",
+        "type2" -> "\"STRUCT<>\""),
+      queryContext = Array(
+        ExpectedContext(
+          fragment = """ASOF JOIN VALUES (named_struct()) AS r(s)
+                       |  MATCH_CONDITION (t.s >= r.s)""".stripMargin,
+          start = 47,
+          stop = 118)))
   }
 }
