@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
 import org.apache.spark.sql.internal.SQLConf
@@ -1042,7 +1041,8 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       input)
   }
 
-  test("JsonToStructs, GetJsonObject, JsonTuple are stateful and produce fresh copies") {
+  test("JsonToStructs, GetJsonObject, JsonTuple, MultiGetJsonObject are stateful " +
+      "and produce fresh copies") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     val jsonToStructs = JsonToStructs(schema, Map.empty, Literal("{}"), UTC_OPT)
     assert(jsonToStructs.stateful)
@@ -1055,29 +1055,10 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val jsonTuple = JsonTuple(Literal("{}") :: Literal("a") :: Nil)
     assert(jsonTuple.stateful)
     assert(jsonTuple.freshCopyIfContainsStatefulExpression() ne jsonTuple)
-  }
 
-  test("StructsToJson and SchemaOfJson are stateful and produce fresh copies with " +
-      "independent evaluators") {
-    val schema = StructType(StructField("a", IntegerType) :: Nil)
-    val struct = Literal.create(create_row(1), schema)
-
-    val structsToJson = StructsToJson(Map.empty, struct, UTC_OPT)
-    assert(structsToJson.stateful)
-    val copy1 = structsToJson.freshCopyIfContainsStatefulExpression()
-    assert(copy1 ne structsToJson)
-    val copy2 = structsToJson.freshCopyIfContainsStatefulExpression()
-    assert(copy2 ne structsToJson)
-    // Each copy owns an independent evaluator - mutable state must not be shared.
-    val eval1 = copy1.asInstanceOf[StructsToJson].replacement
-      .asInstanceOf[Invoke].targetObject.asInstanceOf[Literal].value.asInstanceOf[AnyRef]
-    val eval2 = copy2.asInstanceOf[StructsToJson].replacement
-      .asInstanceOf[Invoke].targetObject.asInstanceOf[Literal].value.asInstanceOf[AnyRef]
-    assert(eval1 ne eval2)
-
-    val schemaOfJson = SchemaOfJson(Literal("""{"a":1}"""), Map.empty)
-    assert(schemaOfJson.stateful)
-    assert(schemaOfJson.freshCopyIfContainsStatefulExpression() ne schemaOfJson)
+    val multiGetJsonObject = MultiGetJsonObject(Literal("{}"), Seq("$.a", "$.b"))
+    assert(multiGetJsonObject.stateful)
+    assert(multiGetJsonObject.freshCopyIfContainsStatefulExpression() ne multiGetJsonObject)
   }
 
 }

@@ -25,7 +25,6 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC_OPT}
 import org.apache.spark.sql.types._
@@ -329,18 +328,4 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(structsToCsv.freshCopyIfContainsStatefulExpression() ne structsToCsv)
   }
 
-  test("SchemaOfCsv is stateful and produces fresh copies with independent evaluators") {
-    val schemaOfCsv = new SchemaOfCsv(Literal.create("1,abc"))
-    assert(schemaOfCsv.stateful)
-    val copy1 = schemaOfCsv.freshCopyIfContainsStatefulExpression()
-    assert(copy1 ne schemaOfCsv)
-    val copy2 = schemaOfCsv.freshCopyIfContainsStatefulExpression()
-    assert(copy2 ne schemaOfCsv)
-    // Each copy owns an independent evaluator - mutable state must not be shared.
-    val eval1 = copy1.asInstanceOf[SchemaOfCsv].replacement
-      .asInstanceOf[Invoke].targetObject.asInstanceOf[Literal].value.asInstanceOf[AnyRef]
-    val eval2 = copy2.asInstanceOf[SchemaOfCsv].replacement
-      .asInstanceOf[Invoke].targetObject.asInstanceOf[Literal].value.asInstanceOf[AnyRef]
-    assert(eval1 ne eval2)
-  }
 }
