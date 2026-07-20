@@ -1099,6 +1099,21 @@ class QueryCompilationErrorsSuite
       )
     }
   }
+
+  test("UNSUPPORTED_FEATURE.TABLE_OPERATION: v1 table ADD COLUMN with NOT NULL") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT) USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t ADD COLUMN c INT NOT NULL")
+        },
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "operation" -> "ADD COLUMN with NOT NULL")
+      )
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
