@@ -159,7 +159,8 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     private val tempRow = new SpecificInternalRow(Seq(dataType))
     private val isPrimitive = dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
-           DateType | TimestampType | TimestampNTZType => true
+           DateType | TimestampType | TimestampNTZType | _: YearMonthIntervalType |
+           _: DayTimeIntervalType => true
       case _ => false
     }
 

@@ -4470,9 +4470,9 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doc("Use monotonic deques for sliding min/max aggregate window frames. " +
         "This provides O(N) complexity instead of O(N * W) or O(N log W).")
-      .version("5.0.0")
+      .version("4.3.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS =
     buildConf("spark.sql.window.segmentTree.minPartitionRows")

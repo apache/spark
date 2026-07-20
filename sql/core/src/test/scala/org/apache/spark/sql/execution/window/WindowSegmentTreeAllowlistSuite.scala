@@ -42,7 +42,8 @@ class WindowSegmentTreeAllowlistSuite
 
   private val enableSegTree: Map[String, String] = Map(
     SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
-    SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1")
+    SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1",
+    SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false")
 
   private def baseDF = spark.range(0, 120).selectExpr(
     "id", "(id % 3) AS pk", "CAST(id AS INT) AS v", "CAST(id AS DOUBLE) AS vd")

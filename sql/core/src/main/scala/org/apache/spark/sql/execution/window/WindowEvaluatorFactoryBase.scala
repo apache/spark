@@ -222,6 +222,11 @@ trait WindowEvaluatorFactoryBase {
             aggFilters)
         }
         val conf = SQLConf.get
+        val isMinMaxOnly = conf.windowMonotonicDequeEnabled &&
+          functions.nonEmpty && functions.forall {
+            case _: Min | _: Max => true
+            case _ => false
+          } && aggFilters.forall(_.isEmpty)
         val blockSize = conf.windowSegmentTreeBlockSize
 
         // Create the factory to produce WindowFunctionFrame.
@@ -283,12 +288,6 @@ trait WindowEvaluatorFactoryBase {
 
           // Shrinking Frame.
           case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
-            val isMinMaxOnly = conf.windowMonotonicDequeEnabled &&
-              functions.nonEmpty && functions.forall {
-                case _: Min | _: Max => true
-                case _ => false
-              } && aggFilters.forall(_.isEmpty)
-
             if (isMinMaxOnly) {
               target: InternalRow => {
                 val lb = createBoundOrdering(frameType, lower, timeZone)
@@ -348,12 +347,6 @@ trait WindowEvaluatorFactoryBase {
 
           // Moving Frame.
           case ("AGGREGATE", frameType, lower, upper, _) =>
-            val isMinMaxOnly = conf.windowMonotonicDequeEnabled &&
-              functions.nonEmpty && functions.forall {
-                case _: Min | _: Max => true
-                case _ => false
-              } && aggFilters.forall(_.isEmpty)
-
             if (isMinMaxOnly) {
               target: InternalRow => {
                 val lb = createBoundOrdering(frameType, lower, timeZone)
