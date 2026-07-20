@@ -723,8 +723,8 @@ private[spark] class DAGScheduler(
    * mis-scheduling. Inert for a regular ShuffleDependency.
    *
    * Group-level idioms are handled elsewhere, since they are properties of the group rather than a
-   * single producer stage: fan-out (a producer with more than one consumer) and a mixed-resource-
-   * profile group are rejected up front at job submission by
+   * single producer stage: fan-out (a producer with more than one consumer) and a group with a
+   * non-default resource profile are rejected up front at job submission by
    * `checkPipelinedGroupsSupportedInRDDGraph` (before any stage is created). A regular shuffle
    * internal to a group does not arise for v1's all-pipelined job shape (groups are split at
    * regular-shuffle boundaries, S3) and so is not checked.
@@ -1151,9 +1151,10 @@ private[spark] class DAGScheduler(
    *    shuffle. Checked here (not at stage creation) so a reject leaves no partial stage state, and
    *    so BOTH the producer chain (rooted at pd.rdd) and each consumer chain (rooted at a consuming
    *    RDD) are covered from the whole-graph view.
-   *  - Mixed resource profiles across the group's RDDs. The gang slot check (S4) compares one
-   *    demand against one profile's capacity, so v1 requires a group to be single-profile; more
-   *    than one distinct explicit profile is rejected. Per-profile accounting is a follow-up.
+   *  - A non-default resource profile on any member. The gang slot check (S4) compares one demand
+   *    against one profile's capacity and measures it against the default profile, so v1 requires
+   *    the whole group to run on the default profile; any member with an explicit non-default
+   *    profile is rejected. Per-profile accounting is a follow-up.
    *
    * (The remaining S9 group-level row -- a regular shuffle internal to a group -- is a structural
    * invariant that does not arise for the prefix*->PG->suffix* shapes v1 targets: groups are split
@@ -1168,12 +1169,19 @@ private[spark] class DAGScheduler(
     val consumersByShuffleId = new HashMap[Int, HashSet[Int]]
     val producerRoots = new HashSet[RDD[_]]           // RDDs that WRITE a pipelined shuffle
     val reliablyCheckpointed = new HashSet[RDD[_]]     // RDDs with a reliable checkpoint pending
-    val resourceProfiles = new HashSet[ResourceProfile]  // distinct RPs across the group's RDDs
+    var hasNonDefaultResourceProfile = false          // any member RDD with a non-default RP
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
       if (rdd.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]])) {
         reliablyCheckpointed += rdd
       }
-      Option(rdd.getResourceProfile()).foreach(resourceProfiles += _)
+      // An RDD's EFFECTIVE profile is its explicit one, or the default when unset. The slot check
+      // measures capacity against the default profile (see rejectUnadmittablePipelinedGroup), so
+      // for v1 the whole group must run on the default profile; any explicit non-default profile on
+      // a member makes the group span profiles (against the default the rest use) and is rejected.
+      val rp = rdd.getResourceProfile()
+      if (rp != null && rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) {
+        hasNonDefaultResourceProfile = true
+      }
       rdd.dependencies.foreach {
         case pd: PipelinedShuffleDependency[_, _, _] =>
           consumersByShuffleId.getOrElseUpdate(pd.shuffleId, new HashSet[Int]) += rdd.id
@@ -1187,15 +1195,17 @@ private[spark] class DAGScheduler(
       throw pipelinedUnsupportedError(
         "a pipelined producer with more than one consumer (fan-out / branching)")
     }
-    // Mixed resource profiles within a group (spec S9). The gang slot check (S4) compares one
-    // demand against one profile's capacity (maxNumConcurrentTasks is defined per profile), so v1
-    // requires a group to be single-profile and fails fast otherwise; per-profile accounting is a
-    // follow-up. An RDD with no explicit profile contributes nothing (it runs under the default),
-    // so only distinct EXPLICIT profiles are counted -- more than one means the group spans
-    // profiles. This is a real check, not just a documented assumption: nothing else enforces it.
-    if (resourceProfiles.size > 1) {
+    // Resource profile (spec S9). The gang slot check (S4) compares one demand against one
+    // profile's capacity (maxNumConcurrentTasks is defined per profile) and measures it against the
+    // DEFAULT profile, so v1 requires the whole group to run on the default profile and fails fast
+    // otherwise; per-profile accounting is a follow-up. Reject if ANY member carries an explicit
+    // non-default profile -- that both spans profiles (against the default the other members use)
+    // and would be admitted against the wrong (default) capacity pool. This is a real check, not
+    // just a documented assumption: nothing else enforces it.
+    if (hasNonDefaultResourceProfile) {
       throw pipelinedUnsupportedError(
-        "members of a pipelined group with differing resource profiles (single-profile required)")
+        "a pipelined group member with a non-default resource profile (v1 requires the default " +
+          "profile for the whole group)")
     }
     // Reject a reliable checkpoint anywhere in a pipelined-group MEMBER's within-stage chain (spec
     // S9). Keyed on checkpointData being ReliableRDDCheckpointData, not isCheckpointed, since the
@@ -3279,8 +3289,10 @@ private[spark] class DAGScheduler(
             log"${MDC(STAGE_ATTEMPT_ID, task.stageAttemptId)} and there is a more recent attempt for " +
             log"that stage (attempt " +
             log"${MDC(NUM_ATTEMPT, failedStage.latestInfo.attemptNumber())}) running")
-        } else if (isPipelinedGroupMember(failedStage) || isPipelinedGroupMember(mapStage)) {
-          // Failure is group-atomic for a pipelined group. The base scheduler handles a
+        } else if (activeJobForStage(failedStage).flatMap(jobIdToActiveJob.get)
+            .exists(_.hasPipelinedDependency) &&
+            (isPipelinedGroupMember(failedStage) || isPipelinedGroupMember(mapStage))) {
+          // Failure is group-atomic for a pipelined group (spec S6). The base scheduler handles a
           // FetchFailed by resubmitting just the map stage in isolation and recomputing serially,
           // but a transient pipelined shuffle cannot be re-read and its members are co-scheduled, so
           // a lone-stage resubmit is never valid and would deadlock the group. Abort the
@@ -4608,8 +4620,8 @@ private[spark] object DAGScheduler {
 /**
  * Thrown when a job uses a pipelined-shuffle idiom that v1 does not support (fan-out, a barrier /
  * indeterminate / checksum-retry / push-merge producer, a reliable checkpoint in a member's chain,
- * or a mixed-resource-profile group; spec S9). `handleJobSubmitted` matches on this TYPE to
- * distinguish an up-front idiom rejection from an ordinary stage-creation failure, rather than on
+ * or a non-default resource profile on a member; spec S9). `handleJobSubmitted` matches on this
+ * TYPE to distinguish an up-front idiom rejection from an ordinary stage-creation failure, not on
  * the error-condition string (which a rename or a wrapped cause would silently break). Carries the
  * `PIPELINED_SHUFFLE_UNSUPPORTED` error class so the user-facing message is unchanged.
  */

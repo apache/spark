@@ -6770,13 +6770,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("pipelined shuffle: a multi-producer consumer's buffered successes are dropped when one " +
       "producer fails (no stale replay via a sibling)") {
-    // Isaac-review probe (group-atomic drop across MULTIPLE producers). Consumer C reads TWO
-    // pipelined producers P1 and P2 (a join; pure all-PG, no regular shuffle). C finishes early ->
-    // its successes are buffered against BOTH producers. If P1 then fails, the whole group must be
-    // torn down and C's buffered successes DROPPED -- they depended on P1's (now-invalid) output.
-    // The concern: releaseDeferredPipelinedConsumers evaluates producerFailed per finishing
-    // producer, so a naive impl could remove P1 (parents still has P2, no drop), then later see P2
-    // "succeed" and REPLAY. Verify the shipped stack drops instead (group abort tears C down).
+    // Group-atomic drop across MULTIPLE producers. Consumer C reads TWO pipelined producers P1 and
+    // P2 (a join; pure all-PG, no regular shuffle). C finishes early -> its successes are buffered
+    // against BOTH producers. If P1 then fails, the whole group must be torn down and C's buffered
+    // successes DROPPED -- they depended on P1's (now-invalid) output. Note the release path
+    // evaluates producerFailed per finishing producer, so a naive impl could remove P1
+    // (parents still has P2, no drop), then later see P2 "succeed" and REPLAY. This asserts the
+    // shipped stack drops instead: a member failure aborts the whole group, which tears C down.
     val rddP1 = new MyRDD(sc, 2, Nil)
     val psdP1 = new PipelinedShuffleDependency(rddP1, new HashPartitioner(2))
     val rddP2 = new MyRDD(sc, 2, Nil)
@@ -7606,23 +7606,49 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("pipelined shuffle: a group whose members have differing resource profiles is rejected") {
-    // The gang slot check (S4) compares one demand against one profile's capacity, so v1 requires a
-    // group to be single-profile and fails fast otherwise (spec S9). Give the producer and consumer
-    // two distinct, non-default resource profiles: checkPipelinedGroupsSupportedInRDDGraph collects
-    // more than one distinct profile across the group's RDDs and rejects up front.
-    val rpA = new ResourceProfileBuilder()
-      .require(new ExecutorResourceRequests().cores(4))
-      .require(new TaskResourceRequests().cpus(1)).build()
-    val rpB = new ResourceProfileBuilder()
-      .require(new ExecutorResourceRequests().cores(8))
-      .require(new TaskResourceRequests().cpus(2)).build()
-    val producerRdd = new MyRDD(sc, 2, Nil).withResources(rpA)
+  // Resource-profile rejection (spec S9). The gang slot check measures capacity against the DEFAULT
+  // resource profile, so v1 requires the whole group to run on the default profile and rejects any
+  // member with an explicit non-default profile. The three shapes below must all be rejected; the
+  // uniform-non-default and non-default-plus-default cases in particular would each pass a
+  // "more than one DISTINCT profile" check yet still be admitted against the wrong (default) pool.
+  private def rpWithCores(cores: Int, cpus: Int): ResourceProfile =
+    new ResourceProfileBuilder()
+      .require(new ExecutorResourceRequests().cores(cores))
+      .require(new TaskResourceRequests().cpus(cpus)).build()
+
+  test("pipelined shuffle: a group with two distinct non-default resource profiles is rejected") {
+    val producerRdd = new MyRDD(sc, 2, Nil).withResources(rpWithCores(4, 1))
     val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
     val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
-      .withResources(rpB)
+      .withResources(rpWithCores(8, 2))
     assertPipelinedUnsupported(
-      submitAndCaptureFailure(consumerRdd, Array(0, 1)), "differing resource profiles")
+      submitAndCaptureFailure(consumerRdd, Array(0, 1)), "non-default resource profile")
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a group uniformly on one non-default resource profile is rejected") {
+    // Both members share ONE non-default profile -- a "distinct profile count" of 1, which a
+    // more-than-one-distinct-profile check would wrongly admit, then measure against the default
+    // profile's capacity (the wrong pool). Must be rejected: the whole group is off the default RP.
+    val rp = rpWithCores(4, 1)
+    val producerRdd = new MyRDD(sc, 2, Nil).withResources(rp)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      .withResources(rp)
+    assertPipelinedUnsupported(
+      submitAndCaptureFailure(consumerRdd, Array(0, 1)), "non-default resource profile")
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a group mixing a non-default profile with the default is rejected") {
+    // The producer carries an explicit non-default profile; the consumer is left on the default.
+    // The set of EXPLICIT profiles is again size 1, so a distinct-explicit-profile check would miss
+    // it, but the group genuinely spans the non-default and default profiles. Must be rejected.
+    val producerRdd = new MyRDD(sc, 2, Nil).withResources(rpWithCores(4, 1))
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    assertPipelinedUnsupported(
+      submitAndCaptureFailure(consumerRdd, Array(0, 1)), "non-default resource profile")
     assertDataStructuresEmpty()
   }
 
