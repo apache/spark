@@ -1174,12 +1174,12 @@ jobs:
       run: |
         echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         BRANCH="${GITHUB_REF#refs/heads/}"
-        PR_NUMBER=$(gh pr list \
-          --repo apache/spark \
-          --head "${{ github.repository_owner }}:${BRANCH}" \
-          --state open \
-          --json number \
-          --jq '.[0].number' 2>/dev/null || true)
+        PR_NUMBER=$(curl -s \
+          -H "Authorization: Bearer ${GH_TOKEN}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          "https://api.github.com/repos/apache/spark/pulls?state=open&head=${{ github.repository_owner }}:${BRANCH}&per_page=1" \
+          | python3 -c "import json,sys; prs=json.load(sys.stdin); print(prs[0]['number'] if prs else '')" \
+          2>/dev/null || true)
         if [ -n "$PR_NUMBER" ]; then
           echo "Found PR #${PR_NUMBER}; using exact merge ref refs/pull/${PR_NUMBER}/merge"
           git fetch https://github.com/apache/spark.git "refs/pull/${PR_NUMBER}/merge"
