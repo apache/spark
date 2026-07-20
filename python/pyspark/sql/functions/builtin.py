@@ -17668,7 +17668,7 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     'PR': Only allowed at the end of the format string; specifies that the result string
     will be wrapped by angle brackets if the input value is negative.
     If `col` is a datetime, `format` shall be a valid datetime pattern, see
-    https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html.
+    `Datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`.
     If `col` is a binary, it is converted to a string in one of the formats:
     'base64': a base 64 string.
     'hex': a string in the hexadecimal format.
@@ -17718,7 +17718,7 @@ def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     'PR': Only allowed at the end of the format string; specifies that the result string
     will be wrapped by angle brackets if the input value is negative.
     If `col` is a datetime, `format` shall be a valid datetime pattern, see
-    https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html.
+    `Datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`.
     If `col` is a binary, it is converted to a string in one of the formats:
     'base64': a base 64 string.
     'hex': a string in the hexadecimal format.
@@ -20260,10 +20260,6 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
         name of column containing array or map
     extraction :
         index to check for in array or key to check for in map
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
 
     Notes
     -----
