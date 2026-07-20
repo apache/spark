@@ -111,28 +111,36 @@ class HiveUDAFSuite extends QueryTest
   test("SPARK-24935: customized Hive UDAF with two aggregation buffers") {
     withTempView("v") {
       spark.range(100).createTempView("v")
-      val df = sql("SELECT id % 2, mock2(id) FROM v GROUP BY id % 2")
+      // `range(100)` is a single partition, so the partial and final aggregate would otherwise be
+      // adjacent and merged by `CombineAdjacentAggregation`. `MockUDAF2` deliberately uses distinct
+      // aggregation-buffer classes per aggregation mode (one for consuming original input, another
+      // for merging partial buffers), so it does not support a single `Complete`-mode aggregate.
+      // Keep the partial/final pair uncombined so the sort-based fallback path below is exercised
+      // in the mode this UDAF is designed for.
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        val df = sql("SELECT id % 2, mock2(id) FROM v GROUP BY id % 2")
 
-      val aggs = collect(df.queryExecution.executedPlan) {
-        case agg: ObjectHashAggregateExec => agg
-      }
+        val aggs = collect(df.queryExecution.executedPlan) {
+          case agg: ObjectHashAggregateExec => agg
+        }
 
-      // There should be two aggregate operators, one for partial aggregation, and the other for
-      // global aggregation.
-      assert(aggs.length == 2)
+        // There should be two aggregate operators, one for partial aggregation, and the other for
+        // global aggregation.
+        assert(aggs.length == 2)
 
-      withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
-        checkAnswer(df, Seq(
-          Row(0, Row(50, 0)),
-          Row(1, Row(50, 0))
-        ))
-      }
+        withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+          checkAnswer(df, Seq(
+            Row(0, Row(50, 0)),
+            Row(1, Row(50, 0))
+          ))
+        }
 
-      withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100") {
-        checkAnswer(df, Seq(
-          Row(0, Row(50, 0)),
-          Row(1, Row(50, 0))
-        ))
+        withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100") {
+          checkAnswer(df, Seq(
+            Row(0, Row(50, 0)),
+            Row(1, Row(50, 0))
+          ))
+        }
       }
     }
   }

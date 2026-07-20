@@ -41,11 +41,18 @@ abstract class ReplaceHashWithSortAggSuiteBase
       enabledSortAggCount: Int,
       disabledHashAggCount: Int,
       disabledSortAggCount: Int): Unit = {
-    withSQLConf(SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true") {
+    // Toggle both rules together so the "disabled" case keeps the raw partial/final aggregate
+    // structure (the queries here are designed around `ReplaceHashWithSortAgg`, and an enabled
+    // `CombineAdjacentAggregation` would merge adjacent partial/final pairs and change the counts).
+    withSQLConf(
+        SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true",
+        SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
       val df = sql(query)
       checkNumAggs(df, enabledHashAggCount, enabledSortAggCount)
       val result = df.collect()
-      withSQLConf(SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false") {
+      withSQLConf(
+          SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false",
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
         val df = sql(query)
         checkNumAggs(df, disabledHashAggCount, disabledSortAggCount)
         checkAnswer(df, result)

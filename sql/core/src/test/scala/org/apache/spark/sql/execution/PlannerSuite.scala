@@ -1344,7 +1344,12 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
       val planned = df.queryExecution.executedPlan
 
-      assert(collect(planned) { case h: HashAggregateExec => h }.nonEmpty)
+      // `range(5)` is a single partition sorted by `id`, so the aggregate is a sort aggregate
+      // (the child already satisfies the grouping-key ordering) rather than a hash aggregate.
+      assert(collect(planned) {
+        case h: HashAggregateExec => h
+        case s: SortAggregateExec => s
+      }.nonEmpty)
 
       val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
       assert(exchanges.size == 0)
@@ -1359,7 +1364,12 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
       val planned = df.queryExecution.executedPlan
 
-      assert(collect(planned) { case h: HashAggregateExec => h }.nonEmpty)
+      // `range(5)` is a single partition sorted by `key`, so the aggregate is a sort aggregate
+      // (the child already satisfies the grouping-key ordering) rather than a hash aggregate.
+      assert(collect(planned) {
+        case h: HashAggregateExec => h
+        case s: SortAggregateExec => s
+      }.nonEmpty)
 
       val exchanges = collect(planned) { case s: ShuffleExchangeExec => s }
       assert(exchanges.size == 0)
