@@ -290,3 +290,47 @@ SELECT regr_r2(y, k) FROM testRegression where k=2
 struct<regr_r2(y, k):double>
 -- !query output
 NULL
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW testCorrConstant AS SELECT * FROM VALUES
+(1, 1), (1, 2), (1, 3) AS t(x, y)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)) FROM testCorrConstant
+-- !query schema
+struct<corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)):double>
+-- !query output
+NULL
+
+
+-- !query
+DROP VIEW testCorrConstant
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)) FROM VALUES
+(1, 1), (1, 2), (1, 3) AS t(x, y)
+-- !query schema
+struct<corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)):double>
+-- !query output
+NULL
+
+
+-- !query
+SELECT corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)) FROM VALUES
+(1, 1), (2, 1), (3, 1) AS t(x, y)
+-- !query schema
+struct<corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)):double>
+-- !query output
+NULL
+
