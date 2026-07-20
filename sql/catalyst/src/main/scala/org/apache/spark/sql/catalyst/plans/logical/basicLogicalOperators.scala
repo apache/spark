@@ -2645,6 +2645,7 @@ object AsOfJoin {
    *
    * SQL tuple literals `(t.a, t.b)` are flattened to scalar leaves. Whole struct columns
    * (`t.k >= r.k`) sort by the struct value directly so nested struct shapes stay intact.
+   * Array operands sort element-wise; length mismatches follow Spark array ordering semantics.
    */
   def matchSortExpressions(
       leftOperand: Expression,
@@ -2675,8 +2676,8 @@ object AsOfJoin {
       expr2: Expression): (Expression, Expression, MatchComparisonOperator) = {
     val leftSet = left.outputSet
     val rightSet = right.outputSet
-    val expr1Side = operandJoinSide(expr1, leftSet, rightSet)
-    val expr2Side = operandJoinSide(expr2, leftSet, rightSet)
+    val expr1Side = operandJoinSide(expr1, leftSet, rightSet, syntacticIsLeft = true)
+    val expr2Side = operandJoinSide(expr2, leftSet, rightSet, syntacticIsLeft = false)
     (expr1Side, expr2Side) match {
       case (Some(true), Some(false)) => (expr1, expr2, operator)
       case (Some(false), Some(true)) => (expr2, expr1, operator.flip)
@@ -2688,10 +2689,13 @@ object AsOfJoin {
   private def operandJoinSide(
       expr: Expression,
       leftSet: AttributeSet,
-      rightSet: AttributeSet): Option[Boolean] = {
+      rightSet: AttributeSet,
+      syntacticIsLeft: Boolean): Option[Boolean] = {
     val refs = expr.references
     if (refs.isEmpty) {
-      None
+      // Literals, CURRENT_TIMESTAMP(), session variables, etc. have no column refs;
+      // use MATCH_CONDITION syntactic position (expr1/expr2) for join-side assignment.
+      Some(syntacticIsLeft)
     } else if (refs.subsetOf(leftSet)) {
       Some(true)
     } else if (refs.subsetOf(rightSet)) {
@@ -2727,6 +2731,8 @@ object AsOfJoin {
     (leftOperand.dataType, rightOperand.dataType) match {
       case (ArrayType(leftElem, _), ArrayType(rightElem, _))
           if DataTypeUtils.sameType(leftElem, rightElem) =>
+        // Array comparison (and ordering distance) use Spark's lexicographic array ordering,
+        // including when the two arrays have different lengths.
         buildArrayOrderExpression(leftOperand, rightOperand, leftElem, operator)
       case (leftStruct: StructType, rightStruct: StructType)
           if leftStruct.length == rightStruct.length && leftStruct.nonEmpty =>

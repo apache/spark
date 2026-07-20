@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types.{ArrayType, DataType, DatetimeType, StringType, StructType}
@@ -156,6 +157,15 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
           "type1" -> toSQLType(leftExpr.dataType),
           "type2" -> toSQLType(rightExpr.dataType)))
     }
+    Seq(leftExpr, rightExpr).foreach { expr =>
+      if (containsEmptyStructType(expr.dataType)) {
+        join.failAnalysis(
+          errorClass = "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
+          messageParameters = Map(
+            "type1" -> toSQLType(leftExpr.dataType),
+            "type2" -> toSQLType(rightExpr.dataType)))
+      }
+    }
   }
 
   /**
@@ -179,15 +189,16 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
 
   private def areStructurallyComparableTypes(t1: DataType, t2: DataType): Boolean = {
     (t1, t2) match {
-      case (s1: StructType, s2: StructType) if s1.length == s2.length =>
+      case (s1: StructType, s2: StructType) if s1.length == s2.length && s1.nonEmpty =>
         s1.zip(s2).forall { case (f1, f2) =>
           RowOrdering.isOrderable(f1.dataType) &&
             RowOrdering.isOrderable(f2.dataType) &&
             areMatchConditionTypesCompatible(f1.dataType, f2.dataType)
         }
       case (ArrayType(e1, _), ArrayType(e2, _)) =>
-        RowOrdering.isOrderable(e1) && RowOrdering.isOrderable(e2) &&
-          areMatchConditionTypesCompatible(e1, e2)
+        // Require identical element types so analysis agrees with order-expression construction.
+        DataTypeUtils.sameType(e1, e2) &&
+          RowOrdering.isOrderable(e1) && RowOrdering.isOrderable(e2)
       case _ => false
     }
   }
@@ -200,5 +211,12 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
       case e if e.containsPattern(GENERATOR) => e
       case e if !e.deterministic => e
     }.headOption
+  }
+
+  private def containsEmptyStructType(dataType: DataType): Boolean = dataType match {
+    case struct: StructType =>
+      struct.isEmpty || struct.exists(field => containsEmptyStructType(field.dataType))
+    case ArrayType(elementType, _) => containsEmptyStructType(elementType)
+    case _ => false
   }
 }
