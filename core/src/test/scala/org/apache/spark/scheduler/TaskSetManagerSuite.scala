@@ -3047,7 +3047,7 @@ class TaskSetManagerSuite
   }
 
   // ==========================================================================================
-  // Pipelined-group member: group-atomic failure via job-abort (M1.4)
+  // Pipelined-group member: group-atomic failure via job-abort
   // ==========================================================================================
 
   /** A single-task TaskSet marked as a pipelined-group member. */
@@ -3135,15 +3135,15 @@ class TaskSetManagerSuite
   }
 
   test("pipelined task set does NOT single-resubmit a completed map task on executor " +
-      "decommission (SC-235532 channel 3)") {
+      "decommission") {
     // The TaskSetManager.executorLost "Resubmitted" loop re-enqueues an already-successful
     // ShuffleMapTask when its executor is lost and the map output looks gone -- for a decommission,
     // it looks gone whenever MapOutputTracker.getMapOutputLocation returns None. A pipelined
     // shuffle
-    // is NEVER registered in the MapOutputTracker (M1.6), so getMapOutputLocation is always None
+    // is NEVER registered in the MapOutputTracker, so getMapOutputLocation is always None
     // and
-    // this loop would resubmit the lone producer task -- the exact SC-235532 hang. This loop
-    // bypasses handleFailedTask, so M1.4's group-atomic abort would never see it. The guard
+    // this loop would resubmit the lone producer task -- the exact streaming-writer hang. This loop
+    // bypasses handleFailedTask, so the group-atomic abort would never see it. The guard
     // (!taskSet.isPipelined on maybeShuffleMapOutputLoss) must keep a pipelined set out of the
     // loop.
     //

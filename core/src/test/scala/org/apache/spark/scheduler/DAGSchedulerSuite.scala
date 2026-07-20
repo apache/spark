@@ -6918,7 +6918,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   // ==========================================================================================
-  // Cross-job / cross-time reuse prevention at both layers (M1.6, spec S4) -- fixes SC-235532
+  // Cross-job / cross-time reuse prevention at both layers (spec S4): a consumed pipelined
+  // producer whose executor is lost must not be resubmitted
   // ==========================================================================================
 
   test("pipelined shuffle: producer availability is tracked on the stage, not the" +
@@ -6994,15 +6995,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a post-executor-loss straggler success must not resubmit the producer " +
-      "(SC-235532 bogus-epoch race)") {
+      "(bogus-epoch race)") {
     // A pipelined producer's map task can succeed on an executor whose loss is already recorded
     // (its StatusUpdate raced the executor-loss event). That completion hits the "possibly bogus
     // epoch" branch, which for a regular shuffle simply ignores it (a healthy reattempt will
     // re-register the output). But the same branch also runs `pendingPartitions -= partitionId`
     // first, so if it is the last pending partition and we do NOT record it in the pipelined
     // completed set, the stage looks "done but not available" and processShuffleMapStageCompletion
-    // resubmits the transient producer -- the exact SC-235532 hang. A pipelined stage must record
-    // the partition as completed even on the bogus-epoch path (its output is monotonic and the
+    // resubmits the transient producer -- the exact streaming-writer hang. A pipelined stage must
+    // record the partition as completed even on the bogus-epoch path (its output is monotonic and
     // MapOutputTracker's executor-loss stripping does not apply to it).
     val producerRdd = new MyRDD(sc, 2, Nil)
     val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
@@ -7034,7 +7035,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         "straggler")
     assert(producerStage.findMissingPartitions() === Seq.empty)
     assert(taskSets.size === taskSetsBefore,
-      "the pipelined producer must NOT be resubmitted by a post-loss straggler success (SC-235532)")
+      "the pipelined producer must NOT be resubmitted by a post-loss straggler success")
 
     // Consumer drains normally; no hang.
     val consumerTs = taskSets.find { ts =>
@@ -7046,7 +7047,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a producer success with ignoreOldTaskAttempts set is still recorded " +
-      "(no resubmit; SC-235532)") {
+      "(no resubmit)") {
     // Sibling of the bogus-epoch case, for the OTHER guard that gates a regular shuffle's
     // recording:
     // ignoreOldTaskAttempts (set when a stage is rolled back, e.g. as a succeeding stage of an
@@ -7054,7 +7055,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // back, so its success must be recorded even when ignoreOldTaskAttempts is true -- otherwise
     // the
     // last partition is dropped (pendingPartitions decremented, not recorded) -> "done but not
-    // available" -> processShuffleMapStageCompletion resubmits the transient producer (SC-235532).
+    // available" -> processShuffleMapStageCompletion resubmits the transient producer.
     val producerRdd = new MyRDD(sc, 2, Nil)
     val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
     val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
@@ -7079,7 +7080,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(producerStage.findMissingPartitions() === Seq.empty)
     assert(taskSets.size === taskSetsBefore,
       "the pipelined producer must NOT be resubmitted when a success arrives under " +
-        "ignoreOldTaskAttempts (SC-235532)")
+        "ignoreOldTaskAttempts")
 
     val consumerTs = taskSets.find { ts =>
       scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
@@ -7090,8 +7091,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: losing an executor does NOT flip a completed producer to unavailable " +
-      "or resubmit it (SC-235532)") {
-    // SC-235532: a completed, consumed pipelined producer whose executor is lost must NOT be
+      "or resubmit it") {
+    // A completed, consumed pipelined producer whose executor is lost must NOT be
     // resubmitted (which would hang the streaming writer in awaitTerminationAcks). Because
     // pipelined
     // availability is tracked on the stage (monotonic) and not the MapOutputTracker, executor loss
@@ -7124,7 +7125,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(producerStage.findMissingPartitions() === Seq.empty,
       "executor loss must not strip a pipelined producer's completed partitions (monotonic)")
     assert(taskSets.size === taskSetsAfterProducer,
-      "the pipelined producer must NOT be resubmitted on executor loss (SC-235532)")
+      "the pipelined producer must NOT be resubmitted on executor loss")
 
     // The consumer completes normally; no hang, no extra producer attempt.
     val consumerTaskSet = taskSets.find { ts =>
@@ -7222,8 +7223,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a FetchFailed on a group member fails the group, not a single-stage " +
-      "resubmit (SC-233883)") {
-    // SC-233883: a FetchFailed must fail an RTM (pipelined) query promptly rather than trigger the
+      "resubmit") {
+    // A FetchFailed must fail an RTM (pipelined) query promptly rather than trigger the
     // base scheduler's single-stage resubmit -> serial recompute -> deadlock. The transient
     // pipelined shuffle cannot be re-read, and members are co-scheduled, so a lone-stage resubmit
     // is
@@ -7261,7 +7262,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     scheduler.resubmitFailedStages()
     assert(failure != null, "a FetchFailed on a pipelined group member must fail the job")
     assert(taskSets.size === taskSetsBeforeFetchFailure,
-      "a pipelined group member's FetchFailed must NOT resubmit a single stage (SC-233883)")
+      "a pipelined group member's FetchFailed must NOT resubmit a single stage")
     assert(!scheduler.runningStages.exists(_.isInstanceOf[ShuffleMapStage]),
       "the pipelined producer must not be left running/resubmitted after the group fails")
     sc.listenerBus.waitUntilEmpty()
@@ -7270,7 +7271,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
 
   // ==========================================================================================
-  // Group-atomic rerun resets per-partition commit authorization (M1.8, spec S5)
+  // Group-atomic rerun resets per-partition commit authorization (spec S5)
   // ==========================================================================================
 
   test("pipelined shuffle: a group rerun resets per-partition commit authorization") {

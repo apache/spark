@@ -3003,7 +3003,8 @@ private[spark] class DAGScheduler(
               // A pipelined shuffle is transient and must NOT be registered with the
               // MapOutputTracker as a durable, addressable output (spec S4): doing so would let
               // executor/host loss strip it there, flip isAvailable to false, and resubmit the
-              // producer -- which then hangs its streaming writer (SC-235532). Track the completed
+              // producer -- which then hangs its streaming writer (it blocks forever on
+              // termination acks from reducers that already finished). Track the completed
               // partition locally and monotonically on the stage instead; the incremental shuffle
               // reader discovers the producer through its own transport, not the MapOutputTracker.
               // Checksum-mismatch detection does not apply (a pipelined dependency never enables
@@ -3019,8 +3020,8 @@ private[spark] class DAGScheduler(
               // group, S6). Skipping the record for an "old" or "bogus" straggler would be actively
               // harmful: with pendingPartitions decremented but the partition unrecorded, a dropped
               // last partition leaves the stage "done but not available" -> processShuffleMapStage-
-              // Completion resubmits the transient producer, reopening SC-235532. An already-
-              // successful straggler is not a failure, so recording it is always correct.
+              // Completion resubmits the transient producer, reopening the streaming-writer hang.
+              // An already-successful straggler is not a failure, so recording it is correct.
               shuffleStage.pendingPartitions -= task.partitionId
               shuffleStage.addPipelinedCompletedPartition(smt.partitionId)
             } else if (!ignoreOldTaskAttempts) {
@@ -3095,7 +3096,7 @@ private[spark] class DAGScheduler(
           // Failure is group-atomic for a pipelined group (spec S6). The base scheduler handles a
           // FetchFailed by resubmitting just the map stage in isolation and recomputing serially,
           // but a transient pipelined shuffle cannot be re-read and its members are co-scheduled, so
-          // a lone-stage resubmit is never valid and would deadlock the group (SC-233883). Abort the
+          // a lone-stage resubmit is never valid and would deadlock the group. Abort the
           // whole group instead: aborting the failed stage tears down its running co-scheduled
           // members and fails the job, and the caller (e.g. the streaming batch loop) reruns the
           // batch from scratch. This is distinct from the maxTaskFailures=1 lever (which handles

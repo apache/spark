@@ -1216,12 +1216,13 @@ private[spark] class TaskSetManager(
     // data from this dead executor so we would need to rerun these tasks on other executors.
     // A pipelined-group member must never single-resubmit an already-successful map task: its
     // transient shuffle output is not addressable and a lone producer rerun hangs the streaming
-    // writer in awaitTerminationAcks (SC-235532). This "Resubmitted" re-enqueue loop bypasses
-    // handleFailedTask, so M1.4's group-atomic abort would never see it; exclude pipelined sets
-    // here. A genuine executor loss still flows through the running-task loop below (iter2 ->
-    // handleFailedTask(ExecutorLostFailure)), which is force-counted for a pipelined set and aborts
-    // the whole group. Note isZombie already skips a fully-complete producer's set; this guard also
-    // covers a PARTIALLY-complete producer losing an executor on decommission (the SC-235532 case).
+    // writer in awaitTerminationAcks. This "Resubmitted" re-enqueue loop bypasses handleFailedTask,
+    // so the group-atomic abort (driven from handleFailedTask via maxTaskFailures=1) would never
+    // see it; exclude pipelined sets here. A genuine executor loss still flows through the
+    // running-task loop below (iter2 -> handleFailedTask(ExecutorLostFailure)), force-counted for a
+    // pipelined set and aborts the whole group. Note isZombie already skips a fully-complete
+    // producer's set; this guard also covers a PARTIALLY-complete producer losing an executor on
+    // decommission.
     val maybeShuffleMapOutputLoss = isShuffleMapTasks && !taskSet.isPipelined &&
       !sched.sc.shuffleDriverComponents.supportsReliableStorage() &&
       (reason.isInstanceOf[ExecutorDecommission] || !env.blockManager.externalShuffleServiceEnabled)
