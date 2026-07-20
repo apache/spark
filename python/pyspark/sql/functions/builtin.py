@@ -26821,14 +26821,17 @@ def make_timestamp(
         A column that evaluates to a decimal.
     timezone : :class:`~pyspark.sql.Column` or column name, optional
         The time zone identifier. For example, CET, UTC, and etc.
+        A column that evaluates to a string.
     date : :class:`~pyspark.sql.Column` or column name, optional
         The date to represent, in valid DATE format.
         Required when creating timestamps from date and time components.
         Must be used with time parameter only.
+        A column that evaluates to a date.
     time : :class:`~pyspark.sql.Column` or column name, optional
         The time to represent, in valid TIME format.
         Required when creating timestamps from date and time components.
         Must be used with date parameter only.
+        A column that evaluates to a time.
 
     Returns
     -------
@@ -27053,14 +27056,17 @@ def try_make_timestamp(
         A column that evaluates to a decimal.
     timezone : :class:`~pyspark.sql.Column` or column name, optional
         The time zone identifier. For example, CET, UTC, and etc.
+        A column that evaluates to a string.
     date : :class:`~pyspark.sql.Column` or column name, optional
         The date to represent, in valid DATE format.
         Required when creating timestamps from date and time components.
         Must be used with time parameter only.
+        A column that evaluates to a date.
     time : :class:`~pyspark.sql.Column` or column name, optional
         The time to represent, in valid TIME format.
         Required when creating timestamps from date and time components.
         Must be used with date parameter only.
+        A column that evaluates to a time.
 
     Returns
     -------
@@ -27248,6 +27254,7 @@ def make_timestamp_ltz(
         A column that evaluates to a decimal.
     timezone : :class:`~pyspark.sql.Column` or str, optional
         The time zone identifier. For example, CET, UTC and etc.
+        A column that evaluates to a string.
 
     Returns
     -------
@@ -27352,6 +27359,7 @@ def try_make_timestamp_ltz(
         A column that evaluates to a decimal.
     timezone : :class:`~pyspark.sql.Column` or column name, optional
         The time zone identifier. For example, CET, UTC and etc.
+        A column that evaluates to a string.
 
     Returns
     -------
@@ -27507,10 +27515,12 @@ def make_timestamp_ntz(
         The date to represent, in valid DATE format.
         Required when creating timestamps from date and time components.
         Must be used with time parameter only.
+        A column that evaluates to a date.
     time : :class:`~pyspark.sql.Column` or column name, optional
         The time to represent, in valid TIME format.
         Required when creating timestamps from date and time components.
         Must be used with date parameter only.
+        A column that evaluates to a time.
 
     Returns
     -------
@@ -27669,10 +27679,12 @@ def try_make_timestamp_ntz(
         The date to represent, in valid DATE format.
         Required when creating timestamps from date and time components.
         Must be used with time parameter only.
+        A column that evaluates to a date.
     time : :class:`~pyspark.sql.Column` or column name, optional
         The time to represent, in valid TIME format.
         Required when creating timestamps from date and time components.
         Must be used with date parameter only.
+        A column that evaluates to a time.
 
     Returns
     -------
