@@ -57,6 +57,13 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   private[kafka010] val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
 
+  private val partitionMetadataCacheTtlMs: Long =
+    readerOptions.getOrElse(KafkaSourceProvider.PARTITION_METADATA_CACHE_TTL_MS, "-1").toLong
+
+  // Protected by this.synchronized (always accessed inside withRetries, which holds the lock).
+  private var cachedPartitions: Set[TopicPartition] = Set.empty
+  private var cacheTimestampMs: Long = 0L
+
   /**
    * An AdminClient used in the driver to query the latest Kafka offsets.
    * This only queries the offsets because AdminClient has no functionality to commit offsets like
@@ -127,7 +134,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       logDebug(s"Assigned partitions: $partitions. Seeking to $partitionOffsets")
       partitionOffsets
     }
-    val partitions = withRetries { consumerStrategy.assignedTopicPartitions(admin) }
+    val partitions = withRetries { resolvePartitions() }
     // Obtain TopicPartition offsets with late binding support
     offsetRangeLimit match {
       case EarliestOffsetRangeLimit => partitions.map {
@@ -439,12 +446,30 @@ private[kafka010] class KafkaOffsetReaderAdmin(
     }
   }
 
+  // Must be called inside withRetries (which holds this.synchronized).
+  private def resolvePartitions(): Set[TopicPartition] = {
+    if (partitionMetadataCacheTtlMs <= 0) {
+      return consumerStrategy.assignedTopicPartitions(admin)
+    }
+    val now = System.currentTimeMillis()
+    if (cacheTimestampMs > 0 && (now - cacheTimestampMs) < partitionMetadataCacheTtlMs) {
+      logDebug(s"Reusing cached partitions (age ${now - cacheTimestampMs}ms < " +
+        s"${partitionMetadataCacheTtlMs}ms TTL): $cachedPartitions")
+      cachedPartitions
+    } else {
+      val fresh = consumerStrategy.assignedTopicPartitions(admin)
+      cachedPartitions = fresh
+      cacheTimestampMs = now
+      fresh
+    }
+  }
+
   private def partitionsAssignedToAdmin(
       body: ju.Set[TopicPartition] => Map[TopicPartition, Long])
     : Map[TopicPartition, Long] = {
 
     withRetries {
-      val partitions = consumerStrategy.assignedTopicPartitions(admin).asJava
+      val partitions = resolvePartitions().asJava
       logDebug(s"Partitions assigned: $partitions.")
       body(partitions)
     }
@@ -493,5 +518,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
   private def resetAdmin(): Unit = synchronized {
     stopAdmin()
     _admin = null  // will automatically get reinitialized again
+    cachedPartitions = Set.empty
+    cacheTimestampMs = 0L
   }
 }
