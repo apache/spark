@@ -51,7 +51,13 @@ class SparkConnectServerAppStatusStore(store: KVStore) {
     try {
       Some(store.read(classOf[SessionInfo], SessionInfo.uniqueId(userId, sessionId)))
     } catch {
-      case _: NoSuchElementException => None
+      case _: NoSuchElementException =>
+        // Fallback for stores written before the natural key became (userId, sessionId), e.g. a
+        // History Server disk store cached by an older Spark that keyed SessionInfo on sessionId
+        // alone. Such rows still carry userId in the value, so we can match on both fields. Rows
+        // where two users shared a UUID were already merged under the old key and cannot be
+        // recovered here.
+        getSessionList.find(s => s.userId == userId && s.sessionId == sessionId)
     }
   }
 

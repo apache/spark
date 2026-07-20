@@ -724,7 +724,8 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/connect/sessions/[session-id]?userId=[user-id]</code></td>
     <td>Details for the given Spark Connect session. A session is identified by the composite
-    <code>(userId, sessionId)</code>, so <code>userId</code> is required.</td>
+    <code>(userId, sessionId)</code>, so <code>userId</code> is required and must be passed as an
+    unpadded base64url-encoded string.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/connect/operations</code></td>
