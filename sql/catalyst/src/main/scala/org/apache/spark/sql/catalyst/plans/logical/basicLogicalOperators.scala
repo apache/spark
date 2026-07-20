@@ -2666,11 +2666,18 @@ object AsOfJoin {
 
     def usesArrayOrderExpression(leftType: DataType, rightType: DataType): Boolean =
       (leftType, rightType) match {
-        case (ArrayType(leftElem, _), ArrayType(rightElem, _))
-            if DataTypeUtils.sameType(leftElem, rightElem) =>
-          true
+        case (ArrayType(leftElem, _), ArrayType(rightElem, _)) =>
+          areArrayElementsCompatible(leftElem, rightElem)
         case _ => false
       }
+
+    private def areArrayElementsCompatible(leftElem: DataType, rightElem: DataType): Boolean = {
+      if (DataTypeUtils.sameType(leftElem, rightElem)) {
+        RowOrdering.isOrderable(leftElem)
+      } else {
+        arePositionalStructsCompatible(leftElem, rightElem)
+      }
+    }
 
     /** Positional struct operands with the same field count (names may differ). */
     def usesStructDecomposition(leftType: DataType, rightType: DataType): Boolean =

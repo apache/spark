@@ -64,6 +64,21 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
   }
 
+  test("array operands with different struct element field names are compatible") {
+    val leftArray = ArrayType(
+      StructType(
+        StructField("x", IntegerType, nullable = false) ::
+          StructField("y", IntegerType, nullable = false) ::
+          Nil))
+    val rightArray = ArrayType(
+      StructType(
+        StructField("p", IntegerType, nullable = false) ::
+          StructField("q", IntegerType, nullable = false) ::
+          Nil))
+    assert(MatchConditionTypes.areOperandsCompatible(leftArray, rightArray))
+    assert(MatchConditionTypes.usesArrayOrderExpression(leftArray, rightArray))
+  }
+
   test("array operands with different element types are rejected") {
     val leftArray = ArrayType(IntegerType)
     val rightArray = ArrayType(StringType)
