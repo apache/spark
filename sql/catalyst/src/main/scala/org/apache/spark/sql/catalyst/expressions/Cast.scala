@@ -89,10 +89,6 @@ object Cast extends QueryErrorsBase {
    *   - Numeric <=> Boolean
    *   - String <=> Binary
    */
-  private val MICROS_PER_SECOND_BD = java.math.BigDecimal.valueOf(MICROS_PER_SECOND)
-  private val LONG_MAX_BD = java.math.BigDecimal.valueOf(Long.MaxValue)
-  private val LONG_MIN_BD = java.math.BigDecimal.valueOf(Long.MinValue)
-
   def canAnsiCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case (fromType, toType) if fromType == toType => true
 
@@ -684,6 +680,11 @@ case class Cast(
   with ToStringBase
   with SupportQueryContext
   with QueryErrorsBase {
+
+  private val MICROS_PER_SECOND_BD = java.math.BigDecimal.valueOf(MICROS_PER_SECOND)
+  private val LONG_MAX_BD = java.math.BigDecimal.valueOf(Long.MaxValue)
+  private val LONG_MIN_BD = java.math.BigDecimal.valueOf(Long.MinValue)
+
   override def nullIntolerant: Boolean = true
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
