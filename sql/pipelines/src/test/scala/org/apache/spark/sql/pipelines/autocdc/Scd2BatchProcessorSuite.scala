@@ -2987,4 +2987,30 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  test("promoteDecompositionTailsToTombstones quotes pass-through user columns whose names " +
+    "contain a dot") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("user.name", StringType)
+
+    // The `user.name` user column passes through the default branch unchanged. Without quoting,
+    // `F.col("user.name")` would be parsed as a nested-field access (struct `user`, field
+    // `name`) and fail to resolve, so the select would throw. A decomposition tail (recordStartAt
+    // and startAt null, endAt=20) is promoted to a tombstone at 20 while the dotted user column
+    // survives verbatim.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", null, 20L, Row(null))
+    )
+
+    val result = processor.promoteDecompositionTailsToTombstones(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 20L, 20L, Row(20L))
+      )
+    )
+  }
 }

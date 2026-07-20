@@ -892,7 +892,7 @@ case class Scd2BatchProcessor(
         val metadata = reconciledDf.schema(c).metadata
         F.when(isDecompositionTail, endAt).otherwise(startAt).as(c, metadata)
       case c =>
-        F.col(c)
+        F.col(QuotingUtils.quoteIdentifier(c))
     }
 
     reconciledDf.select(outputColumns.toImmutableArraySeq: _*)
