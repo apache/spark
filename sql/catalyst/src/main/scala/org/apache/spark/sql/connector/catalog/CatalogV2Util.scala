@@ -265,7 +265,11 @@ private[sql] object CatalogV2Util {
 
         case update: UpdateColumnComment =>
           replace(schema, update.fieldNames.toImmutableArraySeq, field =>
-            Some(field.withComment(update.newComment)))
+            if (update.newComment != null) {
+              Some(field.withComment(update.newComment))
+            } else {
+              Some(field.clearComment())
+            })
 
         case update: UpdateColumnPosition =>
           def updateFieldPos(struct: StructType, name: String): StructType = {
