@@ -15324,6 +15324,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
         A column that evaluates to a string.
     cols : :class:`~pyspark.sql.Column` or column name
         list of columns to work on.
+        Each a column that evaluates to a string or an array of strings.
 
     Returns
     -------
