@@ -9599,11 +9599,6 @@
       "Can only star expand struct data types. Attribute: `<attributes>`."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1052" : {
-    "message" : [
-      "ADD COLUMN with v1 tables cannot specify NOT NULL."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1058" : {
     "message" : [
       "Cannot create table with both USING <provider> and <serDeInfo>."
