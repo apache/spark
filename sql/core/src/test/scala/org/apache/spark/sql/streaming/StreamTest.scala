@@ -726,8 +726,13 @@ trait StreamTest extends SharedSparkSession with TimeLimits {
             if (ef.isFatalError) {
               // This is a fatal error, `streamThreadDeathCause` should be set to this error in
               // UncaughtExceptionHandler.
-              verify(streamThreadDeathCause != null &&
-                streamThreadDeathCause.getClass === ef.causeClass,
+              val fatalErrorMatches = streamThreadDeathCause != null && (
+                if (ef.typeIsSuperClass) {
+                  ef.causeClass.isInstance(streamThreadDeathCause)
+                } else {
+                  streamThreadDeathCause.getClass === ef.causeClass
+                })
+              verify(fatalErrorMatches,
                 "UncaughtExceptionHandler didn't receive the correct error\n" +
                   s"\tExpected: ${ef.causeClass}\n\tReturned: $streamThreadDeathCause")
               streamThreadDeathCause = null
