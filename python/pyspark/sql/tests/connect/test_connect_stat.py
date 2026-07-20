@@ -214,12 +214,17 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
                 "arg_type": "int",
             },
         )
-        with self.assertRaises(ValueError) as context:
-            (self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman"),)
-            self.assertTrue(
-                "Currently only the calculation of the Pearson Correlation "
-                + "coefficient is supported."
-                in str(context.exception)
+        for df in [
+            self.connect.read.table(self.tbl_name2),
+            self.spark.read.table(self.tbl_name2),
+        ]:
+            with self.assertRaises(PySparkValueError) as pe:
+                df.stat.corr("col1", "col3", "spearman")
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "method", "allowed_values": "['pearson']"},
             )
 
     def test_stat_approx_quantile(self):
