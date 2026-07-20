@@ -187,6 +187,11 @@ private[spark] class DAGScheduler(
       delayedTaskCompletionEvents: ListBuffer[CompletionEvent] = new ListBuffer[CompletionEvent])
   private[scheduler] val dependentStageMap = new HashMap[Stage, DependentStageInfo]
 
+  // Whether we have already logged that the pipelined-group slot check is disabled. Only the
+  // (single-threaded) event loop touches this, so a plain var is safe. Keeps the warning to once
+  // per scheduler rather than once per submitted batch job.
+  private var warnedPipelinedSlotCheckDisabled = false
+
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
   // Track all the jobs submitted by the same query execution, will clean up after
@@ -1777,6 +1782,16 @@ private[spark] class DAGScheduler(
       return true
     }
     if (!sc.conf.get(config.PIPELINED_GROUP_SLOT_CHECK_ENABLED)) {
+      // The only deadlock-prevention check for gang admission is off. Legitimate only when the
+      // deployment admits capacity out-of-band (e.g. a slot reservation); otherwise a pipelined
+      // group that cannot co-fit will be gang-scheduled and can deadlock. Warn once so this is
+      // never a silent state.
+      if (!warnedPipelinedSlotCheckDisabled) {
+        warnedPipelinedSlotCheckDisabled = true
+        logWarning(log"${MDC(CONFIG, config.PIPELINED_GROUP_SLOT_CHECK_ENABLED.key)}=false: " +
+          log"pipelined-group gang admission is NOT checking free slots. This is safe only if " +
+          log"capacity is reserved out-of-band; otherwise a group that cannot co-fit may deadlock.")
+      }
       return false
     }
     val rp = sc.resourceProfileManager.defaultResourceProfile
@@ -1840,24 +1855,12 @@ private[spark] class DAGScheduler(
    * member's `TaskSet.isPipelined` at submission and routing a member FetchFailed to a whole-group
    * abort.
    */
-  private def isPipelinedGroupMember(stage: Stage): Boolean = {
-    if (isPipelinedProducer(stage)) {
-      return true
-    }
-    // Consumer check: does this stage read through a PipelinedShuffleDependency at one of its
-    // shuffle boundaries? Walk the stage's own RDD graph (descending narrow deps, stopping at every
-    // shuffle boundary) -- the same edges that define the stage -- and look for a pipelined one.
-    !traverseRDDGraphUntil(stage.rdd) { (rdd, enqueue) =>
-      val hasPipelinedBoundary = rdd.dependencies.exists {
-        case _: PipelinedShuffleDependency[_, _, _] => true
-        case _: ShuffleDependency[_, _, _] => false // regular shuffle boundary: do not descend
-        case narrowDep =>
-          enqueue(narrowDep.rdd)
-          false
-      }
-      !hasPipelinedBoundary // keep walking until a pipelined boundary is found
-    }
-  }
+  private def isPipelinedGroupMember(stage: Stage): Boolean =
+    // Producer side: it writes a pipelined shuffle. Consumer side: its within-stage chain reads
+    // one. rddChainReadsPipelinedShuffle is the single source of truth for that within-stage walk
+    // (descend narrow deps, stop at every shuffle boundary, look for a pipelined one) -- do not
+    // re-inline it; the consumer walk here and that method used to be byte-identical copies.
+    isPipelinedProducer(stage) || rddChainReadsPipelinedShuffle(stage.rdd)
 
   /** Finds the earliest-created active job that needs the stage */
   // TODO: Probably should actually find among the active jobs that need this
@@ -2095,6 +2098,11 @@ private[spark] class DAGScheduler(
     // Record whether this job uses a pipelined shuffle (computed above), so the per-submit
     // pipelined-group checks can short-circuit for a regular job without walking its RDD graph.
     job.hasPipelinedDependency = hasPipelined
+    // We only reach here if the up-front gang admission above (rejectUnadmittablePipelinedGroup)
+    // did NOT fail-and-return -- i.e. it passed or was disabled by config. Record that so the
+    // co-schedule path in submitStage can assert the group was admitted, rather than trusting a
+    // comment. (v1: job == one group, so admission is job-level; see ActiveJob.)
+    job.pipelinedGroupAdmitted = hasPipelined
     clearCacheLocs()
     logInfo(
       log"Got job ${MDC(JOB_ID, job.jobId)} (${MDC(CALL_SITE_SHORT_FORM, callSite.shortForm)}) " +
@@ -2249,6 +2257,16 @@ private[spark] class DAGScheduler(
               pipelinedMissing.nonEmpty && pipelinedMissing.forall(runningStages.contains)
 
             if (regularMissing.isEmpty && allPipelinedParentsRunning) {
+              // v1 INVARIANT (job == one pipelined group): we co-schedule this group's members with
+              // NO slot check because the whole job was gang-admitted up front in
+              // handleJobSubmitted (rejectUnadmittablePipelinedGroup) before any member ran. Assert
+              // that link rather than trusting the comment. If a later version relaxes job==group
+              // (mixed DAGs / multiple groups per job), gang admission must move to a per-group
+              // "admit-on-ready" check HERE and REPLACE this assert -- do NOT just delete it, or an
+              // unadmitted group would be gang-scheduled and could deadlock.
+              assert(jobIdToActiveJob.get(jobId.get).exists(_.pipelinedGroupAdmitted),
+                s"Co-scheduling pipelined $stage whose job was not gang-admitted up front " +
+                  "(the v1 job==group admission invariant is violated)")
               // The whole group's capacity was already admitted up front (handleJobSubmitted ->
               // rejectUnadmittablePipelinedGroup) before any member was submitted, so the group is
               // known to fit; just co-schedule this consumer with its running producer(s). No slot
