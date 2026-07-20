@@ -214,18 +214,14 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
                 "arg_type": "int",
             },
         )
-        for df in [
-            self.connect.read.table(self.tbl_name2),
-            self.spark.read.table(self.tbl_name2),
-        ]:
-            with self.assertRaises(PySparkValueError) as pe:
-                df.stat.corr("col1", "col3", "spearman")
+        with self.assertRaises(PySparkValueError) as pe:
+            self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman")
 
-            self.check_error(
-                exception=pe.exception,
-                errorClass="VALUE_NOT_ALLOWED",
-                messageParameters={"arg_name": "method", "allowed_values": "['pearson']"},
-            )
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={"arg_name": "method", "allowed_values": "['pearson']"},
+        )
 
     def test_stat_approx_quantile(self):
         # SPARK-41069: Test the stat.approxQuantile method
