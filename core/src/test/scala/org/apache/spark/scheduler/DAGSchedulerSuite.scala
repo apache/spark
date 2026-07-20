@@ -7298,6 +7298,37 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined shuffle: a consumer result task throwing aborts the whole group") {
+    // Defense-in-depth for the group-atomic model at the DAGScheduler layer: a CONSUMER (result)
+    // task failing must tear down the whole group, not just its own stage. Result and map tasks
+    // share handleFailedTask / effectiveMaxTaskFailures=1, so the first consumer-task exception
+    // makes the TaskSetManager abort the set (delivered here as TaskSetFailed, exactly as a
+    // maxTaskFailures=1 abort surfaces to the DAGScheduler), which must abort the group and tear
+    // down the still-running producer -- the caller then reruns the batch. Complements the
+    // TaskSetManager-layer maxTaskFailures=1 tests and the producer-failure drop test.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    val consumerTs = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    val producerStage = scheduler.stageIdToStage(taskSets.head.stageId)
+    // The producer is STILL RUNNING (co-scheduled, not yet completed) when the consumer fails --
+    // this is what gives the assertion teeth: group-atomic teardown must reach a running producer.
+    assert(scheduler.runningStages.contains(producerStage),
+      "the pipelined producer must be co-scheduled and running alongside the consumer")
+
+    // The consumer's task set aborts on the first task exception (maxTaskFailures=1 for a pipelined
+    // member). This must fail the whole group and tear down the still-running producer.
+    failed(consumerTs, "consumer result task threw")
+    assert(failure != null, "a consumer task failure must fail the group's job")
+    assert(!scheduler.runningStages.contains(producerStage),
+      "the still-running pipelined producer must be torn down when the consumer fails the group")
+    sc.listenerBus.waitUntilEmpty()
+    assertDataStructuresEmpty()
+  }
+
   test("pipelined shuffle: a finishOnly replay landing on a torn-down stage does not re-post " +
       "TaskEnd") {
     // A deferred consumer completion fires its TaskEnd INLINE on first completion; only the
