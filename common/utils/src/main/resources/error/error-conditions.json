@@ -343,6 +343,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "AVRO_CANNOT_READ_NULL_FIELD" : {
+    "message" : [
+      "Cannot read null value for <name> into a non-nullable SQL type.",
+      "To allow null values, declare the corresponding type as nullable in the read schema."
+    ],
+    "sqlState" : "22004"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
