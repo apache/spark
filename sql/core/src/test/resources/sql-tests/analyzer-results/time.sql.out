@@ -1419,6 +1419,13 @@ Project [06:30:00 + INTERVAL '48' HOUR AS TIME '06:30:00' + INTERVAL '48' HOUR#x
 
 
 -- !query
+SELECT TIME'12:00:00' + INTERVAL '106751991' DAY
+-- !query analysis
+Project [12:00:00 + INTERVAL '106751991' DAY AS TIME '12:00:00' + INTERVAL '106751991' DAY#x]
++- OneRowRelation
+
+
+-- !query
 SELECT time_diff('HOUR', time'00:00:00', time'12:34:56')
 -- !query analysis
 Project [time_diff(HOUR, 00:00:00, 12:34:56) AS time_diff(HOUR, TIME '00:00:00', TIME '12:34:56')#xL]

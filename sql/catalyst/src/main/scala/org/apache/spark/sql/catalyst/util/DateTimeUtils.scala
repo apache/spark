@@ -1257,10 +1257,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
       intervalEndField: Byte,
       targetPrecision: Int): Long = {
     // ANSI SQL modulo-24 semantics: TIME + INTERVAL wraps around midnight.
-    // Use floorMod to keep the result in [0, NANOS_PER_DAY) for both positive
+    // Reduce the interval modulo one day in microseconds first to prevent Long overflow
+    // when converting to nanos (interval can be up to Long.MaxValue micros).
+    // Then use floorMod to keep the result in [0, NANOS_PER_DAY) for both positive
     // and negative overflow (e.g., 23:00 + 2h = 01:00, 01:00 - 3h = 22:00).
-    val intervalNanos = interval * NANOS_PER_MICROS
-    val result = Math.floorMod(time + intervalNanos, NANOS_PER_DAY)
+    val reducedMicros = Math.floorMod(interval, MICROS_PER_DAY)
+    val result = Math.floorMod(time + reducedMicros * NANOS_PER_MICROS, NANOS_PER_DAY)
     truncateTimeToPrecision(result, targetPrecision)
   }
 

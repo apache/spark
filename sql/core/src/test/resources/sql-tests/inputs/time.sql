@@ -212,6 +212,8 @@ SELECT TIME'01:00' - INTERVAL '3' HOUR;
 SELECT TIME'00:00' - INTERVAL '0.000001' SECOND;
 SELECT TIME'12:00' + INTERVAL '24' HOUR;
 SELECT TIME'06:30' + INTERVAL '48' HOUR;
+-- Large interval that would overflow Long if not reduced mod day first (106751991 days mod 24h = 0)
+SELECT TIME'12:00:00' + INTERVAL '106751991' DAY;
 
 -- SPARK-51555: time difference.
 SELECT time_diff('HOUR', time'00:00:00', time'12:34:56');
