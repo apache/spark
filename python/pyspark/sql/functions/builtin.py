@@ -7360,6 +7360,11 @@ def isnan(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         True if value is NaN and False otherwise.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.isnull`
+    :meth:`pyspark.sql.functions.isnotnull`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -7393,6 +7398,11 @@ def isnull(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         True if value is null and False otherwise.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.isnan`
+    :meth:`pyspark.sql.functions.isnotnull`
 
     Examples
     --------
@@ -16215,6 +16225,13 @@ def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         true if `str` matches a Java regex, or false otherwise.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.regexp`
+    :meth:`pyspark.sql.functions.regexp_like`
+    :meth:`pyspark.sql.functions.like`
+    :meth:`pyspark.sql.functions.ilike`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -16268,6 +16285,13 @@ def regexp(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         true if `str` matches a Java regex, or false otherwise.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.rlike`
+    :meth:`pyspark.sql.functions.regexp_like`
+    :meth:`pyspark.sql.functions.like`
+    :meth:`pyspark.sql.functions.ilike`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -16320,6 +16344,13 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         true if `str` matches a Java regex, or false otherwise.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.rlike`
+    :meth:`pyspark.sql.functions.regexp`
+    :meth:`pyspark.sql.functions.like`
+    :meth:`pyspark.sql.functions.ilike`
 
     Examples
     --------
@@ -18511,6 +18542,13 @@ def like(
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.ilike`
+    :meth:`pyspark.sql.functions.rlike`
+    :meth:`pyspark.sql.functions.regexp`
+    :meth:`pyspark.sql.functions.regexp_like`
+
     Examples
     --------
     >>> df = spark.createDataFrame([("Spark", "_park")], ['a', 'b'])
@@ -18560,6 +18598,13 @@ def ilike(
         An character added since Spark 3.0. The default escape character is the '\'.
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.like`
+    :meth:`pyspark.sql.functions.rlike`
+    :meth:`pyspark.sql.functions.regexp`
+    :meth:`pyspark.sql.functions.regexp_like`
 
     Examples
     --------
@@ -29956,6 +30001,11 @@ def isnotnull(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.isnan`
+    :meth:`pyspark.sql.functions.isnull`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -30096,6 +30146,10 @@ def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     col1 : :class:`~pyspark.sql.Column` or column name
     col2 : :class:`~pyspark.sql.Column` or column name
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.nvl2`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -30131,6 +30185,10 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
     col1 : :class:`~pyspark.sql.Column` or column name
     col2 : :class:`~pyspark.sql.Column` or column name
     col3 : :class:`~pyspark.sql.Column` or column name
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.nvl`
 
     Examples
     --------
