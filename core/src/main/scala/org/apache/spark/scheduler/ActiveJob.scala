@@ -63,4 +63,12 @@ private[spark] class ActiveJob(
   val finished = Array.fill[Boolean](numPartitions)(false)
 
   var numFinished = 0
+
+  /**
+   * Whether this job's RDD graph uses a `PipelinedShuffleDependency` (set once at job submission).
+   * Every pipelined-group scheduling path -- co-scheduling, deferral, and the per-submit
+   * `TaskSet.isPipelined` tagging -- is inert for a job without one, so this flag lets those paths
+   * short-circuit the group-membership graph walk for the common regular job at no cost.
+   */
+  var hasPipelinedDependency: Boolean = false
 }

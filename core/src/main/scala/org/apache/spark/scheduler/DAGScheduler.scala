@@ -1904,6 +1904,9 @@ private[spark] class DAGScheduler(
     barrierJobIdToNumTasksCheckFailures.remove(jobId)
 
     val job = new ActiveJob(jobId, finalStage, callSite, listener, artifacts, properties)
+    // Record whether this job uses a pipelined shuffle (computed above), so the per-submit
+    // pipelined-group checks can short-circuit for a regular job without walking its RDD graph.
+    job.hasPipelinedDependency = hasPipelined
     clearCacheLocs()
     logInfo(
       log"Got job ${MDC(JOB_ID, job.jobId)} (${MDC(CALL_SITE_SHORT_FORM, callSite.shortForm)}) " +
@@ -2460,9 +2463,13 @@ private[spark] class DAGScheduler(
         case _: ResultStage => None
       }
 
+      // Only a job that uses a pipelined shuffle can have a pipelined-group member; gate the
+      // group-membership graph walk on that cheap per-job flag so a regular job pays nothing here.
+      val isPipelined = jobIdToActiveJob.get(jobId).exists(_.hasPipelinedDependency) &&
+        isPipelinedGroupMember(stage)
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptNumber(), jobId, properties,
-        stage.resourceProfileId, shuffleId, isPipelined = isPipelinedGroupMember(stage)))
+        stage.resourceProfileId, shuffleId, isPipelined = isPipelined))
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run
