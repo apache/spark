@@ -2731,8 +2731,9 @@ object AsOfJoin {
     (leftOperand.dataType, rightOperand.dataType) match {
       case (ArrayType(leftElem, _), ArrayType(rightElem, _))
           if DataTypeUtils.sameType(leftElem, rightElem) =>
-        // Array comparison (and ordering distance) use Spark's lexicographic array ordering,
-        // including when the two arrays have different lengths.
+        // MATCH_CONDITION array comparison uses Spark lexicographic ordering (including length).
+        // The ordering distance below is element-wise via ZipWith, padding the shorter side with
+        // null when lengths differ (e.g. [0, null]), not a lexicographic length tie-break.
         buildArrayOrderExpression(leftOperand, rightOperand, leftElem, operator)
       case (leftStruct: StructType, rightStruct: StructType)
           if leftStruct.length == rightStruct.length && leftStruct.nonEmpty =>
