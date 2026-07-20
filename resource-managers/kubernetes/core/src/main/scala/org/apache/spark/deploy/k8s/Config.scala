@@ -106,7 +106,7 @@ private[spark] object Config extends Logging {
         "Web UI (separate from the headless driver service). When enabled, after the driver " +
         "Web UI starts, Spark will patch the Service's targetPort to match the actual bound " +
         "UI port, which allows using `spark.ui.port=0` (random port). Requires the driver's " +
-        "ServiceAccount to have `patch services` permission.")
+        "ServiceAccount to have `get` and `patch` verbs on `services`.")
       .version("4.3.0")
       .booleanConf
       .createWithDefault(false)
