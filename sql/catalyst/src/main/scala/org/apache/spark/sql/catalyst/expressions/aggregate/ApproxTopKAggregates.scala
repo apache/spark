@@ -697,9 +697,20 @@ class CombineInternal[T](
    * boundaries (SPARK-58069).
    */
   def serialize(): Array[Byte] = {
-    val sketchWithNullCountBytes = sketchWithNullCount.serialize(
-      ApproxTopK.genSketchSerDe(itemDataType).asInstanceOf[ArrayOfItemsSerDe[T]])
-    val typeBytes: Array[Byte] = itemDataType.json.getBytes(StandardCharsets.UTF_8)
+    // An empty partition has a placeholder buffer whose itemDataType has not been initialized.
+    // It can still be serialized between aggregation stages, so use a default serde for its empty
+    // sketch and encode the missing type as a zero-length section.
+    val serDe: ArrayOfItemsSerDe[T] = if (itemDataType == null) {
+      new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[T]]
+    } else {
+      ApproxTopK.genSketchSerDe(itemDataType).asInstanceOf[ArrayOfItemsSerDe[T]]
+    }
+    val sketchWithNullCountBytes = sketchWithNullCount.serialize(serDe)
+    val typeBytes: Array[Byte] = if (itemDataType == null) {
+      Array.emptyByteArray
+    } else {
+      itemDataType.json.getBytes(StandardCharsets.UTF_8)
+    }
     val byteArray = new Array[Byte](
       sketchWithNullCountBytes.length + Integer.BYTES + Integer.BYTES + typeBytes.length)
 
@@ -729,12 +740,20 @@ object CombineInternal {
     val typeLength = byteBuffer.getInt
     val typeBytes = new Array[Byte](typeLength)
     byteBuffer.get(typeBytes)
-    val itemDataType = DataType.fromJson(new String(typeBytes, StandardCharsets.UTF_8))
+    val itemDataType = if (typeLength == 0) {
+      null
+    } else {
+      DataType.fromJson(new String(typeBytes, StandardCharsets.UTF_8))
+    }
     // read sketchBytes
     val sketchBytes = new Array[Byte](buffer.length - Integer.BYTES - Integer.BYTES - typeLength)
     byteBuffer.get(sketchBytes)
-    val sketchWithNullCount = ApproxTopKAggregateBuffer.deserialize(
-      sketchBytes, ApproxTopK.genSketchSerDe(itemDataType))
+    val serDe = if (itemDataType == null) {
+      new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
+    } else {
+      ApproxTopK.genSketchSerDe(itemDataType)
+    }
+    val sketchWithNullCount = ApproxTopKAggregateBuffer.deserialize(sketchBytes, serDe)
     new CombineInternal[Any](sketchWithNullCount, itemDataType, maxItemsTracked)
   }
 }

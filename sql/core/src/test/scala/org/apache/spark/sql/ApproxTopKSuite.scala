@@ -20,8 +20,11 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.time.{LocalDateTime, LocalTime}
 
+import org.apache.datasketches.frequencies.ItemsSketch
+
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproxTopKAggregateBuffer, CombineInternal}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampNTZType, TimestampType, TimeType}
@@ -574,6 +577,20 @@ class ApproxTopKSuite extends SharedSparkSession {
       Seq("CAST('12:00:00.123' AS TIME(3))", "CAST('12:00:00.123' AS TIME(3))",
         "CAST('13:00:00.123' AS TIME(3))"))
   )
+
+  test("SPARK-58069: serialize an empty approx_top_k_combine buffer") {
+    val maxItemsTracked = 100
+    val buffer = new CombineInternal[Any](
+      new ApproxTopKAggregateBuffer[Any](new ItemsSketch[Any](128), 0L),
+      null,
+      maxItemsTracked)
+
+    val restored = CombineInternal.deserialize(buffer.serialize())
+
+    assert(restored.getItemDataType == null)
+    assert(restored.getMaxItemsTracked == maxItemsTracked)
+    assert(restored.getSketchWithNullCount.sketch.isEmpty)
+  }
 
   // positive tests for approx_top_k_combine on every types
   gridTest("SPARK-52798: same type, same size, specified combine size - success")(itemsWithTopK) {
