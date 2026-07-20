@@ -6291,6 +6291,35 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined shuffle: an explicit job cancellation cleans up a buffered consumer deferral") {
+    // A buffered deferral is the only mutable state this feature adds; it must never outlive its
+    // job. Job cancellation goes through failJobAndIndependentStages ->
+    // cleanupStateForJobAndIndependentStages, which drops the entry (as a consumer key) and removes
+    // the stage from every other consumer's pending-producer set. Verify a consumer whose
+    // completion is buffered while its producer runs leaves NO deferral behind when the job is
+    // cancelled, and no buffered success is later applied as a result.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    val jobId = submit(consumerRdd, Array(0, 1))
+    val consumerTaskSet = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+
+    // Consumer finishes ahead of its producer -> its completion is buffered (a deferral exists).
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    assert(scheduler.dependentStageMap.nonEmpty, "a deferral must exist while the producer runs")
+    assert(results.isEmpty, "the consumer result must be deferred, not applied yet")
+
+    // Cancel the job. The deferral must be torn down with everything else -- no stale entry, and
+    // the buffered success must not be replayed as a result.
+    cancel(jobId)
+    assert(scheduler.dependentStageMap.isEmpty,
+      "job cancellation must clean up the buffered consumer deferral (no state outlives the job)")
+    assert(results.isEmpty, "a cancelled job's buffered consumer success must not be applied")
+    assertDataStructuresEmpty()
+  }
+
   test("regular shuffle job with speculation enabled is NOT rejected (rejection path is inert)") {
     // The speculation fail-fast must apply only to jobs with a pipelined dependency; a plain
     // regular-shuffle job with speculation on runs normally.
