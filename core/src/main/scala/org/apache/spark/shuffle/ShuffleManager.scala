@@ -37,8 +37,8 @@ import org.apache.spark.util.Utils
  * 1. This will be instantiated by SparkEnv so its constructor can take a SparkConf and
  * boolean isDriver as parameters.
  * 2. A [[BlockingShuffleManager]] exposes a ShuffleBlockResolver which interacts with the External
- * Shuffle Service when it is enabled. Need to pay attention to that, if implementing a custom
- * shuffle manager, to make sure it could co-exist with the External Shuffle Service.
+ * Shuffle Service when it is enabled. Pay attention to this when implementing a custom shuffle
+ * manager to make sure it can coexist with the External Shuffle Service.
  */
 private[spark] trait ShuffleManager {
 

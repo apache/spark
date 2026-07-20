@@ -275,11 +275,14 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
  * [[ShuffleDependency]] keeps the existing semantics: its output is fully materialized before any
  * consumer reads it.
  *
- * This class only declares the capability. On its own it behaves exactly like its parent
- * [[ShuffleDependency]] -- code that matches `ShuffleDependency` continues to treat it as an
- * ordinary (materialized) shuffle -- so introducing it changes no existing behavior. The concurrent
- * scheduling and incremental-shuffle behavior will be added separately by the components that match
- * on this type.
+ * Two behaviors are active from construction, driven by this type: shuffle registration routes to
+ * the incremental (pipelined) shuffle manager via `SparkEnv.shuffleManagerFor` (a plain
+ * [[ShuffleDependency]] goes to the blocking manager), and push-based shuffle merge is
+ * unconditionally disabled (`setShuffleMergeAllowed(false)`; see below) because merge exposes
+ * output only after a post-completion finalize step and would register merge results for a
+ * transient shuffle. Beyond those, the concurrent scheduling behavior is added separately by the
+ * `DAGScheduler` components that match on this type; code that only matches the parent
+ * `ShuffleDependency` still treats it as an ordinary (materialized) shuffle for everything else.
  *
  * The name is *pipelined* rather than *streaming*: reading producer output as it is produced is a
  * general execution capability (software-pipelining of dependent stages), not specific to
