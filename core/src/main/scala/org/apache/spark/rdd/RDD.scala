@@ -1790,7 +1790,7 @@ abstract class RDD[T: ClassTag](
     // Content verification only covers serialized blocks. When enabled together with the
     // force-serialized flag, adapt the level to a serialized one so a plain localCheckpoint()
     // (whose default level is deserialized) becomes verifiable.
-    val verifyCheckpointChecksumEnabled = localCheckpointVerifyChecksumEnabled
+    val verifyCheckpointChecksumEnabled = conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED)
     val forceCheckpointSerialized =
       verifyCheckpointChecksumEnabled &&
         conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_FORCE_SERIALIZED)
@@ -1833,13 +1833,6 @@ abstract class RDD[T: ClassTag](
    * Return whether this RDD is checkpointed and materialized, either reliably or locally.
    */
   def isCheckpointed: Boolean = isCheckpointedAndMaterialized
-
-  /**
-   * The `spark.checkpoint.local.verifyChecksum.enabled` config (not the
-   * `verifyCheckpointChecksums` mark).
-   */
-  def localCheckpointVerifyChecksumEnabled: Boolean =
-    conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED)
 
   /**
    * Return whether this RDD is checkpointed and materialized, either reliably or locally.
