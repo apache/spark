@@ -174,7 +174,7 @@ private[spark] class TaskSchedulerImpl(
    * count is one consistent snapshot (both the per-profile total and the excluded members are read
    * together).
    */
-  def outstandingTasksForOtherWorkInProfile(
+  private[scheduler] def outstandingTasksForOtherWorkInProfile(
       resourceProfileId: Int, excludeStageIds: Set[Int]): Int = synchronized {
     taskSetsByStageIdAndAttempt.iterator.flatMap { case (stageId, attempts) =>
       if (excludeStageIds.contains(stageId)) {
