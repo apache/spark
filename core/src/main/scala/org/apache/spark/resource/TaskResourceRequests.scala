@@ -60,7 +60,9 @@ class TaskResourceRequests() extends Serializable {
    *
    * @param amount Number of cpus to allocate per Task. Any positive value is valid, including
    *               fractional ones: below 1 (e.g. 0.2) to let multiple tasks share a CPU core,
-   *               or above 1 (e.g. 1.5).
+   *               or above 1 (e.g. 1.5). The value is rounded to the nearest 1e-9 for internal
+   *               CPU accounting, so precision beyond 9 decimal places is not preserved (this
+   *               also absorbs the binary noise of computed `Double`s such as `0.1 + 0.2`).
    */
   @Since("4.3.0")
   def cpus(amount: Double): this.type = {
