@@ -149,6 +149,13 @@ case class BitmapCount(child: Expression)
     _FUNC_(bitmap, bit_position) - Returns true if the bit at the given position is set in the
     bitmap, false otherwise.
   """,
+  arguments = """
+    Arguments:
+      * bitmap - The bitmap to test.
+        An expression that evaluates to a binary.
+      * bit_position - The bit position to test.
+        An expression that evaluates to a long.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(X '01', 0L);
