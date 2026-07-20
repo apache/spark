@@ -1604,10 +1604,10 @@ private[spark] class DAGScheduler(
    * fail-fast behavior off this (via TaskSet.isPipelined). False for any stage in a job with no
    * pipelined dependency.
    *
-   * NOTE: this is deliberately defined here alongside the other group-topology helpers
-   * (`isPipelinedProducer`, `pipelinedGroupOf`) but is first consumed by the group-atomic failure
-   * handling added in a later PR of this stack (`TaskSet.isPipelined` and the member-failure
-   * fail-fast, spec S6). It reads as unused when this change is viewed alone; that is expected.
+   * NOTE: this is deliberately defined here alongside the other group-topology helper
+   * (`isPipelinedProducer`). Its call sites are the group-atomic failure handling added later in
+   * this stack: tagging the member's `TaskSet.isPipelined` at submission and routing a member
+   * FetchFailed to a whole-group abort (spec S6).
    */
   private def isPipelinedGroupMember(stage: Stage): Boolean = {
     if (isPipelinedProducer(stage)) {
