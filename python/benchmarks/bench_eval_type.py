@@ -2006,10 +2006,9 @@ class TransformWithStatePandasUDFPeakmemBench(
 # either inputData or initState rows -- never both -- with the inactive column
 # written as an all-null struct. Matching the JVM ``initData ++ data`` ordering,
 # all initial-state batches are emitted first (initState populated), then all
-# data batches (inputData populated). ``TransformWithStateInPandasInitStateSerializer``
-# regroups rows by the leading key column, so each key surfaces as an init-only
-# call followed by a data-only call; the empty side of each call is filtered out
-# before the UDF sees it.
+# data batches (inputData populated). The worker regroups rows by the leading
+# key column, so each key surfaces as an init-only call followed by a data-only
+# call; the empty side of each call is filtered out before the UDF sees it.
 
 
 class _TransformWithStatePandasInitStateBenchMixin(_TransformWithStatePandasBenchMixin):
