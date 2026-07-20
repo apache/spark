@@ -75,6 +75,7 @@ if TYPE_CHECKING:
     from py4j.java_gateway import JavaClass, JavaObject, JVMView
     import pyarrow as pa
     from pyspark.core.context import SparkContext
+    from pyspark.core.broadcast import Broadcast
     from pyspark.core.rdd import RDD
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
     from pyspark.sql.catalog import Catalog
@@ -1051,6 +1052,40 @@ class SparkSession(SparkConversionMixin):
             jdf = self._jsparkSession.range(int(start), int(end), int(step), int(numPartitions))
 
         return DataFrame(jdf, self)
+
+    def broadcast(self, value: "T") -> "Broadcast[T]":
+        """
+        Broadcast a read-only variable to the cluster, returning a
+        :class:`Broadcast <pyspark.broadcast.Broadcast>` object for reading it in distributed
+        functions. The variable will be sent to each executor only once.
+
+        This is an alias for :meth:`SparkContext.broadcast`, provided so that broadcast variables
+        can be created from a :class:`SparkSession` in both classic PySpark and Spark Connect
+        (SPARK-51705).
+
+        .. versionadded:: 4.3.0
+
+        .. versionchanged:: 4.3.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        value : T
+            value to broadcast to the Spark nodes
+
+        Returns
+        -------
+        :class:`Broadcast <pyspark.broadcast.Broadcast>`
+            :class:`Broadcast <pyspark.broadcast.Broadcast>` object, a read-only variable cached
+            on each machine
+
+        Examples
+        --------
+        >>> bc = spark.broadcast({1: 10001, 2: 10002})
+        >>> bc.value
+        {1: 10001, 2: 10002}
+        """
+        return self._sc.broadcast(value)
 
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None

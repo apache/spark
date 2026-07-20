@@ -37,6 +37,7 @@ from typing import (
     overload,
     Iterable,
     Mapping,
+    TypeVar,
     TYPE_CHECKING,
     ClassVar,
 )
@@ -103,6 +104,7 @@ from pyspark.errors import (
 
 if TYPE_CHECKING:
     import pyspark.sql.connect.proto as pb2
+    from pyspark.core.broadcast import Broadcast
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
@@ -110,6 +112,9 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.tvf import TableValuedFunction
     from pyspark.sql.connect.shell.progress import ProgressHandler
     from pyspark.sql.connect.datasource import DataSourceRegistration
+
+
+T = TypeVar("T")
 
 
 class SparkSession:
@@ -865,6 +870,20 @@ class SparkSession:
         )
 
     range.__doc__ = PySparkSession.range.__doc__
+
+    def broadcast(self, value: "T") -> "Broadcast[T]":
+        # (SPARK-51705) Create a broadcast variable over Spark Connect. The value is cloudpickled
+        # and uploaded through the existing cache artifact channel; the server materializes a
+        # PythonBroadcast on the driver SparkContext and returns a driver-side broadcast id.
+        from pyspark.serializers import CloudPickleSerializer
+        from pyspark.sql.connect.broadcast import ConnectBroadcast
+
+        blob = CloudPickleSerializer().dumps(value)
+        artifact_hash = self._client.cache_artifact(blob)
+        broadcast_id = self._client._create_broadcast(artifact_hash, len(blob))
+        return ConnectBroadcast(self, broadcast_id, value)
+
+    broadcast.__doc__ = PySparkSession.broadcast.__doc__
 
     @functools.cached_property
     def catalog(self) -> "Catalog":

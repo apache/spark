@@ -53,12 +53,35 @@ message Command {
     MlCommand ml_command = 17;
     ExecuteExternalCommand execute_external_command = 18;
     PipelineCommand pipeline_command = 19;
+    CreateBroadcastCommand create_broadcast_command = 20;
+    UnpersistBroadcastCommand unpersist_broadcast_command = 21;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 999;
 
   }
+}
+
+// (SPARK-51705) Create a broadcast variable from an already-uploaded cache/<sha256> artifact.
+// The client uploads cloudpickle(value) through the existing cache artifact channel and then
+// sends this command with the returned hash. The server materializes a PythonBroadcast on the
+// live driver SparkContext and returns a CreateBroadcastResult with the driver-side broadcast id.
+message CreateBroadcastCommand {
+  // (Required) sha256 hash returned by client.cache_artifact(cloudpickle(value)).
+  string artifact_hash = 1;
+  // (Optional) Uncompressed byte size, used to enforce the BROADCAST_VALUE_TOO_LARGE quota.
+  int64 size_bytes = 2;
+}
+
+// (SPARK-51705) Release a broadcast variable created over Spark Connect.
+message UnpersistBroadcastCommand {
+  // (Required) The driver-side broadcast id returned by CreateBroadcastResult.
+  int64 broadcast_id = 1;
+  // (Optional) Whether to block until unpersisting has completed.
+  bool blocking = 2;
+  // (Optional) Whether to destroy (not just unpersist) all data and metadata of the broadcast.
+  bool destroy = 3;
 }
 
 // A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.
