@@ -1540,6 +1540,13 @@ private[spark] class DAGScheduler(
    * `listener` with no retry -- a transient shortfall is the caller's to retry (e.g. the streaming
    * batch loop reruns the batch). Returns true (job failed) if it does not fit.
    *
+   * The likeness to barrier's slot check is only that both reject before any stage is created
+   * (leaving no partial state) and compute demand from the RDD graph. Retry behavior differs
+   * deliberately: barrier RE-POSTS the job and re-runs its check on a timer up to
+   * `spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures` times; pipelined admission is
+   * TERMINAL (one check, then fail), delegating transient-shortfall retry to the caller
+   * (scheduler-side PG-admission retry is a post-v1 refinement; spec S4.1).
+   *
    * The check can be turned off with `spark.scheduler.pipelinedGroup.slotCheck.enabled=false` (for
    * deployments that admit capacity out-of-band, e.g. via a slot reservation).
    */
