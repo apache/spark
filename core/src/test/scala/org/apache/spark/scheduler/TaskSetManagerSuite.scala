@@ -41,7 +41,9 @@ import org.apache.spark.internal.config.Tests.{SKIP_VALIDATE_CORES_TESTING, TEST
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceProfileBuilder
 import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TaskResourceRequests
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.serializer.SerializerInstance
@@ -2393,6 +2395,13 @@ class TaskSetManagerSuite
       Seq.empty[AccumulableInfo])
   }
 
+  // A fatal JVM heap OutOfMemoryError, as reported by the ExceptionFailure the Executor sends
+  // before it exits with the OOM exit code. Its className is java.lang.OutOfMemoryError, not
+  // SparkOutOfMemoryError.
+  private def jvmOomExceptionFailure: ExceptionFailure = {
+    new ExceptionFailure(new OutOfMemoryError("Java heap space"), Seq.empty[AccumulableInfo])
+  }
+
   test("SPARK-58187: OOM retry cpus increment disabled by default (zero regression)") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -2672,6 +2681,104 @@ class TaskSetManagerSuite
     val spec = manager.resourceOffer("exec2", "host2", ANY, availCpus = 8)._1
     assert(spec.isDefined && spec.get.index === 0)
     assert(spec.get.cpus === 5)
+  }
+
+  test("SPARK-58187: OOM retry grows cpus when executor cores are unknown") {
+    // A ResourceProfile without an explicit executor-core count (e.g. Standalone / local-cluster
+    // without spark.executor.cores) reports getExecutorCores == None. Previously the cap fell back
+    // to the generic default spark.executor.cores of 1, which pinned every retry at 1 cpu so the
+    // increment never took effect. With the fix the cap is absent and the retry cpus grow, bounded
+    // only by the executor's actual free cpus at offer time.
+    val conf = new SparkConf()
+      .set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+      .set(config.CPUS_PER_TASK, 1)
+    sc = new SparkContext("local[4]", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    // Build a TaskResourceProfile (only task resources, no executor cores).
+    val rp = new ResourceProfileBuilder()
+      .require(new TaskResourceRequests().cpus(1))
+      .build()
+    sc.resourceProfileManager.addResourceProfile(rp)
+    assert(rp.getExecutorCores.isEmpty)
+    val taskSet = FakeTask.createTaskSet(1, rpId = rp.id)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    // First attempt uses the base 1 cpu.
+    val a0 = manager.resourceOffer("exec1", "host1", ANY, taskCpus = 1, availCpus = 8)._1
+    assert(a0.isDefined && a0.get.cpus === 1)
+    manager.handleFailedTask(a0.get.taskId, TaskState.FAILED, oomExceptionFailure)
+
+    // First OOM retry with an unknown cap: 1 + 1 * 1 = 2 cpus (grows; the old code pinned it at 1).
+    val a1 = manager.resourceOffer("exec1", "host1", ANY, taskCpus = 1, availCpus = 8)._1
+    assert(a1.isDefined && a1.get.cpus === 2)
+  }
+
+  test("SPARK-58187: maximum increment never yields a non-positive cpu request") {
+    // The config accepts any non-negative Int. An extreme increment (Int.MaxValue) overflows the
+    // Int request arithmetic, but effectiveCpusFor floors the result at baseCpus, so the launch
+    // never sees a non-positive cpu count (which would trip the cpus > 0 assertion in
+    // TaskDescription after scheduler state was already mutated). It degrades gracefully to the
+    // base cpus rather than crashing.
+    val conf = new SparkConf()
+      .set(config.OOM_RETRY_CPUS_INCREMENT, Int.MaxValue)
+      .set(config.CPUS_PER_TASK, 1)
+      .set(config.EXECUTOR_CORES, 4)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    val a0 = manager.resourceOffer("exec1", "host1", ANY, availCpus = 4)._1
+    assert(a0.isDefined && a0.get.cpus === 1)
+    manager.handleFailedTask(a0.get.taskId, TaskState.FAILED, oomExceptionFailure)
+
+    // The overflowed request is floored at baseCpus, so the retry still launches with a positive
+    // cpu count (no crash, no cpus > 0 assertion failure).
+    val a1 = manager.resourceOffer("exec1", "host1", ANY, availCpus = 4)._1
+    assert(a1.isDefined && a1.get.cpus >= 1)
+  }
+
+  test("SPARK-58187: fatal JVM OutOfMemoryError FAILED before executor loss increments once") {
+    // The Executor sends the ExceptionFailure (java.lang.OutOfMemoryError) before it exits with
+    // the OOM exit code, so the driver may process FAILED first. That path must recognize the
+    // fatal OOM, and the later ExecutorExited(52) must not double-count.
+    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    val a0 = manager.resourceOffer("exec1", "host1", ANY, availCpus = 4)._1
+    assert(a0.isDefined)
+    manager.taskInfos(a0.get.taskId).launchSucceeded()
+    // FAILED (fatal heap OOM) arrives first.
+    manager.handleFailedTask(a0.get.taskId, TaskState.FAILED, jvmOomExceptionFailure)
+    assert(numOomRetriesOf(manager)(0) === 1)
+    // The executor-loss event for the same, now-finished attempt must not increment again.
+    manager.executorLost(
+      "exec1", "host1", ExecutorExited(SparkExitCode.OOM, exitCausedByApp = true))
+    assert(numOomRetriesOf(manager)(0) === 1)
+  }
+
+  test("SPARK-58187: JVM OutOfMemoryError executor loss before FAILED increments once") {
+    // The reverse ordering: the ExecutorExited(52) is processed before the stale FAILED. The
+    // executor-loss path increments and marks the attempt finished, so the later FAILED is a
+    // no-op (info.finished guard).
+    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    val a0 = manager.resourceOffer("exec1", "host1", ANY, availCpus = 4)._1
+    assert(a0.isDefined)
+    manager.taskInfos(a0.get.taskId).launchSucceeded()
+    manager.executorLost(
+      "exec1", "host1", ExecutorExited(SparkExitCode.OOM, exitCausedByApp = true))
+    assert(numOomRetriesOf(manager)(0) === 1)
+    // The stale FAILED for the same attempt must be ignored (already finished).
+    manager.handleFailedTask(a0.get.taskId, TaskState.FAILED, jvmOomExceptionFailure)
+    assert(numOomRetriesOf(manager)(0) === 1)
   }
 
   test("SPARK-30359: don't clean executorsPendingToRemove " +
