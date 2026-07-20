@@ -39,6 +39,7 @@ on:
     - 'dev/spark-test-image/python-314/Dockerfile'
     - 'dev/spark-test-image/python-314-nogil/Dockerfile'
     - '.github/workflows/build_infra_images_cache.yml'
+    - 'pyproject.toml'
   # Create infra image when cutting down branches/tags
   create:
   workflow_dispatch:
