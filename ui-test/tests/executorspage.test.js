@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import '../../core/src/main/resources/org/apache/spark/ui/static/jquery.min.js';
+import '../../core/src/main/resources/org/apache/spark/ui/static/jquery-3.5.1.min.js';
 import '../../core/src/main/resources/org/apache/spark/ui/static/jquery.dataTables.min.js';
 import { formatLossReason } from '../../core/src/main/resources/org/apache/spark/ui/static/executorspage.js';
 
