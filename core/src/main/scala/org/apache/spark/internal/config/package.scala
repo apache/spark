@@ -1679,8 +1679,6 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
 
-  // ======== OIDC Credential Propagation configs (SPARK-57703) ========
-
   private[spark] val SECURITY_CREDENTIALS_ENABLED =
     ConfigBuilder("spark.security.credentials.enabled")
       .doc("Whether to enable OIDC credential propagation. When enabled, the driver reads an " +
