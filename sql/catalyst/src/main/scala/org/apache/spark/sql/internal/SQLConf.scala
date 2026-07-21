@@ -7229,6 +7229,20 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED = buildConf(
+    "spark.sql.optimizer.mergeSubplans.filterPropagation.dsv2SymmetricFilterPropagation.enabled")
+    .doc("When true, two DataSource V2 scan subplans that pushed the same strict filters but " +
+      "carry different best-effort (post-scan) filters can merge into one scan even when " +
+      s"${MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key} is false. The equal strict " +
+      "filters (re-enforced on the rebuilt scan) mean both sides read the same base rows, so the " +
+      "merge reads that shared set once with a broadened OR of the best-effort filters, rather " +
+      "than twice -- unlike the general symmetric case where the two sides may read disjoint " +
+      s"data. Has no effect when ${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(true)
+
   val MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED =
     buildConf("spark.sql.optimizer.mergeSubplans.filterPropagation.throughJoin.enabled")
       .doc("When set to true, filter attributes can propagate through Join nodes during subplan " +

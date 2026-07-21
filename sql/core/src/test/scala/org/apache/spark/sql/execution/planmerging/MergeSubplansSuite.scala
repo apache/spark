@@ -2102,6 +2102,37 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
+  test("SPARK-40259: DSv2 symmetric merge honors its own config when the general one is off") {
+    // Two DSv2 scans with equal (empty) strict filters but differing best-effort filters. The
+    // general symmetric propagation is off, so a non-DSv2 pair would not merge; the DSv2-specific
+    // config allows it, since the equal strict filters mean both sides read the same base set and
+    // only the best-effort OR pruning is broadened.
+    val sub1 = ScalarSubquery(
+      v2ScanReading("a").where($"a" > 1).groupBy()(sum($"a").as("sum_a")))
+    val sub2 = ScalarSubquery(
+      v2ScanReading("b").where($"b" > 2).groupBy()(sum($"b").as("sum_b")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false",
+        SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      assert(v2Scans(optimized).map(_.canonicalized).distinct.length == 1,
+        s"the two DSv2 scans should fuse into one:\n$optimized")
+    }
+
+    // With the DSv2 config also off, the differing-filter pair must NOT merge (two scans remain).
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false",
+        SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      assert(v2Scans(optimized).map(_.canonicalized).distinct.length == 2,
+        s"the two DSv2 scans must not fuse when both symmetric configs are off:\n$optimized")
+    }
+  }
+
   test("SPARK-40259: merge proceeds without pruning when the source rejects the pruning") {
     val rejecting = new TestV2Table(
       StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType))),
