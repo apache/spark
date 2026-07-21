@@ -252,7 +252,7 @@ public final class CredentialProviderLoader {
   /**
    * Resets the cached provider list and initialization tracking. Intended for testing only.
    */
-  static void resetForTesting() {
+  public static void resetForTesting() {
     synchronized (CredentialProviderLoader.class) {
       cachedProviders = null;
       initializedProviders.clear();
