@@ -1,3 +1,4 @@
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -22917,8 +22918,8 @@ def variant_array_append(
 def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Column:
     """
     Recursively removes null fields from variant objects and null elements from arrays, unless
-    `include_arrays` is False, in which case null elements in arrays are kept. Returns NULL if `v`
-    is NULL.
+    `include_arrays` is False, in which case null elements in arrays are kept. Returns NULL if any
+    argument is NULL.
 
     .. versionadded:: 4.3.0
 
