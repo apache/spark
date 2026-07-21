@@ -87,7 +87,7 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
    * bit 3 is set and the local header's crc/size fields are zeroed, so the real values live only in
    * the trailing data descriptor. `ZipArchiveInputStream` cannot stream such an entry -- it has no
    * size to bound the read -- so `read` throws rather than yielding truncated bytes. This is the
-   * non-streamable case the zip reader documents; `ZipArchiveOutputStream` cannot produce it
+   * non-streamable case for pure-streaming zip reads; `ZipArchiveOutputStream` cannot produce it
    * (it rejects an unsized STORED entry, or rewrites the header when the sink is seekable), so the
    * bytes are assembled by hand.
    */
