@@ -94,10 +94,10 @@ private[scheduler] case class CompletionEvent(
     metricPeaks: Array[Long],
     taskInfo: TaskInfo,
     // Set only on a pipelined consumer's completion event that was deferred and is now being
-    // replayed after its producer(s) finished (spec S5, fine-grained model). Its per-task side
-    // effects (accumulator update, task-end listener event) already ran inline when the task first
-    // completed; on replay only the deferred stage/job-completion bookkeeping must run, so this
-    // flag tells handleTaskCompletion to skip the per-task effects and avoid applying them twice.
+    // replayed after its producer(s) finished. Its per-task side effects (accumulator update,
+    // task-end listener event) already ran inline when the task first completed; on replay only the
+    // deferred stage/job-completion bookkeeping must run, so this flag tells handleTaskCompletion
+    // to skip the per-task effects and avoid applying them twice.
     finishOnly: Boolean = false)
   extends DAGSchedulerEvent
 
