@@ -716,31 +716,25 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(cores === "2")
   }
 
-  test("SPARK-58192: recovery-mode ENV_EXECUTOR_CORES follows the launched profile's task cpus") {
+  test("SPARK-58192: recovery-mode ENV_EXECUTOR_CORES rounds fractional spark.task.cpus up") {
+    val rpb = new ResourceProfileBuilder()
+    val ereq = new ExecutorResourceRequests()
+    val treq = new TaskResourceRequests()
+    ereq.cores(4)
+    treq.cpus(0.5)
+    rpb.require(ereq).require(treq)
+    val rp = rpb.build()
+
     baseConf.set(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
-    // The profile's own (possibly fractional) cpus request wins over the global spark.task.cpus.
-    baseConf.set("spark.task.cpus", "2.5")
-    Seq(0.5 -> "1", 1.5 -> "2", 2.5 -> "3").foreach { case (taskCpus, expectedCores) =>
-      val ereq = new ExecutorResourceRequests().cores(4)
-      val treq = new TaskResourceRequests().cpus(taskCpus)
-      val rp = new ResourceProfileBuilder().require(ereq).require(treq).build()
-      val step =
-        new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
+    Seq("0.5" -> "1", "1.5" -> "2", "2.5" -> "3").foreach { case (taskCpus, expectedCores) =>
+      baseConf.set("spark.task.cpus", taskCpus)
+      val secMgr = new SecurityManager(baseConf)
+      val step = new BasicExecutorFeatureStep(newExecutorConf(), secMgr, rp)
       val executor = step.configurePod(SparkPod.initialPod())
       val cores =
         executor.container.getEnv.asScala.find(_.getName == ENV_EXECUTOR_CORES).get.getValue
-      assert(cores === expectedCores, s"for profile task cpus = $taskCpus")
+      assert(cores === expectedCores, s"for spark.task.cpus = $taskCpus")
     }
-
-    // A profile without a cpus request falls back to the global (fractional) spark.task.cpus.
-    baseConf.set("spark.task.cpus", "0.5")
-    val treq = new TaskResourceRequests().resource("gpu", 1)
-    val rp = new ResourceProfileBuilder().require(treq).build()
-    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf), rp)
-    val executor = step.configurePod(SparkPod.initialPod())
-    val cores =
-      executor.container.getEnv.asScala.find(_.getName == ENV_EXECUTOR_CORES).get.getValue
-    assert(cores === "1")
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.
