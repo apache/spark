@@ -355,7 +355,7 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
   def condition: Expression
   def originalTable: NamedRelation
 
-  override def output: Seq[Attribute] = {
+  override lazy val output: Seq[Attribute] = {
     EliminateSubqueryAliases(table) match {
       case ExtractV2Table(table: RowLevelOperationTable) => table.operationOutput
       case _ => Nil
