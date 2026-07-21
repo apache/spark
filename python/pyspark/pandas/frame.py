@@ -9484,6 +9484,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 raise ValueError("Data overlaps.")
 
         data_fields = self._internal.data_fields.copy()
+        updated_columns: Dict[str, PySparkColumn] = {}
         for column_labels in update_columns:
             column_name = self._internal.spark_column_name_for(column_labels)
             old_col = scol_for(update_sdf, column_name)
@@ -9507,8 +9508,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     else F.when(old_col.isNull(), new_col).otherwise(old_col)
                 )
 
-            update_sdf = update_sdf.withColumn(column_name, updated_col)
+            updated_columns[column_name] = updated_col
             data_fields[self._internal.column_labels.index(column_labels)] = None
+        if updated_columns:
+            update_sdf = update_sdf.withColumns(updated_columns)
         sdf = update_sdf.select(
             *[scol_for(update_sdf, col) for col in self._internal.spark_column_names],
             *HIDDEN_COLUMNS,
