@@ -927,4 +927,101 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       )
     }
   }
+
+  test("SPARK-58235: cast large double to timestamp overflow with ansi on") {
+    // Large positive double overflow - error from DoubleExactNumeric.toLong
+    checkErrorInExpression[SparkArithmeticException](
+      cast(Literal(1E20.toDouble), TimestampType),
+      "CAST_OVERFLOW",
+      Map(
+        "value" -> s"${(1E20 * 1000000.0)}D",
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BIGINT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+      ))
+
+    // Large negative double overflow
+    checkErrorInExpression[SparkArithmeticException](
+      cast(Literal(-1E20.toDouble), TimestampType),
+      "CAST_OVERFLOW",
+      Map(
+        "value" -> s"${(-1E20 * 1000000.0)}D",
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BIGINT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+      ))
+
+    // Normal value should work: 1.5 seconds = 1,500,000 microseconds
+    checkEvaluation(cast(Literal(1.5), TimestampType), 1500000L)
+
+    // Positive boundary: 9223372036854 * 1e6 = 9223372036853999616 (within Long range)
+    checkEvaluation(
+      cast(Literal(9223372036854.0), TimestampType),
+      (9223372036854.0 * 1000000.0).toLong)
+
+    // Positive overflow: 9223372036855 * 1e6 > Long.MaxValue -> overflow
+    checkErrorInExpression[SparkArithmeticException](
+      cast(Literal(9223372036855.0), TimestampType),
+      "CAST_OVERFLOW",
+      Map(
+        "value" -> s"${(9223372036855.0 * 1000000.0)}D",
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BIGINT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+      ))
+
+    // Negative boundary: -9223372036854 * 1e6 within Long range
+    checkEvaluation(
+      cast(Literal(-9223372036854.0), TimestampType),
+      (-9223372036854.0 * 1000000.0).toLong)
+
+    // Negative overflow: -9223372036855 * 1e6 < Long.MinValue -> overflow
+    checkErrorInExpression[SparkArithmeticException](
+      cast(Literal(-9223372036855.0), TimestampType),
+      "CAST_OVERFLOW",
+      Map(
+        "value" -> s"${(-9223372036855.0 * 1000000.0)}D",
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BIGINT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+      ))
+  }
+
+  test("SPARK-58235: cast large float to timestamp overflow with ansi on") {
+    // Large positive float overflow - value is (double)float * MICROS_PER_SECOND
+    checkErrorInExpression[SparkArithmeticException](
+      cast(Literal(1E20f), TimestampType),
+      "CAST_OVERFLOW",
+      Map(
+        "value" -> s"${(1E20f.toDouble * 1000000.0)}D",
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BIGINT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+      ))
+
+    // Large negative float overflow
+    checkErrorInExpression[SparkArithmeticException](
+      cast(Literal(-1E20f), TimestampType),
+      "CAST_OVERFLOW",
+      Map(
+        "value" -> s"${(-1E20f.toDouble * 1000000.0)}D",
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BIGINT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+      ))
+
+    // Normal float value: 1.5f seconds = 1,500,000 microseconds
+    checkEvaluation(cast(Literal(1.5f), TimestampType), 1500000L)
+
+    // Float boundary: 92233720000000.0f * 1e6 = 9.223372E19 overflows Long range
+    checkErrorInExpression[SparkArithmeticException](
+      cast(Literal(92233720000000.0f), TimestampType),
+      "CAST_OVERFLOW",
+      Map(
+        "value" -> s"${(92233720000000.0f.toDouble * 1000000.0)}D",
+        "sourceType" -> "\"DOUBLE\"",
+        "targetType" -> "\"BIGINT\"",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+      ))
+  }
 }

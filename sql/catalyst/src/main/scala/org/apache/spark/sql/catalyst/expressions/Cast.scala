@@ -1013,7 +1013,24 @@ case class Cast(
     (d.toBigDecimal * MICROS_PER_SECOND).longValue
   }
   private[this] def doubleToTimestamp(d: Double): Any = {
-    if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
+    if (d.isNaN || d.isInfinite) {
+      null
+    } else {
+      val result = d * MICROS_PER_SECOND
+      // Detect overflow before casting to Long. Conditions 2 and 3 also catch
+      // finite d whose multiplication overflows to +-Infinity (then (long)result
+      // clamps to Long.MAX_VALUE or Long.MIN_VALUE). Note: condition 3 has a
+      // theoretical false positive when d = Long.MinValue / 1e6 (double rounding
+      // makes d * 1e6 == Long.MinValue), but the corresponding timestamp is
+      // ~292 million years BCE, so this is harmless in practice.
+      if (result > Long.MaxValue ||
+        (result.toLong == Long.MaxValue && d > 0) ||
+        (result.toLong == Long.MinValue && d < 0)) {
+        errorOrNull(d, DoubleType, TimestampType)
+      } else {
+        result.toLong
+      }
+    }
   }
 
   // converting seconds to us
@@ -2010,11 +2027,19 @@ case class Cast(
           val errorContext = getContextOrNullCode(ctx)
           code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi($c, $errorContext);"
         } else {
+          val result = ctx.freshName("dblResult")
           code"""
             if (Double.isNaN($c) || Double.isInfinite($c)) {
               $evNull = true;
             } else {
-              $evPrim = (long)($c * $MICROS_PER_SECOND);
+              double $result = $c * $MICROS_PER_SECOND;
+              if ($result > Long.MAX_VALUE ||
+                  ((long)$result == Long.MAX_VALUE && $c > 0) ||
+                  ((long)$result == Long.MIN_VALUE && $c < 0)) {
+                $evNull = true;
+              } else {
+                $evPrim = (long)$result;
+              }
             }
           """
         }
@@ -2024,11 +2049,19 @@ case class Cast(
           val errorContext = getContextOrNullCode(ctx)
           code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi((double)$c, $errorContext);"
         } else {
+          val result = ctx.freshName("fltResult")
           code"""
             if (Float.isNaN($c) || Float.isInfinite($c)) {
               $evNull = true;
             } else {
-              $evPrim = (long)((double)$c * $MICROS_PER_SECOND);
+              double $result = (double)$c * $MICROS_PER_SECOND;
+              if ($result > Long.MAX_VALUE ||
+                  ((long)$result == Long.MAX_VALUE && $c > 0) ||
+                  ((long)$result == Long.MIN_VALUE && $c < 0)) {
+                $evNull = true;
+              } else {
+                $evPrim = (long)$result;
+              }
             }
           """
         }

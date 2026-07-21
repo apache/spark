@@ -942,4 +942,79 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(largeTime1, ShortType), null)
     checkEvaluation(cast(largeTime1, ByteType), null)
   }
+
+  test("SPARK-58235: cast large double to timestamp overflow with ansi off") {
+    // Large positive double that overflows Long range when multiplied by MICROS_PER_SECOND
+    val largePosDouble = Literal(1E20.toDouble)
+    checkEvaluation(cast(largePosDouble, TimestampType, UTC_OPT), null)
+
+    // Large negative double overflow
+    val largeNegDouble = Literal(-1E20.toDouble)
+    checkEvaluation(cast(largeNegDouble, TimestampType, UTC_OPT), null)
+
+    // NaN should return null
+    checkEvaluation(cast(Literal(Double.NaN), TimestampType, UTC_OPT), null)
+
+    // Positive Infinity should return null
+    checkEvaluation(
+      cast(Literal(Double.PositiveInfinity), TimestampType, UTC_OPT), null)
+
+    // Negative Infinity should return null
+    checkEvaluation(
+      cast(Literal(Double.NegativeInfinity), TimestampType, UTC_OPT), null)
+
+    // Normal value should work: 1.5 seconds = 1,500,000 microseconds
+    checkEvaluation(
+      cast(Literal(1.5), TimestampType, UTC_OPT), 1500000L)
+
+    // Zero should return epoch
+    checkEvaluation(cast(Literal(0.0), TimestampType, UTC_OPT), 0L)
+
+    // Positive boundary: 9223372036854 * 1e6 = 9223372036853999616 (within Long range)
+    checkEvaluation(
+      cast(Literal(9223372036854.0), TimestampType, UTC_OPT),
+      (9223372036854.0 * 1000000.0).toLong)
+
+    // Positive overflow: 9223372036855 * 1e6 overflows Long range -> null
+    checkEvaluation(
+      cast(Literal(9223372036855.0), TimestampType, UTC_OPT), null)
+
+    // Negative boundary: -9223372036854 * 1e6 = -9223372036853999616 (within Long range)
+    checkEvaluation(
+      cast(Literal(-9223372036854.0), TimestampType, UTC_OPT),
+      (-9223372036854.0 * 1000000.0).toLong)
+
+    // Negative overflow: -9223372036855 * 1e6 overflows Long range -> null
+    checkEvaluation(
+      cast(Literal(-9223372036855.0), TimestampType, UTC_OPT), null)
+
+    // Finite double whose multiplication overflows to +-Infinity
+    checkEvaluation(cast(Literal(-Double.MaxValue), TimestampType, UTC_OPT), null)
+    checkEvaluation(cast(Literal(Double.MaxValue), TimestampType, UTC_OPT), null)
+  }
+
+  test("SPARK-58235: cast large float to timestamp overflow with ansi off") {
+    // Large positive float overflow
+    val largePosFloat = Literal(1E20f)
+    checkEvaluation(cast(largePosFloat, TimestampType, UTC_OPT), null)
+
+    // Large negative float overflow
+    val largeNegFloat = Literal(-1E20f)
+    checkEvaluation(cast(largeNegFloat, TimestampType, UTC_OPT), null)
+
+    // Float NaN should return null
+    checkEvaluation(cast(Literal(Float.NaN), TimestampType, UTC_OPT), null)
+
+    // Float Infinity should return null
+    checkEvaluation(
+      cast(Literal(Float.PositiveInfinity), TimestampType, UTC_OPT), null)
+
+    // Normal float value: 1.5f seconds = 1,500,000 microseconds
+    checkEvaluation(
+      cast(Literal(1.5f), TimestampType, UTC_OPT), 1500000L)
+
+    // Float boundary: 92233720000000.0f * 1e6 = 9.223372E19 overflows Long range
+    checkEvaluation(
+      cast(Literal(92233720000000.0f), TimestampType, UTC_OPT), null)
+  }
 }

@@ -65,6 +65,7 @@ license: |
 - Since Spark 4.0, Spark removes `hive-llap-common` dependency. To restore the previous behavior, add `hive-llap-common` jar to the class path.
 - Since Spark 4.0, `spark.sql.parquet.compression.codec` drops the support of codec name `lz4raw`, please use `lz4_raw` instead.
 - Since Spark 4.0, when overflowing during casting timestamp to byte/short/int under non-ansi mode, Spark will return null instead a wrapping value.
+- Since Spark 4.0, when overflowing during casting numeric types (double, float) to timestamp under non-ansi mode, Spark will return null instead of an incorrect value caused by numeric overflow.
 - Since Spark 4.0, the `encode()` and `decode()` functions support only the following charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32'. To restore the previous behavior when the function accepts charsets of the current JDK used by Spark, set `spark.sql.legacy.javaCharsets` to `true`.
 - Since Spark 4.0, the `encode()` and `decode()` functions raise `MALFORMED_CHARACTER_CODING` error when handling unmappable characters, while in Spark 3.5 and earlier versions, these characters will be replaced with mojibakes. To restore the previous behavior, set `spark.sql.legacy.codingErrorAction` to `true`. For example, if you try to `decode` a string value `tést` / [116, -23, 115, 116] (encoded in latin1) with 'UTF-8', you get `t�st`.
 - Since Spark 4.0, the legacy datetime rebasing SQL configs with the prefix `spark.sql.legacy` are removed. To restore the previous behavior, use the following configs:
