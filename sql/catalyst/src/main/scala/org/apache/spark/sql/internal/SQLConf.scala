@@ -3001,6 +3001,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PUSH_DOWN_LOCAL_SORT_ENABLED =
+    buildConf("spark.sql.execution.pushDownLocalSort")
+      .internal()
+      .doc("When true, pushes a wider local sort down through order-preserving " +
+        "operators to replace a narrower local sort below it, so that a single sort can satisfy " +
+        "multiple operators' ordering requirements. This reduces the total number of local sorts " +
+        "computed in a stage, for example when a sort aggregate is stacked on a window over the " +
+        "same clustering keys.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val REPLACE_HASH_WITH_SORT_AGG_ENABLED = buildConf("spark.sql.execution.replaceHashWithSortAgg")
     .internal()
     .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
