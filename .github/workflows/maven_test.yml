@@ -30,7 +30,7 @@ on:
         description: Branch to run the build against
         required: false
         type: string
-        default: master
+        default: branch-4.2
       hadoop:
         description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
         required: false
