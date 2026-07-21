@@ -369,6 +369,72 @@ class ArrowUtilsSuite extends SparkFunSuite {
       defaultType.asInstanceOf[ArrowType.Interval].getUnit === IntervalUnit.MONTH_DAY_NANO)
   }
 
+  test("isInterchangeShapedField rejects shapes the interchange schema cannot declare") {
+    def field(schema: StructType, lossless: Boolean, largeVarTypes: Boolean = false): Field = {
+      ArrowUtils
+        .toArrowSchema(schema, "UTC", true, largeVarTypes, losslessInternalTypes = lossless)
+        .findField("value")
+    }
+
+    // Interchange-encoded fields of every kind pass, including the standard nanos/interval
+    // encodings and nested complex types.
+    Seq[DataType](
+      IntegerType,
+      TimestampNTZNanosType(9),
+      TimestampLTZNanosType(7),
+      CalendarIntervalType,
+      ArrayType(TimestampNTZNanosType(9)),
+      new StructType().add("i", CalendarIntervalType),
+      MapType(IntegerType, StringType)).foreach { dt =>
+      val f = field(new StructType().add("value", dt), lossless = false)
+      assert(ArrowUtils.isInterchangeShapedField(f, largeVarTypes = false), dt.toString)
+    }
+
+    // The lossless internal struct encodings are rejected, top-level and nested.
+    Seq[DataType](
+      TimestampNTZNanosType(9),
+      TimestampLTZNanosType(7),
+      CalendarIntervalType,
+      ArrayType(TimestampNTZNanosType(9)),
+      new StructType().add("i", CalendarIntervalType),
+      MapType(IntegerType, TimestampLTZNanosType(9))).foreach { dt =>
+      val f = field(new StructType().add("value", dt), lossless = true)
+      assert(!ArrowUtils.isInterchangeShapedField(f, largeVarTypes = false), dt.toString)
+    }
+
+    // A plain struct with the same child names but no tag is not a lossless encoding: it is
+    // declarable by the interchange schema and passes.
+    val untagged = field(
+      new StructType().add(
+        "value",
+        new StructType()
+          .add("months", IntegerType, nullable = false)
+          .add("days", IntegerType, nullable = false)
+          .add("microseconds", LongType, nullable = false)),
+      lossless = false)
+    assert(ArrowUtils.isInterchangeShapedField(untagged, largeVarTypes = false))
+
+    // Var-width offset width must agree with the largeVarTypes flag, in both directions and
+    // nested.
+    Seq[DataType](StringType, BinaryType, ArrayType(StringType)).foreach { dt =>
+      val standard = field(new StructType().add("value", dt), lossless = false)
+      assert(ArrowUtils.isInterchangeShapedField(standard, largeVarTypes = false), dt.toString)
+      assert(!ArrowUtils.isInterchangeShapedField(standard, largeVarTypes = true), dt.toString)
+      val large =
+        field(new StructType().add("value", dt), lossless = false, largeVarTypes = true)
+      assert(ArrowUtils.isInterchangeShapedField(large, largeVarTypes = true), dt.toString)
+      assert(!ArrowUtils.isInterchangeShapedField(large, largeVarTypes = false), dt.toString)
+    }
+
+    // The Arrow view types are never declared by a Spark interchange schema.
+    val viewField = new Field(
+      "value",
+      new FieldType(true, ArrowType.Utf8View.INSTANCE, null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(!ArrowUtils.isInterchangeShapedField(viewField, largeVarTypes = false))
+    assert(!ArrowUtils.isInterchangeShapedField(viewField, largeVarTypes = true))
+  }
+
   test("time") {
     // Arrow's Time type has no precision field, so TIME(p) precision is preserved via field
     // metadata; the Arrow type itself stays Time(NANOSECOND, 64).

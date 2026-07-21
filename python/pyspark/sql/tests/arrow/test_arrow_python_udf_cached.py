@@ -41,7 +41,9 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
     Python runner (ColumnarArrowPythonWithNamedArgumentRunner) end to end -- the path an
     Arrow-backed DSv2 source would also take. This pins the init-message protocol between that
     runner and the worker: a mismatched section there desyncs the worker's init parse and hangs
-    the task (SPARK-58241).
+    the task (SPARK-58241). It also pins the columnar fast path's shape gate: the cached vectors
+    are forwarded verbatim only when their physical shape matches what the stream's schema
+    declares, and fall back to row-based re-encoding otherwise.
 
     This suite runs in its own module because spark.sql.cache.serializer is a static conf latched
     into a JVM-wide singleton on first cache materialization.
@@ -69,7 +71,7 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         finally:
             super().tearDownClass()
 
-    def test_udf_on_cached_strings(self):
+    def _assert_udf_on_cached_strings(self):
         df = self.spark.createDataFrame(
             [("hello",), (None,), ("world",)], schema="v string"
         ).cache()
@@ -78,6 +80,20 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
             assertDataFrameEqual(result, [Row("HELLO"), Row(None), Row("WORLD")])
         finally:
             df.unpersist()
+
+    def test_udf_on_cached_strings(self):
+        # Cache-scan vectors use standard 32-bit var-width offsets, matching the default
+        # interchange schema: the columnar fast path forwards them verbatim.
+        self._assert_udf_on_cached_strings()
+
+    def test_udf_on_cached_strings_with_large_var_types(self):
+        # With useLargeVarTypes=true the UDF stream schema declares LargeUtf8 (64-bit offsets)
+        # but the cache always stores standard Utf8, so forwarding the cache-scan vector
+        # verbatim would produce a stream whose header and body disagree. The shape gate must
+        # route this through the row-based re-encoding fallback and still produce correct
+        # results.
+        with self.sql_conf({"spark.sql.execution.arrow.useLargeVarTypes": "true"}):
+            self._assert_udf_on_cached_strings()
 
     def test_udf_on_cached_numeric_column_alongside_unselected_string(self):
         # Only the UDF's input columns are serialized to the worker; the column that is not a

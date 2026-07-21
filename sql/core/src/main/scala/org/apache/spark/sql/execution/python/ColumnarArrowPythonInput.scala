@@ -28,6 +28,7 @@ import org.apache.arrow.vector.ipc.message.MessageSerializer
 
 import org.apache.spark.api.python.BasePythonRunner
 import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
@@ -81,10 +82,25 @@ private[python] trait ColumnarArrowPythonInput
   }
 
   /**
-   * Check whether all selected columns in the batch are Arrow-backed.
+   * Check whether all selected columns in the batch are Arrow-backed AND physically match the
+   * shape the stream's Schema message declares. The Schema message was written once from the
+   * declared UDF input schema with the standard interchange encoding, while writeArrowDirect
+   * serializes the upstream vectors' buffers verbatim -- so a vector in a different physical
+   * shape (the lossless internal struct encodings of nanosecond timestamps or CalendarInterval
+   * from an Arrow-cache scan, a var-width vector whose offset width disagrees with
+   * largeVarTypes, or an Arrow view type) would produce a stream whose header and body disagree,
+   * which the worker decodes as garbage or rejects. Such batches take writeRowByRow instead,
+   * which re-encodes through ArrowWriter under the declared schema -- including its
+   * DATETIME_OVERFLOW guards for values the interchange encoding cannot represent at all.
    */
   private def isArrowBacked(batch: ColumnarBatch): Boolean = {
-    inputColumnIndices.forall(i => batch.column(i).isInstanceOf[ArrowColumnVector])
+    inputColumnIndices.forall { i =>
+      batch.column(i) match {
+        case acv: ArrowColumnVector =>
+          ArrowUtils.isInterchangeShapedField(acv.getValueVector.getField, largeVarTypes)
+        case _ => false
+      }
+    }
   }
 
   /**

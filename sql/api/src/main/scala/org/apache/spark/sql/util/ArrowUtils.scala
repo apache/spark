@@ -556,6 +556,35 @@ private[sql] object ArrowUtils {
     }
   }
 
+  /**
+   * Whether an Arrow field tree (from an upstream vector) has exactly the physical shape the
+   * standard interchange encoding declares for its Spark type, so its buffers can be serialized
+   * verbatim under a schema built by `toArrowSchema(..., largeVarTypes)` with the default
+   * (non-lossless) encodings. An IPC consumer decodes a RecordBatch body strictly by the shape
+   * the stream's Schema message declared, so forwarding a vector whose shape differs -- the
+   * lossless internal struct encodings of nanosecond timestamps and CalendarInterval, a var-width
+   * vector whose offset width disagrees with `largeVarTypes`, or the Arrow view types (which
+   * Spark schemas never declare) -- produces a stream whose header and body disagree: depending
+   * on the column mix that surfaces as a decode error or, worse, silently mis-bound buffers.
+   * Callers that forward vectors verbatim (e.g. the columnar Arrow Python UDF input) must reject
+   * such vectors and re-encode them through ArrowWriter instead, which also reinstates the
+   * value-domain guards (DATETIME_OVERFLOW) for values the interchange encoding cannot represent.
+   */
+  def isInterchangeShapedField(field: Field, largeVarTypes: Boolean): Boolean = {
+    field.getType match {
+      case ArrowType.Utf8.INSTANCE | ArrowType.Binary.INSTANCE => !largeVarTypes
+      case ArrowType.LargeUtf8.INSTANCE | ArrowType.LargeBinary.INSTANCE => largeVarTypes
+      case ArrowType.Utf8View.INSTANCE | ArrowType.BinaryView.INSTANCE |
+          ArrowType.ListView.INSTANCE =>
+        false
+      case _: ArrowType.Struct
+          if isTimestampNanosStructField(field) || isCalendarIntervalStructField(field) =>
+        false
+      case _ =>
+        field.getChildren.asScala.forall(child => isInterchangeShapedField(child, largeVarTypes))
+    }
+  }
+
   def fromArrowField(field: Field): DataType = {
     field.getType match {
       case _: ArrowType.Map =>
