@@ -413,6 +413,19 @@ class QueryCompilationErrorsSuite
     )
   }
 
+  test("INVALID_XML_SCHEMA_MAP_TYPE: only STRING as a key type for MAP") {
+    val schema = StructType(
+      StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.schema(schema).xml(spark.emptyDataset[String])
+      },
+      condition = "INVALID_XML_SCHEMA_MAP_TYPE",
+      parameters = Map("xmlSchema" -> "\"STRUCT<map: MAP<INT, INT> NOT NULL>\"")
+    )
+  }
+
   test("UNRESOLVED_MAP_KEY: string type literal should be quoted") {
     checkAnswer(sql("select m['a'] from (select map('a', 'b') as m, 'aa' as aa)"), Row("b"))
     val query = "select m[a] from (select map('a', 'b') as m, 'aa' as aa)"

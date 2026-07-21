@@ -5357,6 +5357,12 @@
     },
     "sqlState" : "42000"
   },
+  "INVALID_XML_SCHEMA_MAP_TYPE" : {
+    "message" : [
+      "Input schema <xmlSchema> can only contain STRING as a key type for a MAP."
+    ],
+    "sqlState" : "2200N"
+  },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
       "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. <externalEngineError>."
