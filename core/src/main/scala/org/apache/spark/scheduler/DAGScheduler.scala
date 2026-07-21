@@ -623,11 +623,11 @@ private[spark] class DAGScheduler(
     shuffleIdToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) =>
         // A pipelined shuffle is transient: it is a once-through live stream with no retained,
-        // addressable output, so reusing its producer stage across jobs is unsound (spec S4,
-        // cross-time/cross-job reuse). Reuse must be prevented explicitly -- from the scheduler's
-        // view a shuffle-map stage can be reused unless something forbids it. If a pipelined
-        // dependency's shuffleId is already bound to a stage from a different job, that is the
-        // forbidden cross-job reuse; fail fast (S9). (Within the same job the cached stage is the
+        // addressable output, so reusing its producer stage across jobs is unsound (there is no
+        // durable output for a second job to read). Reuse must be prevented explicitly -- from the
+        // scheduler's view a shuffle-map stage can be reused unless something forbids it. If a
+        // pipelined dependency's shuffleId is already bound to a stage from a different job, that
+        // is the forbidden cross-job reuse; fail fast. (Within the same job the cached stage is the
         // one we just created, so returning it is correct and not reuse.)
         if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]] &&
             !stage.jobIds.contains(firstJobId)) {
@@ -3008,7 +3008,7 @@ private[spark] class DAGScheduler(
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
             if (shuffleStage.isPipelined) {
               // A pipelined shuffle is transient and must NOT be registered with the
-              // MapOutputTracker as a durable, addressable output (spec S4): doing so would let
+              // MapOutputTracker as a durable, addressable output: doing so would let
               // executor/host loss strip it there, flip isAvailable to false, and resubmit the
               // producer -- which then hangs its streaming writer (it blocks forever on
               // termination acks from reducers that already finished). Track the completed
@@ -3024,7 +3024,7 @@ private[spark] class DAGScheduler(
               // executor-loss strip (bogus epoch) could invalidate. A pipelined stage never
               // registers there, and its completed set is monotonic and never rolled back (a
               // transient shuffle cannot be recomputed; any real group failure aborts the whole
-              // group, S6). Skipping the record for an "old" or "bogus" straggler would be actively
+              // group). Skipping the record for an "old" or "bogus" straggler would be actively
               // harmful: with pendingPartitions decremented but the partition unrecorded, a dropped
               // last partition leaves the stage "done but not available" -> processShuffleMapStage-
               // Completion resubmits the transient producer, reopening the streaming-writer hang.
@@ -3100,7 +3100,7 @@ private[spark] class DAGScheduler(
             log"that stage (attempt " +
             log"${MDC(NUM_ATTEMPT, failedStage.latestInfo.attemptNumber())}) running")
         } else if (isPipelinedGroupMember(failedStage) || isPipelinedGroupMember(mapStage)) {
-          // Failure is group-atomic for a pipelined group (spec S6). The base scheduler handles a
+          // Failure is group-atomic for a pipelined group. The base scheduler handles a
           // FetchFailed by resubmitting just the map stage in isolation and recomputing serially,
           // but a transient pipelined shuffle cannot be re-read and its members are co-scheduled, so
           // a lone-stage resubmit is never valid and would deadlock the group. Abort the
@@ -3120,7 +3120,7 @@ private[spark] class DAGScheduler(
           // jobs sharing that executor must not keep stale MapOutputTracker entries (with an
           // external shuffle service, an ExecutorLost would NOT clean these, so this is the only
           // proactive channel). Safe for the pipelined shuffle itself: it registers no map outputs
-          // in the tracker (S4), so this can only strip regular/durable outputs.
+          // in the tracker, so this can only strip regular/durable outputs.
           unregisterOutputsOnFetchFailedExecutor(bmAddress, task)
           abortStage(failedStage,
             s"A pipelined group member failed with a fetch failure: $failureMessage", None)

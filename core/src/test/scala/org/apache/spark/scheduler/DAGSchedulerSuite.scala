@@ -6241,10 +6241,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("pipelined shuffle: a regular-shuffle prefix feeding a pipelined producer is rejected") {
     // Also mixed: a regular shuffle in the PREFIX that feeds a pipelined producer
-    // (regularRoot --regular--> producer(pipelined) --pipelined--> consumer). Spec S7 would treat
-    // the regular edge as an ordinary external input to the group, but v1/M1 (RTM scope: the shape
-    // is scan-of-files --pipelined--> stateful, with no upstream shuffle) rejects ANY regular
-    // shuffle in a pipelined job up front rather than supporting a mid-DAG regular prefix.
+    // (regularRoot --regular--> producer(pipelined) --pipelined--> consumer). Rather than treat
+    // the regular edge as an ordinary external input to the group and support a mid-DAG regular
+    // prefix, a pipelined job rejects ANY regular shuffle up front (the supported shape is
+    // scan-of-files --pipelined--> stateful, with no upstream shuffle).
     val regularRoot = new MyRDD(sc, 2, Nil)
     val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(2))
     val producerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
@@ -6947,7 +6947,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   // ==========================================================================================
-  // Cross-job / cross-time reuse prevention at both layers (spec S4): a consumed pipelined
+  // Cross-job / cross-time reuse prevention at both layers: a consumed pipelined
   // producer whose executor is lost must not be resubmitted
   // ==========================================================================================
 
@@ -7167,15 +7167,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("pipelined shuffle: binding a live producer stage to a second concurrent job fails fast") {
     // A pipelined shuffle is a once-through live stream with no retained output, so two concurrent
-    // jobs cannot share one producer stage (spec S4). While job 0 is still active its producer
+    // jobs cannot share one producer stage. While job 0 is still active its producer
     // stage stays cached in shuffleIdToMapStage bound to job 0; a second concurrent job that reuses
     // the SAME PipelinedShuffleDependency would bind that live stage to a second jobId, which is
     // the
     // forbidden cross-job reuse. Fail fast rather than let job 1 attach to job 0's live stream.
     // (A sequential re-run is NOT this case: after job 0 finishes, cleanup drops the stage from
     // shuffleIdToMapStage, so a later job gets a fresh producer bound to only its own job --
-    // exactly
-    // how each RTM micro-batch reruns its producer.)
+    // exactly how each streaming micro-batch reruns its producer.)
     val producerRdd = new MyRDD(sc, 2, Nil)
     val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
 
@@ -7225,7 +7224,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Contrast with the concurrent case above: after a job using a pipelined dependency finishes,
     // cleanup removes its producer from shuffleIdToMapStage, so re-submitting a job on the SAME
     // dependency creates a fresh producer stage bound to only the new job. This is sound (it is how
-    // an RTM micro-batch reruns) and must NOT trip the cross-job-reuse fail-fast.
+    // a streaming micro-batch reruns) and must NOT trip the cross-job-reuse fail-fast.
     val producerRdd = new MyRDD(sc, 2, Nil)
     val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
 
@@ -7253,11 +7252,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("pipelined shuffle: a FetchFailed on a group member fails the group, not a single-stage " +
       "resubmit") {
-    // A FetchFailed must fail an RTM (pipelined) query promptly rather than trigger the
+    // A FetchFailed must fail a pipelined (streaming) query promptly rather than trigger the
     // base scheduler's single-stage resubmit -> serial recompute -> deadlock. The transient
     // pipelined shuffle cannot be re-read, and members are co-scheduled, so a lone-stage resubmit
-    // is
-    // never valid (spec S6). Any member's FetchFailed must abort the whole group (-> job abort ->
+    // is never valid. Any member's FetchFailed must abort the whole group (-> job abort ->
     // the caller reruns the batch). Note the base TaskSetManager does NOT count a FetchFailed (it
     // marks the task successful and zombies the set), so the group-atomic maxTaskFailures=1 lever
     // does not apply to FetchFailed; the routing must be enforced in the DAGScheduler.
@@ -7396,16 +7394,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
 
   // ==========================================================================================
-  // Group-atomic rerun resets per-partition commit authorization (spec S5)
+  // Group-atomic rerun resets per-partition commit authorization
   // ==========================================================================================
 
   test("pipelined shuffle: a group rerun resets per-partition commit authorization") {
-    // Spec S5: a PG is atomic, so a failure reruns the WHOLE group -- including a result stage
-    // whose
-    // tasks already succeeded and committed. Those committed partitions are rerun and must be
-    // allowed to commit again. OutputCommitCoordinator permanently denies re-commit for a committed
-    // partition (a Success clears nothing; keyed by stage id). M1 satisfies S5 two ways, both
-    // asserted here: (b) the group teardown runs the committed result stage through
+    // A pipelined group is atomic, so a failure reruns the WHOLE group -- including a result
+    // stage whose tasks already succeeded and committed. Those committed partitions are rerun and
+    // must be allowed to commit again. OutputCommitCoordinator permanently denies re-commit for a
+    // committed partition (a Success clears nothing; keyed by stage id). The rerun stays correct
+    // two ways, both asserted here: (b) the group teardown runs the committed result stage through
     // markStageAsFinished -> stageEnd, clearing its committer state (so no stale authorization
     // survives); and (a) the caller's rerun is a NEW job whose stages get FRESH stage ids, so the
     // coordinator has no prior committer for them regardless.
@@ -7437,10 +7434,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     failed(producerTaskSet, "producer blew up")
     assert(failure.get() != null, "the group must fail atomically when the producer fails")
     // Teardown ran the group's stages through markStageAsFinished -> stageEnd, clearing their
-    // coordinator state: the commit-authorization state does not survive the failed attempt (S5).
+    // coordinator state: the commit-authorization state does not survive the failed attempt.
     // (isEmpty here proves stageEnd reached every stage the teardown covered.)
     assert(scheduler.outputCommitCoordinator.isEmpty,
-      "group teardown must reset per-partition commit authorization (S5); none may survive")
+      "group teardown must reset per-partition commit authorization; none may survive")
     assertDataStructuresEmpty()
 
     // The caller reruns the batch as a NEW job on the same dependency. Its stages get fresh ids, so
