@@ -80,7 +80,9 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(5, "hr", "new-text"),
         Row(6, "hr", "new-text")))
 
-    sql(s"DELETE FROM $tableNameAsString WHERE pk IN (2, 5)")
+    checkAnswer(
+      sql(s"DELETE FROM $tableNameAsString WHERE pk IN (2, 5)"),
+      Seq(Row("num_affected_rows", 2L)))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),

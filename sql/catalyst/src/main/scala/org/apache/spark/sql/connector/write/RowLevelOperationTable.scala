@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector.write
 
 import java.util
 
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.{Column, SupportsRead, SupportsRowLevelOperations, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.read.ScanBuilder
@@ -35,6 +37,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 private[sql] case class RowLevelOperationTable(
     table: Table with SupportsRowLevelOperations,
     operation: RowLevelOperation) extends Table with SupportsRead with SupportsWrite {
+
+  lazy val operationOutput: Seq[AttributeReference] =
+    DataTypeUtils.toAttributes(operation.outputSchema())
 
   override def name: String = table.name
   override def columns: Array[Column] = table.columns()

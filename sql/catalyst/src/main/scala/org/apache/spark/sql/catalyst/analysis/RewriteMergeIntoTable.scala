@@ -51,9 +51,11 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
-        case r: DataSourceV2Relation =>
+        case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
           checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
+          val operationTable = buildOperationTable(
+            tbl, MERGE, CaseInsensitiveStringMap.empty())
 
           // NOT MATCHED conditions may only refer to columns in source so they can be pushed down
           val insertAction = notMatchedActions.head.asInstanceOf[InsertAction]
@@ -74,7 +76,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           }
           val project = Project(projectList, joinPlan)
 
-          InsertOnlyMerge(r, project)
+          InsertOnlyMerge(r, project, output = operationTable.operationOutput)
 
         case _ =>
           m
@@ -85,9 +87,11 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         matchedActions.isEmpty && notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
-        case r: DataSourceV2Relation =>
+        case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
           checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
+          val operationTable = buildOperationTable(
+            tbl, MERGE, CaseInsensitiveStringMap.empty())
 
           // there are only NOT MATCHED actions, use a left anti join to remove any matching rows
           // and switch to using a regular append instead of a row-level MERGE operation
@@ -116,7 +120,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             output = generateExpandOutput(r.output, outputs),
             joinPlan)
 
-          InsertOnlyMerge(r, mergeRows)
+          InsertOnlyMerge(r, mergeRows, output = operationTable.operationOutput)
 
         case _ =>
           m

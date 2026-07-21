@@ -506,8 +506,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AppendData(r: DataSourceV2Relation, query, _, _, _, Some(write), _) =>
       AppendDataExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
-    case InsertOnlyMerge(r: DataSourceV2Relation, query, Some(write), _) =>
-      InsertOnlyMergeExec(planLater(query), refreshCache(r), write, r.name) :: Nil
+    case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, Some(write), _, _) =>
+      InsertOnlyMergeExec(planLater(query), refreshCache(r), write, r.name, m.output) :: Nil
 
     case OverwriteByExpression(r @ ExtractV2Table(v1: SupportsWrite), _, _,
         _, _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
@@ -572,7 +572,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         projections,
         write,
         rd.operation.command,
-        r.name) :: Nil
+        r.name,
+        rd.output) :: Nil
 
     case wd @ WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
         _, Some(write)) =>
@@ -582,7 +583,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         projections,
         write,
         wd.operation.command,
-        r.name) :: Nil
+        r.name,
+        wd.output) :: Nil
 
     case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
         notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>

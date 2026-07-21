@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.config
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableInfo}
@@ -50,15 +50,21 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
     // merge into table using a subquery on top of itself
     val (txn, txnTables) = executeTransaction {
-      sql(
-        s"""MERGE INTO $tableNameAsString t
-           |USING (SELECT * FROM $tableNameAsString WHERE salary = 100) s
-           |ON t.pk = s.pk AND t.dep = 'hr'
-           |WHEN MATCHED THEN
-           | UPDATE SET salary = t.salary + 1
-           |WHEN NOT MATCHED THEN
-           | INSERT *
-           |""".stripMargin)
+      checkAnswer(
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING (SELECT * FROM $tableNameAsString WHERE salary = 100) s
+             |ON t.pk = s.pk AND t.dep = 'hr'
+             |WHEN MATCHED THEN
+             | UPDATE SET salary = t.salary + 1
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin),
+        Seq(
+          Row("num_affected_rows", 1L),
+          Row("num_updated_rows", 1L),
+          Row("num_deleted_rows", 0L),
+          Row("num_inserted_rows", 0L)))
     }
 
     // check txn was properly committed and closed
@@ -1328,13 +1334,19 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         (2, 201, "support"))
       sourceRows.toDF("pk", "salary", "dep").createOrReplaceTempView("source")
 
-      sql(
-        s"""MERGE INTO $tableNameAsString AS t
-           |USING source AS s
-           |ON t.pk = s.pk
-           |WHEN NOT MATCHED THEN
-           | INSERT *
-           |""".stripMargin)
+      checkAnswer(
+        sql(
+          s"""MERGE INTO $tableNameAsString AS t
+             |USING source AS s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin),
+        Seq(
+          Row("num_affected_rows", 1L),
+          Row("num_updated_rows", 0L),
+          Row("num_deleted_rows", 0L),
+          Row("num_inserted_rows", 1L)))
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -2512,7 +2524,6 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            |""".stripMargin
       }
 
-
       assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
       assertMetric(mergeExec, "numTargetRowsInserted", 0)
       assertMetric(mergeExec, "numTargetRowsUpdated", 0)
@@ -2614,7 +2625,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       val sourceDF = Seq(1, 2, 6, 10).toDF("pk")
       sourceDF.createOrReplaceTempView("source")
 
-      val mergeExec = findMergeExec {
+      val mergeExec = findMergeExec(
         s"""MERGE INTO $tableNameAsString t
            |USING source s
            |ON t.pk = s.pk
@@ -2624,8 +2635,12 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            | INSERT (pk, salary, dep) VALUES (s.pk, -1, "dummy")
            |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
            | DELETE
-           |""".stripMargin
-      }
+           |""".stripMargin,
+        expectedOutput = Some(Seq(
+          Row("num_affected_rows", 3L),
+          Row("num_updated_rows", 0L),
+          Row("num_deleted_rows", 2L),
+          Row("num_inserted_rows", 1L))))
 
       assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
       assertMetric(mergeExec, "numTargetRowsInserted", 1)
@@ -2807,10 +2822,14 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  private def findMergeExec(query: String): MergeRowsExec = {
+  private def findMergeExec(
+      query: String,
+      expectedOutput: Option[Seq[Row]] = None): MergeRowsExec = {
+    var result: DataFrame = null
     val plan = executeAndKeepPlan {
-      sql(query)
+      result = sql(query)
     }
+    expectedOutput.foreach(checkAnswer(result, _))
     collectFirst(plan) {
       case m: MergeRowsExec => m
     } match {

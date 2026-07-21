@@ -76,7 +76,9 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
     sql(s"ALTER TABLE $tableNameAsString ALTER COLUMN txt SET DEFAULT 'new-text'")
 
-    sql(s"UPDATE $tableNameAsString SET txt = DEFAULT WHERE pk IN (2, 8, 11)")
+    checkAnswer(
+      sql(s"UPDATE $tableNameAsString SET txt = DEFAULT WHERE pk IN (2, 8, 11)"),
+      Seq(Row("num_affected_rows", 1L)))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),

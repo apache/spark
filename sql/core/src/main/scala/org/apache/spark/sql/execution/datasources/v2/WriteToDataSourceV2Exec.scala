@@ -309,6 +309,7 @@ case class InsertOnlyMergeExec(
     refreshCache: () => Unit,
     write: Write,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
   override def withTransaction(txn: Option[Transaction]): InsertOnlyMergeExec =
     copy(transaction = txn)
@@ -325,6 +326,8 @@ case class InsertOnlyMergeExec(
       numTargetRowsMatchedDeleted = 0L,
       numTargetRowsNotMatchedBySourceUpdated = 0L,
       numTargetRowsNotMatchedBySourceDeleted = 0L))
+
+  override protected def outputRows: Seq[InternalRow] = write.output().toImmutableArraySeq
 }
 
 /**
@@ -380,6 +383,7 @@ case class ReplaceDataExec(
     write: Write,
     rowLevelCommand: RowLevelOperation.Command,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends RowLevelWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {
@@ -427,6 +431,7 @@ case class WriteDeltaExec(
     write: DeltaWrite,
     rowLevelCommand: RowLevelOperation.Command,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends RowLevelWriteExec {
 
   override lazy val writingTask: WritingSparkTask[_] = {
@@ -491,15 +496,17 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec with TransactionalExec {
     createCustomMetrics(write.supportedCustomMetrics())
 
   override protected def run(): Seq[InternalRow] = {
-    val writtenRows = try {
+    try {
       writeWithV2(write.toBatch)
     } finally {
       postDriverMetrics(write.reportDriverMetrics())
     }
     transaction.foreach(TransactionUtils.commit)
     refreshCache()
-    writtenRows
+    outputRows
   }
+
+  protected def outputRows: Seq[InternalRow] = Nil
 }
 
 /**
@@ -507,6 +514,8 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec with TransactionalExec {
  */
 trait RowLevelWriteExec extends V2ExistingTableWriteExec {
   def rowLevelCommand: RowLevelOperation.Command
+
+  override protected def outputRows: Seq[InternalRow] = write.output().toImmutableArraySeq
 
   override protected lazy val sparkMetrics: Map[String, SQLMetric] = super.sparkMetrics ++ (
     rowLevelCommand match {
@@ -1010,4 +1019,3 @@ private[v2] case class DataWritingSparkTaskResult(
  * Sink progress information collected after commit.
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
-

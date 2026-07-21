@@ -22,6 +22,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -53,6 +54,18 @@ public interface RowLevelOperation {
    * Returns the SQL command that is being performed.
    */
   Command command();
+
+  /**
+   * Returns the schema of the rows produced by this operation.
+   * <p>
+   * Spark calls this method during planning. The returned schema must match the rows returned by
+   * {@link Write#output()} after the write commits successfully.
+   *
+   * @since 4.3.0
+   */
+  default StructType outputSchema() {
+    return new StructType();
+  }
 
   /**
    * Returns a {@link ScanBuilder} to configure a {@link Scan} for this row-level operation.

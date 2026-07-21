@@ -21,6 +21,7 @@ import java.util.Map;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.connector.metric.CustomMetric;
@@ -46,6 +47,18 @@ public interface Write {
    */
   default String description() {
     return this.getClass().toString();
+  }
+
+  /**
+   * Returns the rows produced by this write after it commits successfully.
+   * <p>
+   * The returned rows must match the schema reported by
+   * {@link RowLevelOperation#outputSchema()}. By default, this method returns no rows.
+   *
+   * @since 4.3.0
+   */
+  default InternalRow[] output() {
+    return new InternalRow[0];
   }
 
   /**

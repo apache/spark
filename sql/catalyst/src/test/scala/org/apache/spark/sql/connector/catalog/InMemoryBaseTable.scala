@@ -215,6 +215,37 @@ abstract class InMemoryBaseTable(
 
   val commits: ListBuffer[Commit] = ListBuffer[Commit]()
 
+  protected def commandOutput: Array[InternalRow] = {
+    commits.lastOption.flatMap(_.writeSummary).map {
+      case summary: MergeSummary =>
+        val affectedRows = sumIfKnown(
+          summary.numTargetRowsUpdated(),
+          summary.numTargetRowsDeleted(),
+          summary.numTargetRowsInserted())
+        Array(
+          metricRow("num_affected_rows", affectedRows),
+          metricRow("num_updated_rows", summary.numTargetRowsUpdated()),
+          metricRow("num_deleted_rows", summary.numTargetRowsDeleted()),
+          metricRow("num_inserted_rows", summary.numTargetRowsInserted()))
+
+      case summary: UpdateSummary =>
+        Array(metricRow("num_affected_rows", summary.numUpdatedRows()))
+
+      case summary: DeleteSummary =>
+        Array(metricRow("num_affected_rows", summary.numDeletedRows()))
+
+      case _ => Array.empty[InternalRow]
+    }.getOrElse(Array.empty)
+  }
+
+  private def metricRow(name: String, value: Long): InternalRow = {
+    new GenericInternalRow(Array[Any](UTF8String.fromString(name), value))
+  }
+
+  private def sumIfKnown(values: Long*): Long = {
+    if (values.exists(_ < 0)) -1L else values.sum
+  }
+
   def data: Array[BufferedRows] = dataMap.values.flatten.toArray
 
   def rows: Seq[InternalRow] = dataMap.values.flatten.flatMap(_.rows).toSeq
@@ -754,6 +785,8 @@ abstract class InMemoryBaseTable(
     }
 
     override def build(): Write = new Write with RequiresDistributionAndOrdering {
+      override def output(): Array[InternalRow] = commandOutput
+
       override def requiredDistribution: Distribution = distribution
 
       override def distributionStrictlyRequired: Boolean = isDistributionStrictlyRequired
