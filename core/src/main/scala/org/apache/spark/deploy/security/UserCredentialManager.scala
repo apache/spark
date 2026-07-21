@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.security
 
-import java.io.{ByteArrayOutputStream, ObjectInputStream, ObjectInputFilter, ObjectOutputStream}
+import java.io.{ByteArrayOutputStream, ObjectInputFilter, ObjectInputStream, ObjectOutputStream}
 import java.net.URI
 import java.nio.file.Paths
 import java.time.Instant
