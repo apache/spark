@@ -4385,6 +4385,7 @@ def stddev(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         standard deviation of given column.
+        Returns a column that evaluates to a double.
 
     Examples
     --------
@@ -4416,6 +4417,7 @@ def std(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         standard deviation of given column.
+        Returns a column that evaluates to a double.
 
     See Also
     --------
@@ -4460,6 +4462,7 @@ def stddev_samp(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         standard deviation of given column.
+        Returns a column that evaluates to a double.
 
     See Also
     --------
@@ -4502,6 +4505,7 @@ def stddev_pop(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         standard deviation of given column.
+        Returns a column that evaluates to a double.
 
     See Also
     --------
