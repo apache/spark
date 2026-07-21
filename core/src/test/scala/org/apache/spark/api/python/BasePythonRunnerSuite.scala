@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.python
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 
 class BasePythonRunnerSuite extends SparkFunSuite {
 
@@ -38,5 +38,17 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     assert(workerMemoryMb(1, "8") === Some(4096L))
     // No pyspark memory configured means no per-worker limit.
     assert(BasePythonRunner.getWorkerMemoryMb(None, 4, BigDecimal("0.5")) === None)
+  }
+
+  test("SPARK-58192: fail fast when the per-slot pyspark memory share rounds to zero") {
+    // 64 cores / 0.1 cpus = 640 slots; 512 MiB / 640 rounds down to 0, which the worker would
+    // treat as "no limit". Fail fast rather than silently dropping the configured cap.
+    val e = intercept[SparkException] {
+      BasePythonRunner.getWorkerMemoryMb(Some(512L), 64, BigDecimal("0.1"))
+    }
+    assert(e.getMessage.contains("spark.executor.pyspark.memory"))
+    assert(e.getMessage.contains("640"))
+    // A share of exactly 1 MiB is still enforceable and must not fail.
+    assert(BasePythonRunner.getWorkerMemoryMb(Some(640L), 64, BigDecimal("0.1")) === Some(1L))
   }
 }

@@ -38,7 +38,7 @@ import org.apache.spark.internal.LogKeys.{COUNT, PYTHON_WORKER_IDLE_TIMEOUT, SIZ
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{CpuAmount, ResourceProfile}
 import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
@@ -172,7 +172,22 @@ private[spark] object BasePythonRunner extends Logging {
     // count, see SPARK-30299); never split into less than one slot.
     val taskSlots =
       math.max(1, ResourceProfile.numTasksBasedOnCores(BigDecimal(execCores), taskCpus))
-    mem.map(_ / taskSlots)
+    mem.map { m =>
+      val perWorkerMb = m / taskSlots
+      // A per-worker share that rounds down to 0 MiB would be treated as "no limit" by the
+      // worker (setup_memory_limits only applies RLIMIT_AS when the value is positive), letting
+      // the workers' aggregate memory blow past the configured cap. Such a configuration is
+      // unsatisfiable, so fail fast rather than silently removing the limit.
+      if (perWorkerMb <= 0) {
+        throw new SparkException(
+          s"Cannot honor spark.executor.pyspark.memory=${m}m split across $taskSlots concurrent " +
+            s"task slots (executor cores $execCores, task cpus " +
+            s"${CpuAmount.toDisplayString(taskCpus)}): each worker would get less than 1 MiB. " +
+            "Increase spark.executor.pyspark.memory or the task cpus amount, or reduce " +
+            "spark.executor.cores.")
+      }
+      perWorkerMb
+    }
   }
 
   /**
