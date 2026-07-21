@@ -503,7 +503,7 @@ class ExistenceJoinSuite extends SharedSparkSession {
       Row(null, 5.0, null, null),
       Row(6, null, null, null)))
 
-  // ExistenceJoin with the same left-only residual condition: exists=true only for (2,1.0).
+  // ExistenceJoin with the same mixed residual condition: exists=true only for (2,1.0).
   testExistenceJoin(
     "test mixed residual condition for existence join",
     ExistenceJoin(AttributeReference("exists", BooleanType, false)()),

@@ -18,6 +18,10 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, LessThan, Literal, Rand}
+import org.apache.spark.sql.catalyst.plans.LeftOuter
+import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -29,8 +33,10 @@ import org.apache.spark.sql.test.SharedSparkSession
  *  - a broadcast hash join, so the scan and the join share one whole-stage. Sort-merge and
  *    shuffled hash joins are out of scope here: their streamed side crosses a Sort or an
  *    exchange, which advances its cursor before running the inlined consume code, and the
- *    sort-merge guard is folded into the match condition rather than emitted as an early
- *    return. ExistenceJoinSuite covers those join implementations functionally, with the
+ *    sort-merge guard is a standalone pre-loop guard that emits and continues before the
+ *    match loop; it is not folded into the match condition. The relevant contrast is that
+ *    it uses continue in its own loop instead of returning from an inlined consumer.
+ *    ExistenceJoinSuite covers those join implementations functionally, with the
  *    config on and off.
  *  - a batching streamed producer (vectorized parquet scan -> ColumnarToRowExec) whose loop
  *    cursor is only written back after the inlined consume code
@@ -45,7 +51,6 @@ import org.apache.spark.sql.test.SharedSparkSession
  * query terminate (with wrong results).
  */
 class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSession {
-
   // streamed_t: (id, a, pad) with id 0..7, a = id, pad = id * 10
   // build_t:    (bid, b) with bid 0..3, b = bid * 100
   private def withStreamedAndBuildTables(f: => Unit): Unit = {
@@ -64,11 +69,11 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
 
   // Compares the query with hoisting enabled against the same query with hoisting disabled,
   // sorting both sides by all columns.
-  private def checkQuery(query: String): Unit = {
+  private def checkDataFrame(query: => DataFrame): Unit = {
     val expected = withSQLConf(SQLConf.SPLIT_STREAMED_SIDE_JOIN_CONDITION.key -> "false") {
-      sortByAllColumns(spark.sql(query)).collect().toSeq
+      sortByAllColumns(query).collect().toSeq
     }
-    val df = spark.sql(query)
+    val df = query
     assert(df.queryExecution.executedPlan.toString.contains("BroadcastHashJoin"),
       s"expected a broadcast hash join in ${df.queryExecution.executedPlan}")
     checkAnswer(sortByAllColumns(df.limit(100)), expected)
@@ -80,7 +85,7 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
   }
 
   private def testWithCodegenOnAndOff(testName: String)(
-      query: => String,
+      queryDf: => DataFrame,
       codegenOnly: Boolean = false): Unit = {
     testWithWholeStageCodegenOnAndOff(testName) { _ =>
       val confs = Seq(
@@ -89,10 +94,36 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
         (if (codegenOnly) Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") else Nil)
       withSQLConf(confs: _*) {
         withStreamedAndBuildTables {
-          checkQuery(query)
+          checkDataFrame(queryDf)
         }
       }
     }
+  }
+
+  // Streamed-only conjuncts that can throw or are non-deterministic must stay in the
+  // residual: hoisting evaluates the hoisted part for every streamed row, including rows
+  // that have no buffered match and would never evaluate the conjunct otherwise.
+
+  test("split does not hoist throwable conjuncts") {
+    val streamed = spark.range(8).selectExpr("id", "id AS a").queryExecution.executedPlan
+    val a = streamed.output.find(_.name == "a").get
+    val hoistable = LessThan(a, Literal(5L))
+    val throwableConjunct = TestThrowableUDF(LessThan(a, Literal(4L)))
+    val (streamedOnly, rest) = StreamedSideJoinCondition.split(
+      Some(And(hoistable, throwableConjunct)), LeftOuter, streamed, splitEnabled = true)
+    assert(streamedOnly.contains(hoistable))
+    assert(rest.contains(throwableConjunct))
+  }
+
+  test("split does not hoist non-deterministic conjuncts") {
+    val streamed = spark.range(8).selectExpr("id", "id AS a").queryExecution.executedPlan
+    val a = streamed.output.find(_.name == "a").get
+    val hoistable = LessThan(a, Literal(5L))
+    val nonDeterministic = LessThan(Rand(Literal(0L)), Literal(0.5))
+    val (streamedOnly, rest) = StreamedSideJoinCondition.split(
+      Some(And(hoistable, nonDeterministic)), LeftOuter, streamed, splitEnabled = true)
+    assert(streamedOnly.contains(hoistable))
+    assert(rest.contains(nonDeterministic))
   }
 
   // The streamed-only condition a < 5 is false for ids 5..7, so the hoisted guard fires on
@@ -100,21 +131,21 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
 
   testWithCodegenOnAndOff(
     "left outer join, unique build key")(
-    """
+    spark.sql("""
       |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad, b.bid
       |FROM (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
       |LEFT OUTER JOIN (SELECT DISTINCT bid FROM build_t) b
       |ON s.id = b.bid AND s.a < 5
-    """.stripMargin)
+    """.stripMargin))
 
   testWithCodegenOnAndOff(
     "left outer join, non-unique build key")(
-    """
+    spark.sql("""
       |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad, b.bid, b.b
       |FROM (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
       |LEFT OUTER JOIN (SELECT bid, b FROM build_t UNION ALL SELECT bid, b FROM build_t) b
       |ON s.id = b.bid AND s.a < 5
-    """.stripMargin)
+    """.stripMargin))
 
   // The "compiles without pre-materialized column" variants drop the residual filter, so pad
   // stays lazy through the join and is only materialized by the join's own consume code. They
@@ -124,40 +155,40 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
   // error so these tests actually assert compilation succeeds.
   testWithCodegenOnAndOff(
     "left outer join compiles without pre-materialized column")(
-    """
+    spark.sql("""
       |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad, b.bid, b.b
       |FROM streamed_t s
       |LEFT OUTER JOIN build_t b
       |ON s.id = b.bid AND s.a < 5
-    """.stripMargin,
+    """.stripMargin),
     codegenOnly = true)
 
   testWithCodegenOnAndOff(
     "right outer join")(
-    """
+    spark.sql("""
       |SELECT /*+ BROADCAST(b) */ b.bid, b.b, s.id, s.a, s.pad
       |FROM build_t b
       |RIGHT OUTER JOIN (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
       |ON b.bid = s.id AND s.a < 5
-    """.stripMargin)
+    """.stripMargin))
 
   testWithCodegenOnAndOff(
     "left anti join")(
-    """
+    spark.sql("""
       |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad
       |FROM (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
       |LEFT ANTI JOIN build_t b
       |ON s.id = b.bid AND s.a < 5
-    """.stripMargin)
+    """.stripMargin))
 
   testWithCodegenOnAndOff(
     "left anti join compiles without pre-materialized column")(
-    """
+    spark.sql("""
       |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad
       |FROM streamed_t s
       |LEFT ANTI JOIN build_t b
       |ON s.id = b.bid AND s.a < 5
-    """.stripMargin,
+    """.stripMargin),
     codegenOnly = true)
 
   // The EXISTS flag is projected (not filtered on) so guard-fired rows (ids 5..7) are
@@ -168,18 +199,42 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
   // return the right answer for the wrong reason.
   testWithCodegenOnAndOff(
     "existence join")(
-    """
+    spark.sql("""
       |SELECT s.id, s.a, s.pad,
       |  EXISTS (SELECT /*+ BROADCAST(b) */ 1 FROM build_t b WHERE b.bid = s.id AND s.a < 5) AS e
       |FROM (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
-    """.stripMargin)
+    """.stripMargin))
 
   testWithCodegenOnAndOff(
     "existence join compiles without pre-materialized column")(
-    """
+    spark.sql("""
       |SELECT s.id, s.a, s.pad,
       |  EXISTS (SELECT /*+ BROADCAST(b) */ 1 FROM build_t b WHERE b.bid = s.id AND s.a < 5) AS e
       |FROM streamed_t s
-    """.stripMargin,
+    """.stripMargin),
     codegenOnly = true)
+
+  // Left outer join whose ON clause has two streamed-side-only conjuncts: a hoistable
+  // a < 5 and a throwable TestThrowableUDF(a < 4). The throwable conjunct holds for the
+  // matched rows (ids 0..3) and throws for the unmatched ones (ids 4..7), so it throws
+  // exactly when it is wrongly hoisted and evaluated before probing.
+  private def throwableConjunctJoin: DataFrame = {
+    val s = spark.table("streamed_t")
+    val b = spark.table("build_t").hint("broadcast")
+    val condition = And(
+      EqualTo(s.col("id").expr, b.col("bid").expr),
+      And(
+        LessThan(s.col("a").expr, Literal(5L)),
+        TestThrowableUDF(LessThan(s.col("a").expr, Literal(4L)))))
+    val join = Join(s.logicalPlan, b.logicalPlan, LeftOuter, Some(condition), JoinHint.NONE)
+    Dataset.ofRows(spark, join).select("id", "a", "bid", "b")
+  }
+
+  // End-to-end: the throwable conjunct must not run for streamed rows 4..7, which have no
+  // buffered match. The hoistable conjunct a < 5 keeps the hoisted guard on the path so
+  // the test proves the throwable conjunct is excluded from it, not that hoisting is off.
+  // Before the fix, rows 4..7 evaluate the hoisted throwable conjunct and throw.
+  testWithCodegenOnAndOff(
+    "throwable streamed-side conjunct is not evaluated for unmatched rows")(
+    throwableConjunctJoin)
 }
