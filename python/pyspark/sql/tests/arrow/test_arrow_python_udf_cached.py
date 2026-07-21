@@ -82,9 +82,7 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
     def test_udf_on_cached_numeric_column_alongside_unselected_string(self):
         # Only the UDF's input columns are serialized; unselected columns ride through the
         # pass-through recombination.
-        df = self.spark.createDataFrame(
-            [(1, "a"), (2, "b")], schema="i long, s string"
-        ).cache()
+        df = self.spark.createDataFrame([(1, "a"), (2, "b")], schema="i long, s string").cache()
         try:
             result = df.select(udf(lambda x: x + 1, "long")(col("i")))
             assertDataFrameEqual(result, [Row(2), Row(3)])
