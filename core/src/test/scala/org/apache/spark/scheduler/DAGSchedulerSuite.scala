@@ -6771,8 +6771,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("pipelined shuffle: a multi-producer consumer's buffered successes are dropped when one " +
       "producer fails (no stale replay via a sibling)") {
     // Group-atomic drop across MULTIPLE producers. Consumer C reads TWO pipelined producers P1 and
-    // P2 (a join; pure all-PG, no regular shuffle). C finishes early -> its successes are buffered
-    // against BOTH producers. If P1 then fails, the whole group must be torn down and C's buffered
+    // P2 (a join; purely all-pipelined, no regular shuffle). C finishes early -> its successes are
+    // buffered against BOTH producers. If P1 then fails, the whole group must be torn down and C's
     // successes DROPPED -- they depended on P1's (now-invalid) output. Note the release path
     // evaluates producerFailed per finishing producer, so a naive impl could remove P1
     // (parents still has P2, no drop), then later see P2 "succeed" and REPLAY. This asserts the
@@ -6788,7 +6788,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       override def jobFailed(exception: Exception): Unit = failure.set(exception)
     }
     submit(consumerRdd, Array(0, 1), listener = failListener)
-    // P1, P2, and C are all co-scheduled (pure all-PG join, admitted up front).
+    // P1, P2, and C are all co-scheduled (purely all-pipelined join, admitted up front).
     assert(taskSets.size === 3, s"expected P1, P2, consumer co-scheduled, got ${taskSets.size}")
     val tsP1 = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddP1).get
     val tsC = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd).get
@@ -7442,14 +7442,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("pipelined shuffle: a deferred consumer TaskEnd fires inline, so an abort cannot leak the " +
       "stage as running") {
-    // Fine-grained model (S5.1): a consumer's successful task posts its TaskEnd in real time as the
+    // A consumer's successful task posts its TaskEnd in real time as the
     // task finishes -- only the stage/job-completion bookkeeping is deferred. So even if the job is
     // later torn down before the producer finishes (here: the consumer's OTHER task hits a
     // FetchFailed, which aborts the group), the earlier success's TaskEnd has ALREADY been emitted.
     // A listener that tracks active tasks (e.g. AppStatusListener, which removes a stage once
     // activeTasks hits 0) therefore never leaks the consumer stage as perpetually running -- the
-    // leak the coarse model had to patch by re-emitting buffered TaskEnds at teardown simply cannot
-    // arise here.
+    // leak a defer-everything design would have to patch by re-emitting buffered TaskEnds at
+    // teardown simply cannot arise here.
     val endedTaskIds = new java.util.concurrent.ConcurrentHashMap[Long, Boolean]()
     val recordingListener = new SparkListener {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit =
@@ -7518,7 +7518,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("pipelined shuffle: a statically-indeterminate producer is rejected") {
     // Indeterminate output's recovery is stage rollback-and-recompute, which a group never performs
-    // (moot under S6); reject rather than carry dead machinery.
+    // (so it never applies); reject rather than carry dead machinery.
     val producerRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
     val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
     val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
@@ -7547,9 +7547,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("pipelined shuffle: a reliable RDD checkpoint in a CONSUMER's chain is rejected") {
     // The rejection must cover a consumer member's chain too, not just the producer's: a consumer's
     // transient input IS the pipelined shuffle, so a reliable checkpoint there would re-read the
-    // vanished stream on recompute. Pure all-PG shape (no regular shuffle -- v1 rejects those
-    // separately): producer --pipelined--> consumer(checkpointed, result). The consumer reads the
-    // pipelined shuffle and its within-stage chain carries the reliable checkpoint.
+    // vanished stream on recompute. Purely all-pipelined shape (no regular shuffle -- those are
+    // rejected separately): producer --pipelined--> consumer(checkpointed, result). The consumer
+    // reads the pipelined shuffle and its within-stage chain carries the reliable checkpoint.
     withTempDir { dir =>
       sc.setCheckpointDir(dir.getCanonicalPath)
       val producerRdd = new MyRDD(sc, 2, Nil)
@@ -7567,7 +7567,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("pipelined shuffle: a reliable checkpoint DOWNSTREAM in the consumer stage (not on the " +
       "reading RDD) is still rejected") {
     // Coverage for a checkpoint that is NOT on the RDD reading the pipelined shuffle, but on a
-    // narrow-dep child of it WITHIN the same consumer stage. Pure all-PG shape:
+    // narrow-dep child of it WITHIN the same consumer stage. Purely all-pipelined shape:
     //   producer --pipelined--> reads --(narrow)--> checkpointed (result).
     // `reads` and `checkpointed` are one stage. Rooting the check at the pipelined-reading RDD and
     // walking parents would MISS this (the checkpoint is downstream of the read); the check must
@@ -7589,9 +7589,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a producer feeding more than one consumer (fan-out) is rejected") {
-    // 1:N fan-out is a supported model deferred to a later version; v1 rejects it. Fan-out is
+    // 1:N fan-out is deferred to a later version and rejected up front here. Fan-out is
     // detected at the RDD level -- two DISTINCT RDDs listing the same pipelined shuffle as a
-    // dependency -- so it is expressible in a pure all-PG job without any regular shuffle: two
+    // dependency -- so it is expressible in an all-pipelined job without any regular shuffle: two
     // consumer RDDs both read the same pipelined producer, unioned by a narrow dependency into the
     // result. checkPipelinedGroupsSupportedInRDDGraph counts 2 distinct consumers for the shuffle.
     val producerRdd = new MyRDD(sc, 2, Nil)
@@ -7606,9 +7606,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  // Resource-profile rejection (spec S9). The gang slot check measures capacity against the DEFAULT
-  // resource profile, so v1 requires the whole group to run on the default profile and rejects any
-  // member with an explicit non-default profile. The three shapes below must all be rejected; the
+  // Resource-profile rejection. The gang slot check measures capacity against the DEFAULT
+  // resource profile, so the whole group must run on the default profile; any member with an
+  // explicit non-default profile is rejected. The three shapes below must all be rejected; the
   // uniform-non-default and non-default-plus-default cases in particular would each pass a
   // "more than one DISTINCT profile" check yet still be admitted against the wrong (default) pool.
   private def rpWithCores(cores: Int, cpus: Int): ResourceProfile =

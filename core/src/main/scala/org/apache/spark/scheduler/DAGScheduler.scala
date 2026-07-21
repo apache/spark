@@ -719,11 +719,11 @@ private[spark] class DAGScheduler(
     new PipelinedShuffleUnsupportedException(reason)
 
   /**
-   * Fail-fast on producer-side idioms a pipelined shuffle cannot support in v1 (spec S9), checked
-   * when the producer stage is created. A pipelined shuffle runs its producer and consumer stages
-   * concurrently over a transient, once-through stream that a group never recomputes in isolation
-   * (any failure aborts the whole group, S6), so mechanisms that recompute/roll back a single stage
-   * are moot, and features that expose output only after a global barrier are incompatible with
+   * Fail-fast on producer-side idioms a pipelined shuffle cannot support, checked when the producer
+   * stage is created. A pipelined shuffle runs its producer and consumer stages concurrently over a
+   * transient, once-through stream that a group never recomputes in isolation (any failure aborts
+   * the whole group), so mechanisms that recompute/roll back a single stage are moot, and features
+   * that expose output only after a global barrier are incompatible with
    * incremental reads. Rejecting here (before the stage is used) keeps a misuse from silently
    * mis-scheduling. Inert for a regular ShuffleDependency.
    *
@@ -731,8 +731,8 @@ private[spark] class DAGScheduler(
    * single producer stage: fan-out (a producer with more than one consumer) and a group with a
    * non-default resource profile are rejected up front at job submission by
    * `checkPipelinedGroupsSupportedInRDDGraph` (before any stage is created). A regular shuffle
-   * internal to a group does not arise for v1's all-pipelined job shape (groups are split at
-   * regular-shuffle boundaries, S3) and so is not checked.
+   * internal to a group does not arise for the all-pipelined job shape (groups are split at
+   * regular-shuffle boundaries) and so is not checked.
    */
   private def checkPipelinedProducerSupported(shuffleDep: ShuffleDependency[_, _, _]): Unit = {
     if (!shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
@@ -749,7 +749,8 @@ private[spark] class DAGScheduler(
       throw pipelinedUnsupportedError("dynamic resource allocation with a pipelined shuffle")
     }
     // Statically-indeterminate producer: its recovery is stage rollback-and-recompute, which a
-    // group never performs (moot under S6); reject rather than carry dead machinery.
+    // group never performs (any failure aborts the whole group); reject rather than carry dead
+    // machinery.
     if (rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
       throw pipelinedUnsupportedError("a statically-indeterminate pipelined producer")
     }
@@ -1138,34 +1139,34 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Reject group-level idioms a pipelined group cannot support in v1 (spec S9), checked against the
-   * RDD graph BEFORE any stage is created -- so a rejection fails the job up front (via
-   * handleJobSubmitted's listener.jobFailed) without leaving partial scheduler state behind,
-   * exactly like the speculation check.
+   * Reject group-level idioms a pipelined group cannot support, checked against the RDD graph
+   * BEFORE any stage is created -- so a rejection fails the job up front (via handleJobSubmitted's
+   * listener.jobFailed) without leaving partial scheduler state behind, exactly like the
+   * speculation check.
    *
    * Inert for a job with no pipelined dependency. Throws PIPELINED_SHUFFLE_UNSUPPORTED on
    * violation. Enforces:
-   *  - Fan-out: a pipelined producer feeding more than one consumer. 1:N is a supported model
-   *    deferred to a later version (it needs multicast to N live readers); v1 rejects it. A
+   *  - Fan-out: a pipelined producer feeding more than one consumer. 1:N is a supported model not
+   *    yet built (it needs multicast to N live readers), so it is rejected for now. A
    *    PipelinedShuffleDependency's producer is `dep.rdd`; a "consumer" is any RDD that lists that
    *    dependency. More than one distinct consumer RDD for the same pipelined shuffle is fan-out.
    *  - Reliable RDD checkpoint in a group member's within-stage chain (producer OR consumer side):
    *    a reliable `checkpoint()` writes a durable, lineage-truncated snapshot, which both
-   *    reintroduces cross-time reuse of a transient edge (S4) and requires a post-success recompute
+   *    reintroduces cross-time reuse of a transient edge and requires a post-success recompute
    *    of the member's transient input -- for a consumer, that input is the vanished pipelined
    *    shuffle. Checked here (not at stage creation) so a reject leaves no partial stage state, and
    *    so BOTH the producer chain (rooted at pd.rdd) and each consumer chain (rooted at a consuming
    *    RDD) are covered from the whole-graph view.
-   *  - A non-default resource profile on any member. The gang slot check (S4) compares one demand
-   *    against one profile's capacity and measures it against the default profile, so v1 requires
-   *    the whole group to run on the default profile; any member with an explicit non-default
+   *  - A non-default resource profile on any member. The gang slot check compares one demand
+   *    against one profile's capacity and measures it against the default profile, so the whole
+   *    group is required to run on the default profile; any member with an explicit non-default
    *    profile is rejected. Per-profile accounting is a follow-up.
    *
-   * (The remaining S9 group-level row -- a regular shuffle internal to a group -- is a structural
-   * invariant that does not arise for the prefix*->PG->suffix* shapes v1 targets: groups are split
-   * at regular-shuffle boundaries (S3). The producer-side idioms -- barrier, DRA, indeterminate,
-   * checksum, push-merge -- are rejected in checkPipelinedProducerSupported at stage creation,
-   * where a producer-only throw leaves no partial state.)
+   * (The remaining group-level case -- a regular shuffle internal to a group -- is a structural
+   * invariant that does not arise for the prefix -> pipelined-group -> suffix shapes targeted here:
+   * groups are split at regular-shuffle boundaries. The producer-side idioms -- barrier, DRA,
+   * indeterminate, checksum, push-merge -- are rejected in checkPipelinedProducerSupported at stage
+   * creation, where a producer-only throw leaves no partial state.)
    */
   private def checkPipelinedGroupsSupportedInRDDGraph(finalRDD: RDD[_]): Unit = {
     // Walk the whole RDD graph once, collecting for each pipelined shuffleId the distinct consumer
@@ -1181,8 +1182,8 @@ private[spark] class DAGScheduler(
       }
       // An RDD's EFFECTIVE profile is its explicit one, or the default when unset. The slot check
       // measures capacity against the default profile (see rejectUnadmittablePipelinedGroup), so
-      // for v1 the whole group must run on the default profile; any explicit non-default profile on
-      // a member makes the group span profiles (against the default the rest use) and is rejected.
+      // the whole group must run on the default profile; any explicit non-default profile on a
+      // member makes the group span profiles (against the default the rest use) and is rejected.
       val rp = rdd.getResourceProfile()
       if (rp != null && rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) {
         hasNonDefaultResourceProfile = true
@@ -1200,20 +1201,20 @@ private[spark] class DAGScheduler(
       throw pipelinedUnsupportedError(
         "a pipelined producer with more than one consumer (fan-out / branching)")
     }
-    // Resource profile (spec S9). The gang slot check (S4) compares one demand against one
-    // profile's capacity (maxNumConcurrentTasks is defined per profile) and measures it against the
-    // DEFAULT profile, so v1 requires the whole group to run on the default profile and fails fast
-    // otherwise; per-profile accounting is a follow-up. Reject if ANY member carries an explicit
-    // non-default profile -- that both spans profiles (against the default the other members use)
-    // and would be admitted against the wrong (default) capacity pool. This is a real check, not
-    // just a documented assumption: nothing else enforces it.
+    // Resource profile. The gang slot check compares one demand against one profile's capacity
+    // (maxNumConcurrentTasks is defined per profile) and measures it against the DEFAULT profile,
+    // so the whole group is required to run on the default profile and fails fast otherwise;
+    // per-profile accounting is a follow-up. Reject if ANY member carries an explicit non-default
+    // profile -- that both spans profiles (against the default the other members use) and would be
+    // admitted against the wrong (default) capacity pool. This is a real check, not just a
+    // documented assumption: nothing else enforces it.
     if (hasNonDefaultResourceProfile) {
       throw pipelinedUnsupportedError(
-        "a pipelined group member with a non-default resource profile (v1 requires the default " +
-          "profile for the whole group)")
+        "a pipelined group member with a non-default resource profile (the whole group must run " +
+          "on the default profile)")
     }
-    // Reject a reliable checkpoint anywhere in a pipelined-group MEMBER's within-stage chain (spec
-    // S9). Keyed on checkpointData being ReliableRDDCheckpointData, not isCheckpointed, since the
+    // Reject a reliable checkpoint anywhere in a pipelined-group MEMBER's within-stage chain.
+    // Keyed on checkpointData being ReliableRDDCheckpointData, not isCheckpointed, since the
     // write has not happened yet. Cache / .persist() / local checkpoint are whole-partition and
     // ephemeral and are not rejected. A reliably-checkpointed RDD `cp` is inside a member stage
     // iff:
@@ -2040,7 +2041,7 @@ private[spark] class DAGScheduler(
     }
     var finalStage: ResultStage = null
     try {
-      // Reject group-level unsupported pipelined idioms (fan-out; spec S9) from the RDD graph, up
+      // Reject group-level unsupported pipelined idioms (e.g. fan-out) from the RDD graph, up
       // front -- before any stage is created, so a rejection leaves no partial scheduler state.
       // Inert for a job with no pipelined dependency. Inside this try so any incidental exception
       // from the graph walk is handled by the same listener.jobFailed path as stage creation.
@@ -2100,8 +2101,8 @@ private[spark] class DAGScheduler(
     job.hasPipelinedDependency = hasPipelined
     // We only reach here if the up-front gang admission above (rejectUnadmittablePipelinedGroup)
     // did NOT fail-and-return -- i.e. it passed or was disabled by config. Record that so the
-    // co-schedule path in submitStage can assert the group was admitted, rather than trusting a
-    // comment. (v1: job == one group, so admission is job-level; see ActiveJob.)
+    // co-schedule path in submitStage can verify the group was admitted, rather than trusting a
+    // comment. (The job is one group, so admission is job-level; see ActiveJob.)
     job.pipelinedGroupAdmitted = hasPipelined
     clearCacheLocs()
     logInfo(
@@ -2256,12 +2257,12 @@ private[spark] class DAGScheduler(
             val allPipelinedParentsRunning =
               pipelinedMissing.nonEmpty && pipelinedMissing.forall(runningStages.contains)
 
-            // v1 INVARIANT (job == one pipelined group): we co-schedule this group's members with
+            // INVARIANT (job == one pipelined group): we co-schedule this group's members with
             // NO slot check because the whole job was gang-admitted up front in handleJobSubmitted
             // (rejectUnadmittablePipelinedGroup) before any member ran. Verify that link rather
-            // than trusting the comment. In v1 this always holds (the flag is set on the same
+            // than trusting the comment. This always holds today (the flag is set on the same
             // admitted path), so it is an invariant tripwire -- but make it FAIL-CLOSED (abort the
-            // group, not just assert): a bare `assert` is elided under -da, so if a later version
+            // group, not just assert): a bare `assert` is elided under -da, so if a future change
             // relaxes job==group and forgets to move gang admission to a per-group "admit-on-ready"
             // check HERE, a prod build would silently gang-schedule an unadmitted group and could
             // deadlock. Aborting turns that into a clean, rerunnable job failure. (When that
@@ -2270,16 +2271,16 @@ private[spark] class DAGScheduler(
               if (!jobIdToActiveJob.get(jobId.get).exists(_.pipelinedGroupAdmitted)) {
                 abortStage(stage,
                   s"Co-scheduling pipelined $stage whose job was not gang-admitted up front " +
-                    "(the v1 job==group admission invariant is violated)", None)
+                    "(the job==group admission invariant is violated)", None)
                 return
               }
               // The whole group's capacity was already admitted up front (handleJobSubmitted ->
               // rejectUnadmittablePipelinedGroup) before any member was submitted, so the group is
               // known to fit; just co-schedule this consumer with its running producer(s). No slot
               // check here -- that would re-measure capacity against a mid-flight snapshot and is
-              // unnecessary once admission is decided up front (v1 gang admission). Group-level
+              // unnecessary once admission is decided up front (gang admission). Group-level
               // idiom rejection (fan-out, internal regular shuffle) already happened at job
-              // submission (checkPipelinedGroupsSupportedInRDDGraph + the all-PG check).
+              // submission (checkPipelinedGroupsSupportedInRDDGraph + the all-pipelined check).
               logInfo(log"Submitting ${MDC(STAGE, stage)} concurrently with its running " +
                 log"pipelined producer(s) ${MDC(MISSING_PARENT_STAGES, pipelinedMissing)}")
               // Record that this stage is co-scheduled with still-running pipelined producers,
@@ -3316,7 +3317,7 @@ private[spark] class DAGScheduler(
         } else if (activeJobForStage(failedStage).flatMap(jobIdToActiveJob.get)
             .exists(_.hasPipelinedDependency) &&
             (isPipelinedGroupMember(failedStage) || isPipelinedGroupMember(mapStage))) {
-          // Failure is group-atomic for a pipelined group (spec S6). The base scheduler handles a
+          // Failure is group-atomic for a pipelined group. The base scheduler handles a
           // FetchFailed by resubmitting just the map stage in isolation and recomputing serially,
           // but a transient pipelined shuffle cannot be re-read and its members are co-scheduled, so
           // a lone-stage resubmit is never valid and would deadlock the group. Abort the
@@ -4642,9 +4643,9 @@ private[spark] object DAGScheduler {
 }
 
 /**
- * Thrown when a job uses a pipelined-shuffle idiom that v1 does not support (fan-out, a barrier /
+ * Thrown when a job uses a pipelined-shuffle idiom that is not supported (fan-out, a barrier /
  * indeterminate / checksum-retry / push-merge producer, a reliable checkpoint in a member's chain,
- * or a non-default resource profile on a member; spec S9). `handleJobSubmitted` matches on this
+ * or a non-default resource profile on a member). `handleJobSubmitted` matches on this
  * TYPE to distinguish an up-front idiom rejection from an ordinary stage-creation failure, not on
  * the error-condition string (which a rename or a wrapped cause would silently break). Carries the
  * `PIPELINED_SHUFFLE_UNSUPPORTED` error class so the user-facing message is unchanged.
