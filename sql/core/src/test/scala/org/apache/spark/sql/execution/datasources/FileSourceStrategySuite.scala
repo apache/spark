@@ -252,32 +252,25 @@ class FileSourceStrategySuite extends SharedSparkSession {
     assert(getPhysicalFilters(df2) contains resolve(df2, "(p1 + c2) = 2"))
   }
 
-  test("FileIndex fullyPushedFilters controls final FilterExec removal") {
+  test("FileIndex canFullPushDownPartitionFilter controls final FilterExec removal") {
     val (table, testIndex) =
-      createTableWithFullyPushedFiltersIndex(
+      createTableWithCanFullPushDownPartitionFilterIndex(
         files = Seq(
           "p1=1/file1" -> 10,
           "p1=2/file2" -> 10))
 
-    // By default the index returns the partition-key filters, matching legacy behavior, so the
+    // By default the index returns the partition filters, matching legacy behavior, so the
     // partition-key filter is removed from the FilterExec above the scan.
     val defaultPartitionFilter = table.where("p1 = 1")
     assert(!getPhysicalFilters(defaultPartitionFilter).contains(
       resolve(defaultPartitionFilter, "p1 = 1")))
 
-    // Returning nothing means no filter is fully pushed, so even the partition-key filter stays
-    // in the FilterExec above the scan.
-    testIndex.setFullyPushedFilters((_, _) => Nil)
+    // Returning nothing means no partition filter is fully pushed, so the partition-key
+    // filter stays in the FilterExec above the scan.
+    testIndex.setCanFullPushDownPartitionFilter(_ => Nil)
     val explicitNoFullyPushed = table.where("p1 = 1")
     assert(getPhysicalFilters(explicitNoFullyPushed).contains(
       resolve(explicitNoFullyPushed, "p1 = 1")))
-
-    // Returning a data filter as fully pushed removes it from the FilterExec above the scan.
-    val dataFilter = table.where("c1 = 1")
-    testIndex.setFullyPushedFilters((_, _) => Seq(resolve(dataFilter, "c1 = 1")))
-    val explicitFullyPushed = table.where("c1 = 1")
-    assert(!getPhysicalFilters(explicitFullyPushed).contains(
-      resolve(explicitFullyPushed, "c1 = 1")))
   }
 
   test("bucketed table") {
@@ -735,7 +728,7 @@ class FileSourceStrategySuite extends SharedSparkSession {
     }
   }
 
-  private class FullyPushedFiltersTestFileIndex(
+  private class CanFullPushDownPartitionFilterTestFileIndex(
       sparkSession: SparkSession,
       rootPathsSpecified: Seq[Path],
       parameters: Map[String, String],
@@ -746,22 +739,19 @@ class FileSourceStrategySuite extends SharedSparkSession {
       parameters,
       userSpecifiedSchema) {
 
-    private var pushedFilters: (Seq[Expression], Seq[Expression]) => Seq[Expression] =
-      (partitionKeyFilters, _) => partitionKeyFilters
+    private var canFullPushDown: Seq[Expression] => Seq[Expression] = identity
 
-    override def fullyPushedFilters(
-        partitionKeyFilters: Seq[Expression],
-        dataFilters: Seq[Expression]): Seq[Expression] =
-      pushedFilters(partitionKeyFilters, dataFilters)
+    override def canFullPushDownPartitionFilter(
+        partitionFilters: Seq[Expression]): Seq[Expression] =
+      canFullPushDown(partitionFilters)
 
-    def setFullyPushedFilters(
-        f: (Seq[Expression], Seq[Expression]) => Seq[Expression]): Unit = {
-      pushedFilters = f
+    def setCanFullPushDownPartitionFilter(f: Seq[Expression] => Seq[Expression]): Unit = {
+      canFullPushDown = f
     }
   }
 
-  private def createTableWithFullyPushedFiltersIndex(
-      files: Seq[(String, Int)]): (DataFrame, FullyPushedFiltersTestFileIndex) = {
+  private def createTableWithCanFullPushDownPartitionFilterIndex(
+      files: Seq[(String, Int)]): (DataFrame, CanFullPushDownPartitionFilterTestFileIndex) = {
     val tempDir = Utils.createTempDir()
     files.foreach {
       case (name, size) =>
@@ -773,7 +763,7 @@ class FileSourceStrategySuite extends SharedSparkSession {
     val dataSchema = StructType(Nil)
       .add("c1", IntegerType)
       .add("c2", IntegerType)
-    val fileIndex = new FullyPushedFiltersTestFileIndex(
+    val fileIndex = new CanFullPushDownPartitionFilterTestFileIndex(
       spark,
       Seq(new Path(tempDir.getCanonicalPath)),
       Map.empty[String, String],
