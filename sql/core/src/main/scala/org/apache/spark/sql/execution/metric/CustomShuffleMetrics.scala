@@ -18,10 +18,32 @@
 package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.METRIC_NAME
 import org.apache.spark.shuffle.api.metric.{CustomShuffleMetric, CustomShuffleTaskMetric}
 import org.apache.spark.util.MetricUtils
 
-object CustomShuffleMetrics {
+object CustomShuffleMetrics extends Logging {
+
+  /**
+   * Creates collision-filtered custom shuffle metric [[SQLMetric]]s for an operator that already
+   * exposes the given Spark-owned metric names. Plugin metrics whose names collide with a
+   * Spark-owned name are dropped so they can't shadow the real accumulators (e.g.
+   * `shuffleRecordsWritten`, which feeds AQE). Operators pass the reserved names they own; the
+   * declared metrics come from the shuffle driver components.
+   */
+  def createFilteredMetrics(
+      sc: SparkContext,
+      reservedNames: Set[String]): Map[String, SQLMetric] = {
+    val (reserved, allowed) = sc.shuffleDriverComponents.supportedCustomMetrics()
+      .partition(metric => reservedNames.contains(metric.name()))
+    if (reserved.nonEmpty) {
+      logWarning(log"Ignoring custom shuffle metrics whose names collide with Spark-owned " +
+        log"Exchange metrics: " +
+        log"${MDC(METRIC_NAME, reserved.map(_.name()).sorted.mkString(", "))}.")
+    }
+    createMetrics(sc, allowed)
+  }
 
   /**
    * Creates [[SQLMetric]]s for the given declared custom shuffle metrics, keyed by metric name.
