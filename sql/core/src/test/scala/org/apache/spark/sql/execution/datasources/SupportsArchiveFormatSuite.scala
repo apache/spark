@@ -25,6 +25,7 @@ import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.commons.compress.archivers.sevenz.{SevenZArchiveEntry, SevenZOutputFile}
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
 import org.apache.commons.compress.archivers.zip.{ZipArchiveEntry, ZipArchiveOutputStream}
 import org.apache.hadoop.conf.Configuration
@@ -120,6 +121,24 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
     u32(cdSize.toLong); u32(cdOffset.toLong); u16(0)
     val fos = new FileOutputStream(file)
     try fos.write(out.toByteArray) finally fos.close()
+  }
+
+  /** Write a 7z archive, used to verify the `.7z` archive path. */
+  private def writeSevenZ(file: File, entries: Seq[Entry]): Unit = {
+    val out = new SevenZOutputFile(file)
+    try {
+      entries.foreach { e =>
+        // 7z records an explicit directory flag rather than inferring it from a trailing slash.
+        val sevenZEntry = new SevenZArchiveEntry()
+        sevenZEntry.setName(e.name)
+        sevenZEntry.setDirectory(e.isDir)
+        sevenZEntry.setHasStream(!e.isDir)
+        out.putArchiveEntry(sevenZEntry)
+        if (!e.isDir) out.write(e.data)
+        out.closeArchiveEntry()
+      }
+      out.finish()
+    } finally out.close()
   }
 
   private def textEntry(name: String, body: String): Entry =
@@ -443,6 +462,60 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
       val ex = intercept[java.io.IOException](collect(zip))
       assert(ex.getMessage != null && ex.getMessage.contains("data descriptor"),
         s"expected a clear unsupported-feature error, got $ex")
+    }
+  }
+
+  // ----- 7z -----------------------------------------------------------------
+  // 7z keeps its entry index at the end of the file, so the reader seeks rather than streaming
+  // forward like tar and zip. These cases confirm the `.7z` dispatch and that the seek-based
+  // container surfaces entries through the same engine.
+
+  test("readArchiveEntries: empty 7z yields empty iterator") {
+    withTempDir { dir =>
+      val sevenZ = new File(dir, "empty.7z")
+      writeSevenZ(sevenZ, Seq.empty)
+      assert(collect(sevenZ).isEmpty)
+    }
+  }
+
+  test("readArchiveEntries: 7z single entry exposes its name and bytes") {
+    withTempDir { dir =>
+      val sevenZ = new File(dir, "single.7z")
+      writeSevenZ(sevenZ, Seq(textEntry("only.csv", "hello\n")))
+      assert(collect(sevenZ) == Seq("only.csv" -> "hello\n"))
+    }
+  }
+
+  test("readArchiveEntries: 7z multiple entries chained in archive order") {
+    withTempDir { dir =>
+      val sevenZ = new File(dir, "multi.7z")
+      writeSevenZ(sevenZ,
+        Seq(textEntry("a.csv", "a"), textEntry("b.csv", "b"), textEntry("c.csv", "c")))
+      assert(collect(sevenZ) == Seq("a.csv" -> "a", "b.csv" -> "b", "c.csv" -> "c"))
+    }
+  }
+
+  test("readArchiveEntries: 7z directory entries are skipped") {
+    withTempDir { dir =>
+      val sevenZ = new File(dir, "dirs.7z")
+      writeSevenZ(sevenZ, Seq(
+        Entry("subdir", Array.emptyByteArray, isDir = true),
+        textEntry("subdir/data.csv", "x")))
+      assert(collect(sevenZ) == Seq("subdir/data.csv" -> "x"))
+    }
+  }
+
+  test("readArchiveEntries: 7z dotfile, underscore-marker, and prefixed-dir entries are skipped") {
+    withTempDir { dir =>
+      val sevenZ = new File(dir, "skipped.7z")
+      writeSevenZ(sevenZ, Seq(
+        textEntry("._real.csv", "junk"),           // macOS AppleDouble sidecar
+        textEntry(".hidden", "ignored"),           // bare dotfile
+        textEntry("_SUCCESS", "marker"),           // _-prefixed marker (InMemoryFileIndex skips it)
+        textEntry("_temporary/part-0.csv", "tmp"), // entry under a _-prefixed dir (skipped whole)
+        textEntry("real.csv", "kept"),
+        textEntry("nested/._sidecar", "junk2")))   // dotfile in a subdir
+      assert(collect(sevenZ) == Seq("real.csv" -> "kept"))
     }
   }
 }
