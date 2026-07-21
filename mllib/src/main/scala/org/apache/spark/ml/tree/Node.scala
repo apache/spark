@@ -122,6 +122,8 @@ class LeafNode private[ml] (
     override val impurity: Double,
     override private[ml] val impurityStats: ImpurityCalculator) extends Node {
 
+  @transient private[tree] var leafIndex: Int = -1
+
   override def toString: String =
     s"LeafNode(prediction = $prediction, impurity = $impurity)"
 

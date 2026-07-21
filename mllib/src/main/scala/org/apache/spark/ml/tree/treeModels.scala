@@ -107,8 +107,10 @@ private[spark] trait DecisionTreeModel {
     leafAttr.withName(leafCol).toStructField()
   }
 
-  @transient private lazy val leafIndices: Map[LeafNode, Int] = {
-    leafIterator(rootNode).zipWithIndex.toMap
+  @transient private lazy val leafIndicesInitialized: Unit = {
+    leafIterator(rootNode).zipWithIndex.foreach { case (leaf, index) =>
+      leaf.leafIndex = index
+    }
   }
 
   /**
@@ -116,7 +118,8 @@ private[spark] trait DecisionTreeModel {
    *         Leaves are indexed in pre-order from 0.
    */
   def predictLeaf(features: Vector): Double = {
-    leafIndices(rootNode.predictImpl(features)).toDouble
+    leafIndicesInitialized
+    rootNode.predictImpl(features).leafIndex.toDouble
   }
 
   def getEstimatedSize(): Long = {
