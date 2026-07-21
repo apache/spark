@@ -2459,8 +2459,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkey_names = ["__groupkey_{}__".format(i) for i in range(len(self._groupkeys))]
 
         sdf = self._psdf._internal.spark_frame
-        for s, name in zip(self._groupkeys, groupkey_names):
-            sdf = sdf.withColumn(name, s.spark.column)
+        if groupkey_names:
+            sdf = sdf.withColumns(
+                {name: s.spark.column for s, name in zip(self._groupkeys, groupkey_names)}
+            )
         index = self._psdf._internal.index_spark_column_names[0]
         index_spark_type = self._psdf._internal.index_fields[0].spark_type
 
@@ -2554,8 +2556,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkey_names = ["__groupkey_{}__".format(i) for i in range(len(self._groupkeys))]
 
         sdf = self._psdf._internal.spark_frame
-        for s, name in zip(self._groupkeys, groupkey_names):
-            sdf = sdf.withColumn(name, s.spark.column)
+        if groupkey_names:
+            sdf = sdf.withColumns(
+                {name: s.spark.column for s, name in zip(self._groupkeys, groupkey_names)}
+            )
         index = self._psdf._internal.index_spark_column_names[0]
         index_spark_type = self._psdf._internal.index_fields[0].spark_type
 
