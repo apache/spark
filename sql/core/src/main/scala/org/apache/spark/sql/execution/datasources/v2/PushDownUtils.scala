@@ -93,7 +93,7 @@ object PushDownUtils extends Logging {
           (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownV2Filters =>
-        // Non-deterministic filters must not be pushed down: a data source may evaluate a pushed
+        // Non-deterministic filters should not be pushed down: a data source may evaluate a pushed
         // predicate a different number of times or at a different point than Spark, and a partial
         // push (a predicate used for pruning yet also returned for post-scan re-evaluation, e.g. a
         // parquet row group filter) would evaluate a non-deterministic predicate twice with
