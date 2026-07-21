@@ -22071,13 +22071,16 @@ def from_json(
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
+        A column that evaluates to a string.
         a column or column name in JSON format
     schema : :class:`StructType`, :class:`ArrayType`, :class:`MapType`, or str
         a StructType, ArrayType of StructType, MapType, or Python string literal with a DDL-formatted string
+        A column that evaluates to a string, or a DDL-formatted type string, or a DataType.
         to use when parsing the json column
     options : dict, optional
         options to control parsing. accepts the same options as the json datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
+        A dict of options. Each key and value is a string.
         for the version you use.
 
         .. # noqa
@@ -22086,6 +22089,7 @@ def from_json(
     -------
     :class:`~pyspark.sql.Column`
         a new column of complex type from given JSON object.
+        Returns a column that evaluates to a struct, array, or map.
 
     Examples
     --------
@@ -22302,11 +22306,13 @@ def is_variant_null(v: "ColumnOrName") -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+        A column that evaluates to a variant.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         a boolean column indicating whether the variant value is a variant null
+        Returns a column that evaluates to a boolean.
 
     Examples
     --------
@@ -22331,11 +22337,13 @@ def is_valid_variant(v: "ColumnOrName") -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+        A column that evaluates to a variant.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         a boolean column indicating whether the variant value is valid
+        Returns a column that evaluates to a boolean.
 
     Examples
     --------
@@ -22361,17 +22369,20 @@ def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+        A column that evaluates to a variant.
     paths : :class:`~pyspark.sql.Column` or str
         one or more JSONPath deletion targets. A `str` is a literal path; a
         :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path
         should start with `$` and is followed by one or more segments like
         `[123]`, `.name`, `['name']`, or `["name"]`. The root path `$` is not
+        A column that evaluates to a string.
         allowed.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         a variant column with the specified paths removed
+        Returns a column that evaluates to a variant.
 
     Examples
     --------
@@ -22424,10 +22435,12 @@ def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOr
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+        A column that evaluates to a variant.
     path : :class:`~pyspark.sql.Column` or str
         the JSONPath insertion target. A `str` is a literal path; a
         :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path should start with
         `$` and is followed by one or more segments like `[123]`, `.name`, `['name']`, or
+        A column that evaluates to a string.
         `["name"]`. The root path `$` is not allowed.
     value : :class:`~pyspark.sql.Column` or str
         the value to insert. Any expression castable to variant.
@@ -22436,6 +22449,7 @@ def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOr
     -------
     :class:`~pyspark.sql.Column`
         a variant column with `value` inserted at `path`
+        Returns a column that evaluates to a variant.
 
     Examples
     --------
@@ -22487,6 +22501,7 @@ def try_variant_insert(
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+        A column that evaluates to a variant.
     path : :class:`~pyspark.sql.Column` or str
         the JSONPath insertion target. A `str` is a literal path; a
         :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path should start with
@@ -22499,6 +22514,7 @@ def try_variant_insert(
     -------
     :class:`~pyspark.sql.Column`
         a variant column with `value` inserted at `path`, or NULL if the insertion fails
+        Returns a column that evaluates to a variant.
 
     Examples
     --------
@@ -22551,19 +22567,23 @@ def variant_set(
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+        A column that evaluates to a variant.
     path : :class:`~pyspark.sql.Column` or str
         the JSONPath set target. A `str` is a literal path; a :class:`~pyspark.sql.Column` supplies
         the path at runtime. A valid path should start with `$` and is followed by one or more
+        A column that evaluates to a string.
         segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
     value : :class:`~pyspark.sql.Column` or str
         the value to set. Any expression castable to variant.
     create_if_missing : bool, optional
         whether to create missing keys or out-of-range array indices (default True).
+        A column that evaluates to a boolean. Must be a constant.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         a variant column with `value` set at `path`
+        Returns a column that evaluates to a variant.
 
     Examples
     --------
@@ -22610,9 +22630,11 @@ def variant_array_append(
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+        A column that evaluates to a variant.
     path : :class:`~pyspark.sql.Column` or str
         the JSONPath target array. A `str` is a literal path; a :class:`~pyspark.sql.Column`
         supplies the path at runtime. A valid path should start with `$` and is followed by zero or
+        A column that evaluates to a string.
         more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
     value : :class:`~pyspark.sql.Column` or str
         the value to append. Any expression castable to variant.
@@ -22621,6 +22643,7 @@ def variant_array_append(
     -------
     :class:`~pyspark.sql.Column`
         a variant column with `value` appended to the array at `path`
+        Returns a column that evaluates to a variant.
 
     Examples
     --------
@@ -22665,17 +22688,21 @@ def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) ->
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+        A column that evaluates to a variant.
     path : :class:`~pyspark.sql.Column` or str
         a column containing the extraction path strings or a string representing the extraction
         path. A valid path should start with `$` and is followed by zero or more segments like
+        A column that evaluates to a string.
         `[123]`, `.name`, `['name']`, or `["name"]`.
     targetType : str
+        A DDL-formatted type string. Must be a constant.
         the target data type to cast into, in a DDL-formatted string
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         a column of `targetType` representing the extracted result
+        Returns a column of the type given by `targetType`.
 
     Examples
     --------
@@ -22712,17 +22739,21 @@ def try_variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+        A column that evaluates to a variant.
     path : :class:`~pyspark.sql.Column` or str
         a column containing the extraction path strings or a string representing the extraction
         path. A valid path should start with `$` and is followed by zero or more segments like
+        A column that evaluates to a string.
         `[123]`, `.name`, `['name']`, or `["name"]`.
     targetType : str
+        A DDL-formatted type string. Must be a constant.
         the target data type to cast into, in a DDL-formatted string
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         a column of `targetType` representing the extracted result
+        Returns a column of the type given by `targetType`.
 
     Examples
     --------
@@ -22759,11 +22790,13 @@ def schema_of_variant(v: "ColumnOrName") -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+        A column that evaluates to a variant.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         a string column representing the variant schema
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -22787,11 +22820,13 @@ def schema_of_variant_agg(v: "ColumnOrName") -> Column:
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
+        A column that evaluates to a variant.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         a string column representing the variant schema
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -22825,6 +22860,7 @@ def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) ->
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
         for the version you use.
         Additionally the function supports the `pretty` option which enables
+        A dict of options. Each key and value is a string.
         pretty JSON generation.
 
         .. # noqa
@@ -22938,10 +22974,12 @@ def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]
     Parameters
     ----------
     json : :class:`~pyspark.sql.Column` or str
+        A column that evaluates to a string.
         a JSON string or a foldable string column containing a JSON string.
     options : dict, optional
         options to control parsing. accepts the same options as the JSON datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option>`_
+        A dict of options. Each key and value is a string.
         for the version you use.
 
         .. # noqa
@@ -22953,6 +22991,7 @@ def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]
     -------
     :class:`~pyspark.sql.Column`
         a string representation of a :class:`StructType` parsed from given JSON.
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -23058,13 +23097,16 @@ def from_xml(
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
+        A column that evaluates to a string.
         a column or column name in XML format
     schema : :class:`StructType`, :class:`~pyspark.sql.Column` or str
         a StructType, Column or Python string literal with a DDL-formatted string
+        A column that evaluates to a string, or a DDL-formatted type string, or a DataType.
         to use when parsing the Xml column
     options : dict, optional
         options to control parsing. accepts the same options as the Xml datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+        A dict of options. Each key and value is a string.
         for the version you use.
 
         .. # noqa
@@ -23073,6 +23115,7 @@ def from_xml(
     -------
     :class:`~pyspark.sql.Column`
         a new column of complex type from given XML object.
+        Returns a column that evaluates to a struct.
 
     Examples
     --------
@@ -23166,10 +23209,12 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
     Parameters
     ----------
     xml : :class:`~pyspark.sql.Column` or str
+        A column that evaluates to a string.
         a XML string or a foldable string column containing a XML string.
     options : dict, optional
         options to control parsing. accepts the same options as the XML datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+        A dict of options. Each key and value is a string.
         for the version you use.
 
         .. # noqa
@@ -23178,6 +23223,7 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
     -------
     :class:`~pyspark.sql.Column`
         a string representation of a :class:`StructType` parsed from given XML.
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -23262,10 +23308,12 @@ def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
+        A column that evaluates to a struct, array, map, or variant.
         name of column containing a struct.
     options: dict, optional
         options to control converting. accepts the same options as the XML datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option>`_
+        A dict of options. Each key and value is a string.
         for the version you use.
 
         .. # noqa
@@ -23274,6 +23322,7 @@ def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     -------
     :class:`~pyspark.sql.Column`
         a XML string converted from given :class:`StructType`.
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -23315,10 +23364,12 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     Parameters
     ----------
     csv : :class:`~pyspark.sql.Column` or str
+        A column that evaluates to a string.
         A CSV string or a foldable string column containing a CSV string.
     options : dict, optional
         Options to control parsing. Accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
+        A dict of options. Each key and value is a string.
         for the version you use.
 
         .. # noqa
@@ -23327,6 +23378,7 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     -------
     :class:`~pyspark.sql.Column`
         A string representation of a :class:`StructType` parsed from the given CSV.
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -23404,10 +23456,12 @@ def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
+        A column that evaluates to a struct, array, map, or variant.
         Name of column containing a struct.
     options: dict, optional
         Options to control converting. Accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
+        A dict of options. Each key and value is a string.
         for the version you use.
 
         .. # noqa
@@ -23416,6 +23470,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     -------
     :class:`~pyspark.sql.Column`
         A CSV string converted from the given :class:`StructType`.
+        Returns a column that evaluates to a string.
 
     Examples
     --------
@@ -24894,12 +24949,15 @@ def from_csv(
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or str
+        A column that evaluates to a string.
         A column or column name in CSV format.
     schema : :class:`~pyspark.sql.Column` or str
+        A column that evaluates to a string, or a DDL-formatted type string, or a DataType.
         A column, or Python string literal with schema in DDL format, to use when parsing the CSV column.
     options : dict, optional
         Options to control parsing. Accepts the same options as the CSV datasource.
         See `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option>`_
+        A dict of options. Each key and value is a string.
         for the version you use.
 
         .. # noqa
@@ -24908,6 +24966,7 @@ def from_csv(
     -------
     :class:`~pyspark.sql.Column`
         A column of parsed CSV values.
+        Returns a column that evaluates to a struct.
 
     Examples
     --------
