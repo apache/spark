@@ -81,18 +81,28 @@ public final class Platform {
 
       // no point continuing if the above failed:
       if (DBB_CONSTRUCTOR != null && DBB_CLEANER_FIELD != null) {
-        Class<?> cleanerClass = Class.forName("jdk.internal.ref.Cleaner");
-        Method createMethod = cleanerClass.getMethod("create", Object.class, Runnable.class);
-        // Accessing jdk.internal.ref.Cleaner should actually fail by default in JDK 9+,
-        // unfortunately, unless the user has allowed access with something like
-        // --add-opens java.base/jdk.internal.ref=ALL-UNNAMED  If not, we can't use the Cleaner
-        // hack below. It doesn't break, just means the user might run into the default JVM limit
-        // on off-heap memory and increase it or set the flag above. This tests whether it's
-        // available:
+        Method createMethod;
         try {
-          createMethod.invoke(null, null, null);
-        } catch (IllegalAccessException e) {
-          // Don't throw an exception, but can't log here?
+          // jdk.internal.ref.Cleaner has been removed on some recent JDKs (e.g. JDK 26); on
+          // such JDKs this class simply doesn't exist any more, so treat that as "unavailable"
+          // rather than a fatal initialization error.
+          Class<?> cleanerClass = Class.forName("jdk.internal.ref.Cleaner");
+          createMethod = cleanerClass.getMethod("create", Object.class, Runnable.class);
+          // Accessing jdk.internal.ref.Cleaner should actually fail by default in JDK 9+,
+          // unfortunately, unless the user has allowed access with something like
+          // --add-opens java.base/jdk.internal.ref=ALL-UNNAMED  If not, we can't use the Cleaner
+          // hack below. It doesn't break, just means the user might run into the default JVM limit
+          // on off-heap memory and increase it or set the flag above. This tests whether it's
+          // available:
+          try {
+            createMethod.invoke(null, null, null);
+          } catch (IllegalAccessException e) {
+            // Don't throw an exception, but can't log here?
+            createMethod = null;
+          }
+        } catch (ClassNotFoundException | NoSuchMethodException e) {
+          // jdk.internal.ref.Cleaner is gone (e.g. JDK 26+). Not fatal: Platform simply won't
+          // use the Cleaner-based hack to release DirectByteBuffer memory on such JDKs.
           createMethod = null;
         }
         CLEANER_CREATE_METHOD = createMethod;
