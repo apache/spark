@@ -31,7 +31,7 @@ import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSeq}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
@@ -144,8 +144,12 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       conf: SQLConf): RDD[ColumnarBatch] = {
     val cacheSchema = DataTypeUtils.fromAttributes(cacheAttributes)
     val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
+    // Use AttributeSeq's cached exprId -> ordinal map so each selected attribute is a
+    // constant-time lookup, instead of rebuilding the exprId list and linear-scanning it
+    // per selected attribute.
+    val cacheAttributeSeq = AttributeSeq(cacheAttributes)
     val columnIndices =
-      selectedAttributes.map(a => cacheAttributes.map(o => o.exprId).indexOf(a.exprId)).toArray
+      selectedAttributes.map(a => cacheAttributeSeq.indexOf(a.exprId)).toArray
     // Capture config on driver
     val timeZoneId = conf.sessionLocalTimeZone
     val prefetchEnabled = conf.arrowCachePrefetchEnabled
@@ -170,9 +174,12 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
     val timeZoneId = conf.sessionLocalTimeZone
 
-    // Calculate column indices for projection
+    // Calculate column indices for projection. Use AttributeSeq's cached exprId -> ordinal
+    // map so each selected attribute is a constant-time lookup, instead of linear-scanning
+    // the cache attributes per selected attribute.
+    val cacheAttributeSeq = AttributeSeq(cacheAttributes)
     val selectedIndices = selectedAttributes.map { attr =>
-      cacheAttributes.indexWhere(_.exprId == attr.exprId)
+      cacheAttributeSeq.indexOf(attr.exprId)
     }.toArray
 
     // Check if all selected types can use the fast path.

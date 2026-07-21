@@ -197,11 +197,12 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       conf: SQLConf): RDD[ColumnarBatch] = {
     val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
     val outputSchema = DataTypeUtils.fromAttributes(selectedAttributes)
-    // Build a single exprId -> ordinal map so each selected attribute is a constant-time lookup,
-    // instead of rebuilding the exprId list and linear-scanning it per selected attribute.
-    val cacheAttributeOrdinals = cacheAttributes.iterator.map(_.exprId).zipWithIndex.toMap
+    // Use AttributeSeq's cached exprId -> ordinal map so each selected attribute is a
+    // constant-time lookup, instead of rebuilding the exprId list and linear-scanning it
+    // per selected attribute.
+    val cacheAttributeSeq = AttributeSeq(cacheAttributes)
     val columnIndices =
-      selectedAttributes.map(a => cacheAttributeOrdinals.getOrElse(a.exprId, -1)).toArray
+      selectedAttributes.map(a => cacheAttributeSeq.indexOf(a.exprId)).toArray
 
     def createAndDecompressColumn(cb: CachedBatch): ColumnarBatch = {
       val cachedColumnarBatch = cb.asInstanceOf[DefaultCachedBatch]
@@ -233,13 +234,13 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow] = {
-    // Find the ordinals and data types of the requested columns. Build a single
+    // Find the ordinals and data types of the requested columns. Use AttributeSeq's cached
     // exprId -> ordinal map so each requested column is a constant-time lookup, instead of
     // rebuilding the exprId list and linear-scanning it per requested column.
-    val cacheAttributeOrdinals = cacheAttributes.iterator.map(_.exprId).zipWithIndex.toMap
+    val cacheAttributeSeq = AttributeSeq(cacheAttributes)
     val (requestedColumnIndices, requestedColumnDataTypes) =
       selectedAttributes.map { a =>
-        cacheAttributeOrdinals.getOrElse(a.exprId, -1) -> a.dataType
+        cacheAttributeSeq.indexOf(a.exprId) -> a.dataType
       }.unzip
 
     val columnTypes = requestedColumnDataTypes.map {
