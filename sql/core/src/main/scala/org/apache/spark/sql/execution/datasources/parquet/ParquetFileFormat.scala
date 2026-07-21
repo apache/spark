@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.{Closeable, FileNotFoundException, IOException}
+import java.io.{Closeable, File, FileNotFoundException, IOException}
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -595,8 +595,11 @@ object ParquetFileFormat extends Logging {
   private def readArchiveFooters(conf: Configuration, archive: FileStatus): Seq[Footer] = {
     val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), "parquet-archive-infer")
     // No TaskContext here, so close the archive stream deterministically rather than on task end.
-    val entries = SupportsArchiveFormat.localizeEntries(archive.getPath, conf, tempDir, _ => true)
+    // localizeEntries eagerly opens/copies the first entry, so build it inside the try -- a corrupt
+    // archive throws there and the finally must still delete tempDir.
+    var entries: Iterator[(String, File)] = Iterator.empty
     try {
+      entries = SupportsArchiveFormat.localizeEntries(archive.getPath, conf, tempDir, _ => true)
       entries.map { case (_, entryFile) =>
         try {
           val status = new FileStatus(entryFile.length(), false, 0, 0, entryFile.lastModified(),

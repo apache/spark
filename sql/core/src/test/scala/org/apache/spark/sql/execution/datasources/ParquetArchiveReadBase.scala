@@ -105,18 +105,32 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 
-  test("a corrupt archive cleans up its temp dir rather than leaking it") {
+  private def parquetArchiveTempDirs(prefix: String): Set[String] = {
+    val localDir = new File(Utils.getLocalDir(spark.sparkContext.getConf))
+    Option(localDir.listFiles()).getOrElse(Array.empty)
+      .filter(_.getName.startsWith(prefix)).map(_.getName).toSet
+  }
+
+  test("a corrupt archive cleans up its read temp dir rather than leaking it") {
     // A corrupt archive throws before the read returns an iterator, but must not leak the temp dir.
-    def archiveTempDirs(localDir: File): Set[String] =
-      Option(localDir.listFiles()).getOrElse(Array.empty)
-        .filter(_.getName.startsWith("parquet-archive")).map(_.getName).toSet
     withArchiveFile(corruptArchiveExtension) { archive =>
       writeCorruptArchive(archive)
-      val localDir = new File(Utils.getLocalDir(spark.sparkContext.getConf))
-      val before = archiveTempDirs(localDir)
+      val before = parquetArchiveTempDirs("parquet-archive")
       intercept[SparkException](read(archive.getCanonicalPath).collect())
-      assert((archiveTempDirs(localDir) -- before).isEmpty,
-        "a corrupt archive leaked its temp dir")
+      assert((parquetArchiveTempDirs("parquet-archive") -- before).isEmpty,
+        "a corrupt archive leaked its read temp dir")
+    }
+  }
+
+  test("a corrupt archive cleans up its inference temp dir rather than leaking it") {
+    // Inference localizes entries too (readArchiveFooters), on a worker without a TaskContext; a
+    // corrupt archive throws during that eager localize and must not leak parquet-archive-infer.
+    withArchiveFile(corruptArchiveExtension) { archive =>
+      writeCorruptArchive(archive)
+      val before = parquetArchiveTempDirs("parquet-archive-infer")
+      intercept[SparkException](inferredSchema(Seq(archive.getCanonicalPath)))
+      assert((parquetArchiveTempDirs("parquet-archive-infer") -- before).isEmpty,
+        "a corrupt archive leaked its inference temp dir")
     }
   }
 
