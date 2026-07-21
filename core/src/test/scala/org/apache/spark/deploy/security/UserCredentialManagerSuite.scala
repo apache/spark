@@ -463,7 +463,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
       assert(initial != null)
       assert(callbacks.size() === 1, "Should have one callback from start()")
 
-      // Wait for renewal to fire (token expires in 2s, safety margin 1s → renews after ~1s)
+      // Wait for renewal to fire (token expires in 2s, safety margin 1s -> renews after ~1s)
       Thread.sleep(2000)
 
       // After renewal, a second callback should have been invoked with new credentials
