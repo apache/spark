@@ -316,7 +316,8 @@ object functions {
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
    * @param rsd
-   *   maximum relative standard deviation allowed (default = 0.05)
+   *   maximum relative standard deviation allowed (default = 0.05). A column that evaluates to a
+   *   double. Must be a constant.
    *
    * @group agg_funcs
    * @since 2.1.0
@@ -331,7 +332,8 @@ object functions {
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
    * @param rsd
-   *   maximum relative standard deviation allowed (default = 0.05)
+   *   maximum relative standard deviation allowed (default = 0.05). A column that evaluates to a
+   *   double. Must be a constant.
    *
    * @group agg_funcs
    * @since 2.1.0
@@ -1055,7 +1057,8 @@ object functions {
    * @param e
    *   the column to take the last value from. A column of any type.
    * @param ignoreNulls
-   *   if true, returns the last non-null value; if all values are null, null is returned.
+   *   if true, returns the last non-null value; if all values are null, null is returned. A
+   *   column that evaluates to a boolean. Must be a constant.
    * @note
    *   The function is non-deterministic because its results depends on the order of the rows
    *   which may be non-deterministic after a shuffle.
@@ -1077,7 +1080,8 @@ object functions {
    * @param columnName
    *   the name of the column to take the last value from. A column of any type.
    * @param ignoreNulls
-   *   if true, returns the last non-null value; if all values are null, null is returned.
+   *   if true, returns the last non-null value; if all values are null, null is returned. A
+   *   column that evaluates to a boolean. Must be a constant.
    * @note
    *   The function is non-deterministic because its results depends on the order of the rows
    *   which may be non-deterministic after a shuffle.
@@ -1395,7 +1399,7 @@ object functions {
    * @param ord
    *   the column that needs to be minimized. A column of an orderable type.
    * @param k
-   *   the number of bottom values to return. Must be a constant.
+   *   the number of bottom values to return. An integer. Must be a constant.
    * @note
    *   The function is non-deterministic because the order of collected results depends on the
    *   order of the rows which may be non-deterministic after a shuffle when there are ties in the
@@ -4067,8 +4071,8 @@ object functions {
    *   Number of rows after the current row to look ahead. A column that evaluates to an integral.
    *   Must be a constant.
    * @param defaultValue
-   *   Value to return when there are fewer than `offset` rows after the current row. Must be a
-   *   constant.
+   *   Value to return when there are fewer than `offset` rows after the current row. A column of
+   *   any type. Must be a constant.
    * @param ignoreNulls
    *   Whether to skip null values when computing the result. A column that evaluates to a
    *   boolean. Must be a constant.
@@ -5260,7 +5264,7 @@ object functions {
 
   /**
    * @param columnName
-   *   angle in radians
+   *   angle in radians. A column that evaluates to a double.
    * @return
    *   cosine of the angle, as if computed by `java.lang.Math.cos`. Returns a column that
    *   evaluates to a double.
@@ -5819,7 +5823,7 @@ object functions {
    * @param l
    *   the base number. A column that evaluates to a double.
    * @param rightName
-   *   the exponent number.
+   *   the exponent number. A column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    * @return
@@ -5831,7 +5835,7 @@ object functions {
    * Returns the value of the first argument raised to the power of the second argument.
    *
    * @param leftName
-   *   the base number.
+   *   the base number. A column that evaluates to a double.
    * @param r
    *   the exponent number. A column that evaluates to a double.
    * @group math_funcs
@@ -5861,7 +5865,7 @@ object functions {
    * @param l
    *   the base number. A column that evaluates to a double.
    * @param r
-   *   the exponent number.
+   *   the exponent number. A column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    * @return
@@ -5887,7 +5891,7 @@ object functions {
    * Returns the value of the first argument raised to the power of the second argument.
    *
    * @param l
-   *   the base number.
+   *   the base number. A column that evaluates to a double.
    * @param r
    *   the exponent number. A column that evaluates to a double.
    * @group math_funcs
@@ -5986,7 +5990,8 @@ object functions {
    * @param e
    *   the value to round. A column that evaluates to a numeric.
    * @param scale
-   *   the number of decimal places to round to.
+   *   the number of decimal places to round to. A column that evaluates to an integral. Must be a
+   *   constant.
    * @group math_funcs
    * @since 1.5.0
    * @return
@@ -6200,7 +6205,7 @@ object functions {
 
   /**
    * @param columnName
-   *   angle in radians
+   *   angle in radians. A column that evaluates to a double.
    * @return
    *   sine of the angle, as if computed by `java.lang.Math.sin`. Returns a column that evaluates
    *   to a double.
@@ -6222,7 +6227,7 @@ object functions {
 
   /**
    * @param columnName
-   *   hyperbolic angle
+   *   hyperbolic angle. A column that evaluates to a double.
    * @return
    *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`. Returns a
    *   column that evaluates to a double.
@@ -6245,7 +6250,7 @@ object functions {
 
   /**
    * @param columnName
-   *   angle in radians
+   *   angle in radians. A column that evaluates to a double.
    * @return
    *   tangent of the given value, as if computed by `java.lang.Math.tan`. Returns a column that
    *   evaluates to a double.
@@ -6267,7 +6272,7 @@ object functions {
 
   /**
    * @param columnName
-   *   hyperbolic angle
+   *   hyperbolic angle. A column that evaluates to a double.
    * @return
    *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`. Returns a
    *   column that evaluates to a double.
@@ -6314,7 +6319,7 @@ object functions {
    * degrees.
    *
    * @param columnName
-   *   angle in radians
+   *   angle in radians. A column that evaluates to a double.
    * @return
    *   angle in degrees, as if computed by `java.lang.Math.toDegrees`. Returns a column that
    *   evaluates to a double.
@@ -8190,10 +8195,10 @@ object functions {
    * Splits str around matches of the given pattern.
    *
    * @param str
-   *   a string expression to split
+   *   a string expression to split. A column that evaluates to a string.
    * @param pattern
    *   a string representing a regular expression. The regex string should be a Java regular
-   *   expression.
+   *   expression. A column that evaluates to a string.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -8206,10 +8211,10 @@ object functions {
    * Splits str around matches of the given pattern.
    *
    * @param str
-   *   a string expression to split
+   *   a string expression to split. A column that evaluates to a string.
    * @param pattern
    *   a column of string representing a regular expression. The regex string should be a Java
-   *   regular expression.
+   *   regular expression. A column that evaluates to a string.
    *
    * @group string_funcs
    * @since 4.0.0
@@ -8222,16 +8227,16 @@ object functions {
    * Splits str around matches of the given pattern.
    *
    * @param str
-   *   a string expression to split
+   *   a string expression to split. A column that evaluates to a string.
    * @param pattern
    *   a string representing a regular expression. The regex string should be a Java regular
-   *   expression.
+   *   expression. A column that evaluates to a string.
    * @param limit
    *   an integer expression which controls the number of times the regex is applied. <ul>
    *   <li>limit greater than 0: The resulting array's length will not be more than limit, and the
    *   resulting array's last entry will contain all input beyond the last matched regex.</li>
    *   <li>limit less than or equal to 0: `regex` will be applied as many times as possible, and
-   *   the resulting array can be of any size.</li> </ul>
+   *   the resulting array can be of any size.</li> </ul> A column that evaluates to an integer.
    *
    * @group string_funcs
    * @since 3.0.0
@@ -8245,16 +8250,17 @@ object functions {
    * Splits str around matches of the given pattern.
    *
    * @param str
-   *   a string expression to split
+   *   a string expression to split. A column that evaluates to a string.
    * @param pattern
    *   a column of string representing a regular expression. The regex string should be a Java
-   *   regular expression.
+   *   regular expression. A column that evaluates to a string.
    * @param limit
    *   a column of integer expression which controls the number of times the regex is applied.
    *   <ul> <li>limit greater than 0: The resulting array's length will not be more than limit,
    *   and the resulting array's last entry will contain all input beyond the last matched
    *   regex.</li> <li>limit less than or equal to 0: `regex` will be applied as many times as
-   *   possible, and the resulting array can be of any size.</li> </ul>
+   *   possible, and the resulting array can be of any size.</li> </ul> A column that evaluates to
+   *   an integer.
    *
    * @group string_funcs
    * @since 4.0.0
@@ -8635,9 +8641,10 @@ object functions {
    * Replaces all occurrences of `search` with `replace`.
    *
    * @param src
-   *   A column of strings to be replaced.
+   *   A column of strings to be replaced. A column that evaluates to a string.
    * @param search
-   *   A column of strings. If `search` is not found in `src`, `src` is returned unchanged.
+   *   A column of strings. If `search` is not found in `src`, `src` is returned unchanged. A
+   *   column that evaluates to a string.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -11218,9 +11225,11 @@ object functions {
    *
    * @param startDate
    *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
    * @param numMonths
-   *   A column of the number of months to add to `startDate`, can be negative to subtract months
+   *   A column of the number of months to add to `startDate`, can be negative to subtract months.
+   *   A column that evaluates to an integer.
    * @return
    *   A date, or null if `startDate` was a string that could not be cast to a date. Returns a
    *   column that evaluates to a date.
@@ -11346,9 +11355,11 @@ object functions {
    *
    * @param start
    *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
    * @param days
-   *   A column of the number of days to add to `start`, can be negative to subtract days
+   *   A column of the number of days to add to `start`, can be negative to subtract days. A
+   *   column that evaluates to an integer, short, or byte.
    * @return
    *   A date, or null if `start` was a string that could not be cast to a date. Returns a column
    *   that evaluates to a date.
@@ -11398,9 +11409,11 @@ object functions {
    *
    * @param start
    *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
    * @param days
-   *   A column of the number of days to subtract from `start`, can be negative to add days
+   *   A column of the number of days to subtract from `start`, can be negative to add days. A
+   *   column that evaluates to an integer, short, or byte.
    * @return
    *   A date, or null if `start` was a string that could not be cast to a date. Returns a column
    *   that evaluates to a date.
@@ -11707,10 +11720,12 @@ object functions {
    *
    * @param end
    *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to
+   *   a timestamp.
    * @param start
    *   A date, timestamp or string. If a string, the data must be in a format that can cast to a
-   *   timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *   timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   timestamp.
    * @return
    *   A double, or null if either `end` or `start` were strings that could not be cast to a
    *   timestamp. Negative if `end` is before `start`. Returns a column that evaluates to a
@@ -11774,10 +11789,11 @@ object functions {
    *
    * @param date
    *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
    * @param dayOfWeek
    *   A column of the day of week. Case insensitive, and accepts: "Mon", "Tue", "Wed", "Thu",
-   *   "Fri", "Sat", "Sun"
+   *   "Fri", "Sat", "Sun". A column that evaluates to a string.
    * @return
    *   A date, or null if `date` was a string that could not be cast to a date or if `dayOfWeek`
    *   was an invalid value. Returns a column that evaluates to a date.
@@ -11894,9 +11910,11 @@ object functions {
    *
    * @param s
    *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   string, date, or timestamp.
    * @param p
-   *   A date time pattern detailing the format of `s` when `s` is a string
+   *   A date time pattern detailing the format of `s` when `s` is a string. A column that
+   *   evaluates to a string.
    * @return
    *   A long, or null if `s` was a string that could not be cast to a date or `p` was an invalid
    *   format. Returns a column that evaluates to a long.
@@ -11910,7 +11928,7 @@ object functions {
    * Parses a string value to a time value.
    *
    * @param str
-   *   A string to be parsed to time.
+   *   A string to be parsed to time. A column that evaluates to a string.
    * @return
    *   A time, or raises an error if the input is malformed. Returns a column that evaluates to a
    *   time.
@@ -11931,7 +11949,7 @@ object functions {
    * @param str
    *   A string to be parsed to time.
    * @param format
-   *   A time format pattern to follow.
+   *   A time format pattern to follow. A column that evaluates to a string.
    * @return
    *   A time, or raises an error if the input is malformed. Returns a column that evaluates to a
    *   time.
@@ -11965,9 +11983,11 @@ object functions {
    *
    * @param s
    *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to
+   *   a string, date, timestamp, or numeric.
    * @param fmt
-   *   A date time pattern detailing the format of `s` when `s` is a string
+   *   A date time pattern detailing the format of `s` when `s` is a string. A column that
+   *   evaluates to a string.
    * @return
    *   A timestamp, or null if `s` was a string that could not be cast to a timestamp or `fmt` was
    *   an invalid format. Returns a column that evaluates to a timestamp.
@@ -11980,7 +12000,7 @@ object functions {
    * Parses a string value to a time value.
    *
    * @param str
-   *   A string to be parsed to time.
+   *   A string to be parsed to time. A column that evaluates to a string.
    * @return
    *   A time, or null if the input is malformed. Returns a column that evaluates to a time.
    *
@@ -12000,7 +12020,7 @@ object functions {
    * @param str
    *   A string to be parsed to time.
    * @param format
-   *   A time format pattern to follow.
+   *   A time format pattern to follow. A column that evaluates to a string.
    * @return
    *   A time, or null if the input is malformed. Returns a column that evaluates to a time.
    * @group datetime_funcs
@@ -12061,9 +12081,11 @@ object functions {
    *
    * @param e
    *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   string, date, or timestamp.
    * @param fmt
-   *   A date time pattern detailing the format of `e` when `e`is a string
+   *   A date time pattern detailing the format of `e` when `e`is a string. A column that
+   *   evaluates to a string.
    * @return
    *   A date, or null if `e` was a string that could not be cast to a date or `fmt` was an
    *   invalid format. Returns a column that evaluates to a date.
@@ -12320,21 +12342,24 @@ object functions {
    *
    * @param timeColumn
    *   The column or the expression to use as the timestamp for windowing by time. The time column
-   *   must be of TimestampType or TimestampNTZType.
+   *   must be of TimestampType or TimestampNTZType. A column that evaluates to a timestamp.
    * @param windowDuration
    *   A string specifying the width of the window, e.g. `10 minutes`, `1 second`. Check
    *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers. Note that
    *   the duration is a fixed length of time, and does not vary over time according to a
-   *   calendar. For example, `1 day` always means 86,400,000 milliseconds, not a calendar day.
+   *   calendar. For example, `1 day` always means 86,400,000 milliseconds, not a calendar day. A
+   *   column that evaluates to a string.
    * @param slideDuration
    *   A string specifying the sliding interval of the window, e.g. `1 minute`. A new window will
    *   be generated every `slideDuration`. Must be less than or equal to the `windowDuration`.
    *   Check `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers. This
-   *   duration is likewise absolute, and does not vary according to a calendar.
+   *   duration is likewise absolute, and does not vary according to a calendar. A column that
+   *   evaluates to a string.
    * @param startTime
    *   The offset with respect to 1970-01-01 00:00:00 UTC with which to start window intervals.
    *   For example, in order to have hourly tumbling windows that start 15 minutes past the hour,
-   *   e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
+   *   e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`. A column that
+   *   evaluates to a string.
    *
    * @group datetime_funcs
    * @since 2.0.0
@@ -12375,17 +12400,19 @@ object functions {
    *
    * @param timeColumn
    *   The column or the expression to use as the timestamp for windowing by time. The time column
-   *   must be of TimestampType or TimestampNTZType.
+   *   must be of TimestampType or TimestampNTZType. A column that evaluates to a timestamp.
    * @param windowDuration
    *   A string specifying the width of the window, e.g. `10 minutes`, `1 second`. Check
    *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers. Note that
    *   the duration is a fixed length of time, and does not vary over time according to a
-   *   calendar. For example, `1 day` always means 86,400,000 milliseconds, not a calendar day.
+   *   calendar. For example, `1 day` always means 86,400,000 milliseconds, not a calendar day. A
+   *   column that evaluates to a string.
    * @param slideDuration
    *   A string specifying the sliding interval of the window, e.g. `1 minute`. A new window will
    *   be generated every `slideDuration`. Must be less than or equal to the `windowDuration`.
    *   Check `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers. This
-   *   duration is likewise absolute, and does not vary according to a calendar.
+   *   duration is likewise absolute, and does not vary according to a calendar. A column that
+   *   evaluates to a string.
    *
    * @group datetime_funcs
    * @since 2.0.0
@@ -12422,10 +12449,11 @@ object functions {
    *
    * @param timeColumn
    *   The column or the expression to use as the timestamp for windowing by time. The time column
-   *   must be of TimestampType or TimestampNTZType.
+   *   must be of TimestampType or TimestampNTZType. A column that evaluates to a timestamp.
    * @param windowDuration
    *   A string specifying the width of the window, e.g. `10 minutes`, `1 second`. Check
-   *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers.
+   *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers. A column
+   *   that evaluates to a string.
    *
    * @group datetime_funcs
    * @since 2.0.0
@@ -12445,7 +12473,7 @@ object functions {
    *
    * @param windowColumn
    *   The window column (typically produced by window aggregation) of type StructType { start:
-   *   Timestamp, end: Timestamp }
+   *   Timestamp, end: Timestamp }. A column that evaluates to a struct.
    *
    * @group datetime_funcs
    * @since 3.4.0
@@ -12470,10 +12498,11 @@ object functions {
    *
    * @param timeColumn
    *   The column or the expression to use as the timestamp for windowing by time. The time column
-   *   must be of TimestampType or TimestampNTZType.
+   *   must be of TimestampType or TimestampNTZType. A column that evaluates to a timestamp.
    * @param gapDuration
    *   A string specifying the timeout of the session, e.g. `10 minutes`, `1 second`. Check
-   *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers.
+   *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers. A column
+   *   that evaluates to a string.
    *
    * @group datetime_funcs
    * @since 3.2.0
@@ -12507,11 +12536,11 @@ object functions {
    *
    * @param timeColumn
    *   The column or the expression to use as the timestamp for windowing by time. The time column
-   *   must be of TimestampType or TimestampNTZType.
+   *   must be of TimestampType or TimestampNTZType. A column that evaluates to a timestamp.
    * @param gapDuration
    *   A column specifying the timeout of the session. It could be static value, e.g. `10
    *   minutes`, `1 second`, or an expression/UDF that specifies gap duration dynamically based on
-   *   the input row.
+   *   the input row. A column that evaluates to a string or interval.
    *
    * @group datetime_funcs
    * @since 3.2.0
@@ -12957,11 +12986,11 @@ object functions {
    * end if `start` is negative) with the specified `length`.
    *
    * @param x
-   *   the array column to be sliced
+   *   the array column to be sliced. A column that evaluates to an array.
    * @param start
-   *   the starting index
+   *   the starting index. A column that evaluates to an integer.
    * @param length
-   *   the length of the slice
+   *   the length of the slice. A column that evaluates to an integer.
    *
    * @group array_funcs
    * @since 3.1.0
@@ -13296,7 +13325,7 @@ object functions {
    * }}}
    *
    * @param column
-   *   the input array column
+   *   the input array column. A column that evaluates to an array.
    * @param f
    *   (col, index) => transformed_col, the lambda function to transform the input column given
    *   the index. Indices start at 0.
@@ -13373,7 +13402,7 @@ object functions {
    * }}}
    *
    * @param column
-   *   the input array column
+   *   the input array column. A column that evaluates to an array.
    * @param f
    *   (col, index) => predicate, the Boolean predicate to filter the input column given the
    *   index. Indices start at 0.
@@ -13425,9 +13454,9 @@ object functions {
    * }}}
    *
    * @param expr
-   *   the input array column
+   *   the input array column. A column that evaluates to an array.
    * @param initialValue
-   *   the initial value
+   *   the initial value. A column of any type.
    * @param merge
    *   (combined_value, input_value) => combined_value, the merge function to merge an input value
    *   to the combined_value
@@ -13478,9 +13507,9 @@ object functions {
    * }}}
    *
    * @param expr
-   *   the input array column
+   *   the input array column. A column that evaluates to an array.
    * @param initialValue
-   *   the initial value
+   *   the initial value. A column of any type.
    * @param merge
    *   (combined_value, input_value) => combined_value, the merge function to merge an input value
    *   to the combined_value
@@ -13523,7 +13552,7 @@ object functions {
    * }}}
    *
    * @param expr
-   *   the input map column
+   *   the input map column. A column that evaluates to a map.
    * @param f
    *   (key, value) => new_key, the lambda function to transform the key of input map column
    *
@@ -13543,7 +13572,7 @@ object functions {
    * }}}
    *
    * @param expr
-   *   the input map column
+   *   the input map column. A column that evaluates to a map.
    * @param f
    *   (key, value) => new_value, the lambda function to transform the value of input map column
    *
@@ -13562,7 +13591,7 @@ object functions {
    * }}}
    *
    * @param expr
-   *   the input map column
+   *   the input map column. A column that evaluates to a map.
    * @param f
    *   (key, value) => predicate, the Boolean predicate to filter the input map column
    *
@@ -13581,9 +13610,9 @@ object functions {
    * }}}
    *
    * @param left
-   *   the left input map column
+   *   the left input map column. A column that evaluates to a map.
    * @param right
-   *   the right input map column
+   *   the right input map column. A column that evaluates to a map.
    * @param f
    *   (key, value1, value2) => new_value, the lambda function to merge the map values
    *
@@ -13959,7 +13988,7 @@ object functions {
    * a valid JSON value.
    *
    * @param json
-   *   a string column that contains JSON data.
+   *   a string column that contains JSON data. A column that evaluates to a string.
    *
    * @group variant_funcs
    * @since 4.0.0
@@ -15467,9 +15496,10 @@ object functions {
    * Converts the timestamp without time zone `sourceTs` from the current time zone to `targetTz`.
    *
    * @param targetTz
-   *   the time zone to which the input timestamp should be converted.
+   *   the time zone to which the input timestamp should be converted. A column that evaluates to
+   *   a string.
    * @param sourceTs
-   *   a timestamp without time zone.
+   *   a timestamp without time zone. A column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 3.5.0
    * @return
