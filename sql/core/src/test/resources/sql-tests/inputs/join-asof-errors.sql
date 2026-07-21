@@ -1,5 +1,4 @@
 -- FVT Category 3: ASOF JOIN error conditions (FVT-ASOF-3-*)
--- Source: sql-fvt-plan/plans/asof-join.md
 
 --SET spark.sql.join.asofJoin.enabled=true
 

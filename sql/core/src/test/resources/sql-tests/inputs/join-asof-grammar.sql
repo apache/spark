@@ -1,5 +1,4 @@
 -- FVT Category 1: ASOF JOIN grammar coverage (FVT-ASOF-1-*)
--- Source: sql-fvt-plan/plans/asof-join.md
 
 --SET spark.sql.join.asofJoin.enabled=true
 

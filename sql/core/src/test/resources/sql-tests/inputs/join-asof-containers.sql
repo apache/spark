@@ -1,5 +1,4 @@
 -- FVT Category 7: ASOF JOIN container integration (FVT-ASOF-7-*)
--- Source: sql-fvt-plan/plans/asof-join.md
 
 --SET spark.sql.join.asofJoin.enabled=true
 
@@ -109,67 +108,9 @@ FROM trades t ASOF JOIN quotes q
 
 SELECT count(*) AS cnt FROM asof_insert_tgt;
 
--- FVT-ASOF-7-011: MERGE USING ASOF subquery
-DROP TABLE IF EXISTS asof_merge_tgt;
-CREATE TABLE asof_merge_tgt (symbol STRING, trade_time TIMESTAMP, bid_price DOUBLE) USING parquet;
-
-MERGE INTO asof_merge_tgt AS tgt
-USING (
-  SELECT t.symbol, t.trade_time, q.bid_price
-  FROM trades t ASOF JOIN quotes q
-    MATCH_CONDITION (t.trade_time >= q.quote_time)
-    ON t.symbol = q.symbol
-) AS src
-ON tgt.symbol = src.symbol AND tgt.trade_time = src.trade_time
-WHEN MATCHED THEN UPDATE SET tgt.bid_price = src.bid_price
-WHEN NOT MATCHED THEN INSERT *;
-
-SELECT count(*) AS cnt FROM asof_merge_tgt;
-
--- FVT-ASOF-7-012a: UPDATE SET from scalar ASOF subquery
-DROP TABLE IF EXISTS asof_update_tgt;
-CREATE TABLE asof_update_tgt (symbol STRING, trade_time TIMESTAMP, bid_price DOUBLE) USING parquet;
-INSERT INTO asof_update_tgt VALUES
-  ('AAPL', TIMESTAMP '2026-06-29 10:00:05', 0.0),
-  ('AAPL', TIMESTAMP '2026-06-29 10:00:11', 0.0);
-
-UPDATE asof_update_tgt AS tgt
-SET bid_price = (
-  SELECT q.bid_price
-  FROM trades t ASOF JOIN quotes q
-    MATCH_CONDITION (t.trade_time >= q.quote_time)
-    ON t.symbol = q.symbol
-  WHERE t.trade_time = tgt.trade_time AND t.symbol = tgt.symbol
-);
-
-SELECT symbol, trade_time, bid_price
-FROM asof_update_tgt
-ORDER BY trade_time;
-
--- FVT-ASOF-7-012b: UPDATE WHERE IN ASOF subquery
-UPDATE asof_update_tgt
-SET bid_price = -1.0
-WHERE trade_time IN (
-  SELECT t.trade_time
-  FROM trades t ASOF JOIN quotes q
-    MATCH_CONDITION (t.trade_time >= q.quote_time)
-    ON t.symbol = q.symbol
-  WHERE q.bid_price > 200
-);
-
-SELECT count(*) AS flagged_cnt FROM asof_update_tgt WHERE bid_price = -1.0;
-
--- FVT-ASOF-7-013: DELETE WHERE IN ASOF subquery
-DELETE FROM asof_update_tgt
-WHERE symbol IN (
-  SELECT t.symbol
-  FROM trades t ASOF JOIN quotes q
-    MATCH_CONDITION (t.trade_time >= q.quote_time)
-    ON t.symbol = q.symbol
-  WHERE t.symbol = 'GOOG'
-);
-
-SELECT count(*) AS remaining_cnt FROM asof_update_tgt;
+-- FVT-ASOF-7-011: excluded — MERGE on parquet rejects row-level DML (ASOF USING subquery not evaluated)
+-- FVT-ASOF-7-012a/7-012b: excluded — UPDATE on parquet rejects row-level DML (ASOF subquery not evaluated)
+-- FVT-ASOF-7-013: excluded — DELETE on parquet rejects row-level DML (ASOF subquery not evaluated)
 
 -- FVT-ASOF-7-014: cursor over ASOF SELECT (requires scripting + cursorEnabled)
 --SET spark.sql.scripting.cursorEnabled=true

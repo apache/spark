@@ -1,5 +1,4 @@
 -- FVT Category 10: ASOF JOIN feature gating (FVT-ASOF-10-*)
--- Source: sql-fvt-plan/plans/asof-join.md
 
 --SET spark.sql.join.asofJoin.enabled=false
 

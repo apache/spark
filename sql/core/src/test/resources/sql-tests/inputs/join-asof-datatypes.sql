@@ -1,5 +1,4 @@
 -- FVT Category 4: ASOF JOIN data type coverage (FVT-ASOF-4-*)
--- Source: sql-fvt-plan/plans/asof-join.md
 
 --SET spark.sql.join.asofJoin.enabled=true
 

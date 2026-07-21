@@ -1,5 +1,4 @@
 -- FVT Category 6: ASOF JOIN query-context integration (FVT-ASOF-6-*)
--- Source: sql-fvt-plan/plans/asof-join.md
 
 --SET spark.sql.join.asofJoin.enabled=true
 

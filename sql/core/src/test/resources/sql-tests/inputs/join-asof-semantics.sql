@@ -1,5 +1,4 @@
 -- FVT Category 2: ASOF JOIN semantic behavior (FVT-ASOF-2-*)
--- Source: sql-fvt-plan/plans/asof-join.md
 
 --SET spark.sql.join.asofJoin.enabled=true
 

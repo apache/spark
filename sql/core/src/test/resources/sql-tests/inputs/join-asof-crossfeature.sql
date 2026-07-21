@@ -1,5 +1,4 @@
 -- FVT Category 9: ASOF JOIN cross-feature interaction (FVT-ASOF-9-*)
--- Source: sql-fvt-plan/plans/asof-join.md
 
 --SET spark.sql.join.asofJoin.enabled=true
 

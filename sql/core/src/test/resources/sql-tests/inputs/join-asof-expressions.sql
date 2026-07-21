@@ -1,5 +1,4 @@
 -- FVT Category 8: ASOF JOIN expression integration (FVT-ASOF-8-*)
--- Source: sql-fvt-plan/plans/asof-join.md
 
 --SET spark.sql.join.asofJoin.enabled=true
 
@@ -55,7 +54,7 @@ FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (shift_ts(t.trade_time) >= q.quote_time)
   ON t.symbol = q.symbol;
 
--- FVT-ASOF-8-006a: builtin interval transform (same semantics as 8-006 without SQL UDF)
+-- FVT-ASOF-8-006a: builtin interval transform (same operand transform, expressed with a builtin instead of a SQL UDF)
 SELECT count(*) AS cnt
 FROM trades t ASOF JOIN quotes q
   MATCH_CONDITION (t.trade_time - INTERVAL 1 HOUR >= q.quote_time)
