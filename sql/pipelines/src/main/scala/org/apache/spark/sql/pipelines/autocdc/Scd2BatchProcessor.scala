@@ -1044,22 +1044,22 @@ case class Scd2BatchProcessor(
     val auxTableColumns = mergeSource.columns.toImmutableArraySeq
 
     // Build predicate for whether rows represent the same event (match). In SCD2 each key can have
-    // multiple records, so a row's identity is defined by (keys, sequencing). 
+    // multiple records, so a row's identity is defined by (keys, sequencing).
     val auxIdentQuoted = auxiliaryTableIdentifier.quotedString
     val meta = AutoCdcReservedNames.cdcMetadataColName
 
-    val mergeSourceRecordStartAt = 
+    val mergeSourceRecordStartAt =
       Scd2BatchProcessor.recordStartAtOf(F.col(s"source.`$meta`"))
     val auxTableRecordStartAt =
       Scd2BatchProcessor.recordStartAtOf(F.col(s"$auxIdentQuoted.`$meta`"))
-    
+
     val doKeysMatch = changeArgs.keys
       .map(k => F.col(s"source.${k.quoted}") === F.col(s"$auxIdentQuoted.${k.quoted}"))
       .reduce(_ && _)
     val doRowsMatch = doKeysMatch && (mergeSourceRecordStartAt <=> auxTableRecordStartAt)
 
     // On updates, MERGE requires only non-key columns are updated (remapped). For inserts, all of
-    // the row's columns must explicitly be mapped. 
+    // the row's columns must explicitly be mapped.
     val keyNames = changeArgs.keys.map(_.name)
     def upsertAssignments(columnName: String): (String, Column) = {
       val quoted = QuotingUtils.quoteIdentifier(columnName)
@@ -1074,9 +1074,9 @@ case class Scd2BatchProcessor(
     // Physically garbage-collect aux rows logically deleted by some other, already-committed
     // batch. Such rows are always excluded when pulling in the current microbatch's affected set,
     // so they can never match against a row being merged in.
-    val auxTableDeleyedByBatchId = F.col(s"$auxIdentQuoted.`$deletedByBatchIdCol`")
+    val auxTableDeletedByBatchId = F.col(s"$auxIdentQuoted.`$deletedByBatchIdCol`")
     val isGarbageCollectableAuxRow =
-      auxTableDeleyedByBatchId.isNotNull && auxTableDeleyedByBatchId =!= F.lit(batchId)
+      auxTableDeletedByBatchId.isNotNull && auxTableDeletedByBatchId =!= F.lit(batchId)
 
     // Whether a row in the MERGE source represents a row being [logically] deleted, as opposed to
     // being upserted.
@@ -1102,8 +1102,9 @@ case class Scd2BatchProcessor(
       .whenNotMatched(!shouldLogicallyDeleteAuxRow)
       .insert(insertAssignments)
       // If this is a row not affected by the current microbatch but is eligible for garbage
-      // collection now, proactively hard-delete it. This GC triggers a full scan of the aux
-      // table, revisit whether to GC only periodically rather than on every microbatch.
+      // collection now, proactively hard-delete it.
+      // TODO: This GC triggers a full scan of the aux table; revisit whether to GC only
+      // periodically rather than on every microbatch.
       .whenNotMatchedBySource(isGarbageCollectableAuxRow)
       .delete()
       .merge()
@@ -1145,8 +1146,8 @@ case class Scd2BatchProcessor(
       // upserts).
       !F.col(Scd2BatchProcessor.shouldRouteToAuxTableColName) &&
         // While rows headed to aux are mutually exclusive to rows that should land in the target,
-        // its possible there are rows that belong to neither aux nor target (ex. decomposition
-        // tails). Only op upsert-representing rows should land in the target, and no-op
+        // it's possible there are rows that belong to neither aux nor target (ex. decomposition
+        // tails). Only non-no-op upsert-representing rows should land in the target, and no-op
         // upsert-representing rows would have been marked as routed to aux table; hence all
         // remaining upserts should land in the target table.
         RowClassifier.isUpsertRepresentingRow(Scd2IntervalColumns(recordStartAt, startAt, endAt))
@@ -1180,12 +1181,12 @@ case class Scd2BatchProcessor(
       .as("source")
 
     val mergeSourceRecordStartAt = Scd2BatchProcessor.recordStartAtOf(F.col(s"source.`$meta`"))
-    val auxTableRecordStartAt =
+    val targetTableRecordStartAt =
       Scd2BatchProcessor.recordStartAtOf(F.col(s"$targetIdentQuoted.`$meta`"))
     val doKeysMatch = changeArgs.keys
       .map(k => F.col(s"source.${k.quoted}") === F.col(s"$targetIdentQuoted.${k.quoted}"))
       .reduce(_ && _)
-    val doRowsMatch = doKeysMatch && (mergeSourceRecordStartAt <=> auxTableRecordStartAt)
+    val doRowsMatch = doKeysMatch && (mergeSourceRecordStartAt <=> targetTableRecordStartAt)
 
     // On updates, MERGE requires only non-key columns are updated (remapped). For inserts, all of
     // the row's columns must explicitly be mapped.
