@@ -3198,6 +3198,72 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("identifyAndTagAuxRows evaluates runs independently per key") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two keys, each with its own no-op run. The per-key window must never let one key's rows
+    // influence another's: the last row of key 1 must stay visible (it is its run's tail, not a
+    // hidden continuation of key 2's run), and key 2's first row must be evaluated against key
+    // 2's successor only. A window that leaked across keys would mistag one of these boundary
+    // rows.
+    val df = targetTableOf(userSchema)(
+      Row(1, "a", 5L, null, Row(5L)),
+      Row(1, "a", 5L, null, Row(10L)),
+      Row(2, "b", 7L, null, Row(7L)),
+      Row(2, "b", 7L, null, Row(20L))
+    )
+
+    checkAnswer(
+      df = withRouteFlag(processor.identifyAndTagAuxRows(df)),
+      expectedAnswer = Seq(
+        Row(1, "a", 5L, null, Row(5L), true),
+        Row(1, "a", 5L, null, Row(10L), false),
+        Row(2, "b", 7L, null, Row(7L), true),
+        Row(2, "b", 7L, null, Row(20L), false)
+      )
+    )
+  }
+
+  test("identifyAndTagAuxRows quotes tracked columns whose names contain a dot") {
+    // The backticks make `UnqualifiedColumnName` store the literal field name "user.name".
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("`user.name`")))
+      )
+    )
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("user.name", StringType)
+
+    // The dotted column is the tracked column. Two gapless upserts agreeing on it form a no-op
+    // run, so the earlier row is hidden. Without quoting, the tracked-equality comparison would
+    // parse `user.name` as a nested-field access (struct `user`, field `name`) and fail to
+    // resolve.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L, null, Row(5L)),
+      Row(1, "alice", 5L, null, Row(10L))
+    )
+
+    val result = processor.identifyAndTagAuxRows(df)
+
+    checkAnswer(
+      df = result.select(
+        F.col("id"),
+        F.col("`user.name`"),
+        F.col(Scd2BatchProcessor.startAtColName),
+        F.col(Scd2BatchProcessor.endAtColName),
+        F.col(AutoCdcReservedNames.cdcMetadataColName),
+        F.col(Scd2BatchProcessor.shouldRouteToAuxTableColName)
+      ),
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L, null, Row(5L), true),
+        Row(1, "alice", 5L, null, Row(10L), false)
+      )
+    )
+  }
+
   // =============== antiJoinRowsByRecordStartAtPerKey tests ===============
 
   test("antiJoinRowsByRecordStartAtPerKey returns only left rows with no (key, recordStartAt) " +

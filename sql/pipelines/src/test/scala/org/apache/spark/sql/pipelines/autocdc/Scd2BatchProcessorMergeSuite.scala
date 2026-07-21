@@ -59,6 +59,29 @@ class Scd2BatchProcessorMergeSuite
   private val taggedSchema = canonicalSchema
     .add(Scd2BatchProcessor.shouldRouteToAuxTableColName, BooleanType, nullable = false)
 
+  /** User schema with a dotted (identifier-sensitive) non-key column name. */
+  private val dottedUserSchema = new StructType()
+    .add("id", IntegerType)
+    .add("user.name", StringType)
+
+  /** Canonical schema variant whose user column name contains a dot. */
+  private val dottedCanonicalSchema = dottedUserSchema
+    .add(Scd2BatchProcessor.startAtColName, LongType, nullable = true)
+    .add(Scd2BatchProcessor.endAtColName, LongType, nullable = true)
+    .add(
+      AutoCdcReservedNames.cdcMetadataColName,
+      Scd2BatchProcessor.cdcMetadataColSchema(LongType),
+      nullable = false
+    )
+
+  /** Aux schema variant whose user column name contains a dot. */
+  private val dottedAuxSchema = dottedCanonicalSchema
+    .add(Scd2BatchProcessor.deletedByBatchIdColName, LongType, nullable = true)
+
+  /** Tagged schema variant whose user column name contains a dot. */
+  private val dottedTaggedSchema = dottedCanonicalSchema
+    .add(Scd2BatchProcessor.shouldRouteToAuxTableColName, BooleanType, nullable = false)
+
   private val processor = Scd2BatchProcessor(
     changeArgs = ChangeArgs(
       keys = Seq(UnqualifiedColumnName("id")),
@@ -196,6 +219,20 @@ class Scd2BatchProcessorMergeSuite
     )
   }
 
+  test("mergeRowsIntoAuxiliaryTable handles user columns whose names contain a dot") {
+    // A user column named `user.name`: the merge must quote it for both the insert column list
+    // and the non-key update assignments. Without quoting, `user.name` would be parsed as a
+    // nested-field access and the MERGE would fail to resolve the column.
+    createTable(defaultAuxIdent, defaultAuxTableIdentifier, dottedAuxSchema)
+
+    val tagged = microbatchOf(dottedTaggedSchema)(Row(1, "alice", 5L, 5L, Row(5L), true))
+    val affected = microbatchOf(dottedCanonicalSchema)()
+
+    processor.mergeRowsIntoAuxiliaryTable(tagged, affected, defaultAuxTableIdentifier, batchId = 1L)
+
+    checkAnswer(auxTable, Row(1, "alice", 5L, 5L, Row(5L), null))
+  }
+
   // ===========================================================================================
   // mergeRowsIntoTargetTable tests
   // ===========================================================================================
@@ -283,5 +320,19 @@ class Scd2BatchProcessorMergeSuite
         Row(3, "ins3", 12L, null, Row(12L))
       )
     )
+  }
+
+  test("mergeRowsIntoTargetTable handles user columns whose names contain a dot") {
+    // A user column named `user.name`: the merge quotes it for the source projection, the insert
+    // column list, and the non-key update assignments. Without quoting, `user.name` would be
+    // parsed as a nested-field access and the MERGE would fail to resolve the column.
+    createTable(defaultTargetIdent, defaultTargetTableIdentifier, dottedCanonicalSchema)
+
+    val tagged = microbatchOf(dottedTaggedSchema)(Row(1, "alice", 5L, null, Row(5L), false))
+    val affected = microbatchOf(dottedCanonicalSchema)()
+
+    processor.mergeRowsIntoTargetTable(tagged, affected, defaultTargetTableIdentifier)
+
+    checkAnswer(targetTable, Row(1, "alice", 5L, null, Row(5L)))
   }
 }
