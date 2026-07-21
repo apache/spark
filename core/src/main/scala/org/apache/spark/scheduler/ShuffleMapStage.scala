@@ -78,7 +78,7 @@ private[spark] class ShuffleMapStage(
    * the DAGScheduler resubmit the producer -- whose streaming writer then blocks forever waiting
    * for termination acks from reducers that already finished. Keeping availability local and
    * monotonic means executor loss never triggers such a resubmit; a genuine mid-group failure is
-   * handled group-atomically instead (S6). Unused (and empty) for a non-pipelined stage.
+   * handled group-atomically instead. Unused (and empty) for a non-pipelined stage.
    */
   private[this] val pipelinedCompletedPartitions = new HashSet[Int]
 
