@@ -80,12 +80,13 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
             df.unpersist()
 
     def test_udf_on_cached_numeric_column_alongside_unselected_string(self):
-        # Only the UDF's input columns are serialized; unselected columns ride through the
-        # pass-through recombination.
+        # Only the UDF's input columns are serialized to the worker; the column that is not a
+        # UDF input rides through the pass-through recombination, so select it alongside the
+        # UDF result to observe that its values line up with the corresponding rows.
         df = self.spark.createDataFrame([(1, "a"), (2, "b")], schema="i long, s string").cache()
         try:
-            result = df.select(udf(lambda x: x + 1, "long")(col("i")))
-            assertDataFrameEqual(result, [Row(2), Row(3)])
+            result = df.select(col("s"), udf(lambda x: x + 1, "long")(col("i")))
+            assertDataFrameEqual(result, [Row("a", 2), Row("b", 3)])
         finally:
             df.unpersist()
 
