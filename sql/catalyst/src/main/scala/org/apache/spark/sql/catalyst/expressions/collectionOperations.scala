@@ -3371,11 +3371,14 @@ case class Flatten(child: Expression) extends UnaryExpression
   arguments = """
     Arguments:
       * start - an expression. The start of the range.
+        An expression that evaluates to an integral, date, or timestamp.
       * stop - an expression. The end the range (inclusive).
+        An expression that evaluates to an integral, date, or timestamp.
       * step - an optional expression. The step of the range.
           By default step is 1 if start is less than or equal to stop, otherwise -1.
           For the temporal sequences it's 1 day and -1 day respectively.
           If start is greater than stop then the step must be negative, and vice versa.
+        An expression that evaluates to an integral or interval.
   """,
   examples = """
     Examples:
