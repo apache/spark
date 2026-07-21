@@ -479,6 +479,12 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
+  test("SPARK-57465: ExecutorShutdownFailure deserializes from its JSON representation") {
+    val json = """{"Reason":"ExecutorShutdownFailure","Executor ID":"exec-42"}"""
+    val reason = JsonProtocol.taskEndReasonFromJson(json)
+    assert(reason === ExecutorShutdownFailure("exec-42"))
+  }
+
   test("SparkListenerJobStart backward compatibility") {
     // Prior to Spark 1.2.0, SparkListenerJobStart did not have a "Stage Infos" property.
     val stageIds = Seq[Int](1, 2, 3, 4)
