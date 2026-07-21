@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.{Closeable, FileNotFoundException, IOException}
 import java.time.ZoneId
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
@@ -66,8 +65,9 @@ class ParquetFileFormat
   with Logging
   with Serializable {
 
-  override protected def archiveEntryFilter(name: String): Boolean =
-    ParquetFileFormat.isParquetArchiveEntry(name)
+  // Reads every archive entry, matching a directory scan: the shared entry filter already drops
+  // directories and hidden/metadata paths, and Parquet part-files are commonly extensionless.
+  override protected def archiveEntryFilter(name: String): Boolean = true
 
   override def shortName(): String = "parquet"
 
@@ -473,9 +473,6 @@ class ParquetFileFormat
 
 object ParquetFileFormat extends Logging {
 
-  private[parquet] def isParquetArchiveEntry(name: String): Boolean =
-    name.toLowerCase(Locale.ROOT).endsWith(".parquet")
-
   val ROW_INDEX = "row_index"
 
   // A name for a temporary column that holds row indexes computed by the file format reader
@@ -598,20 +595,27 @@ object ParquetFileFormat extends Logging {
   /** Reads every Parquet entry's footer in one archive. */
   private def readArchiveFooters(conf: Configuration, archive: FileStatus): Seq[Footer] = {
     val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), "parquet-archive-infer")
-    Option(TaskContext.get()).foreach(
-      _.addTaskCompletionListener[Unit](_ => Utils.deleteRecursively(tempDir)))
+    // Runs on a ThreadUtils.parmap worker without a TaskContext, so the archive stream must be
+    // closed here rather than through a task-completion listener; a footer read that throws
+    // (corrupt entry) would otherwise leave the stream open until executor shutdown.
+    val entries = SupportsArchiveFormat.localizeEntries(archive.getPath, conf, tempDir, _ => true)
     try {
-      SupportsArchiveFormat.localizeEntries(archive.getPath, conf, tempDir, isParquetArchiveEntry)
-        .map { case (_, entryFile) =>
-          try {
-            val status = new FileStatus(entryFile.length(), false, 0, 0, entryFile.lastModified(),
-              0, null, null, null, new Path(entryFile.toURI))
-            new Footer(archive.getPath,
-              ParquetFooterReader.readFooter(HadoopInputFile.fromStatus(status, conf),
-                SKIP_ROW_GROUPS))
-          } finally entryFile.delete()
-        }.toList
-    } finally Utils.deleteRecursively(tempDir)
+      entries.map { case (_, entryFile) =>
+        try {
+          val status = new FileStatus(entryFile.length(), false, 0, 0, entryFile.lastModified(),
+            0, null, null, null, new Path(entryFile.toURI))
+          new Footer(archive.getPath,
+            ParquetFooterReader.readFooter(HadoopInputFile.fromStatus(status, conf),
+              SKIP_ROW_GROUPS))
+        } finally entryFile.delete()
+      }.toList
+    } finally {
+      entries match {
+        case c: Closeable => c.close()
+        case _ =>
+      }
+      Utils.deleteRecursively(tempDir)
+    }
   }
 
   /**

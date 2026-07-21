@@ -129,7 +129,19 @@ trait SupportsArchiveFormat extends Logging {
       tempPrefix: String)(
       readEntry: PartitionedFile => Iterator[InternalRow]): Iterator[InternalRow] = {
     val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), tempPrefix)
-    val entries = localizeEntries(file.toPath, conf, tempDir)
+    // Register cleanup before constructing `entries`: localizeEntries eagerly probes the first
+    // entry, so opening a corrupt archive or copying the first entry can throw here -- before
+    // FileScanRDD receives an iterator it can close -- and the temp dir must not leak.
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ =>
+      Utils.deleteRecursively(tempDir)
+    })
+    val entries =
+      try localizeEntries(file.toPath, conf, tempDir)
+      catch {
+        case NonFatal(e) =>
+          Utils.deleteRecursively(tempDir)
+          throw e
+      }
 
     // Element type is `Object`, not `InternalRow`: a batch scan yields `ColumnarBatch`.
     val rows = new Iterator[Object] with Closeable {
@@ -188,11 +200,8 @@ trait SupportsArchiveFormat extends Logging {
       }
     }
 
-    // Delete only the temp dir here; FileScanRDD closes `rows`. Closing the per-entry reader from
-    // this listener would free the vectorized reader's off-heap vectors while still in use.
-    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ =>
-      Utils.deleteRecursively(tempDir)
-    })
+    // The listener above deletes only the temp dir; FileScanRDD closes `rows`. Closing the
+    // per-entry reader from a listener would free the vectorized reader's off-heap vectors early.
     rows.asInstanceOf[Iterator[InternalRow]]
   }
 

@@ -95,6 +95,34 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 
+  test("extensionless entries are read and inferred like a directory of part-files") {
+    // Parquet part-files are commonly extensionless (e.g. part-00000); an archive entry must be
+    // read the same as a loose file, matching a directory scan rather than requiring `.parquet`.
+    val data = sampleDf((1, "Alice"), (2, "Bob"))
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq("part-00000" -> encodeFile(data)))
+      checkAnswer(read(archive.getCanonicalPath), data)
+      assert(inferredSchema(Seq(archive.getCanonicalPath)).fieldNames.toSet == Set("id", "name"),
+        "an extensionless entry should be inferred like a directory of part-files")
+    }
+  }
+
+  test("a corrupt archive cleans up its temp dir rather than leaking it") {
+    // localizeEntries eagerly probes the first entry, so opening a corrupt archive throws before
+    // FileScanRDD receives an iterator to close; the per-read temp dir must still be removed.
+    def archiveTempDirs(localDir: File): Set[String] =
+      Option(localDir.listFiles()).getOrElse(Array.empty)
+        .filter(_.getName.startsWith("parquet-archive")).map(_.getName).toSet
+    withArchiveFile(corruptArchiveExtension) { archive =>
+      writeCorruptArchive(archive)
+      val localDir = new File(Utils.getLocalDir(spark.sparkContext.getConf))
+      val before = archiveTempDirs(localDir)
+      intercept[SparkException](read(archive.getCanonicalPath).collect())
+      assert((archiveTempDirs(localDir) -- before).isEmpty,
+        "a corrupt archive leaked its temp dir")
+    }
+  }
+
   test("archive entries with differing fields read like a directory") {
     // Reading fills a missing column with null even with supportsSchemaMerge off.
     val withName = sampleDf((1, "Alice"), (2, "Bob"))
