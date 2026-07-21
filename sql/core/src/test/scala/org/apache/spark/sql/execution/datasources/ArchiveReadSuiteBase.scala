@@ -389,6 +389,22 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
         }
       }
     }
+
+    // Excludes formats that sample one file (Parquet): they can't widen types across entries.
+    if (!inferenceSamplesOneFile) {
+      test("archive inference widens a column's type across entries like a directory") {
+        // The column is integral in the first entry and string in the second; inference over all
+        // entries widens the merged type to string, exactly as a directory read would.
+        withArchiveFile() { archive =>
+          writeArchive(archive, Seq(
+            entryName(0) -> encodeFile(Seq(1, 2).toDF("c")),
+            entryName(1) -> encodeFile(Seq("x").toDF("c"))))
+          val schema = inferredSchema(Seq(archive.getCanonicalPath))
+          assert(schema.length == 1 && schema.head.dataType == StringType,
+            s"expected the column widened to string across entries, got $schema")
+        }
+      }
+    }
   }
 
   // ----- shared schema-merge tests (run when `supportsSchemaMerge`) ----------
@@ -421,19 +437,6 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
           assert(schema == inferredSchema(Seq(looseDir.getCanonicalPath)),
             s"differing-field inference diverged from a directory read; got $schema")
         }
-      }
-    }
-
-    test("archive inference widens a column's type across entries like a directory") {
-      // The column is integral in the first entry and string in the second; inference over all
-      // entries widens the merged type to string, exactly as a directory read would.
-      withArchiveFile() { archive =>
-        writeArchive(archive, Seq(
-          entryName(0) -> encodeFile(Seq(1, 2).toDF("c")),
-          entryName(1) -> encodeFile(Seq("x").toDF("c"))))
-        val schema = inferredSchema(Seq(archive.getCanonicalPath))
-        assert(schema.length == 1 && schema.head.dataType == StringType,
-          s"expected the column widened to string across entries, got $schema")
       }
     }
   }
