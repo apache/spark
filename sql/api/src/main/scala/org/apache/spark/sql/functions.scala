@@ -13768,13 +13768,16 @@ object functions {
    *
    * @param e
    *   a string column containing JSON data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the json string
+   *   A string, StructType or DataType. Must be a constant.
    * @param options
    *   options to control how the json is parsed. Accepts the same options as the json data
    *   source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    *
    * @group json_funcs
    * @since 2.1.0
@@ -13793,13 +13796,16 @@ object functions {
    *
    * @param e
    *   a string column containing JSON data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the json string
+   *   A string, StructType or DataType. Must be a constant.
    * @param options
    *   options to control how the json is parsed. accepts the same options and the json data
    *   source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    *
    * @group json_funcs
    * @since 2.2.0
@@ -13818,13 +13824,16 @@ object functions {
    *
    * @param e
    *   a string column containing JSON data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the json string
+   *   A string, StructType or DataType. Must be a constant.
    * @param options
    *   options to control how the json is parsed. accepts the same options and the json data
    *   source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    *
    * @group json_funcs
    * @since 2.1.0
@@ -13843,13 +13852,16 @@ object functions {
    *
    * @param e
    *   a string column containing JSON data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the json string
+   *   A string, StructType or DataType. Must be a constant.
    * @param options
    *   options to control how the json is parsed. accepts the same options and the json data
    *   source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    *
    * @group json_funcs
    * @since 2.2.0
@@ -13867,8 +13879,10 @@ object functions {
    *
    * @param e
    *   a string column containing JSON data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the json string
+   *   A string, StructType or DataType. Must be a constant.
    *
    * @group json_funcs
    * @since 2.1.0
@@ -13885,8 +13899,10 @@ object functions {
    *
    * @param e
    *   a string column containing JSON data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the json string
+   *   A string, StructType or DataType. Must be a constant.
    *
    * @group json_funcs
    * @since 2.2.0
@@ -13904,13 +13920,16 @@ object functions {
    *
    * @param e
    *   a string column containing JSON data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema as a DDL-formatted string.
+   *   A string, StructType or DataType. Must be a constant.
    * @param options
    *   options to control how the json is parsed. accepts the same options and the json data
    *   source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    *
    * @group json_funcs
    * @since 2.1.0
@@ -13930,13 +13949,16 @@ object functions {
    *
    * @param e
    *   a string column containing JSON data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema as a DDL-formatted string.
+   *   A string, StructType or DataType. Must be a constant.
    * @param options
    *   options to control how the json is parsed. accepts the same options and the json data
    *   source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    *
    * @group json_funcs
    * @since 2.3.0
@@ -13955,8 +13977,10 @@ object functions {
    *
    * @param e
    *   a string column containing JSON data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the json string
+   *   A column that evaluates to a string.
    *
    * @group json_funcs
    * @since 2.4.0
@@ -13975,13 +13999,16 @@ object functions {
    *
    * @param e
    *   a string column containing JSON data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the json string
+   *   A column that evaluates to a string.
    * @param options
    *   options to control how the json is parsed. accepts the same options and the json data
    *   source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    *
    * @group json_funcs
    * @since 2.4.0
@@ -14033,6 +14060,7 @@ object functions {
    *
    * @param col
    *   a column with a nested schema or column name.
+   *   A column that evaluates to a struct, array, map, or variant.
    * @group variant_funcs
    * @since 4.0.0
    * @return
@@ -14046,6 +14074,7 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @group variant_funcs
    * @since 4.0.0
    * @return
@@ -14059,6 +14088,7 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @group variant_funcs
    * @since 4.2.0
    * @return
@@ -14072,12 +14102,15 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the column containing the first JSONPath string. A valid path should start with `$` and is
    *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
    *   path `$` is not allowed.
+   *   A column that evaluates to a string.
    * @param paths
    *   additional JSONPath arguments, applied after `path` in order.
+   *   A column that evaluates to a string.
    * @group variant_funcs
    * @since 5.0.0
    * @return
@@ -14093,12 +14126,15 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the first JSONPath identifying a deletion target. A valid path should start with `$` and is
    *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
    *   path `$` is not allowed.
+   *   A string. Must be a constant.
    * @param paths
    *   additional JSONPath strings, applied after `path` in order.
+   *   A string. Must be a constant.
    * @group variant_funcs
    * @since 5.0.0
    * @return
@@ -14116,10 +14152,12 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the column containing the JSONPath string identifying the insertion target. A valid path
    *   should start with `$` and is followed by one or more segments like `[123]`, `.name`,
    *   `['name']`, or `["name"]`. The root path `$` is not allowed.
+   *   A column that evaluates to a string.
    * @param value
    *   the value to insert. Any expression castable to variant.
    * @group variant_funcs
@@ -14138,10 +14176,12 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the JSONPath identifying the insertion target. A valid path should start with `$` and is
    *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
    *   path `$` is not allowed.
+   *   A string. Must be a constant.
    * @param value
    *   the value to insert. Any expression castable to variant.
    * @group variant_funcs
@@ -14160,10 +14200,12 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the column containing the JSONPath string identifying the insertion target. A valid path
    *   should start with `$` and is followed by one or more segments like `[123]`, `.name`,
    *   `['name']`, or `["name"]`. The root path `$` is not allowed.
+   *   A column that evaluates to a string.
    * @param value
    *   the value to insert. Any expression castable to variant.
    * @group variant_funcs
@@ -14180,10 +14222,12 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the JSONPath identifying the insertion target. A valid path should start with `$` and is
    *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
    *   path `$` is not allowed.
+   *   A string. Must be a constant.
    * @param value
    *   the value to insert. Any expression castable to variant.
    * @group variant_funcs
@@ -14200,10 +14244,12 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the column containing the JSONPath string identifying the set target. A valid path should
    *   start with `$` and is followed by one or more segments like `[123]`, `.name`, `['name']`,
    *   or `["name"]`. The root path `$` is not allowed.
+   *   A column that evaluates to a string.
    * @param value
    *   the value to set. Any expression castable to variant.
    * @group variant_funcs
@@ -14220,10 +14266,12 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the JSONPath identifying the set target. A valid path should start with `$` and is followed
    *   by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root path `$`
    *   is not allowed.
+   *   A string. Must be a constant.
    * @param value
    *   the value to set. Any expression castable to variant.
    * @group variant_funcs
@@ -14241,14 +14289,17 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the column containing the JSONPath string identifying the set target. A valid path should
    *   start with `$` and is followed by one or more segments like `[123]`, `.name`, `['name']`,
    *   or `["name"]`. The root path `$` is not allowed.
+   *   A column that evaluates to a string.
    * @param value
    *   the value to set. Any expression castable to variant.
    * @param createIfMissing
    *   whether to create missing keys or out-of-range array indices.
+   *   A boolean. Must be a constant.
    * @group variant_funcs
    * @since 4.3.0
    */
@@ -14264,14 +14315,17 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the JSONPath identifying the set target. A valid path should start with `$` and is followed
    *   by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root path `$`
    *   is not allowed.
+   *   A string. Must be a constant.
    * @param value
    *   the value to set. Any expression castable to variant.
    * @param createIfMissing
    *   whether to create missing keys or out-of-range array indices.
+   *   A boolean. Must be a constant.
    * @group variant_funcs
    * @since 4.3.0
    */
@@ -14285,10 +14339,12 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the column containing the JSONPath string identifying the target array. A valid path should
    *   start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`,
    *   or `["name"]`.
+   *   A column that evaluates to a string.
    * @param value
    *   the value to append. Any expression castable to variant.
    * @group variant_funcs
@@ -14304,9 +14360,11 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the JSONPath identifying the target array. A valid path should start with `$` and is
    *   followed by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   *   A string. Must be a constant.
    * @param value
    *   the value to append. Any expression castable to variant.
    * @group variant_funcs
@@ -14321,11 +14379,14 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the extraction path. A valid path should start with `$` and is followed by zero or more
    *   segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   *   A string. Must be a constant.
    * @param targetType
    *   the target data type to cast into, in a DDL-formatted string.
+   *   A string. Must be a constant.
    * @group variant_funcs
    * @since 4.0.0
    * @return
@@ -14340,12 +14401,15 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the column containing the extraction path strings. A valid path string should start with
    *   `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
    *   `["name"]`.
+   *   A column that evaluates to a string.
    * @param targetType
    *   the target data type to cast into, in a DDL-formatted string.
+   *   A string. Must be a constant.
    * @group variant_funcs
    * @since 4.0.0
    * @return
@@ -14360,11 +14424,14 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the extraction path. A valid path should start with `$` and is followed by zero or more
    *   segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   *   A string. Must be a constant.
    * @param targetType
    *   the target data type to cast into, in a DDL-formatted string.
+   *   A string. Must be a constant.
    * @group variant_funcs
    * @since 4.0.0
    * @return
@@ -14379,12 +14446,15 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @param path
    *   the column containing the extraction path strings. A valid path string should start with
    *   `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
    *   `["name"]`.
+   *   A column that evaluates to a string.
    * @param targetType
    *   the target data type to cast into, in a DDL-formatted string.
+   *   A string. Must be a constant.
    * @group variant_funcs
    * @since 4.0.0
    * @return
@@ -14398,6 +14468,7 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @group variant_funcs
    * @since 4.0.0
    * @return
@@ -14410,6 +14481,7 @@ object functions {
    *
    * @param v
    *   a variant column.
+   *   A column that evaluates to a variant.
    * @group variant_funcs
    * @since 4.0.0
    * @return
@@ -14421,7 +14493,7 @@ object functions {
    * Parses a JSON string and infers its schema in DDL format.
    *
    * @param json
-   *   a JSON string.
+   *   a JSON string. A string. Must be a constant.
    *
    * @group json_funcs
    * @since 2.4.0
@@ -14435,6 +14507,7 @@ object functions {
    *
    * @param json
    *   a foldable string column containing a JSON string.
+   *   A column that evaluates to a string.
    *
    * @group json_funcs
    * @since 2.4.0
@@ -14449,11 +14522,13 @@ object functions {
    *
    * @param json
    *   a foldable string column containing JSON data.
+   *   A column that evaluates to a string.
    * @param options
    *   options to control how the json is parsed. accepts the same options and the json data
    *   source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    * @return
    *   a column with string literal containing schema in DDL format. Returns a column that
    *   evaluates to a string.
@@ -14500,12 +14575,14 @@ object functions {
    *
    * @param e
    *   a column containing a struct, an array, a map, or a variant.
+   *   A column that evaluates to a struct, array, map, or variant.
    * @param options
    *   options to control how the struct column is converted into a json string. accepts the same
    *   options and the json data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use. Additionally the function supports the `pretty`
    *   option which enables pretty JSON generation.
+   *   A map of string options. Must be a constant.
    *
    * @group json_funcs
    * @since 2.1.0
@@ -14524,12 +14601,14 @@ object functions {
    *
    * @param e
    *   a column containing a struct, an array, a map, or a variant.
+   *   A column that evaluates to a struct, array, map, or variant.
    * @param options
    *   options to control how the struct column is converted into a json string. accepts the same
    *   options and the json data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use. Additionally the function supports the `pretty`
    *   option which enables pretty JSON generation.
+   *   A map of string options. Must be a constant.
    *
    * @group json_funcs
    * @since 2.1.0
@@ -14546,6 +14625,7 @@ object functions {
    *
    * @param e
    *   a column containing a struct, an array, a map, or a variant.
+   *   A column that evaluates to a struct, array, map, or variant.
    *
    * @group json_funcs
    * @since 2.1.0
@@ -14562,6 +14642,7 @@ object functions {
    *
    * @param input
    *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   *   A column that evaluates to a string.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -14577,8 +14658,10 @@ object functions {
    *
    * @param input
    *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   *   A column that evaluates to a string.
    * @param upperChar
    *   character to replace upper-case characters with. Specify NULL to retain original character.
+   *   A column that evaluates to a string.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -14595,10 +14678,13 @@ object functions {
    *
    * @param input
    *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   *   A column that evaluates to a string.
    * @param upperChar
    *   character to replace upper-case characters with. Specify NULL to retain original character.
+   *   A column that evaluates to a string.
    * @param lowerChar
    *   character to replace lower-case characters with. Specify NULL to retain original character.
+   *   A column that evaluates to a string.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -14615,12 +14701,16 @@ object functions {
    *
    * @param input
    *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   *   A column that evaluates to a string.
    * @param upperChar
    *   character to replace upper-case characters with. Specify NULL to retain original character.
+   *   A column that evaluates to a string.
    * @param lowerChar
    *   character to replace lower-case characters with. Specify NULL to retain original character.
+   *   A column that evaluates to a string.
    * @param digitChar
    *   character to replace digit characters with. Specify NULL to retain original character.
+   *   A column that evaluates to a string.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -14636,14 +14726,19 @@ object functions {
    *
    * @param input
    *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   *   A column that evaluates to a string.
    * @param upperChar
    *   character to replace upper-case characters with. Specify NULL to retain original character.
+   *   A column that evaluates to a string.
    * @param lowerChar
    *   character to replace lower-case characters with. Specify NULL to retain original character.
+   *   A column that evaluates to a string.
    * @param digitChar
    *   character to replace digit characters with. Specify NULL to retain original character.
+   *   A column that evaluates to a string.
    * @param otherChar
    *   character to replace all other characters with. Specify NULL to retain original character.
+   *   A column that evaluates to a string.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -14990,13 +15085,16 @@ object functions {
    *
    * @param e
    *   a string column containing CSV data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the CSV string
+   *   A string, StructType or DataType. Must be a constant.
    * @param options
    *   options to control how the CSV is parsed. accepts the same options and the CSV data source.
    *   See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    *
    * @group csv_funcs
    * @since 3.0.0
@@ -15014,13 +15112,16 @@ object functions {
    *
    * @param e
    *   a string column containing CSV data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the CSV string
+   *   A column that evaluates to a string.
    * @param options
    *   options to control how the CSV is parsed. accepts the same options and the CSV data source.
    *   See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    *
    * @group csv_funcs
    * @since 3.0.0
@@ -15038,7 +15139,7 @@ object functions {
    * Parses a CSV string and infers its schema in DDL format.
    *
    * @param csv
-   *   a CSV string.
+   *   a CSV string. A string. Must be a constant.
    *
    * @group csv_funcs
    * @since 3.0.0
@@ -15052,6 +15153,7 @@ object functions {
    *
    * @param csv
    *   a foldable string column containing a CSV string.
+   *   A column that evaluates to a string.
    *
    * @group csv_funcs
    * @since 3.0.0
@@ -15066,11 +15168,13 @@ object functions {
    *
    * @param csv
    *   a foldable string column containing a CSV string.
+   *   A column that evaluates to a string.
    * @param options
    *   options to control how the CSV is parsed. accepts the same options and the CSV data source.
    *   See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    * @return
    *   a column with string literal containing schema in DDL format. Returns a column that
    *   evaluates to a string.
@@ -15088,11 +15192,13 @@ object functions {
    *
    * @param e
    *   a column containing a struct.
+   *   A column that evaluates to a string.
    * @param options
    *   options to control how the struct column is converted into a CSV string. It accepts the
    *   same options and the CSV data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    *
    * @group csv_funcs
    * @since 3.0.0
@@ -15109,6 +15215,7 @@ object functions {
    *
    * @param e
    *   a column containing a struct.
+   *   A column that evaluates to a string.
    *
    * @group csv_funcs
    * @since 3.0.0
@@ -15124,13 +15231,16 @@ object functions {
    *
    * @param e
    *   a string column containing XML data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the XML string
+   *   A string, StructType or DataType. Must be a constant.
    * @param options
    *   options to control how the XML is parsed. accepts the same options and the XML data source.
    *   See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    * @group xml_funcs
    * @since 4.0.0
    * @return
@@ -15147,13 +15257,16 @@ object functions {
    *
    * @param e
    *   a string column containing XML data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema as a DDL-formatted string.
+   *   A string, StructType or DataType. Must be a constant.
    * @param options
    *   options to control how the XML is parsed. accepts the same options and the xml data source.
    *   See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    * @group xml_funcs
    * @since 4.0.0
    * @return
@@ -15171,8 +15284,10 @@ object functions {
    *
    * @param e
    *   a string column containing XML data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the XML string
+   *   A column that evaluates to a string.
    * @group xml_funcs
    * @since 4.0.0
    * @return
@@ -15190,13 +15305,16 @@ object functions {
    *
    * @param e
    *   a string column containing XML data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the XML string
+   *   A column that evaluates to a string.
    * @param options
    *   options to control how the XML is parsed. accepts the same options and the XML data source.
    *   See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    * @group xml_funcs
    * @since 4.0.0
    * @return
@@ -15212,8 +15330,10 @@ object functions {
    *
    * @param e
    *   a string column containing XML data.
+   *   A column that evaluates to a string.
    * @param schema
    *   the schema to use when parsing the XML string
+   *   A string, StructType or DataType. Must be a constant.
    *
    * @group xml_funcs
    * @since 4.0.0
@@ -15231,7 +15351,7 @@ object functions {
    * Parses a XML string and infers its schema in DDL format.
    *
    * @param xml
-   *   a XML string.
+   *   a XML string. A string. Must be a constant.
    * @group xml_funcs
    * @since 4.0.0
    * @return
@@ -15244,6 +15364,7 @@ object functions {
    *
    * @param xml
    *   a foldable string column containing a XML string.
+   *   A column that evaluates to a string.
    * @group xml_funcs
    * @since 4.0.0
    * @return
@@ -15258,11 +15379,13 @@ object functions {
    *
    * @param xml
    *   a foldable string column containing XML data.
+   *   A column that evaluates to a string.
    * @param options
    *   options to control how the xml is parsed. accepts the same options and the XML data source.
    *   See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    * @return
    *   a column with string literal containing schema in DDL format. Returns a column that
    *   evaluates to a string.
@@ -15281,11 +15404,13 @@ object functions {
    *
    * @param e
    *   a column containing a struct.
+   *   A column that evaluates to a string.
    * @param options
    *   options to control how the struct column is converted into a XML string. It accepts the
    *   same options as the XML data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
+   *   A map of string options. Must be a constant.
    * @group xml_funcs
    * @since 4.0.0
    * @return
@@ -15301,6 +15426,7 @@ object functions {
    *
    * @param e
    *   a column containing a struct.
+   *   A column that evaluates to a string.
    * @group xml_funcs
    * @since 4.0.0
    * @return
