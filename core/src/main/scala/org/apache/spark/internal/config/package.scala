@@ -1687,6 +1687,7 @@ package object config {
         "identity token from a file, exchanges it for short-lived service credentials via " +
         "CredentialProvider implementations, and propagates those credentials to executors.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -1696,6 +1697,7 @@ package object config {
         "spark.security.credentials.enabled is true. The file should contain a JWT token " +
         "(e.g., a Kubernetes projected service account token).")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .createOptional
 
@@ -1704,6 +1706,7 @@ package object config {
       .doc("How long before credential expiry to trigger renewal. Credentials are refreshed " +
         "at min(identity token expiry, service credential expiry) minus this margin.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
@@ -1712,6 +1715,7 @@ package object config {
       .doc("Minimum interval between credential renewal attempts. This prevents tight renewal " +
         "loops when credentials have very short TTLs or when failures cause rapid retries.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("30s")
 
