@@ -51,6 +51,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  * query terminate (with wrong results).
  */
 class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSession {
+  import testImplicits.toRichColumn
+
   // streamed_t: (id, a, pad) with id 0..7, a = id, pad = id * 10
   // build_t:    (bid, b) with bid 0..3, b = bid * 100
   private def withStreamedAndBuildTables(f: => Unit): Unit = {
