@@ -284,8 +284,10 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
         TaskContext.get().attemptNumber() == 0
       }
       if (failFirstAttempt) {
+        // scalastyle:off throwerror
         throw new SparkOutOfMemoryError(
           "POINTER_ARRAY_OUT_OF_MEMORY", new java.util.HashMap[String, String])
+        // scalastyle:on throwerror
       }
       x * x
     }.collect()
