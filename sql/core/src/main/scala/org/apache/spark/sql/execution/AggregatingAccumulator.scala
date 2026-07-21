@@ -331,6 +331,10 @@ object AggregatingAccumulator {
       c.conf)
   }
 
+  /**
+   * Create an aggregating accumulator for the given functions and input schema, and register it
+   * with the given SparkContext under `name`.
+   */
   def apply(
       sc: SparkContext,
       name: String,
@@ -341,6 +345,9 @@ object AggregatingAccumulator {
     acc
   }
 
+  /**
+   * Create a last-attempt aggregating accumulator for the given functions and input schema.
+   */
   def lastAttempt(
       functions: Seq[Expression],
       inputAttributes: Seq[Attribute]): LastAttemptAggregatingAccumulator = {
@@ -356,6 +363,11 @@ object AggregatingAccumulator {
       c.conf)
   }
 
+  /**
+   * Create a last-attempt aggregating accumulator for the given functions and input schema,
+   * register it with the given SparkContext under `name`, and initialize its last-attempt
+   * tracking state.
+   */
   def lastAttempt(
       sc: SparkContext,
       name: String,
