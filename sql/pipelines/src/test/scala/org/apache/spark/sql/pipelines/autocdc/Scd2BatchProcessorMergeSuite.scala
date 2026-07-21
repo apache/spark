@@ -82,6 +82,31 @@ class Scd2BatchProcessorMergeSuite
   private val dottedTaggedSchema = dottedCanonicalSchema
     .add(Scd2BatchProcessor.shouldRouteToAuxTableColName, BooleanType, nullable = false)
 
+  /** User schema with several non-key columns, to exercise the non-key update assignment map. */
+  private val wideUserSchema = new StructType()
+    .add("id", IntegerType)
+    .add("name", StringType)
+    .add("status", StringType)
+    .add("score", IntegerType)
+
+  /** Canonical schema variant with several non-key user columns. */
+  private val wideCanonicalSchema = wideUserSchema
+    .add(Scd2BatchProcessor.startAtColName, LongType, nullable = true)
+    .add(Scd2BatchProcessor.endAtColName, LongType, nullable = true)
+    .add(
+      AutoCdcReservedNames.cdcMetadataColName,
+      Scd2BatchProcessor.cdcMetadataColSchema(LongType),
+      nullable = false
+    )
+
+  /** Aux schema variant with several non-key user columns. */
+  private val wideAuxSchema = wideCanonicalSchema
+    .add(Scd2BatchProcessor.deletedByBatchIdColName, LongType, nullable = true)
+
+  /** Tagged schema variant with several non-key user columns. */
+  private val wideTaggedSchema = wideCanonicalSchema
+    .add(Scd2BatchProcessor.shouldRouteToAuxTableColName, BooleanType, nullable = false)
+
   private val processor = Scd2BatchProcessor(
     changeArgs = ChangeArgs(
       keys = Seq(UnqualifiedColumnName("id")),
@@ -219,6 +244,63 @@ class Scd2BatchProcessorMergeSuite
     )
   }
 
+  test("mergeRowsIntoAuxiliaryTable applies insert, update, logical-delete, and GC in one merge") {
+    createAuxTable(
+      // Affected and survives reconciliation -> non-key columns updated in place.
+      Row(1, "old", 5L, null, Row(5L), null),
+      // Affected but does not survive -> logically deleted by this batch (stamped with batchId).
+      Row(2, "gone", 7L, 7L, Row(7L), null),
+      // Not affected, logically deleted by an older batch (4 != 9) -> physically GC'd.
+      Row(3, "gc", 3L, 3L, Row(3L), 4L)
+    )
+
+    val tagged = taggedOf(
+      // Matches key 1 -> update.
+      Row(1, "new", 5L, null, Row(5L), true),
+      // New key 4 routed to aux -> insert.
+      Row(4, "ins", 9L, 9L, Row(9L), true)
+    )
+    // Keys 1 and 2 were pulled in as affected; key 1 survives in the routed set, key 2 does not.
+    val affected = canonicalOf(
+      Row(1, "old", 5L, null, Row(5L)),
+      Row(2, "gone", 7L, 7L, Row(7L))
+    )
+
+    processor.mergeRowsIntoAuxiliaryTable(tagged, affected, defaultAuxTableIdentifier, batchId = 9L)
+
+    checkAnswer(
+      auxTable,
+      Seq(
+        Row(1, "new", 5L, null, Row(5L), null),
+        Row(2, "gone", 7L, 7L, Row(7L), 9L),
+        Row(4, "ins", 9L, 9L, Row(9L), null)
+        // key 3 physically garbage-collected.
+      )
+    )
+  }
+
+  test("mergeRowsIntoAuxiliaryTable updates every non-key column of a surviving row") {
+    createTable(
+      defaultAuxIdent,
+      defaultAuxTableIdentifier,
+      wideAuxSchema,
+      Row(1, "old-name", "active", 10, 5L, null, Row(5L), null)
+    )
+
+    // Every non-key column (name, status, score) differs from the seeded row; the in-place update
+    // must refresh all of them, not just the first.
+    val tagged = microbatchOf(wideTaggedSchema)(
+      Row(1, "new-name", "inactive", 42, 5L, null, Row(5L), true)
+    )
+    val affected = microbatchOf(wideCanonicalSchema)(
+      Row(1, "old-name", "active", 10, 5L, null, Row(5L))
+    )
+
+    processor.mergeRowsIntoAuxiliaryTable(tagged, affected, defaultAuxTableIdentifier, batchId = 1L)
+
+    checkAnswer(auxTable, Row(1, "new-name", "inactive", 42, 5L, null, Row(5L), null))
+  }
+
   test("mergeRowsIntoAuxiliaryTable handles user columns whose names contain a dot") {
     // A user column named `user.name`: the merge must quote it for both the insert column list
     // and the non-key update assignments. Without quoting, `user.name` would be parsed as a
@@ -334,5 +416,25 @@ class Scd2BatchProcessorMergeSuite
     processor.mergeRowsIntoTargetTable(tagged, affected, defaultTargetTableIdentifier)
 
     checkAnswer(targetTable, Row(1, "alice", 5L, null, Row(5L)))
+  }
+
+  test("mergeRowsIntoTargetTable updates every non-key column of a matched row") {
+    createTable(defaultTargetIdent, defaultTargetTableIdentifier, wideCanonicalSchema)
+    microbatchOf(wideCanonicalSchema)(
+      Row(1, "old-name", "active", 10, 5L, null, Row(5L))
+    ).writeTo(defaultTargetTableIdentifier.quotedString).append()
+
+    // Every non-key column (name, status, score) differs from the existing row; the in-place
+    // update must refresh all of them, exercising the full non-key update assignment map.
+    val tagged = microbatchOf(wideTaggedSchema)(
+      Row(1, "new-name", "inactive", 42, 5L, 30L, Row(5L), false)
+    )
+    val affected = microbatchOf(wideCanonicalSchema)(
+      Row(1, "old-name", "active", 10, 5L, null, Row(5L))
+    )
+
+    processor.mergeRowsIntoTargetTable(tagged, affected, defaultTargetTableIdentifier)
+
+    checkAnswer(targetTable, Row(1, "new-name", "inactive", 42, 5L, 30L, Row(5L)))
   }
 }
