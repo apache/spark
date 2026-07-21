@@ -111,12 +111,9 @@ class HiveUDAFSuite extends QueryTest
   test("SPARK-24935: customized Hive UDAF with two aggregation buffers") {
     withTempView("v") {
       spark.range(100).createTempView("v")
-      // `range(100)` is a single partition, so the partial and final aggregate would otherwise be
-      // adjacent and merged by `CombineAdjacentAggregation`. `MockUDAF2` deliberately uses distinct
-      // aggregation-buffer classes per aggregation mode (one for consuming original input, another
-      // for merging partial buffers), so it does not support a single `Complete`-mode aggregate.
-      // Keep the partial/final pair uncombined so the sort-based fallback path below is exercised
-      // in the mode this UDAF is designed for.
+      // Disable `CombineAdjacentAggregation` so the partial/final staging is preserved; otherwise
+      // the single-partition `range(100)` collapses into a single `Complete`-mode aggregate (the
+      // Complete-mode path is covered separately by the SPARK-58294 test below).
       withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
         val df = sql("SELECT id % 2, mock2(id) FROM v GROUP BY id % 2")
 
