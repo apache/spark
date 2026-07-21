@@ -37,6 +37,13 @@ private[joins] object StreamedSideJoinCondition extends PredicateHelper {
    * conjuncts, when `splitEnabled` is true and the join type preserves all streamed rows.
    * The streamed-only part can be evaluated once per streamed row before probing/walking the
    * buffered matches. Returns `(None, condition)` unchanged otherwise.
+   *
+   * Only deterministic, non-throwable conjuncts are hoisted: the hoisted part runs for every
+   * streamed row, including rows that have no buffered match and would never evaluate the
+   * conjunct otherwise, so hoisting a throwable conjunct could turn a valid outer/anti
+   * result into an exception, and hoisting a non-deterministic conjunct would change how
+   * many times it is evaluated per streamed row. This mirrors the guard used for the
+   * analogous relocation in the optimizer rule PushPredicateThroughJoin.
    */
   def split(
       condition: Option[Expression],
@@ -49,7 +56,8 @@ private[joins] object StreamedSideJoinCondition extends PredicateHelper {
     }
     if (condition.isDefined && splitEnabled && supported) {
       val conjuncts = splitConjunctivePredicates(condition.get)
-      val (streamedOnly, rest) = conjuncts.partition(_.references.subsetOf(streamedPlan.outputSet))
+      val (streamedOnly, rest) = conjuncts.partition(p =>
+        p.deterministic && !p.throwable && p.references.subsetOf(streamedPlan.outputSet))
       (streamedOnly.reduceOption(And), rest.reduceOption(And))
     } else {
       (None, condition)
