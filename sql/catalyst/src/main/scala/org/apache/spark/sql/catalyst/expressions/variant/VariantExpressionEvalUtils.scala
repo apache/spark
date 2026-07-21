@@ -224,7 +224,9 @@ object VariantExpressionEvalUtils {
    * Append `value` to the array in `input` at `javaSegments`. `path` is the source string used in
    * error messages. `value` is cast to a variant first; a size overflow maps to
    * `VARIANT_SIZE_LIMIT` and a target that is not an array (or an incompatible path segment) maps
-   * to `VARIANT_PATH_TYPE_MISMATCH`.
+   * to `VARIANT_PATH_TYPE_MISMATCH`. When `failOnError` is false (the `try_variant_array_append`
+   * mode), a path type mismatch returns null instead of throwing; a size overflow (and a malformed
+   * path, rejected earlier during parsing) is still raised.
    */
   def arrayAppendAtPath(
       input: VariantVal,
@@ -232,7 +234,8 @@ object VariantExpressionEvalUtils {
       path: String,
       value: Any,
       valueDataType: DataType,
-      functionName: String): VariantVal = {
+      functionName: String,
+      failOnError: Boolean): VariantVal = {
     val v = new Variant(input.getValue, input.getMetadata)
     try {
       val valVal = castToVariant(value, valueDataType)
@@ -240,6 +243,7 @@ object VariantExpressionEvalUtils {
       val out = VariantBuilder.arrayAppendAtPath(v, javaSegments, valVariant)
       new VariantVal(out.getValue, out.getMetadata)
     } catch {
+      case _: VariantPathTypeMismatchException if !failOnError => null
       case e: VariantPathTypeMismatchException =>
         throw QueryExecutionErrors.variantPathTypeMismatch(
           path, renderVariantPath(javaSegments.take(e.depth)), functionName)
@@ -253,10 +257,11 @@ object VariantExpressionEvalUtils {
       path: UTF8String,
       value: Any,
       valueDataType: DataType,
-      functionName: String): VariantVal = {
+      functionName: String,
+      failOnError: Boolean): VariantVal = {
     val pathStr = path.toString
     val javaSegments = toJavaSegments(parseVariantPath(pathStr, functionName, allowRoot = true))
-    arrayAppendAtPath(input, javaSegments, pathStr, value, valueDataType, functionName)
+    arrayAppendAtPath(input, javaSegments, pathStr, value, valueDataType, functionName, failOnError)
   }
 
   /** Cast a Spark value from `dataType` into the variant type. */
