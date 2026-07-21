@@ -68,7 +68,7 @@ class ExplainUtilsSuite extends SharedSparkSession {
   test("processPlan includes subquery output in the explain string") {
     withSQLConf("spark.sql.adaptive.enabled" -> "false") {
       val df = spark.range(100).filter("id > 0")
-        .filter(s"id < (SELECT max(id) FROM range(5))")
+        .filter("id < (SELECT max(id) FROM range(5))")
       val output = explainOutput(df.queryExecution.executedPlan)
       assert(output.contains("Subqueries"), "processPlan should emit a Subqueries section")
     }
