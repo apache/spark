@@ -171,11 +171,11 @@ private[spark] class DAGScheduler(
 
   /**
    * Deferred completion for pipelined groups. When a stage is co-scheduled with a pipelined
-   * producer that is still running (a "pipelined consumer"), its successful task-completion events
-   * must not be processed yet: doing so could finish the consumer's job and cancel the
-   * still-running producer, or make the consumer's output observable before the producer's (spec
-   * S5, group-observable completion). We buffer such events here and replay them once every
-   * pipelined producer the consumer was waiting on has finished.
+   * producer that is still running (a "pipelined consumer"), the stage/job-completion decision from
+   * its successful task-completion events must not be processed yet: doing so could finish the
+   * consumer's job and cancel the still-running producer, or make the consumer's output observable
+   * before the producer's. We buffer such events here and replay them once every pipelined producer
+   * the consumer was waiting on has finished.
    *
    * Keyed by the consumer stage. `parents` is the set of its pipelined producer stages not yet
    * finished; `delayedTaskCompletionEvents` are its Success CompletionEvents held until then.
@@ -990,10 +990,10 @@ private[spark] class DAGScheduler(
    * contains any [[PipelinedShuffleDependency]] and whether it contains any regular (non-pipelined)
    * `ShuffleDependency`. Narrow dependencies are not boundaries and are ignored.
    *
-   * v1 (M1, real-time-mode scope) supports a job that is either ALL-regular or ALL-pipelined: a
-   * job whose shuffle graph mixes a pipelined shuffle with a regular one is rejected fail-fast
-   * (see `handleJobSubmitted`). Restricting to a single kind makes the whole job one pipelined
-   * group when pipelined, so gang admission can be decided up front before any stage is submitted.
+   * A job must be either ALL-regular or ALL-pipelined: a job whose shuffle graph mixes a pipelined
+   * shuffle with a regular one is rejected fail-fast (see `handleJobSubmitted`). Restricting to a
+   * single kind makes the whole job one pipelined group when pipelined, so gang admission can be
+   * decided up front before any stage is submitted.
    */
   private def classifyJobShuffleKinds(finalRDD: RDD[_]): (Boolean, Boolean) = {
     var hasPipelined = false
@@ -1024,7 +1024,7 @@ private[spark] class DAGScheduler(
    *
    * Rejected combinations:
    *  - Speculation: a speculative copy of a producer would race a consumer already reading the
-   *    producer's partial output, with no commit barrier protecting the read (spec S9).
+   *    producer's partial output, with no commit barrier protecting the read.
    *  - Dynamic allocation: a pipelined group is gang-scheduled (all member stages must run at
    *    once), and the free-slot admission check measures currently-active executors. Under dynamic
    *    allocation a job can start before any executor has spun up, so the group would be failed
@@ -1503,12 +1503,12 @@ private[spark] class DAGScheduler(
   /**
    * The total concurrent-task demand of an all-pipelined job, computed from the RDD graph BEFORE
    * any stage is created (so a rejection based on it leaves no partial scheduler state, exactly as
-   * the barrier slot check and the speculation/DA reject do). Because a v1 job is either
-   * all-regular or all-pipelined, an all-pipelined job's whole stage graph is one pipelined group;
-   * its members are the final result stage plus every pipelined producer. Each member's task count
-   * is its RDD's partition count (`rdd.partitions.length`), matching how `createShuffleMapStage`
-   * derives `numTasks`. `finalNumPartitions` is the result stage's task count (the number of
-   * partitions the job runs, which may be a subset of `finalRDD.partitions`).
+   * the barrier slot check and the speculation/DA reject do). Because a job is either all-regular
+   * or all-pipelined, an all-pipelined job's whole stage graph is one pipelined group; its members
+   * are the final result stage plus every pipelined producer. Each member's task count is its RDD's
+   * partition count (`rdd.partitions.length`), matching how `createShuffleMapStage` derives
+   * `numTasks`. `finalNumPartitions` is the result stage's task count (the number of partitions the
+   * job runs, which may be a subset of `finalRDD.partitions`).
    */
   private def pipelinedJobConcurrentTaskDemand(finalRDD: RDD[_], finalNumPartitions: Int): Int = {
     var demand = finalNumPartitions
@@ -1523,29 +1523,28 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Up-front gang admission for an all-pipelined job (v1 / M1), checked BEFORE any stage exists.
-   * Because a v1 job is either all-regular or all-pipelined (mixed jobs are already rejected), an
-   * all-pipelined job's whole stage graph is one pipelined group with no regular prefix, so its
-   * full demand is known up front and the group is ready to admit immediately. Checking here
-   * (rather than in `submitStage` once a producer is already running) is true all-or-nothing gang
-   * admission: the whole group is admitted, or the job is failed before any member runs, so a
-   * member is never left running while a sibling cannot get slots -- and, like the barrier slot
-   * check, a rejection leaves no partial scheduler state.
+   * Up-front gang admission for an all-pipelined job, checked BEFORE any stage exists. Because a
+   * job is either all-regular or all-pipelined (mixed jobs are already rejected), an all-pipelined
+   * job's whole stage graph is one pipelined group with no regular prefix, so its full demand is
+   * known up front and the group is ready to admit immediately. Checking here (rather than in
+   * `submitStage` once a producer is already running) is true all-or-nothing gang admission: the
+   * whole group is admitted, or the job is failed before any member runs, so a member is never left
+   * running while a sibling cannot get slots -- and, like the barrier slot check, a rejection
+   * leaves no partial scheduler state.
    *
-   * Free-slot accounting follows spec S4.1: demand vs. total capacity (`maxNumConcurrentTasks` for
-   * the default profile -- v1 requires a single-profile group, spec S9) minus what OTHER work
-   * (other jobs) has outstanding -- running plus enqueued -- in that profile. Counting enqueued,
-   * not just running, tasks charges a busy neighbor's queued backlog against capacity too, so a
-   * group is not admitted against slots other work is already committed to. Fails the job via
-   * `listener` with no retry -- a transient shortfall is the caller's to retry (e.g. the streaming
-   * batch loop reruns the batch). Returns true (job failed) if it does not fit.
+   * Free-slot accounting: demand vs. total capacity (`maxNumConcurrentTasks` for the default
+   * profile -- a group is required to be single-profile) minus what OTHER work (other jobs) has
+   * outstanding -- running plus enqueued -- in that profile. Counting enqueued, not just running,
+   * tasks charges a busy neighbor's queued backlog against capacity too, so a group is not admitted
+   * against slots other work is already committed to. Fails the job via `listener` with no retry --
+   * a transient shortfall is the caller's to retry (e.g. the streaming batch loop reruns it).
+   * Returns true (job failed) if it does not fit.
    *
    * The likeness to barrier's slot check is only that both reject before any stage is created
    * (leaving no partial state) and compute demand from the RDD graph. Retry behavior differs
    * deliberately: barrier RE-POSTS the job and re-runs its check on a timer up to
    * `spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures` times; pipelined admission is
-   * TERMINAL (one check, then fail), delegating transient-shortfall retry to the caller
-   * (scheduler-side PG-admission retry is a post-v1 refinement; spec S4.1).
+   * TERMINAL (one check, then fail), delegating transient-shortfall retry to the caller.
    *
    * The check can be turned off with `spark.scheduler.pipelinedGroup.slotCheck.enabled=false` (for
    * deployments that admit capacity out-of-band, e.g. via a slot reservation).
@@ -1612,9 +1611,9 @@ private[spark] class DAGScheduler(
    * pipelined dependency.
    *
    * NOTE: this is deliberately defined here alongside the other group-topology helper
-   * (`isPipelinedProducer`). Its call sites are the group-atomic failure handling added later in
-   * this stack: tagging the member's `TaskSet.isPipelined` at submission and routing a member
-   * FetchFailed to a whole-group abort (spec S6).
+   * (`isPipelinedProducer`). Its call sites are the group-atomic failure handling: tagging the
+   * member's `TaskSet.isPipelined` at submission and routing a member FetchFailed to a whole-group
+   * abort.
    */
   private def isPipelinedGroupMember(stage: Stage): Boolean = {
     if (isPipelinedProducer(stage)) {
@@ -1788,19 +1787,18 @@ private[spark] class DAGScheduler(
       return
     }
 
-    // v1 (M1, real-time-mode scope) supports a job that is either ALL-regular or ALL-pipelined,
-    // not a mix. A job whose shuffle graph combines a pipelined shuffle with a regular one is
-    // rejected up front (before any stage is created). Restricting to a single kind makes an
-    // all-pipelined job's whole stage graph one pipelined group with no regular prefix, so gang
-    // admission is decided up front (see the slot check below) rather than mid-DAG once a producer
-    // is already running. Mixed / mid-DAG groups are a later milestone.
+    // A job must be either ALL-regular or ALL-pipelined, not a mix: a job whose shuffle graph
+    // combines a pipelined shuffle with a regular one is rejected up front (before any stage is
+    // created). Restricting to a single kind makes an all-pipelined job's whole stage graph one
+    // pipelined group with no regular prefix, so gang admission is decided up front (see the slot
+    // check below) rather than mid-DAG once a producer is already running.
     val (hasPipelined, hasRegular) = classifyJobShuffleKinds(finalRDD)
     if (hasPipelined && hasRegular) {
       logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: a job mixing a pipelined shuffle with " +
         log"a regular shuffle is not supported")
       listener.jobFailed(new SparkException(
         "A job that mixes a pipelined shuffle dependency with a regular shuffle dependency is " +
-          "not supported: v1 requires a job to be either all-regular or all-pipelined."))
+          "not supported: a job must be either all-regular or all-pipelined."))
       return
     }
 
@@ -1892,7 +1890,7 @@ private[spark] class DAGScheduler(
     // shuffle to produce its map-output statistics. A PipelinedShuffleDependency cannot serve that:
     // it is transient with no durable, addressable map output, so it registers no map outputs and
     // getStatistics would return all-zero stats (misleading the map-stage/AQE consumer); and its
-    // producer/consumer co-scheduling makes speculation unsafe (spec S9). Reject a pipelined
+    // producer/consumer co-scheduling makes speculation unsafe. Reject a pipelined
     // dependency submitted as a map-stage job outright, up front, before any stage is created so no
     // partial scheduler state is left behind. Inert for a regular ShuffleDependency. (The
     // result-job path, handleJobSubmitted, only rejects the speculation case, since a pipelined
@@ -2013,11 +2011,11 @@ private[spark] class DAGScheduler(
               // rejectUnadmittablePipelinedGroup) before any member was submitted, so the group is
               // known to fit; just co-schedule this consumer with its running producer(s). No slot
               // check here -- that would re-measure capacity against a mid-flight snapshot and is
-              // unnecessary once admission is decided up front (v1 gang admission).
+              // unnecessary once admission is decided up front (gang admission).
               logInfo(log"Submitting ${MDC(STAGE, stage)} concurrently with its running " +
                 log"pipelined producer(s) ${MDC(MISSING_PARENT_STAGES, pipelinedMissing)}")
               // Record that this stage is co-scheduled with still-running pipelined producers,
-              // so its successful completions are deferred until those producers finish (S5).
+              // so its successful completions are deferred until those producers finish.
               val deferral =
                 dependentStageMap.getOrElseUpdate(stage, DependentStageInfo())
               deferral.parents ++= pipelinedMissing
@@ -2825,15 +2823,14 @@ private[spark] class DAGScheduler(
 
     val stage = stageIdToStage(task.stageId)
 
-    // Group-observable completion (spec S5), fine-grained model: a pipelined consumer's per-task
-    // side effects (accumulator update, task-end listener event) run in real time as its tasks
-    // finish -- exactly as for any other stage -- and ONLY the stage/job-completion decision is
-    // deferred until the producer(s) finish. Deferring the completion decision is what matters:
-    // advancing it early would let a consumer that finished ahead of its producer complete the job
-    // and cancel the still-running producer (via cancelRunningIndependentStages), or expose the
-    // consumer's output before the producer's. Its per-task facts, by contrast, are true when they
-    // happen (S5.1: task-level listener events flow in real time), so they must not be frozen for
-    // the producer's remaining lifetime.
+    // Group-observable completion for a pipelined consumer: its per-task side effects (accumulator
+    // update, task-end listener event) run in real time as its tasks finish -- exactly as for any
+    // other stage -- and ONLY the stage/job-completion decision is deferred until the producer(s)
+    // finish. Deferring the completion decision is what matters: advancing it early would let a
+    // consumer that finished ahead of its producer complete the job and cancel the still-running
+    // producer (via cancelRunningIndependentStages), or expose the consumer's output before the
+    // producer's. Its per-task facts, by contrast, are true when they happen (a task-end listener
+    // event flows in real time), so they must not be frozen for the producer's remaining lifetime.
     //
     // Two flags drive this. `finishOnly` is set on a replayed event (see
     // releaseDeferredPipelinedConsumers): its per-task effects already ran inline on first
@@ -2879,7 +2876,7 @@ private[spark] class DAGScheduler(
 
     // Now that the per-task effects have run, defer the completion bookkeeping if this is a
     // co-scheduled pipelined consumer whose producer(s) are still running. It is replayed
-    // (finishOnly = true) once the last producer finishes, or dropped if a producer fails (S6).
+    // (finishOnly = true) once the last producer finishes, or dropped if a producer fails.
     if (deferCompletion) {
       val deferral = dependentStageMap(stage)
       logInfo(log"Deferring completion of task ${MDC(TASK_ID, event.taskInfo.taskId)} in " +
@@ -3946,15 +3943,14 @@ private[spark] class DAGScheduler(
    * consumer was deferred on, remove it from that consumer's pending-producer set. When a consumer
    * has no pending producers left, either replay its buffered completion events (producer succeeded)
    * or drop them (a producer failed -- the group will be torn down and rerun, so the consumer's
-   * buffered completions must not be applied; S6). Inert unless `finishedStage` is a tracked
-   * producer.
+   * buffered completions must not be applied). Inert unless `finishedStage` is a tracked producer.
    *
    * Only the deferred stage/job-completion bookkeeping is buffered here; each event's per-task side
    * effects (accumulator update, task-end listener event) already ran inline when the task first
-   * completed (fine-grained model, S5). So replay re-posts each event with `finishOnly = true` (run
-   * the completion bookkeeping only, never the per-task effects again), and the drop path simply
-   * discards the buffered events -- there is nothing left to emit, since the consumer's TaskEnd
-   * events were already delivered in real time.
+   * completed. So replay re-posts each event with `finishOnly = true` (run the completion
+   * bookkeeping only, never the per-task effects again), and the drop path simply discards the
+   * buffered events -- there is nothing left to emit, since the consumer's TaskEnd events were
+   * already delivered in real time.
    */
   private def releaseDeferredPipelinedConsumers(
       finishedStage: Stage, producerFailed: Boolean): Unit = {
@@ -3978,12 +3974,11 @@ private[spark] class DAGScheduler(
           // Only the deferred stage/job-completion bookkeeping was buffered; the consumer's
           // per-task effects (TaskEnd, accumulator updates) already ran inline when the tasks first
           // completed. The group failed and will be rerun, so that completion bookkeeping must NOT
-          // be applied -- simply discard the buffered events. (There is nothing to re-emit: unlike
-          // the coarse model, no TaskEnd was withheld.) The already-applied inline accumulator
-          // deltas are NOT un-merged here -- consistent with base Spark, whose accumulators are
-          // non-transactional across an abort+rerun; the rerun re-delivers under the S5 idempotent-
-          // sink contract, and RTM SQL metrics are fresh per batch so there is no cross-batch
-          // double-count.
+          // be applied -- simply discard the buffered events. (There is nothing to re-emit: no
+          // TaskEnd was withheld.) The already-applied inline accumulator deltas are NOT un-merged
+          // here -- consistent with base Spark, whose accumulators are non-transactional across an
+          // abort+rerun; the rerun re-delivers to an idempotent sink, and streaming SQL metrics are
+          // fresh per batch so there is no cross-batch double-count.
         } else {
           logInfo(log"Replaying ${MDC(NUM_EVENTS, events.size.toLong)} deferred completion(s) for " +
             log"pipelined consumer ${MDC(STAGE, consumer)} now that its producers have finished")

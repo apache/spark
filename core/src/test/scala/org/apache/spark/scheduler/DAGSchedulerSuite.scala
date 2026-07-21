@@ -387,7 +387,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     @volatile var maxConcurrentTasksForTest: Int = 1000
     override protected def maxConcurrentTasksForProfile(rpId: Int): Int = maxConcurrentTasksForTest
 
-    // Seam for the free-slot admission check (spec S4.1): outstanding (running + enqueued) task
+    // Seam for the free-slot admission check: outstanding (running + enqueued) task
     // demand of OTHER work. Default 0 so existing tests see a fully-free cluster; a test can set it
     // to model a busy neighbor.
     @volatile var outstandingTasksForOtherWorkForTest: (Int, Set[Int]) => Int = (_, _) => 0
@@ -6165,7 +6165,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   // ==========================================================================================
-  // Pipelined shuffle dependency: group formation + concurrent submission (M1.2)
+  // Pipelined shuffle dependency: group formation + concurrent submission
   // ==========================================================================================
 
   test("pipelined shuffle: consumer stage is submitted concurrently with its producer") {
@@ -6216,7 +6216,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a job mixing a pipelined and a regular shuffle is rejected up front") {
-    // v1 (M1) supports a job that is either all-regular or all-pipelined, not a mix. A consumer
+    // A job must be either all-regular or all-pipelined, not a mix. A consumer
     // depending on BOTH a pipelined producer AND a regular producer is a mixed job and must be
     // rejected up front (before any stage is submitted), leaving no scheduler state behind.
     val pipelinedProducerRdd = new MyRDD(sc, 2, Nil)
@@ -6398,7 +6398,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   // ==========================================================================================
-  // Gang admission / slot check (spec S4, S4.1)
+  // Gang admission / slot check
   // ==========================================================================================
 
   test("pipelined shuffle: an all-pipelined group that fits is admitted up front and runs") {
@@ -6493,8 +6493,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("pipelined shuffle: a group that fits total capacity but not FREE slots fails fast (S4.1)") {
-    // Spec S4.1: admission is decided against currently-FREE slots, not total capacity. A group of
+  test("pipelined shuffle: a group that fits total capacity but not FREE slots fails fast") {
+    // Admission is decided against currently-FREE slots, not total capacity. A group of
     // producer(2) + consumer(2) = 4 tasks fits a 10-slot cluster in principle, but if 8 slots are
     // already occupied by OTHER work only 2 are free -- the group cannot co-fit right now and must
     // fail fast rather than queue forever. Under the old total-capacity check this would wrongly be
@@ -6516,7 +6516,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       submit(consumerRdd, Array(0, 1), listener = failListener)
 
       assert(failure.get() != null,
-        "a group that fits total but not free slots must fail the job (S4.1 free-slot check)")
+        "a group that fits total but not free slots must fail the job (free-slot check)")
       assert(failure.get().getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT") ||
         failure.get().getMessage.contains("currently free"),
         s"expected a free-slot insufficient-slot error, got: ${failure.get().getMessage}")
@@ -6581,7 +6581,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   // ==========================================================================================
-  // Group-observable (coarse deferred) completion (spec S5)
+  // Group-observable completion
   // ==========================================================================================
 
   test("pipelined shuffle: a consumer that finishes early does not end the job or cancel its " +
@@ -6632,9 +6632,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("pipelined shuffle: deferred consumer completions are dropped when the producer fails") {
     // If a producer fails while a co-scheduled consumer's completion is deferred, the deferred
     // stage/job-completion bookkeeping must be DROPPED (not applied): the group is torn down / the
-    // job fails, and applying a partial consumer success would be incorrect (S6). The consumer's
-    // per-task side effects (TaskEnd) already ran inline when its tasks finished (fine-grained
-    // model, S5.1), so on the drop path there is nothing to re-emit and no TaskEnd is duplicated.
+    // job fails, and applying a partial consumer success would be incorrect. The consumer's
+    // per-task side effects (TaskEnd) already ran inline when its tasks finished, so on the drop
+    // path there is nothing to re-emit and no TaskEnd is duplicated.
     val taskEndCount = new java.util.concurrent.atomic.AtomicInteger(0)
     val countingListener = new SparkListener {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = taskEndCount.incrementAndGet()
@@ -6680,7 +6680,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
 
   test("pipelined shuffle: a deferred consumer task fires its TaskEnd exactly once, in real time") {
-    // Fine-grained deferral (spec S5.1): a deferred consumer's per-task side effects (task-end
+    // A deferred consumer's per-task side effects (task-end
     // listener event, accumulator update) run in REAL TIME as its tasks finish -- NOT withheld
     // until replay -- and each runs exactly once (the completion bookkeeping alone is deferred,
     // then replayed with finishOnly=true, which must not re-post the TaskEnd). The producer (2
@@ -6701,7 +6701,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val consumerTaskSet = taskSets(1)
 
       // Consumer finishes first. Its completion BOOKKEEPING is buffered (no result yet), but its
-      // per-task TaskEnd events fire immediately (fine-grained model).
+      // per-task TaskEnd events fire immediately.
       complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
       assert(results.isEmpty, "consumer job result must be deferred until the producer finishes")
       sc.listenerBus.waitUntilEmpty(10000)
