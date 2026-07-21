@@ -2256,17 +2256,23 @@ private[spark] class DAGScheduler(
             val allPipelinedParentsRunning =
               pipelinedMissing.nonEmpty && pipelinedMissing.forall(runningStages.contains)
 
+            // v1 INVARIANT (job == one pipelined group): we co-schedule this group's members with
+            // NO slot check because the whole job was gang-admitted up front in handleJobSubmitted
+            // (rejectUnadmittablePipelinedGroup) before any member ran. Verify that link rather
+            // than trusting the comment. In v1 this always holds (the flag is set on the same
+            // admitted path), so it is an invariant tripwire -- but make it FAIL-CLOSED (abort the
+            // group, not just assert): a bare `assert` is elided under -da, so if a later version
+            // relaxes job==group and forgets to move gang admission to a per-group "admit-on-ready"
+            // check HERE, a prod build would silently gang-schedule an unadmitted group and could
+            // deadlock. Aborting turns that into a clean, rerunnable job failure. (When that
+            // per-group check is added, it REPLACES this guard -- do not just delete it.)
             if (regularMissing.isEmpty && allPipelinedParentsRunning) {
-              // v1 INVARIANT (job == one pipelined group): we co-schedule this group's members with
-              // NO slot check because the whole job was gang-admitted up front in
-              // handleJobSubmitted (rejectUnadmittablePipelinedGroup) before any member ran. Assert
-              // that link rather than trusting the comment. If a later version relaxes job==group
-              // (mixed DAGs / multiple groups per job), gang admission must move to a per-group
-              // "admit-on-ready" check HERE and REPLACE this assert -- do NOT just delete it, or an
-              // unadmitted group would be gang-scheduled and could deadlock.
-              assert(jobIdToActiveJob.get(jobId.get).exists(_.pipelinedGroupAdmitted),
-                s"Co-scheduling pipelined $stage whose job was not gang-admitted up front " +
-                  "(the v1 job==group admission invariant is violated)")
+              if (!jobIdToActiveJob.get(jobId.get).exists(_.pipelinedGroupAdmitted)) {
+                abortStage(stage,
+                  s"Co-scheduling pipelined $stage whose job was not gang-admitted up front " +
+                    "(the v1 job==group admission invariant is violated)", None)
+                return
+              }
               // The whole group's capacity was already admitted up front (handleJobSubmitted ->
               // rejectUnadmittablePipelinedGroup) before any member was submitted, so the group is
               // known to fit; just co-schedule this consumer with its running producer(s). No slot
