@@ -107,7 +107,8 @@ private[spark] trait DecisionTreeModel {
     leafAttr.withName(leafCol).toStructField()
   }
 
-  @transient private lazy val leafIndicesInitialized: Unit = {
+  /** Assign left-to-right DFS indices to the leaf nodes. */
+  private[ml] def assignLeafIndices(): Unit = {
     leafIterator(rootNode).zipWithIndex.foreach { case (leaf, index) =>
       leaf.leafIndex = index
     }
@@ -118,7 +119,6 @@ private[spark] trait DecisionTreeModel {
    *         Leaves are indexed in pre-order from 0.
    */
   def predictLeaf(features: Vector): Double = {
-    leafIndicesInitialized
     rootNode.predictImpl(features).leafIndex.toDouble
   }
 
