@@ -27,11 +27,11 @@ unary_np_spark_mappings = {
     "abs": F.abs,
     "absolute": F.abs,
     "arccos": F.acos,
-    "arccosh": pandas_udf(lambda s: np.arccosh(s), DoubleType()),  # type: ignore[call-overload]
+    "arccosh": F.acosh,
     "arcsin": F.asin,
-    "arcsinh": pandas_udf(lambda s: np.arcsinh(s), DoubleType()),  # type: ignore[call-overload]
+    "arcsinh": F.asinh,
     "arctan": F.atan,
-    "arctanh": pandas_udf(lambda s: np.arctanh(s), DoubleType()),  # type: ignore[call-overload]
+    "arctanh": F.atanh,
     "bitwise_not": F.bitwiseNOT,
     "cbrt": F.cbrt,
     "ceil": F.ceil,

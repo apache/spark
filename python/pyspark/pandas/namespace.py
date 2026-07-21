@@ -2732,8 +2732,10 @@ def concat(
 
                 # TODO: NaN and None difference for missing values. pandas seems to be filling NaN.
                 sdf = psdf._internal.resolved_copy.spark_frame
-                for label in columns_to_add:
-                    sdf = sdf.withColumn(name_like_string(label), F.lit(None))
+                if columns_to_add:
+                    sdf = sdf.withColumns(
+                        {name_like_string(label): F.lit(None) for label in columns_to_add}
+                    )
 
                 data_columns = psdf._internal.data_spark_column_names + [
                     name_like_string(label) for label in columns_to_add

@@ -80,6 +80,8 @@
   subitems:
     - text: Caching Data
       url: sql-performance-tuning.html#caching-data
+    - text: Arrow Cache Format
+      url: sql-arrow-cache-format.html
     - text: Tuning Partitions
       url: sql-performance-tuning.html#tuning-partitions
     - text: Leveraging Statistics
