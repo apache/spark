@@ -27,6 +27,7 @@ import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage
 import org.apache.spark.shuffle.api.metric.{CustomShuffleMetric, CustomShuffleTaskMetric}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.sql.{LocalSparkSession, SparkSession}
+import org.apache.spark.sql.execution.CollectLimitExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.metric.SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN
@@ -85,6 +86,21 @@ class CustomShuffleMetricsIntegrationSuite
     withPluginSession(Some(classOf[TestCollidingMetricShuffleDataIO].getName)) { spark =>
       val exchange = runShuffleAndGetExchange(spark)
       assert(exchange.metrics(SHUFFLE_RECORDS_WRITTEN).value > 0)
+    }
+  }
+
+  test("a declared custom shuffle metric surfaces on a multi-partition limit shuffle") {
+    withPluginSession(Some(classOf[TestCustomMetricShuffleDataIO].getName)) { spark =>
+      import spark.implicits._
+      val df = spark.range(0, 100, 1, 4).map(id => (id, id)).toDF("key", "value").limit(50)
+      val limitExec = collectFirst(df.queryExecution.executedPlan) {
+        case c: CollectLimitExec => c
+      }.getOrElse(fail("query plan had no CollectLimitExec"))
+      limitExec.execute().count()
+      assert(limitExec.metrics.contains(TestCustomMetricShuffleDataIO.MetricName),
+        "CollectLimitExec did not expose the declared custom shuffle metric")
+      assert(limitExec.metrics(TestCustomMetricShuffleDataIO.MetricName).value ===
+        4 * TestCustomMetricShuffleDataIO.PerTaskValue)
     }
   }
 }

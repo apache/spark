@@ -23,7 +23,6 @@ import java.util.function.Supplier
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
 import org.apache.spark._
-import org.apache.spark.internal.LogKeys.METRIC_NAME
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.serializer.Serializer
@@ -207,18 +206,8 @@ case class ShuffleExchangeExec(
     "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")
   ) ++ readMetrics ++ writeMetrics
 
-  // Drop plugin metrics whose names collide with Spark-owned ones so they can't shadow the real
-  // accumulators (e.g. `shuffleRecordsWritten`, which feeds AQE).
-  private lazy val customWriteMetrics: Map[String, SQLMetric] = {
-    val (reserved, allowed) = sparkContext.shuffleDriverComponents.supportedCustomMetrics()
-      .partition(metric => sparkMetrics.contains(metric.name()))
-    if (reserved.nonEmpty) {
-      logWarning(log"Ignoring custom shuffle metrics whose names collide with Spark-owned " +
-        log"Exchange metrics: " +
-        log"${MDC(METRIC_NAME, reserved.map(_.name()).sorted.mkString(", "))}.")
-    }
-    CustomShuffleMetrics.createMetrics(sparkContext, allowed)
-  }
+  private lazy val customWriteMetrics: Map[String, SQLMetric] =
+    CustomShuffleMetrics.createFilteredMetrics(sparkContext, sparkMetrics.keySet)
 
   override lazy val metrics = sparkMetrics ++ customWriteMetrics
 
@@ -379,7 +368,7 @@ object ShuffleExchangeExec {
       newPartitioning: Partitioning,
       serializer: Serializer,
       writeMetrics: Map[String, SQLMetric],
-      customWriteMetrics: Map[String, SQLMetric] = Map.empty,
+      customWriteMetrics: Map[String, SQLMetric],
       pipelined: Boolean = false)
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
@@ -644,7 +633,7 @@ object ShuffleExchangeExec {
    */
   def createShuffleWriteProcessor(
       metrics: Map[String, SQLMetric],
-      customWriteMetrics: Map[String, SQLMetric] = Map.empty): ShuffleWriteProcessor = {
+      customWriteMetrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
     new ShuffleWriteProcessor {
       override protected def createMetricsReporter(
           context: TaskContext): ShuffleWriteMetricsReporter = {
