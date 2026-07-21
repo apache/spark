@@ -36,8 +36,10 @@ class ExplainUtilsSuite extends SharedSparkSession {
   test("processPlan assigns unique operator IDs to all visible plan nodes") {
     val df = spark.range(100).filter("id > 10").select("id")
     val output = explainOutput(df.queryExecution.executedPlan)
-    // Each visible operator is tagged "(N)" in the tree header.
-    val ids = "\\((\\d+)\\)".r.findAllMatchIn(output).map(_.group(1).toInt).toSeq
+    // Each operator ID appears both in the tree header ("Filter (2)") and as the header of its
+    // verbose section ("(2) Filter"). Anchor to the verbose-section headers, which are the only
+    // lines that begin with "(N)", so each operator contributes exactly one ID.
+    val ids = "(?m)^\\((\\d+)\\)".r.findAllMatchIn(output).map(_.group(1).toInt).toSeq
     assert(ids.nonEmpty, "processPlan should assign at least one operator ID")
     assert(ids == ids.distinct, s"processPlan operator IDs should be unique: $ids")
   }
