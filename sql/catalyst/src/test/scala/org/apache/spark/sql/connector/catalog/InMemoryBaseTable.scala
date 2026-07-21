@@ -229,14 +229,10 @@ abstract class InMemoryBaseTable(
           metricRow("num_inserted_rows", summary.numTargetRowsInserted()))
 
       case summary: UpdateSummary =>
-        Array(
-          metricRow("num_affected_rows", summary.numUpdatedRows()),
-          metricRow("num_copied_rows", summary.numCopiedRows()))
+        Array(metricRow("num_affected_rows", summary.numUpdatedRows()))
 
       case summary: DeleteSummary =>
-        Array(
-          metricRow("num_affected_rows", summary.numDeletedRows()),
-          metricRow("num_copied_rows", summary.numCopiedRows()))
+        Array(metricRow("num_affected_rows", summary.numDeletedRows()))
 
       case _ => Array.empty[InternalRow]
     }.getOrElse(Array.empty)
