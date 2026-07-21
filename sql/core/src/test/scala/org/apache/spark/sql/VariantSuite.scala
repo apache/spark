@@ -581,6 +581,68 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     }
   }
 
+  test("variant_strip_nulls with literal arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('{\"a\": 1, \"b\": null, \"c\": 3}')))"),
+      rows("""{"a":1,"c":3}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('[1, null, 3]')))"),
+      rows("[1,3]"))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json(" +
+        "'{\"a\": [null, 3, {\"b\": null, \"c\": [null, 1]}], \"d\": null, " +
+        "\"e\": {\"f\": null, \"g\": 2}}')))"),
+      rows("""{"a":[3,{"c":[1]}],"e":{"g":2}}"""))
+
+    // include_arrays = false keeps array null elements but still strips null fields of objects.
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(" +
+        "parse_json('[{\"a\": 1, \"b\": null}, null, {\"c\": null, \"d\": 4}]'), false))"),
+      rows("""[{"a":1},null,{"d":4}]"""))
+
+    // Empty containers are preserved.
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('{\"a\": null}')))"),
+      rows("{}"))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('[null, null]')))"),
+      rows("[]"))
+
+    // Top-level variant null is unchanged.
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('null')))"),
+      rows("null"))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(CAST(NULL AS VARIANT)))"),
+      rows(null))
+  }
+
+  test("variant_strip_nulls with dynamic arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    val df = Seq(
+      """{"a": [1, null], "b": null}""",
+      """{"x": null, "y": 2}""",
+      null
+    ).toDF("json")
+    val v = parse_json(col("json"))
+
+    // Single-argument overload defaults include_arrays to true.
+    checkAnswer(
+      df.select(to_json(variant_strip_nulls(v)).alias("r")),
+      rows("""{"a":[1]}""", """{"y":2}""", null))
+
+    // Boolean overload with include_arrays = false preserves array null elements.
+    checkAnswer(
+      df.select(to_json(variant_strip_nulls(v, false)).alias("r")),
+      rows("""{"a":[1,null]}""", """{"y":2}""", null))
+  }
+
   test("round trip tests") {
     withSQLConf(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false") {
       val rand = new Random(42)

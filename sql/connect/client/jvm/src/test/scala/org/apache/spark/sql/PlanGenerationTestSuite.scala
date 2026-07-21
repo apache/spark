@@ -2783,6 +2783,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.variant_array_append(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
   }
 
+  functionTest("variant_strip_nulls") {
+    fn.variant_strip_nulls(fn.parse_json(fn.col("g")), false)
+  }
+
   functionTest("variant_get") {
     fn.variant_get(fn.parse_json(fn.col("g")), "$", "int")
   }
