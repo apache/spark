@@ -76,13 +76,13 @@ private[spark] class ActiveJob(
    * True once this job's pipelined group has passed up-front gang admission in
    * `handleJobSubmitted` (or the slot check was disabled by config). This is a distinct fact from
    * `hasPipelinedDependency` (which only says the job uses pipelining): the co-schedule path in
-   * `DAGScheduler.submitStage` gang-schedules a group's members with NO slot check, and asserts
-   * this flag so that trust in up-front admission is enforced rather than merely commented.
+   * `DAGScheduler.submitStage` gang-schedules a group's members with NO slot check, and checks this
+   * flag so that trust in up-front admission is enforced rather than merely commented.
    *
-   * v1 ONLY: the whole job is a single pipelined group, so admission is a job-level fact. If a
-   * later version allows multiple groups per job, this job-level flag must be replaced by
-   * per-group admission state, and the assert in `submitStage` replaced by that per-group gate --
-   * NOT simply deleted, or an unadmitted group could be gang-scheduled and deadlock.
+   * The whole job is a single pipelined group, so admission is a job-level fact. If a future change
+   * allows multiple groups per job, this job-level flag must be replaced by per-group admission
+   * state, and the check in `submitStage` replaced by that per-group gate -- NOT simply deleted, or
+   * an unadmitted group could be gang-scheduled and deadlock.
    */
   var pipelinedGroupAdmitted: Boolean = false
 }
