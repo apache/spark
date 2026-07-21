@@ -907,7 +907,7 @@ object SparkSession extends SparkSessionCompanion {
     /**
      * Make the builder create a Classic SparkSession.
      */
-    def classic(): this.type = mode(CONNECT_COMPANION)
+    def classic(): this.type = mode(CLASSIC_COMPANION)
 
     /**
      * Make the builder create a Connect SparkSession.
