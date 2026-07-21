@@ -60,6 +60,15 @@ import org.apache.spark.unsafe.types.UTF8String
       `k` An optional INTEGER literal greater than 0. If k is not specified, it defaults to 5.
       `maxItemsTracked` An optional INTEGER literal greater than or equal to k and has upper limit of 1000000. If maxItemsTracked is not specified, it defaults to 10000.
   """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the top k most frequent items of.
+        An expression that evaluates to a boolean, numeric, date, timestamp, or string.
+      * k - The number of top items to return.
+        An expression that evaluates to an integer. Must be a constant.
+      * maxItemsTracked - The maximum number of items to track in the sketch.
+        An expression that evaluates to an integer. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);
@@ -522,6 +531,13 @@ object ApproxTopKAggregateBuffer {
   usage = """
     _FUNC_(expr, maxItemsTracked) - Accumulates items into a sketch.
       `maxItemsTracked` An optional positive INTEGER literal with upper limit of 1000000. If maxItemsTracked is not specified, it defaults to 10000.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression whose values are accumulated into the sketch.
+        An expression that evaluates to a boolean, numeric, date, timestamp, or string.
+      * maxItemsTracked - The maximum number of items to track in the sketch.
+        An expression that evaluates to an integer. Must be a constant.
   """,
   examples = """
     Examples:

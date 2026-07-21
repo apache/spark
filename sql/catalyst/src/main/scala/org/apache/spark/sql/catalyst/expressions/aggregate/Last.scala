@@ -35,6 +35,13 @@ import org.apache.spark.sql.types._
   usage = """
     _FUNC_(expr[, isIgnoreNull]) - Returns the last value of `expr` for a group of rows.
       If `isIgnoreNull` is true, returns only non-null values""",
+  arguments = """
+    Arguments:
+      * expr - The expression to return the last value of.
+        An expression of any type.
+      * isIgnoreNull - Whether to ignore null values and return only the last non-null value.
+        An expression that evaluates to a boolean. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (10), (5), (20) AS tab(col);
