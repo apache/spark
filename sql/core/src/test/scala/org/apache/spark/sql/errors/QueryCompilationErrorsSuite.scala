@@ -413,6 +413,16 @@ class QueryCompilationErrorsSuite
     )
   }
 
+  test("COLUMN_IS_NOT_VARIANT_TYPE: semi-structured extraction on non-variant column") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT id:field FROM range(1)")
+      },
+      condition = "COLUMN_IS_NOT_VARIANT_TYPE",
+      parameters = Map.empty[String, String]
+    )
+  }
+
   test("UNRESOLVED_MAP_KEY: string type literal should be quoted") {
     checkAnswer(sql("select m['a'] from (select map('a', 'b') as m, 'aa' as aa)"), Row("b"))
     val query = "select m[a] from (select map('a', 'b') as m, 'aa' as aa)"
