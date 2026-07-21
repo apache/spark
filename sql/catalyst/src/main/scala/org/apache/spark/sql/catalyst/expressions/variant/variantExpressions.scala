@@ -576,6 +576,11 @@ abstract class ParseJsonExpressionBuilderBase(failOnError: Boolean) extends Expr
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr) - Parse a JSON string as a Variant value. Throw an exception when the string is not valid JSON value.",
+  arguments = """
+    Arguments:
+      * jsonStr - The JSON string to parse as a Variant value.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1,"b":0.8}');
@@ -590,6 +595,11 @@ object ParseJsonExpressionBuilder extends ParseJsonExpressionBuilderBase(true)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr) - Parse a JSON string as a Variant value. Return NULL when the string is not valid JSON value.",
+  arguments = """
+    Arguments:
+      * jsonStr - The JSON string to parse as a Variant value.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1,"b":0.8}');

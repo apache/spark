@@ -54,6 +54,13 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, ByteType, DataT
       The optional k parameter controls the size and accuracy of the sketch (default 200, range 8-65535).
       Larger k values provide more accurate quantile estimates but result in larger, slower sketches.
   """,
+  arguments = """
+    Arguments:
+      * expr - The expression to aggregate into the KLL sketch.
+        An expression that evaluates to an integral.
+      * k - The parameter controlling the size and accuracy of the sketch.
+        An expression that evaluates to an integer. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT LENGTH(kll_sketch_to_string_bigint(_FUNC_(col))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
@@ -336,6 +343,13 @@ case class KllSketchAggFloat(
     _FUNC_(expr[, k]) - Returns the KllDoublesSketch compact binary representation.
       The optional k parameter controls the size and accuracy of the sketch (default 200, range 8-65535).
       Larger k values provide more accurate quantile estimates but result in larger, slower sketches.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to aggregate into the KLL sketch.
+        An expression that evaluates to a float or double.
+      * k - The parameter controlling the size and accuracy of the sketch.
+        An expression that evaluates to an integer. Must be a constant.
   """,
   examples = """
     Examples:

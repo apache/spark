@@ -387,10 +387,13 @@ private[aggregate] object CollectTopK {
   arguments = """
     Arguments:
       * expr - a string or binary expression to be concatenated.
+        An expression that evaluates to a string or binary.
       * delimiter - an optional string or binary foldable expression used to separate the input values.
         If NULL, the concatenation will be performed without a delimiter. Default is NULL.
+        An expression that evaluates to a string, binary, or null. Must be a constant.
       * key - an optional expression for ordering the input values. Multiple keys can be specified.
         If none are specified, the order of the rows in the result is non-deterministic.
+        An expression of any type.
   """,
   examples = """
     Examples:
