@@ -74,44 +74,77 @@ Aggregate [count(1) AS cnt#xL]
 
 
 -- !query
+DROP TABLE IF EXISTS asof_perm_trades
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.asof_perm_trades
+
+
+-- !query
+DROP TABLE IF EXISTS asof_perm_quotes
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.asof_perm_quotes
+
+
+-- !query
+CREATE TABLE asof_perm_trades USING parquet AS SELECT * FROM trades
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`asof_perm_trades`, ErrorIfExists, [trade_time, symbol, quantity]
+   +- Project [trade_time#x, symbol#x, quantity#x]
+      +- SubqueryAlias trades
+         +- View (`trades`, [trade_time#x, symbol#x, quantity#x])
+            +- Project [cast(col1#x as timestamp) AS trade_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as int) AS quantity#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+CREATE TABLE asof_perm_quotes USING parquet AS SELECT * FROM quotes
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`asof_perm_quotes`, ErrorIfExists, [quote_time, symbol, bid_price]
+   +- Project [quote_time#x, symbol#x, bid_price#x]
+      +- SubqueryAlias quotes
+         +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])
+            +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]
+               +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
 CREATE OR REPLACE VIEW asof_perm_v AS
 SELECT t.trade_time, q.bid_price
-FROM trades t ASOF JOIN quotes q
+FROM asof_perm_trades t ASOF JOIN asof_perm_quotes q
   MATCH_CONDITION (t.trade_time >= q.quote_time)
   ON t.symbol = q.symbol
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
-  "sqlState" : "42K0F",
-  "messageParameters" : {
-    "obj" : "VIEW",
-    "objName" : "`spark_catalog`.`default`.`asof_perm_v`",
-    "tempObj" : "VIEW",
-    "tempObjName" : "`trades`"
-  }
-}
+CreateViewCommand `spark_catalog`.`default`.`asof_perm_v`, SELECT t.trade_time, q.bid_price
+FROM asof_perm_trades t ASOF JOIN asof_perm_quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol, false, true, PersistedView, COMPENSATION, true
+   +- Project [trade_time#x, bid_price#x]
+      +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+         :- SubqueryAlias t
+         :  +- SubqueryAlias spark_catalog.default.asof_perm_trades
+         :     +- Relation spark_catalog.default.asof_perm_trades[trade_time#x,symbol#x,quantity#x] parquet
+         +- SubqueryAlias q
+            +- SubqueryAlias spark_catalog.default.asof_perm_quotes
+               +- Relation spark_catalog.default.asof_perm_quotes[quote_time#x,symbol#x,bid_price#x] parquet
 
 
 -- !query
 SELECT count(*) AS cnt FROM asof_perm_v
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`asof_perm_v`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 29,
-    "stopIndex" : 39,
-    "fragment" : "asof_perm_v"
-  } ]
-}
+Aggregate [count(1) AS cnt#xL]
++- SubqueryAlias spark_catalog.default.asof_perm_v
+   +- View (`spark_catalog`.`default`.`asof_perm_v`, [trade_time#x, bid_price#x])
+      +- Project [cast(trade_time#x as timestamp) AS trade_time#x, cast(bid_price#x as decimal(5,2)) AS bid_price#x]
+         +- Project [trade_time#x, bid_price#x]
+            +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+               :- SubqueryAlias t
+               :  +- SubqueryAlias spark_catalog.default.asof_perm_trades
+               :     +- Relation spark_catalog.default.asof_perm_trades[trade_time#x,symbol#x,quantity#x] parquet
+               +- SubqueryAlias q
+                  +- SubqueryAlias spark_catalog.default.asof_perm_quotes
+                     +- Relation spark_catalog.default.asof_perm_quotes[quote_time#x,symbol#x,bid_price#x] parquet
 
 
 -- !query
@@ -163,43 +196,33 @@ SELECT count(*) AS cnt FROM chain
 -- !query
 CREATE OR REPLACE FUNCTION asof_match_count() RETURNS INT RETURN (
   SELECT count(*)
-  FROM trades t ASOF JOIN quotes q
+  FROM asof_perm_trades t ASOF JOIN asof_perm_quotes q
     MATCH_CONDITION (t.trade_time >= q.quote_time)
     ON t.symbol = q.symbol
 )
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
-  "sqlState" : "42K0F",
-  "messageParameters" : {
-    "obj" : "FUNCTION",
-    "objName" : "`default`.`asof_match_count`",
-    "tempObj" : "VIEW",
-    "tempObjName" : "`trades`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.asof_match_count, INT, (
+  SELECT count(*)
+  FROM asof_perm_trades t ASOF JOIN asof_perm_quotes q
+    MATCH_CONDITION (t.trade_time >= q.quote_time)
+    ON t.symbol = q.symbol
+), false, false, false, true
 
 
 -- !query
 SELECT asof_match_count() AS cnt
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`asof_match_count`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 25,
-    "fragment" : "asof_match_count()"
-  } ]
-}
+Project [spark_catalog.default.asof_match_count() AS cnt#x]
+:  +- Aggregate [count(1) AS count(1)#xL]
+:     +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+:        :- SubqueryAlias t
+:        :  +- SubqueryAlias spark_catalog.default.asof_perm_trades
+:        :     +- Relation spark_catalog.default.asof_perm_trades[trade_time#x,symbol#x,quantity#x] parquet
+:        +- SubqueryAlias q
+:           +- SubqueryAlias spark_catalog.default.asof_perm_quotes
+:              +- Relation spark_catalog.default.asof_perm_quotes[quote_time#x,symbol#x,bid_price#x] parquet
++- Project
+   +- OneRowRelation
 
 
 -- !query
@@ -207,41 +230,31 @@ CREATE OR REPLACE FUNCTION asof_matches()
 RETURNS TABLE (trade_time TIMESTAMP, bid_price DOUBLE)
 RETURN
   SELECT t.trade_time, q.bid_price
-  FROM trades t ASOF JOIN quotes q
+  FROM asof_perm_trades t ASOF JOIN asof_perm_quotes q
     MATCH_CONDITION (t.trade_time >= q.quote_time)
     ON t.symbol = q.symbol
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
-  "sqlState" : "42K0F",
-  "messageParameters" : {
-    "obj" : "FUNCTION",
-    "objName" : "`default`.`asof_matches`",
-    "tempObj" : "VIEW",
-    "tempObjName" : "`trades`"
-  }
-}
+CreateSQLFunctionCommand spark_catalog.default.asof_matches, trade_time TIMESTAMP, bid_price DOUBLE, SELECT t.trade_time, q.bid_price
+  FROM asof_perm_trades t ASOF JOIN asof_perm_quotes q
+    MATCH_CONDITION (t.trade_time >= q.quote_time)
+    ON t.symbol = q.symbol, true, false, false, true
 
 
 -- !query
 SELECT count(*) AS cnt FROM asof_matches()
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "name" : "`asof_matches`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 29,
-    "stopIndex" : 42,
-    "fragment" : "asof_matches()"
-  } ]
-}
+Aggregate [count(1) AS cnt#xL]
++- SQLFunctionNode spark_catalog.default.asof_matches
+   +- SubqueryAlias asof_matches
+      +- Project [cast(trade_time#x as timestamp) AS trade_time#x, cast(bid_price#x as double) AS bid_price#x]
+         +- Project [trade_time#x, bid_price#x]
+            +- AsOfJoin (trade_time#x >= quote_time#x), (symbol#x = symbol#x), Inner
+               :- SubqueryAlias t
+               :  +- SubqueryAlias spark_catalog.default.asof_perm_trades
+               :     +- Relation spark_catalog.default.asof_perm_trades[trade_time#x,symbol#x,quantity#x] parquet
+               +- SubqueryAlias q
+                  +- SubqueryAlias spark_catalog.default.asof_perm_quotes
+                     +- Relation spark_catalog.default.asof_perm_quotes[quote_time#x,symbol#x,bid_price#x] parquet
 
 
 -- !query

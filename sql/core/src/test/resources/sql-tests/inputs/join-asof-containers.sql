@@ -24,10 +24,16 @@ FROM trades t ASOF JOIN quotes q
 
 SELECT count(*) AS cnt FROM asof_matched_v;
 
+-- Permanent backing tables for cases that cannot reference temp views (7-002, 7-006, 7-007).
+DROP TABLE IF EXISTS asof_perm_trades;
+DROP TABLE IF EXISTS asof_perm_quotes;
+CREATE TABLE asof_perm_trades USING parquet AS SELECT * FROM trades;
+CREATE TABLE asof_perm_quotes USING parquet AS SELECT * FROM quotes;
+
 -- FVT-ASOF-7-002: permanent view hosting ASOF
 CREATE OR REPLACE VIEW asof_perm_v AS
 SELECT t.trade_time, q.bid_price
-FROM trades t ASOF JOIN quotes q
+FROM asof_perm_trades t ASOF JOIN asof_perm_quotes q
   MATCH_CONDITION (t.trade_time >= q.quote_time)
   ON t.symbol = q.symbol;
 
@@ -61,7 +67,7 @@ SELECT count(*) AS cnt FROM chain;
 -- FVT-ASOF-7-006: scalar SQL UDF wrapping ASOF count
 CREATE OR REPLACE FUNCTION asof_match_count() RETURNS INT RETURN (
   SELECT count(*)
-  FROM trades t ASOF JOIN quotes q
+  FROM asof_perm_trades t ASOF JOIN asof_perm_quotes q
     MATCH_CONDITION (t.trade_time >= q.quote_time)
     ON t.symbol = q.symbol
 );
@@ -73,7 +79,7 @@ CREATE OR REPLACE FUNCTION asof_matches()
 RETURNS TABLE (trade_time TIMESTAMP, bid_price DOUBLE)
 RETURN
   SELECT t.trade_time, q.bid_price
-  FROM trades t ASOF JOIN quotes q
+  FROM asof_perm_trades t ASOF JOIN asof_perm_quotes q
     MATCH_CONDITION (t.trade_time >= q.quote_time)
     ON t.symbol = q.symbol;
 
