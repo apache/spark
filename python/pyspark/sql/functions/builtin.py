@@ -2292,6 +2292,10 @@ def acos(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A new column object representing the inverse cosine of the input.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cos`
+
     Examples
     --------
     Example 1: Compute the inverse cosine
@@ -2347,6 +2351,10 @@ def acosh(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A new column object representing the inverse hyperbolic cosine of the input.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cosh`
+
     Examples
     --------
     Example 1: Compute the inverse hyperbolic cosine
@@ -2397,6 +2405,10 @@ def asin(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         inverse sine of `col`, as if computed by `java.lang.Math.asin()`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sin`
 
     Examples
     --------
@@ -2450,6 +2462,10 @@ def asinh(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sinh`
+
     Examples
     --------
     Example 1: Compute the inverse hyperbolic sine
@@ -2501,6 +2517,11 @@ def atan(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         inverse tangent of `col`, as if computed by `java.lang.Math.atan()`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.atan2`
+    :meth:`pyspark.sql.functions.tan`
+
     Examples
     --------
     Example 1: Compute the inverse tangent
@@ -2551,6 +2572,10 @@ def atanh(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tanh`
 
     Examples
     --------
@@ -2772,6 +2797,11 @@ def cos(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         cosine of the angle, as if computed by `java.lang.Math.cos()`.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.acos`
+    :meth:`pyspark.sql.functions.sec`
+
     Examples
     --------
     Example 1: Compute the cosine
@@ -2824,6 +2854,10 @@ def cosh(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh()`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.acosh`
+
     Examples
     --------
     Example 1: Compute the cosine
@@ -2874,6 +2908,10 @@ def cot(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         cotangent of the angle.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tan`
 
     Examples
     --------
@@ -2926,6 +2964,10 @@ def csc(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         cosecant of the angle.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sin`
 
     Examples
     --------
@@ -3383,6 +3425,10 @@ def sec(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         Secant of the angle.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cos`
+
     Examples
     --------
     Example 1: Compute the secant
@@ -3518,6 +3564,11 @@ def sin(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         sine of the angle, as if computed by `java.lang.Math.sin()`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.asin`
+    :meth:`pyspark.sql.functions.csc`
+
     Examples
     --------
     Example 1: Compute the sine
@@ -3571,6 +3622,10 @@ def sinh(col: "ColumnOrName") -> Column:
         hyperbolic sine of the given value,
         as if computed by `java.lang.Math.sinh()`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.asinh`
+
     Examples
     --------
     Example 1: Compute the hyperbolic sine
@@ -3621,6 +3676,12 @@ def tan(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         tangent of the given value, as if computed by `java.lang.Math.tan()`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.atan`
+    :meth:`pyspark.sql.functions.atan2`
+    :meth:`pyspark.sql.functions.cot`
 
     Examples
     --------
@@ -3674,6 +3735,10 @@ def tanh(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         hyperbolic tangent of the given value
         as if computed by `java.lang.Math.tanh()`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.atanh`
 
     Examples
     --------
@@ -6103,6 +6168,10 @@ def degrees(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         angle in degrees, as if computed by `java.lang.Math.toDegrees()`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.radians`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -6141,6 +6210,10 @@ def radians(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         angle in radians, as if computed by `java.lang.Math.toRadians()`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.degrees`
 
     Examples
     --------
@@ -6186,6 +6259,11 @@ def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
         in polar coordinates that corresponds to the point
         (`x`, `y`) in Cartesian coordinates,
         as if computed by `java.lang.Math.atan2()`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.atan`
+    :meth:`pyspark.sql.functions.hypot`
 
     Examples
     --------
@@ -6395,6 +6473,14 @@ def row_number() -> Column:
     :class:`~pyspark.sql.Column`
         the column for calculating row numbers.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cume_dist`
+    :meth:`pyspark.sql.functions.dense_rank`
+    :meth:`pyspark.sql.functions.ntile`
+    :meth:`pyspark.sql.functions.percent_rank`
+    :meth:`pyspark.sql.functions.rank`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -6435,6 +6521,14 @@ def dense_rank() -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for calculating ranks.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cume_dist`
+    :meth:`pyspark.sql.functions.ntile`
+    :meth:`pyspark.sql.functions.percent_rank`
+    :meth:`pyspark.sql.functions.rank`
+    :meth:`pyspark.sql.functions.row_number`
 
     Examples
     --------
@@ -6479,6 +6573,14 @@ def rank() -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for calculating ranks.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cume_dist`
+    :meth:`pyspark.sql.functions.dense_rank`
+    :meth:`pyspark.sql.functions.ntile`
+    :meth:`pyspark.sql.functions.percent_rank`
+    :meth:`pyspark.sql.functions.row_number`
 
     Examples
     --------
@@ -6595,6 +6697,14 @@ def cume_dist() -> Column:
     :class:`~pyspark.sql.Column`
         the column for calculating cumulative distribution.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.dense_rank`
+    :meth:`pyspark.sql.functions.ntile`
+    :meth:`pyspark.sql.functions.percent_rank`
+    :meth:`pyspark.sql.functions.rank`
+    :meth:`pyspark.sql.functions.row_number`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -6629,6 +6739,14 @@ def percent_rank() -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for calculating relative rank.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cume_dist`
+    :meth:`pyspark.sql.functions.dense_rank`
+    :meth:`pyspark.sql.functions.ntile`
+    :meth:`pyspark.sql.functions.rank`
+    :meth:`pyspark.sql.functions.row_number`
 
     Examples
     --------
@@ -7360,6 +7478,11 @@ def isnan(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         True if value is NaN and False otherwise.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.isnull`
+    :meth:`pyspark.sql.functions.isnotnull`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -7393,6 +7516,11 @@ def isnull(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         True if value is null and False otherwise.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.isnan`
+    :meth:`pyspark.sql.functions.isnotnull`
 
     Examples
     --------
@@ -8933,6 +9061,11 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     :class:`~pyspark.sql.Column`
         value of nth row.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.first_value`
+    :meth:`pyspark.sql.functions.last_value`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -9047,6 +9180,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     See Also
     --------
     :meth:`pyspark.sql.functions.last_value`
+    :meth:`pyspark.sql.functions.nth_value`
 
     Examples
     --------
@@ -9100,6 +9234,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     See Also
     --------
     :meth:`pyspark.sql.functions.first_value`
+    :meth:`pyspark.sql.functions.nth_value`
 
     Examples
     --------
@@ -9267,6 +9402,14 @@ def ntile(n: int) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         portioned group id.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cume_dist`
+    :meth:`pyspark.sql.functions.dense_rank`
+    :meth:`pyspark.sql.functions.percent_rank`
+    :meth:`pyspark.sql.functions.rank`
+    :meth:`pyspark.sql.functions.row_number`
 
     Examples
     --------
@@ -16215,6 +16358,13 @@ def rlike(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         true if `str` matches a Java regex, or false otherwise.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.regexp`
+    :meth:`pyspark.sql.functions.regexp_like`
+    :meth:`pyspark.sql.functions.like`
+    :meth:`pyspark.sql.functions.ilike`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -16268,6 +16418,13 @@ def regexp(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         true if `str` matches a Java regex, or false otherwise.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.rlike`
+    :meth:`pyspark.sql.functions.regexp_like`
+    :meth:`pyspark.sql.functions.like`
+    :meth:`pyspark.sql.functions.ilike`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -16320,6 +16477,13 @@ def regexp_like(str: "ColumnOrName", regexp: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         true if `str` matches a Java regex, or false otherwise.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.rlike`
+    :meth:`pyspark.sql.functions.regexp`
+    :meth:`pyspark.sql.functions.like`
+    :meth:`pyspark.sql.functions.ilike`
 
     Examples
     --------
@@ -18511,6 +18675,13 @@ def like(
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.ilike`
+    :meth:`pyspark.sql.functions.rlike`
+    :meth:`pyspark.sql.functions.regexp`
+    :meth:`pyspark.sql.functions.regexp_like`
+
     Examples
     --------
     >>> df = spark.createDataFrame([("Spark", "_park")], ['a', 'b'])
@@ -18560,6 +18731,13 @@ def ilike(
         An character added since Spark 3.0. The default escape character is the '\'.
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.like`
+    :meth:`pyspark.sql.functions.rlike`
+    :meth:`pyspark.sql.functions.regexp`
+    :meth:`pyspark.sql.functions.regexp_like`
 
     Examples
     --------
@@ -19127,6 +19305,10 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
         A new Column of Boolean type, where each value indicates whether the corresponding array
         from the input column contains the specified value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_position`
+
     Examples
     --------
     Example 1: Basic usage of array_contains function.
@@ -19365,6 +19547,11 @@ def array_join(
         A new column of string type, where each value is the result of joining the corresponding
         array from the input column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.concat`
+    :meth:`pyspark.sql.functions.concat_ws`
+
     Examples
     --------
     Example 1: Basic usage of array_join function.
@@ -19558,6 +19745,10 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         position of the value in the given array if found and 0 otherwise.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_contains`
 
     Examples
     --------
@@ -19950,6 +20141,11 @@ def array_prepend(col: "ColumnOrName", value: Any) -> Column:
     :class:`~pyspark.sql.Column`
         an array with the given value prepended.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_append`
+    :meth:`pyspark.sql.functions.array_insert`
+
     Examples
     --------
     Example 1: Prepending a column value to an array column
@@ -20042,6 +20238,10 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         A new column that is an array excluding the given value from the input column.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_compact`
 
     Examples
     --------
@@ -20139,6 +20339,12 @@ def array_distinct(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A new column that is an array of unique values from the input column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_except`
+    :meth:`pyspark.sql.functions.array_intersect`
+    :meth:`pyspark.sql.functions.array_union`
+
     Examples
     --------
     Example 1: Removing duplicate values from a simple array
@@ -20233,6 +20439,11 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
     -----
     Supports Spark Connect.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_append`
+    :meth:`pyspark.sql.functions.array_prepend`
+
     Examples
     --------
     Example 1: Inserting a value at a specific position
@@ -20324,6 +20535,12 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     Notes
     -----
     This function does not preserve the order of the elements in the input arrays.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_distinct`
+    :meth:`pyspark.sql.functions.array_except`
+    :meth:`pyspark.sql.functions.array_union`
 
     Examples
     --------
@@ -20418,6 +20635,12 @@ def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     -----
     This function does not preserve the order of the elements in the input arrays.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_distinct`
+    :meth:`pyspark.sql.functions.array_except`
+    :meth:`pyspark.sql.functions.array_intersect`
+
     Examples
     --------
     Example 1: Basic usage
@@ -20511,6 +20734,12 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     -----
     This function does not preserve the order of the elements in the input arrays.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_distinct`
+    :meth:`pyspark.sql.functions.array_intersect`
+    :meth:`pyspark.sql.functions.array_union`
+
     Examples
     --------
     Example 1: Basic usage
@@ -20597,6 +20826,10 @@ def array_compact(col: "ColumnOrName") -> Column:
     Notes
     -----
     Supports Spark Connect.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_remove`
 
     Examples
     --------
@@ -20689,6 +20922,11 @@ def array_append(col: "ColumnOrName", value: Any) -> Column:
     Notes
     -----
     Supports Spark Connect.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_insert`
+    :meth:`pyspark.sql.functions.array_prepend`
 
     Examples
     --------
@@ -22839,6 +23077,12 @@ def array_min(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A new column that contains the minimum value of each array.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_max`
+    :meth:`pyspark.sql.functions.array_sort`
+    :meth:`pyspark.sql.functions.sort_array`
+
     Examples
     --------
     Example 1: Basic usage with integer array
@@ -22924,6 +23168,12 @@ def array_max(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A new column that contains the maximum value of each array.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_min`
+    :meth:`pyspark.sql.functions.array_sort`
+    :meth:`pyspark.sql.functions.sort_array`
+
     Examples
     --------
     Example 1: Basic usage with integer array
@@ -23006,6 +23256,11 @@ def array_size(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         A new column that contains the size of each array.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cardinality`
+    :meth:`pyspark.sql.functions.size`
 
     Examples
     --------
@@ -23229,6 +23484,10 @@ def array_sort(
     -------
     :class:`~pyspark.sql.Column`
         sorted array.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sort_array`
 
     Examples
     --------
@@ -23856,6 +24115,10 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
     -------
     :class:`~pyspark.sql.Column`
         A new column that contains an array of repeated elements.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array`
 
     Examples
     --------
@@ -29956,6 +30219,11 @@ def isnotnull(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.isnan`
+    :meth:`pyspark.sql.functions.isnull`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -30096,6 +30364,10 @@ def nvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     col1 : :class:`~pyspark.sql.Column` or column name
     col2 : :class:`~pyspark.sql.Column` or column name
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.nvl2`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -30131,6 +30403,10 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
     col1 : :class:`~pyspark.sql.Column` or column name
     col2 : :class:`~pyspark.sql.Column` or column name
     col3 : :class:`~pyspark.sql.Column` or column name
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.nvl`
 
     Examples
     --------
