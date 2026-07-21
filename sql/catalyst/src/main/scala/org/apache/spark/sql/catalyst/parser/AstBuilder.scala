@@ -1107,6 +1107,11 @@ class AstBuilder extends DataTypeAstBuilder
     if (byName && !SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED)) {
       throw QueryParsingErrors.insertReplaceOnByNameNotEnabled(ctx)
     }
+    // The grammar rule is shared with REPLACE WHERE and accepts a column list, but a column
+    // list is not meaningful for REPLACE ON. Reject it explicitly rather than silently ignore it.
+    if (ctx.identifierList() != null) {
+      throw QueryParsingErrors.insertReplaceOnColumnListNotAllowed(ctx.identifierList())
+    }
     val replaceOnCond = expression(ctx.replaceCondition)
     val tableAliasOpt =
       getTableAliasWithoutColumnAlias(ctx.tableAlias(), "INSERT REPLACE ON")

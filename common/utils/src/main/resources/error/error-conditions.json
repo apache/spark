@@ -3206,6 +3206,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "INSERT_REPLACE_ON_COLUMN_LIST_NOT_ALLOWED" : {
+    "message" : [
+      "A column list is not allowed with INSERT INTO ... REPLACE ON."
+    ],
+    "sqlState" : "42000"
+  },
   "INSERT_REPLACE_ON_NOT_ENABLED" : {
     "message" : [
       "INSERT INTO ... REPLACE ON is not enabled. Set 'spark.sql.insertIntoReplaceOn.enabled' to true to enable it."

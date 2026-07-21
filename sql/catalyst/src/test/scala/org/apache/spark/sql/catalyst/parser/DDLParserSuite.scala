@@ -2182,6 +2182,18 @@ class DDLParserSuite extends AnalysisTest {
     )
   }
 
+  test("insert table: REPLACE ON rejects a column list") {
+    checkError(
+      exception = parseException(
+        "INSERT INTO testcat.ns1.ns2.tbl (a, b) REPLACE ON col1 = col2 SELECT * FROM source"),
+      condition = "INSERT_REPLACE_ON_COLUMN_LIST_NOT_ALLOWED",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "INSERT INTO testcat.ns1.ns2.tbl (a, b) REPLACE ON col1 = col2",
+        start = 0,
+        stop = 60))
+  }
+
   test("INSERT INTO REPLACE ON with source query alias") {
     val table = "testcat.ns1.ns2.tbl"
     parseCompare(
