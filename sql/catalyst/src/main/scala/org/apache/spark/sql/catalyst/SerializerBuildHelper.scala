@@ -22,7 +22,7 @@ import scala.language.existentials
 import org.apache.spark.sql.catalyst.{expressions => exprs}
 import org.apache.spark.sql.catalyst.DeserializerBuildHelper.expressionWithNullSafety
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders, AgnosticExpressionPathEncoder, Codec, JavaSerializationCodec, KryoSerializationCodec}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLeafEncoder, BoxedLongEncoder, BoxedShortEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, GeographyEncoder, GeometryEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, OptionEncoder, PrimitiveLeafEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLeafEncoder, BoxedLongEncoder, BoxedShortEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, GeographyEncoder, GeometryEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, OptionEncoder, PrimitiveLeafEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{externalDataTypeFor, isNativeEncoder, lenientExternalDataTypeFor}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, CheckOverflow, CreateNamedStruct, Expression, IsNull, KnownNotNull, Literal, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -114,15 +114,6 @@ object SerializerBuildHelper {
       DateTimeUtils.getClass,
       TimestampType,
       "instantToMicros",
-      inputObject :: Nil,
-      returnNullable = false)
-  }
-
-  def createSerializerForLocalTime(inputObject: Expression): Expression = {
-    StaticInvoke(
-      DateTimeUtils.getClass,
-      TimeType(),
-      "localTimeToNanos",
       inputObject :: Nil,
       returnNullable = false)
   }
@@ -384,9 +375,6 @@ object SerializerBuildHelper {
     case TimestampEncoder(false) => createSerializerForSqlTimestamp(input)
     case InstantEncoder(false) => createSerializerForJavaInstant(input)
     case LocalDateTimeEncoder => createSerializerForLocalDateTime(input)
-    case LocalTimeEncoder if !SQLConf.get.isTimeTypeEnabled =>
-      throw org.apache.spark.sql.errors.QueryCompilationErrors.unsupportedTimeTypeError()
-    case LocalTimeEncoder => createSerializerForLocalTime(input)
     case UDTEncoder(udt, udtClass) => createSerializerForUserDefinedType(input, udt, udtClass)
     case OptionEncoder(valueEnc) =>
       createSerializer(valueEnc, UnwrapOption(externalDataTypeFor(valueEnc), input))

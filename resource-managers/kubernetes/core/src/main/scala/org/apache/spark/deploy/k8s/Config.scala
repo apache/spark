@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigBuilder, DYN_ALLOCATION_ENABLED}
+import org.apache.spark.internal.config.{ConfigBindingPolicy, ConfigBuilder, DYN_ALLOCATION_ENABLED}
 
 private[spark] object Config extends Logging {
 
@@ -88,6 +88,18 @@ private[spark] object Config extends Logging {
       .checkValues(Set("IPv4", "IPv6", "IPv4,IPv6", "IPv6,IPv4"))
       .createWithDefault("IPv4")
 
+  val KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES =
+    ConfigBuilder("spark.kubernetes.driver.service.publishNotReadyAddresses")
+      .doc("If true, the driver service publishes DNS records for the driver pod even " +
+        "while the pod is not ready, so executors can resolve the driver service " +
+        "during startup when a readiness probe is configured on the driver pod. " +
+        "When enabled, the driver pod readiness wait before executor allocation " +
+        "is skipped as well.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_DRIVER_OWN_PVC =
     ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")
       .doc("If true, driver pod becomes the owner of on-demand persistent volume claims " +
@@ -120,12 +132,44 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the driver and executor " +
+        "containers' security context. When false (default), a container cannot gain " +
+        "more privileges than its parent process. Set to true to opt out of this " +
+        "restriction. Driver and executor can be configured individually via the " +
+        "container type-specific config.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.driver.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the driver container's security " +
+        "context. When false (default), the container cannot gain more privileges than " +
+        "its parent process. Set to true to opt out of this restriction. Falls back to " +
+        s"${KUBERNETES_ALLOW_PRIVILEGE_ESCALATION.key} if not set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION)
+
+  val KUBERNETES_EXECUTOR_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.executor.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the executor container's security " +
+        "context. When false (default), the container cannot gain more privileges than " +
+        "its parent process. Set to true to opt out of this restriction. Falls back to " +
+        s"${KUBERNETES_ALLOW_PRIVILEGE_ESCALATION.key} if not set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION)
+
   val KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP =
     ConfigBuilder("spark.kubernetes.executor.useDriverPodIP")
       .doc("If true, executor pods use Driver pod IP directly instead of Driver Service.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")

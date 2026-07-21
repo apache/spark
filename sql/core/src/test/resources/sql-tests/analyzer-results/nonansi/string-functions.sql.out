@@ -1873,3 +1873,297 @@ select quote(NULL)
 -- !query analysis
 Project [quote(cast(null as string)) AS quote(NULL)#x]
 +- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', 1)
+-- !query analysis
+Project [instr(abcabc, b, 1, 1) AS instr(abcabc, b, 1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', 3)
+-- !query analysis
+Project [instr(abcabc, b, 3, 1) AS instr(abcabc, b, 3, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'a', 3)
+-- !query analysis
+Project [instr(abcabc, a, 3, 1) AS instr(abcabc, a, 3, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', -1)
+-- !query analysis
+Project [instr(abcabc, b, -1, 1) AS instr(abcabc, b, -1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', -2)
+-- !query analysis
+Project [instr(abcabc, b, -2, 1) AS instr(abcabc, b, -2, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', -3)
+-- !query analysis
+Project [instr(abcabc, b, -3, 1) AS instr(abcabc, b, -3, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'a', -2)
+-- !query analysis
+Project [instr(abcabc, a, -2, 1) AS instr(abcabc, a, -2, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', 1, 2)
+-- !query analysis
+Project [instr(abcabc, b, 1, 2) AS instr(abcabc, b, 1, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', 3, 1)
+-- !query analysis
+Project [instr(abcabc, b, 3, 1) AS instr(abcabc, b, 3, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', 1, 3)
+-- !query analysis
+Project [instr(abcabc, b, 1, 3) AS instr(abcabc, b, 1, 3)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', -1, 1)
+-- !query analysis
+Project [instr(abcabc, b, -1, 1) AS instr(abcabc, b, -1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', -1, 2)
+-- !query analysis
+Project [instr(abcabc, b, -1, 2) AS instr(abcabc, b, -1, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', -2, 2)
+-- !query analysis
+Project [instr(abcabc, b, -2, 2) AS instr(abcabc, b, -2, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'a', -1, 2)
+-- !query analysis
+Project [instr(abcabc, a, -1, 2) AS instr(abcabc, a, -1, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', 0, 1)
+-- !query analysis
+Project [instr(abcabc, b, 0, 1) AS instr(abcabc, b, 0, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abcabc', 'b', 0, 2)
+-- !query analysis
+Project [instr(abcabc, b, 0, 2) AS instr(abcabc, b, 0, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('hello', '', 1)
+-- !query analysis
+Project [instr(hello, , 1, 1) AS instr(hello, , 1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('hello', '', 3)
+-- !query analysis
+Project [instr(hello, , 3, 1) AS instr(hello, , 3, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('hello', '', -1)
+-- !query analysis
+Project [instr(hello, , -1, 1) AS instr(hello, , -1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('hello', '', -2)
+-- !query analysis
+Project [instr(hello, , -2, 1) AS instr(hello, , -2, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('', '', 1)
+-- !query analysis
+Project [instr(, , 1, 1) AS instr(, , 1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('', '', -1)
+-- !query analysis
+Project [instr(, , -1, 1) AS instr(, , -1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('你好世界你好', '你好', 1, 2)
+-- !query analysis
+Project [instr(你好世界你好, 你好, 1, 2) AS instr(你好世界你好, 你好, 1, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('你好世界你好', '你好', -1, 2)
+-- !query analysis
+Project [instr(你好世界你好, 你好, -1, 2) AS instr(你好世界你好, 你好, -1, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('你好世界你好', '你好', -2, 2)
+-- !query analysis
+Project [instr(你好世界你好, 你好, -2, 2) AS instr(你好世界你好, 你好, -2, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('你好世界你好', '你好', -1)
+-- !query analysis
+Project [instr(你好世界你好, 你好, -1, 1) AS instr(你好世界你好, 你好, -1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('你好世界你好', '你好', -2)
+-- !query analysis
+Project [instr(你好世界你好, 你好, -2, 1) AS instr(你好世界你好, 你好, -2, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('你好世界你好', '世界', -1)
+-- !query analysis
+Project [instr(你好世界你好, 世界, -1, 1) AS instr(你好世界你好, 世界, -1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('aaaa', 'aa', 1, 2)
+-- !query analysis
+Project [instr(aaaa, aa, 1, 2) AS instr(aaaa, aa, 1, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('aaaa', 'aa', 1, 3)
+-- !query analysis
+Project [instr(aaaa, aa, 1, 3) AS instr(aaaa, aa, 1, 3)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('aaaa', 'aa', -1, 2)
+-- !query analysis
+Project [instr(aaaa, aa, -1, 2) AS instr(aaaa, aa, -1, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('aaaa', 'aa', -2, 2)
+-- !query analysis
+Project [instr(aaaa, aa, -2, 2) AS instr(aaaa, aa, -2, 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abc', 'd', 1, 1)
+-- !query analysis
+Project [instr(abc, d, 1, 1) AS instr(abc, d, 1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abc', 'b', 1, 3)
+-- !query analysis
+Project [instr(abc, b, 1, 3) AS instr(abc, b, 1, 3)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abc', 'b', 10, 1)
+-- !query analysis
+Project [instr(abc, b, 10, 1) AS instr(abc, b, 10, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('abc', 'b', -10, 1)
+-- !query analysis
+Project [instr(abc, b, -10, 1) AS instr(abc, b, -10, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('a', 'b', cast(null as int))
+-- !query analysis
+Project [instr(a, b, cast(null as int), 1) AS instr(a, b, CAST(NULL AS INT), 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('a', 'b', 1, cast(null as int))
+-- !query analysis
+Project [instr(a, b, 1, cast(null as int)) AS instr(a, b, 1, CAST(NULL AS INT))#x]
++- OneRowRelation
+
+
+-- !query
+select instr(null, 'b', 1)
+-- !query analysis
+Project [instr(cast(null as string), b, 1, 1) AS instr(NULL, b, 1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('a', null, 1)
+-- !query analysis
+Project [instr(a, cast(null as string), 1, 1) AS instr(a, NULL, 1, 1)#x]
++- OneRowRelation
+
+
+-- !query
+select instr('a', 'b', cast(null as int), 2)
+-- !query analysis
+Project [instr(a, b, cast(null as int), 2) AS instr(a, b, CAST(NULL AS INT), 2)#x]
++- OneRowRelation
+
+
+-- !query
+select instr(null, null, cast(null as int), cast(null as int))
+-- !query analysis
+Project [instr(cast(null as string), cast(null as string), cast(null as int), cast(null as int)) AS instr(NULL, NULL, CAST(NULL AS INT), CAST(NULL AS INT))#x]
++- OneRowRelation

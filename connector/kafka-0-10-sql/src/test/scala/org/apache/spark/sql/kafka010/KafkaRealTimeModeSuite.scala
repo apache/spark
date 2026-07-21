@@ -25,7 +25,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkContext, SparkIllegalStateException}
 import org.apache.spark.sql.execution.datasources.v2.LowLatencyClock
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.sources.ContinuousMemorySink
+import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer

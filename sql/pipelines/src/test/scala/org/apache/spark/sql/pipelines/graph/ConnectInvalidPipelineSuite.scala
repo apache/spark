@@ -764,4 +764,15 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
       )
     )
   }
+
+  test("DUPLICATE_GRAPH_ELEMENT: duplicate graph element identifiers") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        DataflowGraph.mapUnique(Seq("a", "a"), "view")(identity)
+      },
+      condition = "DUPLICATE_GRAPH_ELEMENT",
+      parameters = Map(
+        "graphElementType" -> "view",
+        "graphElementName" -> "a"))
+  }
 }

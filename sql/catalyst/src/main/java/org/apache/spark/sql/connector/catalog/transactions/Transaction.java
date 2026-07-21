@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog.transactions;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.CatalogPlugin;
 import org.apache.spark.sql.connector.catalog.TransactionalCatalogPlugin;
+import org.apache.spark.sql.connector.read.Scan;
 
 import java.io.Closeable;
 
@@ -65,6 +66,22 @@ public interface Transaction extends Closeable {
    * Spark calls {@link #close()} immediately after this method returns.
    */
   void abort();
+
+  /**
+   * Attempts to register materialized scans against this transaction's read set.
+   * <p>
+   * An example use case is cache reuse. Spark passes the scans of a candidate cached subtree
+   * for the transaction's catalog and the connector decides whether to accept them.
+   * <p>
+   * The connector must either accept all passed scans (returning {@code true} after adding
+   * the scans to the read set) or refuse (returning {@code false} without modifying
+   * the read set).
+   *
+   * @param scans the materialized scans Spark offers for registration against
+   *              this transaction's read set.
+   * @return true if the connector accepts the scans; false otherwise.
+   */
+  boolean registerScans(Scan[] scans);
 
   /**
    * Releases any resources held by this transaction.

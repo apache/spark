@@ -134,7 +134,8 @@ object PushDownUtils extends Logging {
           ExpressionSet(untranslatableExprs))
         (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
-        val postScanFilters = r.pushFilters(filters)
+        val (deterministicFilters, nonDeterministicFilters) = filters.partition(_.deterministic)
+        val postScanFilters = r.pushFilters(deterministicFilters) ++ nonDeterministicFilters
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
     }

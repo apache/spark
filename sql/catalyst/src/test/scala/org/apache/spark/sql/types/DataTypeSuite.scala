@@ -22,7 +22,8 @@ import java.util.Locale
 import com.fasterxml.jackson.core.JsonParseException
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFunSuite}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -204,6 +205,68 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(DataType.fromJson("\"timestamp_ltz\"") == TimestampType)
     val expectedStructType = StructType(Seq(StructField("ts", TimestampType)))
     assert(DataType.fromDDL("ts timestamp_ltz") == expectedStructType)
+  }
+
+  test("loading a UDT class from a schema string is enabled by default") {
+    val udt = new ExampleBaseTypeUDT()
+    assert(DataType.fromJson(udt.json).isInstanceOf[ExampleBaseTypeUDT])
+  }
+
+  test("loading a UDT class from a schema string can be disabled") {
+    val udt = new ExampleBaseTypeUDT()
+    withSQLConf(SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false") {
+      checkError(
+        exception = intercept[SparkException] {
+          DataType.fromJson(udt.json)
+        },
+        condition = "UDT_CLASS_LOADING_DISABLED",
+        parameters = Map("udtClass" -> udt.getClass.getName, "allowed" -> ""))
+    }
+  }
+
+  test("disabled UDT loading still honors the allow list") {
+    val udt = new ExampleBaseTypeUDT()
+    withSQLConf(
+        SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false",
+        SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES.key -> udt.getClass.getName) {
+      assert(DataType.fromJson(udt.json).isInstanceOf[ExampleBaseTypeUDT])
+    }
+  }
+
+  test("a schema string cannot load an arbitrary non-UserDefinedType class") {
+    // Simulate a crafted schema string (e.g. from Parquet file metadata) whose UDT "class" field
+    // points at an arbitrary class that is not a UserDefinedType. Spark must refuse to load and
+    // instantiate it, both when UDT loading is enabled and when the class is explicitly allowed.
+    val gadget = classOf[java.lang.Object].getName
+    val json = s"""{"type":"udt","class":"$gadget","pyClass":null,"sqlType":"integer"}"""
+    Seq(
+      Map(SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "true"),
+      Map(
+        SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false",
+        SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES.key -> gadget)
+    ).foreach { conf =>
+      withSQLConf(conf.toSeq: _*) {
+        checkError(
+          exception = intercept[SparkException] {
+            DataType.fromJson(json)
+          },
+          condition = "UDT_CLASS_NOT_USER_DEFINED_TYPE",
+          parameters = Map("udtClass" -> gadget))
+      }
+    }
+  }
+
+  test("UDT_CLASS_NOT_FOUND.WITHOUT_USER_CLASS when UDT class is not on classpath") {
+    val fakeUdtClass = "org.apache.spark.sql.types.NonExistentUDT"
+    val udtJson =
+      s"""{"class":"$fakeUdtClass","pyClass":"","sqlType":"integer","type":"udt"}"""
+    checkError(
+      exception = intercept[SparkClassNotFoundException] {
+        DataType.fromJson(udtJson)
+      },
+      condition = "UDT_CLASS_NOT_FOUND.WITHOUT_USER_CLASS",
+      sqlState = Some("38000"),
+      parameters = Map("udtClass" -> fakeUdtClass))
   }
 
   def checkDataTypeFromJson(dataType: DataType): Unit = {
@@ -1459,7 +1522,7 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("Parse time(n) as TimeType(n)") {
-    0 to 6 foreach { n =>
+    TimeType.MIN_PRECISION to TimeType.MAX_PRECISION foreach { n =>
       assert(DataType.fromJson(s"\"time($n)\"") == TimeType(n))
       val expectedStructType = StructType(Seq(StructField("t", TimeType(n))))
       assert(DataType.fromDDL(s"t time($n)") == expectedStructType)
@@ -1467,10 +1530,10 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        DataType.fromJson("\"time(9)\"")
+        DataType.fromJson("\"time(10)\"")
       },
       condition = "INVALID_JSON_DATA_TYPE",
-      parameters = Map("invalidType" -> "time(9)"))
+      parameters = Map("invalidType" -> "time(10)"))
     checkError(
       exception = intercept[ParseException] {
         DataType.fromDDL("t time(-1)")
@@ -1556,6 +1619,16 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
       assert(DataType.fromJson(arrayOfNanos.json) === arrayOfNanos)
       val mapOfNanos = MapType(StringType, TimestampNTZNanosType(7), valueContainsNull = true)
       assert(DataType.fromJson(mapOfNanos.json) === mapOfNanos)
+
+      // Family B agrees with Family A: a nanos type's typeName re-parses (as a JSON name) to
+      // the same type. For atomic types `json` is exactly the quoted `typeName`, so this pins
+      // the type-name spelling that Family A produces against Family B's JSON parser.
+      variants.foreach { case (_, _, factory) =>
+        TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { n =>
+          val t = factory(n)
+          assert(DataType.fromJson("\"" + t.typeName + "\"") === t)
+        }
+      }
     }
 
     // Bare names without parens still map to the legacy single-precision types, regardless

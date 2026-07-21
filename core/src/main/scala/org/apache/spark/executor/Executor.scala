@@ -1027,6 +1027,9 @@ private[spark] class Executor(
         setTaskFinishedAndClearInterruptStatus()
         plugins.foreach(_.onTaskSucceeded())
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
+        Utils.tryLogNonFatalError {
+          task.context.invokePostStatusUpdateListeners()
+        }
       } catch {
         case t: TaskKilledException =>
           logInfo(log"Executor killed ${MDC(TASK_NAME, taskName)}," +

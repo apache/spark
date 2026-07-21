@@ -22,7 +22,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.{MultiAlias, UnresolvedAlias}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Generator, NamedExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Generator, NamedExpression, Unevaluable, WindowFunction}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.parser.{ParserInterface, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -186,7 +186,12 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
             case ColumnNodeExpression(node) => apply(node)
           }
           transformed match {
-            case f: AggregateFunction => f.toAggregateExpression()
+            // A window function (e.g. an AggregateWindowFunction) is also an AggregateFunction, but
+            // it must not be wrapped in an AggregateExpression: it is used directly as the child of
+            // a WindowExpression. Wrapping it would later fail analysis with
+            // WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE.
+            case f: AggregateFunction if !f.isInstanceOf[WindowFunction] =>
+              f.toAggregateExpression()
             case _ => transformed
           }
 

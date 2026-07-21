@@ -503,6 +503,50 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
+  test("isValidErrorClass with a main class that has no sub-classes") {
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      Files.writeString(json.toPath(),
+        """
+          |{
+          |  "MAIN_NO_SUBCLASS" : {
+          |    "message" : [
+          |      "abc"
+          |    ]
+          |  },
+          |  "MAIN_WITH_SUBCLASS" : {
+          |    "message" : [
+          |      "abc"
+          |    ],
+          |    "subClass" : {
+          |      "VALID_SUB" : {
+          |        "message" : [
+          |          "def"
+          |        ]
+          |      }
+          |    }
+          |  }
+          |}
+          |""".stripMargin, StandardCharsets.UTF_8)
+      val reader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      // A main class with no sub-classes is valid on its own, but querying it with a sub-class
+      // must return false rather than throw NoSuchElementException (reachable from user SQL).
+      assert(reader.isValidErrorClass("MAIN_NO_SUBCLASS"))
+      assert(!reader.isValidErrorClass("MAIN_NO_SUBCLASS.NON_EXISTENT"))
+      // A main class that does define sub-classes: main-only and a valid sub are valid; an
+      // unknown sub is not.
+      assert(reader.isValidErrorClass("MAIN_WITH_SUBCLASS"))
+      assert(reader.isValidErrorClass("MAIN_WITH_SUBCLASS.VALID_SUB"))
+      assert(!reader.isValidErrorClass("MAIN_WITH_SUBCLASS.NON_EXISTENT_SUB"))
+      // Unknown main class: well-formed but not registered.
+      assert(!reader.isValidErrorClass("NON_EXISTENT"))
+      assert(!reader.isValidErrorClass("NON_EXISTENT.SUB"))
+      // Malformed: empty string or more than two parts.
+      assert(!reader.isValidErrorClass(""))
+      assert(!reader.isValidErrorClass("MAIN_NO_SUBCLASS.X.Y"))
+    }
+  }
+
   test("breaking changes info") {
     assert(SparkThrowableHelper.getBreakingChangeInfo(null).isEmpty)
 

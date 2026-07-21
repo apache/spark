@@ -192,6 +192,11 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
     _FUNC_(expr) - Returns the inverse cosine (a.k.a. arc cosine) of `expr`, as if computed by
       `java.lang.Math._FUNC_`.
   """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the inverse cosine of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -209,6 +214,11 @@ case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS"
   usage = """
     _FUNC_(expr) - Returns the inverse sine (a.k.a. arc sine) the arc sin of `expr`,
       as if computed by `java.lang.Math._FUNC_`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the inverse sine of.
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -228,6 +238,11 @@ case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN"
     _FUNC_(expr) - Returns the inverse tangent (a.k.a. arc tangent) of `expr`, as if computed by
       `java.lang.Math._FUNC_`
   """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the inverse tangent of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -241,6 +256,11 @@ case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN"
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the cube root of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the cube root of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(27.0);
@@ -252,7 +272,8 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
   override protected def withNewChildInternal(newChild: Expression): Cbrt = copy(child = newChild)
 }
 
-case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
+case class Ceil(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends UnaryMathExpression(math.ceil, "CEIL") with SupportQueryContext {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
@@ -260,11 +281,17 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
     case _ => LongType
   }
 
+  override def initQueryContext(): Option[QueryContext] = {
+    if (failOnError) Some(origin.context) else None
+  }
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
+    case DoubleType if failOnError =>
+      MathUtils.doubleToLong(f(input.asInstanceOf[Double]), getContextOrNull())
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].ceil
   }
@@ -275,6 +302,10 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.ceil()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
+      case DoubleType if failOnError =>
+        val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
+        defineCodeGen(ctx, ev, c =>
+          s"$mathUtils.doubleToLong(java.lang.Math.$funcName($c), ${getContextOrNullCode(ctx)})")
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
@@ -308,6 +339,13 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, scale]) - Returns the smallest number after rounding up that is not smaller than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
+  arguments = """
+    Arguments:
+      * expr - The expression to round up.
+        An expression that evaluates to a numeric.
+      * scale - The number of decimal places to round to.
+        An expression that evaluates to an integer. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -349,6 +387,7 @@ case class RoundCeil(child: Expression, scale: Expression)
   arguments = """
     Arguments:
       * expr - angle in radians
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -368,6 +407,7 @@ case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS") {
   arguments = """
     Arguments:
       * expr - angle in radians
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -392,6 +432,7 @@ case class Sec(child: Expression)
   arguments = """
     Arguments:
       * expr - hyperbolic angle
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -407,6 +448,11 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Returns inverse hyperbolic cosine of `expr`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the inverse hyperbolic cosine of.
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -436,6 +482,15 @@ case class Acosh(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(num, from_base, to_base) - Convert `num` from `from_base` to `to_base`.",
+  arguments = """
+    Arguments:
+      * num - The number to convert.
+        An expression that evaluates to a string.
+      * from_base - The base the number is currently in.
+        An expression that evaluates to an integer.
+      * to_base - The base to convert the number to.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('100', 2, 10);
@@ -501,6 +556,11 @@ case class Conv(
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns e to the power of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The exponent to raise e to.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -517,6 +577,11 @@ case class Exp(child: Expression) extends UnaryMathExpression(StrictMath.exp, "E
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns exp(`expr`) - 1.",
+  arguments = """
+    Arguments:
+      * expr - The exponent used to compute exp(expr) - 1.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -531,7 +596,8 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
   override protected def withNewChildInternal(newChild: Expression): Expm1 = copy(child = newChild)
 }
 
-case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
+case class Floor(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends UnaryMathExpression(math.floor, "FLOOR") with SupportQueryContext {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
@@ -539,11 +605,17 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
     case _ => LongType
   }
 
+  override def initQueryContext(): Option[QueryContext] = {
+    if (failOnError) Some(origin.context) else None
+  }
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
+    case DoubleType if failOnError =>
+      MathUtils.doubleToLong(f(input.asInstanceOf[Double]), getContextOrNull())
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].floor
   }
@@ -554,16 +626,27 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.floor()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
+      case DoubleType if failOnError =>
+        val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
+        defineCodeGen(ctx, ev, c =>
+          s"$mathUtils.doubleToLong(java.lang.Math.$funcName($c), ${getContextOrNullCode(ctx)})")
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
- }
- override protected def withNewChildInternal(newChild: Expression): Floor =
-  copy(child = newChild)
+  }
+  override protected def withNewChildInternal(newChild: Expression): Floor =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = " _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
+  arguments = """
+    Arguments:
+      * expr - The expression to round down.
+        An expression that evaluates to a numeric.
+      * scale - The number of decimal places to round to.
+        An expression that evaluates to an integer. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -630,6 +713,11 @@ object Factorial {
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the factorial of `expr`. `expr` is [0..20]. Otherwise, null.",
+  arguments = """
+    Arguments:
+      * expr - The integer between 0 and 20 to compute the factorial of.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(5);
@@ -676,6 +764,11 @@ case class Factorial(child: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the natural logarithm (base e) of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the natural logarithm of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -690,6 +783,11 @@ case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LO
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the logarithm of `expr` with base 2.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the base-2 logarithm of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(2);
@@ -715,6 +813,11 @@ case class Log2(child: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the logarithm of `expr` with base 10.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the base-10 logarithm of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(10);
@@ -728,6 +831,11 @@ case class Log10(child: Expression) extends UnaryLogExpression(StrictMath.log10,
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns log(1 + `expr`).",
+  arguments = """
+    Arguments:
+      * expr - The expression used to compute log(1 + expr).
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -743,6 +851,11 @@ case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p,
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the double value that is closest in value to the argument and is equal to a mathematical integer.",
+  arguments = """
+    Arguments:
+      * expr - The value to round to the closest mathematical integer.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(12.3456);
@@ -759,6 +872,11 @@ case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns -1.0, 0.0 or 1.0 as `expr` is negative, 0 or positive.",
+  arguments = """
+    Arguments:
+      * expr - The expression whose sign is returned.
+        An expression that evaluates to a double or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(40);
@@ -782,6 +900,7 @@ case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "S
   arguments = """
     Arguments:
       * expr - angle in radians
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -801,6 +920,7 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN") {
   arguments = """
     Arguments:
       * expr - angle in radians
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -824,6 +944,7 @@ case class Csc(child: Expression)
   arguments = """
     Arguments:
       * expr - hyperbolic angle
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -839,6 +960,11 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Returns inverse hyperbolic sine of `expr`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the inverse hyperbolic sine of.
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -859,6 +985,11 @@ case class Asinh(child: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the square root of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the square root of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(4);
@@ -877,6 +1008,7 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
   arguments = """
     Arguments:
       * expr - angle in radians
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -896,6 +1028,7 @@ case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN") {
   arguments = """
     Arguments:
       * expr - angle in radians
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -920,6 +1053,7 @@ case class Cot(child: Expression)
   arguments = """
     Arguments:
       * expr - hyperbolic angle
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -935,6 +1069,11 @@ case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH"
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Returns inverse hyperbolic tangent of `expr`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the inverse hyperbolic tangent of.
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -961,6 +1100,7 @@ case class Atanh(child: Expression)
   arguments = """
     Arguments:
       * expr - angle in radians
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -980,6 +1120,7 @@ case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegre
   arguments = """
     Arguments:
       * expr - angle in degrees
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -997,6 +1138,11 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the string representation of the long value `expr` represented in binary.",
+  arguments = """
+    Arguments:
+      * expr - The long value to represent in binary.
+        An expression that evaluates to a long.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(13);
@@ -1112,6 +1258,11 @@ object Hex {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Converts `expr` to hexadecimal.",
+  arguments = """
+    Arguments:
+      * expr - The expression to convert to hexadecimal.
+        An expression that evaluates to a long, binary, or string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(17);
@@ -1162,6 +1313,11 @@ case class Hex(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Converts hexadecimal `expr` to binary.",
+  arguments = """
+    Arguments:
+      * expr - The hexadecimal expression to convert to binary.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT decode(_FUNC_('537061726B2053514C'), 'UTF-8');
@@ -1226,7 +1382,9 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
   arguments = """
     Arguments:
       * exprY - coordinate on y-axis
+        An expression that evaluates to a double.
       * exprX - coordinate on x-axis
+        An expression that evaluates to a double.
   """,
   examples = """
     Examples:
@@ -1253,6 +1411,13 @@ case class Atan2(left: Expression, right: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Raises `expr1` to the power of `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The base to be raised to a power.
+        An expression that evaluates to a double.
+      * expr2 - The exponent to raise the base to.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(2, 3);
@@ -1314,6 +1479,13 @@ sealed trait BitShiftOperation
  */
 @ExpressionDescription(
   usage = "base _FUNC_ exp - Bitwise left shift.",
+  arguments = """
+    Arguments:
+      * base - The value whose bits are shifted left.
+        An expression that evaluates to an integer or long.
+      * exp - The number of positions to shift left by.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT shiftleft(2, 1);
@@ -1343,6 +1515,13 @@ case class ShiftLeft(left: Expression, right: Expression) extends BitShiftOperat
  */
 @ExpressionDescription(
   usage = "base _FUNC_ expr - Bitwise (signed) right shift.",
+  arguments = """
+    Arguments:
+      * base - The value whose bits are shifted right.
+        An expression that evaluates to an integer or long.
+      * expr - The number of positions to shift right by.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT shiftright(4, 1);
@@ -1371,6 +1550,13 @@ case class ShiftRight(left: Expression, right: Expression) extends BitShiftOpera
  */
 @ExpressionDescription(
   usage = "base _FUNC_ expr - Bitwise unsigned right shift.",
+  arguments = """
+    Arguments:
+      * base - The value whose bits are shifted right without sign extension.
+        An expression that evaluates to an integer or long.
+      * expr - The number of positions to shift right by.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT shiftrightunsigned(4, 1);
@@ -1395,6 +1581,13 @@ case class ShiftRightUnsigned(left: Expression, right: Expression) extends BitSh
 // scalastyle:off nonascii
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`\u00B2 + `expr2`\u00B2).",
+  arguments = """
+    Arguments:
+      * expr1 - The first value whose square is summed.
+        An expression that evaluates to a double.
+      * expr2 - The second value whose square is summed.
+        An expression that evaluates to a double.
+  """,
   // scalastyle:on nonascii
   examples = """
     Examples:
@@ -1418,6 +1611,13 @@ case class Hypot(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(base, expr) - Returns the logarithm of `expr` with `base`.",
+  arguments = """
+    Arguments:
+      * base - The base of the logarithm.
+        An expression that evaluates to a double.
+      * expr - The expression to compute the logarithm of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(10, 100);
@@ -1701,6 +1901,13 @@ abstract class RoundBase(child: Expression, scale: Expression,
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr, d) - Returns `expr` rounded to `d` decimal places using HALF_UP rounding mode.",
+  arguments = """
+    Arguments:
+      * expr - The expression to round.
+        An expression that evaluates to a numeric.
+      * d - The number of decimal places to round to.
+        An expression that evaluates to an integer. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
@@ -1732,6 +1939,13 @@ case class Round(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr, d) - Returns `expr` rounded to `d` decimal places using HALF_EVEN rounding mode.",
+  arguments = """
+    Arguments:
+      * expr - The expression to round.
+        An expression that evaluates to a numeric.
+      * d - The number of decimal places to round to.
+        An expression that evaluates to an integer. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(2.5, 0);
@@ -1825,6 +2039,17 @@ object WidthBucket {
     _FUNC_(value, min_value, max_value, num_bucket) - Returns the bucket number to which
       `value` would be assigned in an equiwidth histogram with `num_bucket` buckets,
       in the range `min_value` to `max_value`."
+  """,
+  arguments = """
+    Arguments:
+      * value - The value to assign to a bucket.
+        An expression that evaluates to a double or interval.
+      * min_value - The minimum value of the histogram range.
+        An expression that evaluates to a double or interval.
+      * max_value - The maximum value of the histogram range.
+        An expression that evaluates to a double or interval.
+      * num_bucket - The number of equiwidth buckets in the histogram.
+        An expression that evaluates to a long.
   """,
   examples = """
     Examples:

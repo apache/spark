@@ -300,6 +300,19 @@ class UDFProfiler2TestsMixin:
             for id in self.profile_results:
                 self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=10)
 
+    def test_perf_profiler_udf_without_module(self):
+        @udf("long")
+        def add1(x):
+            return x + 1
+
+        add1.__module__ = None
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            df = self.spark.range(10, numPartitions=2).select(add1("id"))
+            df.collect()
+
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
+
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
         pandas_requirement_message or pyarrow_requirement_message,

@@ -419,7 +419,7 @@ def _write_rst(
     all_supported_status : Dict
         Collected support status data.
     """
-    with open(output_rst_file_path, "w") as w_fd:
+    with open(output_rst_file_path, "w", encoding="utf-8") as w_fd:
         w_fd.write(RST_HEADER)
         for module_info, supported_status in all_supported_status.items():
             module, module_path = module_info

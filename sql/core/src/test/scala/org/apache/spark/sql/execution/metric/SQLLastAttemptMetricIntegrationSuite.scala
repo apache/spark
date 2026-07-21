@@ -703,3 +703,23 @@ class SQLLastAttemptMetricIntegrationSuiteWithStageRetries
     }(pos)
   }
 }
+
+class SQLLastAttemptMetricIntegrationSuiteWithChecksumMismatch
+    extends SQLLastAttemptMetricIntegrationSuite {
+  override protected def withRetries = true
+
+  override protected def test(
+      testName: String,
+      testTags: org.scalatest.Tag*)
+      (testFun: => Any)
+      (implicit pos: org.scalactic.source.Position): Unit = {
+    super.test(testName, testTags : _*) {
+      withSparkContextConf(
+          config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true",
+          config.Tests.INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE.key -> "true") {
+        // Forced checksum-mismatch rollback should also not affect SLAM metrics.
+        testFun
+      }
+    }(pos)
+  }
+}

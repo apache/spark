@@ -716,11 +716,11 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   def getTableCommentQuery(table: String, comment: String): String = {
-    s"COMMENT ON TABLE $table IS '$comment'"
+    s"COMMENT ON TABLE $table IS '${escapeSql(comment)}'"
   }
 
   def getSchemaCommentQuery(schema: String, comment: String): String = {
-    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '$comment'"
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '${escapeSql(comment)}'"
   }
 
   def removeSchemaCommentQuery(schema: String): String = {
@@ -807,6 +807,15 @@ abstract class JdbcDialect extends Serializable with Logging {
   def isObjectNotFoundException(e: SQLException): Boolean = {
     Option(e.getSQLState).exists(_.startsWith("42"))
   }
+
+  /**
+   * Returns true if the given exception indicates the object exists but cannot be read as a
+   * table or view (e.g. a synonym that resolves to a procedure, or an invalid view), as opposed
+   * to not existing at all (see `isObjectNotFoundException`). Dialects override this to recognize
+   * their own error codes; the default is false.
+   */
+  @Since("4.3.0")
+  def isNotSelectableObjectException(e: SQLException): Boolean = false
 
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.

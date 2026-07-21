@@ -35,6 +35,9 @@ import org.apache.spark.sql.types.StringType
  * Analysis rule that resolves and executes EXECUTE IMMEDIATE statements during analysis,
  * replacing them with the results, similar to how CALL statements work.
  * This rule combines resolution and execution in a single pass.
+ *
+ * When sub-expressions are not yet resolved, the node is returned unchanged so that the
+ * fixed-point analyzer re-applies this rule on the next iteration.
  */
 case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: CatalogManager)
   extends Rule[LogicalPlan] {
@@ -43,21 +46,43 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
     plan.resolveOperatorsWithPruning(_.containsPattern(EXECUTE_IMMEDIATE), ruleId) {
       case node @ UnresolvedExecuteImmediate(sqlStmtStr, args, targetVariables) =>
         if (sqlStmtStr.resolved && targetVariables.forall(_.resolved) && args.forall(_.resolved)) {
-          // All resolved - execute immediately and handle INTO clause if present
-          if (targetVariables.nonEmpty) {
-            // EXECUTE IMMEDIATE ... INTO should generate SetVariable plan with eagerly executed
-            // source
-            val finalTargetVars = extractTargetVariables(targetVariables)
-            val executedSource = executeImmediateQuery(sqlStmtStr, args, hasIntoClause = true)
-            SetVariable(finalTargetVars, executedSource)
-          } else {
-            // Regular EXECUTE IMMEDIATE without INTO - execute and return result directly
-            executeImmediateQuery(sqlStmtStr, args, hasIntoClause = false)
-          }
+          ResolveExecuteImmediate.resolveExecuteImmediate(
+            sparkSession, sqlStmtStr, args, targetVariables)
         } else {
-          // Not all resolved yet - wait for next iteration
           node
         }
+    }
+  }
+}
+
+/**
+ * Companion object containing shared resolution logic for `EXECUTE IMMEDIATE` statements.
+ */
+object ResolveExecuteImmediate {
+
+  /**
+   * Resolves an [[UnresolvedExecuteImmediate]] node into an executable plan.
+   *
+   * All expressions (`sqlStmtStr`, `args`, `targetVariables`) must already be resolved
+   * before calling this method.
+   *
+   * When an `INTO` clause is present, the dynamic SQL is eagerly parsed and analyzed, and
+   * the analyzed plan is wrapped in a [[SetVariable]] plan that assigns output columns to
+   * the target variables. Without `INTO`, the resulting plan is returned directly
+   * (commands are executed eagerly; queries are returned analyzed but unexecuted).
+   */
+  def resolveExecuteImmediate(
+      sparkSession: SparkSession,
+      sqlStmtStr: Expression,
+      args: Seq[Expression],
+      targetVariables: Seq[Expression]): LogicalPlan = {
+    if (targetVariables.nonEmpty) {
+      val finalTargetVars = extractTargetVariables(targetVariables)
+      val executedSource = executeImmediateQuery(
+        sparkSession, sqlStmtStr, args, hasIntoClause = true)
+      SetVariable(finalTargetVars, executedSource)
+    } else {
+      executeImmediateQuery(sparkSession, sqlStmtStr, args, hasIntoClause = false)
     }
   }
 
@@ -81,6 +106,7 @@ case class ResolveExecuteImmediate(sparkSession: SparkSession, catalogManager: C
   }
 
   private def executeImmediateQuery(
+      sparkSession: SparkSession,
       sqlStmtStr: Expression,
       args: Seq[Expression],
       hasIntoClause: Boolean): LogicalPlan = {

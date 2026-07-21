@@ -22,7 +22,7 @@ import org.apache.spark.sql.execution.command
 class AlterViewUnsetTblPropertiesSuite
   extends command.AlterViewUnsetTblPropertiesSuiteBase with ViewCommandSuiteBase {
 
-  test("V2: unset removes the entry from the stored ViewInfo") {
+  test("V2: unset removes the entry from the stored View") {
     val view = s"$catalog.$namespace.v2_unset_view_info"
     createViewWithProps(view, "k" -> "v")
     sql(s"ALTER VIEW $view UNSET TBLPROPERTIES ('k')")

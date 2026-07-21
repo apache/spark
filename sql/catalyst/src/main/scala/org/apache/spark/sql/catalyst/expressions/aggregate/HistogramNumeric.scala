@@ -78,11 +78,11 @@ case class HistogramNumeric(
   private lazy val propagateInputType: Boolean = SQLConf.get.histogramNumericPropagateInputType
 
   override def inputTypes: Seq[AbstractDataType] = {
-    // Support NumericType, DateType, TimestampType and TimestampNTZType, YearMonthIntervalType,
-    // DayTimeIntervalType since their internal types are all numeric,
+    // Support NumericType, DateType, TimestampType, TimestampNTZType, TimeType,
+    // YearMonthIntervalType, DayTimeIntervalType since their internal types are all numeric,
     // and can be easily cast to double for processing.
     Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
-      YearMonthIntervalType, DayTimeIntervalType), IntegerType)
+      YearMonthIntervalType, DayTimeIntervalType, AnyTimeType), IntegerType)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -163,7 +163,8 @@ case class HistogramNumeric(
               coord.x.toInt
             case FloatType => coord.x.toFloat
             case ShortType => coord.x.toShort
-            case _: DayTimeIntervalType | LongType | TimestampType | TimestampNTZType =>
+            case _: DayTimeIntervalType | LongType | TimestampType | TimestampNTZType
+                | _: TimeType =>
               coord.x.toLong
             case d: DecimalType =>
               val bigDecimal = BigDecimal

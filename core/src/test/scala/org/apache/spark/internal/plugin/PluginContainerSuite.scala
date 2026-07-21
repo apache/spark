@@ -244,8 +244,9 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext(conf)
       val memoryManager = sc.env.memoryManager
 
-      assert(memoryManager.tungstenMemoryMode == MemoryMode.OFF_HEAP)
-      assert(memoryManager.maxOffHeapStorageMemory == MemoryOverridePlugin.offHeapMemory)
+      // SPARK-57867: The driver does not reserve off-heap memory in non-local mode
+      assert(memoryManager.tungstenMemoryMode == MemoryMode.ON_HEAP)
+      assert(memoryManager.maxOffHeapStorageMemory == 0)
 
       val defaultResourceProfile = sc.resourceProfileManager.defaultResourceProfile
       assert(512L ==
@@ -259,8 +260,12 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
 
       // Check executor memory is also updated
-      val execInfo = sc.statusTracker.getExecutorInfos.head
-      assert(execInfo.totalOffHeapStorageMemory() == MemoryOverridePlugin.offHeapMemory)
+      eventually(timeout(10.seconds), interval(100.milliseconds)) {
+        val execs = sc.statusStore.executorList(true).filter(_.id != SparkContext.DRIVER_IDENTIFIER)
+        assert(execs.nonEmpty)
+        assert(execs.forall(_.memoryMetrics.exists(
+          _.totalOffHeapStorageMemory == MemoryOverridePlugin.offHeapMemory)))
+      }
     } finally {
       if (sc != null) {
         sc.stop()

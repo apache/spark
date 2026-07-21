@@ -62,12 +62,13 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
     zlib1g-dev \
+    zstd \
     && rm -rf /var/lib/apt/lists/*
 
-RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
+RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
-RUN gpg -a --export E084DAB9 | apt-key add -
-RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
+RUN gpg -a --export E084DAB9 > /etc/apt/trusted.gpg.d/cran.asc
+RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/'
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown',  \

@@ -28,6 +28,7 @@ Data Definition Statements are used to create or modify the structure of databas
  * [ALTER DATABASE](sql-ref-syntax-ddl-alter-database.html)
  * [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)
  * [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
+ * [COMMENT ON](sql-ref-syntax-ddl-comment.html)
  * [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
  * [CREATE FUNCTION (External)](sql-ref-syntax-ddl-create-function.html)
  * [CREATE FUNCTION (SQL)](sql-ref-syntax-ddl-create-sql-function.html)
@@ -49,6 +50,7 @@ Data Manipulation Statements are used to add, change, or delete data. Spark SQL 
 
  * [INSERT TABLE](sql-ref-syntax-dml-insert-table.html)
  * [INSERT OVERWRITE DIRECTORY](sql-ref-syntax-dml-insert-overwrite-directory.html)
+ * [MERGE INTO](sql-ref-syntax-dml-merge-into.html)
  * [LOAD](sql-ref-syntax-dml-load.html)
 
 ### Data Retrieval Statements

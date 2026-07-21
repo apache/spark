@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.ViewAlreadyExistsException;
  * Catalog API for connectors that expose views.
  * <p>
  * Connectors that expose <i>only</i> views implement this interface. Connectors that expose
- * both tables and views must implement {@link TableViewCatalog} (which extends both this
+ * both tables and views must implement {@link RelationCatalog} (which extends both this
  * interface and {@link TableCatalog} and adds the cross-cutting contract for the combined
  * case); the methods on this interface remain view-only -- they do not interact with tables.
  * <p>
@@ -53,7 +53,7 @@ public interface ViewCatalog extends CatalogPlugin {
    * @return the view metadata
    * @throws NoSuchViewException if the view does not exist
    */
-  ViewInfo loadView(Identifier ident) throws NoSuchViewException;
+  View loadView(Identifier ident) throws NoSuchViewException;
 
   /**
    * Test whether a view exists.
@@ -93,7 +93,7 @@ public interface ViewCatalog extends CatalogPlugin {
    * @throws ViewAlreadyExistsException if a view already exists at {@code ident}
    * @throws NoSuchNamespaceException   if the identifier's namespace does not exist (optional)
    */
-  ViewInfo createView(Identifier ident, ViewInfo info)
+  View createView(Identifier ident, View info)
       throws ViewAlreadyExistsException, NoSuchNamespaceException;
 
   /**
@@ -108,7 +108,7 @@ public interface ViewCatalog extends CatalogPlugin {
    * @return the metadata of the replaced view; may equal {@code info}
    * @throws NoSuchViewException if no view exists at {@code ident}
    */
-  ViewInfo replaceView(Identifier ident, ViewInfo info) throws NoSuchViewException;
+  View replaceView(Identifier ident, View info) throws NoSuchViewException;
 
   /**
    * Create a view if one does not exist at {@code ident}, or atomically replace it if one does.
@@ -126,10 +126,10 @@ public interface ViewCatalog extends CatalogPlugin {
    *                                    concurrent {@code CREATE VIEW} won the race in the
    *                                    default impl's gap between {@link #replaceView} and
    *                                    the fallback {@link #createView}, or, in a
-   *                                    {@link TableViewCatalog}, a table sits at {@code ident}
+   *                                    {@link RelationCatalog}, a table sits at {@code ident}
    * @throws NoSuchNamespaceException   if the identifier's namespace does not exist (optional)
    */
-  default ViewInfo createOrReplaceView(Identifier ident, ViewInfo info)
+  default View createOrReplaceView(Identifier ident, View info)
       throws ViewAlreadyExistsException, NoSuchNamespaceException {
     try {
       return replaceView(ident, info);
@@ -152,12 +152,12 @@ public interface ViewCatalog extends CatalogPlugin {
    * If the catalog supports tables and contains a table at the new identifier, this must throw
    * {@link ViewAlreadyExistsException}. If the source identifier resolves to a table rather than
    * a view, this must throw {@link NoSuchViewException}. The cross-type contract for catalogs
-   * that expose both tables and views lives on {@link TableViewCatalog}.
+   * that expose both tables and views lives on {@link RelationCatalog}.
    *
    * @param oldIdent the view identifier of the existing view to rename
    * @param newIdent the new view identifier
    * @throws NoSuchViewException        if no view exists at {@code oldIdent}
-   * @throws ViewAlreadyExistsException if a view (or, in a {@link TableViewCatalog}, a table)
+   * @throws ViewAlreadyExistsException if a view (or, in a {@link RelationCatalog}, a table)
    *                                    already exists at {@code newIdent}
    */
   void renameView(Identifier oldIdent, Identifier newIdent)

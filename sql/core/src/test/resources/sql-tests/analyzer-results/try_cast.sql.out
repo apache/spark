@@ -200,3 +200,31 @@ SELECT TRY_CAST("2021-101-01 00:00:00" AS timestamp)
 -- !query analysis
 Project [try_cast(2021-101-01 00:00:00 as timestamp) AS TRY_CAST(2021-101-01 00:00:00 AS TIMESTAMP)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT TRY_CAST("12:34:56" AS time)
+-- !query analysis
+Project [try_cast(12:34:56 as time(6)) AS TRY_CAST(12:34:56 AS TIME(6))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TRY_CAST("12:34:56.789012" AS time(6))
+-- !query analysis
+Project [try_cast(12:34:56.789012 as time(6)) AS TRY_CAST(12:34:56.789012 AS TIME(6))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TRY_CAST("24:00:00" AS time)
+-- !query analysis
+Project [try_cast(24:00:00 as time(6)) AS TRY_CAST(24:00:00 AS TIME(6))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TRY_CAST("12:34:56 abc" AS time)
+-- !query analysis
+Project [try_cast(12:34:56 abc as time(6)) AS TRY_CAST(12:34:56 abc AS TIME(6))#x]
++- OneRowRelation

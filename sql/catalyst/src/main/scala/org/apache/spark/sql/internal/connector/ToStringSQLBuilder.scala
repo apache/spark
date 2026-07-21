@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.sql.connector.expressions.GetArrayItem
+import org.apache.spark.sql.connector.expressions.VariantGet
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 
 /**
@@ -39,5 +40,14 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
 
   override protected def visitGetArrayItem(getArrayItem: GetArrayItem): String = {
     s"${getArrayItem.childArray.toString}[${getArrayItem.ordinal.toString}]"
+  }
+
+  override protected def visitVariantGet(variantGet: VariantGet): String = {
+    val funcName = if (variantGet.failOnError()) "variant_get" else "try_variant_get"
+    val col = variantGet.child()
+    val path = variantGet.path()
+    val typ = variantGet.targetType().catalogString
+    val tz = Option(variantGet.timeZoneId()).map(z => s", tz=$z").getOrElse("")
+    s"$funcName($col, '$path', $typ$tz)"
   }
 }

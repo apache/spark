@@ -39,6 +39,16 @@ def main():
     )
     parser.add_argument("-c", "--component", help="Component for the issue")
     parser.add_argument(
+        "-d",
+        "--description",
+        help="Description text for the issue.",
+    )
+    parser.add_argument(
+        "--description-file",
+        help="Path to a file whose contents are used as the issue description "
+        "(mutually exclusive with --description).",
+    )
+    parser.add_argument(
         "--list-components", action="store_true", help="List available components and exit"
     )
     args = parser.parse_args()
@@ -60,9 +70,25 @@ def main():
     if not args.parent and not args.type:
         parser.error("-t/--type is required when not creating a subtask")
 
+    if args.description and args.description_file:
+        parser.error("--description and --description-file cannot be used together")
+
+    description = args.description or ""
+    if args.description_file:
+        try:
+            with open(args.description_file, encoding="utf-8") as f:
+                description = f.read()
+        except OSError as e:
+            parser.error("cannot read --description-file: %s" % e)
+
     asf_jira = get_jira_client()
     jira_id = create_jira_issue(
-        asf_jira, args.title, args.component, parent=args.parent, issue_type=args.type
+        asf_jira,
+        args.title,
+        args.component,
+        parent=args.parent,
+        issue_type=args.type,
+        description=description,
     )
     print(jira_id)
 

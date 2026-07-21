@@ -19,19 +19,18 @@ package org.apache.spark.sql.execution.python
 import java.io.DataOutputStream
 import java.nio.channels.Channels
 
-import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
-import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
+import org.apache.arrow.vector.compression.CompressionCodec
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow
-import org.apache.spark.sql.execution.arrow.{ArrowWriter, ArrowWriterWrapper}
+import org.apache.spark.sql.execution.arrow.{ArrowCompressionUtils, ArrowWriter, ArrowWriterWrapper}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -69,21 +68,8 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
   }
 
   // Create compression codec based on config
-  protected def codec: CompressionCodec = SQLConf.get.arrowCompressionCodec match {
-    case "none" => NoCompressionCodec.INSTANCE
-    case "zstd" =>
-      val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
-      val factory = CompressionCodec.Factory.INSTANCE
-      val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
-      factory.createCodec(codecType)
-    case "lz4" =>
-      val factory = CompressionCodec.Factory.INSTANCE
-      val codecType = new Lz4CompressionCodec().getCodecType()
-      factory.createCodec(codecType)
-    case other =>
-      throw SparkException.internalError(
-        s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
-  }
+  protected def codec: CompressionCodec = ArrowCompressionUtils.createCompressionCodec(
+    SQLConf.get.arrowCompressionCodec, SQLConf.get.arrowZstdCompressionLevel)
 
   protected var writer: ArrowStreamWriter = _
 

@@ -24,7 +24,6 @@ import scala.concurrent.duration.{Duration, MINUTES}
 import org.json4s.DefaultFormats
 
 import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.microsToMillis
 import org.apache.spark.sql.catalyst.util.SparkIntervalUtils
@@ -123,14 +122,12 @@ object ContinuousTrigger {
  * @param batchDurationMs
  *   The duration of each batch in milliseconds. This must be strictly positive.
  */
-@Experimental
 case class RealTimeTrigger(batchDurationMs: Long) extends Trigger {
   require(batchDurationMs > 0, "the batch duration should not be negative")
 
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 }
 
-@Experimental
 object RealTimeTrigger {
   import Triggers._
 

@@ -17,10 +17,9 @@
 
 package org.apache.spark.deploy.rest
 
+import java.nio.charset.StandardCharsets
 import java.util.EnumSet
 import java.util.concurrent.{Executors, ExecutorService}
-
-import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import jakarta.servlet.DispatcherType
@@ -34,7 +33,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.{MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
+import org.apache.spark.internal.config.{MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
 import org.apache.spark.util.Utils
 
 /**
@@ -43,6 +42,7 @@ import org.apache.spark.util.Utils
  * This server responds with different HTTP codes depending on the situation:
  *   200 OK - Request was processed successfully
  *   400 BAD REQUEST - Request was malformed, not successfully validated, or of unexpected type
+ *   413 REQUEST ENTITY TOO LARGE - Request body exceeded the configured maximum size
  *   468 UNKNOWN PROTOCOL VERSION - Request specified a protocol this server does not understand
  *   500 INTERNAL SERVER ERROR - Server throws an exception internally while processing the request
  *
@@ -358,6 +358,24 @@ private[rest] abstract class StatusRequestServlet extends RestServlet {
  */
 private[rest] abstract class SubmitRequestServlet extends RestServlet {
 
+  /** The maximum size in bytes of a request body this servlet will read. */
+  protected def maxRequestSizeBytes: Long =
+    MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE.defaultValue.get
+
+  /**
+   * Read the request body as a UTF-8 string, or return `None` if it exceeds `limit` bytes.
+   * The read is bounded so an oversized body cannot exhaust memory even when the
+   * Content-Length header is missing or understates the actual size.
+   */
+  private def readRequestBody(request: HttpServletRequest, limit: Long): Option[String] = {
+    if (request.getContentLengthLong > limit) {
+      None
+    } else {
+      val bytes = request.getInputStream.readNBytes(math.min(limit + 1, Int.MaxValue).toInt)
+      if (bytes.length > limit) None else Some(new String(bytes, StandardCharsets.UTF_8))
+    }
+  }
+
   /**
    * Submit an application to the Master with parameters specified in the request.
    *
@@ -368,9 +386,16 @@ private[rest] abstract class SubmitRequestServlet extends RestServlet {
   protected override def doPost(
       requestServlet: HttpServletRequest,
       responseServlet: HttpServletResponse): Unit = {
+    val limit = maxRequestSizeBytes
+    val requestMessageJson = readRequestBody(requestServlet, limit).getOrElse {
+      responseServlet.setStatus(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE)
+      val msg = s"The request body exceeds the maximum allowed size ($limit bytes). " +
+        s"Adjust ${MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE.key} to change the limit."
+      sendResponse(handleError(msg), responseServlet)
+      return
+    }
     val responseMessage =
       try {
-        val requestMessageJson = Source.fromInputStream(requestServlet.getInputStream).mkString
         val requestMessage = SubmitRestProtocolMessage.fromJson(requestMessageJson)
         // The response should have already been validated on the client.
         // In case this is not true, validate it ourselves to avoid potential NPEs.

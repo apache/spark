@@ -562,7 +562,7 @@ class ResolverGuard(
           _: Length | _: BitLength | _: OctetLength | _: Levenshtein | _: SoundEx | _: Ascii |
           _: Chr | _: Base64 | _: UnBase64 | _: Decode | _: StringDecode | _: Encode | _: ToBinary |
           _: FormatNumber | _: Sentences | _: StringSplitSQL | _: SplitPart | _: Empty2Null |
-          _: Luhncheck =>
+          _: Luhncheck | _: StringInstrWithOccurrence =>
         true
       // Datetime
       case _: CurrentTime | _: CurrentTimestampLike | _: TimeZoneAwareExpression =>

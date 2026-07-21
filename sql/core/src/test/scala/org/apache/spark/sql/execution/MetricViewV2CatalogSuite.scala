@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchViewException, ViewAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, MetadataTable, Table, TableCatalog, TableDependency, TableSummary, TableViewCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, Relation, RelationCatalog, TableCatalog, TableDependency, TableSummary, View}
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, Constants, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.Metadata
@@ -35,8 +35,8 @@ import org.apache.spark.sql.types.Metadata
  * [[org.apache.spark.sql.execution.datasources.v2.CreateV2MetricViewExec]]).
  * Metric views are persisted through the same [[ViewCatalog]] interface
  * as plain views; the only marker that distinguishes them is `PROP_TABLE_TYPE = METRIC_VIEW`
- * plus the typed `viewDependencies` field on [[ViewInfo]]. The recording catalog used here is a
- * minimal [[TableViewCatalog]] so the same instance can also host the source table referenced by
+ * plus the typed `viewDependencies` field on [[View]]. The recording catalog used here is a
+ * minimal [[RelationCatalog]] so the same instance can also host the source table referenced by
  * the metric view's YAML.
  */
 class MetricViewV2CatalogSuite extends SharedSparkSession {
@@ -121,11 +121,11 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
     yaml
   }
 
-  private def capturedViewInfo(): ViewInfo = {
+  private def capturedViewInfo(): View = {
     val ident = Identifier.of(Array(testNamespace), metricViewName)
     val info = MetricViewRecordingCatalog.capturedViews.get(ident)
     assert(info != null,
-      s"Expected ViewInfo for $ident to be captured by the V2 catalog")
+      s"Expected View for $ident to be captured by the V2 catalog")
     info
   }
 
@@ -134,7 +134,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
   // ============================================================
 
 
-  test("V2 catalog receives METRIC_VIEW table type and view text via ViewInfo") {
+  test("V2 catalog receives METRIC_VIEW table type and view text via View") {
     withTestCatalogTables {
       val metricView = MetricView(
         "0.1",
@@ -144,7 +144,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
       val yaml = createMetricView(fullMetricViewName, metricView)
 
       val info = capturedViewInfo()
-      // PROP_TABLE_TYPE is overwritten to METRIC_VIEW after `ViewInfo`'s constructor stamps it
+      // PROP_TABLE_TYPE is overwritten to METRIC_VIEW after `View`'s constructor stamps it
       // to VIEW; this is the marker `V1Table.toCatalogTable` reads to map the round-tripped row
       // back to `CatalogTableType.METRIC_VIEW`.
       assert(info.properties().get(TableCatalog.PROP_TABLE_TYPE)
@@ -163,7 +163,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
     }
   }
 
-  test("V2 catalog path populates metric_view.* + view context + sql configs on ViewInfo") {
+  test("V2 catalog path populates metric_view.* + view context + sql configs on View") {
     withTestCatalogTables {
       val metricView = MetricView(
         "0.1",
@@ -182,7 +182,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
       assert(props.get(MetricView.PROP_FROM_SQL) === null)
       assert(props.get(MetricView.PROP_WHERE) === "count > 0")
 
-      // SQL configs and current catalog/namespace are first-class typed fields on ViewInfo, no
+      // SQL configs and current catalog/namespace are first-class typed fields on View, no
       // longer encoded into properties for V2 catalogs.
       assert(info.sqlConfigs().size > 0,
         s"Expected at least one captured SQL config; got ${info.sqlConfigs()}")
@@ -336,7 +336,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
 
       // Now CREATE VIEW IF NOT EXISTS with a different YAML body. The catalog should not see
       // the second create at all (V2ViewPreparation's `viewExists` short-circuit fires before
-      // `buildViewInfo`), so the captured ViewInfo retains the original body.
+      // `buildViewInfo`), so the captured View retains the original body.
       val replacement = MetricView(
         "0.1",
         AssetSource(fullSourceTableName),
@@ -471,7 +471,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
 
         val deepIdent = Identifier.of(deepNamespace, deepMetricViewName)
         val info = MetricViewRecordingCatalog.capturedViews.get(deepIdent)
-        assert(info != null, s"Expected ViewInfo for $deepIdent to be captured")
+        assert(info != null, s"Expected View for $deepIdent to be captured")
         assert(info.properties().get(TableCatalog.PROP_TABLE_TYPE)
           === TableSummary.METRIC_VIEW_TABLE_TYPE)
       } finally {
@@ -607,7 +607,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
     val multiTable = "events_deep"
     val multiFull = s"$testCatalogName.${multiNamespace.mkString(".")}.$multiTable"
     withTestCatalogTables {
-      // The InMemoryTableCatalog (TableViewCatalog mixin) supports multi-level namespaces.
+      // The InMemoryTableCatalog (RelationCatalog mixin) supports multi-level namespaces.
       sql(s"CREATE NAMESPACE IF NOT EXISTS $testCatalogName.${multiNamespace.head}")
       sql(s"CREATE NAMESPACE IF NOT EXISTS " +
         s"$testCatalogName.${multiNamespace.mkString(".")}")
@@ -650,7 +650,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
       createMetricView(fullMetricViewName, mv)
       // The fixture's `events` source has rows ("region_1", 1, 5.0), ("region_2", 2, 10.0).
       // The metric view aggregates by `region` summing `count`. Resolution flows through
-      // loadTableOrView -> MetadataTable(ViewInfo) -> V1Table.toCatalogTable(ViewInfo) ->
+      // loadRelation -> DelegatingTable(View) -> V1Table.toCatalogTable(View) ->
       // CatalogTableType.METRIC_VIEW -> ResolveMetricView, which rewrites the view body
       // into Aggregate(Seq(region), Seq(sum(count) AS count_sum)) over `events`. The
       // `measure(...)` wrapper is required for measure columns -- selecting `count_sum`
@@ -740,7 +740,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
   // ============================================================
 
 
-  test("DESCRIBE TABLE EXTENDED on a v2 metric view round-trips through loadTableOrView") {
+  test("DESCRIBE TABLE EXTENDED on a v2 metric view round-trips through loadRelation") {
     withTestCatalogTables {
       val mv = MetricView(
         "0.1",
@@ -750,10 +750,10 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
       val yaml = createMetricView(fullMetricViewName, mv)
 
       // DESCRIBE TABLE EXTENDED resolves the ident through `Analyzer.lookupTableOrView`,
-      // which calls `TableViewCatalog.loadTableOrView` once and gets back a
-      // `MetadataTable(ViewInfo)`. The analyzer wraps it as a `ResolvedPersistentView` and
+      // which calls `RelationCatalog.loadRelation` once and gets back a
+      // `DelegatingTable(View)`. The analyzer wraps it as a `ResolvedPersistentView` and
       // `DataSourceV2Strategy` routes through SPARK-56655's `DescribeV2ViewExec`, which
-      // reads the typed `ViewInfo` directly and emits the standard "Type" / "View Text" /
+      // reads the typed `View` directly and emits the standard "Type" / "View Text" /
       // "View Current Catalog" / "View Schema Mode" / etc. rows. Pins that `DescribeV2ViewExec`
       // emits a "Type" row for parity with v1 `CatalogTable.toJsonLinkedHashMap`, so users
       // can distinguish a plain VIEW from a sub-kind like METRIC_VIEW.
@@ -918,7 +918,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
           s"Expected TABLE_OR_VIEW_NOT_FOUND for the old ident, got " +
             s"${oldEx.getCondition}: ${oldEx.getMessage}")
 
-        // New ident loads through `TableViewCatalog.loadTableOrView` and surfaces the same
+        // New ident loads through `RelationCatalog.loadRelation` and surfaces the same
         // metric-view kind on `DESCRIBE TABLE EXTENDED`.
         val rows = sql(s"DESCRIBE TABLE EXTENDED $renamedFull").collect()
         val rowMap = rows.map(r => r.getString(0) -> r.getString(1)).toMap
@@ -930,7 +930,7 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
     }
   }
 
-  test("SHOW TABLES on a v2 TableViewCatalog lists both tables and metric views") {
+  test("SHOW TABLES on a v2 RelationCatalog lists both tables and metric views") {
     withTestCatalogTables {
       val mv = MetricView(
         "0.1",
@@ -940,13 +940,13 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
       createMetricView(fullMetricViewName, mv)
       val tables = sql(s"SHOW TABLES IN $testCatalogName.$testNamespace")
         .collect().map(_.getString(1)).toSet
-      // SPARK-56655 routes SHOW TABLES on a `TableViewCatalog` through `listRelationSummaries`
+      // SPARK-56655 routes SHOW TABLES on a `RelationCatalog` through `listRelationSummaries`
       // so views appear alongside tables in the output (matching v1 SHOW TABLES on a session
       // catalog). Pure `TableCatalog` catalogs continue to return tables only.
       assert(tables.contains(sourceTableName),
         s"SHOW TABLES should list the source table, got: $tables")
       assert(tables.contains(metricViewName),
-        s"SHOW TABLES on a TableViewCatalog should also list metric views, got: $tables")
+        s"SHOW TABLES on a RelationCatalog should also list metric views, got: $tables")
     }
   }
 
@@ -971,17 +971,17 @@ object MetricViewV2CatalogSuite {
 }
 
 /**
- * Minimal [[TableViewCatalog]] used by [[MetricViewV2CatalogSuite]]. Layers `ViewCatalog`
+ * Minimal [[RelationCatalog]] used by [[MetricViewV2CatalogSuite]]. Layers `ViewCatalog`
  * methods over [[InMemoryTableCatalog]] (which provides table storage + namespace ops) and
- * captures every [[ViewInfo]] passed to `createView` so tests can inspect the typed payload.
+ * captures every [[View]] passed to `createView` so tests can inspect the typed payload.
  *
  * The metric-view CREATE path goes via `ViewCatalog.createView`, so the captured map keys are
  * the view identifiers; the source table created by the test fixture is stored separately in
  * the inherited table catalog.
  */
-class MetricViewRecordingCatalog extends InMemoryTableCatalog with TableViewCatalog {
+class MetricViewRecordingCatalog extends InMemoryTableCatalog with RelationCatalog {
   private val views =
-    new ConcurrentHashMap[(Seq[String], String), ViewInfo]()
+    new ConcurrentHashMap[(Seq[String], String), View]()
 
   // -- ViewCatalog methods --
 
@@ -994,11 +994,11 @@ class MetricViewRecordingCatalog extends InMemoryTableCatalog with TableViewCata
     out.asScala.toArray
   }
 
-  // `loadView`, `tableExists`, and `viewExists` are inherited from `TableViewCatalog`'s
-  // defaults, which derive from `loadTableOrView` -- a stored `ViewInfo` is wrapped in
-  // `MetadataTable` by `loadTableOrView` and the defaults unwrap it correctly.
+  // `loadView`, `tableExists`, and `viewExists` are inherited from `RelationCatalog`'s
+  // defaults, which derive from `loadRelation` -- a stored `View` is returned directly by
+  // `loadRelation` and the defaults discriminate it by type correctly.
 
-  // Bypasses `TableViewCatalog.tableExists` (whose default delegates to `loadTableOrView`,
+  // Bypasses `RelationCatalog.tableExists` (whose default delegates to `loadRelation`,
   // which checks our `views` map first); we want a tables-only check here so the cross-type
   // collision branches in `createView` / `replaceView` see only "is there a *table* at this
   // ident?".
@@ -1006,8 +1006,8 @@ class MetricViewRecordingCatalog extends InMemoryTableCatalog with TableViewCata
     try { super[InMemoryTableCatalog].loadTable(ident); true }
     catch { case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException => false }
 
-  override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {
-    // TableViewCatalog active-rejection contract: createView must throw
+  override def createView(ident: Identifier, info: View): View = {
+    // RelationCatalog active-rejection contract: createView must throw
     // ViewAlreadyExistsException when *either* a view *or* a table sits at the ident.
     if (tableExistsTablesOnly(ident)) {
       throw new ViewAlreadyExistsException(ident)
@@ -1020,8 +1020,8 @@ class MetricViewRecordingCatalog extends InMemoryTableCatalog with TableViewCata
     info
   }
 
-  override def replaceView(ident: Identifier, info: ViewInfo): ViewInfo = {
-    // Per the TableViewCatalog contract, replaceView must surface NoSuchViewException
+  override def replaceView(ident: Identifier, info: View): View = {
+    // Per the RelationCatalog contract, replaceView must surface NoSuchViewException
     // when a *table* sits at the ident (not silently succeed and shadow the table).
     if (tableExistsTablesOnly(ident)) throw new NoSuchViewException(ident)
     val key = (ident.namespace().toSeq, ident.name())
@@ -1055,13 +1055,13 @@ class MetricViewRecordingCatalog extends InMemoryTableCatalog with TableViewCata
     }
   }
 
-  // -- TableViewCatalog single-RPC perf path --
+  // -- RelationCatalog single-RPC perf path --
 
-  override def loadTableOrView(ident: Identifier): Table = {
+  override def loadRelation(ident: Identifier): Relation = {
     val key = (ident.namespace().toSeq, ident.name())
     Option(views.get(key)) match {
-      case Some(info) => new MetadataTable(info, ident.toString)
-      // Bypass `TableViewCatalog.loadTable` (whose default delegates back to `loadTableOrView`)
+      case Some(info) => info
+      // Bypass `RelationCatalog.loadTable` (whose default delegates back to `loadRelation`)
       // and call `InMemoryTableCatalog.loadTable` directly to avoid infinite recursion.
       case None => super[InMemoryTableCatalog].loadTable(ident)
     }
@@ -1069,10 +1069,10 @@ class MetricViewRecordingCatalog extends InMemoryTableCatalog with TableViewCata
 }
 
 object MetricViewRecordingCatalog {
-  // Captures every ViewInfo that flows through createView / replaceView so individual tests
+  // Captures every View that flows through createView / replaceView so individual tests
   // can assert on it. Cleared between tests via `reset()`.
-  val capturedViews: ConcurrentHashMap[Identifier, ViewInfo] =
-    new ConcurrentHashMap[Identifier, ViewInfo]()
+  val capturedViews: ConcurrentHashMap[Identifier, View] =
+    new ConcurrentHashMap[Identifier, View]()
 
   def reset(): Unit = capturedViews.clear()
 }

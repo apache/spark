@@ -147,6 +147,15 @@ class StreamingTestsMixin:
         except TypeError:
             pass
 
+        for arg_name in ("once", "availableNow"):
+            with self.assertRaises(PySparkValueError) as pe:
+                df.writeStream.trigger(**{arg_name: False})
+            self.check_error(
+                exception=pe.exception,
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": arg_name, "allowed_values": "[True]"},
+            )
+
     def test_stream_real_time_trigger(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         tmpPath = tempfile.mkdtemp()
@@ -382,7 +391,7 @@ class StreamingTestsMixin:
         # SPARK-46873: There should not be a new StreamingQueryManager created every time
         # spark.streams is called.
         for i in range(5):
-            self.assertTrue(self.spark.streams == self.spark.streams)
+            self.assertEqual(self.spark.streams, self.spark.streams)
 
     def test_query_manager_get(self):
         df = self.spark.readStream.format("rate").load()
@@ -391,7 +400,7 @@ class StreamingTestsMixin:
         q = df.writeStream.format("noop").start()
 
         self.assertTrue(q.isActive)
-        self.assertTrue(q.id == self.spark.streams.get(q.id).id)
+        self.assertEqual(q.id, self.spark.streams.get(q.id).id)
 
         q.stop()
 

@@ -1576,8 +1576,8 @@ class Column(TableValuedFunctionArgument):
 
         See Also
         --------
-        pyspark.sql.dataframe.DataFrame.scalar
-        pyspark.sql.dataframe.DataFrame.exists
+        pyspark.sql.DataFrame.scalar
+        pyspark.sql.DataFrame.exists
         """
         ...
 

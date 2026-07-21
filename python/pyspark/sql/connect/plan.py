@@ -1447,6 +1447,40 @@ class NearestByJoin(LogicalPlan):
         """
 
 
+class Zip(LogicalPlan):
+    def __init__(self, left: Optional[LogicalPlan], right: LogicalPlan) -> None:
+        super().__init__(left)
+        self.left = cast(LogicalPlan, left)
+        self.right = right
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.zip.left.CopyFrom(self.left.plan(session))
+        plan.zip.right.CopyFrom(self.right.plan(session))
+        return self._with_relations(plan, session)
+
+    @property
+    def observations(self) -> Dict[str, "Observation"]:
+        return {**super().observations, **self.right.observations}
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        o = " " * (indent + LogicalPlan.INDENT)
+        n = indent + LogicalPlan.INDENT * 2
+        return f"{i}<Zip>\n{o}left=\n{self.left.print(n)}\n{o}right=\n{self.right.print(n)}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Zip</b><br />
+                Left: {self.left._repr_html_()}
+                Right: {self.right._repr_html_()}
+            </li>
+        </ul>
+        """
+
+
 class SetOperation(LogicalPlan):
     def __init__(
         self,

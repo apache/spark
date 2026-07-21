@@ -68,7 +68,7 @@ class Iso8601TimeFormatter(pattern: String, locale: Locale, isParsing: Boolean)
 
 /**
  * The formatter parses/formats times according to the pattern `HH:mm:ss.[..fff..]` where
- * `[..fff..]` is a fraction of second up to microsecond resolution. The formatter does not output
+ * `[..fff..]` is a fraction of second up to nanosecond resolution. The formatter does not output
  * trailing zeros in the fraction. For example, the time `15:00:01.123400` is formatted as the
  * string `15:00:01.1234`.
  */

@@ -423,10 +423,6 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
-    // HADOOP-19229 Vector IO on cloud storage: increase threshold for range merging
-    // We can remove this after Apache Hadoop 3.4.2 releases
-    conf.setIfMissing("spark.hadoop.fs.s3a.vectored.read.min.seek.size", "128K")
-    conf.setIfMissing("spark.hadoop.fs.s3a.vectored.read.max.merged.size", "2M")
     // This should be set as early as possible.
     SparkContext.enableMagicCommitterIfNeeded(_conf)
 
@@ -455,7 +451,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Set Spark driver host and port system properties. This explicitly sets the configuration
     // instead of relying on the default value of the config constant.
     if (SparkMasterRegex.isK8s(master) &&
-        _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", false)) {
+        _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", true)) {
       logInfo("Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS as driver address " +
         "because spark.kubernetes.executor.useDriverPodIP is true in K8s mode.")
       _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_BIND_ADDRESS))
@@ -594,7 +590,11 @@ class SparkContext(config: SparkConf) extends Logging {
     _plugins = PluginContainer(this, _resources.asJava)
     _resourceProfileManager = new ResourceProfileManager(_conf, _listenerBus)
     _env.initializeShuffleManager()
-    _env.initializeMemoryManager(SparkContext.numDriverCores(master, conf))
+    // The driver in non-local deployments never runs tasks or stores off-heap blocks, and its
+    // container memory is not sized for spark.memory.offHeap.size, so don't reserve off-heap
+    // memory there.
+    _env.initializeMemoryManager(
+      SparkContext.numDriverCores(master, conf), offHeapAllowed = isLocal)
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)

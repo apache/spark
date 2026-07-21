@@ -161,7 +161,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0012", ctx)
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.DISTRIBUTE_BY", ctx)
   }
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
@@ -234,6 +234,22 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
       messageParameters = Map("numResults" -> numResults, "min" -> "1", "max" -> max.toString),
+      ctx)
+  }
+
+  def sqlAsOfJoinDisabled(configKey: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.ASOF_JOIN",
+      messageParameters = Map("config" -> toSQLConf(configKey)),
+      ctx)
+  }
+
+  def sqlAsOfJoinMatchConditionInvalidOperator(
+      operator: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+      messageParameters = Map("operator" -> operator),
       ctx)
   }
 
@@ -365,6 +381,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx: TypeConstructorContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_TIMESTAMP_LITERAL_PRECISION",
+      messageParameters = Map("value" -> toSQLValue(value)),
+      ctx)
+  }
+
+  def timeLiteralPrecisionExceedsMaxError(
+      value: String,
+      ctx: TypeConstructorContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_TIME_LITERAL_PRECISION",
       messageParameters = Map("value" -> toSQLValue(value)),
       ctx)
   }
@@ -541,8 +566,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def storedAsAndStoredByBothSpecifiedError(ctx: CreateFileFormatContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0033", ctx)
+  def storedAsAndStoredByBothSpecifiedError(): Throwable = {
+    SparkException.internalError("Expected either STORED AS or STORED BY, not both.")
   }
 
   def operationInHiveStyleCommandUnsupportedError(
@@ -869,6 +894,30 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def invalidAtSyntaxTimestamp(
+      timestamp: String,
+      format: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
+      messageParameters = Map("timestamp" -> timestamp, "format" -> format),
+      ctx)
+  }
+
+  def multipleTimeTravelSpec(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "MULTIPLE_TIME_TRAVEL_SPEC",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def timeTravelAtSyntaxDisabled(configKey: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL_AT_SYNTAX",
+      messageParameters = Map("config" -> toSQLConf(configKey)),
+      ctx)
+  }
+
   def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
@@ -1001,13 +1050,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   /**
-   * Throws an exception when a cursor reference has more than one qualifier. Valid: cursor or
-   * label.cursor Invalid: a.b.cursor
+   * Returns an exception for a cursor reference that has more than one qualifier. Valid: cursor
+   * or label.cursor Invalid: a.b.cursor
    *
    * @param cursorName
    *   The fully qualified cursor name with multiple qualifiers
-   * @throws ParseException
-   *   Always throws this exception
+   * @return
+   *   A ParseException to be thrown by the caller
    */
   def cursorInvalidQualifierError(cursorName: String): Throwable = {
     new ParseException(

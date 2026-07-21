@@ -90,6 +90,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case BinaryType => classOf[BinaryColumnAccessor].getName
         case CalendarIntervalType => classOf[IntervalColumnAccessor].getName
         case VariantType => classOf[VariantColumnAccessor].getName
+        case _: TimestampNTZNanosType => classOf[TimestampNTZNanosColumnAccessor].getName
+        case _: TimestampLTZNanosType => classOf[TimestampLTZNanosColumnAccessor].getName
         case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
           classOf[CompactDecimalColumnAccessor].getName
         case dt: DecimalType => classOf[DecimalColumnAccessor].getName
@@ -102,7 +104,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       val createCode = dt match {
         case t if CodeGenerator.isPrimitiveType(dt) =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
-        case NullType | BinaryType | CalendarIntervalType | VariantType =>
+        case NullType | BinaryType | CalendarIntervalType | VariantType |
+            _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case other =>
           s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),

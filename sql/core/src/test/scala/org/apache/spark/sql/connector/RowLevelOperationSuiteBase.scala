@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expr
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, Table, TableInfo, Txn, TxnTable, Update, Write}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, RowLevelOperationWithOptions, Table, TableInfo, Txn, TxnTable, Update, Write}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
@@ -51,6 +51,7 @@ abstract class RowLevelOperationSuiteBase
   }
 
   after {
+    catalog.nextTxnRejectRegisteredScansAttempt = false
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.unsetConf("spark.sql.catalog.cat")
   }
@@ -88,13 +89,22 @@ abstract class RowLevelOperationSuiteBase
     Collections.emptyMap[String, String]
   }
 
+  /** True for the *NoMetadata* test variants - the writer doesn't request any required
+   * distribution / ordering and so MergeRowsExec / writer can run in the same stage as the
+   * preceding join. */
+  protected def noMetadata: Boolean =
+    extraTableProps.getOrDefault("no-metadata", "false") == "true"
+
   protected def catalog: InMemoryRowLevelOperationTableCatalog = {
     val catalog = spark.sessionState.catalogManager.catalog("cat")
     catalog.asTableCatalog.asInstanceOf[InMemoryRowLevelOperationTableCatalog]
   }
 
   protected def table: InMemoryRowLevelOperationTable = {
-    catalog.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
+    // Use liveTable, not loadTable, because loadTable returns a snapshot copy.
+    // Tests mutate state through this accessor (e.g., `table.increaseVersion()`) and need
+    // those mutations to be observable to subsequent loads.
+    catalog.liveTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
   }
 
   protected def createTable(schemaString: String): Unit = {
@@ -167,6 +177,27 @@ abstract class RowLevelOperationSuiteBase
       case rd: ReplaceData => (rd.condition, rd.groupFilterCondition)
       case wd: WriteDelta => (wd.condition, wd.groupFilterCondition)
     }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+  }
+
+  // asserts the given SQL options reached every layer that should carry them: the rewritten
+  // DataSourceV2Relation, the RowLevelOperationInfo passed to the operation builder, and the
+  // write builder's LogicalWriteInfo
+  protected def checkRowLevelOperationOptions(
+      func: => Unit,
+      expectedOptions: (String, String)*): Unit = {
+    val Seq(qe) = withQueryExecutionsCaptured(spark)(func)
+    val writeRelation = qe.optimizedPlan.collectFirst {
+      case rd: ReplaceData => rd.table
+      case wd: WriteDelta => wd.table
+    }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+      .asInstanceOf[DataSourceV2Relation]
+    val operation = writeRelation.table.asInstanceOf[RowLevelOperationTable].operation
+      .asInstanceOf[RowLevelOperationWithOptions]
+    expectedOptions.foreach { case (key, value) =>
+      assert(writeRelation.options.get(key) === value, s"relation option '$key'")
+      assert(operation.options.get(key) === value, s"row-level operation option '$key'")
+      assert(table.lastWriteInfo.options().get(key) === value, s"write option '$key'")
+    }
   }
 
   protected def assertNoScanPlanning(plan: LogicalPlan): Unit = {

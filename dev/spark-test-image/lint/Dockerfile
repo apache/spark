@@ -63,6 +63,7 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
     zlib1g-dev \
+    zstd \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -81,7 +82,6 @@ RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN python3.12 -m pip install \
-    'flake8==3.9.0' \
     'ruff==0.14.8' \
     'googleapis-common-protos-stubs==2.2.0' \
     'grpc-stubs==1.24.11' \

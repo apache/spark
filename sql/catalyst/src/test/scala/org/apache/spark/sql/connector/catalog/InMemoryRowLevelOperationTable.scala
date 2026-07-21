@@ -32,6 +32,14 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
+/**
+ * Test helper trait mixed into the in-memory row-level operations so tests can verify that
+ * per-statement SQL options reach the operation via [[RowLevelOperationInfo#options]].
+ */
+trait RowLevelOperationWithOptions {
+  def options: CaseInsensitiveStringMap
+}
+
 class InMemoryRowLevelOperationTable private (
     name: String,
     columns: Array[Column],
@@ -79,16 +87,43 @@ class InMemoryRowLevelOperationTable private (
   // (operation, id, metadata, row)
   var lastWriteLog: Seq[InternalRow] = Seq.empty
 
+  override def copy(): Table = {
+    val copied = InMemoryRowLevelOperationTable.withColumns(
+      name = name,
+      columns = columns(),
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints,
+      tableId = id)
+    dataMap.synchronized {
+      dataMap.foreach { case (key, splits) =>
+        val copiedSplits = splits.map { bufferedRows =>
+          val copiedBufferedRows = new BufferedRows(bufferedRows.key, bufferedRows.schema)
+          copiedBufferedRows.rows ++= bufferedRows.rows.map(_.copy())
+          copiedBufferedRows
+        }
+        copied.dataMap.put(key, copiedSplits)
+      }
+    }
+    copied.commits ++= commits.map(_.copy())
+    copied.setVersionAndValidatedVersionFrom(this)
+    copied.replacedPartitions = replacedPartitions
+    copied.lastWriteInfo = lastWriteInfo
+    copied.lastWriteLog = lastWriteLog
+    copied
+  }
+
   override def newRowLevelOperationBuilder(
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
     if (properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true") {
-      () => DeltaBasedOperation(info.command)
+      () => DeltaBasedOperation(info.command, info.options)
     } else {
-      () => PartitionBasedOperation(info.command)
+      () => PartitionBasedOperation(info.command, info.options)
     }
   }
 
-  case class PartitionBasedOperation(command: Command) extends RowLevelOperation {
+  case class PartitionBasedOperation(command: Command, options: CaseInsensitiveStringMap)
+    extends RowLevelOperation with RowLevelOperationWithOptions {
     var configuredScan: InMemoryBatchScan = _
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
@@ -157,7 +192,8 @@ class InMemoryRowLevelOperationTable private (
     }
   }
 
-  case class DeltaBasedOperation(command: Command) extends RowLevelOperation with SupportsDelta {
+  case class DeltaBasedOperation(command: Command, options: CaseInsensitiveStringMap)
+    extends RowLevelOperation with SupportsDelta with RowLevelOperationWithOptions {
     private final val PK_COLUMN_REF = FieldReference("pk")
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {

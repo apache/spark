@@ -33,4 +33,7 @@ class SparkSessionBuilderImplementationBindingSuite
   }
 
   override protected def sparkContext: SparkContext = null
+
+  override protected def implementationSpecificBuilder: sql.SparkSession.Builder =
+    sql.SparkSession.builder().connect()
 }

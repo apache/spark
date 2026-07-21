@@ -33,11 +33,11 @@ import org.apache.hive.service.rpc.thrift.{TCLIServiceConstants, TColumnDesc, TP
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.util.{Utils => SparkUtils}
 
 private[hive] class SparkExecuteStatementOperation(
@@ -347,7 +347,6 @@ object SparkExecuteStatementOperation {
     case _: StringType => TTypeId.STRING_TYPE
     case _: DecimalType => TTypeId.DECIMAL_TYPE
     case DateType => TTypeId.DATE_TYPE
-    case _: TimeType => TTypeId.STRING_TYPE
     // TODO: Shall use TIMESTAMPLOCALTZ_TYPE, keep AS-IS now for
     // unnecessary behavior change
     case TimestampType => TTypeId.TIMESTAMP_TYPE
