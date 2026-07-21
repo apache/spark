@@ -129,9 +129,8 @@ trait SupportsArchiveFormat extends Logging {
       tempPrefix: String)(
       readEntry: PartitionedFile => Iterator[InternalRow]): Iterator[InternalRow] = {
     val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), tempPrefix)
-    // Register cleanup before constructing `entries`: localizeEntries eagerly probes the first
-    // entry, so opening a corrupt archive or copying the first entry can throw here -- before
-    // FileScanRDD receives an iterator it can close -- and the temp dir must not leak.
+    // Register cleanup before constructing `entries`, which can throw before returning an iterator
+    // FileScanRDD could close.
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ =>
       Utils.deleteRecursively(tempDir)
     })

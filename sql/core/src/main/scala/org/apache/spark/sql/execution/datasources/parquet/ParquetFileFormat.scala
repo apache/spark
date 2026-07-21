@@ -65,8 +65,8 @@ class ParquetFileFormat
   with Logging
   with Serializable {
 
-  // Reads every archive entry, matching a directory scan: the shared entry filter already drops
-  // directories and hidden/metadata paths, and Parquet part-files are commonly extensionless.
+  // Reads every archive entry, matching a directory scan (Parquet part-files are often
+  // extensionless).
   override protected def archiveEntryFilter(name: String): Boolean = true
 
   override def shortName(): String = "parquet"
@@ -595,9 +595,7 @@ object ParquetFileFormat extends Logging {
   /** Reads every Parquet entry's footer in one archive. */
   private def readArchiveFooters(conf: Configuration, archive: FileStatus): Seq[Footer] = {
     val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), "parquet-archive-infer")
-    // Runs on a ThreadUtils.parmap worker without a TaskContext, so the archive stream must be
-    // closed here rather than through a task-completion listener; a footer read that throws
-    // (corrupt entry) would otherwise leave the stream open until executor shutdown.
+    // No TaskContext here, so close the archive stream deterministically rather than on task end.
     val entries = SupportsArchiveFormat.localizeEntries(archive.getPath, conf, tempDir, _ => true)
     try {
       entries.map { case (_, entryFile) =>

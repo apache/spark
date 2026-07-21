@@ -96,8 +96,6 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("extensionless entries are read and inferred like a directory of part-files") {
-    // Parquet part-files are commonly extensionless (e.g. part-00000); an archive entry must be
-    // read the same as a loose file, matching a directory scan rather than requiring `.parquet`.
     val data = sampleDf((1, "Alice"), (2, "Bob"))
     withArchiveFile() { archive =>
       writeArchive(archive, Seq("part-00000" -> encodeFile(data)))
@@ -108,8 +106,7 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("a corrupt archive cleans up its temp dir rather than leaking it") {
-    // localizeEntries eagerly probes the first entry, so opening a corrupt archive throws before
-    // FileScanRDD receives an iterator to close; the per-read temp dir must still be removed.
+    // A corrupt archive throws before the read returns an iterator, but must not leak the temp dir.
     def archiveTempDirs(localDir: File): Set[String] =
       Option(localDir.listFiles()).getOrElse(Array.empty)
         .filter(_.getName.startsWith("parquet-archive")).map(_.getName).toSet
