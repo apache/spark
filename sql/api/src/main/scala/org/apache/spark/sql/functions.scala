@@ -2193,9 +2193,11 @@ object functions {
    * specifies the aggregation mode for numeric summaries (sum, min, max, alwaysone).
    *
    * @param keyColumnName
-   *   the name of the column containing the key values against which unique counting occurs.
+   *   the name of the column containing the key values against which unique counting occurs. A
+   *   column that evaluates to an array, a binary, a numeric, or a string.
    * @param summaryColumnName
    *   the name of the column containing the summary values against which mode aggregations occur.
+   *   A column that evaluates to a numeric.
    * @param lgNomEntries
    *   the log-base-2 of nominal entries (must be between 4 and 26). A column that evaluates to an
    *   integral. Must be a constant.
@@ -2242,9 +2244,11 @@ object functions {
    * configured with the `lgNomEntries` nominal entries. It uses the default mode of 'sum'.
    *
    * @param keyColumnName
-   *   the name of the column containing the key values against which unique counting occurs.
+   *   the name of the column containing the key values against which unique counting occurs. A
+   *   column that evaluates to an array, a binary, a numeric, or a string.
    * @param summaryColumnName
    *   the name of the column containing the summary values against which mode aggregations occur.
+   *   A column that evaluates to a numeric.
    * @param lgNomEntries
    *   the log-base-2 of nominal entries (must be between 4 and 26). A column that evaluates to an
    *   integral. Must be a constant.
@@ -2284,9 +2288,11 @@ object functions {
    * uses the default values of 12 for `lgNomEntries` and 'sum' for mode.
    *
    * @param keyColumnName
-   *   the name of the column containing the key values against which unique counting occurs.
+   *   the name of the column containing the key values against which unique counting occurs. A
+   *   column that evaluates to an array, a binary, a numeric, or a string.
    * @param summaryColumnName
    *   the name of the column containing the summary values against which mode aggregations occur.
+   *   A column that evaluates to a numeric.
    * @group agg_funcs
    * @since 4.2.0
    * @return
@@ -2362,9 +2368,11 @@ object functions {
    * specifies the aggregation mode for numeric summaries (sum, min, max, alwaysone).
    *
    * @param keyColumnName
-   *   the name of the column containing the key values against which unique counting occurs.
+   *   the name of the column containing the key values against which unique counting occurs. A
+   *   column that evaluates to an array, a binary, a numeric, or a string.
    * @param summaryColumnName
    *   the name of the column containing the summary values against which mode aggregations occur.
+   *   A column that evaluates to an integral.
    * @param lgNomEntries
    *   the log-base-2 of nominal entries (must be between 4 and 26). A column that evaluates to an
    *   integral. Must be a constant.
@@ -2411,9 +2419,11 @@ object functions {
    * configured with the `lgNomEntries` nominal entries. It uses the default mode of 'sum'.
    *
    * @param keyColumnName
-   *   the name of the column containing the key values against which unique counting occurs.
+   *   the name of the column containing the key values against which unique counting occurs. A
+   *   column that evaluates to an array, a binary, a numeric, or a string.
    * @param summaryColumnName
    *   the name of the column containing the summary values against which mode aggregations occur.
+   *   A column that evaluates to an integral.
    * @param lgNomEntries
    *   the log-base-2 of nominal entries (must be between 4 and 26). A column that evaluates to an
    *   integral. Must be a constant.
@@ -2453,9 +2463,11 @@ object functions {
    * uses the default values of 12 for `lgNomEntries` and 'sum' for mode.
    *
    * @param keyColumnName
-   *   the name of the column containing the key values against which unique counting occurs.
+   *   the name of the column containing the key values against which unique counting occurs. A
+   *   column that evaluates to an array, a binary, a numeric, or a string.
    * @param summaryColumnName
    *   the name of the column containing the summary values against which mode aggregations occur.
+   *   A column that evaluates to an integral.
    * @group agg_funcs
    * @since 4.2.0
    * @return
@@ -3647,7 +3659,7 @@ object functions {
    *
    * @param precision
    *   An integer literal in the range [0..6], indicating how many fractional digits of seconds to
-   *   include in the result.
+   *   include in the result. A column that evaluates to an integer. Must be a constant.
    * @return
    *   A time. Returns a column that evaluates to a time.
    * @group datetime_funcs
@@ -6366,7 +6378,7 @@ object functions {
    * radians.
    *
    * @param columnName
-   *   angle in degrees
+   *   angle in degrees. A column that evaluates to a double.
    * @return
    *   angle in radians, as if computed by `java.lang.Math.toRadians`. Returns a column that
    *   evaluates to a double.
@@ -9221,7 +9233,8 @@ object functions {
    * Datasketches HllSketch.
    *
    * @param columnName
-   *   Name of the column containing the binary representation of a Datasketches HllSketch.
+   *   Name of the column containing the binary representation of a Datasketches HllSketch. A
+   *   column that evaluates to a binary.
    * @group sketch_funcs
    * @since 3.5.0
    * @return
@@ -9255,8 +9268,10 @@ object functions {
    *
    * @param columnName1
    *   Name of the column containing the first binary representation of a Datasketches HllSketch.
+   *   A column that evaluates to a binary.
    * @param columnName2
    *   Name of the column containing the second binary representation of a Datasketches HllSketch.
+   *   A column that evaluates to a binary.
    * @group sketch_funcs
    * @since 3.5.0
    * @return
@@ -9295,8 +9310,10 @@ object functions {
    *
    * @param columnName1
    *   Name of the column containing the first binary representation of a Datasketches HllSketch.
+   *   A column that evaluates to a binary.
    * @param columnName2
    *   Name of the column containing the second binary representation of a Datasketches HllSketch.
+   *   A column that evaluates to a binary.
    * @param allowDifferentLgConfigK
    *   Allow sketches with different lgConfigK values to be merged (defaults to false). A column
    *   that evaluates to a boolean. Must be a constant.
@@ -9336,10 +9353,10 @@ object functions {
    *
    * @param columnName1
    *   Name of the column containing the first binary representation of a Datasketches
-   *   ThetaSketch.
+   *   ThetaSketch. A column that evaluates to a binary.
    * @param columnName2
    *   Name of the column containing the second binary representation of a Datasketches
-   *   ThetaSketch.
+   *   ThetaSketch. A column that evaluates to a binary.
    * @group sketch_funcs
    * @since 4.1.0
    * @return
@@ -9373,10 +9390,10 @@ object functions {
    *
    * @param columnName1
    *   Name of the column containing the first binary representation of a Datasketches
-   *   ThetaSketch.
+   *   ThetaSketch. A column that evaluates to a binary.
    * @param columnName2
    *   Name of the column containing the second binary representation of a Datasketches
-   *   ThetaSketch.
+   *   ThetaSketch. A column that evaluates to a binary.
    * @group sketch_funcs
    * @since 4.1.0
    * @return
@@ -9441,10 +9458,10 @@ object functions {
    *
    * @param columnName1
    *   Name of the column containing the first binary representation of a Datasketches
-   *   ThetaSketch.
+   *   ThetaSketch. A column that evaluates to a binary.
    * @param columnName2
    *   Name of the column containing the second binary representation of a Datasketches
-   *   ThetaSketch.
+   *   ThetaSketch. A column that evaluates to a binary.
    * @group sketch_funcs
    * @since 4.1.0
    * @return
