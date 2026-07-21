@@ -4067,12 +4067,14 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         # Split "quartiles" columns into first, second, and third quartiles.
         for label in agg_column_labels:
             quartiles_col = name_like_string(tuple(list(label) + ["quartiles"]))
-            percentile_columns = {}
-            for i, percentile in enumerate(formatted_percentiles):
-                percentile_columns[name_like_string(tuple(list(label) + [percentile]))] = scol_for(
-                    sdf, quartiles_col
-                )[i]
-            sdf = sdf.withColumns(percentile_columns).drop(quartiles_col)
+            sdf = sdf.withColumns(
+                {
+                    name_like_string(tuple(list(label) + [percentile])): scol_for(
+                        sdf, quartiles_col
+                    )[i]
+                    for i, percentile in enumerate(formatted_percentiles)
+                }
+            ).drop(quartiles_col)
 
         # Reorder columns lexicographically by agg column followed by stats.
         stats = ["count", "mean", "std", "min"] + formatted_percentiles + ["max"]
