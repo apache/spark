@@ -1325,14 +1325,13 @@ object VariantArrayAppend {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(v[, includeArrays]) - Recursively removes null fields from variant objects, " +
-    "and null elements from arrays unless `includeArrays` is false. " +
-    "Returns NULL if any argument is NULL.",
+  usage = "_FUNC_(v[, includeArrays]) - Recursively removes null fields from variant objects " +
+    "and null elements from arrays, unless `includeArrays` is false, in which case null " +
+    "elements in arrays are kept. Returns NULL if any argument is NULL.",
   arguments = """
     Arguments:
       * v - A variant value to mutate.
-      * includeArrays - An optional boolean (default true). If false, null array elements are
-          kept, but null fields of nested objects are still removed.
+      * includeArrays - An optional boolean (default true).
   """,
   examples = """
     Examples:

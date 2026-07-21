@@ -22916,8 +22916,9 @@ def variant_array_append(
 @_try_remote_functions
 def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Column:
     """
-    Recursively removes null fields from variant objects, and null elements from arrays unless
-    `include_arrays` is False. Returns NULL if `v` is NULL.
+    Recursively removes null fields from variant objects and null elements from arrays, unless
+    `include_arrays` is False, in which case null elements in arrays are kept. Returns NULL if `v`
+    is NULL.
 
     .. versionadded:: 4.3.0
 
@@ -22926,8 +22927,7 @@ def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Colum
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
     include_arrays : bool, optional
-        whether null elements are also removed from arrays. If False, array null elements are kept
-        while null fields of nested objects are still removed. Defaults to True.
+        whether null elements are also removed from arrays (default True).
 
     Returns
     -------
