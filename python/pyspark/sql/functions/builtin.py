@@ -6958,6 +6958,7 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     ----------
     cols : :class:`~pyspark.sql.Column` or column name
         list of columns to work on.
+        Each a column of any type.
 
     Returns
     -------
@@ -7553,6 +7554,7 @@ def isnull(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
+        A column of any type.
 
     Returns
     -------
@@ -8439,6 +8441,7 @@ def struct(
     ----------
     cols : list, set, :class:`~pyspark.sql.Column` or column name
         column names or :class:`~pyspark.sql.Column`\\s to contain in the output struct.
+        Each a column of any type.
 
     Returns
     -------
@@ -8516,6 +8519,7 @@ def greatest(*cols: "ColumnOrName") -> Column:
     ----------
     cols: :class:`~pyspark.sql.Column` or column name
         columns to check for greatest value.
+        Each a column of any orderable type.
 
     Returns
     -------
@@ -8561,6 +8565,7 @@ def least(*cols: "ColumnOrName") -> Column:
     ----------
     cols : :class:`~pyspark.sql.Column` or column name
         column names or columns to be compared
+        Each a column of any orderable type.
 
     Returns
     -------
@@ -8606,8 +8611,10 @@ def when(condition: Column, value: Any) -> Column:
     ----------
     condition : :class:`~pyspark.sql.Column`
         a boolean :class:`~pyspark.sql.Column` expression.
+        A column that evaluates to a boolean.
     value :
         a literal value, or a :class:`~pyspark.sql.Column` expression.
+        A column of any type.
 
     Returns
     -------
@@ -12282,6 +12289,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
         A column that evaluates to a string, date, timestamp, or numeric.
     format: literal string, optional
         format to use to convert timestamp values.
+        A column that evaluates to a string.
 
     Returns
     -------
@@ -12427,6 +12435,7 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
         A column that evaluates to a string, date, timestamp, or numeric.
     format: literal string, optional
         format to use to convert timestamp values.
+        A column that evaluates to a string.
 
     See Also
     --------
@@ -13539,6 +13548,7 @@ def timestamp_nanos(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         a ``TIMESTAMP_LTZ(9)`` column representing the corresponding point in time.
+        Returns a column that evaluates to a timestamp.
 
     See Also
     --------
@@ -13969,10 +13979,12 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     timeColumn : :class:`~pyspark.sql.Column` or column name
         The column name or column to use as the timestamp for windowing by time.
         The time column must be of TimestampType or TimestampNTZType.
+        A column that evaluates to a timestamp.
     gapDuration : :class:`~pyspark.sql.Column` or literal string
         A Python string literal or column specifying the timeout of the session. It could be
         static value, e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
         duration dynamically based on the input row.
+        A column that evaluates to a string or interval.
 
     Returns
     -------
@@ -14116,6 +14128,7 @@ def to_timestamp_ltz(
         A column that evaluates to a string, date, timestamp, or numeric.
     format : :class:`~pyspark.sql.Column` or column name, optional
         format to use to convert type `TimestampType` timestamp values.
+        A column that evaluates to a string.
 
     See Also
     --------
@@ -14647,6 +14660,7 @@ def hash(*cols: "ColumnOrName") -> Column:
     ----------
     cols : :class:`~pyspark.sql.Column` or column name
         one or more columns to compute on.
+        Each a column of any type.
 
     Returns
     -------
@@ -14700,6 +14714,7 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     ----------
     cols : :class:`~pyspark.sql.Column` or column name
         one or more columns to compute on.
+        Each a column of any type.
 
     Returns
     -------
@@ -15654,6 +15669,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
         A column that evaluates to a string.
     cols : :class:`~pyspark.sql.Column` or column name
         column names or :class:`~pyspark.sql.Column`\\s to be used in formatting
+        Each a column of any type.
 
     Returns
     -------
@@ -18315,6 +18331,7 @@ def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
         A column that evaluates to a string.
     cols : :class:`~pyspark.sql.Column` or str
         column names or :class:`~pyspark.sql.Column`\\s to be used in formatting
+        Each a column of any type.
 
     See Also
     --------
@@ -19074,6 +19091,7 @@ def like(
         An character added since Spark 3.0. The default escape character is the '\'.
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
+        A column that evaluates to a string.
 
     Examples
     --------
@@ -19126,6 +19144,7 @@ def ilike(
         An character added since Spark 3.0. The default escape character is the '\'.
         If an escape character precedes a special symbol or another escape character, the
         following character is matched literally. It is invalid to escape any other character.
+        A column that evaluates to a string.
 
     Examples
     --------
@@ -19788,6 +19807,7 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     ----------
     a1, a2 : :class:`~pyspark.sql.Column` or str
         The names of the columns that contain the input arrays.
+        Each a column that evaluates to an array.
 
     Returns
     -------
@@ -20054,6 +20074,7 @@ def concat(*cols: "ColumnOrName") -> Column:
     ----------
     cols : :class:`~pyspark.sql.Column` or str
         target column or columns to work on.
+        Each a column that evaluates to a string, numeric, binary, or array.
 
     Returns
     -------
@@ -21415,6 +21436,7 @@ def explode(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         Target column to work on.
+        A column that evaluates to an array or map.
 
     Returns
     -------
@@ -21731,6 +21753,7 @@ def explode_outer(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
+        A column that evaluates to an array or map.
 
     Returns
     -------
@@ -21996,8 +22019,10 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         string column in json format
+        A column that evaluates to a string.
     fields : str
         a field or fields to extract
+        Each a column that evaluates to a string.
 
     Returns
     -------
@@ -22192,6 +22217,7 @@ def to_variant_object(
     ----------
     col : :class:`~pyspark.sql.Column` or str
         a column with a nested schema or column name
+        A column that evaluates to an array, map, or struct.
 
     Returns
     -------
@@ -23940,6 +23966,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
         A column that evaluates to an array.
     seed : :class:`~pyspark.sql.Column` or int, optional
         Seed value for the random generator.
+        A column that evaluates to an integer or long. Must be a constant.
 
         .. versionadded:: 4.0.0
 
@@ -24788,11 +24815,14 @@ def sequence(
     ----------
     start : :class:`~pyspark.sql.Column` or str
         The starting value (inclusive) of the sequence.
+        A column that evaluates to an integral, date, or timestamp.
     stop : :class:`~pyspark.sql.Column` or str
         The last value (inclusive) of the sequence.
+        A column that evaluates to an integral, date, or timestamp.
     step : :class:`~pyspark.sql.Column` or str, optional
         The value to add to the current element to get the next element in the sequence.
         The default is 1 if `start` is less than or equal to `stop`, otherwise -1.
+        A column that evaluates to an integral or interval.
 
     Returns
     -------
@@ -25328,6 +25358,7 @@ def aggregate(
     -------
     :class:`~pyspark.sql.Column`
         final value after aggregate function is applied.
+        Returns a column of the same type as ``initialValue``.
 
     Examples
     --------
@@ -25403,6 +25434,7 @@ def reduce(
     -------
     :class:`~pyspark.sql.Column`
         final value after aggregate function is applied.
+        Returns a column of the same type as ``initialValue``.
 
     Examples
     --------
@@ -28624,6 +28656,7 @@ def tuple_sketch_agg_double(
         A column that evaluates to a double.
     lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+        A column that evaluates to an integer.
     mode : :class:`~pyspark.sql.Column` or str, optional
         The summary mode: "sum" (default), "min", "max", or "alwaysone"
 
@@ -28680,6 +28713,7 @@ def tuple_sketch_agg_integer(
         A column that evaluates to an integer.
     lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+        A column that evaluates to an integer.
     mode : :class:`~pyspark.sql.Column` or str, optional
         The summary mode: "sum" (default), "min", "max", or "alwaysone"
 
@@ -28732,6 +28766,7 @@ def tuple_union_agg_double(
         A column that evaluates to a binary.
     lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+        A column that evaluates to an integer.
     mode : :class:`~pyspark.sql.Column` or str, optional
         The summary mode: "sum" (default), "min", "max", or "alwaysone"
 
@@ -28786,6 +28821,7 @@ def tuple_union_agg_integer(
         A column that evaluates to a binary.
     lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+        A column that evaluates to an integer.
     mode : :class:`~pyspark.sql.Column` or str, optional
         The summary mode: "sum" (default), "min", "max", or "alwaysone"
 
@@ -28942,6 +28978,7 @@ def kll_sketch_agg_bigint(
         A column that evaluates to an integral.
     k : :class:`~pyspark.sql.Column` or int, optional
         The k parameter that controls size and accuracy (default 200, range 8-65535)
+        A column that evaluates to an integer. Must be a constant.
 
     Returns
     -------
@@ -28981,6 +29018,7 @@ def kll_sketch_agg_float(
         The column containing float values to aggregate
     k : :class:`~pyspark.sql.Column` or int, optional
         The k parameter that controls size and accuracy (default 200, range 8-65535)
+        A column that evaluates to an integer. Must be a constant.
 
     Returns
     -------
@@ -29021,6 +29059,7 @@ def kll_sketch_agg_double(
         A column that evaluates to a float or double.
     k : :class:`~pyspark.sql.Column` or int, optional
         The k parameter that controls size and accuracy (default 200, range 8-65535)
+        A column that evaluates to an integer. Must be a constant.
 
     Returns
     -------
@@ -29061,6 +29100,7 @@ def kll_merge_agg_bigint(
         The column containing binary KllLongsSketch representations
     k : :class:`~pyspark.sql.Column` or int, optional
         The k parameter that controls size and accuracy (range 8-65535)
+        A column that evaluates to an integer. Must be a constant.
 
     Returns
     -------
@@ -29105,6 +29145,7 @@ def kll_merge_agg_float(
         The column containing binary KllFloatsSketch representations
     k : :class:`~pyspark.sql.Column` or int, optional
         The k parameter that controls size and accuracy (range 8-65535)
+        A column that evaluates to an integer. Must be a constant.
 
     Returns
     -------
@@ -29149,6 +29190,7 @@ def kll_merge_agg_double(
         The column containing binary KllDoublesSketch representations
     k : :class:`~pyspark.sql.Column` or int, optional
         The k parameter that controls size and accuracy (range 8-65535)
+        A column that evaluates to an integer. Must be a constant.
 
     Returns
     -------
@@ -30172,6 +30214,7 @@ def tuple_union_double(
         The second TupleSketch column
     lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+        A column that evaluates to an integer.
     mode : :class:`~pyspark.sql.Column` or str, optional
         The summary mode: "sum" (default), "min", "max", or "alwaysone"
 
@@ -30228,6 +30271,7 @@ def tuple_union_integer(
         The second TupleSketch column
     lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+        A column that evaluates to an integer.
     mode : :class:`~pyspark.sql.Column` or str, optional
         The summary mode: "sum" (default), "min", "max", or "alwaysone"
 
@@ -30676,6 +30720,7 @@ def tuple_union_theta_double(
         The ThetaSketch column
     lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+        A column that evaluates to an integer.
     mode : :class:`~pyspark.sql.Column` or str, optional
         The summary mode: "sum" (default), "min", "max", or "alwaysone"
 
@@ -30733,6 +30778,7 @@ def tuple_union_theta_integer(
         The ThetaSketch column
     lgNomEntries : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of nominal entries (must be between 4 and 26, defaults to 12)
+        A column that evaluates to an integer.
     mode : :class:`~pyspark.sql.Column` or str, optional
         The summary mode: "sum" (default), "min", "max", or "alwaysone"
 
