@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSeq, BindReferences, Expression, InterpretedMutableProjection, InterpretedUnsafeProjection, JoinedRow, MutableProjection, NamedExpression, Projection, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate, ImperativeAggregate, NoOp, TypedImperativeAggregate}
@@ -331,6 +331,16 @@ object AggregatingAccumulator {
       c.conf)
   }
 
+  def apply(
+      sc: SparkContext,
+      name: String,
+      functions: Seq[Expression],
+      inputAttributes: Seq[Attribute]): AggregatingAccumulator = {
+    val acc = apply(functions, inputAttributes)
+    acc.register(sc, Option(name))
+    acc
+  }
+
   def lastAttempt(
       functions: Seq[Expression],
       inputAttributes: Seq[Attribute]): LastAttemptAggregatingAccumulator = {
@@ -344,6 +354,17 @@ object AggregatingAccumulator {
       c.imperatives,
       c.typedImperatives,
       c.conf)
+  }
+
+  def lastAttempt(
+      sc: SparkContext,
+      name: String,
+      functions: Seq[Expression],
+      inputAttributes: Seq[Attribute]): LastAttemptAggregatingAccumulator = {
+    val acc = lastAttempt(functions, inputAttributes)
+    acc.register(sc, Option(name))
+    acc.initializeLastAttemptAccumulator()
+    acc
   }
 
 }

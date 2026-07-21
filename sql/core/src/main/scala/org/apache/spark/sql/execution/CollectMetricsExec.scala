@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -36,11 +37,14 @@ case class CollectMetricsExec(
     child: SparkPlan)
   extends UnaryExecNode {
 
-  private lazy val accumulator: LastAttemptAggregatingAccumulator = {
-    val acc = AggregatingAccumulator.lastAttempt(metricExpressions, child.output)
-    acc.register(sparkContext, Option(CollectMetricsExec.ACCUMULATOR_NAME))
-    acc.initializeLastAttemptAccumulator()
-    acc
+  private lazy val accumulator: AggregatingAccumulator = {
+    if (conf.getConf(SQLConf.LEGACY_OBSERVE_METRICS_AGGREGATE_ALL_ATTEMPTS)) {
+      AggregatingAccumulator(
+        sparkContext, CollectMetricsExec.ACCUMULATOR_NAME, metricExpressions, child.output)
+    } else {
+      AggregatingAccumulator.lastAttempt(
+        sparkContext, CollectMetricsExec.ACCUMULATOR_NAME, metricExpressions, child.output)
+    }
   }
 
   private[sql] def accumulatorId: Long = {
@@ -59,8 +63,11 @@ case class CollectMetricsExec(
 
   def collectedMetrics: Row = toRowConverter(collectedMetricsRow)
 
-  private def collectedMetricsRow: InternalRow =
-    accumulator.lastAttemptValueForHighestRDDId().getOrElse(accumulator.value)
+  private def collectedMetricsRow: InternalRow = accumulator match {
+    case acc: LastAttemptAggregatingAccumulator =>
+      acc.lastAttemptValueForHighestRDDId().getOrElse(acc.value)
+    case acc => acc.value
+  }
 
   override def output: Seq[Attribute] = child.output
 
@@ -70,7 +77,10 @@ case class CollectMetricsExec(
 
   override def resetMetrics(): Unit = {
     accumulator.reset()
-    accumulator.resetLastAttemptAccumulator()
+    accumulator match {
+      case acc: LastAttemptAggregatingAccumulator => acc.resetLastAttemptAccumulator()
+      case _ =>
+    }
     super.resetMetrics()
   }
 

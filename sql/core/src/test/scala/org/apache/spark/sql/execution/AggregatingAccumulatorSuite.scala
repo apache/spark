@@ -57,10 +57,8 @@ class AggregatingAccumulatorSuite
   private def registeredLastAttempt(
       functions: Seq[Expression],
       inputAttributes: Seq[Attribute]): LastAttemptAggregatingAccumulator = {
-    val acc = AggregatingAccumulator.lastAttempt(functions, inputAttributes)
-    sparkContext.register(acc)
-    acc.initializeLastAttemptAccumulator()
-    acc
+    AggregatingAccumulator.lastAttempt(
+      sparkContext, "test accumulator", functions, inputAttributes)
   }
 
   /** Builds a non-zero task-side accumulator by copying `main` and adding `rows`. */

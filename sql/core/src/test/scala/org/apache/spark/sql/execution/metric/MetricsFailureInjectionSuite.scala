@@ -304,20 +304,29 @@ class MetricsFailureInjectionSuite
     }
   }
 
-  test("Observation metrics block failure injection") {
-    val observation = Observation("stage1")
-
+  test("Observation metrics select attempts according to legacy config") {
     withTable("test_table") {
       setUpTestTable("test_table")
       withSparkContextConf(
           config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
-        val observed = spark.read.table("test_table")
-          .observe(observation, count(lit(1)).as("rows"))
-        val finalDf = observed.groupBy("low_cardinality_col").count().as[(Int, Long)]
-        val result = finalDf.collect()
+        Seq(false, true).foreach { aggregateAllAttempts =>
+          withSQLConf(
+              SQLConf.LEGACY_OBSERVE_METRICS_AGGREGATE_ALL_ATTEMPTS.key ->
+                aggregateAllAttempts.toString) {
+            val observation = Observation("stage1")
+            val observed = spark.read.table("test_table")
+              .observe(observation, count(lit(1)).as("rows"))
+            val finalDf = observed.groupBy("low_cardinality_col").count().as[(Int, Long)]
+            val result = finalDf.collect()
 
-        assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
-        assert(observation.get === Map("rows" -> 300L))
+            assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
+            if (aggregateAllAttempts) {
+              assert(observation.get("rows").asInstanceOf[Long] > 300L)
+            } else {
+              assert(observation.get === Map("rows" -> 300L))
+            }
+          }
+        }
       }
     }
   }
