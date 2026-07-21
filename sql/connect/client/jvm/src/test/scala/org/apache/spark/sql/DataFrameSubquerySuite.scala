@@ -355,7 +355,11 @@ class DataFrameSubquerySuite extends QueryTest with RemoteSparkSession {
       spark
         .table("l")
         .where(
-          spark.table("r").where($"c" === $"a".outer()).select(max($"d")).scalar()
+          spark
+            .table("r")
+            .where($"c" === $"a".outer())
+            .select(max($"d"))
+            .scalar()
             .isin(spark.table("r").select($"c"))),
       sql("select * from l where (select max(d) from r where c = a) in (select c from r)"))
   }
