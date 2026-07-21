@@ -395,6 +395,7 @@ class SymmetricHashJoinStateManagerV4(
         storeConf, hadoopConf, useMultipleValuesPerKey = useMultipleValuesPerKey,
         stateSchemaProvider = None)
       if (handlerSnapshotOptions.isDefined) {
+        // Fine-grained snapshot replay (state data source with snapshotStartBatchId).
         if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
           throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
             stateStoreProvider.getClass.toString)
@@ -415,10 +416,13 @@ class SymmetricHashJoinStateManagerV4(
             opts.startStateStoreCkptId,
             opts.endStateStoreCkptId)
         }
-      } else if (readOnly) {
-        stateStoreProvider.getReadStore(stateInfo.get.storeVersion, stateStoreCkptId)
       } else {
-        stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
+        // No snapshot options: open the store at its committed version normally.
+        if (readOnly) {
+          stateStoreProvider.getReadStore(stateInfo.get.storeVersion, stateStoreCkptId)
+        } else {
+          stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
+        }
       }
     }
     if (readOnly) {
@@ -1683,6 +1687,7 @@ abstract class SymmetricHashJoinStateManagerBase(
           useColumnFamilies = useVirtualColumnFamilies, storeConf, hadoopConf,
           useMultipleValuesPerKey = false, stateSchemaProvider = None)
         if (handlerSnapshotOptions.isDefined) {
+          // Fine-grained snapshot replay (state data source with snapshotStartBatchId).
           if (!stateStoreProvider.isInstanceOf[SupportsFineGrainedReplay]) {
             throw StateStoreErrors.stateStoreProviderDoesNotSupportFineGrainedReplay(
               stateStoreProvider.getClass.toString)
@@ -1703,11 +1708,14 @@ abstract class SymmetricHashJoinStateManagerBase(
               opts.startStateStoreCkptId,
               opts.endStateStoreCkptId)
           }
-        } else if (readOnly) {
-          // readOnly mode must not write to the checkpoint path; use the read-only store.
-          stateStoreProvider.getReadStore(stateInfo.get.storeVersion, stateStoreCkptId)
         } else {
-          stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
+          // No snapshot options: open the store at its committed version normally.
+          // readOnly mode must not write to the checkpoint path; use the read-only store.
+          if (readOnly) {
+            stateStoreProvider.getReadStore(stateInfo.get.storeVersion, stateStoreCkptId)
+          } else {
+            stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
+          }
         }
       }
       if (readOnly) {

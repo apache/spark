@@ -212,7 +212,7 @@ private[sql] class RocksDBStateStoreProvider
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
       registerColFamilyInternal(colFamilyName, keySchema, valueSchema, keyStateEncoderSpec,
-        useMultipleValuesPerKey, isInternal, forceSnapshot = false)
+        useMultipleValuesPerKey, isInternal)
     }
 
     override def createColFamilyIfAbsent(
@@ -222,10 +222,8 @@ private[sql] class RocksDBStateStoreProvider
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
-      // Writable variant: same registration plus write intent -- a newly created family forces a
-      // snapshot on commit so it is durably persisted.
       registerColFamilyInternal(colFamilyName, keySchema, valueSchema, keyStateEncoderSpec,
-        useMultipleValuesPerKey, isInternal, forceSnapshot = true)
+        useMultipleValuesPerKey, isInternal)
     }
 
     private def registerColFamilyInternal(
@@ -234,11 +232,10 @@ private[sql] class RocksDBStateStoreProvider
         valueSchema: StructType,
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean,
-        isInternal: Boolean,
-        forceSnapshot: Boolean): Unit = {
+        isInternal: Boolean): Unit = {
       validateAndTransitionState(UPDATE)
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
-      val cfId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal, forceSnapshot)
+      val cfId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal, readOnly)
       val dataEncoderCacheKey = StateRowEncoderCacheKey(
         queryRunId = StateStoreProvider.getRunId(hadoopConf),
         operatorId = stateStoreId.operatorId,
