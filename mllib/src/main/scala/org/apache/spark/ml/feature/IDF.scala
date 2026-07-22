@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
@@ -125,6 +126,10 @@ class IDFModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", null)
+
+  private[spark] override def estimatedSize: Long = {
+    estimateMatadataSize + Option(idfModel).map(SizeEstimator.estimate).getOrElse(0L)
+  }
 
   /** @group setParam */
   @Since("1.4.0")

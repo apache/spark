@@ -49,6 +49,17 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(model)
   }
 
+  test("IDFModel estimated size") {
+    val model = new IDF()
+      .setInputCol("features")
+      .setOutputCol("idf")
+      .fit(Seq(
+        Tuple1(Vectors.sparse(3, Array(0), Array(1.0))),
+        Tuple1(Vectors.sparse(3, Array(1), Array(1.0)))).toDF("features"))
+
+    assert(model.estimatedSize < 2 * 1024)
+  }
+
   test("compute IDF with default parameter") {
     val numOfFeatures = 4
     val data = Array(

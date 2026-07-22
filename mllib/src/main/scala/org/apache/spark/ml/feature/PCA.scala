@@ -32,6 +32,7 @@ import org.apache.spark.mllib.linalg.{DenseMatrix => OldDenseMatrix, Vectors => 
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
@@ -131,6 +132,9 @@ class PCAModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", Matrices.empty, Vectors.empty)
+
+  private[spark] override def estimatedSize: Long =
+    estimateMatadataSize + SizeEstimator.estimate((pc, explainedVariance))
 
   /** @group setParam */
   @Since("1.5.0")

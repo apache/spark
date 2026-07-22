@@ -37,6 +37,15 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(modelWithoutUid)
   }
 
+  test("StringIndexerModel estimated size") {
+    val model = new StringIndexer()
+      .setInputCol("input")
+      .setOutputCol("output")
+      .fit(Seq("a", "b").toDF("input"))
+
+    assert(model.estimatedSize < 2 * 1024)
+  }
+
   test("params: input/output columns") {
     val stringIndexerSingleCol = new StringIndexer()
       .setInputCol("in").setOutputCol("out")
