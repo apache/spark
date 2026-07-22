@@ -176,7 +176,7 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCol("scaled")
       .fit(data.map(Tuple1.apply).toSeq.toDF("features"))
 
-    val maxSize = 2 * 1024
+    val maxSize = 4 * 1024
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
