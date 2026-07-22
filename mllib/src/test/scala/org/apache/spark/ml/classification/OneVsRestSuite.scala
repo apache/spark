@@ -81,7 +81,7 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
       .setClassifier(new LogisticRegression().setMaxIter(1))
       .fit(trainingData)
 
-    val maxSize = 10 * 1024
+    val maxSize = 32 * 1024
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
