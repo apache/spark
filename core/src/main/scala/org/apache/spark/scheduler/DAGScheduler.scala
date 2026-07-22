@@ -47,7 +47,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.resource.{ResourceProfile, TaskResourceProfile}
-import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
+import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.rpc.RpcTimeoutException
 import org.apache.spark.storage._
@@ -1662,6 +1662,14 @@ private[spark] class DAGScheduler(
     }
     pysparkMem.map(mem => properties.setProperty(PYSPARK_MEMORY_LOCAL_PROPERTY, mem.toString))
     execCores.map(cores => properties.setProperty(EXECUTOR_CORES_LOCAL_PROPERTY, cores))
+    // Pass the profile's max concurrent tasks (the limiting resource across cores and custom
+    // resources) so PySpark splits worker memory by real concurrency rather than cpu slots alone.
+    // maxTasksPerExecutor() also populates isCoresLimitKnown; only pass it when the cores limit is
+    // known, otherwise it defaults to 1 and PythonRunner falls back to its cpu-based estimate.
+    val maxTasks = rp.maxTasksPerExecutor(sc.conf)
+    if (rp.isCoresLimitKnown) {
+      properties.setProperty(MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY, maxTasks.toString)
+    }
   }
 
   /**

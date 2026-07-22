@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkEnv, SparkFiles, TaskContext}
+import org.apache.spark.{SparkFiles, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
@@ -40,22 +40,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
-
-object BaseScriptTransformationExec {
-  /**
-   * The `OMP_NUM_THREADS` value to set for a script child process, or `None` to leave the
-   * inherited environment untouched. When the user explicitly set
-   * `spark.executorEnv.OMP_NUM_THREADS` the child inherits it (`None`); otherwise the thread
-   * count is the task's own cpu amount (`taskCpus`, which honors stage-level resource profiles),
-   * falling back to the global `spark.task.cpus` ceiling when no `TaskContext` is available.
-   */
-  private[execution] def scriptOmpNumThreads(
-      userOverride: Boolean,
-      taskCpus: Option[Int],
-      globalCpusCeil: => Int): Option[Int] = {
-    if (userOverride) None else Some(taskCpus.getOrElse(globalCpusCeil))
-  }
-}
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
   def script: String
@@ -100,19 +84,12 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     val path = System.getenv("PATH") + File.pathSeparator +
       SparkFiles.getRootDirectory()
     builder.environment().put("PATH", path)
-    // Derive the script process's OMP_NUM_THREADS from the task's own cpu amount, which honors
-    // stage-level resource profiles (a script transform can be a child of mapInPandas/mapInArrow
-    // carrying a different profile), rounded up to an integer >= 1. We check the config rather
-    // than System.getenv for an explicit user override, because Spark seeds the executor's
-    // OMP_NUM_THREADS with the global default, so a getenv check would always suppress the
-    // per-stage value.
-    val ompUserOverride =
-      Option(SparkEnv.get).exists(_.conf.contains("spark.executorEnv.OMP_NUM_THREADS"))
-    val globalCpusCeil =
-      math.max(1, conf.getConfString("spark.task.cpus", "1.0").toDouble.ceil.toInt)
-    BaseScriptTransformationExec
-      .scriptOmpNumThreads(ompUserOverride, Option(TaskContext.get()).map(_.cpus()), globalCpusCeil)
-      .foreach(t => builder.environment().put("OMP_NUM_THREADS", t.toString))
+    // if OMP_NUM_THREADS is not explicitly set, override it with the value of "spark.task.cpus"
+    // which may be fractional, so round up to an integer (at least 1) of threads.
+    if (System.getenv("OMP_NUM_THREADS") == null) {
+      val taskCpus = conf.getConfString("spark.task.cpus", "1.0").toDouble
+      builder.environment().put("OMP_NUM_THREADS", math.max(1, taskCpus.ceil.toInt).toString)
+    }
 
     val proc = builder.start()
     val inputStream = proc.getInputStream

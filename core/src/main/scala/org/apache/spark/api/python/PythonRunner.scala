@@ -38,8 +38,8 @@ import org.apache.spark.internal.LogKeys.{COUNT, PYTHON_WORKER_IDLE_TIMEOUT, SIZ
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
-import org.apache.spark.resource.{CpuAmount, ResourceProfile}
-import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
+import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 
@@ -156,22 +156,16 @@ private[spark] object BasePythonRunner extends Logging {
   }
 
   /**
-   * Splits the executor-wide pyspark memory allocation evenly across the executor's task
-   * slots. The Python worker pool can grow to the number of concurrently running tasks,
-   * which is floor(execCores / taskCpus) rather than the plain core count: a fractional
-   * `spark.task.cpus` below 1 admits more concurrent tasks than there are cores, and
-   * dividing by the core count alone would let the workers' aggregate limits exceed the
-   * executor-wide allocation.
+   * Splits the executor-wide pyspark memory allocation evenly across the executor's task slots.
+   * The Python worker pool can grow to the number of tasks that run concurrently on the executor
+   * (`maxConcurrentTasks`, the limiting resource across cores and custom resources), which a
+   * fractional `spark.task.cpus` can push above the core count; dividing by the core count alone
+   * would let the workers' aggregate limits exceed the executor-wide allocation.
    */
   private[spark] def getWorkerMemoryMb(
       mem: Option[Long],
-      execCores: Int,
-      taskCpus: BigDecimal): Option[Long] = {
-    // The task cpus amount can exceed the announced cores in misconfigured corners (e.g.
-    // standalone mode, where EXECUTOR_CORES defaults to 1 regardless of the actual core
-    // count, see SPARK-30299); never split into less than one slot.
-    val taskSlots =
-      math.max(1, ResourceProfile.numTasksBasedOnCores(BigDecimal(execCores), taskCpus))
+      maxConcurrentTasks: Int): Option[Long] = {
+    val taskSlots = math.max(1, maxConcurrentTasks)
     mem.map { m =>
       val perWorkerMb = m / taskSlots
       // A per-worker share that rounds down to 0 MiB would be treated as "no limit" by the
@@ -181,10 +175,8 @@ private[spark] object BasePythonRunner extends Logging {
       if (perWorkerMb <= 0) {
         throw new SparkException(
           s"Cannot honor spark.executor.pyspark.memory=${m}m split across $taskSlots concurrent " +
-            s"task slots (executor cores $execCores, task cpus " +
-            s"${CpuAmount.toDisplayString(taskCpus)}): each worker would get less than 1 MiB. " +
-            "Increase spark.executor.pyspark.memory or the task cpus amount, or reduce " +
-            "spark.executor.cores.")
+            "task slots: each worker would get less than 1 MiB. Increase " +
+            "spark.executor.pyspark.memory, or reduce the executor's concurrent task capacity.")
       }
       perWorkerMb
     }
@@ -363,8 +355,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     // SPARK-30299 this could be wrong with standalone mode when executor
     // cores might not be correct because it defaults to all cores on the box.
     val execCores = execCoresProp.map(_.toInt).getOrElse(conf.get(EXECUTOR_CORES))
-    val workerMemoryMb =
-      BasePythonRunner.getWorkerMemoryMb(memoryMb, execCores, context.cpuAmount())
+    // The Python worker pool grows to the number of tasks that run concurrently on this executor.
+    // Prefer the resource profile's max concurrent tasks (the limiting resource across cores and
+    // custom resources, e.g. GPUs); fall back to the cpu-based slot count when it isn't known
+    // (standalone/local without an explicit spark.executor.cores).
+    val maxConcurrentTasks = Option(context.getLocalProperty(MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY))
+      .map(_.toInt)
+      .getOrElse(ResourceProfile.numTasksBasedOnCores(BigDecimal(execCores), context.cpuAmount()))
+    val workerMemoryMb = BasePythonRunner.getWorkerMemoryMb(memoryMb, maxConcurrentTasks)
     if (workerMemoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", workerMemoryMb.get.toString)
     }

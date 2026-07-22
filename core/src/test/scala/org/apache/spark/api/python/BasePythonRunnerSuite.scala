@@ -21,34 +21,35 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 
 class BasePythonRunnerSuite extends SparkFunSuite {
 
-  test("SPARK-58192: pyspark memory is split across the executor's task slots") {
-    def workerMemoryMb(execCores: Int, taskCpus: String): Option[Long] =
-      BasePythonRunner.getWorkerMemoryMb(Some(4096L), execCores, BigDecimal(taskCpus))
+  test("SPARK-58192: pyspark memory is split across the executor's concurrent task slots") {
+    def workerMemoryMb(maxConcurrentTasks: Int): Option[Long] =
+      BasePythonRunner.getWorkerMemoryMb(Some(4096L), maxConcurrentTasks)
 
-    // The default one cpu per task keeps the historical one-slot-per-core split.
-    assert(workerMemoryMb(4, "1") === Some(1024L))
-    // A fractional amount below 1 admits more concurrent tasks than cores, so each worker
-    // gets a smaller share and the aggregate stays within the executor-wide allocation.
-    assert(workerMemoryMb(4, "0.5") === Some(512L))
-    assert(workerMemoryMb(4, "0.7") === Some(819L)) // floor(4 / 0.7) = 5 slots
-    // An amount above 1 admits fewer concurrent tasks than cores.
-    assert(workerMemoryMb(4, "1.5") === Some(2048L)) // floor(4 / 1.5) = 2 slots
-    assert(workerMemoryMb(4, "2") === Some(2048L))
-    // Never split into less than one slot, even when the amount exceeds the announced cores.
-    assert(workerMemoryMb(1, "8") === Some(4096L))
+    // One slot per concurrent task; each worker gets an equal share of the executor allocation.
+    assert(workerMemoryMb(4) === Some(1024L))
+    // A fractional spark.task.cpus (e.g. 4 cores / 0.5) admits more concurrent tasks than cores,
+    // so each worker gets a smaller share and the aggregate stays within the allocation.
+    assert(workerMemoryMb(8) === Some(512L))
+    assert(workerMemoryMb(5) === Some(819L))
+    // The concurrency is the limiting resource, not just cpu slots: a GPU that caps the executor
+    // at a single concurrent task means the sole worker keeps the whole allocation, even though
+    // the cpu-slot count (e.g. 64 cores / 0.1 = 640) is far higher.
+    assert(workerMemoryMb(1) === Some(4096L))
+    // Never split into less than one slot.
+    assert(BasePythonRunner.getWorkerMemoryMb(Some(4096L), 0) === Some(4096L))
     // No pyspark memory configured means no per-worker limit.
-    assert(BasePythonRunner.getWorkerMemoryMb(None, 4, BigDecimal("0.5")) === None)
+    assert(BasePythonRunner.getWorkerMemoryMb(None, 8) === None)
   }
 
   test("SPARK-58192: fail fast when the per-slot pyspark memory share rounds to zero") {
-    // 64 cores / 0.1 cpus = 640 slots; 512 MiB / 640 rounds down to 0, which the worker would
+    // 512 MiB across 640 genuinely concurrent tasks rounds down to 0, which the worker would
     // treat as "no limit". Fail fast rather than silently dropping the configured cap.
     val e = intercept[SparkException] {
-      BasePythonRunner.getWorkerMemoryMb(Some(512L), 64, BigDecimal("0.1"))
+      BasePythonRunner.getWorkerMemoryMb(Some(512L), 640)
     }
     assert(e.getMessage.contains("spark.executor.pyspark.memory"))
     assert(e.getMessage.contains("640"))
     // A share of exactly 1 MiB is still enforceable and must not fail.
-    assert(BasePythonRunner.getWorkerMemoryMb(Some(640L), 64, BigDecimal("0.1")) === Some(1L))
+    assert(BasePythonRunner.getWorkerMemoryMb(Some(640L), 640) === Some(1L))
   }
 }
