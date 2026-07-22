@@ -686,14 +686,23 @@ def create_auto_cdc_flow(
     # Track-history columns describe how consecutive upserts are coalesced into history records,
     # a notion that only exists under SCD2. Reject them for any other SCD type. The engine
     # enforces this too, but failing here gives a clearer, client-side error.
+    #
+    # An empty list serializes identically to an omitted one (an unset repeated field on the
+    # wire) and is therefore a no-op, so gate on non-empty lists rather than `is not None`.
     is_scd2 = stored_as_scd_type is not None and str(stored_as_scd_type) == "2"
-    if not is_scd2 and (
-        track_history_column_list is not None or track_history_except_column_list is not None
-    ):
+    supplied_track_history_args = [
+        arg_name
+        for arg_name, cols in (
+            ("track_history_column_list", track_history_column_list),
+            ("track_history_except_column_list", track_history_except_column_list),
+        )
+        if cols
+    ]
+    if not is_scd2 and supplied_track_history_args:
         raise PySparkValueError(
             errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
             messageParameters={
-                "arg_names": "track_history_column_list, track_history_except_column_list",
+                "arg_names": ", ".join(supplied_track_history_args),
                 "condition": "specified unless stored_as_scd_type is 2 (or '2')",
             },
         )

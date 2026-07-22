@@ -213,6 +213,25 @@ class AutoCdcFlowConstructionTest(unittest.TestCase):
                 )
             self.assertEqual(ctx.exception.getCondition(), "INVALID_MULTIPLE_ARGUMENT_CONDITIONS")
 
+    def test_create_auto_cdc_flow_empty_track_history_list_is_accepted_without_scd2(self):
+        # An empty list serializes identically to an omitted one (an unset repeated field), so it
+        # is a no-op and must not trip the "track history requires SCD2" check.
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("t")
+            dp.create_auto_cdc_flow(
+                target="t",
+                source="s",
+                keys=[col("k")],
+                sequence_by=expr("seq"),
+                track_history_column_list=[],
+                track_history_except_column_list=[],
+            )
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        self.assertEqual(flow.track_history_column_list, [])
+        self.assertEqual(flow.track_history_except_column_list, [])
+
     def test_create_auto_cdc_flow_with_except_column_list(self):
         registry = LocalGraphElementRegistry()
         with graph_element_registration_context(registry):
