@@ -3001,6 +3001,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REMOVE_REDUNDANT_AGGREGATES_ENABLED =
+    buildConf("spark.sql.execution.removeRedundantAggregates")
+      .internal()
+      .doc("Whether to remove redundant aggregate nodes when a two-phase aggregation " +
+        "(partial + final) runs without a shuffle between them. Handles " +
+        "HashAggregateExec, ObjectHashAggregateExec, and SortAggregateExec.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val REPLACE_HASH_WITH_SORT_AGG_ENABLED = buildConf("spark.sql.execution.replaceHashWithSortAgg")
     .internal()
     .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")

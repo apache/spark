@@ -41,7 +41,11 @@ abstract class ReplaceHashWithSortAggSuiteBase
       enabledSortAggCount: Int,
       disabledHashAggCount: Int,
       disabledSortAggCount: Int): Unit = {
-    withSQLConf(SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true") {
+    // Disable `RemoveRedundantAggregates` so this suite can observe the original partial+final
+    // aggregate structure that `ReplaceHashWithSortAgg` is designed to transform.
+    withSQLConf(
+      SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true",
+      SQLConf.REMOVE_REDUNDANT_AGGREGATES_ENABLED.key -> "false") {
       val df = sql(query)
       checkNumAggs(df, enabledHashAggCount, enabledSortAggCount)
       val result = df.collect()
