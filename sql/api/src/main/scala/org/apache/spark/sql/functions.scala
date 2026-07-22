@@ -6634,6 +6634,40 @@ object functions {
   def uuid(seed: Column): Column = Column.fn("uuid", seed)
 
   /**
+   * Returns the keyed-hash message authentication code (HMAC) of `message` using `key` and the
+   * given hash `algorithm`. The result is returned as raw MAC bytes; wrap it with `hex` or
+   * `base64` for a textual value.
+   *
+   * @param key
+   *   The secret key, as a binary value.
+   * @param message
+   *   The message to authenticate, as a binary value.
+   * @param algorithm
+   *   The hash algorithm. Valid values: SHA-224, SHA-256, SHA-384, SHA-512, SHA-1, MD5.
+   *
+   * @group misc_funcs
+   * @since 4.3.0
+   */
+  def hmac(key: Column, message: Column, algorithm: Column): Column =
+    Column.fn("hmac", key, message, algorithm)
+
+  /**
+   * Returns the keyed-hash message authentication code (HMAC) of `message` using `key` and
+   * SHA-256. The result is returned as raw MAC bytes; wrap it with `hex` or `base64` for a
+   * textual value. To use a different algorithm, call the three-argument overload.
+   *
+   * @param key
+   *   The secret key, as a binary value.
+   * @param message
+   *   The message to authenticate, as a binary value.
+   *
+   * @group misc_funcs
+   * @since 4.3.0
+   */
+  def hmac(key: Column, message: Column): Column =
+    Column.fn("hmac", key, message)
+
+  /**
    * Returns an encrypted value of `input` using AES in given `mode` with the specified `padding`.
    * Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`,
    * `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS'). Optional initialization

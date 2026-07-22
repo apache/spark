@@ -31492,6 +31492,65 @@ def zeroifnull(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def hmac(
+    key: "ColumnOrName",
+    message: "ColumnOrName",
+    algorithm: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Returns the keyed-hash message authentication code (HMAC) of `message` using `key` and the
+    given hash `algorithm`. The result is returned as raw MAC bytes; wrap it with :func:`hex` or
+    :func:`base64` for a textual value. The default algorithm is 'SHA-256'.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    key : :class:`~pyspark.sql.Column` or column name
+        The secret key, as a binary value.
+    message : :class:`~pyspark.sql.Column` or column name
+        The message to authenticate, as a binary value.
+    algorithm : :class:`~pyspark.sql.Column` or column name, optional
+        The hash algorithm. Valid values: SHA-224, SHA-256, SHA-384, SHA-512, SHA-1, MD5.
+        The default is SHA-256.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains the raw HMAC bytes.
+
+    Examples
+    --------
+
+    Example 1: Compute the HMAC with the default SHA-256 algorithm.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("key", "message")], ["key", "message"])
+    >>> df.select(sf.hex(sf.hmac(df.key, df.message))).show(truncate=False)
+    +----------------------------------------------------------------+
+    |hex(hmac(key, message, SHA-256))                                |
+    +----------------------------------------------------------------+
+    |6E9EF29B75FFFC5B7ABAE527D58FDADB2FE42E7219011976917343065F58ED4A|
+    +----------------------------------------------------------------+
+
+    Example 2: Compute the HMAC with an explicit algorithm.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("key", "message")], ["key", "message"])
+    >>> df.select(sf.hex(sf.hmac(df.key, df.message, sf.lit("SHA-1")))).show(truncate=False)
+    +----------------------------------------+
+    |hex(hmac(key, message, SHA-1))          |
+    +----------------------------------------+
+    |2088DF74D5F2146B48146CAF4965377E9D0BE3A4|
+    +----------------------------------------+
+    """
+    if algorithm is None:
+        return _invoke_function_over_columns("hmac", key, message)
+    else:
+        return _invoke_function_over_columns("hmac", key, message, algorithm)
+
+
+@_try_remote_functions
 def aes_encrypt(
     input: "ColumnOrName",
     key: "ColumnOrName",
