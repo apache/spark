@@ -557,6 +557,7 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, ByteType | ShortType | IntegerType) => true
     case (_: TimeType, ByteType | ShortType) => true
     case (FloatType | DoubleType, TimestampType) => true
+    case (_: DecimalType, TimestampType) => true
     case (TimestampType, DateType) => false
     case (_: TimestampLTZNanosType, DateType) => false
     case (_: TimestampNTZNanosType, DateType) => false
@@ -679,6 +680,11 @@ case class Cast(
   with ToStringBase
   with SupportQueryContext
   with QueryErrorsBase {
+
+  private val MICROS_PER_SECOND_BD = java.math.BigDecimal.valueOf(MICROS_PER_SECOND)
+  private val LONG_MAX_BD = java.math.BigDecimal.valueOf(Long.MaxValue)
+  private val LONG_MIN_BD = java.math.BigDecimal.valueOf(Long.MinValue)
+
   override def nullIntolerant: Boolean = true
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
@@ -1009,9 +1015,15 @@ case class Cast(
         DateTimeUtils.makeTimestampNTZNanos(currentDate(zoneId), nanos, precision))
   }
 
-  private[this] def decimalToTimestamp(d: Decimal): Long = {
-    (d.toBigDecimal * MICROS_PER_SECOND).longValue
+  private[this] def decimalToTimestamp(d: Decimal): Any = {
+    val result = d.toJavaBigDecimal.multiply(MICROS_PER_SECOND_BD)
+    if (result.compareTo(LONG_MAX_BD) > 0 || result.compareTo(LONG_MIN_BD) < 0) {
+      errorOrNull(d, DecimalType(d.precision, d.scale), TimestampType)
+    } else {
+      result.longValue()
+    }
   }
+
   private[this] def doubleToTimestamp(d: Double): Any = {
     if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
   }
@@ -2003,7 +2015,31 @@ case class Cast(
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c.epochMicros, $zid, java.time.ZoneOffset.UTC);"
     case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
+      val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
+      val toDt = ctx.addReferenceObj("to", TimestampType, TimestampType.getClass.getName)
+      val microsBD = ctx.addReferenceObj("microsBD",
+        MICROS_PER_SECOND_BD, classOf[java.math.BigDecimal].getName)
+      val maxBD = ctx.addReferenceObj("maxBD",
+        LONG_MAX_BD, classOf[java.math.BigDecimal].getName)
+      val minBD = ctx.addReferenceObj("minBD",
+        LONG_MIN_BD, classOf[java.math.BigDecimal].getName)
+      (c, evPrim, evNull) =>
+        val result = ctx.freshName("decResult")
+        val overflow = if (ansiEnabled) {
+          code"""throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);"""
+        } else {
+          code"$evNull = true;"
+        }
+        code"""
+          java.math.BigDecimal $result = $c.toJavaBigDecimal()
+              .multiply($microsBD);
+          if ($result.compareTo($maxBD) > 0 ||
+              $result.compareTo($minBD) < 0) {
+            $overflow
+          } else {
+            $evPrim = $result.longValue();
+          }
+        """
     case DoubleType =>
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
@@ -2267,10 +2303,6 @@ case class Cast(
         """
   }
 
-  private[this] def decimalToTimestampCode(d: ExprValue): Block = {
-    val block = inline"new java.math.BigDecimal($MICROS_PER_SECOND)"
-    code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
-  }
   private[this] def longToTimeStampCode(l: ExprValue): Block =
     code"java.util.concurrent.TimeUnit.SECONDS.toMicros($l)"
   private[this] def timestampToLongCode(ts: ExprValue): Block =
