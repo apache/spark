@@ -7954,6 +7954,41 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DISTRIBUTED_MAP_JOIN_MAX_IN_FLIGHT_NUM =
+    buildConf("spark.sql.execution.distributedMapJoin.maxInFlightNum")
+      .doc("Maximum number of concurrent RPC lookup batches per task on the probe side.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ > 0, "must be positive")
+      .createWithDefault(8)
+
+  val DISTRIBUTED_MAP_JOIN_MAX_BATCH_SIZE =
+    buildConf("spark.sql.execution.distributedMapJoin.maxBatchSize")
+      .doc("Maximum number of probe-side keys per RPC lookup batch.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ > 0, "must be positive")
+      .createWithDefault(1024)
+
+  val DISTRIBUTED_MAP_JOIN_BLOOM_FILTER_CAPACITY =
+    buildConf("spark.sql.execution.distributedMapJoin.bloomFilterCapacity")
+      .doc("Total capacity (expected number of distinct keys) for the build-side bloom filter " +
+        "used in distributed map join.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .longConf
+      .createWithDefault(5L << 20)
+
+  val DISTRIBUTED_MAP_JOIN_EXCHANGE_TIMEOUT =
+    buildConf("spark.sql.execution.distributedMapJoin.exchangeTimeout")
+      .doc("Timeout in seconds for building shard data in distributed map join.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString(s"${30 * 60}")
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -8545,6 +8580,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def broadcastHashJoinOutputPartitioningExpandLimit: Int =
     getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
+
+  def distributedMapJoinMaxInFlightNum: Int = getConf(DISTRIBUTED_MAP_JOIN_MAX_IN_FLIGHT_NUM)
+
+  def distributedMapJoinMaxBatchSize: Int = getConf(DISTRIBUTED_MAP_JOIN_MAX_BATCH_SIZE)
+
+  def distributedMapJoinExchangeTimeout: Long = getConf(DISTRIBUTED_MAP_JOIN_EXCHANGE_TIMEOUT)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

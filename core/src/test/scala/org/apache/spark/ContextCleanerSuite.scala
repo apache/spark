@@ -209,7 +209,8 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
       assert(fs.exists(path))
 
       // the checkpoint is not cleaned by default (without the configuration set)
-      var postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil, Seq(rddId))
+      var postGCTester = new CleanerTester(sc, Seq(rddId), Nil, Nil,
+        checkpointIds = Seq(rddId))
       rdd = null // Make RDD out of scope, ok if collected earlier
       runGC()
       postGCTester.assertCleanup()
@@ -358,12 +359,14 @@ class CleanerTester(
     rddIds: Seq[Int] = Seq.empty,
     shuffleIds: Seq[Int] = Seq.empty,
     broadcastIds: Seq[Long] = Seq.empty,
+    shardSetIds: Seq[Long] = Seq.empty,
     checkpointIds: Seq[Long] = Seq.empty)
   extends Logging {
 
   val toBeCleanedRDDIds = new HashSet[Int] ++= rddIds
   val toBeCleanedShuffleIds = new HashSet[Int] ++= shuffleIds
   val toBeCleanedBroadcastIds = new HashSet[Long] ++= broadcastIds
+  val toBeCleanedShardSetIds = new HashSet[Long] ++= shardSetIds
   val toBeCheckpointIds = new HashSet[Long] ++= checkpointIds
   val isDistributed = !sc.isLocal
 
@@ -381,6 +384,11 @@ class CleanerTester(
     def broadcastCleaned(broadcastId: Long): Unit = {
       toBeCleanedBroadcastIds.synchronized { toBeCleanedBroadcastIds -= broadcastId }
       logInfo("Broadcast " + broadcastId + " cleaned")
+    }
+
+    def shardSetCleaned(setId: Long): Unit = {
+      toBeCleanedShardSetIds.synchronized { toBeCleanedShardSetIds -= setId }
+      logInfo("ShardSet " + setId + " cleaned")
     }
 
     def accumCleaned(accId: Long): Unit = {
@@ -506,10 +514,14 @@ class CleanerTester(
     val s3 = toBeCleanedBroadcastIds.synchronized {
       toBeCleanedBroadcastIds.toSeq.sorted.mkString("[", ", ", "]")
     }
+    val s4 = toBeCleanedShardSetIds.synchronized {
+      toBeCleanedShardSetIds.toSeq.sorted.mkString("[", ", ", "]")
+    }
     s"""
        |\tRDDs = $s1
        |\tShuffles = $s2
        |\tBroadcasts = $s3
+       |\tShardSets = $s4
     """.stripMargin
   }
 
@@ -517,7 +529,8 @@ class CleanerTester(
     toBeCleanedRDDIds.synchronized { toBeCleanedRDDIds.isEmpty } &&
     toBeCleanedShuffleIds.synchronized { toBeCleanedShuffleIds.isEmpty } &&
     toBeCleanedBroadcastIds.synchronized { toBeCleanedBroadcastIds.isEmpty } &&
-    toBeCheckpointIds.synchronized { toBeCheckpointIds.isEmpty }
+    toBeCheckpointIds.synchronized { toBeCheckpointIds.isEmpty } &&
+    toBeCleanedShardSetIds.synchronized { toBeCleanedShardSetIds.isEmpty }
 
   private def getRDDBlocks(rddId: Int): Seq[BlockId] = {
     blockManager.master.getMatchingBlockIds( _ match {

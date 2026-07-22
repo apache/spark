@@ -21,6 +21,8 @@ import java.nio.ByteBuffer;
 
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.client.ManagedRpcResponseCallback;
 import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.StreamCallbackWithID;
@@ -134,6 +136,14 @@ public abstract class RpcHandler {
       logger.error("Error response provided for one-way RPC.", e);
     }
 
+  }
+
+  public interface ManagedRpcHandler {
+
+    void receive(
+        TransportClient client,
+        ManagedBuffer message,
+        ManagedRpcResponseCallback callback);
   }
 
   /**

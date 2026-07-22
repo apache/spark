@@ -489,6 +489,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           // about the executor, but the scheduler will not. Therefore, we should remove the
           // executor from the block manager when we hit this case.
           scheduler.sc.env.blockManager.master.removeExecutorAsync(executorId)
+          val sm = scheduler.sc.env.shardManager
+          if (sm != null) {
+            sm.master.removeExecutor(executorId)
+          }
           // SPARK-35011: If we reach this code path, which means the executor has been
           // already removed from the scheduler backend but the block manager master may
           // still know it. In this case, removing the executor from block manager master

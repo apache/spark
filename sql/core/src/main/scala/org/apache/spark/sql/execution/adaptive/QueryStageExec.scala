@@ -312,6 +312,50 @@ case class TableCacheQueryStageExec(
   override def getRuntimeStatistics: Statistics = inMemoryTableScan.runtimeStatistics
 }
 
+case class ShardQueryStageExec(
+    override val id: Int,
+    override val plan: SparkPlan,
+    override val _canonicalized: SparkPlan) extends ExchangeQueryStageExec {
+
+  @transient val shard: ShardExchangeLike = plan match {
+    case sh: ShardExchangeLike => sh
+    case ReusedExchangeExec(_, sh: ShardExchangeLike) => sh
+    case _ =>
+      throw SparkException.internalError(
+        s"wrong plan for shard stage:\n ${plan.treeString}")
+  }
+
+  override protected def doMaterialize(): Future[Any] = {
+    shard.submitShardJob
+  }
+
+  override def newReuseInstance(
+      newStageId: Int,
+      newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
+    val reuse = ShardQueryStageExec(
+      newStageId,
+      ReusedExchangeExec(newOutput, shard),
+      _canonicalized)
+    reuse._resultOption = this._resultOption
+    reuse._error = this._error
+    reuse
+  }
+
+  override protected def doCancel(reason: String): Unit = {
+    if (!shard.relationFuture.isDone) {
+      sparkContext.cancelJobGroup(shard.runId.toString)
+      shard.relationFuture.cancel(true)
+    }
+  }
+
+  override def getRuntimeStatistics: Statistics = shard.runtimeStatistics
+
+  def shardSetRef: org.apache.spark.shard.ShardSetRef = {
+    assert(isMaterialized, s"${getClass.getSimpleName} should already be ready")
+    resultOption.get().get.asInstanceOf[org.apache.spark.shard.ShardSetRef]
+  }
+}
+
 case class ResultQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,

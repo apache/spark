@@ -235,6 +235,7 @@ private[spark] class DAGScheduler(
         override def broadcastCleaned(broadcastId: Long): Unit = {}
         override def accumCleaned(accId: Long): Unit = {}
         override def checkpointCleaned(rddId: Long): Unit = {}
+        override def shardSetCleaned(setId: Long): Unit = {}
       })
       injectShuffleFetchFailuresCleanerAttached = true
     }
@@ -3329,6 +3330,9 @@ private[spark] class DAGScheduler(
           host => blockManagerMaster.removeShufflePushMergerLocation(host))
       }
       blockManagerMaster.removeExecutorAsync(execId)
+      if (env.shardManager != null) {
+        env.shardManager.master.removeExecutor(execId)
+      }
       clearCacheLocs()
     }
     if (fileLost) {

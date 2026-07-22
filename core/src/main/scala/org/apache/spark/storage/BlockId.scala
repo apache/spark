@@ -162,6 +162,12 @@ case class BroadcastBlockId(broadcastId: Long, field: String = "") extends Block
 }
 
 @DeveloperApi
+case class ShardBlockId(setId: Long, shardId: Int, field: String = "") extends BlockId {
+  override def name: String = "shard_" + setId + "_" + shardId +
+    (if (field == "") "" else "_" + field)
+}
+
+@DeveloperApi
 case class TaskResultBlockId(taskId: Long) extends BlockId {
   override def name: String = "taskresult_" + taskId
 }
@@ -278,6 +284,7 @@ object BlockId {
     "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_([0-9]+)_([0-9]+).meta".r
   val SHUFFLE_CHUNK = "shuffleChunk_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
+  val SHARD = "shard_([0-9]+)_(-?[0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
   val PYTHON_STREAM = "python-stream-([0-9]+)-([0-9]+)".r
@@ -316,6 +323,8 @@ object BlockId {
         chunkId.toInt)
     case BROADCAST(broadcastId, field) =>
       BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
+    case SHARD(setId, id, field) =>
+      ShardBlockId(setId.toLong, id.toInt, field.stripPrefix("_"))
     case TASKRESULT(taskId) =>
       TaskResultBlockId(taskId.toLong)
     case STREAM(streamId, uniqueId) =>

@@ -125,6 +125,8 @@ case class EnsureRequirements(
             distribution match {
               case BroadcastDistribution(mode) =>
                 BroadcastExchangeExec(mode, child)
+              case ShardDistribution(keys, shards, replicas, filter, schema) =>
+                ShardExchangeExec(keys, shards, replicas, child, filter, schema)
               case _: StatefulOpClusteredDistribution =>
                 ShuffleExchangeExec(
                   distribution.createPartitioning(numPartitions), child,

@@ -487,6 +487,7 @@ class CachedTableSuite extends SharedSparkSession
         def rddCleaned(rddId: Int): Unit = {}
         def shuffleCleaned(shuffleId: Int): Unit = {}
         def broadcastCleaned(broadcastId: Long): Unit = {}
+        def shardSetCleaned(setId: Long): Unit = {}
         def accumCleaned(accId: Long): Unit = {
           toBeCleanedAccIds.synchronized { toBeCleanedAccIds -= accId }
         }

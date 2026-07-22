@@ -51,6 +51,8 @@ private[spark] object BlockManagerMessages {
   // Mark a rdd block as visible.
   case class MarkRDDBlockAsVisible(blockId: RDDBlockId) extends ToBlockManagerMasterStorageEndpoint
 
+  case class RemoveShardSet(setId: Long) extends ToBlockManagerMasterStorageEndpoint
+
   /**
    * Driver to Executor message to trigger a thread dump.
    */

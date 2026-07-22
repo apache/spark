@@ -3152,4 +3152,14 @@ package object config {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val SHARD_ENABLED =
+    ConfigBuilder("spark.shard.enabled")
+      .doc("When true, the shard service infrastructure (endpoints, lookup server) is " +
+        "started at application launch, enabling the distributed map join strategy " +
+        "via SQL hints.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 }

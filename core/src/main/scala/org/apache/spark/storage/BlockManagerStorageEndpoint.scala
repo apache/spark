@@ -21,7 +21,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Futu
 
 import org.apache.spark.{MapOutputTracker, SparkEnv}
 import org.apache.spark.internal.{Logging, MessageWithContext}
-import org.apache.spark.internal.LogKeys.{BLOCK_ID, BROADCAST_ID, RDD_ID, SHUFFLE_ID}
+import org.apache.spark.internal.LogKeys.{BLOCK_ID, BROADCAST_ID, RDD_ID, SHARD_ID, SHUFFLE_ID}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEnv}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -75,6 +75,12 @@ class BlockManagerStorageEndpoint(
     case RemoveBroadcast(broadcastId, _) =>
       doAsync[Int](log"removing broadcast ${MDC(BROADCAST_ID, broadcastId)}", context) {
         blockManager.removeBroadcast(broadcastId, tellMaster = true)
+      }
+    case RemoveShardSet(setId: Long) =>
+      doAsync[Int](log"removing shard-set ${MDC(SHARD_ID, setId)}", context) {
+        val sm = SparkEnv.get.shardManager
+        if (sm != null) sm.invokeCleanupCallbacks(setId)
+        blockManager.removeShardSet(setId, tellMaster = true)
       }
 
     case GetBlockStatus(blockId, _) =>

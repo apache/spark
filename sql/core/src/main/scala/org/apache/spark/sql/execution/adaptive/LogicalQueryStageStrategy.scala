@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastPartitioning, IdentityBroadcastMode}
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution.{joins, SparkPlan}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, HashedRelationBroadcastMode}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, DistributedMapJoinExec, HashedRelationBroadcastMode}
 
 /**
  * Strategy for plans containing [[LogicalQueryStage]] nodes:
@@ -58,6 +58,11 @@ object LogicalQueryStageStrategy extends Strategy {
     case _ => false
   }
 
+  private def isShardStage(plan: LogicalPlan): Boolean = plan match {
+    case LogicalQueryStage(_, _: ShardQueryStageExec) => true
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
           left, right, hint)
@@ -72,6 +77,14 @@ object LogicalQueryStageStrategy extends Strategy {
       Seq(BroadcastHashJoinExec(
         leftKeys, rightKeys, joinType, buildSide, otherCondition, planLater(left),
         planLater(right)))
+
+    case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
+          left, right, hint)
+      if isShardStage(left) || isShardStage(right) =>
+      val buildSide = if (isShardStage(left)) BuildLeft else BuildRight
+      Seq(DistributedMapJoinExec(
+        leftKeys, rightKeys, joinType, buildSide, otherCondition, planLater(left),
+        planLater(right), hint))
 
     case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
         if isBroadcastStageWithHashedBroadcastMode(j.right, isNullAware = true) =>
