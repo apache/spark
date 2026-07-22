@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkNoSuchElementException}
+import org.apache.spark.internal.config.{ConfigBuilder, ConfigEntry}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -199,6 +200,16 @@ class SQLConfSuite extends SharedSparkSession {
     sql(s"set ${config.key}=50")
     assert(sqlConf.getConf(config) === 50)
     sqlConf.clear()
+  }
+
+  test("proto-backed config cannot be replaced by an ordinary config entry") {
+    val key = SQLConf.OPTIMIZER_MAX_ITERATIONS.key
+    val original = ConfigEntry.findEntry(key)
+
+    intercept[IllegalArgumentException] {
+      ConfigBuilder(key).intConf.createWithDefault(1)
+    }
+    assert(ConfigEntry.findEntry(key) eq original)
   }
 
   test("proto-backed config with checkValue - SHUFFLE_HASH_JOIN_FACTOR") {

@@ -412,7 +412,7 @@ private[spark] object ConfigEntry {
       // entry is proto-backed; this deliberately trades the duplicate-detection net for that key,
       // so the Scala side must still reference a key that is genuinely defined in a .textproto
       // file.
-      require(existing.isInstanceOf[ProtoBackedBase],
+      require(existing.isInstanceOf[ProtoBackedBase] && entry.isInstanceOf[ProtoBackedBase],
         s"Config entry ${entry.key} already registered!")
       knownConfigs.put(entry.key, entry)
     }
