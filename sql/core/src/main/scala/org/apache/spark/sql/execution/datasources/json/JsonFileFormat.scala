@@ -52,8 +52,7 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = getJsonOptions(sparkSession, options)
-    JsonDataSource(parsedOptions)
-      .inferSchema(sparkSession, files, parsedOptions, supportsArchiveScan = true)
+    JsonDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
   }
 
   override def prepareWrite(
