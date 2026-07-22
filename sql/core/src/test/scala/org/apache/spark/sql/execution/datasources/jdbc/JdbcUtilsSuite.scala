@@ -202,4 +202,89 @@ class JdbcUtilsSuite extends SparkFunSuite {
     // 2 + 0 (null) + 3 = 5
     assert(JdbcUtils.measureRowSize(row, schema) === 5L)
   }
+
+  test("SPARK-57471: measureInternalRowSize skips null elements in arrays") {
+    // [1, null] under ArrayType(IntegerType) -> only non-null element contributes 4 bytes
+    val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
+    val arr = new GenericArrayData(Array[Any](1, null))
+    val row = new GenericInternalRow(Array[Any](arr))
+    assert(JdbcUtils.measureInternalRowSize(row, schema) === 4L)
+  }
+
+  test("SPARK-57471: measureRowSize skips null elements in arrays") {
+    val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
+    val row = Row(Seq(1, null))
+    assert(JdbcUtils.measureRowSize(row, schema) === 4L)
+  }
+
+  test("SPARK-57471: measureInternalRowSize recurses nested arrays") {
+    // [[1,2],[3]] under ArrayType(ArrayType(IntegerType)) -> 3 ints * 4 = 12
+    val schema = StructType(Seq(StructField("a", ArrayType(ArrayType(IntegerType)))))
+    val inner1 = new GenericArrayData(Array[Any](1, 2))
+    val inner2 = new GenericArrayData(Array[Any](3))
+    val outer = new GenericArrayData(Array[Any](inner1, inner2))
+    val row = new GenericInternalRow(Array[Any](outer))
+    assert(JdbcUtils.measureInternalRowSize(row, schema) === 12L)
+  }
+
+  test("SPARK-57471: measureRowSize recurses nested arrays") {
+    val schema = StructType(Seq(StructField("a", ArrayType(ArrayType(IntegerType)))))
+    val row = Row(Seq(Seq(1, 2), Seq(3)))
+    assert(JdbcUtils.measureRowSize(row, schema) === 12L)
+  }
+
+  test("SPARK-57471: measureInternalRowSize returns 0 for empty array") {
+    val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
+    val arr = new GenericArrayData(Array[Any]())
+    val row = new GenericInternalRow(Array[Any](arr))
+    assert(JdbcUtils.measureInternalRowSize(row, schema) === 0L)
+  }
+
+  test("SPARK-57471: measureRowSize returns 0 for empty array") {
+    val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
+    val row = Row(Seq.empty[Int])
+    assert(JdbcUtils.measureRowSize(row, schema) === 0L)
+  }
+
+  test("SPARK-57471: measureInternalRowSize returns 0 for all-null array") {
+    val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
+    val arr = new GenericArrayData(Array[Any](null, null, null))
+    val row = new GenericInternalRow(Array[Any](arr))
+    assert(JdbcUtils.measureInternalRowSize(row, schema) === 0L)
+  }
+
+  test("SPARK-57471: measureRowSize returns 0 for all-null array") {
+    val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
+    val row = Row(Seq(null, null, null))
+    assert(JdbcUtils.measureRowSize(row, schema) === 0L)
+  }
+
+  test("SPARK-57471: measureInternalRowSize returns 0 for null array field") {
+    val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
+    val row = new GenericInternalRow(Array[Any](null))
+    assert(JdbcUtils.measureInternalRowSize(row, schema) === 0L)
+  }
+
+  test("SPARK-57471: measureRowSize returns 0 for null array field") {
+    val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
+    val row = Row(null)
+    assert(JdbcUtils.measureRowSize(row, schema) === 0L)
+  }
+
+  test("SPARK-57471: measureInternalRowSize skips null in string arrays") {
+    import org.apache.spark.unsafe.types.UTF8String
+    val schema = StructType(Seq(StructField("a", ArrayType(StringType))))
+    val arr = new GenericArrayData(
+      Array[Any](UTF8String.fromString("abc"), null, UTF8String.fromString("de")))
+    val row = new GenericInternalRow(Array[Any](arr))
+    // "abc"=3 + null=0 + "de"=2 = 5
+    assert(JdbcUtils.measureInternalRowSize(row, schema) === 5L)
+  }
+
+  test("SPARK-57471: measureRowSize skips null in string arrays") {
+    val schema = StructType(Seq(StructField("a", ArrayType(StringType))))
+    val row = Row(Seq("abc", null, "de"))
+    // "abc"=3 + null=0 + "de"=2 = 5
+    assert(JdbcUtils.measureRowSize(row, schema) === 5L)
+  }
 }
