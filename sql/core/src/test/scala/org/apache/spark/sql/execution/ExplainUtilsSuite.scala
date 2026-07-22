@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.util.StringConcat
 import org.apache.spark.sql.test.SharedSparkSession
@@ -25,7 +26,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Tests for [[ExplainUtils.processPlan]]: operator ID assignment, WholeStageCodegen tag
  * propagation, thread-local lifecycle, and subquery handling.
  */
-class ExplainUtilsSuite extends SharedSparkSession {
+class ExplainUtilsSuite extends QueryTest with SharedSparkSession {
 
   private def explainOutput(plan: SparkPlan): String = {
     val concat = new StringConcat()
