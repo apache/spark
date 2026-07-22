@@ -1319,15 +1319,16 @@ class Analyzer(
           case _ => None
         }
       }
-      // Two-part `session.<name>`: the name can denote either a local temp view `name` or a
-      // persistent relation `name` in schema `session`. Order follows
-      // `SQLConf.prioritizeSystemCatalog` (the inverse of `PERSISTENT_CATALOG_FIRST`), matching
-      // the SELECT/DML path in `RelationResolution.resolveRelation`. Without this, DDL and misc
-      // commands (e.g. DESCRIBE TABLE, ALTER TABLE) would always resolve the temp view first and
-      // ignore `PERSISTENT_CATALOG_FIRST`, diverging from how the same name resolves in a query.
-      if (identifier.length == 2 &&
+      // Three-part `system.session.<name>` denotes a local temp view `name` only; it must never
+      // consult the persistent schema `session`, regardless of `PERSISTENT_CATALOG_FIRST`.
+      if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
+        tempViewCandidate
+      } else if (identifier.length == 2 &&
           identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) &&
           !conf.prioritizeSystemCatalog) {
+        // Two-part `session.<name>`: the name can denote either a local temp view `name` or a
+        // persistent relation `name` in schema `session`. Order follows
+        // `SQLConf.prioritizeSystemCatalog`.
         persistentCandidate.orElse(tempViewCandidate)
       } else {
         tempViewCandidate.orElse(persistentCandidate)

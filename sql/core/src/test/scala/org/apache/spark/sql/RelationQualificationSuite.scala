@@ -319,24 +319,42 @@ class RelationQualificationSuite extends SharedSparkSession {
     }
 
     // Three-part system.session.<name> is temp-only in both paths and must never consult the
-    // persistent schema `session`, regardless of persistentCatalogFirst (guards the length == 2
-    // condition in lookupTableOrView).
-    withDatabase("session") {
-      sql("CREATE DATABASE session")
-      sql(s"CREATE TABLE session.$tbl (persistent_col INT) USING parquet")
-      sql(s"CREATE TEMPORARY VIEW $tbl AS SELECT 1 AS temp_col")
-      try {
-        Seq(false, true).foreach { persistentCatalogFirst =>
+    // persistent schema `session`, regardless of persistentCatalogFirst. This guards the
+    // isFullyQualifiedSystemSessionViewName branch in lookupTableOrView. We cover both the
+    // temp-present case (resolves the temp view) and, critically, the temp-absent case (must NOT
+    // fall through to the persistent table).
+    for {
+      tempExists <- Seq(true, false)
+      persistentCatalogFirst <- Seq(false, true)
+    } {
+      withDatabase("session") {
+        sql("CREATE DATABASE session")
+        // A persistent `session.<name>` always exists here so a fall-through would resolve it.
+        sql(s"CREATE TABLE session.$tbl (persistent_col INT) USING parquet")
+        if (tempExists) {
+          sql(s"CREATE TEMPORARY VIEW $tbl AS SELECT 1 AS temp_col")
+        }
+        try {
           withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> persistentCatalogFirst.toString) {
-            withClue(s"3-part, persistentCatalogFirst=$persistentCatalogFirst: ") {
-              val cols = sql(s"DESCRIBE TABLE system.session.$tbl")
-                .collect().map(_.getString(0)).toSeq
-              assert(cols.contains("temp_col"))
+            withClue(s"3-part, tempExists=$tempExists, " +
+                s"persistentCatalogFirst=$persistentCatalogFirst: ") {
+              if (tempExists) {
+                val cols = sql(s"DESCRIBE TABLE system.session.$tbl")
+                  .collect().map(_.getString(0)).toSeq
+                assert(cols.contains("temp_col"))
+              } else {
+                // Temp view absent: the three-part name is temp-only, so it must NOT resolve the
+                // persistent `session.<name>`. Resolution fails with TABLE_OR_VIEW_NOT_FOUND.
+                val e = intercept[AnalysisException] {
+                  sql(s"DESCRIBE TABLE system.session.$tbl")
+                }
+                assert(e.getCondition == "TABLE_OR_VIEW_NOT_FOUND")
+              }
             }
           }
+        } finally {
+          sql(s"DROP VIEW IF EXISTS $tbl")
         }
-      } finally {
-        sql(s"DROP VIEW IF EXISTS $tbl")
       }
     }
   }
