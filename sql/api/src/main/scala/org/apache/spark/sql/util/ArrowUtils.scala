@@ -557,60 +557,33 @@ private[sql] object ArrowUtils {
   }
 
   /**
-   * Whether an Arrow field tree (from an upstream vector) has exactly the physical shape the
-   * standard interchange encoding declares for its Spark type, so its buffers can be serialized
-   * verbatim under a schema built by `toArrowSchema(..., largeVarTypes)` with the default
-   * (non-lossless) encodings. An IPC consumer decodes a RecordBatch body strictly by the shape
-   * the stream's Schema message declared, so forwarding a vector whose shape differs -- the
-   * lossless internal struct encodings of nanosecond timestamps and CalendarInterval, a var-width
-   * vector whose offset width disagrees with `largeVarTypes`, or any Arrow type Spark schemas
-   * never declare (view types, LargeList, unions, ...) -- produces a stream whose header and body
-   * disagree: depending on the column mix that surfaces as a decode error or, worse, silently
-   * mis-bound buffers. Callers that forward vectors verbatim (e.g. the columnar Arrow Python UDF
-   * input) must reject such vectors and re-encode them through ArrowWriter instead, which also
-   * reinstates the value-domain guards (DATETIME_OVERFLOW) for values the interchange encoding
-   * cannot represent.
+   * Whether an Arrow field tree (from an upstream vector) is physically congruent with the
+   * declared field of the stream it would be forwarded into: same Arrow type, same child count,
+   * congruent children, and no dictionary encoding. An IPC consumer decodes a RecordBatch body
+   * strictly by the declared schema, walking a flattened sequence of field nodes and buffers, so
+   * ANY structural divergence silently shifts the node/buffer assignment of every following
+   * column or mis-binds buffers within one: the lossless internal struct encodings where the
+   * declared schema has the interchange types, a var-width vector whose offset width disagrees
+   * with the declared one, a tagged Variant/Geometry/Geography struct carrying an extra child
+   * that the recognizers tolerate but the declared canonical field does not include, or
+   * dictionary-encoded data whose values live in dictionary batches the stream never writes.
    *
-   * This is an allowlist of the shapes `toArrowField` can produce, not a blocklist of known-bad
-   * shapes: an unrecognized Arrow type must fail the check, because the two failure directions
-   * are not symmetric -- a shape wrongly rejected merely takes the row-based re-encoding fallback
-   * (slower, still correct), while a shape wrongly forwarded corrupts the stream. The same
-   * applies to dictionary-encoded fields: their record batches carry indices whose values live in
-   * separate dictionary batches this stream never writes, so they must take the fallback even
-   * though their type alone would pass.
+   * This compares against the declared field rather than allowlisting "declarable" shapes: the
+   * declared schema is the exact header the consumer will decode with, so congruence with it is
+   * the complete correctness condition, not an approximation of it. Field names, nullability, and
+   * metadata are ignored -- they do not affect the buffer layout. The two failure directions stay
+   * asymmetric: a false reject merely takes the row-based re-encoding fallback (slower, still
+   * correct, and with the value-domain guards such as DATETIME_OVERFLOW reinstated), while a
+   * false accept corrupts the stream -- so anything not provably congruent must be rejected.
    */
-  def isInterchangeShapedField(field: Field, largeVarTypes: Boolean): Boolean = {
-    val shapeOk = field.getType match {
-      case ArrowType.Utf8.INSTANCE | ArrowType.Binary.INSTANCE => !largeVarTypes
-      case ArrowType.LargeUtf8.INSTANCE | ArrowType.LargeBinary.INSTANCE => largeVarTypes
-      case _: ArrowType.Struct =>
-        // The lossless internal encodings are structs, but not ones the interchange schema
-        // declares; plain structs are fine (their children are checked below).
-        !(isTimestampNanosStructField(field) || isCalendarIntervalStructField(field))
-      case ArrowType.Bool.INSTANCE | ArrowType.Null.INSTANCE | ArrowType.List.INSTANCE => true
-      case i: ArrowType.Int => i.getIsSigned && interchangeIntBitWidths.contains(i.getBitWidth)
-      case f: ArrowType.FloatingPoint =>
-        f.getPrecision == FloatingPointPrecision.SINGLE ||
-        f.getPrecision == FloatingPointPrecision.DOUBLE
-      case d: ArrowType.Decimal => d.getBitWidth == 8 * 16
-      case d: ArrowType.Date => d.getUnit == DateUnit.DAY
-      case ts: ArrowType.Timestamp =>
-        ts.getUnit == TimeUnit.MICROSECOND || ts.getUnit == TimeUnit.NANOSECOND
-      case t: ArrowType.Time => t.getUnit == TimeUnit.NANOSECOND && t.getBitWidth == 8 * 8
-      case iv: ArrowType.Interval =>
-        iv.getUnit == IntervalUnit.YEAR_MONTH || iv.getUnit == IntervalUnit.MONTH_DAY_NANO
-      case d: ArrowType.Duration => d.getUnit == TimeUnit.MICROSECOND
-      case _: ArrowType.Map => true
-      case _ => false
+  def isCompatibleWithDeclaredField(actual: Field, declared: Field): Boolean = {
+    actual.getDictionary == null &&
+    actual.getType == declared.getType &&
+    actual.getChildren.size == declared.getChildren.size &&
+    actual.getChildren.asScala.zip(declared.getChildren.asScala).forall { case (a, d) =>
+      isCompatibleWithDeclaredField(a, d)
     }
-    shapeOk &&
-    field.getDictionary == null &&
-    field.getChildren.asScala.forall(child => isInterchangeShapedField(child, largeVarTypes))
   }
-
-  // Hoisted out of isInterchangeShapedField: it runs per field tree on every batch of the
-  // columnar Python UDF input path, and a literal Set would be re-allocated on each call.
-  private val interchangeIntBitWidths = Set(8, 16, 32, 64)
 
   def fromArrowField(field: Field): DataType = {
     field.getType match {

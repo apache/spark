@@ -82,22 +82,25 @@ private[python] trait ColumnarArrowPythonInput
   }
 
   /**
-   * Check whether all selected columns in the batch are Arrow-backed AND physically match the
-   * shape the stream's Schema message declares. The Schema message was written once from the
-   * declared UDF input schema with the standard interchange encoding, while writeArrowDirect
-   * serializes the upstream vectors' buffers verbatim -- so a vector in a different physical
-   * shape (the lossless internal struct encodings of nanosecond timestamps or CalendarInterval
-   * from an Arrow-cache scan, a var-width vector whose offset width disagrees with
-   * largeVarTypes, or an Arrow view type) would produce a stream whose header and body disagree,
-   * which the worker decodes as garbage or rejects. Such batches take writeRowByRow instead,
+   * Check whether all selected columns in the batch are Arrow-backed AND physically congruent
+   * with the stream's Schema message. The Schema message was written once from `root` (built
+   * from the declared UDF input schema), while writeArrowDirect serializes the upstream
+   * vectors' buffers verbatim -- so each selected vector's field tree is compared against the
+   * corresponding declared field of that exact header. Any divergence (the lossless internal
+   * struct encodings from an Arrow-cache scan, a var-width offset width disagreeing with the
+   * declared one, a tagged struct carrying extra children the declared canonical field lacks,
+   * dictionary-encoded data, ...) would make the header and body disagree, which the worker
+   * decodes as silently shifted buffers or rejects. Such batches take writeRowByRow instead,
    * which re-encodes through ArrowWriter under the declared schema -- including its
    * DATETIME_OVERFLOW guards for values the interchange encoding cannot represent at all.
    */
   private def isArrowBacked(batch: ColumnarBatch): Boolean = {
-    inputColumnIndices.forall { i =>
-      batch.column(i) match {
+    val declaredFields = root.getSchema.getFields
+    inputColumnIndices.indices.forall { i =>
+      batch.column(inputColumnIndices(i)) match {
         case acv: ArrowColumnVector =>
-          ArrowUtils.isInterchangeShapedField(acv.getValueVector.getField, largeVarTypes)
+          ArrowUtils.isCompatibleWithDeclaredField(
+            acv.getValueVector.getField, declaredFields.get(i))
         case _ => false
       }
     }

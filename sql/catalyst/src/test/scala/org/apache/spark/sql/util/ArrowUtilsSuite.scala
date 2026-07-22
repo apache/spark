@@ -369,74 +369,84 @@ class ArrowUtilsSuite extends SparkFunSuite {
       defaultType.asInstanceOf[ArrowType.Interval].getUnit === IntervalUnit.MONTH_DAY_NANO)
   }
 
-  test("isInterchangeShapedField rejects shapes the interchange schema cannot declare") {
-    def field(schema: StructType, lossless: Boolean, largeVarTypes: Boolean = false): Field = {
+  test("isCompatibleWithDeclaredField requires congruence with the declared field tree") {
+    def declared(schema: StructType, largeVarTypes: Boolean = false): Field = {
+      ArrowUtils.toArrowSchema(schema, "UTC", true, largeVarTypes).findField("value")
+    }
+    def actual(
+        schema: StructType,
+        lossless: Boolean = false,
+        largeVarTypes: Boolean = false): Field = {
       ArrowUtils
         .toArrowSchema(schema, "UTC", true, largeVarTypes, losslessInternalTypes = lossless)
         .findField("value")
     }
+    def compat(a: Field, d: Field): Boolean = ArrowUtils.isCompatibleWithDeclaredField(a, d)
 
-    // Interchange-encoded fields of every kind pass, including the standard nanos/interval
-    // encodings and nested complex types.
+    // Identical construction is congruent, for every kind of type the schema can declare,
+    // including the standard nanos/interval encodings, tagged struct types, and nested trees.
     Seq[DataType](
       IntegerType,
+      StringType,
       TimestampNTZNanosType(9),
-      TimestampLTZNanosType(7),
       CalendarIntervalType,
+      GeometryType(4326),
+      VariantType,
       ArrayType(TimestampNTZNanosType(9)),
       new StructType().add("i", CalendarIntervalType),
       MapType(IntegerType, StringType)).foreach { dt =>
-      val f = field(new StructType().add("value", dt), lossless = false)
-      assert(ArrowUtils.isInterchangeShapedField(f, largeVarTypes = false), dt.toString)
+      val s = new StructType().add("value", dt)
+      assert(compat(actual(s), declared(s)), dt.toString)
     }
 
-    // The lossless internal struct encodings are rejected, top-level and nested.
+    // The lossless internal encodings are structs where the declared schema has the
+    // interchange types: incongruent in both directions.
     Seq[DataType](
       TimestampNTZNanosType(9),
-      TimestampLTZNanosType(7),
       CalendarIntervalType,
-      ArrayType(TimestampNTZNanosType(9)),
-      new StructType().add("i", CalendarIntervalType),
-      MapType(IntegerType, TimestampLTZNanosType(9))).foreach { dt =>
-      val f = field(new StructType().add("value", dt), lossless = true)
-      assert(!ArrowUtils.isInterchangeShapedField(f, largeVarTypes = false), dt.toString)
+      ArrayType(TimestampLTZNanosType(7))).foreach { dt =>
+      val s = new StructType().add("value", dt)
+      assert(!compat(actual(s, lossless = true), declared(s)), dt.toString)
     }
 
-    // A plain struct with the same child names but no tag is not a lossless encoding: it is
-    // declarable by the interchange schema and passes.
-    val untagged = field(
-      new StructType().add(
-        "value",
-        new StructType()
-          .add("months", IntegerType, nullable = false)
-          .add("days", IntegerType, nullable = false)
-          .add("microseconds", LongType, nullable = false)),
-      lossless = false)
-    assert(ArrowUtils.isInterchangeShapedField(untagged, largeVarTypes = false))
-
-    // Var-width offset width must agree with the largeVarTypes flag, in both directions and
-    // nested.
+    // Var-width offset width must agree with the declared field, in both directions and nested.
     Seq[DataType](StringType, BinaryType, ArrayType(StringType)).foreach { dt =>
-      val standard = field(new StructType().add("value", dt), lossless = false)
-      assert(ArrowUtils.isInterchangeShapedField(standard, largeVarTypes = false), dt.toString)
-      assert(!ArrowUtils.isInterchangeShapedField(standard, largeVarTypes = true), dt.toString)
-      val large =
-        field(new StructType().add("value", dt), lossless = false, largeVarTypes = true)
-      assert(ArrowUtils.isInterchangeShapedField(large, largeVarTypes = true), dt.toString)
-      assert(!ArrowUtils.isInterchangeShapedField(large, largeVarTypes = false), dt.toString)
+      val s = new StructType().add("value", dt)
+      assert(compat(actual(s), declared(s)), dt.toString)
+      assert(!compat(actual(s), declared(s, largeVarTypes = true)), dt.toString)
+      assert(!compat(actual(s, largeVarTypes = true), declared(s)), dt.toString)
+      assert(
+        compat(actual(s, largeVarTypes = true), declared(s, largeVarTypes = true)),
+        dt.toString)
     }
 
-    // The Arrow view types are never declared by a Spark interchange schema.
-    val viewField = new Field(
-      "value",
-      new FieldType(true, ArrowType.Utf8View.INSTANCE, null, null),
+    // A tagged Geometry struct with an extra child is read back as GeometryType by the
+    // recognizers (which tolerate extra children), but the declared canonical field has exactly
+    // two children -- forwarding the three-child body verbatim would shift every following
+    // column's buffers (the extra child's buffers would be consumed as the next argument's
+    // data), so it must be incongruent.
+    val geometrySchema = new StructType().add("value", GeometryType(4326))
+    val canonicalGeometry = declared(geometrySchema)
+    val extraChild = new Field(
+      "extra",
+      new FieldType(true, new ArrowType.Int(32, true), null, null),
       java.util.Collections.emptyList[Field]())
-    assert(!ArrowUtils.isInterchangeShapedField(viewField, largeVarTypes = false))
-    assert(!ArrowUtils.isInterchangeShapedField(viewField, largeVarTypes = true))
+    val paddedChildren = new java.util.ArrayList[Field](canonicalGeometry.getChildren)
+    paddedChildren.add(extraChild)
+    val paddedGeometry = new Field(
+      canonicalGeometry.getName,
+      new FieldType(
+        canonicalGeometry.isNullable,
+        canonicalGeometry.getType,
+        null,
+        canonicalGeometry.getMetadata),
+      paddedChildren)
+    assert(ArrowUtils.fromArrowField(paddedGeometry) === GeometryType(4326))
+    assert(!compat(paddedGeometry, canonicalGeometry))
 
-    // The check is an allowlist of shapes toArrowField can produce, so list-like types Spark
-    // never declares are rejected even though their children would individually pass -- an
-    // unrecognized shape must take the fallback, never the verbatim forward.
+    // List-like types Spark never declares are incongruent with the declared List.
+    val arraySchema = new StructType().add("value", ArrayType(IntegerType))
+    val declaredList = declared(arraySchema)
     val intChild = new Field(
       "element",
       new FieldType(true, new ArrowType.Int(32, true), null, null),
@@ -450,15 +460,20 @@ class ArrowUtilsSuite extends SparkFunSuite {
         "value",
         new FieldType(true, arrowType, null, null),
         java.util.Collections.singletonList(intChild))
-      assert(!ArrowUtils.isInterchangeShapedField(listLike, largeVarTypes = false),
-        arrowType.toString)
-      assert(!ArrowUtils.isInterchangeShapedField(listLike, largeVarTypes = true),
-        arrowType.toString)
+      assert(!compat(listLike, declaredList), arrowType.toString)
     }
 
-    // A dictionary-encoded field is rejected even though its type alone would pass: its record
-    // batches carry indices whose values live in separate dictionary batches the UDF stream
-    // never writes.
+    // A view-typed field is incongruent with the declared Utf8.
+    val stringSchema = new StructType().add("value", StringType)
+    val viewField = new Field(
+      "value",
+      new FieldType(true, ArrowType.Utf8View.INSTANCE, null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(!compat(viewField, declared(stringSchema)))
+
+    // A dictionary-encoded field is incongruent even though its value type matches the declared
+    // field: its record batches carry indices whose values live in separate dictionary batches
+    // the UDF stream never writes.
     val dictField = new Field(
       "value",
       new FieldType(
@@ -467,13 +482,14 @@ class ArrowUtilsSuite extends SparkFunSuite {
         new DictionaryEncoding(1L, false, new ArrowType.Int(32, true)),
         null),
       java.util.Collections.emptyList[Field]())
-    assert(!ArrowUtils.isInterchangeShapedField(dictField, largeVarTypes = false))
-    // The same field without the dictionary passes, isolating the dictionary as the reason.
+    assert(!compat(dictField, declared(stringSchema)))
+    // The same field without the dictionary is congruent, isolating the dictionary as the
+    // reason. Names and metadata are ignored: only the physical layout matters.
     val plainField = new Field(
-      "value",
+      "renamed",
       new FieldType(true, ArrowType.Utf8.INSTANCE, null, null),
       java.util.Collections.emptyList[Field]())
-    assert(ArrowUtils.isInterchangeShapedField(plainField, largeVarTypes = false))
+    assert(compat(plainField, declared(stringSchema)))
   }
 
   test("time") {
