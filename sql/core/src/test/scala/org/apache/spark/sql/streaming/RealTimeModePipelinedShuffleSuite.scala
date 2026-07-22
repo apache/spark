@@ -20,10 +20,17 @@ package org.apache.spark.sql.streaming
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.scheduler.SparkListenerStageSubmitted
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
+import org.apache.spark.sql.functions.udf
+
+/** Driver-side switch a UDF reads on executors to fail a task on demand (for fault-tolerance). */
+object RealTimeModePipelinedShuffleSuite {
+  @volatile var failTasks: Boolean = false
+}
 
 /**
  * Tests that a stateful Real-Time Mode query (streaming `dropDuplicates`) runs when its repartition
@@ -31,13 +38,18 @@ import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, L
  * stage are co-scheduled and stream records through a transient shuffle instead of the consumer
  * waiting for the producer to fully materialize.
  *
- * The Real-Time Mode operator allowlist check is left enabled, so the test also confirms that the
+ * The Real-Time Mode operator allowlist check is left enabled, so the tests also confirm that the
  * dedup plan's operators (StreamingDeduplicateExec, StateStoreRestore/Save, ShuffleExchangeExec)
- * are admitted. It drives the source with the standard `testStream` DSL, which advances the query
+ * are admitted. They drive the source with the standard `testStream` DSL, which advances the query
  * across multiple batches.
  */
-class RealTimeModePipelinedShuffleSuite extends StreamRealTimeModeSuiteBase {
+class RealTimeModePipelinedShuffleSuite extends StreamRealTimeModeManualClockSuiteBase {
   import testImplicits._
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    RealTimeModePipelinedShuffleSuite.failTasks = false
+  }
 
   test("stateful dedup runs in Real-Time Mode over a pipelined shuffle") {
     // Track, from the driver, whether the producer (source scan) and consumer (dedup) stages of the
@@ -70,13 +82,17 @@ class RealTimeModePipelinedShuffleSuite extends StreamRealTimeModeSuiteBase {
         .select($"key")
 
       testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
-        // Batch 0: three distinct keys, each sent twice -> dedup emits each once.
+        // Batch 0: three distinct keys, each sent twice -> dedup emits each once. A Real-Time Mode
+        // batch runs for a fixed duration and emits in real time, so CheckAnswerWithTimeout polls
+        // the sink (rather than blocking for batch completion) and advanceRealTimeClock ends it.
         AddData(inputData, ("a", 1), ("b", 1), ("c", 1), ("a", 2), ("b", 2), ("c", 2)),
         StartStream(),
-        CheckAnswer("a", "b", "c"),
+        CheckAnswerWithTimeout(60000, "a", "b", "c"),
+        advanceRealTimeClock,
+        WaitUntilBatchProcessed(0),
         // Batch 1: all duplicates of already-seen keys plus one new key -> only "d" is new.
         AddData(inputData, ("a", 3), ("b", 3), ("c", 3), ("d", 1)),
-        CheckAnswer("a", "b", "c", "d"),
+        CheckAnswerWithTimeout(60000, "a", "b", "c", "d"),
         // Every Real-Time Mode shuffle exchange in the executed plan is pipelined, and the producer
         // + consumer stages were genuinely co-scheduled (>= 2 stages ran at once).
         Execute { q =>
@@ -93,6 +109,56 @@ class RealTimeModePipelinedShuffleSuite extends StreamRealTimeModeSuiteBase {
       )
     } finally {
       spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("dedup over a pipelined shuffle recovers from a task failure via checkpoint restart") {
+    withTempDir { checkpointDir =>
+      // A UDF that throws on demand, to fail a task mid-batch. Placed after the dedup so the
+      // failure lands in the pipelined consumer stage while the query is running.
+      val failUDF = udf { (key: String) =>
+        if (RealTimeModePipelinedShuffleSuite.failTasks) {
+          throw new RuntimeException(s"forced task failure on $key")
+        }
+        key
+      }
+
+      val inputData = LowLatencyMemoryStream[(String, Int)]
+      val result = inputData
+        .toDF()
+        .select($"_1".as("key"))
+        .dropDuplicates("key")
+        .select(failUDF($"key").as("key"))
+
+      // First run: dedup "a","b" (batch 0 commits), then a task failure fails the query. RTM does
+      // not retry tasks, so a single task failure fails the whole batch/query.
+      testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        AddData(inputData, ("a", 1), ("b", 1), ("a", 2)),
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        CheckAnswerWithTimeout(60000, "a", "b"),
+        advanceRealTimeClock,
+        WaitUntilBatchProcessed(0),
+        Execute { _ => RealTimeModePipelinedShuffleSuite.failTasks = true },
+        AddData(inputData, ("c", 1)),
+        advanceRealTimeClock,
+        ExpectFailure[SparkException] { ex =>
+          val msg = Option(ex.getCause).map(_.getMessage).getOrElse(ex.getMessage)
+          assert(msg != null && msg.contains("forced task failure"),
+            s"expected a forced task failure, got: $msg")
+        }
+      )
+
+      // Restart from the same checkpoint. The dedup state from batch 0 must survive: "a" and "b"
+      // are already seen and must NOT be re-emitted; only the genuinely-new "c","d" appear. This
+      // proves recovery-to-last-committed-batch works when the shuffle is pipelined.
+      RealTimeModePipelinedShuffleSuite.failTasks = false
+      testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, ("a", 3), ("b", 3), ("c", 3), ("d", 1)),
+        CheckAnswerWithTimeout(60000, "c", "d"),
+        advanceRealTimeClock,
+        StopStream
+      )
     }
   }
 }
