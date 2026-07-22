@@ -671,6 +671,9 @@ private[sql] object CatalogV2Util {
     Option(col.id()).foreach { id =>
       f = f.withId(id)
     }
+    // TODO: this only carries the SQL string form. We could also convert the connector
+    //  Expression form (GenerationExpression) via V2ExpressionUtils.toCatalyst and store it
+    //  with putExpression.
     Option(col.generationExpression()).foreach { genExpr =>
       f = f.copy(metadata = new MetadataBuilder()
         .withMetadata(f.metadata)
