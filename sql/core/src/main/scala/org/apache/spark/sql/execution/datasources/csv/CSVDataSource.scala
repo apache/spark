@@ -68,23 +68,17 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
   final def inferSchema(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions,
-      supportsArchiveScan: Boolean): Option[StructType] = {
+      parsedOptions: CSVOptions): Option[StructType] = {
     parsedOptions.singleVariantColumn match {
       case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
       case None =>
         val hasArchive = parsedOptions.archiveFormatEnabled &&
           inputPaths.exists(f => SupportsArchiveFormat.isArchivePath(f.getPath))
-        if (hasArchive && supportsArchiveScan) {
+        if (hasArchive) {
           // Archives (and any loose files alongside them) are inferred in a single CSVInferSchema
           // pass over all inputs -- archive entries are streamed, never unpacked -- so the result
           // matches what the scan returns for the same files.
           Some(inferWithArchives(sparkSession, inputPaths, parsedOptions))
-        } else if (hasArchive) {
-          // The caller's scan path cannot read archives (e.g. the DSv2 reader), so refuse to infer
-          // a schema when any input is an archive: returning None raises UNABLE_TO_INFER_SCHEMA,
-          // which fails loudly instead of letting the scan parse raw archive bytes as CSV.
-          None
         } else if (inputPaths.nonEmpty) {
           Some(infer(sparkSession, inputPaths, parsedOptions))
         } else {
