@@ -54,6 +54,12 @@ trait BlockDataManager {
   def getLocalBlockData(blockId: BlockId): ManagedBuffer
 
   /**
+   * Interface to get fallback storage block data. Throws an exception if the block cannot be found
+   * or cannot be read successfully.
+   */
+  def getFallbackStorageBlockData(blockId: BlockId): ManagedBuffer
+
+  /**
    * Put the block locally, using the given storage level.
    *
    * Returns true if the block was stored and false if the put operation failed or the block
