@@ -69,7 +69,7 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(model)
   }
 
-  test("SPARK-58181: estimatedSize includes only model-owned state") {
+  test("SPARK-58250: estimatedSize includes only model-owned state") {
     val metadata = NominalAttribute.defaultAttr.withNumValues(2).toMetadata()
     val models = Array(
       new LogisticRegressionModel("lr1", Vectors.dense(1.0, 2.0), 0.0),
