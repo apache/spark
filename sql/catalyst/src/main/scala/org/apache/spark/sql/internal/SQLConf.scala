@@ -766,8 +766,9 @@ object SQLConf {
 
   val RUNTIME_BLOOM_FILTER_ENABLED =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.enabled")
-      .doc("When true and if one side of a shuffle join has a selective predicate, we attempt " +
-        "to insert a bloom filter in the other side to reduce the amount of shuffle data.")
+      .doc("When true and if one side of a shuffle join has a selective predicate, or is a " +
+        "fully materialized, repeatable cache with evidence that pruning is beneficial, we " +
+        "attempt to insert a bloom filter in the other side to reduce shuffle data.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
@@ -775,10 +776,20 @@ object SQLConf {
   val RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
-        "under this value to try to inject bloom filter.")
+        "under this value to try to inject a bloom filter, unless the creation side is fully " +
+        "materialized and has accurate statistics.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10MB")
+
+  val RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.materializedCreationSideThreshold")
+      .doc("Size threshold of a fully materialized, repeatable bloom filter creation side with " +
+        "accurate statistics. This replaces the general creation-side threshold because scanning " +
+        "materialized output does not recompute its original plan.")
+      .version("5.0.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("100MB")
 
   val RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold")
@@ -8206,6 +8217,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def runtimeFilterCreationSideThreshold: Long =
     getConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD)
+
+  def runtimeFilterMaterializedCreationSideThreshold: Long =
+    getConf(RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD)
 
   def runtimeRowLevelOperationGroupFilterEnabled: Boolean =
     getConf(RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED)
