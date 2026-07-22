@@ -25,6 +25,17 @@ class MinMaxScalerSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
+  test("MinMaxScalerModel estimated size") {
+    val model = new MinMaxScaler()
+      .setInputCol("features")
+      .setOutputCol("scaled")
+      .fit(Seq(
+        Tuple1(Vectors.dense(1.0, 0.0)),
+        Tuple1(Vectors.dense(0.0, 1.0))).toDF("features"))
+
+    assert(model.estimatedSize < 2 * 1024)
+  }
+
   test("MinMaxScaler fit basic case") {
     val data = Array(
       Vectors.dense(1, 0, Long.MinValue),

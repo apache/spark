@@ -69,6 +69,15 @@ class StandardScalerSuite extends MLTest with DefaultReadWriteTest {
       Vectors.dense(1.0), Vectors.dense(2.0)))
   }
 
+  test("StandardScalerModel estimated size") {
+    val model = new StandardScaler()
+      .setInputCol("features")
+      .setOutputCol("scaled")
+      .fit(data.map(Tuple1.apply).toSeq.toDF("features"))
+
+    assert(model.estimatedSize < 2 * 1024)
+  }
+
   test("Standardization with default parameter") {
     val df0 = data.zip(resWithStd).toSeq.toDF("features", "expected")
 
