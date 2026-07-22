@@ -24,7 +24,8 @@ import org.apache.datasketches.frequencies.ItemsSketch
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproxTopKAggregateBuffer, CombineInternal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproxTopK, ApproxTopKAggregateBuffer,
+  CombineInternal}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampNTZType, TimestampType, TimeType}
@@ -579,17 +580,30 @@ class ApproxTopKSuite extends SharedSparkSession {
   )
 
   test("SPARK-58069: serialize an empty approx_top_k_combine buffer") {
-    val maxItemsTracked = 100
-    val buffer = new CombineInternal[Any](
-      new ApproxTopKAggregateBuffer[Any](new ItemsSketch[Any](128), 0L),
-      null,
-      maxItemsTracked)
+    Seq(100, ApproxTopK.VOID_MAX_ITEMS_TRACKED).foreach { maxItemsTracked =>
+      val buffer = new CombineInternal[Any](
+        new ApproxTopKAggregateBuffer[Any](new ItemsSketch[Any](128), 0L),
+        null,
+        maxItemsTracked)
 
-    val restored = CombineInternal.deserialize(buffer.serialize())
+      val restored = CombineInternal.deserialize(buffer.serialize())
 
-    assert(restored.getItemDataType == null)
-    assert(restored.getMaxItemsTracked == maxItemsTracked)
-    assert(restored.getSketchWithNullCount.sketch.isEmpty)
+      assert(restored.getItemDataType == null)
+      assert(restored.getMaxItemsTracked == maxItemsTracked)
+      assert(restored.getSketchWithNullCount.sketch.isEmpty)
+      assert(restored.getSketchWithNullCount.nullCount == 0L)
+    }
+  }
+
+  test("SPARK-58069: combine sketches with empty shuffle partitions") {
+    val sketches = sql(
+      "SELECT approx_top_k_accumulate(id) AS sketch FROM range(10) GROUP BY id")
+      .repartition(20)
+    val combined = sketches.selectExpr("approx_top_k_combine(sketch) AS sketch")
+
+    checkAnswer(
+      combined.selectExpr("inline(approx_top_k_estimate(sketch))"),
+      (0L until 10L).map(Row(_, 1L)))
   }
 
   // positive tests for approx_top_k_combine on every types
