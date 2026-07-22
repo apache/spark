@@ -26,7 +26,6 @@ __all__ = ["StreamingQueryListener"]
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
-    from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
 
 
 class StreamingQueryListener(ABC):
@@ -66,17 +65,17 @@ class StreamingQueryListener(ABC):
 
     def _set_spark_session(
         self,
-        session: "ConnectSparkSession",
+        session: "SparkSession",  # type: ignore[name-defined] # noqa: F821
     ) -> None:
         if self.spark is None:
             self.spark = session
 
     @property
-    def spark(self) -> Optional["ConnectSparkSession"]:
+    def spark(self) -> Optional["SparkSession"]:  # type: ignore[name-defined] # noqa: F821
         return getattr(self, "_sparkSession", None)
 
     @spark.setter
-    def spark(self, session: "ConnectSparkSession") -> None:
+    def spark(self, session: "SparkSession") -> None:  # type: ignore[name-defined] # noqa: F821
         # For backward compatibility
         self._sparkSession = session
 
