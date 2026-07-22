@@ -774,6 +774,8 @@ autoCdcParameters
         autoCdcDeleteClause?
         autoCdcSequenceByClause
         autoCdcColumnsClause?
+        autoCdcStoredAsClause?
+        autoCdcTrackHistoryClause?
     ;
 
 autoCdcDeleteClause
@@ -788,6 +790,16 @@ autoCdcColumnsClause
     : COLUMNS (
         LEFT_PAREN columns=identifierSeq RIGHT_PAREN |
         ASTERISK EXCEPT LEFT_PAREN exceptCols=identifierSeq RIGHT_PAREN)
+    ;
+
+autoCdcStoredAsClause
+    : STORED AS (SCD_TYPE_1 | SCD_TYPE_2)
+    ;
+
+autoCdcTrackHistoryClause
+    : TRACK HISTORY ON (
+        LEFT_PAREN trackCols=identifierSeq RIGHT_PAREN |
+        ASTERISK EXCEPT LEFT_PAREN nonTrackCols=identifierSeq RIGHT_PAREN)
     ;
 
 identifierReference
@@ -2160,6 +2172,7 @@ ansiNonReserved
     | GLOBAL
     | GROUPING
     | HANDLER
+    | HISTORY
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -2294,6 +2307,8 @@ ansiNonReserved
     | ROWS
     | SCHEMA
     | SCHEMAS
+    | SCD_TYPE_1
+    | SCD_TYPE_2
     | SECOND
     | SECONDS
     | SECURITY
@@ -2346,6 +2361,7 @@ ansiNonReserved
     | TIMESTAMPDIFF
     | TINYINT
     | TOUCH
+    | TRACK
     | TRANSACTION
     | TRANSACTIONS
     | TRANSFORM
@@ -2586,6 +2602,7 @@ nonReserved
     | GROUPING
     | HANDLER
     | HAVING
+    | HISTORY
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -2737,6 +2754,8 @@ nonReserved
     | ROWS
     | SCHEMA
     | SCHEMAS
+    | SCD_TYPE_1
+    | SCD_TYPE_2
     | SECOND
     | SECONDS
     | SECURITY
@@ -2795,6 +2814,7 @@ nonReserved
     | TINYINT
     | TO
     | TOUCH
+    | TRACK
     | TRAILING
     | TRANSACTION
     | TRANSACTIONS

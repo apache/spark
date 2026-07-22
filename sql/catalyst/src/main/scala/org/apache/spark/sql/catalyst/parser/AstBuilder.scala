@@ -1400,7 +1400,10 @@ class AstBuilder extends DataTypeAstBuilder
         deleteCondition = params.deleteCondition,
         sequenceByExpr = params.sequencing,
         includeColumns = params.includeColumns,
-        excludeColumns = params.excludeColumns)
+        excludeColumns = params.excludeColumns,
+        storedAsScdType = params.storedAsScdType,
+        trackHistoryColumns = params.trackHistoryColumns,
+        trackHistoryExceptColumns = params.trackHistoryExceptColumns)
     }
 
   protected def parseAutoCdcParams(params: AutoCdcParametersContext): AutoCdcParams =
@@ -1430,13 +1433,32 @@ class AstBuilder extends DataTypeAstBuilder
           visitIdentifierSeq(c.exceptCols).map(UnresolvedAttribute.quoted)
       }
 
+      // STORED AS SCD TYPE 1|2. Absent clause defaults to SCD Type 1.
+      val storedAsScdType = Option(params.autoCdcStoredAsClause()) match {
+        case Some(c) if c.SCD_TYPE_2() != null => 2
+        case _ => 1
+      }
+
+      val trackHistoryClause = Option(params.autoCdcTrackHistoryClause())
+      val trackHistoryColumns = trackHistoryClause.collect {
+        case c if c.trackCols != null =>
+          visitIdentifierSeq(c.trackCols).map(UnresolvedAttribute.quoted)
+      }
+      val trackHistoryExceptColumns = trackHistoryClause.collect {
+        case c if c.nonTrackCols != null =>
+          visitIdentifierSeq(c.nonTrackCols).map(UnresolvedAttribute.quoted)
+      }
+
       AutoCdcParams(
         source = source,
         keys = keys,
         deleteCondition = deleteCondition,
         sequencing = sequencing,
         includeColumns = includeColumns,
-        excludeColumns = excludeColumns)
+        excludeColumns = excludeColumns,
+        storedAsScdType = storedAsScdType,
+        trackHistoryColumns = trackHistoryColumns,
+        trackHistoryExceptColumns = trackHistoryExceptColumns)
     }
 
   /**
@@ -8038,4 +8060,7 @@ case class AutoCdcParams(
     deleteCondition: Option[Expression],
     sequencing: Expression,
     includeColumns: Option[Seq[UnresolvedAttribute]],
-    excludeColumns: Option[Seq[UnresolvedAttribute]])
+    excludeColumns: Option[Seq[UnresolvedAttribute]],
+    storedAsScdType: Int,
+    trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
+    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]])

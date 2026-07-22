@@ -583,6 +583,7 @@ Below is a list of all the keywords in Spark SQL.
 |GROUPING|non-reserved|non-reserved|reserved|
 |HANDLER|non-reserved|non-reserved|non-reserved|
 |HAVING|reserved|non-reserved|reserved|
+|HISTORY|non-reserved|non-reserved|non-reserved|
 |HOUR|non-reserved|non-reserved|non-reserved|
 |HOURS|non-reserved|non-reserved|non-reserved|
 |IDENTIFIER|non-reserved|non-reserved|non-reserved|
@@ -803,6 +804,7 @@ Below is a list of all the keywords in Spark SQL.
 |TINYINT|non-reserved|non-reserved|non-reserved|
 |TO|reserved|non-reserved|reserved|
 |TOUCH|non-reserved|non-reserved|non-reserved|
+|TRACK|non-reserved|non-reserved|non-reserved|
 |TRAILING|reserved|non-reserved|reserved|
 |TRANSACTION|non-reserved|non-reserved|non-reserved|
 |TRANSACTIONS|non-reserved|non-reserved|non-reserved|
