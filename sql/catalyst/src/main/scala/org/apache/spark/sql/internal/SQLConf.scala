@@ -6145,6 +6145,7 @@ object SQLConf {
       .doc("When true, metrics produced by `Dataset.observe` aggregate values from all task " +
         "attempts. When false, only values from the last successful task attempts are used.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
