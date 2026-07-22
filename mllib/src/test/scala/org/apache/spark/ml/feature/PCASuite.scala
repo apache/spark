@@ -47,7 +47,9 @@ class PCASuite extends MLTest with DefaultReadWriteTest {
         Tuple1(Vectors.dense(1.0, 0.0)),
         Tuple1(Vectors.dense(0.0, 1.0))).toDF("features"))
 
-    assert(model.estimatedSize < 2 * 1024)
+    val maxSize = 2 * 1024
+    assert(model.estimatedSize < maxSize,
+      s"model.estimatedSize (${model.estimatedSize}) should be less than $maxSize")
   }
 
   test("pca") {
