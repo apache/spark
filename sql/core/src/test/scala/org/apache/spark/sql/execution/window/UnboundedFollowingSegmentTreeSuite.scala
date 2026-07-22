@@ -117,6 +117,22 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
       baseDF.select($"id", $"pk", avg($"v").over(shrinkingRowsFrame(0)).as("agg")))
   }
 
+  // First / Last over a shrinking frame: in respect-nulls mode, FIRST is just
+  // `rows[lower]` (the first row of the suffix). LAST advances with the
+  // shrinking lower bound but always sees the partition's end. Both modes
+  // exercise the segment-tree merge path through a series of `[lower, n)`
+  // queries; correctness depends on the same left-to-right combine that
+  // makes First/Last safe in the sliding case.
+  test("FIRST over ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING") {
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", first($"v").over(shrinkingRowsFrame(0)).as("agg")))
+  }
+
+  test("LAST over ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING") {
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", last($"v").over(shrinkingRowsFrame(0)).as("agg")))
+  }
+
   // ============================================================
   // ROWS frame: lower-bound variations
   // ============================================================
@@ -238,6 +254,43 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
         max($"v").over(shrinkingRowsFrame(0)).as("mx"),
         avg($"v").over(shrinkingRowsFrame(0)).as("a"),
         count($"v").over(shrinkingRowsFrame(0)).as("c")))
+  }
+
+  // First / Last over a shrinking frame with NULL distribution. Mirrors the
+  // sliding-suite NULL tests; verifies the merge path is correct when the
+  // lower-edge partial block of the segtree query crosses a NULL/non-NULL
+  // boundary.
+  test("FIRST/LAST over shrinking frame: respect-nulls with mixed NULLs") {
+    val df = spark.range(0, 60).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
+    checkEquivalence(() =>
+      df.select($"id", $"pk",
+        first($"v").over(shrinkingRowsFrame(0)).as("fv"),
+        last($"v").over(shrinkingRowsFrame(0)).as("lv")))
+  }
+
+  test("FIRST/LAST over shrinking frame: ignore-nulls with mixed NULLs") {
+    val df = spark.range(0, 60).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
+    checkEquivalence(() =>
+      df.select($"id", $"pk",
+        first($"v", ignoreNulls = true).over(shrinkingRowsFrame(0)).as("fv_ign"),
+        last($"v", ignoreNulls = true).over(shrinkingRowsFrame(0)).as("lv_ign")))
+  }
+
+  test("all-NULL column: FIRST/LAST shrinking frame in both modes") {
+    val df = spark.range(0, 30).selectExpr("id", "(id % 3) AS pk",
+      "CAST(NULL AS INT) AS v")
+    checkEquivalence(() =>
+      df.select($"id", $"pk",
+        first($"v").over(shrinkingRowsFrame(0)).as("fv"),
+        last($"v").over(shrinkingRowsFrame(0)).as("lv"),
+        first($"v", ignoreNulls = true).over(shrinkingRowsFrame(0)).as("fv_ign"),
+        last($"v", ignoreNulls = true).over(shrinkingRowsFrame(0)).as("lv_ign")))
   }
 
   test("mixed NULL and non-NULL: NULLs must not leak into MIN/MAX") {

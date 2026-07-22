@@ -228,7 +228,10 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     assert(!new SQLConf().getJsonObjectSharedParsingEnabled)
     val query = testRelation2.select(
       GetJsonObject($"json", Literal("$.a")).as("a"),
-      GetJsonObject($"json", Literal("$.b")).as("b"))
+      GetJsonObject($"json", Literal("$.b")).as("b"),
+      Coalesce(Seq(
+        GetJsonObject($"json", Literal("$.c")),
+        GetJsonObject($"json", Literal("$[0].c")))).as("c"))
 
     withSQLConf(SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "false") {
       comparePlans(Optimizer.execute(query.analyze), query.analyze)
@@ -271,16 +274,205 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-57626: leave prefix-conflicting and unsupported paths independent") {
+  test("SPARK-57990: share simple array-index get_json_object paths") {
+    val query = testRelation2.select(
+      GetJsonObject($"json", Literal("$[0].a")).as("first_a"),
+      GetJsonObject($"json", Literal("$.items[1].b")).as("second_b"),
+      GetJsonObject($"json", Literal("$[2]")).as("third"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    optimized match {
+      case Project(projectList, Project(innerProjectList, _: LocalRelation)) =>
+        val sharedAlias = innerProjectList.collectFirst {
+          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+        }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
+        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
+        assert(shared.fallbackPaths == Seq("$[0].a", "$.items[1].b", "$[2]"))
+
+        val sharedAttr = sharedAlias.toAttribute
+        val extractedFields = projectList.flatMap(_.collect {
+          case getStructField: GetStructField
+              if getStructField.child.semanticEquals(sharedAttr) => getStructField
+        })
+        assert(extractedFields.map(_.ordinal) == Seq(0, 1, 2))
+
+      case _ =>
+        fail(s"Expected shared array-index JSON paths below the project, but found:\n$optimized")
+    }
+  }
+
+  test("SPARK-57990: share get_json_object paths within coalesce") {
+    val query = testRelation2.select(
+      Coalesce(Seq(
+        Cast(GetJsonObject($"json", Literal("$.a")), IntegerType),
+        Cast(GetJsonObject($"json", Literal("$[0].a")), IntegerType))).as("a"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    optimized match {
+      case Project(Seq(Alias(coalesce: Coalesce, "a")),
+          Project(innerProjectList, _: LocalRelation)) =>
+        val sharedAlias = innerProjectList.collectFirst {
+          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+        }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
+        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
+        assert(shared.fallbackPaths == Seq("$.a", "$[0].a"))
+
+        val sharedAttr = sharedAlias.toAttribute
+        assert(coalesce.children.zipWithIndex.forall { case (child, ordinal) =>
+          child match {
+            case Cast(getStructField: GetStructField, IntegerType, _, _) =>
+              getStructField.child.semanticEquals(sharedAttr) && getStructField.ordinal == ordinal
+            case _ => false
+          }
+        })
+
+      case _ =>
+        fail(s"Expected shared JSON paths within coalesce, but found:\n$optimized")
+    }
+  }
+
+  test("SPARK-57990: share only the first get_json_object path for each coalesce root shape") {
+    val query = testRelation2.select(
+      Coalesce(Seq(
+        GetJsonObject($"json", Literal("$.a")),
+        GetJsonObject($"json", Literal("$.b")),
+        GetJsonObject($"json", Literal("$[0].a")),
+        GetJsonObject($"json", Literal("$[0].b")))).as("value"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    optimized match {
+      case Project(Seq(Alias(coalesce: Coalesce, "value")),
+          Project(innerProjectList, _: LocalRelation)) =>
+        val sharedAlias = innerProjectList.collectFirst {
+          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+        }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
+        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
+        assert(shared.fallbackPaths == Seq("$.a", "$[0].a"))
+
+        val sharedAttr = sharedAlias.toAttribute
+        coalesce.children.zipWithIndex.foreach {
+          case (getStructField: GetStructField, 0) =>
+            assert(getStructField.child.semanticEquals(sharedAttr))
+            assert(getStructField.ordinal == 0)
+          case (getStructField: GetStructField, 2) =>
+            assert(getStructField.child.semanticEquals(sharedAttr))
+            assert(getStructField.ordinal == 1)
+          case (GetJsonObject(_, Literal(path: UTF8String, StringType)), 1) =>
+            assert(path.toString == "$.b")
+          case (GetJsonObject(_, Literal(path: UTF8String, StringType)), 3) =>
+            assert(path.toString == "$[0].b")
+          case (child, index) =>
+            fail(s"Unexpected coalesce branch $index after sharing: $child")
+        }
+
+      case _ =>
+        fail(s"Expected selectively shared coalesce paths, but found:\n$optimized")
+    }
+  }
+
+  test("SPARK-57990: keep coalesce path pairs atomic across prefix groups") {
+    // $.a conflicts with $.a.x but not $[0].x, so both coalesce paths must move together.
+    val query = testRelation2.select(
+      GetJsonObject($"json", Literal("$.a")).as("a"),
+      Coalesce(Seq(
+        GetJsonObject($"json", Literal("$[0].x")),
+        GetJsonObject($"json", Literal("$.a.x")))).as("x"),
+      Coalesce(Seq(
+        GetJsonObject($"json", Literal("$[0].y")),
+        GetJsonObject($"json", Literal("$.a.y")))).as("y"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    optimized match {
+      case Project(projectList, Project(innerProjectList, _: LocalRelation)) =>
+        val sharedAliases = innerProjectList.collect {
+          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+        }
+        assert(sharedAliases.length == 1)
+        val sharedAlias = sharedAliases.head
+        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
+        assert(shared.fallbackPaths == Seq("$[0].x", "$.a.x", "$[0].y", "$.a.y"))
+
+        val sharedAttr = sharedAlias.toAttribute
+        Seq("x", "y").foreach { name =>
+          val coalesce = projectList.collectFirst {
+            case Alias(expression: Coalesce, aliasName) if aliasName == name => expression
+          }.getOrElse(fail(s"Missing $name coalesce in plan:\n$optimized"))
+          assert(coalesce.children.forall {
+            case getStructField: GetStructField =>
+              getStructField.child.semanticEquals(sharedAttr)
+            case _ => false
+          })
+        }
+
+        assert(projectList.exists {
+          case Alias(GetJsonObject(_, Literal(path: UTF8String, StringType)), "a") =>
+            path.toString == "$.a"
+          case _ => false
+        })
+
+      case _ =>
+        fail(s"Expected atomic shared coalesce paths, but found:\n$optimized")
+    }
+  }
+
+  test("SPARK-57990: share get_json_object paths within coalesce below an outer cast") {
+    val query = testRelation2.select(
+      Cast(Coalesce(Seq(
+        GetJsonObject($"json", Literal("$.a")),
+        GetJsonObject($"json", Literal("$[0].a")))), IntegerType).as("a"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    val shared = optimized.collect {
+      case Project(projectList, _) => projectList.collectFirst {
+        case Alias(shared: MultiGetJsonObject, "_shared_json_paths") => shared
+      }
+    }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
+    assert(shared.fallbackPaths == Seq("$.a", "$[0].a"))
+
+    optimized match {
+      case Project(Seq(Alias(Cast(coalesce: Coalesce, IntegerType, _, _), "a")), _) =>
+        assert(coalesce.children.forall(_.isInstanceOf[GetStructField]))
+      case _ => fail(s"Expected cast around rewritten coalesce, but found:\n$optimized")
+    }
+  }
+
+  test("SPARK-57990: do not share unsafe coalesce branches") {
+    val otherJsonAttr = $"other_json".string
+    val relation = LocalRelation(jsonAttr, otherJsonAttr)
+    val queries = Seq(
+      relation.select(Coalesce(Seq(
+        GetJsonObject($"json", Literal("$.a")),
+        GetJsonObject($"json", Literal("$.b")))).as("value")),
+      relation.select(Coalesce(Seq(
+        GetJsonObject($"json", Literal("$.a")),
+        Literal("fallback"),
+        GetJsonObject($"json", Literal("$.b")))).as("value")),
+      relation.select(Coalesce(Seq(
+        GetJsonObject($"json", Literal("$.a")),
+        GetJsonObject($"other_json", Literal("$.b")))).as("value")),
+      relation.select(Coalesce(Seq(
+        GetJsonObject($"json", Literal("$.a")),
+        GetJsonObject($"json", Literal("$.items[*]")))).as("value")))
+
+    queries.foreach { query =>
+      val optimized = Optimizer.execute(query.analyze)
+      assert(!optimized.exists { plan =>
+        plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+      })
+      comparePlans(optimized, query.analyze)
+    }
+  }
+
+  test("SPARK-57990: leave prefix-conflicting and unsupported paths independent") {
     val deepPath = (1 to 65).map(index => s"field$index").mkString("$.", ".", "")
-    val legacyPaths = Seq("$.a.b", "$.items[0].id", "$.a.*", deepPath)
+    val legacyPaths = Seq("$.a.b", "$.a.*", deepPath)
     val query = testRelation2.select(
       GetJsonObject($"json", Literal("$.a")).as("a"),
       GetJsonObject($"json", Literal(legacyPaths(0))).as("nested"),
       GetJsonObject($"json", Literal("$.c.d")).as("d"),
-      GetJsonObject($"json", Literal(legacyPaths(1))).as("array"),
-      GetJsonObject($"json", Literal(legacyPaths(2))).as("wildcard"),
-      GetJsonObject($"json", Literal(legacyPaths(3))).as("deep"),
+      GetJsonObject($"json", Literal("$.items[0].id")).as("array"),
+      GetJsonObject($"json", Literal(legacyPaths(1))).as("wildcard"),
+      GetJsonObject($"json", Literal(legacyPaths(2))).as("deep"),
       GetJsonObject($"json", Literal("$.e")).as("e"))
     val optimized = Optimizer.execute(query.analyze)
 
@@ -290,7 +482,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       }
     }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
       .child.asInstanceOf[MultiGetJsonObject]
-    assert(shared.fallbackPaths == Seq("$.a", "$.c.d", "$.e"))
+    assert(shared.fallbackPaths == Seq("$.a", "$.c.d", "$.items[0].id", "$.e"))
 
     val remainingPaths = optimized.expressions.flatMap(_.collect {
       case GetJsonObject(_, Literal(path: UTF8String, StringType)) => path.toString
@@ -315,6 +507,27 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     assert(shared.fallbackPaths == Seq("$.a.b", "$.a.c", "$.d"))
     assert(optimized.expressions.exists(_.exists {
       case GetJsonObject(_, Literal(path: UTF8String, StringType)) => path.toString == "$.a"
+      case _ => false
+    }))
+  }
+
+  test("SPARK-57990: keep array-index prefix conflicts independent") {
+    val query = testRelation2.select(
+      GetJsonObject($"json", Literal("$[0].a")).as("a"),
+      GetJsonObject($"json", Literal("$[0]")).as("first"),
+      GetJsonObject($"json", Literal("$[0].b")).as("b"),
+      GetJsonObject($"json", Literal("$[1]")).as("second"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    val shared = optimized.collect {
+      case Project(projectList, _) => projectList.collectFirst {
+        case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+      }
+    }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
+      .child.asInstanceOf[MultiGetJsonObject]
+    assert(shared.fallbackPaths == Seq("$[0].a", "$[0].b", "$[1]"))
+    assert(optimized.expressions.exists(_.exists {
+      case GetJsonObject(_, Literal(path: UTF8String, StringType)) => path.toString == "$[0]"
       case _ => false
     }))
   }

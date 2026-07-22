@@ -455,38 +455,13 @@ private[spark] object Utils
     } else if (lowerSrc.endsWith(".zip")) {
       // After issue HADOOP-18145, unzip could keep file permissions.
       FileUtil.unZip(source, dest)
-    } else if (lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz")) {
+    } else if (
+      lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz") || lowerSrc.endsWith(".tar")) {
       FileUtil.unTar(source, dest)
-    } else if (lowerSrc.endsWith(".tar")) {
-      // TODO(SPARK-38632): should keep file permissions. Java implementation doesn't.
-      unTarUsingJava(source, dest)
     } else {
       logWarning(log"Cannot unpack ${MDC(LogKeys.FILE_NAME, source)}, " +
         log"just copying it to ${MDC(FILE_NAME2, dest)}.")
       copyRecursive(source, dest)
-    }
-  }
-
-  /**
-   * The method below was copied from `FileUtil.unTar` but uses Java-based implementation
-   * to work around a security issue, see also SPARK-38631.
-   */
-  private def unTarUsingJava(source: File, dest: File): Unit = {
-    if (!Utils.createDirectory(dest) && !dest.isDirectory) {
-      throw new IOException(s"Mkdirs failed to create $dest")
-    } else {
-      try {
-        // Should not fail because all Hadoop 2.1+ (from HADOOP-9264)
-        // have 'unTarUsingJava'.
-        val mth = classOf[FileUtil].getDeclaredMethod(
-          "unTarUsingJava", classOf[File], classOf[File], classOf[Boolean])
-        mth.setAccessible(true)
-        mth.invoke(null, source, dest, java.lang.Boolean.FALSE)
-      } catch {
-        // Re-throw the original exception.
-        case e: java.lang.reflect.InvocationTargetException if e.getCause != null =>
-          throw e.getCause
-      }
     }
   }
 

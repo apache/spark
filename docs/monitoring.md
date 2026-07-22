@@ -715,6 +715,28 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     </td>
   </tr>
   <tr>
+    <td><code>/applications/[app-id]/connect/sessions</code></td>
+    <td>A list of all Spark Connect sessions for a given application.
+    <br>
+    <code>?offset=[offset]&length=[len]</code> lists sessions in the given range.
+    </td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/connect/sessions/[session-id]</code></td>
+    <td>Details for the given Spark Connect session.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/connect/operations</code></td>
+    <td>A list of all Spark Connect operations for a given application.
+    <br>
+    <code>?offset=[offset]&length=[len]</code> lists operations in the given range.
+    </td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/connect/operations/detail?jobTag=[job-tag]</code></td>
+    <td>Details for the Spark Connect operation with the given job tag.</td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/environment</code></td>
     <td>Environment details of the given application.</td>
   </tr>

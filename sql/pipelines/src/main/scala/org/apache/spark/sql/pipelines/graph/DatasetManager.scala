@@ -29,6 +29,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
   Identifier,
+  SupportsRowLevelOperations,
   Table => V2Table,
   TableCatalog,
   TableChange,
@@ -38,6 +39,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructTyp
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, Transform}
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
+import org.apache.spark.sql.pipelines.util.PipelinesCatalogUtils
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
 import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
 import org.apache.spark.sql.types.StructType
@@ -104,12 +106,38 @@ object DatasetManager extends Logging {
           transformer.transformTables { table =>
             if (tablesToMaterialize.keySet.contains(table.identifier)) {
               try {
-                materializeTable(
+                val isFullRefresh = tablesToMaterialize(table.identifier).isFullRefresh
+                val (tableWithMaterializationMetadata, catalogTableEntity) = materializeTable(
                   resolvedDataflowGraph = resolvedDataflowGraph,
                   table = table,
-                  isFullRefresh = tablesToMaterialize(table.identifier).isFullRefresh,
+                  isFullRefresh = isFullRefresh,
                   context = context
                 )
+                // Auxiliary tables' lifecycle should follow the table that it is complementary to.
+                // If this table has any auxiliary tables, validate the target can host them and
+                // materialize/full-refresh them accordingly.
+                resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier).foreach {
+                  auxiliaryTableSpec =>
+                    // If this table is an AutoCDC target table, as identified by being
+                    // accompanied by an AutoCDC auxiliary table, additionally validate that the
+                    // target table supports row level mutations. This is a relevant validation for
+                    // the auxiliary table itself too, whose format for AutoCDC is fully derived
+                    // from the target table.
+                    auxiliaryTableSpec match {
+                      case _: AutoCdcAuxiliaryTableSpec =>
+                        requireAutoCdcTargetSupportsRowLevelOps(
+                          targetTable = table,
+                          targetTableCatalogEntity = catalogTableEntity
+                        )
+                    }
+
+                    materializeAuxiliaryTable(
+                      auxiliaryTableSpec = auxiliaryTableSpec,
+                      isFullRefresh = isFullRefresh,
+                      context = context
+                    )
+                }
+                tableWithMaterializationMetadata
               } catch {
                 case NonFatal(e) =>
                   throw TableMaterializationException(
@@ -243,24 +271,19 @@ object DatasetManager extends Logging {
    * @param table The table to be materialized.
    * @param isFullRefresh Whether this table should be full refreshed or not.
    * @param context The context for the pipeline update.
-   * @return The materialized table (with additional metadata set).
+   * @return The materialized graph [[Table]] (with additional metadata set) paired with the loaded
+   *         DSv2 handle of the just created/evolved table.
    */
   private def materializeTable(
       resolvedDataflowGraph: DataflowGraph,
       table: Table,
       isFullRefresh: Boolean,
-      context: PipelineUpdateContext): Table = {
+      context: PipelineUpdateContext): (Table, V2Table) = {
     logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
-    val catalogManager = context.spark.sessionState.catalogManager
-    val catalog = (table.identifier.catalog match {
-      case Some(catalogName) =>
-        catalogManager.catalog(catalogName)
-      case None =>
-        catalogManager.currentCatalog
-    }).asInstanceOf[TableCatalog]
+    // Get the DSv2 catalog handler and identifier for the table.
+    val (catalog, identifier) =
+      PipelinesCatalogUtils.resolveTableCatalog(context.spark, table.identifier)
 
-    val identifier =
-      Identifier.of(Array(table.identifier.database.get), table.identifier.identifier)
     val outputSchema = table.specifiedSchema.getOrElse(
       resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
     )
@@ -307,20 +330,6 @@ object DatasetManager extends Logging {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
 
-    if (isFullRefresh) {
-      // On full refresh, drop the AutoCDC auxiliary state associated with this table (if any) so
-      // that stale delete-tracking data and table properties are not carried forward into the new
-      // table generation. We unconditionally issue the DROP for every fully-refreshed target.
-
-      // Intentionally DROP and not TRUNCATE: the auxiliary table is an internal state store
-      // that is not part of the dataflow graph, so it does not participate in regular schema
-      // evolution like user tables do. On a full refresh we want a clean recreation against
-      // the new target schema rather than carrying forward the previous generation's layout.
-
-      val auxiliaryTableId = AutoCdcAuxiliaryTable.identifier(table.identifier)
-      context.spark.sql(s"DROP TABLE IF EXISTS ${auxiliaryTableId.quotedString}")
-    }
-
     // Create the table if absent, otherwise evolve it (schema + properties).
     existingTableOpt match {
       case Some(existingTable) =>
@@ -342,11 +351,127 @@ object DatasetManager extends Logging {
         )
     }
 
-    table.copy(
-      normalizedPath = Option(
-        catalog.loadTable(identifier).properties().get(TableCatalog.PROP_LOCATION)
+    val catalogTableEntity = catalog.loadTable(identifier)
+    val tableWithMaterializationMetadata =
+      table.copy(
+        normalizedPath =
+          Option(catalogTableEntity.properties().get(TableCatalog.PROP_LOCATION))
       )
+
+    (tableWithMaterializationMetadata, catalogTableEntity)
+  }
+
+  /**
+   * Validate that the AutoCDC target table is backed by a connector implementing
+   * [[SupportsRowLevelOperations]], the DSv2 contract for the MERGE/UPDATE/DELETE-with-rewrite
+   * operations the AutoCDC transformation relies on. Reuses the target handle already loaded by
+   * [[materializeTable]], so it performs no additional catalog I/O. Only AutoCDC auxiliary specs
+   * carry a MERGE-backed target; other auxiliary tables have no such requirement.
+   *
+   * @param targetTable              the target table graph entity, source of the identifier and
+   *                                 declared format used in the error message.
+   * @param targetTableCatalogEntity the target table's loaded DSv2 handle.
+   */
+  private def requireAutoCdcTargetSupportsRowLevelOps(
+      targetTable: Table,
+      targetTableCatalogEntity: V2Table): Unit = {
+    if (!targetTableCatalogEntity.isInstanceOf[SupportsRowLevelOperations]) {
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE",
+        messageParameters = Map(
+          "tableName" -> targetTable.identifier.quotedString,
+          // Prefer the flow-declared format, falling back to the connector's provider property.
+          "format" -> targetTable.format
+            .orElse(Option(targetTableCatalogEntity.properties.get(TableCatalog.PROP_PROVIDER)))
+            .getOrElse("<unknown>")
+        )
+      )
+    }
+  }
+
+  /**
+   * Materialize the auxiliary table according to the provided spec.
+   *
+   * @param auxiliaryTableSpec the spec describing the auxiliary table to create/evolve.
+   * @param isFullRefresh whether the owning table is being fully refreshed.
+   * @param context the context for the pipeline update.
+   */
+  private def materializeAuxiliaryTable(
+      auxiliaryTableSpec: AuxiliaryTableSpec,
+      isFullRefresh: Boolean,
+      context: PipelineUpdateContext): Unit = {
+    // Get the DSv2 catalog handler and identifier for the aux table.
+    val (catalog, auxiliaryTableIdentifier) =
+      PipelinesCatalogUtils.resolveTableCatalog(context.spark, auxiliaryTableSpec.identifier)
+
+    logInfo(
+      log"Materializing auxiliary table " +
+      log"${MDC(LogKeys.TABLE_NAME, auxiliaryTableSpec.identifier)}."
     )
+
+    if (isFullRefresh) {
+      // Intentionally DROP and not TRUNCATE on full refresh. The auxiliary table is an internal
+      // table whose identity does not need to be preserved on full refresh, and has metadata
+      // (ex. table properties) that should not persist between full refreshes.
+      //
+      // DROP + CREATE (rather than an atomic REPLACE) because REPLACE is not universally supported
+      // by DSv2 catalogs. The non-atomicity is acceptable: a CREATE that fails after the DROP is
+      // self-healing on the next run (a full refresh re-enters here; an incremental run recreates
+      // via the create path below).
+      logInfo(
+        log"Dropping and recreating auxiliary table " +
+        log"${MDC(LogKeys.TABLE_NAME, auxiliaryTableSpec.identifier)} as part of full refresh."
+      )
+
+      // [[dropTable]] is a no-op if the table does not exist.
+      catalog.dropTable(auxiliaryTableIdentifier)
+
+      createTable(
+        catalog = catalog,
+        tableIdentifier = auxiliaryTableIdentifier,
+        schema = auxiliaryTableSpec.schema,
+        properties = auxiliaryTableSpec.properties,
+        transforms = Seq.empty
+      )
+    } else {
+      loadTableIfExists(catalog, auxiliaryTableIdentifier) match {
+        case Some(existingAuxiliaryTable) =>
+          auxiliaryTableSpec match {
+            case autoCdcSpec: AutoCdcAuxiliaryTableSpec =>
+              // For AutoCDC auxiliary tables specifically, we persist metadata about the AutoCDC
+              // configuration that should be invariant for the flow's lifetime; i.e until it is
+              // full-refreshed. Validate these configurations remain invariant before attempting
+              // to evolve the auxiliary table's schema, to prevent corrupting the table.
+              AutoCdcAuxiliaryTable.validateNoKeyColumnDrift(
+                existingAuxiliaryTable = existingAuxiliaryTable,
+                targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
+                expectedKeyFields = autoCdcSpec.expectedKeyFields,
+                resolver = context.spark.sessionState.conf.resolver
+              )
+              AutoCdcAuxiliaryTable.validateNoScdTypeDrift(
+                existingAuxiliaryTable = existingAuxiliaryTable,
+                targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
+                expectedScdType = autoCdcSpec.expectedScdType
+              )
+          }
+          evolveTable(
+            catalog = catalog,
+            tableIdentifier = auxiliaryTableIdentifier,
+            existingTable = existingAuxiliaryTable,
+            desiredSchema = auxiliaryTableSpec.schema,
+            properties = auxiliaryTableSpec.properties,
+            mergeWithExistingSchema = true
+          )
+        case None =>
+          createTable(
+            catalog = catalog,
+            tableIdentifier = auxiliaryTableIdentifier,
+            schema = auxiliaryTableSpec.schema,
+            properties = auxiliaryTableSpec.properties,
+            transforms = Seq.empty
+          )
+      }
+    }
   }
 
   /** Loads the table at `identifier` from `catalog`, or `None` if it does not exist. */
@@ -358,7 +483,8 @@ object DatasetManager extends Logging {
 
   /**
    * Creates the table at `identifier` with the given schema, properties, and partition/cluster
-   * transforms. Used when no table yet exists at the identifier.
+   * transforms. Used both for graph datasets and for internal auxiliary tables when no table yet
+   * exists at the identifier.
    *
    * @param schema     the schema to create the table with.
    * @param properties the table properties to create the table with.
@@ -381,13 +507,15 @@ object DatasetManager extends Logging {
   }
 
   /**
-   * Evolves the already-existing `existingTable` at `identifier` in place by diffing its schema
-   * and properties, skipping the catalog `alterTable` entirely when nothing actually changes.
-   * Partitioning/clustering cannot change in place, so no transforms are accepted here.
+   * Evolves the already-existing `existingTable` at `identifier` in place by diffing its schema and
+   * properties, skipping the catalog `alterTable` entirely when nothing actually changes.
+   * Partitioning/clustering cannot change in place, so no transforms are accepted here. Used both
+   * for graph datasets and for internal auxiliary tables.
    *
    * @param existingTable           the currently materialized table.
    * @param desiredSchema           the schema the table should have as computed in the current
-   *                                execution (the user-specified or inferred schema). This is the
+   *                                execution (for graph datasets, the user-specified or inferred
+   *                                schema; for auxiliary tables, the derived schema). This is the
    *                                "incoming" side and may differ from `existingTable`'s recorded
    *                                schema due to schema evolution across runs.
    * @param properties              the declared table properties to (re)set on the table. Note

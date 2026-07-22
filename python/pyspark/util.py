@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -979,7 +978,7 @@ class _FaulthandlerHelper:
         self._log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
         if self._log_path:
             self._log_path = os.path.join(self._log_path, str(os.getpid()))
-            self._log_file = open(self._log_path, "w")
+            self._log_file = open(self._log_path, "w", encoding="utf-8")
 
             faulthandler.enable(file=self._log_file)
 

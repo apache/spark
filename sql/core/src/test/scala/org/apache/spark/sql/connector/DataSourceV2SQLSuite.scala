@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, CharType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -3170,6 +3170,386 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-54831: COMMENT ON COLUMN") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    // Session catalog (V1) table.
+    withTable("t") {
+      sql("CREATE TABLE t(k int COMMENT 'original comment', v string) USING json")
+
+      assert(columnComment("t", "k") === Some("original comment"))
+
+      // Update an existing comment.
+      sql("COMMENT ON COLUMN t.k IS 'new comment'")
+      assert(columnComment("t", "k") === Some("new comment"))
+
+      // IS NULL removes the comment entirely, so it becomes genuinely absent (not an empty string).
+      sql("COMMENT ON COLUMN t.k IS NULL")
+      assert(columnComment("t", "k").isEmpty)
+
+      // Setting back to literal 'NULL' must keep the string value.
+      sql("COMMENT ON COLUMN t.k IS 'NULL'")
+      assert(columnComment("t", "k") === Some("NULL"))
+
+      // Empty string sets an empty comment, which is distinct from removing it.
+      sql("COMMENT ON COLUMN t.k IS ''")
+      assert(columnComment("t", "k") === Some(""))
+
+      // Add comment to a column that didn't have one.
+      sql("COMMENT ON COLUMN t.v IS 'comment for v'")
+      assert(columnComment("t", "v") === Some("comment for v"))
+    }
+
+    // V2 non-session catalog table.
+    withTable("testcat.ns1.ns2.t") {
+      sql("CREATE TABLE testcat.ns1.ns2.t(k int COMMENT 'original', v string) USING foo")
+      assert(columnComment("testcat.ns1.ns2.t", "k") === Some("original"))
+
+      sql("COMMENT ON COLUMN testcat.ns1.ns2.t.k IS 'updated comment'")
+      assert(columnComment("testcat.ns1.ns2.t", "k") === Some("updated comment"))
+
+      // IS NULL removes the comment entirely.
+      sql("COMMENT ON COLUMN testcat.ns1.ns2.t.k IS NULL")
+      assert(columnComment("testcat.ns1.ns2.t", "k").isEmpty)
+
+      // IS '' sets an empty comment, which remains present.
+      sql("COMMENT ON COLUMN testcat.ns1.ns2.t.k IS ''")
+      assert(columnComment("testcat.ns1.ns2.t", "k") === Some(""))
+    }
+
+    // COMMENT ON COLUMN with only one identifier part is rejected.
+    val sql1 = "COMMENT ON COLUMN onlyone IS 'x'"
+    checkError(
+      exception = intercept[ParseException](sql(sql1)),
+      condition = "INVALID_SQL_SYNTAX.COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = sql1, start = 0, stop = sql1.length - 1))
+
+    // Unknown column is reported as an UNRESOLVED_COLUMN error.
+    withTable("t2") {
+      sql("CREATE TABLE t2(k int) USING json")
+      val sql2 = "COMMENT ON COLUMN t2.nonexistent IS 'test'"
+      checkError(
+        exception = analysisException(sql2),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`nonexistent`", "proposal" -> "`k`"),
+        context = ExpectedContext(fragment = sql2, start = 0, stop = sql2.length - 1))
+    }
+
+    // Different qualification levels for the session catalog: table.column and
+    // database.table.column (matching the examples in the
+    // COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER error message).
+    withDatabase("comment_test_db") {
+      sql("CREATE DATABASE comment_test_db")
+      sql("USE comment_test_db")
+      withTable("comment_test_db.qualified_test") {
+        sql("CREATE TABLE qualified_test(x int, y string, z int) USING json")
+
+        // table.column
+        sql("COMMENT ON COLUMN qualified_test.x IS 'with table.column'")
+        assert(columnComment("qualified_test", "x") === Some("with table.column"))
+
+        // database.table.column
+        sql("COMMENT ON COLUMN comment_test_db.qualified_test.y IS 'with db.table.column'")
+        assert(columnComment("qualified_test", "y") === Some("with db.table.column"))
+
+        // catalog.database.table.column
+        sql(
+          "COMMENT ON COLUMN spark_catalog.comment_test_db.qualified_test.z IS " +
+            "'with catalog.db.table.column'")
+        assert(columnComment("qualified_test", "z") === Some("with catalog.db.table.column"))
+      }
+    }
+
+    // catalog.database.table.column against a V2 non-session catalog.
+    withTable("testcat.ns1.ns2.qualified") {
+      sql("CREATE TABLE testcat.ns1.ns2.qualified(c int) USING foo")
+      sql("COMMENT ON COLUMN testcat.ns1.ns2.qualified.c IS 'v2 catalog.db.table.column'")
+      assert(columnComment("testcat.ns1.ns2.qualified", "c") === Some("v2 catalog.db.table.column"))
+    }
+
+    // A view target is rejected: COMMENT ON COLUMN only supports tables.
+    withView("v") {
+      sql("CREATE VIEW v AS SELECT 1 AS c")
+      val sql3 = "COMMENT ON COLUMN v.c IS 'test'"
+      checkError(
+        exception = analysisException(sql3),
+        condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        parameters = Map(
+          "viewName" -> "`spark_catalog`.`default`.`v`",
+          "operation" -> "COMMENT ON COLUMN"),
+        context = ExpectedContext(fragment = sql3, start = 0, stop = sql3.length - 1))
+    }
+
+    // The single-column `COMMENT ON COLUMN` form cannot address a nested field: the last
+    // identifier part is always taken as the (top-level) column name and everything before it as
+    // the table path. So `t.point.x` is parsed as table `testcat.ns1.ns2.t.point`, column `x`,
+    // and fails to find that table. Nested fields must use the `COMMENT ON TABLE ... COLUMN (...)`
+    // form instead (covered below).
+    withTable("testcat.ns1.ns2.nested") {
+      sql("CREATE TABLE testcat.ns1.ns2.nested(point struct<x: double, y: double>) USING foo")
+      val sql4 = "COMMENT ON COLUMN testcat.ns1.ns2.nested.point.x IS 'x field'"
+      checkError(
+        exception = analysisException(sql4),
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`testcat`.`ns1`.`ns2`.`nested`.`point`"),
+        context = ExpectedContext(fragment = sql4, start = 0, stop = sql4.length - 1))
+    }
+  }
+
+  test("SPARK-54831: COMMENT ON TABLE ... COLUMN supports multiple columns and nested fields") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    withTable("testcat.ns1.ns2.t") {
+      sql(
+        "CREATE TABLE testcat.ns1.ns2.t(id int, data string, " +
+          "point struct<x: double, y: double>) USING foo")
+
+      sql(
+        """COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (
+          | id IS 'id col',
+          | data IS 'data col',
+          | point IS 'point col')""".stripMargin)
+
+      assert(columnComment("testcat.ns1.ns2.t", "id") === Some("id col"))
+      assert(columnComment("testcat.ns1.ns2.t", "data") === Some("data col"))
+      assert(columnComment("testcat.ns1.ns2.t", "point") === Some("point col"))
+
+      // Nested fields must be commented in a separate statement because the analyzer rejects
+      // commenting on a parent column and its nested fields in the same command
+      // (NOT_SUPPORTED_CHANGE_SAME_COLUMN).
+      sql(
+        """COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (
+          | point.x IS 'x field',
+          | point.y IS 'y field')""".stripMargin)
+
+      val pointField = spark.table("testcat.ns1.ns2.t").schema("point")
+      val struct = pointField.dataType.asInstanceOf[StructType]
+      assert(struct("x").getComment().contains("x field"))
+      assert(struct("y").getComment().contains("y field"))
+
+      // IS NULL removes a column comment, making it genuinely absent.
+      sql("COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (id IS NULL)")
+      assert(columnComment("testcat.ns1.ns2.t", "id").isEmpty)
+
+      // A nested field comment can likewise be removed with IS NULL.
+      sql("COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (point.x IS NULL)")
+      val pointAfter = spark.table("testcat.ns1.ns2.t").schema("point")
+        .dataType.asInstanceOf[StructType]
+      assert(pointAfter("x").getComment().isEmpty)
+      assert(pointAfter("y").getComment().contains("y field"))
+    }
+
+    // Deeply nested fields (struct within struct) can be commented via the COLUMN (...) form.
+    // A parent field and its descendant cannot be changed in the same command
+    // (NOT_SUPPORTED_CHANGE_SAME_COLUMN), so comment them in separate statements.
+    withTable("testcat.ns1.ns2.deep") {
+      sql(
+        "CREATE TABLE testcat.ns1.ns2.deep(" +
+          "outer struct<inner: struct<leaf: int>>) USING foo")
+
+      sql("COMMENT ON TABLE testcat.ns1.ns2.deep COLUMN (outer.inner IS 'inner struct')")
+      sql("COMMENT ON TABLE testcat.ns1.ns2.deep COLUMN (outer.inner.leaf IS 'leaf field')")
+
+      val outerField = spark.table("testcat.ns1.ns2.deep").schema("outer")
+      val outerStruct = outerField.dataType.asInstanceOf[StructType]
+      assert(outerStruct("inner").getComment().contains("inner struct"))
+      val innerStruct = outerStruct("inner").dataType.asInstanceOf[StructType]
+      assert(innerStruct("leaf").getComment().contains("leaf field"))
+    }
+
+    // A nested field inside an array element (`points.element.y`) can be commented and removed,
+    // matching the reach of `ALTER TABLE ... ALTER COLUMN points.element.y COMMENT`.
+    withTable("testcat.ns1.ns2.arr") {
+      sql(
+        "CREATE TABLE testcat.ns1.ns2.arr(" +
+          "id int, points array<struct<x: double, y: double>>) USING foo")
+
+      def yField(): StructField = {
+        val elem = spark.table("testcat.ns1.ns2.arr").schema("points")
+          .dataType.asInstanceOf[ArrayType].elementType.asInstanceOf[StructType]
+        elem("y")
+      }
+
+      sql("COMMENT ON TABLE testcat.ns1.ns2.arr COLUMN (points.element.y IS 'y in array')")
+      assert(yField().getComment().contains("y in array"))
+
+      // IS NULL removes the array-element field comment.
+      sql("COMMENT ON TABLE testcat.ns1.ns2.arr COLUMN (points.element.y IS NULL)")
+      assert(yField().getComment().isEmpty)
+    }
+  }
+
+  test("SPARK-54831: COMMENT ON TABLE ... COLUMN works on the session catalog (V1 table)") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    // Multiple top-level columns and nested fields work on an ordinary managed table, routed
+    // through the shared V2 execution path rather than the single-column V1 command.
+    withTable("t") {
+      sql("CREATE TABLE t(id int, data string, point struct<x: double, y: double>) USING json")
+
+      // Multiple top-level columns at once.
+      sql(
+        """COMMENT ON TABLE t COLUMN (
+          | id IS 'id col',
+          | data IS 'data col')""".stripMargin)
+      assert(columnComment("t", "id") === Some("id col"))
+      assert(columnComment("t", "data") === Some("data col"))
+
+      // Nested fields.
+      sql(
+        """COMMENT ON TABLE t COLUMN (
+          | point.x IS 'x field',
+          | point.y IS 'y field')""".stripMargin)
+      val struct = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct("x").getComment().contains("x field"))
+      assert(struct("y").getComment().contains("y field"))
+
+      // A single nested field via COMMENT ON TABLE ... COLUMN.
+      sql("COMMENT ON TABLE t COLUMN (point.x IS 'updated x')")
+      val struct2 = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct2("x").getComment().contains("updated x"))
+
+      // IS NULL removes comments (top-level and nested) on the session catalog too.
+      sql("COMMENT ON TABLE t COLUMN (id IS NULL, point.y IS NULL)")
+      assert(columnComment("t", "id").isEmpty)
+      val struct3 = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct3("y").getComment().isEmpty)
+
+      // The new comment is visible immediately via DESCRIBE (the relation cache is refreshed).
+      sql("COMMENT ON TABLE t COLUMN (data IS 'fresh comment')")
+      checkAnswer(
+        sql("DESCRIBE t data").filter("info_name = 'comment'").select("info_value"),
+        Row("fresh comment"))
+
+      // The table target accepts an IDENTIFIER(...) clause, like COMMENT ON TABLE ... IS.
+      sql("COMMENT ON TABLE IDENTIFIER('t') COLUMN (id IS 'via identifier')")
+      assert(columnComment("t", "id") === Some("via identifier"))
+    }
+
+    // char/varchar columns keep their declared type while their comment is updated.
+    withTable("t") {
+      sql("CREATE TABLE t(c char(5), v varchar(6)) USING parquet")
+      sql("COMMENT ON TABLE t COLUMN (c IS 'char comment', v IS 'varchar comment')")
+      assert(columnComment("t", "c") === Some("char comment"))
+      assert(columnComment("t", "v") === Some("varchar comment"))
+      val raw = spark.sessionState.catalog.getTableRawMetadata(
+        TableIdentifier("t", Some("default")))
+      assert(raw.schema("c").dataType === CharType(5))
+      assert(raw.schema("v").dataType === VarcharType(6))
+    }
+
+    // A parent field and its nested field still cannot be changed in the same command.
+    withTable("t") {
+      sql("CREATE TABLE t(point struct<x: double, y: double>) USING json")
+      val sqlText =
+        """COMMENT ON TABLE t COLUMN (
+          | point IS 'point col',
+          | point.x IS 'x field')""".stripMargin
+      checkError(
+        exception = intercept[AnalysisException](sql(sqlText)),
+        condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+        parameters = Map(
+          "table" -> "`spark_catalog`.`default`.`t`",
+          "fieldName" -> "`point`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+    }
+
+    // An unknown column is still reported as UNRESOLVED_COLUMN on the session catalog.
+    withTable("t") {
+      sql("CREATE TABLE t(id int) USING json")
+      val sqlText = "COMMENT ON TABLE t COLUMN (id IS 'x', nope IS 'y')"
+      checkError(
+        exception = analysisException(sqlText),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`nope`", "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+    }
+
+    // Commenting a partition column is rejected.
+    withTable("t") {
+      sql("CREATE TABLE t(id int, p string) USING json PARTITIONED BY (p)")
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("COMMENT ON TABLE t COLUMN (id IS 'id col', p IS 'part col')")),
+        condition = "CANNOT_ALTER_PARTITION_COLUMN",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "columnName" -> "`p`"))
+    }
+  }
+
+  test("SPARK-54831: session-catalog V1 comment routing is scoped to COMMENT ON ... COLUMN") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    // The dedicated V1 comment command only handles the `COMMENT ON ... COLUMN` syntax. The
+    // equivalent bulk / nested-field `ALTER TABLE ... ALTER COLUMN ... COMMENT` forms build the
+    // same `AlterColumns` plan but keep their pre-existing UNSUPPORTED_FEATURE.TABLE_OPERATION
+    // error on the session catalog, so this PR does not silently change ALTER TABLE behavior.
+    withTable("t") {
+      sql("CREATE TABLE t(id int, data string, point struct<x: double, y: double>) USING json")
+
+      // Bulk ALTER COLUMN comment change (multiple columns) is still unsupported on V1.
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("ALTER TABLE t ALTER COLUMN id COMMENT 'id col', data COMMENT 'data col'")),
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "operation" -> "ALTER COLUMN in bulk"))
+      assert(columnComment("t", "id").isEmpty)
+      assert(columnComment("t", "data").isEmpty)
+
+      // Nested-field ALTER COLUMN comment change is still unsupported on V1.
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("ALTER TABLE t ALTER COLUMN point.x COMMENT 'x field'")),
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "operation" -> "ALTER COLUMN with qualified column"))
+      val struct = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct("x").getComment().isEmpty)
+
+      // The single-column, top-level ALTER COLUMN comment change keeps working on V1.
+      sql("ALTER TABLE t ALTER COLUMN id COMMENT 'id col'")
+      assert(columnComment("t", "id") === Some("id col"))
+    }
+  }
+
+  test("SPARK-54831: COMMENT ON TABLE ... COLUMN cannot change parent and child fields in the " +
+    "same command") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    withTable("testcat.ns1.ns2.t") {
+      sql(
+        "CREATE TABLE testcat.ns1.ns2.t(id int, " +
+          "point struct<x: double, y: double>) USING foo")
+
+      val sqlText =
+        """COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (
+          | point IS 'point col',
+          | point.x IS 'x field')""".stripMargin
+      checkError(
+        exception = intercept[AnalysisException](sql(sqlText)),
+        condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+        parameters = Map(
+          "table" -> "`testcat`.`ns1`.`ns2`.`t`",
+          "fieldName" -> "`point`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+    }
+  }
+
+  // Returns the comment of a top-level column as stored in the table schema. Reads it from the
+  // StructField metadata (not DESCRIBE, which renders both an absent and an empty comment as the
+  // same empty string) so callers can distinguish a removed comment (None) from an empty one
+  // (Some("")).
+  private def columnComment(tableName: String, columnName: String): Option[String] = {
+    spark.table(tableName).schema(columnName).getComment()
+  }
+
   test("SPARK-31015: star expression should work for qualified column names for v2 tables") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -3939,6 +4319,123 @@ class DataSourceV2SQLSuiteV1Filter
           start = 40,
           stop = 70))
     }
+  }
+
+  test("time travel with at syntax") {
+    sql("use testcat")
+    val t1 = "testcat.tSnapshot123456789"
+    val t2 = "testcat.t2345678910"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 (id int) USING foo")
+      sql(s"CREATE TABLE $t2 (id int) USING foo")
+      sql(s"INSERT INTO $t1 VALUES (1), (2)")
+      sql(s"INSERT INTO $t2 VALUES (3), (4)")
+
+      checkAnswer(sql("SELECT * FROM t@v2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(sql("SELECT * FROM t@V2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(sql("SELECT * FROM t@v'Snapshot123456789'"), Seq(Row(1), Row(2)))
+      checkAnswer(spark.read.table("t@v2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(spark.table("t@v2345678910"), Seq(Row(3), Row(4)))
+
+      checkError(
+        exception = intercept[ParseException] {
+          sql("SELECT * FROM t@v2345678910 VERSION AS OF 1")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "VERSION AS OF 1", start = 28, stop = 42))
+      checkError(
+        exception = intercept[ParseException] {
+          sql("SELECT * FROM t@v2345678910 TIMESTAMP AS OF '2019-01-29'")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "TIMESTAMP AS OF '2019-01-29'", start = 28, stop = 55))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("versionAsOf", "2345678910").table("t@v2345678910").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("timestampAsOf", "2019-01-29").table("t@v2345678910").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM t@v2345678910 WITH ('timestampAsOf' = '2019-01-29')")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+
+      withSQLConf(SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED.key -> "false") {
+        checkError(
+          exception = intercept[ParseException] {
+            sql("SELECT * FROM t@v2345678910")
+          },
+          condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL_AT_SYNTAX",
+          parameters = Map("config" -> "\"spark.sql.timeTravel.atSyntax.enabled\""),
+          context = ExpectedContext(fragment = "t@v2345678910", start = 14, stop = 26))
+        intercept[ParseException](spark.read.table("t@v2345678910"))
+      }
+    }
+
+    val ts1 = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2019-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    val t3 = s"testcat.t$ts1"
+    withTable(t3) {
+      sql(s"CREATE TABLE $t3 (id int) USING foo")
+      sql(s"INSERT INTO $t3 VALUES (5), (6)")
+
+      checkAnswer(sql("SELECT * FROM t@20190129003758000"), Seq(Row(5), Row(6)))
+      checkAnswer(spark.read.table("t@20190129003758000"), Seq(Row(5), Row(6)))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("versionAsOf", "1").table("t@20190129003758000").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("timestampAsOf", "2019-01-29").table("t@20190129003758000").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM t@20190129003758000 WITH ('timestampAsOf' = '2019-01-29')")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+    }
+
+    intercept[ParseException](sql("SELECT * FROM t@foo"))
+    intercept[ParseException](spark.read.table("t@foo"))
+    withTable("testcat.`weird@v1`") {
+      sql("CREATE TABLE testcat.`weird@v1` (id int) USING foo")
+      sql("INSERT INTO testcat.`weird@v1` VALUES (42)")
+      checkAnswer(sql("SELECT * FROM `weird@v1`"), Row(42))
+      checkAnswer(spark.read.table("`weird@v1`"), Row(42))
+    }
+
+    withTempView("v") {
+      spark.range(1).createOrReplaceTempView("v")
+      checkError(
+        exception = analysisException("SELECT * FROM v@v1"),
+        condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+        sqlState = None,
+        parameters = Map("relationId" -> "`v`"))
+    }
+    checkError(
+      exception = analysisException("WITH x AS (SELECT 1) SELECT * FROM x@v1"),
+      condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+      sqlState = None,
+      parameters = Map("relationId" -> "`x`"))
   }
 
   test("SPARK-37827: put build-in properties into V1Table.properties to adapt v2 command") {

@@ -21,7 +21,7 @@ import java.lang.{Boolean => JBoolean, Byte => JByte, Double => JDouble, Float =
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalTime, Period}
 import java.time.temporal.ChronoField.MICRO_OF_DAY
 import java.util.HashSet
 import java.util.Locale
@@ -39,9 +39,9 @@ import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.{ParquetFilterOps, ParquetTypeOps}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
@@ -151,15 +151,21 @@ class ParquetFilters(
     ParquetSchemaType(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS), INT64, 0)
   private val ParquetTimestampMillisType =
     ParquetSchemaType(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS), INT64, 0)
-  private val ParquetTimeMicrosType =
-    ParquetSchemaType(LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS), INT64, 0)
-  // TIMESTAMP(NANOS) is stored as a signed INT64 of epoch-nanoseconds. The `isAdjustedToUTC` flag
-  // differs by type: LTZ (UTC-adjusted) vs NTZ (not), so the two annotations get separate
-  // constants dispatched to separate value converters (Instant vs LocalDateTime).
-  private val ParquetTimestampLTZNanosType =
-    ParquetSchemaType(LogicalTypeAnnotation.timestampType(true, TimeUnit.NANOS), INT64, 0)
-  private val ParquetTimestampNTZNanosType =
-    ParquetSchemaType(LogicalTypeAnnotation.timestampType(false, TimeUnit.NANOS), INT64, 0)
+
+  /**
+   * Extractor that maps a Parquet field's schema to its Types Framework filter ops, if the
+   * field's on-disk encoding belongs to a framework-managed type. Defined here, not in the
+   * ops package, because it pattern-matches on the private [[ParquetSchemaType]]. A `Some`
+   * routes the field's predicates through the framework ops; `None` falls through to the
+   * built-in cases below. Framework types use Parquet encodings distinct from the built-in
+   * cases, so the extractor never shadows them. This replaces the inline TimeType handling
+   * (TIME(MICROS) -> micros Long), which now lives in TimeTypeParquetOps.filterOps.
+   */
+  private object FrameworkFilterOps {
+    def unapply(parquetSchemaType: ParquetSchemaType): Option[ParquetFilterOps] =
+      ParquetTypeOps.filterOpsFor(
+        parquetSchemaType.logicalTypeAnnotation, parquetSchemaType.primitiveTypeName)
+  }
 
   private def dateToDays(date: Any): Int = {
     val gregorianDays = date match {
@@ -187,37 +193,6 @@ class ParquetFilters(
   private def localTimeToMicros(v: Any): JLong = {
     v.asInstanceOf[LocalTime].getLong(MICRO_OF_DAY)
   }
-
-  // Converts a TIMESTAMP_LTZ(p) filter value (externalized as a `java.time.Instant`) into the
-  // signed INT64 epoch-nanoseconds that `TimestampNanosParquetOps` writes. Precision 9 is a
-  // lossless repack: the literal has already been floored to the column precision upstream.
-  // Unlike `timestampToMicros`, this must NOT drop the sub-microsecond digits and is exempt from
-  // datetime rebasing. Throws `ArithmeticException` when the value is outside the int64 range;
-  // callers gate on `valueCanMakeFilterOn` (via `instantEpochNanosInRange`) so this never throws
-  // on the pushdown path.
-  private def instantToEpochNanos(v: Any): JLong = {
-    DateTimeUtils.timestampNanosToEpochNanos(
-      DateTimeUtils.instantToTimestampNanos(
-        v.asInstanceOf[Instant], TimestampLTZNanosType.NANOS_PRECISION))
-  }
-
-  // As `instantToEpochNanos`, but for TIMESTAMP_NTZ(p) filter values (externalized as a
-  // `java.time.LocalDateTime`). Guarded by `localDateTimeEpochNanosInRange`.
-  private def localDateTimeToEpochNanos(v: Any): JLong = {
-    DateTimeUtils.timestampNanosToEpochNanos(
-      DateTimeUtils.localDateTimeToTimestampNanos(
-        v.asInstanceOf[LocalDateTime], TimestampNTZNanosType.NANOS_PRECISION))
-  }
-
-  // SPARK-46092-style guards: only push down a nanos filter when the value is representable as
-  // int64 epoch-nanoseconds. An out-of-range value would throw in the converter (blowing up filter
-  // creation), and — worse — a truncated encoding could silently mis-skip row groups. Returning
-  // false here falls back to a full scan, which is always correct.
-  private def instantEpochNanosInRange(v: Instant): Boolean =
-    try { instantToEpochNanos(v); true } catch { case _: ArithmeticException => false }
-
-  private def localDateTimeEpochNanosInRange(v: LocalDateTime): Boolean =
-    try { localDateTimeToEpochNanos(v); true } catch { case _: ArithmeticException => false }
 
   private def decimalToInt32(decimal: JBigDecimal): Integer = decimal.unscaledValue().intValue()
 
@@ -291,18 +266,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.eq(
         longColumn(n),
         Option(v).map(timestampToMillis).orNull)
-    case ParquetTimeMicrosType =>
-      (n: Array[String], v: Any) => FilterApi.eq(
-        longColumn(n),
-        Option(v).map(localTimeToMicros).orNull)
-    case ParquetTimestampLTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.eq(
-        longColumn(n),
-        Option(v).map(instantToEpochNanos).orNull)
-    case ParquetTimestampNTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.eq(
-        longColumn(n),
-        Option(v).map(localDateTimeToEpochNanos).orNull)
+    case FrameworkFilterOps(ops) =>
+      (n: Array[String], v: Any) => ops.makeEq(n, v)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) => FilterApi.eq(
@@ -352,18 +317,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.notEq(
         longColumn(n),
         Option(v).map(timestampToMillis).orNull)
-    case ParquetTimeMicrosType =>
-      (n: Array[String], v: Any) => FilterApi.notEq(
-        longColumn(n),
-        Option(v).map(localTimeToMicros).orNull)
-    case ParquetTimestampLTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.notEq(
-        longColumn(n),
-        Option(v).map(instantToEpochNanos).orNull)
-    case ParquetTimestampNTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.notEq(
-        longColumn(n),
-        Option(v).map(localDateTimeToEpochNanos).orNull)
+    case FrameworkFilterOps(ops) =>
+      (n: Array[String], v: Any) => ops.makeNotEq(n, v)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) => FilterApi.notEq(
@@ -404,12 +359,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), timestampToMicros(v))
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), timestampToMillis(v))
-    case ParquetTimeMicrosType =>
-      (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), localTimeToMicros(v))
-    case ParquetTimestampLTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), instantToEpochNanos(v))
-    case ParquetTimestampNTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), localDateTimeToEpochNanos(v))
+    case FrameworkFilterOps(ops) =>
+      (n: Array[String], v: Any) => ops.makeLt(n, v)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -447,12 +398,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), timestampToMicros(v))
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), timestampToMillis(v))
-    case ParquetTimeMicrosType =>
-      (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), localTimeToMicros(v))
-    case ParquetTimestampLTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), instantToEpochNanos(v))
-    case ParquetTimestampNTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), localDateTimeToEpochNanos(v))
+    case FrameworkFilterOps(ops) =>
+      (n: Array[String], v: Any) => ops.makeLtEq(n, v)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -490,12 +437,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), timestampToMicros(v))
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), timestampToMillis(v))
-    case ParquetTimeMicrosType =>
-      (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), localTimeToMicros(v))
-    case ParquetTimestampLTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), instantToEpochNanos(v))
-    case ParquetTimestampNTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), localDateTimeToEpochNanos(v))
+    case FrameworkFilterOps(ops) =>
+      (n: Array[String], v: Any) => ops.makeGt(n, v)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -533,12 +476,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), timestampToMicros(v))
     case ParquetTimestampMillisType if pushDownTimestamp =>
       (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), timestampToMillis(v))
-    case ParquetTimeMicrosType =>
-      (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), localTimeToMicros(v))
-    case ParquetTimestampLTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), instantToEpochNanos(v))
-    case ParquetTimestampNTZNanosType if pushDownTimestamp =>
-      (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), localDateTimeToEpochNanos(v))
+    case FrameworkFilterOps(ops) =>
+      (n: Array[String], v: Any) => ops.makeGtEq(n, v)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -628,29 +567,8 @@ class ParquetFilters(
         }
         FilterApi.in(longColumn(n), set)
 
-    case ParquetTimeMicrosType =>
-      (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[JLong]()
-        for (value <- values) {
-          set.add(Option(value).map(localTimeToMicros).orNull)
-        }
-        FilterApi.in(longColumn(n), set)
-
-    case ParquetTimestampLTZNanosType if pushDownTimestamp =>
-      (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[JLong]()
-        for (value <- values) {
-          set.add(Option(value).map(instantToEpochNanos).orNull)
-        }
-        FilterApi.in(longColumn(n), set)
-
-    case ParquetTimestampNTZNanosType if pushDownTimestamp =>
-      (n: Array[String], values: Array[Any]) =>
-        val set = new HashSet[JLong]()
-        for (value <- values) {
-          set.add(Option(value).map(localDateTimeToEpochNanos).orNull)
-        }
-        FilterApi.in(longColumn(n), set)
+    case FrameworkFilterOps(ops) =>
+      (n: Array[String], values: Array[Any]) => ops.makeIn(n, values)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], values: Array[Any]) =>
@@ -749,12 +667,7 @@ class ParquetFilters(
         value.isInstanceOf[Date] || value.isInstanceOf[LocalDate]
       case ParquetTimestampMicrosType | ParquetTimestampMillisType =>
         value.isInstanceOf[Timestamp] || value.isInstanceOf[Instant]
-      case ParquetTimeMicrosType => value.isInstanceOf[LocalTime]
-      case ParquetTimestampLTZNanosType =>
-        value.isInstanceOf[Instant] && instantEpochNanosInRange(value.asInstanceOf[Instant])
-      case ParquetTimestampNTZNanosType =>
-        value.isInstanceOf[LocalDateTime] &&
-          localDateTimeEpochNanosInRange(value.asInstanceOf[LocalDateTime])
+      case FrameworkFilterOps(ops) => ops.acceptsValue(value)
       case ParquetSchemaType(decimalType: DecimalLogicalTypeAnnotation, INT32, _) =>
         isDecimalMatched(value, decimalType)
       case ParquetSchemaType(decimalType: DecimalLogicalTypeAnnotation, INT64, _) =>

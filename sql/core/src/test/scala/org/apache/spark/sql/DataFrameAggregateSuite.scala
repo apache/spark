@@ -132,6 +132,17 @@ class DataFrameAggregateSuite extends SharedSparkSession
     )
   }
 
+  test("cube()/rollup() with no grouping columns return one grand-total row over empty input") {
+    // With no grouping columns, cube()/rollup() lower to a global aggregate (the grand total),
+    // which returns one row even over empty input -- like an aggregation with no GROUP BY clause.
+    // This is the DataFrame-API surface for the empty CUBE/ROLLUP case (not expressible in SQL).
+    checkAnswer(spark.range(0).cube().count(), Row(0L))
+    checkAnswer(spark.range(0).rollup().count(), Row(0L))
+    // Non-empty input still collapses to the single grand-total row.
+    checkAnswer(spark.range(3).cube().count(), Row(3L))
+    checkAnswer(spark.range(3).rollup().count(), Row(3L))
+  }
+
   test("rollup") {
     checkAnswer(
       courseSales.rollup("course", "year").sum("earnings"),
@@ -1605,7 +1616,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
         percentile(col("year"), lit(0.3), lit(2)),
         percentile(col("year"), lit(Array(0.25, 0.75)), lit(2))
       ),
-      Row("Java", 2012.2999999999997, Seq(2012.25, 2012.75), 2012.0, Seq(2012.0, 2013.0)) ::
+      Row("Java", 2012.3, Seq(2012.25, 2012.75), 2012.0, Seq(2012.0, 2013.0)) ::
         Row("dotNET", 2012.0, Seq(2012.0, 2012.5), 2012.0, Seq(2012.0, 2012.75)) :: Nil
     )
 

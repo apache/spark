@@ -182,7 +182,8 @@ object ResolveHints {
   }
 
   /**
-   * COALESCE Hint accepts names "COALESCE", "REPARTITION", "REPARTITION_BY_RANGE" and "REBALANCE".
+   * COALESCE Hint accepts names "COALESCE", "REPARTITION", "REPARTITION_BY_RANGE", "REBALANCE"
+   * and "REBALANCE_BY_SIZE".
    */
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
     import CoalesceHintUtils._
@@ -198,6 +199,8 @@ object ResolveHints {
             createRepartitionByRange(transformStringToAttribute(hint))
           case "REBALANCE" if conf.adaptiveExecutionEnabled =>
             createRebalance(transformStringToAttribute(hint))
+          case "REBALANCE_BY_SIZE" if conf.adaptiveExecutionEnabled =>
+            createRebalanceBySize(transformStringToAttribute(hint, skipFirstParameter = true))
           case _ => hint
         }
     }

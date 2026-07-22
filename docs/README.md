@@ -50,7 +50,7 @@ And the required Python dependencies can be installed using pip:
 
 ```sh
 $ cd "$SPARK_HOME"
-$ pip install --upgrade -r dev/requirements.txt
+$ pip install --upgrade --group dev
 ```
 
 To generate the Python or R API docs, you'll also need to [install Pandoc](https://pandoc.org/installing.html).

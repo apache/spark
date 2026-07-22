@@ -37,7 +37,9 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
   test("String field types are inferred correctly from null types") {
     val inferSchema = newInferSchema(Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss"))
 
-    assert(inferSchema.inferFrom("", NullType) == NullType)
+    // An empty value carries no numeric/temporal content, so it falls through the cascade to
+    // StringType (see `inferFrom`); only a genuinely null value preserves `typeSoFar`.
+    assert(inferSchema.inferFrom("", NullType) == StringType)
     assert(inferSchema.inferFrom(null, NullType) == NullType)
     assert(inferSchema.inferFrom("100000000000", NullType) == LongType)
     // XML infers integral values as LongType (there is no IntegerType narrowing).
@@ -100,16 +102,35 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferFrom("TRUEe", DoubleType) == StringType)
   }
 
-  test("Empty and null values keep the type inferred so far") {
+  test("Null values keep the type inferred so far; empty values widen to String") {
     val inferSchema = newInferSchema(Map.empty[String, String])
 
-    // A genuinely empty/null value carries no type information, so `typeSoFar` is preserved.
-    // (Unlike CSV, XML inference does not treat the `nullValue` option as null here; a value
-    // equal to `nullValue` is inferred by its content, matching the pre-existing behavior.)
-    assert(inferSchema.inferFrom("", NullType) == NullType)
-    assert(inferSchema.inferFrom("", LongType) == LongType)
+    // A genuinely null value carries no type information, so `typeSoFar` is preserved.
     assert(inferSchema.inferFrom(null, DoubleType) == DoubleType)
     assert(inferSchema.inferFrom(null, TimestampType) == TimestampType)
+    // Unlike CSV, XML inference does NOT skip empty values (see `inferFrom` and SPARK-58133): the
+    // parser does not read "" as null under the default `nullValue`, so an empty value falls
+    // through the cascade to StringType, widening any prior numeric/temporal type to String.
+    assert(inferSchema.inferFrom("", NullType) == StringType)
+    assert(inferSchema.inferFrom("", LongType) == StringType)
+  }
+
+  test("A value matching the nullValue option keeps the type inferred so far") {
+    // A token equal to the `nullValue` option is read as null by the parser, so inference must
+    // ignore it and preserve `typeSoFar` -- matching `CSVInferSchema.inferField`. Otherwise a
+    // `nullValue` token would be inferred by its string content and (incorrectly) widen the field.
+    val inferSchema = newInferSchema(Map("nullValue" -> "NA"))
+    assert(inferSchema.inferFrom("NA", NullType) == NullType)
+    assert(inferSchema.inferFrom("NA", LongType) == LongType)
+    assert(inferSchema.inferFrom("NA", TimestampType) == TimestampType)
+    // A non-null value is still inferred by content as usual.
+    assert(inferSchema.inferFrom("5", NullType) == LongType)
+
+    // The nullValue token itself, when it happens to look like another type, is still treated as
+    // null rather than inferred as that type.
+    val inferSchemaNumericNull = newInferSchema(Map("nullValue" -> "0"))
+    assert(inferSchemaNumericNull.inferFrom("0", NullType) == NullType)
+    assert(inferSchemaNumericNull.inferFrom("1", NullType) == LongType)
   }
 
   test("Refining from a wider type never narrows and is consistent with fresh inference") {
@@ -155,11 +176,44 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferFrom("2024-01-15T10:00:00", DateType) == TimestampType)
   }
 
-  test("date is inferred regardless of preferDate") {
+  test("preferDate gates date inference (consistent with CSV)") {
+    // preferDate controls whether date inference is attempted, matching CSVInferSchema: when true
+    // a bare date infers as DateType; when false date inference is skipped and the value falls
+    // through to timestamp inference.
+    assert(newInferSchema(Map("preferDate" -> "true"))
+      .inferFrom("2024-01-15", NullType) == DateType)
+    assert(newInferSchema(Map("preferDate" -> "false"))
+      .inferFrom("2024-01-15", NullType) == TimestampType)
+  }
+
+  test("preferDate gates the incremental temporal re-entry (tryParseTime)") {
+    // Refining a temporal `typeSoFar` re-enters the cascade at `tryParseTime`, which must honor
+    // `preferDate` just like the fresh path (`tryParseDouble`). With a `Date`-so-far field seeing
+    // another date-only value: preferDate=true re-infers `Date` and the merge stays `Date`;
+    // preferDate=false skips date inference so the value falls through to `Timestamp`, and the
+    // merge widens `Date` to `Timestamp`. This guards the `tryParseTime` branch, which the
+    // incremental-vs-legacy parity test does not cover (it runs only at the default
+    // preferDate=true).
+    assert(newInferSchema(Map("preferDate" -> "true"))
+      .inferFrom("2024-01-15", DateType) == DateType)
+    assert(newInferSchema(Map("preferDate" -> "false"))
+      .inferFrom("2024-01-15", DateType) == TimestampType)
+  }
+
+  test("TIME inference precedes the preferDate gate") {
+    // TIME is tried ahead of date/timestamp in both `tryParseDouble` (fresh path) and
+    // `tryParseTime` (incremental temporal re-entry), so a TIME-shaped value infers as `TimeType`
+    // regardless of `preferDate`. This guards against a refactor that would move the TIME guard
+    // inside the `preferDate` branch and silently drop TIME inference when preferDate=false.
+    val time = TimeType(TimeType.DEFAULT_PRECISION)
     Seq("true", "false").foreach { preferDate =>
       val inferSchema = newInferSchema(Map("preferDate" -> preferDate))
-      assert(inferSchema.inferFrom("2024-01-15", NullType) == DateType,
-        s"expected DateType with preferDate=$preferDate")
+      // Fresh path (typeSoFar == NullType, enters via tryParseDouble).
+      assert(inferSchema.inferFrom("10:00:00", NullType) == time,
+        s"expected TimeType with preferDate=$preferDate")
+      // Incremental temporal re-entry (typeSoFar == TimeType, enters via tryParseTime).
+      assert(inferSchema.inferFrom("10:00:00", time) == time,
+        s"expected TimeType with preferDate=$preferDate")
     }
   }
 }

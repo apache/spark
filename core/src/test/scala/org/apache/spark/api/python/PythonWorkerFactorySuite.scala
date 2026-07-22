@@ -80,6 +80,38 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("SPARK-57931: refreshNonBlocking normalizes a blocking channel and opens a selector") {
+    // The pipelined Python UDF path switches a borrowed worker's channel to blocking mode
+    // and does not restore it, so a worker returned to the idle pool can be left blocking.
+    // create() calls refreshNonBlocking() when reusing a pooled worker; it must return the
+    // channel to non-blocking mode and re-open the selector, otherwise a later task on the
+    // selector path would NPE on a null worker.selector / worker.selectionKey.
+    val channel = java.nio.channels.SocketChannel.open()
+    try {
+      val worker = PythonWorker(channel)
+
+      // Simulate the state the pipelined path leaves behind: a blocking channel whose
+      // refresh() opens no selector.
+      channel.configureBlocking(true)
+      worker.refresh()
+      assert(worker.selector === null, "precondition: blocking channel has no selector")
+      assert(worker.selectionKey === null)
+
+      // Reuse normalization must restore non-blocking mode with a live selector.
+      worker.refreshNonBlocking()
+      assert(!worker.channel.isBlocking, "channel should be normalized to non-blocking")
+      assert(worker.selector != null, "a non-blocking channel should have a selector")
+      assert(worker.selectionKey != null, "a non-blocking channel should have a selection key")
+
+      // refreshNonBlocking on an already non-blocking channel is a no-op for the mode.
+      worker.refreshNonBlocking()
+      assert(!worker.channel.isBlocking)
+      assert(worker.selector != null)
+    } finally {
+      channel.close()
+    }
+  }
+
   test("idle worker pool is bounded when idleWorkerMaxPoolSize is set") {
     sc.conf.set("spark.python.factory.idleWorkerMaxPoolSize", "2")
 

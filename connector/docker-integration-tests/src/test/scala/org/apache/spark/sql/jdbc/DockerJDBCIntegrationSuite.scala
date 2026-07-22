@@ -119,6 +119,11 @@ abstract class DockerJDBCIntegrationSuite
     sys.props.getOrElse("spark.test.docker.removePulledImage", "true").toBoolean
   protected val imagePullTimeout: Long =
     timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.imagePullTimeout", "5min"))
+  // Number of attempts to pull the Docker image before giving up. Image pulls occasionally fail
+  // with transient registry/proxy errors (e.g. HTTP 502 Bad Gateway) that abort the whole suite
+  // in beforeAll even though a retry would succeed, so retry a few times with backoff.
+  protected val imagePullAttempts: Int =
+    sys.props.getOrElse("spark.test.docker.imagePullAttempts", "3").toInt
   protected val startContainerTimeout: Long =
     timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.startContainerTimeout", "5min"))
   // `lazy` so that `db` (abstract, defined by concrete suites) is initialized before it is read.
@@ -159,27 +164,48 @@ abstract class DockerJDBCIntegrationSuite
       } catch {
         case e: NotFoundException =>
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
-          val callback = new PullImageResultCallback {
-            override def onNext(item: PullResponseItem): Unit = {
-              super.onNext(item)
-              val status = item.getStatus
-              if (status != null && status != "Downloading" && status != "Extracting") {
-                logInfo(s"$status ${item.getId}")
+          // Retry the pull a few times: it can fail with transient registry/proxy errors
+          // (e.g. HTTP 502 Bad Gateway) or a timeout that would otherwise abort the suite.
+          var attempt = 0
+          var lastError: Throwable = null
+          while (!pulled && attempt < imagePullAttempts) {
+            attempt += 1
+            val callback = new PullImageResultCallback {
+              override def onNext(item: PullResponseItem): Unit = {
+                super.onNext(item)
+                val status = item.getStatus
+                if (status != null && status != "Downloading" && status != "Extracting") {
+                  logInfo(s"$status ${item.getId}")
+                }
               }
             }
+            try {
+              val (success, time) = Utils.timeTakenMs(
+                docker.pullImageCmd(db.imageName)
+                  .exec(callback)
+                  .awaitCompletion(imagePullTimeout, TimeUnit.SECONDS))
+
+              if (success) {
+                pulled = true
+                logInfo(s"Successfully pulled image ${db.imageName} in $time ms")
+              } else {
+                lastError = new TimeoutException(
+                  s"Timeout('$imagePullTimeout secs') waiting for image ${db.imageName} " +
+                    "to be pulled")
+              }
+            } catch {
+              case NonFatal(e) =>
+                lastError = e
+            }
+            if (!pulled && attempt < imagePullAttempts) {
+              log.warn(s"Failed to pull image ${db.imageName} " +
+                s"(attempt $attempt/$imagePullAttempts); retrying", lastError)
+              // Linear backoff between attempts to let a transient registry issue recover.
+              Thread.sleep(TimeUnit.SECONDS.toMillis(5L * attempt))
+            }
           }
-
-          val (success, time) = Utils.timeTakenMs(
-            docker.pullImageCmd(db.imageName)
-              .exec(callback)
-              .awaitCompletion(imagePullTimeout, TimeUnit.SECONDS))
-
-          if (success) {
-            pulled = success
-            logInfo(s"Successfully pulled image ${db.imageName} in $time ms")
-          } else {
-            throw new TimeoutException(
-              s"Timeout('$imagePullTimeout secs') waiting for image ${db.imageName} to be pulled")
+          if (!pulled) {
+            throw lastError
           }
       }
 

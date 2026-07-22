@@ -36,7 +36,7 @@ def determine_modules_for_files(filenames):
     file to belong to the 'root' module. `.github` directory is counted only in GitHub Actions.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
-    ['pyspark-core', 'pyspark-errors', 'sql']
+    ['pyspark-core', 'pyspark-install', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
     """
@@ -123,7 +123,7 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'catalyst', 'connect', 'core', 'docker-integration-tests', 'examples', 'graphx',
      'hive', 'hive-thriftserver', 'mllib', 'mllib-local', 'pipelines', 'protobuf',
-     'pyspark-connect', 'pyspark-core', 'pyspark-install', 'pyspark-ml', 'pyspark-ml-connect',
+     'pyspark-connect', 'pyspark-core', 'pyspark-errors', 'pyspark-ml', 'pyspark-ml-connect',
      'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
      'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-resource', 'pyspark-sql',
      'pyspark-streaming', 'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',

@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
+import java.time.{Instant, LocalDateTime, ZoneOffset}
+
+import org.apache.parquet.filter2.predicate.FilterApi
+import org.apache.parquet.filter2.predicate.SparkFilterApi.longColumn
 import org.apache.parquet.io.api.PrimitiveConverter
 import org.apache.parquet.schema.{LogicalTypeAnnotation, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation.{TimestampLogicalTypeAnnotation, TimeUnit}
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{INT32, INT64}
 import org.apache.parquet.schema.Type.Repetition.REQUIRED
 
 import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkRuntimeException}
@@ -133,6 +137,108 @@ class TimestampNanosParquetOpsSuite extends SparkFunSuite {
       }
       assert(ex.getCondition === "DATETIME_OVERFLOW")
     }
+  }
+
+  // ---------- filter-pushdown ops ----------
+
+  test("filterOps accepts the matching Java time value and rejects others") {
+    // LTZ pushes down java.time.Instant; NTZ pushes down java.time.LocalDateTime. Each rejects
+    // the other type (and non-temporal values) so a mismatched literal falls through to no
+    // pushdown rather than a ClassCastException in the converter.
+    val ltzOps = TimestampNanosParquetOps.ltzFilterOps
+    val ntzOps = TimestampNanosParquetOps.ntzFilterOps
+    assert(ltzOps.acceptsValue(Instant.parse("2020-01-01T00:00:00Z")))
+    assert(!ltzOps.acceptsValue(LocalDateTime.parse("2020-01-01T00:00:00")))
+    assert(!ltzOps.acceptsValue(java.lang.Long.valueOf(1L)))
+    assert(ntzOps.acceptsValue(LocalDateTime.parse("2020-01-01T00:00:00")))
+    assert(!ntzOps.acceptsValue(Instant.parse("2020-01-01T00:00:00Z")))
+    assert(!ntzOps.acceptsValue("2020-01-01"))
+  }
+
+  test("filterOps rejects values outside the INT64 epoch-nanos range (falls back to full scan)") {
+    // Year 2300 is past the ~2262 int64 epoch-nanos cutoff: encoding would overflow, so
+    // acceptsValue must reject it (SPARK-46092-style guard) instead of throwing during filter
+    // creation. An in-range value is accepted.
+    val ltzOps = TimestampNanosParquetOps.ltzFilterOps
+    val ntzOps = TimestampNanosParquetOps.ntzFilterOps
+    assert(!ltzOps.acceptsValue(Instant.parse("2300-01-01T00:00:00Z")))
+    assert(!ntzOps.acceptsValue(LocalDateTime.parse("2300-01-01T00:00:00")))
+    assert(ltzOps.acceptsValue(Instant.parse("2020-01-01T00:00:00Z")))
+    assert(ntzOps.acceptsValue(LocalDateTime.parse("2020-01-01T00:00:00")))
+  }
+
+  test("filterOps declares the canonical nanos-timestamp Parquet encoding") {
+    // LTZ is isAdjustedToUTC=true, NTZ is false; both INT64 TIMESTAMP(NANOS). These are the keys
+    // the ParquetFilters reverse lookup matches against the file schema.
+    val ltzOps = TimestampNanosParquetOps.ltzFilterOps
+    val ntzOps = TimestampNanosParquetOps.ntzFilterOps
+    assert(ltzOps.primitiveTypeName === INT64)
+    assert(ltzOps.logicalTypeAnnotation ===
+      LogicalTypeAnnotation.timestampType(true, TimeUnit.NANOS))
+    assert(ntzOps.primitiveTypeName === INT64)
+    assert(ntzOps.logicalTypeAnnotation ===
+      LogicalTypeAnnotation.timestampType(false, TimeUnit.NANOS))
+  }
+
+  test("filterOps builds predicates converting to signed INT64 epoch-nanoseconds") {
+    val path = Array("c")
+    val col = longColumn(path)
+
+    // LTZ: Instant -> epoch-nanos. Sub-microsecond digits are preserved (not truncated to micros).
+    val ltzOps = TimestampNanosParquetOps.ltzFilterOps
+    val instant = Instant.parse("2020-01-01T12:34:56.000000789Z")
+    val ltzNanos = java.lang.Long.valueOf(
+      instant.getEpochSecond * DateTimeConstants.NANOS_PER_SECOND + instant.getNano)
+    assert(ltzOps.makeEq(path, instant) === FilterApi.eq(col, ltzNanos))
+    assert(ltzOps.makeNotEq(path, instant) === FilterApi.notEq(col, ltzNanos))
+    assert(ltzOps.makeLt(path, instant) === FilterApi.lt(col, ltzNanos))
+    assert(ltzOps.makeLtEq(path, instant) === FilterApi.ltEq(col, ltzNanos))
+    assert(ltzOps.makeGt(path, instant) === FilterApi.gt(col, ltzNanos))
+    assert(ltzOps.makeGtEq(path, instant) === FilterApi.gtEq(col, ltzNanos))
+
+    // NTZ: LocalDateTime (interpreted at UTC) -> epoch-nanos.
+    val ntzOps = TimestampNanosParquetOps.ntzFilterOps
+    val ldt = LocalDateTime.parse("2020-01-01T12:34:56.000000789")
+    val ntzInstant = ldt.toInstant(ZoneOffset.UTC)
+    val ntzNanos = java.lang.Long.valueOf(
+      ntzInstant.getEpochSecond * DateTimeConstants.NANOS_PER_SECOND + ntzInstant.getNano)
+    assert(ntzOps.makeEq(path, ldt) === FilterApi.eq(col, ntzNanos))
+    assert(ntzOps.makeIn(path, Array[Any](ldt)) === {
+      val set = new java.util.HashSet[java.lang.Long]()
+      set.add(ntzNanos)
+      FilterApi.in(col, set)
+    })
+  }
+
+  test("filterOps eq/notEq/in tolerate a null value (IsNull / IsNotNull)") {
+    val path = Array("c")
+    val col = longColumn(path)
+    val nullLong = null.asInstanceOf[java.lang.Long]
+    // null value -> null Long comparand; used by ParquetFilters for IsNull / IsNotNull.
+    Seq(TimestampNanosParquetOps.ltzFilterOps, TimestampNanosParquetOps.ntzFilterOps).foreach {
+      ops =>
+        assert(ops.makeEq(path, null) === FilterApi.eq(col, nullLong))
+        assert(ops.makeNotEq(path, null) === FilterApi.notEq(col, nullLong))
+        val set = new java.util.HashSet[java.lang.Long]()
+        set.add(null)
+        assert(ops.makeIn(path, Array[Any](null)) === FilterApi.in(col, set))
+    }
+  }
+
+  test("ParquetTypeOps.filterOpsFor resolves each nanos encoding and nothing else") {
+    // The LTZ and NTZ encodings differ only in isAdjustedToUTC; each resolves to its own ops.
+    assert(ParquetTypeOps.filterOpsFor(
+      LogicalTypeAnnotation.timestampType(true, TimeUnit.NANOS), INT64)
+      .contains(TimestampNanosParquetOps.ltzFilterOps))
+    assert(ParquetTypeOps.filterOpsFor(
+      LogicalTypeAnnotation.timestampType(false, TimeUnit.NANOS), INT64)
+      .contains(TimestampNanosParquetOps.ntzFilterOps))
+    // MICROS unit, or an INT32 primitive, is not a nanos-timestamp encoding (pushdown falls
+    // through to no framework ops).
+    assert(ParquetTypeOps.filterOpsFor(
+      LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS), INT64).isEmpty)
+    assert(ParquetTypeOps.filterOpsFor(
+      LogicalTypeAnnotation.timestampType(false, TimeUnit.NANOS), INT32).isEmpty)
   }
 
   // ---------- helpers ----------

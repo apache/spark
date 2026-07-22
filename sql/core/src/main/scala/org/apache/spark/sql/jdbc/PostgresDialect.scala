@@ -41,7 +41,7 @@ private case class PostgresDialect()
   extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
-    url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
+    url.toLowerCase(Locale.ROOT).matches("jdbc:(.*:)?postgresql.*")
 
   // See https://www.postgresql.org/docs/8.4/functions-aggregate.html
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
@@ -270,7 +270,7 @@ private case class PostgresDialect()
       indexName: String,
       tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
-    val sql = s"SELECT * FROM pg_indexes WHERE tablename = '${tableIdent.name()}' AND" +
+    val sql = s"SELECT * FROM pg_indexes WHERE tablename = '${escapeSql(tableIdent.name())}' AND" +
       s" indexname = '${escapeSql(indexName)}'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
   }

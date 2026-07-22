@@ -142,7 +142,7 @@ try:
     _minimum_pyyaml_version = "3.11"
     _minimum_zstandard_version = "0.25.0"
 
-    with open("README.md") as f:
+    with open("README.md", encoding="utf-8") as f:
         long_description = f.read()
 
     connect_packages = [

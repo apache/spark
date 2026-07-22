@@ -1355,8 +1355,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     ) -> ParentDataFrame:
         if how is not None and how not in ["any", "all"]:
             raise PySparkValueError(
-                errorClass="VALUE_NOT_ANY_OR_ALL",
-                messageParameters={"arg_name": "how", "arg_type": how},
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "how", "allowed_values": "['any', 'all']"},
             )
 
         if subset is None:
@@ -1693,8 +1693,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             method = "pearson"
         if not method == "pearson":
             raise PySparkValueError(
-                errorClass="VALUE_NOT_PEARSON",
-                messageParameters={"arg_name": "method", "arg_value": method},
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "method", "allowed_values": "['pearson']"},
             )
         return self._jdf.stat().corr(col1, col2, method)
 

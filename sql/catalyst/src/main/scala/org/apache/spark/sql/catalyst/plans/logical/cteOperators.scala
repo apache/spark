@@ -106,15 +106,30 @@ case class UnionLoopRef(
  * @param underSubquery If true, it means we don't need to add a shuffle for this CTE relation as
  *                      subquery reuse will be applied to reuse CTE relation output.
  * @param maxDepth The maximal depth of a recursion in a recursive CTE.
+ * @param forceSkipInline If true, this CTE relation will never be inlined by [[InlineCTE]],
+ *                        regardless of determinism or reference count. This lets a producer
+ *                        force the CTE to be materialized instead of duplicated, e.g. when the
+ *                        CTE wraps a non-deterministic source that must be evaluated exactly once.
  */
 case class CTERelationDef(
     child: LogicalPlan,
     id: Long = CTERelationDef.newId,
     originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
     underSubquery: Boolean = false,
-    maxDepth: Option[Int] = None) extends UnaryNode {
+    maxDepth: Option[Int] = None,
+    forceSkipInline: Boolean = false) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
+
+  // Keep the default string representation stable when `forceSkipInline` is not set, so that
+  // existing plan comparisons and golden files are unaffected by the new field.
+  override def stringArgs: Iterator[Any] = {
+    if (forceSkipInline) {
+      super.stringArgs
+    } else {
+      super.stringArgs.toArray.dropRight(1).iterator
+    }
+  }
 
   override def maxRows: Option[Long] = if (conf.getConf(SQLConf.CTE_RELATION_DEF_MAX_ROWS)) {
     child.maxRows

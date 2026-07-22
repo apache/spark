@@ -104,6 +104,27 @@ class SparkSqlParser extends AbstractSqlParser {
   }
 
   /**
+   * Split a SQL string into individual statements at `;` boundaries.
+   *
+   * The emitted statements are pieces of the original input -- `${...}` variable
+   * references are NOT expanded here, so they survive into each emitted statement
+   * and are substituted for real per-statement at parse time (see [[parseInternal]]).
+   * This is important for the `spark-sql` CLI's batch mode: a `${x}` whose value
+   * comes from a `SET x=...` in the same batch must resolve to the post-`SET`
+   * value, which is only available *after* the earlier statement executes.
+   *
+   * To still recognize `BEGIN ... END` compound block boundaries when a body
+   * contains a `${...}` reference, the splitter is invoked with a validation
+   * preprocessor that replaces every `${...}` with a fixed valid identifier.
+   * The placeholder makes the candidate region parse-equivalent regardless of
+   * whether (or how) the variable is set, while the emitted statement keeps
+   * the original `${...}` so per-statement substitution at execution still
+   * runs against the real session config (with earlier `SET`s applied).
+   */
+  override def splitStatements(sqlText: String): SqlStatementSplitResult =
+    SqlStatementSplitter.split(sqlText, SparkSqlParser.substituteVariablesForValidation)
+
+  /**
    * Internal parse method that handles both parameter substitution and regular parsing.
    *
    * @param command The SQL text to parse
@@ -166,6 +187,42 @@ class SparkSqlParser extends AbstractSqlParser {
     CurrentOrigin.withOrigin(originToUse) {
       super.parse(paramSubstituted)(toResult)
     }
+  }
+}
+
+object SparkSqlParser {
+
+  /**
+   * Identifier used to stand in for every `${...}` variable reference when
+   * the splitter validates a candidate compound block. It is intentionally
+   * shaped so that a real user identifier cannot collide with it; it is also
+   * a structurally well-formed Spark SQL identifier (letters + underscores
+   * only) so the parser accepts it in nearly every position a `${...}` might
+   * appear.
+   */
+  private[execution] val VariableRefPlaceholder = "__SPARK_VAR_PLACEHOLDER__"
+
+  /**
+   * Regex matching a `${...}` variable reference. Mirrors
+   * [[org.apache.spark.internal.config.ConfigReader.REF_RE]]: an optional
+   * `prefix:` followed by a non-whitespace name, enclosed in `${ }`.
+   */
+  private val variableRefRe = """\$\{(?:\w+?:)?\S+?\}""".r
+
+  /**
+   * Validation-time preprocessor for the splitter (see
+   * [[SparkSqlParser.splitStatements]]): replaces every `${...}` reference
+   * with [[VariableRefPlaceholder]] so candidate regions parse regardless of
+   * whether the referenced variable is set. The emitted statement keeps the
+   * original `${...}` and is substituted for real at execution time. If
+   * variable substitution is disabled in the session conf, the input is
+   * returned unchanged (matching the behavior of the real substituter).
+   */
+  private[execution] def substituteVariablesForValidation(input: String): String = {
+    if (input == null || input.isEmpty || !input.contains("${")) return input
+    if (!SQLConf.get.variableSubstituteEnabled) return input
+    variableRefRe.replaceAllIn(
+      input, _ => scala.util.matching.Regex.quoteReplacement(VariableRefPlaceholder))
   }
 }
 
@@ -840,12 +897,12 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     if (ctx.METRICS(0) == null) {
       throw QueryParsingErrors.missingClausesForOperation(
-        ctx, "WITH METRICS", "METRIC VIEW CREATION")
+        ctx, "WITH METRICS", "CREATE METRIC VIEW")
     }
 
     if (ctx.routineLanguage(0) == null) {
       throw QueryParsingErrors.missingClausesForOperation(
-        ctx, "LANGUAGE", "METRIC VIEW CREATION")
+        ctx, "LANGUAGE", "CREATE METRIC VIEW")
     }
 
     val languageCtx = ctx.routineLanguage(0)
@@ -1571,6 +1628,19 @@ class SparkSqlAstBuilder extends AstBuilder {
     )
   }
 
+  override def visitCreateFlowAutoCdc(
+      ctx: CreateFlowAutoCdcContext): LogicalPlan = withOrigin(ctx) {
+    val flowHeaderCtx = ctx.createPipelineFlowHeader()
+    val ident = withIdentClause(flowHeaderCtx.flowName, UnresolvedIdentifier(_))
+    val commentOpt = Option(flowHeaderCtx.commentSpec()).map(visitCommentSpec)
+    val autoCdcInto = buildAutoCdcInto(ctx.autoCdcCommand())
+    CreateFlowCommand(
+      name = ident,
+      flowOperation = autoCdcInto,
+      comment = commentOpt
+    )
+  }
+
   override def visitCreatePipelineDataset(
       ctx: CreatePipelineDatasetContext): LogicalPlan = withOrigin(ctx) {
     val createPipelineDatasetHeaderCtx = ctx.createPipelineDatasetHeader()
@@ -1603,7 +1673,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       partitionExpressions(partTransforms, partCols, ctx) ++
         clusterBySpec.map(_.asTransform)
 
-    // Because the createTableClauses grammar is reused for createPipelineDataset but pipeline
+    // Because the createTableClauses grammar is reused for pipeline datasets but pipeline
     // datasets don't support bucketing, options, storage location, or Hive SerDe, validate they
     // are not set.
     if (bucketSpec.isDefined) {
@@ -1646,6 +1716,10 @@ class SparkSqlAstBuilder extends AstBuilder {
     )
 
     if (createPipelineDatasetHeaderCtx.materializedView() != null) {
+      if (ctx.autoCdcBody() != null) {
+        throw operationNotAllowed(
+          "AUTO CDC is only supported for STREAMING TABLE, not MATERIALIZED VIEW.", ctx)
+      }
       val query: ParserRuleContext = Option(ctx.query).getOrElse(
         throw operationNotAllowed(
           s"Unable to find query for CREATE $syntaxTypeErrorStr statement.", ctx)
@@ -1660,25 +1734,42 @@ class SparkSqlAstBuilder extends AstBuilder {
         ifNotExists = ifNotExists
       )
     } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
-      Option(ctx.query) match {
-        case Some(query) =>
-          CreateStreamingTableAsSelect(
-            name = datasetIdentifier,
-            columns = colDefs,
-            partitioning = partitioning,
-            tableSpec = spec,
-            query = plan(query),
-            originalText = source(query),
-            ifNotExists = ifNotExists
-          )
-        case None =>
-          CreateStreamingTable(
-            name = datasetIdentifier,
-            columns = colDefs,
-            partitioning = partitioning,
-            tableSpec = spec,
-            ifNotExists = ifNotExists
-          )
+      if (ctx.autoCdcBody() != null) {
+        val params = parseAutoCdcParams(ctx.autoCdcBody().autoCdcParameters())
+        CreateStreamingTableAutoCdc(
+          name = datasetIdentifier,
+          columns = colDefs,
+          partitioning = partitioning,
+          tableSpec = spec,
+          ifNotExists = ifNotExists,
+          source = params.source,
+          keys = params.keys,
+          deleteCondition = params.deleteCondition,
+          sequenceByExpr = params.sequencing,
+          includeColumns = params.includeColumns,
+          excludeColumns = params.excludeColumns
+        )
+      } else {
+        Option(ctx.query) match {
+          case Some(query) =>
+            CreateStreamingTableAsSelect(
+              name = datasetIdentifier,
+              columns = colDefs,
+              partitioning = partitioning,
+              tableSpec = spec,
+              query = plan(query),
+              originalText = source(query),
+              ifNotExists = ifNotExists
+            )
+          case None =>
+            CreateStreamingTable(
+              name = datasetIdentifier,
+              columns = colDefs,
+              partitioning = partitioning,
+              tableSpec = spec,
+              ifNotExists = ifNotExists
+            )
+        }
       }
     } else {
       // Should never be possible based on grammar definition.

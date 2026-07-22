@@ -866,6 +866,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringTranslate(Literal("translate"), Literal("rnlt"), Literal("123")), "1a2s3ae")
     checkEvaluation(StringTranslate(Literal("translate"), Literal(""), Literal("123")), "translate")
     checkEvaluation(StringTranslate(Literal("translate"), Literal("rnlt"), Literal("")), "asae")
+    // A literal U+0000 in `to` is preserved as a one-character replacement, not deletion.
+    checkEvaluation(StringTranslate(Literal("A"), Literal("A"), Literal("\u0000")), "\u0000")
+    // Mixed literal U+0000 replacement and deletion: A -> U+0000, B -> X, C and D deleted.
+    checkEvaluation(
+      StringTranslate(Literal("ABCD"), Literal("ABCD"), Literal("\u0000" + "X")), "\u0000" + "X")
     // test for multiple mapping
     checkEvaluation(StringTranslate(Literal("abcd"), Literal("aba"), Literal("123")), "12cd")
     checkEvaluation(StringTranslate(Literal("abcd"), Literal("aba"), Literal("12")), "12cd")

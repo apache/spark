@@ -116,6 +116,13 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     // headroom left for the executors these tests request. On a busy CI runner that makes
     // executor allocation slow/racy and the YarnClusterSuite apps time out waiting to finish.
     // The CI hosts have plenty of RAM, so let the NM offer enough for the AM plus a few executors.
+    //
+    // NOTE: MiniYARNCluster ignores a plain `yarn.nodemanager.resource.memory-mb`. Its
+    // NodeManager.serviceInit unconditionally overwrites that key with
+    //   yarn.minicluster.yarn.nodemanager.resource.memory-mb (default 4096)
+    // so the minicluster-prefixed key is the one that actually sizes the mini NM. Set both: the
+    // prefixed key is what takes effect, and the plain key keeps the RM's view consistent.
+    yarnConf.setInt("yarn.minicluster.yarn.nodemanager.resource.memory-mb", 8192)
     yarnConf.setInt("yarn.nodemanager.resource.memory-mb", 8192)
     yarnConf.setInt("yarn.scheduler.maximum-allocation-mb", 8192)
 

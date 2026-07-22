@@ -265,7 +265,11 @@ private[sql] object CatalogV2Util {
 
         case update: UpdateColumnComment =>
           replace(schema, update.fieldNames.toImmutableArraySeq, field =>
-            Some(field.withComment(update.newComment)))
+            if (update.newComment != null) {
+              Some(field.withComment(update.newComment))
+            } else {
+              Some(field.clearComment())
+            })
 
         case update: UpdateColumnPosition =>
           def updateFieldPos(struct: StructType, name: String): StructType = {
@@ -670,6 +674,12 @@ private[sql] object CatalogV2Util {
     }
     Option(col.id()).foreach { id =>
       f = f.withId(id)
+    }
+    Option(col.generationExpression()).foreach { genExpr =>
+      f = f.copy(metadata = new MetadataBuilder()
+        .withMetadata(f.metadata)
+        .putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, genExpr)
+        .build())
     }
     f
   }

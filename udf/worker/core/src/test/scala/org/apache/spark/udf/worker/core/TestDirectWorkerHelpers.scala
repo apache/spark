@@ -263,9 +263,20 @@ class TestDirectWorkerDispatcher(
   private def shortTempBase(): Path = {
     val candidates =
       Seq("TMPDIR", "TEMP", "TMP").flatMap(sys.env.get).filter(_.nonEmpty) :+ "/tmp"
-    candidates
+    val usable = candidates
       .map(Paths.get(_))
-      .find(p => Files.isDirectory(p) && Files.isWritable(p))
+      .filter(p => Files.isDirectory(p) && Files.isWritable(p))
+    // Pick the SHORTEST usable base, measured by its *real* (symlink-resolved) path,
+    // because that is what actually counts against the `sun_path` limit when the socket
+    // is bound. On macOS `$TMPDIR` is a long `/var/folders/<...>/T` path while `/tmp`
+    // resolves to the short `/private/tmp`; picking the first writable candidate (the old
+    // behavior) chose the long `$TMPDIR` and overflowed the 104-byte macOS limit
+    // ("AF_UNIX path too long"). Choosing the shortest real path avoids that.
+    def realLen(p: Path): Int =
+      try p.toRealPath().toString.length catch { case _: IOException => p.toString.length }
+    usable
+      .sortBy(realLen)
+      .headOption
       .getOrElse(Paths.get(System.getProperty("java.io.tmpdir")))
   }
 }

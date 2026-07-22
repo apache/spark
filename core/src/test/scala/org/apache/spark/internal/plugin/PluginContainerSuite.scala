@@ -244,8 +244,9 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext(conf)
       val memoryManager = sc.env.memoryManager
 
-      assert(memoryManager.tungstenMemoryMode == MemoryMode.OFF_HEAP)
-      assert(memoryManager.maxOffHeapStorageMemory == MemoryOverridePlugin.offHeapMemory)
+      // SPARK-57867: The driver does not reserve off-heap memory in non-local mode
+      assert(memoryManager.tungstenMemoryMode == MemoryMode.ON_HEAP)
+      assert(memoryManager.maxOffHeapStorageMemory == 0)
 
       val defaultResourceProfile = sc.resourceProfileManager.defaultResourceProfile
       assert(512L ==

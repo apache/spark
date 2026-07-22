@@ -52,6 +52,11 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns an MD5 128-bit checksum as a hex string of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the MD5 checksum of.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark');
@@ -93,6 +98,13 @@ case class Md5(child: Expression)
   usage = """
     _FUNC_(expr, bitLength) - Returns a checksum of SHA-2 family as a hex string of `expr`.
       SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is equivalent to 256.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the SHA-2 checksum of.
+        An expression that evaluates to a binary.
+      * bitLength - The bit length of the SHA-2 result (224, 256, 384, or 512).
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:
@@ -160,6 +172,11 @@ case class Sha2(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a sha1 hash value as a hex string of the `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the SHA-1 hash of.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark');
@@ -195,6 +212,11 @@ case class Sha1(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a cyclic redundancy check value of the `expr` as a bigint.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the cyclic redundancy check value of.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark');
