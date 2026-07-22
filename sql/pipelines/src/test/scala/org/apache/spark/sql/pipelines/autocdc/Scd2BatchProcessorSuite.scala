@@ -2854,6 +2854,33 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("dropLeftoverDeletesPostReconciliation keeps a delete-encoded row whose predecessor is " +
+    "itself a delete-encoded row on the same boundary") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A closed upsert [5, 15) followed by two tombstones at 15. The first tombstone is redundant
+    // (its predecessor is the upsert closing on 15) and drops. The second tombstone's predecessor
+    // is the *first tombstone*, not an upsert, so - although their endAts coincide at 15 - it must
+    // survive: only a preceding upsert makes a delete boundary redundant. This guards the
+    // documented "immediately preceding upsert" invariant against adjacent delete-encoded rows.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L, 15L, Row(5L)),
+      Row(1, "alice", 15L, 15L, Row(15L)),
+      Row(1, "alice", 15L, 15L, Row(15L))
+    )
+
+    val result = processor.dropLeftoverDeletesPostReconciliation(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L, 15L, Row(5L)),
+        Row(1, "alice", 15L, 15L, Row(15L))
+      )
+    )
+  }
+
   // =============== promoteDecompositionTailsToTombstones tests ===============
 
   test("promoteDecompositionTailsToTombstones rewrites a decomposition tail into a tombstone") {

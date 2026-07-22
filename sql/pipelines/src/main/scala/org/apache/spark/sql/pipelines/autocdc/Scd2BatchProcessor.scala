@@ -850,22 +850,25 @@ case class Scd2BatchProcessor(
     val isDecompositionTail = RowClassifier.isDecompositionTail(row)
     val isDeleteEncodedRow = isTombstone || isDecompositionTail
 
+    // The immediately preceding chronologically-ordered row for the same key.
+    val previous = row.lagBy(1, orderChronologicallyPerKeyWindow)
+
     val withWindowCols = reconciledDf
       .withColumn(
-        Scd2BatchProcessor.previousEndAtColName,
-        F.lag(endAt, 1).over(orderChronologicallyPerKeyWindow)
-      )
-      .withColumn(
         Scd2BatchProcessor.isRedundantDeleteEncodingColName,
-        isDeleteEncodedRow && (F.col(Scd2BatchProcessor.previousEndAtColName) <=> endAt)
+        isDeleteEncodedRow &&
+          // Defensive: the predecessor should always be an upsert, because upstream cleanup
+          // prevents adjacent delete-encoded rows sharing the same boundary from reaching here.
+          // Asserting it directly keeps this method's redundancy rule matching its documented
+          // "immediately preceding upsert" invariant, rather than dropping a delete-encoded row
+          // that merely happens to abut another delete-encoded row on the same boundary.
+          RowClassifier.isUpsertRepresentingRow(previous) &&
+          (previous.endAt <=> endAt)
       )
 
     withWindowCols
       .filter(!F.col(Scd2BatchProcessor.isRedundantDeleteEncodingColName))
-      .drop(
-        Scd2BatchProcessor.previousEndAtColName,
-        Scd2BatchProcessor.isRedundantDeleteEncodingColName
-      )
+      .drop(Scd2BatchProcessor.isRedundantDeleteEncodingColName)
   }
 
   /**
@@ -1146,15 +1149,12 @@ object Scd2BatchProcessor {
     s"${AutoCdcReservedNames.prefix}final_end_at"
 
   /**
-   * Names of temporary columns used by [[dropLeftoverDeletesPostReconciliation]] to identify
+   * Name of the temporary column used by [[dropLeftoverDeletesPostReconciliation]] to flag
    * delete-encoded rows (tombstones and decomposition tails) already encoded by the immediately
    * preceding upsert row's [[endAtColName]].
    *
-   * Temporary in that the columns have no observable side effect or persistence across
-   * microbatches.
+   * Temporary in that the column has no observable side effect or persistence across microbatches.
    */
-  private val previousEndAtColName: String =
-    s"${AutoCdcReservedNames.prefix}previous_end_at"
   private val isRedundantDeleteEncodingColName: String =
     s"${AutoCdcReservedNames.prefix}is_redundant_delete_encoding"
 
