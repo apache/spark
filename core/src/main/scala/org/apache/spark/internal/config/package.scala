@@ -751,11 +751,13 @@ package object config {
         "CPUs reduce the number of concurrent tasks on the executor, which increases the share " +
         "of the execution memory pool available to the retrying task, improving the chance of " +
         "success. The total CPUs per task is capped at the executor's total core count " +
-        "(spark.executor.cores or the ResourceProfile equivalent). If the executor does not " +
-        "currently have enough free CPUs to satisfy the request, the retry waits for an offer " +
-        "that does, rather than falling back to the default. Set to 0 (the default) to disable " +
-        "this feature and retry OOM tasks with the same resources as the original attempt. " +
-        "This feature does not apply to barrier stages.")
+        "(spark.executor.cores or the ResourceProfile equivalent). If that core count is not " +
+        "known (e.g. Standalone / local-cluster without spark.executor.cores), the retry keeps " +
+        "the original CPUs rather than risk requesting more than the executor has. If the " +
+        "executor does not currently have enough free CPUs to satisfy the request, the retry " +
+        "waits for an offer that does, rather than falling back to the default. Set to 0 (the " +
+        "default) to disable this feature and retry OOM tasks with the same resources as the " +
+        "original attempt. This feature does not apply to barrier stages.")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ >= 0, "OOM retry cpus increment must be non-negative (0 disables).")
