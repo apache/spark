@@ -361,8 +361,10 @@ object MultiLineXmlDataSource extends XmlDataSource {
    * as a directory of the same files would infer. Single-line archive inference does not come here:
    * the Text data source reads archives directly, so it flows through
    * [[TextInputXmlDataSource.infer]] like any directory read. A corrupt/missing input is skipped as
-   * a unit when the ignore flags are set. Uses the legacy tokenizer because the optimized parser
-   * re-opens its input, which a single-use archive entry stream does not support.
+   * a unit when the ignore flags are set -- across the whole input, since `readArchiveEntries`
+   * advances to later entries lazily (see [[skipInputOnError]]). Uses the legacy tokenizer because
+   * the optimized parser re-opens its input, which a single-use archive entry stream does not
+   * support.
    */
   private def inferWithArchives(
       sparkSession: SparkSession,
@@ -374,7 +376,7 @@ object MultiLineXmlDataSource extends XmlDataSource {
 
     val tokenRDD: RDD[String] = baseRdd.flatMap { stream =>
       val path = new Path(stream.getPath())
-      try {
+      skipInputOnError(ignoreMissingFiles, ignoreCorruptFiles) {
         if (SupportsArchiveFormat.isArchivePath(path)) {
           SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
             StaxXmlParser.tokenizeStream(in, parsedOptions)
@@ -384,23 +386,54 @@ object MultiLineXmlDataSource extends XmlDataSource {
             CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
             parsedOptions)
         }
-      } catch {
-        case e: FileNotFoundException if ignoreMissingFiles =>
-          logWarning("Skipped missing file", e)
-          Iterator.empty[String]
-        case NonFatal(e) =>
-          Utils.getRootCause(e) match {
-            case root @ (_: AccessControlException | _: BlockMissingException) => throw root
-            case _: RuntimeException | _: IOException if ignoreCorruptFiles =>
-              logWarning("Skipped the rest of the content in the corrupted file", e)
-              Iterator.empty[String]
-            case other => throw other
-          }
       }
     }
     SQLExecution.withSQLConfPropagated(sparkSession) {
       new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
         .infer(tokenRDD)
+    }
+  }
+
+  /**
+   * Builds one input's token iterator, skipping the whole input when the ignore flags are set and it
+   * is missing/corrupt. `readArchiveEntries` opens only the first entry eagerly and advances to
+   * later entries lazily, so a corrupt later entry throws while the returned iterator is consumed,
+   * not while it is built -- guarding only construction would let that escape. The returned iterator
+   * therefore catches on both construction and advancement (`hasNext`). Access/block errors are
+   * always rethrown (unwrapped), matching the non-archive read path.
+   */
+  private def skipInputOnError(
+      ignoreMissingFiles: Boolean,
+      ignoreCorruptFiles: Boolean)(
+      build: => Iterator[String]): Iterator[String] = {
+    def handle(e: Throwable): Iterator[String] = e match {
+      case e: FileNotFoundException if ignoreMissingFiles =>
+        logWarning("Skipped missing file", e)
+        Iterator.empty[String]
+      case NonFatal(e) =>
+        Utils.getRootCause(e) match {
+          case root @ (_: AccessControlException | _: BlockMissingException) => throw root
+          case _: RuntimeException | _: IOException if ignoreCorruptFiles =>
+            logWarning("Skipped the rest of the content in the corrupted file", e)
+            Iterator.empty[String]
+          case other => throw other
+        }
+    }
+
+    val underlying =
+      try build
+      catch { case NonFatal(e) => return handle(e) }
+
+    new Iterator[String] {
+      private var delegate = underlying
+      override def hasNext: Boolean =
+        try delegate.hasNext
+        catch {
+          case NonFatal(e) =>
+            delegate = handle(e)
+            delegate.hasNext
+        }
+      override def next(): String = delegate.next()
     }
   }
 }

@@ -45,7 +45,8 @@ case class JsonTable(
       options.asScala.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
-    JsonDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
+    JsonDataSource(parsedOptions).inferSchema(
+      sparkSession, files, parsedOptions, supportsArchiveScan = false)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {

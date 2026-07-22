@@ -46,7 +46,9 @@ case class CSVTable(
       columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
 
-    CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
+    // The DSv2 scan cannot read archives, so refuse archive inference here.
+    CSVDataSource(parsedOptions)
+      .inferSchema(sparkSession, files, parsedOptions, supportsArchiveScan = false)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {

@@ -97,11 +97,18 @@ abstract class JsonDataSource extends Serializable with Logging with SupportsArc
   final def inferSchema(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: JSONOptions): Option[StructType] = {
+      parsedOptions: JSONOptions,
+      supportsArchiveScan: Boolean): Option[StructType] = {
     parsedOptions.singleVariantColumn.orElse(parsedOptions.explodeEmbeddedArray) match {
       case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
       case None =>
-        if (inputPaths.nonEmpty) {
+        val hasArchive = parsedOptions.archiveFormatEnabled &&
+          inputPaths.exists(f => SupportsArchiveFormat.isArchivePath(f.getPath))
+        if (hasArchive && !supportsArchiveScan) {
+          // The caller's scan cannot read archives (e.g. DSv2), so refuse rather than let it
+          // mis-read raw archive bytes as JSON.
+          None
+        } else if (inputPaths.nonEmpty) {
           Some(infer(sparkSession, inputPaths, parsedOptions))
         } else {
           None
@@ -269,7 +276,9 @@ object MultiLineJsonDataSource extends JsonDataSource {
    * JSON document, and all feed a single [[JsonInferSchema]] pass -- exactly as a directory of the
    * same files would infer. Single-line archive inference does not come here: the Text data source
    * reads archives directly, so it flows through [[TextInputJsonDataSource.infer]] like any
-   * directory read. A corrupt/missing input is skipped as a unit when the ignore flags are set.
+   * directory read. A corrupt/missing input is skipped as a unit when the ignore flags are set --
+   * across the whole input, since `readArchiveEntries` advances to later entries lazily (see
+   * [[skipInputOnError]]).
    */
   private def inferWithArchives(
       sparkSession: SparkSession,
@@ -280,15 +289,11 @@ object MultiLineJsonDataSource extends JsonDataSource {
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
 
-    // Each archive entry and each loose file is one JSON document: stream it straight through (an
-    // archive entry by entry -- streamed, never unpacked -- a loose file directly), skipping a
-    // whole input when it is corrupt/missing and the ignore flags are set. An archive entry's
-    // stream is a `CloseShieldInputStream` view over the one shared archive cursor, valid only
-    // until `readArchiveEntries` advances; `JsonInferSchema.infer` fully consumes each document
-    // before pulling the next, so the cursor is never read after it advances.
+    // An archive entry's stream is only valid until the shared cursor advances, so each document
+    // must be consumed before the next is pulled; `JsonInferSchema.infer` does.
     val docs: RDD[InputStream] = baseRdd.flatMap { stream =>
       val path = new Path(stream.getPath())
-      try {
+      skipInputOnError(stream.getPath(), ignoreMissingFiles, ignoreCorruptFiles) {
         if (SupportsArchiveFormat.isArchivePath(path)) {
           SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
             Iterator.single(in)
@@ -297,17 +302,6 @@ object MultiLineJsonDataSource extends JsonDataSource {
           Iterator.single(
             CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
         }
-      } catch {
-        case e: FileNotFoundException if ignoreMissingFiles =>
-          logWarning(log"Skipped missing input: ${MDC(PATH, stream.getPath())}", e)
-          Iterator.empty
-        case e: FileNotFoundException => throw e
-        case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-          logWarning(log"Skipped the corrupted input: ${MDC(PATH, stream.getPath())}", e)
-          Iterator.empty
-        case NonFatal(e) =>
-          throw QueryExecutionErrors.cannotReadFilesError(
-            e, SparkPath.fromPathString(stream.getPath()).urlEncoded)
       }
     }
 
@@ -317,6 +311,49 @@ object MultiLineJsonDataSource extends JsonDataSource {
         .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
       new JsonInferSchema(parsedOptions).infer[InputStream](
         JsonUtils.sample(docs, parsedOptions), docParser, isReadFile = true)
+    }
+  }
+
+  /**
+   * Builds one input's document iterator, skipping the whole input when the ignore flags are set and
+   * it is missing/corrupt. `readArchiveEntries` opens only the first entry eagerly and advances to
+   * later entries lazily, so a corrupt later entry throws while the returned iterator is consumed,
+   * not while it is built -- guarding only construction would let that escape. The returned iterator
+   * therefore catches on both construction and advancement (`hasNext`), ending the input on a
+   * skipped error rather than propagating it.
+   */
+  private def skipInputOnError(
+      inputPath: String,
+      ignoreMissingFiles: Boolean,
+      ignoreCorruptFiles: Boolean)(
+      build: => Iterator[InputStream]): Iterator[InputStream] = {
+    def handle(e: Throwable): Iterator[InputStream] = e match {
+      case e: FileNotFoundException if ignoreMissingFiles =>
+        logWarning(log"Skipped missing input: ${MDC(PATH, inputPath)}", e)
+        Iterator.empty
+      case e: FileNotFoundException => throw e
+      case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+        logWarning(log"Skipped the corrupted input: ${MDC(PATH, inputPath)}", e)
+        Iterator.empty
+      case NonFatal(e) =>
+        throw QueryExecutionErrors.cannotReadFilesError(
+          e, SparkPath.fromPathString(inputPath).urlEncoded)
+    }
+
+    val underlying =
+      try build
+      catch { case NonFatal(e) => return handle(e) }
+
+    new Iterator[InputStream] {
+      private var delegate = underlying
+      override def hasNext: Boolean =
+        try delegate.hasNext
+        catch {
+          case NonFatal(e) =>
+            delegate = handle(e)
+            delegate.hasNext
+        }
+      override def next(): InputStream = delegate.next()
     }
   }
 
