@@ -3603,6 +3603,19 @@
             <artifactId>scala-library</artifactId>
             <version>${scala213.version}</version>
           </dependency>
+          <!-- scala-reflect and scala-compiler are Scala 2 only, so ${scala.version} would
+               resolve to a nonexistent 3.x artifact. Pin them to the 2.13 line to keep the
+               modules that still depend on them resolvable. -->
+          <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-reflect</artifactId>
+            <version>${scala213.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-compiler</artifactId>
+            <version>${scala213.version}</version>
+          </dependency>
         </dependencies>
       </dependencyManagement>
       <build>
