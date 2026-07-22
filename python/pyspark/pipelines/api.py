@@ -537,9 +537,10 @@ def create_auto_cdc_flow(
     column_list: Optional[Union[List[str], List[Column]]] = None,
     except_column_list: Optional[Union[List[str], List[Column]]] = None,
     stored_as_scd_type: Optional[Literal[1, 2, "1", "2"]] = None,
+    name: Optional[str] = None,
+    *,
     track_history_column_list: Optional[Union[List[str], List[Column]]] = None,
     track_history_except_column_list: Optional[Union[List[str], List[Column]]] = None,
-    name: Optional[str] = None,
 ) -> None:
     """
     Create an Auto CDC flow into the target table from the Change Data Capture (CDC) source.
