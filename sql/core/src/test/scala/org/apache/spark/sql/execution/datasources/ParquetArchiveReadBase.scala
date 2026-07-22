@@ -233,3 +233,18 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 }
+
+class ParquetTarArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with ParquetArchiveReadBase
+  with TarArchiveReadBase
+
+class ParquetZipArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with ParquetArchiveReadBase
+  with ZipArchiveReadBase
+
+class ParquetSevenZArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with ParquetArchiveReadBase
+  with SevenZArchiveReadBase
