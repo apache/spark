@@ -145,6 +145,7 @@ case class ResolvedCollation(collationName: String) extends LeafExpression {
   arguments = """
     Arguments:
       * expr - String expression to perform collation on.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:

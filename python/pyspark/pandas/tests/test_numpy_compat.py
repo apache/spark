@@ -85,6 +85,19 @@ class NumPyCompatTestsMixin:
         with self.assertRaisesRegex(ValueError, "cannot join with no overlapping index names"):
             np.left_shift(psdf1, psdf2)
 
+    def test_np_inverse_hyperbolic_series_uses_native_functions(self):
+        for np_func, values in (
+            (np.arccosh, [1.0, 2.0, 4.0]),
+            (np.arcsinh, [-2.0, 0.0, 2.0]),
+            (np.arctanh, [-0.5, 0.0, 0.5]),
+        ):
+            with self.subTest(name=np_func.__name__):
+                pdf = pd.DataFrame({"a": values})
+                psdf = ps.from_pandas(pdf)
+                result = np_func(psdf.a)
+
+                self.assert_eq(result, np_func(pdf.a), almost=True)
+
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 

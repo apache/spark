@@ -14,15 +14,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.status.api.v1.connect
 
-package org.apache.spark.sql.execution.datasources
+class SessionData private[spark] (
+    val sessionId: String,
+    val userId: String,
+    val startTimestamp: Long,
+    val finishTimestamp: Long,
+    val totalExecution: Long,
+    val totalTime: Long)
 
-/**
- * Reads of Avro files packed in tar archives (`.tar`/`.tar.gz`/`.tgz`): the shared archive tests
- * from [[ArchiveReadSuiteBase]] plus the Avro-specific ones from [[AvroArchiveReadBase]], run over
- * tar containers via [[TarArchiveReadBase]].
- */
-class AvroTarArchiveReadSuite
-  extends ArchiveReadSuiteBase
-  with AvroArchiveReadBase
-  with TarArchiveReadBase
+class ExecutionData private[spark] (
+    val jobTag: String,
+    val operationId: String,
+    val sessionId: String,
+    val userId: String,
+    val statement: String,
+    val state: String,
+    val startTimestamp: Long,
+    val finishTimestamp: Long,
+    val closeTimestamp: Long,
+    val duration: Long,
+    val executionTime: Long,
+    val sparkSessionTags: Seq[String],
+    val jobIds: Seq[String],
+    val sqlExecIds: Seq[String],
+    val detail: String)

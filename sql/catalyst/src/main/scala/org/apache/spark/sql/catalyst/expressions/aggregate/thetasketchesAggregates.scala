@@ -74,6 +74,14 @@ case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
     _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch compact binary representation.
       `lgNomEntries` (optional) is the log-base-2 of nominal entries, with nominal entries deciding
       the number buckets or slots for the ThetaSketch. """,
+  arguments = """
+    Arguments:
+      * expr - The expression whose distinct values are aggregated into the sketch.
+        An expression that evaluates to an array, binary, double, float, integer, long, or string.
+      * lgNomEntries - The log-base-2 of nominal entries, which sets the number of buckets for the
+      ThetaSketch.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(col, 12)) FROM VALUES (1), (1), (2), (2), (3) tab(col);

@@ -3762,6 +3762,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val STREAMING_ASYNC_PROGRESS_TRACKING_REAL_TIME_MODE_ENABLED_BY_DEFAULT = buildConf(
+    "spark.sql.streaming.realTimeMode.asyncProgressTrackingByDefault.enabled")
+    .internal()
+    .doc("Whether asynchronous progress tracking should be enabled in real-time mode by " +
+      "default for stateless queries. If explicitly set, the stream writer option for async " +
+      "progress tracking will still take precedence over this flag.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(true)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
@@ -4931,6 +4942,18 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
+
+  val ARROW_CACHE_PREFETCH_ENABLED =
+    buildConf("spark.sql.execution.arrow.cache.prefetch.enabled")
+      .doc("When true, Arrow cache read path prefetches and decompresses the next batch " +
+        "in a background thread while the current batch is being consumed. This can " +
+        "significantly improve read performance for compressed Arrow caches (e.g., ZSTD) " +
+        "by overlapping decompression with consumption. Increases memory usage by up to " +
+        "one additional batch worth of Arrow vectors.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
@@ -8893,6 +8916,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowPySparkUDFColumnarInputEnabled: Boolean =
     getConf(ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED)
+
+  def arrowCachePrefetchEnabled: Boolean = getConf(ARROW_CACHE_PREFETCH_ENABLED)
 
   def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
     getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)

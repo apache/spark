@@ -1204,6 +1204,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
         Row(
           """Extended Usage:
+            |    Arguments:
+            |      * expr1 - The first operand of the bitwise exclusive OR.
+            |        An expression that evaluates to an integral.
+            |      * expr2 - The second operand of the bitwise exclusive OR.
+            |        An expression that evaluates to an integral.
+            |  
             |    Examples:
             |      > SELECT 3 ^ 5;
             |       6

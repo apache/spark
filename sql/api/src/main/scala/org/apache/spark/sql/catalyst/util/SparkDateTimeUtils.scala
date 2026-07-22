@@ -163,8 +163,8 @@ trait SparkDateTimeUtils {
    * Truncates a time value (in nanoseconds) to the specified fractional precision `p`.
    *
    * For example, if `p = 3`, we keep millisecond resolution and discard any digits beyond the
-   * thousand-nanosecond place. So a value like `123456` microseconds (12:34:56.123456) becomes
-   * `123000` microseconds (12:34:56.123).
+   * millisecond place. So a value like `123456789` nanoseconds (12:34:56.123456789) becomes
+   * `123000000` nanoseconds (12:34:56.123).
    *
    * @param nanos
    *   The original time in nanoseconds.

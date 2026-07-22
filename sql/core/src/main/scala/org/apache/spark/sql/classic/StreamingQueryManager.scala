@@ -168,9 +168,22 @@ class StreamingQueryManager private[sql] (
     listenerBus.post(event)
   }
 
-  private def useAsyncProgressTracking(extraOptions: Map[String, String]): Boolean = {
-    extraOptions.getOrElse(
-      AsyncProgressTrackingMicroBatchExecution.ASYNC_PROGRESS_TRACKING_ENABLED, "false").toBoolean
+  private def isAnalysedPlanStateful(analysedPlan: WriteToStream): Boolean = {
+    analysedPlan.exists { op => op.isStateful }
+  }
+
+  private def useAsyncProgressTracking(
+      extraOptions: Map[String, String],
+      trigger: Trigger,
+      analysedPlan: WriteToStream
+    ): Boolean = {
+    extraOptions.get(AsyncProgressTrackingMicroBatchExecution.ASYNC_PROGRESS_TRACKING_ENABLED)
+      .map(_.toBoolean)
+      // We enable APT in RTM by default whenever the query is stateless.
+      .getOrElse(trigger.isInstanceOf[RealTimeTrigger] &&
+        !isAnalysedPlanStateful(analysedPlan) &&
+        sparkSession.sessionState.conf.getConf(
+          SQLConf.STREAMING_ASYNC_PROGRESS_TRACKING_REAL_TIME_MODE_ENABLED_BY_DEFAULT))
   }
 
   // scalastyle:off argcount
@@ -226,6 +239,15 @@ class StreamingQueryManager private[sql] (
 
     (sink, trigger) match {
       case (_: SupportsWrite, trigger: ContinuousTrigger) =>
+        // Sink evolution persists per-sink metadata via the V3 commit log, which is written only
+        // by MicroBatchExecution.markMicroBatchEnd. ContinuousExecution.commit writes just V1
+        // commit metadata and never goes through that path, so the sink metadata would be silently
+        // never persisted. Reject the combination explicitly instead of silently dropping it.
+        if (sparkSession.sessionState.conf.enableStreamingSinkEvolution) {
+          throw new SparkIllegalArgumentException(
+            errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.CONTINUOUS_PROCESSING_NOT_SUPPORTED"
+          )
+        }
         new StreamingQueryWrapper(new ContinuousExecution(
           sparkSession,
           trigger,
@@ -233,12 +255,8 @@ class StreamingQueryManager private[sql] (
           extraOptions,
           analyzedStreamWritePlan))
       case _ =>
-        val microBatchExecution = if (useAsyncProgressTracking(extraOptions)) {
-          if (trigger.isInstanceOf[RealTimeTrigger]) {
-            throw new SparkIllegalArgumentException(
-              errorClass = "STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED"
-            )
-          }
+        val useApt = useAsyncProgressTracking(extraOptions, trigger, analyzedStreamWritePlan)
+        val microBatchExecution = if (useApt) {
           // Sink evolution persists per-sink metadata via the V3 commit log written in
           // MicroBatchExecution.markMicroBatchEnd, which AsyncProgressTrackingMicroBatchExecution
           // overrides with an async write that only emits V1 commit metadata. The sink metadata

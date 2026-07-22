@@ -1435,40 +1435,12 @@ class MicroBatchExecution(
       updateStateStoreCkptId(execCtx, latestExecPlan)
     }
 
-    var needSignalProgressLock = false
     // In real-time mode, we delay the offset logging until the end of the batch.
     // We first gather the offsets processed up to from all RealTimeStreamScanExec,
     // i.e. tasks that execute a source partition.  We merge the offsets and
     // write them to the offset log
     if (trigger.isInstanceOf[RealTimeTrigger]) {
-      val execs = StreamingQueryPlanTraverseHelper
-        .collectFromUnfoldedPlan(lastExecution.executedPlan) {
-        case e: RealTimeStreamScanExec => e
-      }
-
-      val endOffsetMap = MutableMap[SparkDataStream, OffsetV2]()
-      execs.foreach { e =>
-        val lowLatencyExec = e.asInstanceOf[RealTimeStreamScanExec]
-        val accus: Seq[PartitionOffsetWithIndex] =
-          lowLatencyExec.endOffsetsAccumulator.value.asScala.toSeq
-        val sortedPartitionOffsets = accus.sortBy(_.index).map(_.partitionOffset).toArray
-        val source = e.stream
-        val endOffset = source
-          .asInstanceOf[SupportsRealTimeMode]
-          .mergeOffsets(sortedPartitionOffsets)
-        endOffsetMap += (source -> endOffset)
-      }
-
-      assert(endOffsetMap.size == execs.size, "Identical sources exist in the physical nodes" +
-        " which is not supported.")
-
-      execCtx.endOffsets ++= endOffsetMap
-      execCtx.recordEndOffsets(execCtx.endOffsets)
-      execCtx.recordTriggerOffsets(
-        from = execCtx.startOffsets,
-        to = execCtx.endOffsets,
-        latest = execCtx.latestOffsets
-      )
+      populateBatchOffsetsForRTM(execCtx)
       execCtx.reportTimeTaken("walCommit") {
         if (!offsetLog.add(
           execCtx.batchId,
@@ -1481,23 +1453,6 @@ class MicroBatchExecution(
         log"Committed offsets for batch ${MDC(LogKeys.BATCH_ID, execCtx.batchId)}. Metadata " +
         log"${MDC(LogKeys.OFFSET_SEQUENCE_METADATA, execCtx.offsetSeqMetadata)}"
       )
-      var shouldUpdate = true
-      sources.foreach { s =>
-        execCtx.startOffsets.get(s).foreach { prevOffsets =>
-          if (!prevOffsets.equals(endOffsetMap(s))) {
-            shouldUpdate = false
-          }
-        }
-      }
-      if (shouldUpdate) {
-        // To trigger processAllAvailable() return.
-        noNewData = true
-
-        // We could signal ProcessAllAvailable to finish here, however
-        // signaling after commit log will make it less likely that the caller of
-        // ProcessAllAvailable() sees offset log written but not commit log.
-        needSignalProgressLock = true
-      }
     }
 
     execCtx.reportTimeTaken("commitOffsets") {
@@ -1540,14 +1495,74 @@ class MicroBatchExecution(
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
       }
     }
+    signalProcessAllAvailableIfRealTimeMode(execCtx)
     committedOffsets ++= execCtx.endOffsets
+  }
 
-    // RealTime Mode deals with ProcessAllAvailable() differently. It sets noNewData above
-    // when a batch ends, so we need to signal here. Non-Real-Time mode sets the same flag
-    // in query planning phase.
-    if (needSignalProgressLock) {
-      withProgressLocked {
-        awaitProgressLockCondition.signalAll()
+  /**
+   * When running in RealTimeTrigger mode, this method extracts the end offsets after the current
+   * batch has finished execution and writes them to the execution context. In real-time mode the
+   * end offsets are not known up front; they are gathered from all [[RealTimeStreamScanExec]]
+   * nodes (i.e. tasks that execute a source partition), merged, and recorded on the context so
+   * they can subsequently be written to the offset log.
+   */
+  protected def populateBatchOffsetsForRTM(execCtx: MicroBatchExecutionContext): Unit = {
+    assert(trigger.isInstanceOf[RealTimeTrigger])
+
+    val execs = StreamingQueryPlanTraverseHelper
+      .collectFromUnfoldedPlan(lastExecution.executedPlan) {
+      case e: RealTimeStreamScanExec => e
+    }
+
+    val endOffsetMap = MutableMap[SparkDataStream, OffsetV2]()
+    execs.foreach { e =>
+      val lowLatencyExec = e.asInstanceOf[RealTimeStreamScanExec]
+      val accus: Seq[PartitionOffsetWithIndex] =
+        lowLatencyExec.endOffsetsAccumulator.value.asScala.toSeq
+      val sortedPartitionOffsets = accus.sortBy(_.index).map(_.partitionOffset).toArray
+      val source = e.stream
+      val endOffset = source
+        .asInstanceOf[SupportsRealTimeMode]
+        .mergeOffsets(sortedPartitionOffsets)
+      endOffsetMap += (source -> endOffset)
+    }
+
+    assert(endOffsetMap.size == execs.size, "Identical sources exist in the physical nodes" +
+      " which is not supported.")
+
+    execCtx.endOffsets ++= endOffsetMap
+    execCtx.recordEndOffsets(execCtx.endOffsets)
+    execCtx.recordTriggerOffsets(
+      from = execCtx.startOffsets,
+      to = execCtx.endOffsets,
+      latest = execCtx.latestOffsets
+    )
+  }
+
+  /**
+   * RealTime Mode deals with ProcessAllAvailable() differently. Unlike non-real-time mode, which
+   * sets [[noNewData]] in the query planning phase, real-time mode only knows a batch was empty
+   * (i.e. the end offsets did not advance past the start offsets) after the batch has finished.
+   * When that is the case, this signals the progress lock so a pending processAllAvailable() call
+   * can return.
+   */
+  protected def signalProcessAllAvailableIfRealTimeMode(
+      execCtx: MicroBatchExecutionContext): Unit = {
+    if (trigger.isInstanceOf[RealTimeTrigger]) {
+      var emptyBatch = true
+      sources.foreach { s =>
+        execCtx.startOffsets.get(s).foreach { prevOffsets =>
+          if (!prevOffsets.equals(execCtx.endOffsets.get(s).get)) {
+            emptyBatch = false
+          }
+        }
+      }
+      if (emptyBatch) {
+        // To trigger processAllAvailable() return.
+        noNewData = true
+        withProgressLocked {
+          awaitProgressLockCondition.signalAll()
+        }
       }
     }
   }

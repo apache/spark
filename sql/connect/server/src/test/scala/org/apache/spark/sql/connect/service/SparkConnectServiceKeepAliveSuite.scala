@@ -121,7 +121,7 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
     // behavior), this client's cadence would violate that coupled invariant; with today's fixed,
     // decoupled GRPC_KEEPALIVE_PERMIT_TIME_SECONDS floor (10s), it's comfortably tolerated.
     val clientKeepAliveMs = (SparkConnectService.GRPC_KEEPALIVE_PERMIT_TIME_SECONDS + 1) * 1000
-    SparkConnectService.stop()
+    SparkConnectService.stop(Some(30), Some(TimeUnit.SECONDS))
     withSparkEnvConfs(
       Connect.CONNECT_GRPC_BINDING_PORT.key -> serverPort.toString,
       Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
@@ -156,7 +156,7 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
         client.shutdown()
       }
     } finally {
-      SparkConnectService.stop()
+      SparkConnectService.stop(Some(30), Some(TimeUnit.SECONDS))
       withSparkEnvConfs(
         Connect.CONNECT_GRPC_BINDING_PORT.key -> serverPort.toString,
         Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
@@ -190,7 +190,7 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
     // truly idle connection -- hence one call to establish the transport, then real idle time
     // (no further calls) spanning several ping intervals, then a connection-count check.
     val clientKeepAliveMs = (SparkConnectService.GRPC_KEEPALIVE_PERMIT_TIME_SECONDS + 1) * 1000
-    SparkConnectService.stop()
+    SparkConnectService.stop(Some(30), Some(TimeUnit.SECONDS))
     withSparkEnvConfs(
       Connect.CONNECT_GRPC_BINDING_PORT.key -> serverPort.toString,
       Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "false",
@@ -238,7 +238,7 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
       }
     } finally {
       relay.close()
-      SparkConnectService.stop()
+      SparkConnectService.stop(Some(30), Some(TimeUnit.SECONDS))
       withSparkEnvConfs(
         Connect.CONNECT_GRPC_BINDING_PORT.key -> serverPort.toString,
         Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
@@ -253,7 +253,7 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
     "SPARK-58094: disabling spark.connect.grpc.keepAlive.enabled reverts to the pre-fix hang") {
     // Restart the real service with keepalive fully disabled (not just given short/aggressive
     // timing) to prove the flag genuinely gates the fix rather than only tuning its timing.
-    SparkConnectService.stop()
+    SparkConnectService.stop(Some(30), Some(TimeUnit.SECONDS))
     withSparkEnvConfs(
       Connect.CONNECT_GRPC_BINDING_PORT.key -> serverPort.toString,
       Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "false",
@@ -321,7 +321,7 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
       }
     } finally {
       // Restore the enabled server for afterAll()/subsequent tests in this suite.
-      SparkConnectService.stop()
+      SparkConnectService.stop(Some(30), Some(TimeUnit.SECONDS))
       withSparkEnvConfs(
         Connect.CONNECT_GRPC_BINDING_PORT.key -> serverPort.toString,
         Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",

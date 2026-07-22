@@ -15,13 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources
+package org.apache.spark.status.api.v1.connect
 
-/**
- * Reads of text files packed in tar archives (`.tar`/`.tar.gz`/`.tgz`): the shared text archive
- * tests from [[TextArchiveReadBase]], run over tar containers via [[TarArchiveTestUtils]].
- */
-class TextTarArchiveReadSuite extends TextArchiveReadBase with TarArchiveTestUtils {
+import jakarta.ws.rs.{Path, PathParam}
 
-  override protected def corruptArchiveExtension: String = "tar.gz"
+import org.apache.spark.status.api.v1.ApiRequestContext
+
+@Path("/v1")
+private[v1] class ApiConnectRootResource extends ApiRequestContext {
+
+  @Path("applications/{appId}/connect")
+  def connectList(@PathParam("appId") appId: String): Class[ConnectResource] =
+    classOf[ConnectResource]
+
+  @Path("applications/{appId}/{attemptId}/connect")
+  def connectList(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): Class[ConnectResource] =
+    classOf[ConnectResource]
 }

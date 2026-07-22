@@ -14,15 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.hive.execution;
 
-package org.apache.spark.sql.execution.datasources
+import org.apache.hadoop.hive.ql.exec.UDF;
+
+import java.util.Collections;
+import java.util.Set;
 
 /**
- * Reads of Avro files packed in zip archives (`.zip`): the shared archive tests from
- * [[ArchiveReadSuiteBase]] plus the Avro-specific ones from [[AvroArchiveReadBase]], run over zip
- * containers via [[ZipArchiveReadBase]].
+ * UDF that returns a raw (non-parameterized) java Set, a type Spark cannot map
+ * to a Catalyst data type.
  */
-class AvroZipArchiveReadSuite
-  extends ArchiveReadSuiteBase
-  with AvroArchiveReadBase
-  with ZipArchiveReadBase
+public class UDFRawSet extends UDF {
+  @SuppressWarnings("rawtypes")
+  public Set evaluate(Object o) {
+    return Collections.singleton("data1");
+  }
+}
