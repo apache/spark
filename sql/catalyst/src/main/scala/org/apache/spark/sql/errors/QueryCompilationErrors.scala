@@ -1307,7 +1307,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotCreateTableWithBothProviderAndSerdeError(
       provider: Option[String], maybeSerdeInfo: Option[SerdeInfo]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1058",
+      errorClass = "CREATE_TABLE_WITH_BOTH_PROVIDER_AND_SERDE",
       messageParameters = Map(
         "provider" -> provider.toString,
         "serDeInfo" -> maybeSerdeInfo.get.describe))

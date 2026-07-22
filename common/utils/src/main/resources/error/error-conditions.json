@@ -1647,6 +1647,12 @@
     ],
     "sqlState" : "42710"
   },
+  "CREATE_TABLE_WITH_BOTH_PROVIDER_AND_SERDE" : {
+    "message" : [
+      "Cannot create table with both USING <provider> and <serDeInfo>."
+    ],
+    "sqlState" : "42908"
+  },
   "CREATE_VIEW_COLUMN_ARITY_MISMATCH" : {
     "message" : [
       "Cannot create view <viewName>, the reason is"
@@ -9675,11 +9681,6 @@
   "_LEGACY_ERROR_TEMP_1052" : {
     "message" : [
       "ADD COLUMN with v1 tables cannot specify NOT NULL."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1058" : {
-    "message" : [
-      "Cannot create table with both USING <provider> and <serDeInfo>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1059" : {
