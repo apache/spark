@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.{File, IOException}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -25,7 +26,9 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.scheduler.SparkListenerStageSubmitted
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
+import org.apache.spark.sql.execution.streaming.state.{FailureInjectionCheckpointFileManager, FailureInjectionFileSystem, FailureInjectionState}
 import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.internal.SQLConf
 
 /** Driver-side switch a UDF reads on executors to fail a task on demand (for fault-tolerance). */
 object RealTimeModePipelinedShuffleSuite {
@@ -159,6 +162,62 @@ class RealTimeModePipelinedShuffleSuite extends StreamRealTimeModeManualClockSui
         advanceRealTimeClock,
         StopStream
       )
+    }
+  }
+
+  /** Run `f` with a temp dir whose checkpoint file ops can be fault-injected via injectionState. */
+  private def withTempDirAllowFailureInjection(f: (File, FailureInjectionState) => Unit): Unit = {
+    withTempDir { dir =>
+      val injectionState = FailureInjectionFileSystem.registerTempPath(dir.getPath)
+      try {
+        f(dir, injectionState)
+      } finally {
+        FailureInjectionFileSystem.removePathFromTempToInjectionState(dir.getPath)
+      }
+    }
+  }
+
+  test("dedup over a pipelined shuffle recovers from a commit-log write failure") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        classOf[FailureInjectionCheckpointFileManager].getName) {
+      withTempDirAllowFailureInjection { (checkpointDir, injectionState) =>
+        val inputData = LowLatencyMemoryStream[(String, Int)]
+        val result = inputData
+          .toDF()
+          .select($"_1".as("key"))
+          .dropDuplicates("key")
+          .select($"key")
+
+        // Batch 0 dedups "a","b" and commits. Then fail the close() of batch 1's commit-log write,
+        // so batch 1 cannot commit and the query fails after processing.
+        injectionState.createAtomicDelayCloseRegex = Seq(".*/commits/1")
+
+        testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+          AddData(inputData, ("a", 1), ("b", 1)),
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          CheckAnswerWithTimeout(60000, "a", "b"),
+          advanceRealTimeClock,
+          WaitUntilBatchProcessed(0),
+          AddData(inputData, ("c", 1)),
+          CheckAnswerWithTimeout(60000, "a", "b", "c"),
+          advanceRealTimeClock,
+          // The injected close() failure surfaces as the underlying IOException failing the batch.
+          ExpectFailure[IOException]()
+        )
+
+        // Clear the injection and restart from the same checkpoint. Batch 0's dedup state must
+        // survive (a, b already seen); the uncommitted batch 1 is re-run, so its new key "c" is
+        // still emitted, and a further new key "d" is added.
+        injectionState.createAtomicDelayCloseRegex = Seq.empty
+        testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          AddData(inputData, ("a", 2), ("b", 2), ("c", 2), ("d", 1)),
+          CheckAnswerWithTimeout(60000, "c", "d"),
+          advanceRealTimeClock,
+          StopStream
+        )
+      }
     }
   }
 }
