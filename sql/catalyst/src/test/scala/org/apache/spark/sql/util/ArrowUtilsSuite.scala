@@ -463,6 +463,35 @@ class ArrowUtilsSuite extends SparkFunSuite {
       assert(!compat(listLike, declaredList), arrowType.toString)
     }
 
+    // The timestamp timezone LABEL does not affect the physical layout and differs across
+    // Spark's own paths (a worker's output comes back labeled UTC while the next stream
+    // declares the session time zone), so it must not cause a reject. Presence-vs-absence must
+    // still match: it distinguishes TimestampType from TimestampNTZType, whose values are
+    // interpreted differently. The unit must also match: both units are int64, but forwarding
+    // one under the other reinterprets every value by a factor of 1000.
+    def tsField(tz: String): Field = new Field(
+      "value",
+      new FieldType(true, new ArrowType.Timestamp(TimeUnit.MICROSECOND, tz), null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(compat(tsField("UTC"), tsField("America/Los_Angeles")))
+    assert(compat(tsField("America/Los_Angeles"), tsField("UTC")))
+    assert(!compat(tsField(null), tsField("UTC")))
+    assert(!compat(tsField("UTC"), tsField(null)))
+    val tsNanoField = new Field(
+      "value",
+      new FieldType(true, new ArrowType.Timestamp(TimeUnit.NANOSECOND, "UTC"), null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(!compat(tsNanoField, tsField("UTC")))
+
+    // Map equality includes keysSorted, which has no layout impact and must not cause a reject.
+    val mapSchema = new StructType().add("value", MapType(IntegerType, StringType))
+    val declaredMap = declared(mapSchema)
+    val sortedMap = new Field(
+      declaredMap.getName,
+      new FieldType(declaredMap.isNullable, new ArrowType.Map(true), null, null),
+      declaredMap.getChildren)
+    assert(compat(sortedMap, declaredMap))
+
     // A view-typed field is incongruent with the declared Utf8.
     val stringSchema = new StructType().add("value", StringType)
     val viewField = new Field(

@@ -15,9 +15,10 @@
 # limitations under the License.
 #
 
+import datetime
 import unittest
 
-from pyspark.sql.functions import col, udf
+from pyspark.sql.functions import col, pandas_udf, udf
 from pyspark.sql import Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
@@ -105,6 +106,21 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
             assertDataFrameEqual(result, [Row("a", 2), Row("b", 3)])
         finally:
             df.unpersist()
+
+
+    def test_chained_udfs_on_timestamps_with_non_utc_session(self):
+        # A pandas UDF's timestamp output comes back from the worker labeled UTC, while the
+        # following Arrow-optimized Python UDF runs as a separate exec node whose stream
+        # declares the session time zone. The labels differ but the physical layout is
+        # identical (int64 epoch microseconds), so the congruence gate must not reject the
+        # pass-through for this normal mixed-UDF pipeline -- and the values must round-trip
+        # regardless of which path is taken.
+        ts = datetime.datetime(2025, 1, 6, 12, 30, 45)
+        with self.sql_conf({"spark.sql.session.timeZone": "America/Los_Angeles"}):
+            df = self.spark.createDataFrame([(ts,)], schema="ts timestamp")
+            identity = pandas_udf(lambda s: s, "timestamp")
+            result = df.select(udf(lambda t: t, "timestamp")(identity(col("ts"))))
+            assertDataFrameEqual(result, [Row(ts)])
 
 
 if __name__ == "__main__":

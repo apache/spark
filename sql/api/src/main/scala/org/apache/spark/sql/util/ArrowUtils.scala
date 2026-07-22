@@ -578,12 +578,27 @@ private[sql] object ArrowUtils {
    */
   def isCompatibleWithDeclaredField(actual: Field, declared: Field): Boolean = {
     actual.getDictionary == null &&
-    actual.getType == declared.getType &&
+    sameLayoutArrowType(actual.getType, declared.getType) &&
     actual.getChildren.size == declared.getChildren.size &&
     actual.getChildren.asScala.zip(declared.getChildren.asScala).forall { case (a, d) =>
       isCompatibleWithDeclaredField(a, d)
     }
   }
+
+  // Physical-layout type comparison, mirroring ArrowFileReadWrite.checkLayoutMatch: the
+  // timestamp timezone label does not affect the layout (values are int64 epoch numbers either
+  // way) and differs across Spark's own paths (a worker's output comes back labeled UTC while
+  // the next stream declares the session time zone), so comparing it would only cause false
+  // rejects. Presence-vs-absence must still match: it distinguishes TimestampType from
+  // TimestampNTZType, whose identical-looking values are interpreted differently. Map equality
+  // includes the keysSorted flag, which has no layout impact.
+  private def sameLayoutArrowType(actual: ArrowType, declared: ArrowType): Boolean =
+    (actual, declared) match {
+      case (a: ArrowType.Timestamp, d: ArrowType.Timestamp) =>
+        a.getUnit == d.getUnit && (a.getTimezone == null) == (d.getTimezone == null)
+      case (_: ArrowType.Map, _: ArrowType.Map) => true
+      case (a, d) => a == d
+    }
 
   def fromArrowField(field: Field): DataType = {
     field.getType match {
