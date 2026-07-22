@@ -74,7 +74,7 @@ unary_np_spark_mappings = {
     "sinh": F.sinh,
     "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType()),  # type: ignore[call-overload]
     "sqrt": F.sqrt,
-    "square": pandas_udf(lambda s: np.square(s), DoubleType()),  # type: ignore[call-overload]
+    "square": lambda c: (c * c).cast("double"),
     "tan": F.tan,
     "tanh": F.tanh,
     "trunc": pandas_udf(lambda s: np.trunc(s), DoubleType()),  # type: ignore[call-overload]
