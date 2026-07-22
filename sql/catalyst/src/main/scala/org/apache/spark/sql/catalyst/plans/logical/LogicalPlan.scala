@@ -242,6 +242,18 @@ trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3114")
 }
 
+/** A materialized leaf whose output can safely be scanned again to build a runtime filter. */
+private[sql] trait LeafNodeWithAccurateStats extends LeafNode {
+  /** Whether the current materialized output has complete, accurate statistics. */
+  def statsAvailable: Boolean
+
+  /** Whether scanning the materialized output again returns the same rows. */
+  def isOutputRepeatable: Boolean
+
+  /** Whether the original plan contains a predicate that is likely to be selective. */
+  def hasSelectivePredicate: Boolean
+}
+
 /**
  * A abstract class for LogicalQueryStage that is visible in logical rewrites.
  */

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.columnar.CachedBatch
-import org.apache.spark.sql.execution.{FilterExec, InputAdapter, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, InputAdapter, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -649,4 +649,126 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
 
     assert(exceptionCnt.get == 0)
   }
+
+  test("SPARK-58272: only fully materialized repeatable disk-backed caches publish exact stats") {
+    def checkCache(level: StorageLevel, expected: Boolean): Unit = {
+      val cached = spark.range(0, 20, 1, numPartitions = 2)
+        .filter($"id" < 10)
+        .persist(level)
+      try {
+        val relation = cached.queryExecution.withCachedData.collectFirst {
+          case plan: InMemoryRelation => plan
+        }.get
+
+        assert(relation.hasSelectivePredicate)
+        assert(!relation.isOutputRepeatable)
+        assert(!relation.statsAvailable)
+        relation.cacheBuilder.cachedColumnBuffers.count()
+
+        assert(relation.isOutputRepeatable)
+        assert(relation.statsAvailable == expected)
+        assert(relation.computeStats().rowCount.contains(10L))
+      } finally {
+        cached.unpersist(blocking = true)
+      }
+    }
+
+    checkCache(MEMORY_AND_DISK, expected = true)
+    checkCache(MEMORY_ONLY, expected = false)
+  }
+
+  test("SPARK-58272: materialized caches require trusted strict file reads") {
+    withTempPath { path =>
+      spark.range(10).write.parquet(path.getCanonicalPath)
+
+      def checkCache(data: DataFrame, expected: Boolean): Unit = {
+        val cached = data.filter($"id" < 5).persist(MEMORY_AND_DISK)
+        try {
+          val relation = cached.queryExecution.withCachedData.collectFirst {
+            case plan: InMemoryRelation => plan
+          }.get
+          relation.cacheBuilder.cachedColumnBuffers.count()
+          assert(relation.isOutputRepeatable == expected)
+          assert(relation.statsAvailable == expected)
+          assert(relation.hasSelectivePredicate)
+        } finally {
+          cached.unpersist(blocking = true)
+        }
+      }
+
+      withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+          SQLConf.IGNORE_MISSING_FILES.key -> "false",
+          SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        checkCache(spark.read.parquet(path.getCanonicalPath), expected = true)
+
+        val preinitialized = spark.read.parquet(path.getCanonicalPath)
+          .filter($"id" < 5)
+          .persist(MEMORY_AND_DISK)
+        try {
+          val relation = preinitialized.queryExecution.withCachedData.collectFirst {
+            case plan: InMemoryRelation => plan
+          }.get
+          val fileScan = relation.cacheBuilder.cachedPlan.collectFirst {
+            case scan: FileSourceScanExec => scan
+          }.get
+          withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+            fileScan.inputRDD
+          }
+
+          relation.cacheBuilder.cachedColumnBuffers.count()
+          assert(!relation.isOutputRepeatable)
+          assert(!relation.statsAvailable)
+        } finally {
+          preinitialized.unpersist(blocking = true)
+        }
+
+        checkCache(
+          spark.read.option("ignoreMissingFiles", "true").parquet(path.getCanonicalPath),
+          expected = false)
+        checkCache(
+          spark.read.option("ignoreCorruptFiles", "true").parquet(path.getCanonicalPath),
+          expected = false)
+      }
+
+      withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+          SQLConf.IGNORE_MISSING_FILES.key -> "true",
+          SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        checkCache(spark.read.parquet(path.getCanonicalPath), expected = false)
+      }
+    }
+  }
+
+  test("SPARK-58272: unsafe cached lineages cannot supply runtime-filter statistics") {
+    val nondeterministic = spark.range(10).filter(rand() > 0.5).persist(MEMORY_AND_DISK)
+    val isSmall = udf((value: Long) => value < 5)
+    val userDefined = spark.range(10)
+      .filter(isSmall($"id"))
+      .persist(MEMORY_AND_DISK)
+    val randomizedEncryption = spark.range(10)
+      .selectExpr(
+        "id",
+        "aes_encrypt(CAST(id AS STRING), '0000111122223333') AS encrypted")
+      .filter($"id" < 5)
+      .persist(MEMORY_AND_DISK)
+    val currentTime = spark.range(10)
+      .selectExpr("id", "current_timestamp() AS observed_at")
+      .filter($"id" < 5)
+      .persist(MEMORY_AND_DISK)
+
+    Seq(nondeterministic, userDefined, randomizedEncryption, currentTime).foreach { cached =>
+      try {
+        val relation = cached.queryExecution.withCachedData.collectFirst {
+          case plan: InMemoryRelation => plan
+        }.get
+        relation.cacheBuilder.cachedColumnBuffers.count()
+        assert(!relation.isOutputRepeatable)
+        assert(!relation.statsAvailable)
+      } finally {
+        cached.unpersist(blocking = true)
+      }
+    }
+  }
+
 }
