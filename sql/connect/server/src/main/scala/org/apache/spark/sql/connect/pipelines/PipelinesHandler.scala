@@ -503,6 +503,14 @@ private[connect] object PipelinesHandler extends Logging {
       }
     }
 
+    // History-tracking columns only make sense under SCD2. The Python client rejects this
+    // client-side, but a raw Connect client can still send it, so mirror the check here to
+    // surface a clean user-facing error rather than the internal error the [[ChangeArgs]]
+    // guard would otherwise raise.
+    if (scdType != ScdType.Type2 && trackHistorySelection.isDefined) {
+      throw new AnalysisException("AUTOCDC_TRACK_HISTORY_REQUIRES_SCD2", Map.empty)
+    }
+
     val changeArgs = ChangeArgs(
       keys = keys,
       sequencing = toColumn(autoCdcDetails.getSequenceBy),

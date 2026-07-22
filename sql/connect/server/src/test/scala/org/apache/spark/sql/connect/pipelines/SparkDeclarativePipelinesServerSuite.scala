@@ -115,6 +115,78 @@ class SparkDeclarativePipelinesServerSuite
     assert(ex.getMessage.contains("DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED"))
   }
 
+  // The Python client rejects these AutoCDC misconfigurations client-side, so drive the raw
+  // Connect stub directly to exercise the server-side validation a non-Python client would hit.
+  private def unresolvedColumn(name: String): Expression =
+    Expression
+      .newBuilder()
+      .setUnresolvedAttribute(
+        Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier(name))
+      .build()
+
+  private def autoCdcDefineFlow(
+      graphId: String,
+      scdType: DefineFlow.SCDType,
+      trackHistoryColumns: Seq[String] = Seq.empty,
+      trackHistoryExceptColumns: Seq[String] = Seq.empty): DefineFlow = {
+    val autoCdcDetails = DefineFlow.AutoCdcFlowDetails
+      .newBuilder()
+      .setSource("src")
+      .addKeys(unresolvedColumn("id"))
+      .setSequenceBy(unresolvedColumn("ts"))
+      .setStoredAsScdType(scdType)
+    trackHistoryColumns.foreach(c => autoCdcDetails.addTrackHistoryColumnList(unresolvedColumn(c)))
+    trackHistoryExceptColumns.foreach(c =>
+      autoCdcDetails.addTrackHistoryExceptColumnList(unresolvedColumn(c)))
+    DefineFlow
+      .newBuilder()
+      .setDataflowGraphId(graphId)
+      .setFlowName("target")
+      .setTargetDatasetName("target")
+      .setAutoCdcFlowDetails(autoCdcDetails)
+      .build()
+  }
+
+  test("AutoCDC: track-history columns without SCD2 are rejected server-side") {
+    val ex = intercept[Exception] {
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        sendPlan(
+          buildPlanFromPipelineCommand(
+            PipelineCommand
+              .newBuilder()
+              .setDefineFlow(
+                autoCdcDefineFlow(
+                  graphId,
+                  DefineFlow.SCDType.SCD_TYPE_1,
+                  trackHistoryColumns = Seq("val")))
+              .build()))
+      }
+    }
+    assert(ex.getMessage.contains("AUTOCDC_TRACK_HISTORY_REQUIRES_SCD2"))
+  }
+
+  test("AutoCDC: specifying both track-history column lists is rejected server-side") {
+    val ex = intercept[Exception] {
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        sendPlan(
+          buildPlanFromPipelineCommand(
+            PipelineCommand
+              .newBuilder()
+              .setDefineFlow(
+                autoCdcDefineFlow(
+                  graphId,
+                  DefineFlow.SCDType.SCD_TYPE_2,
+                  trackHistoryColumns = Seq("val"),
+                  trackHistoryExceptColumns = Seq("ts")))
+              .build()))
+      }
+    }
+    assert(
+      ex.getMessage.contains("AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST"))
+  }
+
   test(
     "Cross dependency between SQL dataset and non-SQL dataset is valid and can be registered") {
     withRawBlockingStub { implicit stub =>
