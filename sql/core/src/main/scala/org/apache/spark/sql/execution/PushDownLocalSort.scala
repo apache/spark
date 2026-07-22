@@ -123,18 +123,29 @@ object PushDownLocalSort extends Rule[SparkPlan] {
   }
 
   private def isOrderPreserving(plan: UnaryExecNode): Boolean = plan match {
-    case _: ProjectExec => true
-    case _: FilterExec => true
+    // A non-deterministic project/filter must not be crossed: moving the sort below it changes
+    // which rows a seeded non-deterministic expression is evaluated over (a different row-value
+    // association for a project, a different surviving set for a filter). This mirrors the
+    // determinism guard in the logical `EliminateSorts.canEliminateSort`.
+    case p: ProjectExec => p.projectList.forall(_.deterministic)
+    // `FilterExec` and `WindowGroupLimitExec` are cardinality reducers: pushing the wider sort
+    // below them sorts the full input instead of only the surviving rows, which can outweigh the
+    // saved sort. Only cross them when explicitly enabled. `FilterExec` additionally needs the
+    // determinism guard, for the same reason as the project above.
+    case f: FilterExec => throughCardinalityReducer && f.condition.deterministic
+    case _: WindowGroupLimitExec => throughCardinalityReducer
     // Pushing a wider sort under a window refines the input order the window sees within ties of
     // its own `ORDER BY`. For order-sensitive window functions (`first_value`/`last_value`/
-    // `collect_list`, `lead`/`lag`, `ROWS`-frame aggregates) and a `row_number`-based
-    // `WindowGroupLimitExec`, that can change the result -- but only for a non-unique window
-    // `ORDER BY`, where the result is already non-deterministic by Spark's contract, so this does
-    // not change any deterministic result. This differs from `CollectMetricsExec`, which is
-    // deliberately excluded: its observed metric is a documented, expected-stable side output, not
-    // a non-deterministic query result, so refining the order it sees would be a real surprise.
+    // `collect_list`, `lead`/`lag`, `ROWS`-frame aggregates) that can change the result -- but only
+    // for a non-unique window `ORDER BY`, where the result is already non-deterministic by Spark's
+    // contract, so this does not change any deterministic result. This differs from
+    // `CollectMetricsExec`, which is deliberately excluded: its observed metric is a documented,
+    // expected-stable side output, not a non-deterministic query result, so refining the order it
+    // sees would be a real surprise.
     case _: WindowExecBase => true
-    case _: WindowGroupLimitExec => true
     case _ => false
   }
+
+  private def throughCardinalityReducer: Boolean =
+    conf.getConf(SQLConf.PUSH_DOWN_LOCAL_SORT_THROUGH_CARDINALITY_REDUCER_ENABLED)
 }

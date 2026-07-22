@@ -3014,6 +3014,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PUSH_DOWN_LOCAL_SORT_THROUGH_CARDINALITY_REDUCER_ENABLED =
+    buildConf("spark.sql.execution.pushDownLocalSort.throughCardinalityReducer")
+      .internal()
+      .doc("When true, `spark.sql.execution.pushDownLocalSort` may also push a wider local sort " +
+        "down through cardinality-reducing operators (`FilterExec` and `WindowGroupLimitExec`). " +
+        "This is disabled by default because moving the wider sort below a selective reducer can " +
+        "sort the full input instead of only the surviving rows, which may outweigh the saved " +
+        "sort. Has no effect when `spark.sql.execution.pushDownLocalSort` is false.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val REPLACE_HASH_WITH_SORT_AGG_ENABLED = buildConf("spark.sql.execution.replaceHashWithSortAgg")
     .internal()
     .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")

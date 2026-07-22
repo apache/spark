@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, IsNotNull, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, IsNotNull, LessThan, Literal, Rand, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.exchange.ValidateRequirements
@@ -231,6 +231,74 @@ abstract class PushDownLocalSortSuiteBase
     }
   }
 
+  test("Negative: do not push through a non-deterministic project") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val scan = LocalTableScanExec(Seq(a, b), Nil, None)
+    val orderA = SortOrder(a, Ascending) :: Nil
+    val orderAB = SortOrder(a, Ascending) :: SortOrder(b, Ascending) :: Nil
+
+    // SortExec([a, b]) <- Project[a, b, rand(0)] <- SortExec([a]). Pushing the sort below the
+    // project would change which rows the seeded random stream is evaluated over, so the rule must
+    // not cross a non-deterministic project (mirrors `EliminateSorts.canEliminateSort`).
+    val lower = SortExec(orderA, global = false, scan)
+    val project = ProjectExec(Seq(a, b, Alias(Rand(Literal(0L)), "r")()), lower)
+    val upper = SortExec(orderAB, global = false, project)
+
+    withSQLConf(SQLConf.PUSH_DOWN_LOCAL_SORT_ENABLED.key -> "true") {
+      assert(PushDownLocalSort(upper).fastEquals(upper), "the plan must be left unchanged")
+    }
+  }
+
+  test("Negative: do not push through a non-deterministic filter") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val scan = LocalTableScanExec(Seq(a, b), Nil, None)
+    val orderA = SortOrder(a, Ascending) :: Nil
+    val orderAB = SortOrder(a, Ascending) :: SortOrder(b, Ascending) :: Nil
+
+    // SortExec([a, b]) <- Filter(rand(0) < 0.5) <- SortExec([a]). Even with cardinality-reducer
+    // traversal enabled, a non-deterministic filter must not be crossed: the surviving row set
+    // would change if the sort moved below it.
+    val lower = SortExec(orderA, global = false, scan)
+    val filter = FilterExec(LessThan(Rand(Literal(0L)), Literal(0.5)), lower)
+    val upper = SortExec(orderAB, global = false, filter)
+
+    withSQLConf(
+        SQLConf.PUSH_DOWN_LOCAL_SORT_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_LOCAL_SORT_THROUGH_CARDINALITY_REDUCER_ENABLED.key -> "true") {
+      assert(PushDownLocalSort(upper).fastEquals(upper), "the plan must be left unchanged")
+    }
+  }
+
+  test("Cardinality reducer: do not cross a filter unless explicitly enabled") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val scan = LocalTableScanExec(Seq(a, b), Nil, None)
+    val orderA = SortOrder(a, Ascending) :: Nil
+    val orderAB = SortOrder(a, Ascending) :: SortOrder(b, Ascending) :: Nil
+
+    // SortExec([a, b]) <- Filter(a IS NOT NULL) <- SortExec([a]). A filter is a cardinality
+    // reducer, so it is only crossed when the reducer config is on.
+    val lower = SortExec(orderA, global = false, scan)
+    val filter = FilterExec(IsNotNull(a), lower)
+    val upper = SortExec(orderAB, global = false, filter)
+
+    withSQLConf(SQLConf.PUSH_DOWN_LOCAL_SORT_ENABLED.key -> "true") {
+      // Reducer traversal off (default): the filter is not crossed, both sorts survive.
+      withSQLConf(
+          SQLConf.PUSH_DOWN_LOCAL_SORT_THROUGH_CARDINALITY_REDUCER_ENABLED.key -> "false") {
+        assert(PushDownLocalSort(upper).fastEquals(upper), "must not cross the filter by default")
+      }
+      // Reducer traversal on: the sort is pushed below the filter and the two sorts become one.
+      withSQLConf(
+          SQLConf.PUSH_DOWN_LOCAL_SORT_THROUGH_CARDINALITY_REDUCER_ENABLED.key -> "true") {
+        val rewritten = PushDownLocalSort(upper)
+        assert(rewritten.collect { case s: SortExec => s }.length == 1)
+      }
+    }
+  }
+
   test("Plan-level: push a wider sort down through order-preserving operators") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
@@ -240,12 +308,15 @@ abstract class PushDownLocalSortSuiteBase
 
     // SortExec([a, b]) <- Filter <- Project <- SortExec([a]) : the wider sort above is pushed down
     // to widen the lower [a] sort into [a, b], and the upper sort is dropped, leaving one sort.
+    // Crossing the `Filter` requires the cardinality-reducer config.
     val lower = SortExec(orderA, global = false, scan)
     val project = ProjectExec(Seq(a, b), lower)
     val filter = FilterExec(IsNotNull(a), project)
     val upper = SortExec(orderAB, global = false, filter)
 
-    withSQLConf(SQLConf.PUSH_DOWN_LOCAL_SORT_ENABLED.key -> "true") {
+    withSQLConf(
+        SQLConf.PUSH_DOWN_LOCAL_SORT_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_LOCAL_SORT_THROUGH_CARDINALITY_REDUCER_ENABLED.key -> "true") {
       val rewritten = PushDownLocalSort(upper)
       val sorts = rewritten.collect { case s: SortExec => s }
       assert(sorts.length == 1, "the two sorts become one")
@@ -299,13 +370,16 @@ abstract class PushDownLocalSortSuiteBase
 
     // Sort([a,b,c]) <- Filter <- Sort([a,b]) <- Project <- Sort([a]) : the widest ordering is
     // pushed all the way to the bottom sort, and both intermediate sorts are dropped, leaving one.
+    // Crossing the `Filter` requires the cardinality-reducer config.
     val bottom = SortExec(orderA, global = false, scan)
     val project = ProjectExec(Seq(a, b, c), bottom)
     val middle = SortExec(orderAB, global = false, project)
     val filter = FilterExec(IsNotNull(a), middle)
     val top = SortExec(orderABC, global = false, filter)
 
-    withSQLConf(SQLConf.PUSH_DOWN_LOCAL_SORT_ENABLED.key -> "true") {
+    withSQLConf(
+        SQLConf.PUSH_DOWN_LOCAL_SORT_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_LOCAL_SORT_THROUGH_CARDINALITY_REDUCER_ENABLED.key -> "true") {
       val rewritten = PushDownLocalSort(top)
       val sorts = rewritten.collect { case s: SortExec => s }
       assert(sorts.length == 1, "the three sorts become one")
