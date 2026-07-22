@@ -32,6 +32,9 @@ abstract class PushDownLocalSortSuiteBase
     with AdaptiveSparkPlanHelper {
 
   private def checkNumSorts(df: DataFrame, count: Int): Unit = {
+    // Execute first so that, under AQE, the final adaptive plan (after query-stage materialization
+    // and any replanning) is inspected rather than the initial plan.
+    df.collect()
     val plan = df.queryExecution.executedPlan
     assert(collectWithSubqueries(plan) { case s: SortExec => s }.length == count)
   }
