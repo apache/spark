@@ -1657,11 +1657,49 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("variant_array_append") {
     def checkAppend(input: String, path: String, value: Expression, expected: String): Unit = {
-      val expr = VariantArrayAppend(
-        Literal(parseJson(input)), Literal.create(path, StringType), value)
+      Seq(true, false).foreach { failOnError =>
+        val expr = VariantArrayAppend(
+          Literal(parseJson(input)), Literal.create(path, StringType), value, failOnError)
+        checkEvaluation(
+          ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+          expected)
+      }
+    }
+
+    // A recoverable error: `variant_array_append` throws, but `try_variant_array_append` returns
+    // NULL.
+    def checkAppendRecoverableError(
+        input: String,
+        path: String,
+        value: Expression,
+        condition: String,
+        parameters: Map[String, String]): Unit = {
+      checkErrorInExpression[SparkRuntimeException](
+        VariantArrayAppend(Literal(parseJson(input)), Literal.create(path, StringType), value),
+        condition,
+        parameters)
       checkEvaluation(
-        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
-        expected)
+        VariantArrayAppend(Literal(parseJson(input)), Literal.create(path, StringType), value,
+          failOnError = false),
+        null)
+    }
+
+    // An unrecoverable error (a malformed path or a size overflow): both functions throw, and only
+    // the `functionName` in the error message differs.
+    def checkAppendUnrecoverableError(
+        input: String,
+        path: String,
+        value: Expression,
+        condition: String,
+        parameters: String => Map[String, String]): Unit = {
+      Seq("variant_array_append" -> true, "try_variant_array_append" -> false).foreach {
+        case (name, failOnError) =>
+          checkErrorInExpression[SparkRuntimeException](
+            VariantArrayAppend(Literal(parseJson(input)), Literal.create(path, StringType), value,
+              failOnError),
+            condition,
+            parameters(name))
+      }
     }
 
     // Append to the root array, and to nested arrays reached through object keys / array indices.
@@ -1691,46 +1729,45 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkAppend("""{"a": [1]}""", "$.missing", Literal(2), """{"a":[1]}""")
     checkAppend("[[1]]", "$[5]", Literal(2), "[[1]]")
 
-    // NULL-intolerant: any NULL argument yields NULL.
-    checkEvaluation(
-      VariantArrayAppend(Literal.create(null, VariantType), Literal("$"), Literal(1)),
-      null)
+    Seq(true, false).foreach { failOnError =>
+      checkEvaluation(
+        VariantArrayAppend(
+          Literal.create(null, VariantType), Literal("$"), Literal(1), failOnError),
+        null)
+    }
     checkAppend("[1]", null, Literal(1), null)
     checkAppend("[1]", "$", Literal.create(null, VariantType), null)
     checkAppend("[1]", "$", Literal.create(null, NullType), null)
 
-    // Dynamic (non-foldable) path.
-    val dynamic = VariantArrayAppend(
-      Literal(parseJson("""{"a": [1, 2]}""")),
-      BoundReference(0, StringType, nullable = true),
-      Literal(3))
-    checkEvaluation(
-      ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
-      """{"a":[1,2,3]}""",
-      InternalRow(UTF8String.fromString("$.a")))
+    Seq(true, false).foreach { failOnError =>
+      val dynamic = VariantArrayAppend(
+        Literal(parseJson("""{"a": [1, 2]}""")),
+        BoundReference(0, StringType, nullable = true),
+        Literal(3),
+        failOnError)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+        """{"a":[1,2,3]}""",
+        InternalRow(UTF8String.fromString("$.a")))
+    }
 
+    // Recoverable errors: `variant_array_append` throws; `try_variant_array_append` returns NULL.
     // The target is not an array (a scalar leaf, or an object at the root).
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2)),
+    checkAppendRecoverableError("""{"a": 1}""", "$.a", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a", "failedAt" -> "$.a", "functionName" -> "`variant_array_append`"))
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$"), Literal(2)),
+    checkAppendRecoverableError("""{"a": 1}""", "$", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$", "failedAt" -> "$", "functionName" -> "`variant_array_append`"))
-
     // A segment applied to an incompatible container: descending into a scalar, an array index on
     // an object, or an object key on an array.
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$.a.b"), Literal(2)),
+    checkAppendRecoverableError("""{"a": 1}""", "$.a.b", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_array_append`"))
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$[0]"), Literal(2)),
+    checkAppendRecoverableError("""{"a": 1}""", "$[0]", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$[0]", "failedAt" -> "$", "functionName" -> "`variant_array_append`"))
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("[1, 2]")), Literal("$.a"), Literal(2)),
+    checkAppendRecoverableError("[1, 2]", "$.a", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_array_append`"))
 
@@ -1739,26 +1776,25 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, MapType(StringType, IntegerType)),
       Literal.create(null, StructType(Seq(StructField("x", IntegerType))))
     ).foreach { v =>
-      assert(
-        VariantArrayAppend(Literal(parseJson("[]")), Literal("$"), v).checkInputDataTypes()
-          .isFailure)
+      Seq(true, false).foreach { failOnError =>
+        assert(
+          VariantArrayAppend(Literal(parseJson("[]")), Literal("$"), v, failOnError)
+            .checkInputDataTypes().isFailure)
+      }
     }
 
-    // The root `$` is a valid target here, but a malformed path is still rejected.
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("[]")), Literal("abc"), Literal(1)),
+    // Unrecoverable errors: both functions throw. The root `$` is a valid target, but a malformed
+    // path is still rejected, and a size overflow surfaces as VARIANT_SIZE_LIMIT.
+    checkAppendUnrecoverableError("[]", "abc", Literal(1),
       "INVALID_VARIANT_PATH",
-      Map("path" -> "abc", "functionName" -> "`variant_array_append`"))
+      name => Map("path" -> "abc", "functionName" -> s"`$name`"))
     checkErrorInExpression[SparkRuntimeException](
       VariantArrayAppend(Literal(parseJson("[]")), Literal(""), Literal(1)),
       "INVALID_VARIANT_PATH",
       Map("path" -> "", "functionName" -> "`variant_array_append`"))
-
-    // Appending a value that overflows the variant size limit surfaces as VARIANT_SIZE_LIMIT.
     val tooBig = "x".repeat(16 * 1024 * 1024)
-    checkErrorInExpression[SparkRuntimeException](
-      VariantArrayAppend(Literal(parseJson("[]")), Literal("$"), Literal(tooBig)),
+    checkAppendUnrecoverableError("[]", "$", Literal(tooBig),
       "VARIANT_SIZE_LIMIT",
-      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_array_append`"))
+      name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
   }
 }

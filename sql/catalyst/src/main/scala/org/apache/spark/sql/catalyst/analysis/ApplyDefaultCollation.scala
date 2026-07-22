@@ -267,7 +267,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
       case replaceCols: ReplaceColumns =>
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, collation))
 
-      case a @ AlterColumns(ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec]) =>
+      case a @ AlterColumns(ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec], _) =>
         val newSpecs = specs.map {
           case spec if shouldApplyDefaultCollationToAlterColumn(spec) =>
             spec.copy(newDataType =
@@ -292,7 +292,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
   private def pruneRedundantAlterColumnTypes(plan: LogicalPlan): LogicalPlan = {
     plan match {
       case alterColumns@AlterColumns(
-      ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec]) =>
+      ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec], _) =>
         val resolvedSpecs = specs.map { spec =>
           if (isAlterColumnNOP(spec)) {
             spec.copy(newDataType = None)

@@ -947,8 +947,8 @@ object SQLConf {
 
   val SQL_ASOF_JOIN_ENABLED =
     buildConf("spark.sql.join.asofJoin.enabled")
-      .doc("When true, enable SQL ASOF JOIN syntax with MATCH_CONDITION. When false, " +
-        "ASOF JOIN fails at parse time.")
+      .doc("When true, enable SQL ASOF JOIN syntax with MATCH_CONDITION and plan it with " +
+        "the sort-merge ASOF join physical operator. When false, ASOF JOIN fails at parse time.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -3008,6 +3008,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val COMBINE_ADJACENT_AGGREGATION_ENABLED =
+    buildConf("spark.sql.execution.combineAdjacentAggregation")
+      .internal()
+      .doc("When true, combine adjacent aggregation with `Partial` and `Final` to `Complete` " +
+        "mode. This defaults to the value of `spark.sql.execution.replaceHashWithSortAgg` since " +
+        "combining adjacent aggregation subsumes the partial-and-final merge that " +
+        "`replaceHashWithSortAgg` used to perform on its own.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(REPLACE_HASH_WITH_SORT_AGG_ENABLED)
+
   val USE_PARTITION_EVALUATOR = buildConf("spark.sql.execution.usePartitionEvaluator")
     .internal()
     .doc("When true, use PartitionEvaluator to execute SQL operators.")
@@ -3291,10 +3302,12 @@ object SQLConf {
       .createWithDefault(false)
 
   val MIN_BATCHES_TO_RETAIN = buildConf("spark.sql.streaming.minBatchesToRetain")
-    .internal()
-    .doc("The minimum number of batches that must be retained and made recoverable.")
+    .doc("The minimum number of batches that must be retained and made recoverable. " +
+      "This also controls the lifecycle of checkpoint files: state, offset and commit log " +
+      "files older than this many batches are eligible for cleanup. Must be positive.")
     .version("2.1.1")
     .intConf
+    .checkValue(_ > 0, "minBatchesToRetain must be positive")
     .createWithDefault(100)
 
   val RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT =
@@ -3748,6 +3761,17 @@ object SQLConf {
     "spark.sql.streaming.realTimeMode.allowlistCheck")
     .doc("Whether to check all operators, sinks used in real-time mode are in the allowlist.")
     .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val STREAMING_ASYNC_PROGRESS_TRACKING_REAL_TIME_MODE_ENABLED_BY_DEFAULT = buildConf(
+    "spark.sql.streaming.realTimeMode.asyncProgressTrackingByDefault.enabled")
+    .internal()
+    .doc("Whether asynchronous progress tracking should be enabled in real-time mode by " +
+      "default for stateless queries. If explicitly set, the stream writer option for async " +
+      "progress tracking will still take precedence over this flag.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(true)
 
@@ -4920,6 +4944,18 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
+
+  val ARROW_CACHE_PREFETCH_ENABLED =
+    buildConf("spark.sql.execution.arrow.cache.prefetch.enabled")
+      .doc("When true, Arrow cache read path prefetches and decompresses the next batch " +
+        "in a background thread while the current batch is being consumed. This can " +
+        "significantly improve read performance for compressed Arrow caches (e.g., ZSTD) " +
+        "by overlapping decompression with consumption. Increases memory usage by up to " +
+        "one additional batch worth of Arrow vectors.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
@@ -8573,6 +8609,14 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def sqlAsOfJoinEnabled: Boolean = getConf(SQL_ASOF_JOIN_ENABLED)
 
+  /**
+   * Whether to keep [[AsOfJoin]] for the sort-merge physical operator instead of the
+   * correlated-subquery rewrite. SQL ASOF JOIN always requires sort-merge; the DataFrame
+   * API is gated separately on [[sortMergeAsOfJoinEnabled]].
+   */
+  def useSortMergeAsOfJoinOperator(requiresSortMergeAsOfJoin: Boolean): Boolean =
+    sortMergeAsOfJoinEnabled || requiresSortMergeAsOfJoin
+
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
@@ -8874,6 +8918,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowPySparkUDFColumnarInputEnabled: Boolean =
     getConf(ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED)
+
+  def arrowCachePrefetchEnabled: Boolean = getConf(ARROW_CACHE_PREFETCH_ENABLED)
 
   def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
     getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)

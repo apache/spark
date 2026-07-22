@@ -1753,7 +1753,8 @@ class Analyzer(
         // Lateral column alias has higher priority than outer reference.
         val resolvedWithLCA = resolveLateralColumnAlias(resolvedBasic)
         val resolvedFinal = resolvedWithLCA.map(resolveColsLastResort)
-        p.copy(projectList = resolvedFinal.map(_.asInstanceOf[NamedExpression]))
+        p.copy(projectList =
+          resolvedFinal.map(e => aliasIfOuterReference(e.asInstanceOf[NamedExpression])))
 
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
@@ -2038,19 +2039,6 @@ class Analyzer(
         case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
-    }
-
-    /**
-     * Wrap an outer-scope star expansion result in [[Alias]] so that the [[OuterReference]]
-     * attribute gets a fresh ExprId in the subquery's scope. This prevents the outer ExprId from
-     * leaking through [[Project.output]] when the expansion goes through a derived table.
-     * Struct star expansion already produces [[Alias]] nodes, so those are left unchanged.
-     */
-    private def aliasIfOuterReference(e: NamedExpression): NamedExpression = e match {
-      case _: Alias => e
-      case outerReference: OuterReference =>
-        Alias(outerReference, toPrettySQL(outerReference.e))()
-      case _ => e
     }
 
     /**
@@ -2644,6 +2632,8 @@ class Analyzer(
       case r: RelationTimeTravel =>
         resolveSubQueries(r, r)
       case j: Join if j.childrenResolved && j.duplicateResolved =>
+        resolveSubQueries(j, j)
+      case j: AsOfJoin if j.childrenResolved && j.duplicateResolved =>
         resolveSubQueries(j, j)
       case tvf: UnresolvedTableValuedFunction =>
         resolveSubQueries(tvf, tvf)
@@ -4203,10 +4193,10 @@ class Analyzer(
         resolved.copyTagsFrom(a)
         resolved
 
-      case a @ AlterColumns(table: ResolvedTable, specs) =>
+      case a @ AlterColumns(table: ResolvedTable, specs, _) =>
         val resolvedSpecs = specs.map {
           case s @ AlterColumnSpec(
-              ResolvedFieldName(path, field), dataType, _, _, position, _, _) =>
+              ResolvedFieldName(path, field), dataType, _, _, position, _, _, _) =>
             val newDataType = dataType.flatMap { dt =>
               // Hive style syntax provides the column type, even if it may not have changed.
               val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)

@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.adaptive
 import java.io.File
 import java.net.URI
 
+import scala.concurrent.duration._
+
 import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
 
@@ -1056,6 +1058,22 @@ class AdaptiveQueryExecSuite
         }
       } finally {
         spark.experimental.extraStrategies = Nil
+        // `slow_udf` runs inside scalar-subquery jobs on the `df`/`df3` shuffle stages. These jobs
+        // are submitted asynchronously and run to completion (they are not the cancelled stages),
+        // so each `slow_udf` invocation sleeps the full 15s while holding one of the test session's
+        // task slots (`local[2]`) -- and a task can even start running only after this test body
+        // has already returned. `QueryTest.withTempDir` runs a task drain (`waitForTasksToFinish`,
+        // a 10s `numRunningTasks <= 0` wait) after each test, so a later `withTempDir` test
+        // scheduled within that window would see these leftover tasks still occupying slots and
+        // time out its drain. Wait here, within this test's own scope, for those jobs to finish so
+        // they cannot bleed into a sibling test. We poll `getActiveJobIds` (not `numRunningTasks`):
+        // the subquery jobs are already submitted when this block runs even though their tasks may
+        // not have started yet, so a running-task count can race ahead and return early, whereas
+        // the job stays active until it completes. The timeout outlasts the 15s sleep.
+        eventually(timeout(60.seconds), interval(500.milliseconds)) {
+          assert(spark.sparkContext.statusTracker.getActiveJobIds().isEmpty,
+            "slow_udf scalar-subquery jobs are still running")
+        }
       }
     }
   }

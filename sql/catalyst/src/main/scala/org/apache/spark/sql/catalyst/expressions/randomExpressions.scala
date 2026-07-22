@@ -92,6 +92,11 @@ private[catalyst] object ExpressionWithRandomSeed {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) uniformly distributed values in [0, 1).",
+  arguments = """
+    Arguments:
+      * seed - The seed for the random number generator.
+        An expression that evaluates to an integer or long. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -146,6 +151,11 @@ object Rand {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.""",
+  arguments = """
+    Arguments:
+      * seed - The seed used to produce reproducible random results.
+        An expression that evaluates to an integer or long. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_();
@@ -204,6 +214,15 @@ object Randn {
       If both of these numbers are integers, then the result will also be an integer. Otherwise if
       one or both of these are floating-point numbers, then the result will also be a floating-point
       number.
+  """,
+  arguments = """
+    Arguments:
+      * min - The lower bound of the range of random values.
+        An expression that evaluates to a numeric. Must be a constant.
+      * max - The upper bound of the range of random values.
+        An expression that evaluates to a numeric. Must be a constant.
+      * seed - The seed used to produce reproducible random results.
+        An expression that evaluates to an integer or long. Must be a constant.
   """,
   examples = """
     Examples:
@@ -328,6 +347,13 @@ object Uniform {
       uniformly at random from the following pool of characters: 0-9, a-z, A-Z. The random seed is
       optional. The string length must be a constant two-byte or four-byte integer (SMALLINT or INT,
       respectively).
+  """,
+  arguments = """
+    Arguments:
+      * length - The length of the random string to generate.
+        An expression that evaluates to an integer. Must be a constant.
+      * seed - The seed used to produce reproducible random results.
+        An expression that evaluates to an integer or long. Must be a constant.
   """,
   examples =
     """
