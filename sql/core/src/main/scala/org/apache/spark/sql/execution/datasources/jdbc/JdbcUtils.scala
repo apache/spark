@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.{DecimalPrecisionTypeCoercion, Res
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
@@ -361,6 +361,50 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
+   * Returns the byte size of an ArrayData, iterating elements, skipping nulls,
+   * and recursing into nested arrays. Used by the read-path sizers.
+   */
+  private def sizeArrayData(arr: ArrayData, elementType: DataType): Long = {
+    var s = 0L
+    var j = 0
+    while (j < arr.numElements()) {
+      if (!arr.isNullAt(j)) {
+        elementType match {
+          case _: StringType => s += arr.getUTF8String(j).numBytes()
+          case BinaryType => s += arr.getBinary(j).length
+          case nested: ArrayType => s += sizeArrayData(arr.getArray(j), nested.elementType)
+          case dt => s += dt.defaultSize
+        }
+      }
+      j += 1
+    }
+    s
+  }
+
+  /**
+   * Returns the byte size of a Seq (external Row representation of an array), iterating
+   * elements, skipping nulls, and recursing into nested arrays. Used by the write-path sizer.
+   */
+  private def sizeSeqElements(seq: Seq[Any], elementType: DataType): Long = {
+    var s = 0L
+    seq.foreach { e =>
+      if (e != null) {
+        elementType match {
+          case _: StringType =>
+            s += UTF8String.fromString(e.asInstanceOf[String]).numBytes()
+          case BinaryType =>
+            s += e.asInstanceOf[Array[Byte]].length
+          case nested: ArrayType =>
+            s += sizeSeqElements(e.asInstanceOf[Seq[Any]], nested.elementType)
+          case dt =>
+            s += dt.defaultSize
+        }
+      }
+    }
+    s
+  }
+
+  /**
    * Builds an array of per-column sizing functions for InternalRow. Each function returns the
    * byte size contribution of that column (0 for nulls). Variable-length types (String, Binary)
    * use actual value size; fixed-width types use defaultSize.
@@ -379,21 +423,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
           if (row.isNullAt(idx)) 0L
           else {
             val arr = row.getArray(idx)
-            at.elementType match {
-              case _: StringType =>
-                var s = 0L; var j = 0
-                while (j < arr.numElements()) {
-                  if (!arr.isNullAt(j)) s += arr.getUTF8String(j).numBytes()
-                  j += 1
-                }; s
-              case BinaryType =>
-                var s = 0L; var j = 0
-                while (j < arr.numElements()) {
-                  if (!arr.isNullAt(j)) s += arr.getBinary(j).length
-                  j += 1
-                }; s
-              case et => arr.numElements().toLong * et.defaultSize
-            }
+            sizeArrayData(arr, at.elementType)
           }
         case dt => (row: InternalRow) =>
           if (row.isNullAt(idx)) 0L else dt.defaultSize.toLong
@@ -442,14 +472,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
             size += row.getAs[Array[Byte]](i).length
           case at: ArrayType =>
             val seq = row.getSeq[Any](i)
-            at.elementType match {
-              case _: StringType =>
-                seq.foreach(e =>
-                  if (e != null) size += UTF8String.fromString(e.asInstanceOf[String]).numBytes())
-              case BinaryType =>
-                seq.foreach(e => if (e != null) size += e.asInstanceOf[Array[Byte]].length)
-              case et => size += seq.length.toLong * et.defaultSize
-            }
+            size += sizeSeqElements(seq, at.elementType)
           case dt =>
             size += dt.defaultSize
         }
