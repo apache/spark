@@ -107,7 +107,6 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         finally:
             df.unpersist()
 
-
     def test_chained_udfs_on_timestamps_with_non_utc_session(self):
         # A pandas UDF's timestamp output comes back from the worker labeled UTC, while the
         # following Arrow-optimized Python UDF runs as a separate exec node whose stream
