@@ -111,4 +111,35 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
       "DynamicPruningSubquery with identical build queries but different ExprIds " +
       "must produce identical canonicalized forms so PlanMerger can deduplicate them")
   }
+
+  test("broadcast value metadata survives logical rewrites without changing DPP identity") {
+    val key = AttributeReference("key", IntegerType)()
+    val source = LocalRelation(key)
+    val projection = BroadcastValueProjection(source, Seq(key), key)
+    val pruning = DynamicPruningSubquery(
+      key, source, Seq(key), Seq(0), onlyInBroadcast = true)
+      .withBroadcastValueProjection(Some(projection))
+
+    assert(pruning.resolved)
+    assert(pruning.productArity === 7)
+    assert(DynamicPruningSubquery.unapply(pruning).exists(_.productArity == 7))
+
+    Seq(
+      pruning.withNewPlan(source),
+      pruning.withNewOuterAttrs(Seq(key)),
+      pruning.withNewHint(None).asInstanceOf[DynamicPruningSubquery],
+      pruning.withNewChildren(Seq(key)).asInstanceOf[DynamicPruningSubquery]
+    ).foreach { rewritten =>
+      assert(rewritten.broadcastValueProjection.contains(projection))
+    }
+
+    assert(pruning.canonicalized ===
+      pruning.withBroadcastValueProjection(None).canonicalized)
+
+    val missing = AttributeReference("missing", IntegerType)()
+    assert(!pruning.withBroadcastValueProjection(
+      Some(projection.copy(sourceHashKeys = Seq(missing)))).resolved)
+    assert(!pruning.withBroadcastValueProjection(
+      Some(projection.copy(valueExpression = missing))).resolved)
+  }
 }

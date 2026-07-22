@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql
 
+import java.sql.Date
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.concurrent.TrieMap
+import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.GivenWhenThen
 
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, DynamicPruningSubquery, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -195,8 +197,9 @@ abstract class DynamicPartitionPruningSuiteBase
       case InSubqueryExec(_, _: SubqueryExec, _, _, _, _) => true
       case _ => false
     }
-    val subqueryBroadcast = dpExprs.collect {
+    val subqueryBroadcast: Seq[BaseSubqueryExec with UnaryExecNode] = dpExprs.collect {
       case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _, _, _) => b
+      case InSubqueryExec(_, b: ProjectedBroadcastValueSubqueryExec, _, _, _, _) => b
     }
 
     val hasFilter = if (withSubquery) "Should" else "Shouldn't"
@@ -253,6 +256,204 @@ abstract class DynamicPartitionPruningSuiteBase
         b.indices.map(idx => b.buildKeys(idx))
     }
     assert(buf.distinct.size == n)
+  }
+
+  test("reuse ancestor broadcast value rows for composite-key date partition pruning") {
+    withTable("dpp_projection_dates", "dpp_projection_users", "dpp_projection_target") {
+      Seq(
+        (Date.valueOf("2024-01-01"), "2024-01-01", "us"),
+        (Date.valueOf("2024-01-01"), "2024-01-01", "us"),
+        (Date.valueOf("2024-01-08"), "2024-01-08", "eu"),
+        (Date.valueOf("2024-01-15"), null, "us"),
+        (null.asInstanceOf[Date], "2024-01-22", "apac"),
+        (Date.valueOf("2024-01-29"), "2024-01-29", "latam"))
+        .toDF("cohort_date", "cohort_ds", "region")
+        .write.format(tableFormat).saveAsTable("dpp_projection_dates")
+
+      Seq(
+        ("2024-01-01", "us", "u1", true),
+        ("2024-01-08", "eu", "u2", true),
+        (null, "us", "null-key", true),
+        ("2024-01-22", "apac", "null-value", true),
+        ("2024-01-08", "us", "inactive", false))
+        .toDF("cohort_ds", "region", "user_id", "active")
+        .write.format(tableFormat).saveAsTable("dpp_projection_users")
+
+      Seq(
+        ("u1", "2024-01-07", "p1"),
+        ("u2", "2024-01-14", "p2"),
+        ("ghost", "2024-02-04", "extra-domain"),
+        ("u1", "2024-02-01", "unselected"))
+        .toDF("user_id", "ds", "payload")
+        .write.partitionBy("ds").format(tableFormat).saveAsTable("dpp_projection_target")
+
+      val query =
+        """
+          |WITH cohorts AS (
+          |  SELECT /*+ BROADCAST(d) */ d.cohort_date, u.user_id
+          |  FROM dpp_projection_dates d
+          |  JOIN dpp_projection_users u
+          |    ON d.cohort_ds = u.cohort_ds AND d.region = u.region
+          |  WHERE u.active AND u.user_id <> 'filtered'
+          |)
+          |SELECT c.user_id, w.payload
+          |FROM cohorts c LEFT JOIN dpp_projection_target w
+          |  ON w.user_id = c.user_id
+          | AND w.ds = date_format(date_add(c.cohort_date, 6), 'yyyy-MM-dd')
+          |ORDER BY c.user_id, w.payload
+          |""".stripMargin
+      val expected = Seq(
+        Row("null-value", null),
+        Row("u1", "p1"),
+        Row("u1", "p1"),
+        Row("u2", "p2"))
+
+      withSQLConf(
+          SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED.key -> "false",
+          SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val projected = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case subquery: ProjectedBroadcastValueSubqueryExec => subquery
+        }
+        assert(projected.isEmpty, df.queryExecution.executedPlan)
+      }
+
+      Seq("true", "false").foreach { ansiEnabled =>
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> ansiEnabled,
+            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+            SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+            SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED.key -> "true",
+            SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          val df = sql(query)
+          val candidates = ArrayBuffer.empty[DynamicPruningSubquery]
+          df.queryExecution.optimizedPlan.transformAllExpressionsWithSubqueries {
+            case candidate: DynamicPruningSubquery =>
+              candidates += candidate
+              candidate
+          }
+          val projections = candidates.flatMap(_.broadcastValueProjection)
+          assert(projections.size === 1, df.queryExecution.optimizedPlan)
+          assert(projections.head.sourceHashKeys.map(_.references.head.name) ===
+            Seq("cohort_ds", "region"))
+
+          checkAnswer(df, expected)
+
+          val projected = collectWithSubqueries(df.queryExecution.executedPlan) {
+            case subquery: ProjectedBroadcastValueSubqueryExec => subquery
+          }
+          assert(projected.size === 1, df.queryExecution.executedPlan)
+          val pruning = collectDynamicPruningExpressions(df.queryExecution.executedPlan)
+            .collectFirst { case in: InSubqueryExec => in }.get
+          assert(pruning.values().get.map(String.valueOf).toSet ===
+            Set("2024-01-07", "2024-01-14", "2024-02-04"))
+          val projectedMetrics = projected.head.metrics.map {
+            case (name, metric) => name -> metric.value
+          }
+          assert(projected.head.metrics("numInputRows").value === 5, projectedMetrics)
+          assert(projected.head.metrics("numOutputRows").value === 3, projectedMetrics)
+        }
+      }
+
+      Seq(
+        SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_ROWS.key,
+        SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_BYTES.key,
+        SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_SOURCE_BYTES.key
+      ).foreach { limitKey =>
+        withSQLConf(
+            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+            SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+            SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED.key -> "true",
+            limitKey -> "0",
+            SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          val df = sql(query)
+          checkAnswer(df, expected)
+
+          val projected = collectWithSubqueries(df.queryExecution.executedPlan) {
+            case subquery: ProjectedBroadcastValueSubqueryExec => subquery
+          }
+          assert(projected.size === 1, df.queryExecution.executedPlan)
+          assert(projected.head.metrics("projectionDisabled").value === 1)
+
+          val pruning = collectDynamicPruningExpressions(df.queryExecution.executedPlan)
+            .collectFirst { case in: InSubqueryExec => in }.get
+          assert(pruning.isResultUnavailable)
+          assert(pruning.values().isEmpty)
+        }
+      }
+    }
+  }
+
+  test("project every value row from dense and sparse long-key hash broadcasts") {
+    Seq(2L, 1000000000L).foreach { otherKey =>
+      withTable("dpp_long_dates", "dpp_long_users", "dpp_long_target") {
+        Seq(
+          (1L, Date.valueOf("2024-01-01")),
+          (1L, Date.valueOf("2024-01-08")),
+          (otherKey, Date.valueOf("2024-01-15")))
+          .toDF("cohort_id", "cohort_date")
+          .write.format(tableFormat).saveAsTable("dpp_long_dates")
+
+        Seq((1L, "u1", true), (otherKey, "u2", true))
+          .toDF("cohort_id", "user_id", "active")
+          .write.format(tableFormat).saveAsTable("dpp_long_users")
+
+        Seq(
+          ("u1", "2024-01-07", "p1"),
+          ("u1", "2024-01-14", "p2"),
+          ("u2", "2024-01-21", "p3"))
+          .toDF("user_id", "ds", "payload")
+          .write.partitionBy("ds").format(tableFormat).saveAsTable("dpp_long_target")
+
+        withSQLConf(
+            SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+            SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+            SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED.key -> "true",
+            SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          val df = sql(
+            """
+              |WITH cohorts AS (
+              |  SELECT /*+ BROADCAST(d) */ d.cohort_date, u.user_id
+              |  FROM dpp_long_dates d
+              |  JOIN dpp_long_users u ON d.cohort_id = u.cohort_id
+              |  WHERE u.active AND u.user_id <> 'filtered'
+              |)
+              |SELECT c.user_id, w.payload
+              |FROM cohorts c
+              |LEFT JOIN dpp_long_target w
+              |  ON w.user_id = c.user_id
+              | AND w.ds = date_format(date_add(c.cohort_date, 6), 'yyyy-MM-dd')
+              |ORDER BY c.user_id, w.payload
+              |""".stripMargin)
+
+          checkAnswer(df, Seq(
+            Row("u1", "p1"),
+            Row("u1", "p2"),
+            Row("u2", "p3")))
+
+          val projected = collectWithSubqueries(df.queryExecution.executedPlan) {
+            case subquery: ProjectedBroadcastValueSubqueryExec => subquery
+          }
+          assert(projected.size === 1, df.queryExecution.executedPlan)
+          val pruning = collectDynamicPruningExpressions(df.queryExecution.executedPlan)
+            .collectFirst { case in: InSubqueryExec => in }.get
+          assert(pruning.values().get.map(String.valueOf).toSet ===
+            Set("2024-01-07", "2024-01-14", "2024-01-21"))
+          val projectedMetrics = projected.head.metrics.map {
+            case (name, metric) => name -> metric.value
+          }
+          assert(projected.head.metrics("numInputRows").value === 3, projectedMetrics)
+          assert(projected.head.metrics("numOutputRows").value === 3, projectedMetrics)
+        }
+      }
+    }
   }
 
   /**

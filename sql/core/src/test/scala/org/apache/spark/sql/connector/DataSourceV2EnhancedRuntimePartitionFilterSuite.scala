@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruning
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryEnhancedRuntimePartitionFilterTable, InMemoryTableEnhancedRuntimePartitionFilterCatalog}
 import org.apache.spark.sql.connector.expressions.PartitionFieldReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
-import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
+import org.apache.spark.sql.execution.{ExplainUtils, ProjectedBroadcastValueSubqueryExec}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -73,6 +73,79 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10")(f)
+  }
+
+  private def withProjectedBroadcastRuntimeFiltering(
+      maxRows: Int)(f: DataFrame => Unit): Unit = {
+    val fact = s"$catalogName.projection_fact"
+    val codes = "broadcast_projection_codes"
+    val selectors = "broadcast_projection_selectors"
+
+    withTable(fact, codes, selectors) {
+      sql(s"CREATE TABLE $fact (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+      for (part <- 0 until 5) {
+        sql(s"INSERT INTO $fact VALUES ($part, $part)")
+      }
+
+      sql(s"CREATE TABLE $codes (join_id INT, part INT) USING parquet")
+      sql(s"INSERT INTO $codes VALUES (1, 2), (2, 3), (3, 4)")
+      sql(s"CREATE TABLE $selectors (join_id INT, keep BOOLEAN) USING parquet")
+      sql(s"INSERT INTO $selectors VALUES (1, true), (2, true), (3, false)")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_ROWS.key ->
+            maxRows.toString,
+          SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df = sql(
+          s"""
+             |WITH selected AS (
+             |  SELECT /*+ BROADCAST(c) */ c.part
+             |  FROM $codes c
+             |  JOIN $selectors x ON c.join_id = x.join_id
+             |  WHERE x.keep AND x.join_id > 0
+             |)
+             |SELECT /*+ MERGE(f, s) */ f.id, f.part
+             |FROM $fact f
+             |JOIN selected s ON f.part = s.part
+             |ORDER BY f.id
+             |""".stripMargin)
+        f(df)
+      }
+    }
+  }
+
+  test("unavailable broadcast values do not reach iterative V2 partition filtering") {
+    withProjectedBroadcastRuntimeFiltering(maxRows = 0) { df =>
+      checkAnswer(df, Seq(Row(2, 2), Row(3, 3)))
+      val projected = ExplainUtils.collectWithSubqueries(df.queryExecution.executedPlan) {
+        case subquery: ProjectedBroadcastValueSubqueryExec => subquery
+      }
+      assert(projected.size === 1, df.queryExecution.executedPlan)
+      assert(projected.head.metrics("projectionDisabled").value === 1)
+      assertDPPRuntimeFilters(df)
+      assertPushedPartitionPredicates(df, expectedCount = 0)
+      assertScanReturnsPartitionKeys(df, Set("0", "1", "2", "3", "4"))
+    }
+  }
+
+  test("projected broadcast values prune iterative V2 partitions with a safe superset") {
+    withProjectedBroadcastRuntimeFiltering(maxRows = 10) { df =>
+      checkAnswer(df, Seq(Row(2, 2), Row(3, 3)))
+      val projected = ExplainUtils.collectWithSubqueries(df.queryExecution.executedPlan) {
+        case subquery: ProjectedBroadcastValueSubqueryExec => subquery
+      }
+      assert(projected.size === 1, df.queryExecution.executedPlan)
+      assert(projected.head.metrics("numInputRows").value === 3)
+      assert(projected.head.metrics("numOutputRows").value === 3)
+      assertDPPRuntimeFilters(df)
+      assertPushedPartitionPredicates(df, expectedCount = 1)
+      assertScanReturnsPartitionKeys(df, Set("2", "3", "4"))
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -520,7 +593,7 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
   }
 
   private def collectBatchScan(df: DataFrame): BatchScanExec = {
-    stripAQEPlan(df.queryExecution.executedPlan).collectFirst {
+    ExplainUtils.collectFirst(df.queryExecution.executedPlan) {
       case b: BatchScanExec => b
     }.getOrElse(fail("Expected BatchScanExec in plan"))
   }
