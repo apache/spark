@@ -755,6 +755,9 @@ class ExecutorSuite extends SparkFunSuite
       rejectionMessage: String)(
       f: (JavaSerializer, ArgumentCaptor[ByteBuffer]) => Unit): Unit = {
     val conf = new SparkConf
+    // Defense-in-depth: set a very large heartbeat interval so the heartbeater thread
+    // cannot fire during this test even if cleanup is delayed.
+    conf.set(EXECUTOR_HEARTBEAT_INTERVAL.key, "3600s")
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     val serializedTask = serializer.newInstance().serialize(new FakeTask(0, 0))
@@ -765,11 +768,12 @@ class ExecutorSuite extends SparkFunSuite
 
     withExecutor("id", "localhost", env) { executor =>
       val executorClass = classOf[Executor]
+      val shutdownField = executorClass.getDeclaredField("executorShutdown")
+      shutdownField.setAccessible(true)
+      val shutdownFlag = shutdownField.get(executor).asInstanceOf[AtomicBoolean]
 
       if (executorShutdown) {
-        val shutdownField = executorClass.getDeclaredField("executorShutdown")
-        shutdownField.setAccessible(true)
-        shutdownField.get(executor).asInstanceOf[AtomicBoolean].set(true)
+        shutdownFlag.set(true)
       }
 
       val threadPoolField = executorClass.getDeclaredField("threadPool")
@@ -788,6 +792,15 @@ class ExecutorSuite extends SparkFunSuite
       )
 
       f(serializer, statusCaptor)
+
+      // SPARK-57465: Reset executorShutdown to false so that withExecutor's finally block
+      // can call executor.stop() fully. Executor.stop() is guarded by
+      // `if (!executorShutdown.getAndSet(true))` -- leaving the flag true causes stop() to
+      // short-circuit, leaking the heartbeater thread which eventually triggers
+      // System.exit(HEARTBEAT_FAILURE) and crashes the entire test fork.
+      if (executorShutdown) {
+        shutdownFlag.set(false)
+      }
     }
   }
 
