@@ -20,10 +20,15 @@ package org.apache.spark.deploy.security
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.Credentials
+import org.mockito.ArgumentCaptor
+import org.mockito.Mockito.{mock, verify}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.NETWORK_CRYPTO_ENABLED
+import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
 import org.apache.spark.security.HadoopDelegationTokenProvider
 
 private class TestNonKerberosTokenProvider extends HadoopDelegationTokenProvider {
@@ -129,13 +134,49 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
     assert(!manager.isProviderLoaded("test-direct"))
   }
 
-  test("fails if network crypto is not enabled") {
+  test("fails if no RPC encryption is enabled") {
     val sparkConf = new SparkConf(false)
       .set(CREDENTIALS_DIRECT_PROVIDERS_ENABLED, true)
 
     val e = intercept[IllegalArgumentException] {
       new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
     }
-    assert(e.getMessage.contains("spark.network.crypto.enabled must be true"))
+    assert(e.getMessage.contains("RPC channel encryption"))
+  }
+
+  test("accepts SASL encryption as sufficient") {
+    val sparkConf = new SparkConf(false)
+      .set(CREDENTIALS_DIRECT_PROVIDERS_ENABLED, true)
+      .set(SASL_ENCRYPTION_ENABLED, true)
+    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
+    assert(manager.renewalEnabled)
+  }
+
+  test("accepts SSL RPC encryption as sufficient") {
+    val sparkConf = new SparkConf(false)
+      .set(CREDENTIALS_DIRECT_PROVIDERS_ENABLED, true)
+      .set("spark.ssl.rpc.enabled", "true")
+    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
+    assert(manager.renewalEnabled)
+  }
+
+  test("start() obtains tokens and sends UpdateDelegationTokens to schedulerRef") {
+    val mockRef = mock(classOf[RpcEndpointRef])
+    val manager = new HadoopDelegationTokenManager(baseConf, hadoopConf, mockRef)
+
+    try {
+      val tokens = manager.start()
+      assert(tokens != null)
+
+      val captor = ArgumentCaptor.forClass(classOf[Any])
+      verify(mockRef).send(captor.capture())
+      val msg = captor.getValue.asInstanceOf[UpdateDelegationTokens]
+
+      val creds = SparkHadoopUtil.get.deserialize(msg.tokens)
+      assert(creds.getSecretKey(new Text("test.direct.credential")) != null)
+      assert(new String(creds.getSecretKey(new Text("test.direct.credential"))) === "test-token")
+    } finally {
+      manager.stop()
+    }
   }
 }
