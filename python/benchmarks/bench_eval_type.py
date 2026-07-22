@@ -2500,8 +2500,8 @@ class TransformWithStateRowInitStateUDFPeakmemBench(
 # ``(key, pdfs, state)`` and returns ``Iterator[pandas.DataFrame]``, where
 # ``state`` is a ``GroupState`` the UDF may read (``getOption``) and write
 # (``update``/``remove``). Unlike TransformWithState, no state server socket is
-# involved: ``ApplyInPandasWithStateSerializer`` reconstructs each ``GroupState``
-# entirely from a metadata column carried inline in the Arrow stream.
+# involved: each ``GroupState`` is reconstructed entirely from a metadata column
+# carried inline in the Arrow stream.
 #
 # The wire stream is a single plain Arrow IPC stream whose batch schema is the
 # data columns followed by one trailing struct column (``__state``, matching the
@@ -2510,7 +2510,7 @@ class TransformWithStateRowInitStateUDFPeakmemBench(
 # state value), ``startOffset``, ``numRows``, ``isLastChunk``. Data and state
 # columns must share a row count, so exactly one populated state row per data
 # chunk sits at the top of each group's range and the remaining state rows are
-# null structs (which the serializer treats as end-of-data padding).
+# null structs (treated as end-of-data padding when read back).
 
 
 class _ApplyInPandasWithStateBenchMixin:
