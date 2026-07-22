@@ -1315,7 +1315,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidFileFormatForStoredAsError(serdeInfo: SerdeInfo): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1059",
+      errorClass = "INVALID_FILE_FORMAT_FOR_STORED_AS",
       messageParameters = Map("serdeInfo" -> serdeInfo.storedAs.get))
   }
 

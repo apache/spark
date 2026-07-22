@@ -3938,6 +3938,12 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_FILE_FORMAT_FOR_STORED_AS" : {
+    "message" : [
+      "STORED AS with file format '<serdeInfo>' is invalid."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_FLOW_QUERY_TYPE" : {
     "message" : [
       "Flow <flowIdentifier> returns an invalid relation type."
@@ -9680,11 +9686,6 @@
   "_LEGACY_ERROR_TEMP_1058" : {
     "message" : [
       "Cannot create table with both USING <provider> and <serDeInfo>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1059" : {
-    "message" : [
-      "STORED AS with file format '<serdeInfo>' is invalid."
     ]
   },
   "_LEGACY_ERROR_TEMP_1060" : {
