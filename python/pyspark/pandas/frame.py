@@ -390,19 +390,6 @@ class DataFrame(Frame, Generic[T]):
     pandas-on-Spark DataFrame that corresponds to pandas DataFrame logically. This holds Spark
     DataFrame internally.
 
-    .. versionadded:: 3.2.0
-
-    .. versionchanged:: 3.4.0
-        Since 3.4.0, it deals with `data` and `index` in this approach:
-        1, when `data` is a distributed dataset (Internal DataFrame/Spark DataFrame/
-        pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallelize
-        the `index` if necessary, and then try to combine the `data` and `index`;
-        Note that if `data` and `index` doesn't have the same anchor, then
-        `compute.ops_on_diff_frames` should be turned on;
-        2, when `data` is a local dataset (Pandas DataFrame/numpy ndarray/list/etc),
-        it will first collect the `index` to driver if necessary, and then apply
-        the `pandas.DataFrame(...)` creation internally;
-
     :ivar _internal: an internal immutable Frame to manage metadata.
     :type _internal: InternalFrame
 
@@ -421,6 +408,17 @@ class DataFrame(Frame, Generic[T]):
         Data type to force. Only a single dtype is allowed. If None, infer
     copy : boolean, default False
         Copy data from inputs. Only affects DataFrame / 2d ndarray input
+
+    .. versionchanged:: 3.4.0
+        Since 3.4.0, it deals with `data` and `index` in this approach:
+        1, when `data` is a distributed dataset (Internal DataFrame/Spark DataFrame/
+        pandas-on-Spark DataFrame/pandas-on-Spark Series), it will first parallelize
+        the `index` if necessary, and then try to combine the `data` and `index`;
+        Note that if `data` and `index` doesn't have the same anchor, then
+        `compute.ops_on_diff_frames` should be turned on;
+        2, when `data` is a local dataset (Pandas DataFrame/numpy ndarray/list/etc),
+        it will first collect the `index` to driver if necessary, and then apply
+        the `pandas.DataFrame(...)` creation internally;
 
     Examples
     --------
