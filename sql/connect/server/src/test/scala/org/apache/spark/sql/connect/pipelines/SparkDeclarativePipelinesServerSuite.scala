@@ -127,6 +127,8 @@ class SparkDeclarativePipelinesServerSuite
   private def autoCdcDefineFlow(
       graphId: String,
       scdType: DefineFlow.SCDType,
+      columns: Seq[String] = Seq.empty,
+      exceptColumns: Seq[String] = Seq.empty,
       trackHistoryColumns: Seq[String] = Seq.empty,
       trackHistoryExceptColumns: Seq[String] = Seq.empty): DefineFlow = {
     val autoCdcDetails = DefineFlow.AutoCdcFlowDetails
@@ -135,6 +137,8 @@ class SparkDeclarativePipelinesServerSuite
       .addKeys(unresolvedColumn("id"))
       .setSequenceBy(unresolvedColumn("ts"))
       .setStoredAsScdType(scdType)
+    columns.foreach(c => autoCdcDetails.addColumnList(unresolvedColumn(c)))
+    exceptColumns.foreach(c => autoCdcDetails.addExceptColumnList(unresolvedColumn(c)))
     trackHistoryColumns.foreach(c => autoCdcDetails.addTrackHistoryColumnList(unresolvedColumn(c)))
     trackHistoryExceptColumns.foreach(c =>
       autoCdcDetails.addTrackHistoryExceptColumnList(unresolvedColumn(c)))
@@ -145,6 +149,26 @@ class SparkDeclarativePipelinesServerSuite
       .setTargetDatasetName("target")
       .setAutoCdcFlowDetails(autoCdcDetails)
       .build()
+  }
+
+  test("AutoCDC: specifying both column_list and except_column_list is rejected server-side") {
+    val ex = intercept[Exception] {
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        sendPlan(
+          buildPlanFromPipelineCommand(
+            PipelineCommand
+              .newBuilder()
+              .setDefineFlow(
+                autoCdcDefineFlow(
+                  graphId,
+                  DefineFlow.SCDType.SCD_TYPE_1,
+                  columns = Seq("id"),
+                  exceptColumns = Seq("ts")))
+              .build()))
+      }
+    }
+    assert(ex.getMessage.contains("AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST"))
   }
 
   test("AutoCDC: track-history columns without SCD2 are rejected server-side") {

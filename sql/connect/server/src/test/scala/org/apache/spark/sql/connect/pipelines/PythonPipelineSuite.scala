@@ -1268,10 +1268,10 @@ class PythonPipelineSuite
   }
 
   test("AutoCDC API: specifying both column_list and except_column_list is rejected") {
-    // The Python create_auto_cdc_flow API does not currently enforce the "at most one" contract
-    // client-side, so the proto carries both lists to the server, where the structured error is
-    // raised. If/when a Python-side check is added, this test guards against the server-side
-    // defense being silently bypassed.
+    // The Python create_auto_cdc_flow API rejects the "at most one" violation client-side with a
+    // CANNOT_SET_TOGETHER PySparkValueError, so the request never reaches the server. The
+    // server-side defense (AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST) is exercised directly
+    // against a raw proto in SparkDeclarativePipelinesServerSuite.
     val ex = intercept[RuntimeException] {
       buildGraph("""
           |@dp.table
@@ -1290,7 +1290,7 @@ class PythonPipelineSuite
           |)
           |""".stripMargin)
     }
-    assert(ex.getMessage.contains("AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST"))
+    assert(ex.getMessage.contains("CANNOT_SET_TOGETHER"))
   }
 
   test("AutoCDC API: registered flow survives graph resolution and validation end-to-end") {
@@ -1397,6 +1397,10 @@ class PythonPipelineSuite
   }
 
   test("AutoCDC API: specifying both track_history column lists is rejected") {
+    // The Python create_auto_cdc_flow API rejects the "at most one" violation client-side with a
+    // CANNOT_SET_TOGETHER PySparkValueError, so the request never reaches the server. The
+    // server-side defense (AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST) is
+    // exercised directly against a raw proto in SparkDeclarativePipelinesServerSuite.
     val ex = intercept[RuntimeException] {
       buildGraph("""
           |@dp.table
@@ -1416,8 +1420,7 @@ class PythonPipelineSuite
           |)
           |""".stripMargin)
     }
-    assert(
-      ex.getMessage.contains("AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST"))
+    assert(ex.getMessage.contains("CANNOT_SET_TOGETHER"))
   }
 
   /**

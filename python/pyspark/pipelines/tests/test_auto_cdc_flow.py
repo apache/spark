@@ -251,6 +251,57 @@ class AutoCdcFlowConstructionTest(unittest.TestCase):
         for c in flow.except_column_list:
             self.assertIsInstance(c, Column)
 
+    def test_create_auto_cdc_flow_rejects_both_column_list_and_except(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("tgt")
+            with self.assertRaises(PySparkValueError) as ctx:
+                dp.create_auto_cdc_flow(
+                    target="tgt",
+                    source="src",
+                    keys=[col("id")],
+                    sequence_by=expr("ts"),
+                    column_list=["id"],
+                    except_column_list=["op"],
+                )
+            self.assertEqual(ctx.exception.getCondition(), "CANNOT_SET_TOGETHER")
+
+    def test_create_auto_cdc_flow_rejects_both_track_history_column_list_and_except(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("tgt")
+            with self.assertRaises(PySparkValueError) as ctx:
+                dp.create_auto_cdc_flow(
+                    target="tgt",
+                    source="src",
+                    keys=[col("id")],
+                    sequence_by=expr("ts"),
+                    stored_as_scd_type=2,
+                    track_history_column_list=["val"],
+                    track_history_except_column_list=["op"],
+                )
+            self.assertEqual(ctx.exception.getCondition(), "CANNOT_SET_TOGETHER")
+
+    def test_create_auto_cdc_flow_empty_column_lists_not_treated_as_both_set(self):
+        # Empty lists are no-ops (they serialize to unset repeated fields), so an empty include
+        # list alongside a non-empty except list must not trip the mutual-exclusivity check.
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("tgt")
+            dp.create_auto_cdc_flow(
+                target="tgt",
+                source="src",
+                keys=[col("id")],
+                sequence_by=expr("ts"),
+                column_list=[],
+                except_column_list=["op"],
+            )
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        self.assertEqual(flow.column_list, [])
+        assert flow.except_column_list is not None
+        self.assertEqual(len(flow.except_column_list), 1)
+
     def test_create_auto_cdc_flow_rejects_non_str_target(self):
         registry = LocalGraphElementRegistry()
         with graph_element_registration_context(registry):

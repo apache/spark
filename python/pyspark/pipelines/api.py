@@ -649,6 +649,20 @@ def create_auto_cdc_flow(
         column_list=track_history_except_column_list,
     )
 
+    # An include/except pair is mutually exclusive. The server enforces this too, but failing
+    # here avoids a round-trip. An empty list serializes identically to an omitted one (an unset
+    # repeated field on the wire), so it is a no-op; gate on non-empty lists rather than
+    # `is not None`.
+    _reject_include_and_except_together(
+        "column_list", column_list, "except_column_list", except_column_list
+    )
+    _reject_include_and_except_together(
+        "track_history_column_list",
+        track_history_column_list,
+        "track_history_except_column_list",
+        track_history_except_column_list,
+    )
+
     if isinstance(sequence_by, str):
         sequence_by = _connect_expr(sequence_by)
     elif not isinstance(sequence_by, Column):
@@ -725,6 +739,24 @@ def create_auto_cdc_flow(
     )
 
     get_active_graph_element_registry().register_auto_cdc_flow(flow)
+
+
+def _reject_include_and_except_together(
+    include_arg_name: str,
+    include_columns: Optional[List[Column]],
+    except_arg_name: str,
+    except_columns: Optional[List[Column]],
+) -> None:
+    """Reject specifying a non-empty include list and a non-empty except list together.
+
+    An empty list is a no-op (it serializes to an unset repeated field, indistinguishable from an
+    omitted argument), so only non-empty lists count as "specified".
+    """
+    if include_columns and except_columns:
+        raise PySparkValueError(
+            errorClass="CANNOT_SET_TOGETHER",
+            messageParameters={"arg_list": f"{include_arg_name} and {except_arg_name}"},
+        )
 
 
 def _normalize_optional_column_list(
