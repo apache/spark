@@ -58,6 +58,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def insertReplaceOnColumnListNotAllowed(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_ON_COLUMN_LIST_NOT_ALLOWED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def insertReplaceUsingNotEnabled(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INSERT_REPLACE_USING_NOT_ENABLED",
@@ -68,6 +75,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   def insertReplaceUsingByNameNotEnabled(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def insertReplaceWhereColumnListNotEnabled(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_WHERE_COLUMN_LIST_NOT_ENABLED",
       messageParameters = Map.empty,
       ctx)
   }
