@@ -151,11 +151,11 @@ private[spark] class TaskSetManager(
 
   // The number of CPUs a retry of the given task should request, given the ResourceProfile's
   // base taskCpus. For a task that has failed with OOM, this grows by oomRetryCpusIncrement per
-  // OOM failure, capped at the executor total cores when that is known. The result is floored at
-  // baseCpus, so an absent/small cap never shrinks the request below the base, and an extreme
-  // increment that overflows the Int arithmetic degrades gracefully to baseCpus rather than
-  // producing a non-positive request (which would trip the cpus > 0 assertion in TaskDescription
-  // after scheduler state was already mutated).
+  // OOM failure, capped at the executor total cores when that is known. The Int arithmetic is
+  // floored at baseCpus, so an absent/small cap never shrinks the request below the base, and an
+  // extreme increment that overflows Int degrades gracefully to baseCpus rather than producing a
+  // non-positive request (which would trip the cpus > 0 assertion in TaskDescription after
+  // scheduler state was already mutated).
   private def effectiveCpusFor(index: Int, baseCpus: Int): Int = {
     val requested = baseCpus + oomRetryCpusIncrement * numOomRetries(index)
     executorCoresLimit.map(_.min(requested)).getOrElse(requested).max(baseCpus)
@@ -559,9 +559,10 @@ private[spark] class TaskSetManager(
               // return null since the TaskDescription for the barrier task is not ready yet
               null
             } else {
-              // For an OOM retry, allocate extra CPUs (capped at the executor cores). dequeueTask
-              // guarantees effectiveCpus <= availCpus, so the scheduler's cpu bookkeeping is safe.
-              // Barrier tasks are excluded above and keep the ResourceProfile's taskCpus.
+              // For an OOM retry (numOomRetries > 0), allocate extra CPUs (capped at the executor
+              // cores). Such a retry is dequeued only when effectiveCpus <= availCpus (see
+              // oomRetryNeedsMoreCpus), so the scheduler's cpu bookkeeping is safe; a first attempt
+              // is never gated and keeps the base taskCpus. Barrier tasks are excluded above.
               val effectiveCpus = if (oomRetryCpusIncrement > 0) {
                 effectiveCpusFor(index, taskCpus)
               } else {
