@@ -21,6 +21,8 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NullType, StringType}
 
 /**
@@ -180,6 +182,22 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
       Seq("a.json" -> jsonBytes("{ not valid json")),
       extraOptions = Map("multiLine" -> "true"),
       schema = corruptSchema)
+  }
+
+  test("JSON: the DSv2 path refuses to infer a schema for an archive (UNABLE_TO_INFER_SCHEMA)") {
+    // Forcing json off the v1 source list routes the archive read through the DSv2 JsonTable, which
+    // cannot read archives and must fail with UNABLE_TO_INFER_SCHEMA, not parse raw bytes.
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        val e = intercept[AnalysisException] {
+          spark.read.options(readOptions).format(format).load(archive.getCanonicalPath)
+        }
+        assert(e.getCondition == "UNABLE_TO_INFER_SCHEMA",
+          s"expected UNABLE_TO_INFER_SCHEMA on the DSv2 path, got " +
+            s"${e.getCondition}: ${e.getMessage}")
+      }
+    }
   }
 }
 
