@@ -53,22 +53,35 @@ case class DynamicPruningSubquery(
   with Unevaluable
   with UnaryLike[Expression] {
 
+  private[sql] def broadcastValueProjection: Option[BroadcastValueProjection] =
+    DynamicPruningBroadcastValueMetadata.get(this)
+
+  private[sql] def withBroadcastValueProjection(
+      projection: Option[BroadcastValueProjection]): DynamicPruningSubquery =
+    DynamicPruningBroadcastValueMetadata.updated(this, projection)
+
+  private def copyBroadcastValueMetadataTo(
+      result: DynamicPruningSubquery): DynamicPruningSubquery =
+    DynamicPruningBroadcastValueMetadata.copy(this, result)
+
   override def child: Expression = pruningKey
 
   override def plan: LogicalPlan = buildQuery
 
   override def nullable: Boolean = false
 
-  override def withNewPlan(plan: LogicalPlan): DynamicPruningSubquery = copy(buildQuery = plan)
+  override def withNewPlan(plan: LogicalPlan): DynamicPruningSubquery =
+    copyBroadcastValueMetadataTo(copy(buildQuery = plan))
 
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): DynamicPruningSubquery = {
     // Updating outer attrs of DynamicPruningSubquery is unsupported; assert that they match
     // pruningKey and return a copy without any changes.
     assert(outerAttrs.size == 1 && outerAttrs.head.semanticEquals(pruningKey))
-    copy()
+    copyBroadcastValueMetadataTo(copy())
   }
 
-  override def withNewHint(hint: Option[HintInfo]): SubqueryExpression = copy(hint = hint)
+  override def withNewHint(hint: Option[HintInfo]): SubqueryExpression =
+    copyBroadcastValueMetadataTo(copy(hint = hint))
 
   override lazy val resolved: Boolean = {
     pruningKey.resolved &&
@@ -80,7 +93,20 @@ case class DynamicPruningSubquery(
       // DynamicPruningSubquery should only have a single broadcasting key since
       // there are no usage for multiple broadcasting keys at the moment.
       broadcastKeyIndices.size == 1 &&
-      child.dataType == buildKeys(broadcastKeyIndices.head).dataType
+      child.dataType == buildKeys(broadcastKeyIndices.head).dataType &&
+      broadcastValueProjection.forall { projection =>
+        projection.sourcePlan.resolved &&
+          projection.sourcePlan.deterministic &&
+          projection.sourceHashKeys.nonEmpty &&
+          projection.sourceHashKeys.forall(_.resolved) &&
+          projection.sourceHashKeys.forall(_.deterministic) &&
+          projection.sourceHashKeys.forall(
+            _.references.subsetOf(projection.sourcePlan.outputSet)) &&
+          projection.valueExpression.resolved &&
+          projection.valueExpression.deterministic &&
+          projection.valueExpression.references.subsetOf(projection.sourcePlan.outputSet) &&
+          projection.valueExpression.dataType == pruningKey.dataType
+      }
   }
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(DYNAMIC_PRUNING_SUBQUERY)
@@ -96,7 +122,7 @@ case class DynamicPruningSubquery(
   }
 
   override protected def withNewChildInternal(newChild: Expression): DynamicPruningSubquery =
-    copy(pruningKey = newChild)
+    copyBroadcastValueMetadataTo(copy(pruningKey = newChild))
 }
 
 /**

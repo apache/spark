@@ -127,23 +127,33 @@ case class InSubqueryExec(
 
   override def nullable: Boolean = child.nullable
   override def toString: String = s"$child IN ${plan.name}"
-  override def withNewPlan(plan: BaseSubqueryExec): InSubqueryExec = copy(plan = plan)
+  override def withNewPlan(plan: BaseSubqueryExec): InSubqueryExec =
+    copy(plan = plan, resultBroadcast = null, result = null)
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(IN_SUBQUERY_EXEC)
 
   def updateResult(): Unit = {
-    val rows = plan.executeCollect()
-    result = if (plan.output.length > 1) {
+    val (rows, unavailable) = ProjectedBroadcastValueSubqueryExec.resultOf(plan) match {
+      case Some(BroadcastValueResult.Available(values)) => (values, false)
+      case Some(BroadcastValueResult.Unavailable) => (Array.empty[InternalRow], true)
+      case None => (plan.executeCollect(), false)
+    }
+    result = if (unavailable) {
+      InSubqueryExecResultState.unavailableResult
+    } else if (plan.output.length > 1) {
       rows.asInstanceOf[Array[Any]]
     } else {
       rows.map(_.get(0, child.dataType))
     }
-    if (!isDynamicPruning) {
+    if (!isDynamicPruning && !isResultUnavailable) {
       resultBroadcast = plan.session.sparkContext.broadcast(result)
     }
   }
 
   // This is used only by DPP where we don't need broadcast the result.
-  def values(): Option[Array[Any]] = Option(result)
+  def values(): Option[Array[Any]] = if (isResultUnavailable) None else Option(result)
+
+  private[sql] def isResultUnavailable: Boolean =
+    InSubqueryExecResultState.isUnavailable(result)
 
   private def prepareResult(): Unit = {
     require(result != null || resultBroadcast != null, s"$this has not finished")
@@ -154,12 +164,12 @@ case class InSubqueryExec(
 
   override def eval(input: InternalRow): Any = {
     prepareResult()
-    inSet.eval(input)
+    if (isResultUnavailable) true else inSet.eval(input)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     prepareResult()
-    inSet.doGenCode(ctx, ev)
+    if (isResultUnavailable) Literal.TrueLiteral.doGenCode(ctx, ev) else inSet.doGenCode(ctx, ev)
   }
 
   override lazy val canonicalized: InSubqueryExec = {
@@ -173,6 +183,17 @@ case class InSubqueryExec(
 
   override protected def withNewChildInternal(newChild: Expression): InSubqueryExec =
     copy(child = newChild)
+}
+
+private[execution] object InSubqueryExecResultState {
+  private case object UnavailableMarker
+
+  def unavailableResult: Array[Any] = Array(UnavailableMarker)
+
+  def isUnavailable(result: Array[Any]): Boolean = {
+    result != null && result.length == 1 &&
+      (result(0).asInstanceOf[AnyRef] eq UnavailableMarker)
+  }
 }
 
 /**

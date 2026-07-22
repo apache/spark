@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, SampleMethod => SampleMethodV2, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsRuntimeV2Filtering}
-import org.apache.spark.sql.execution.{ScalarSubquery => ExecScalarSubquery}
+import org.apache.spark.sql.execution.{InSubqueryExec, ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters}
@@ -427,6 +427,9 @@ object PushDownUtils extends Logging {
       runtimeFilters: Seq[Expression],
       partitionFields: Seq[PartitionPredicateField]): Seq[PartitionPredicateImpl] = {
     val catalystExprs = runtimeFilters.flatMap {
+      case DynamicPruningExpression(in: InSubqueryExec) if in.isResultUnavailable =>
+        None
+      case DynamicPruningExpression(Literal.TrueLiteral) => None
       case DynamicPruningExpression(e) => Some(e)
       case _: DynamicPruning => None
       case f => Some(f.transform { case s: ExecScalarSubquery => s.toLiteral })

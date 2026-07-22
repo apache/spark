@@ -189,6 +189,8 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
         subqueriesMap.getOrElseUpdate(subquery.id, subqueriesMap.size + 1)
       case subquery: SubqueryBroadcastExec =>
         subqueriesMap.getOrElseUpdate(subquery.id, subqueriesMap.size + 1)
+      case subquery: ProjectedBroadcastValueSubqueryExec =>
+        subqueriesMap.getOrElseUpdate(subquery.id, subqueriesMap.size + 1)
       case ReusedSubqueryExec(subquery) =>
         subqueriesMap.getOrElseUpdate(subquery.id, subqueriesMap.size + 1)
       case _ => -1
