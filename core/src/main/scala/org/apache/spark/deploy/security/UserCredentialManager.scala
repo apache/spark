@@ -50,7 +50,7 @@ import org.apache.spark.util.ThreadUtils
  *      safetyMargin`
  *   5. Retries with exponential backoff on failure
  *
- * Started from `CoarseGrainedSchedulerBackend.start()` when
+ * Intended to be started from `CoarseGrainedSchedulerBackend.start()` when
  * `spark.security.credentials.enabled=true`, independently of
  * `UserGroupInformation.isSecurityEnabled()`.
  *
@@ -68,7 +68,7 @@ private[spark] class UserCredentialManager(
   // Thread-safe counter for exponential backoff calculation.
   // Accessed from both the caller of start() and the scheduled renewal thread.
   private val consecutiveFailures = new AtomicInteger(0)
-  private val maxBackoffMs: Long = TimeUnit.MINUTES.toMillis(10)
+  private val maxBackoffMs: Long = UserCredentialManager.MAX_BACKOFF_MS
 
   @volatile private var renewalExecutor: ScheduledExecutorService = _
 
@@ -89,8 +89,6 @@ private[spark] class UserCredentialManager(
    */
   def start(): Array[Byte] = {
     require(renewalExecutor == null, "start() must not be called more than once")
-    renewalExecutor =
-      ThreadUtils.newDaemonSingleThreadScheduledExecutor("user-credential-renewal")
 
     // Initial acquisition is fail-fast (no retry/backoff).
     // This ensures the application fails to start if credentials cannot be obtained,
@@ -112,6 +110,12 @@ private[spark] class UserCredentialManager(
 
     // Propagate initial credentials
     onCredentialsUpdate(serialized)
+
+    // Create the renewal executor only after successful initial acquisition.
+    // This avoids leaking a daemon thread if the fail-fast path throws, and
+    // keeps the require() guard valid for retry scenarios.
+    renewalExecutor =
+      ThreadUtils.newDaemonSingleThreadScheduledExecutor("user-credential-renewal")
 
     // Schedule first renewal
     val renewalDelay = computeRenewalDelay(ctx, earliestExpiry)
@@ -264,7 +268,7 @@ private[spark] class UserCredentialManager(
       // available on the classpath by probing CredentialProviderLoader.
       // This covers both built-in providers (e.g., connector/credential-aws for "s3a")
       // and third-party providers registered via ServiceLoader.
-      CredentialProviderLoader.discoverAllSchemes(credentialConfMap).asScala.toSet
+      CredentialProviderLoader.discoverAllSchemes().asScala.toSet
     }
   }
 
@@ -364,6 +368,12 @@ private[spark] object UserCredentialManager {
    * is targeted and only the URI scheme is meaningful.
    */
   private val SYNTHETIC_TARGET_AUTHORITY = "synthetic"
+
+  /**
+   * Maximum backoff delay between credential renewal retry attempts.
+   * Caps the exponential backoff to prevent excessively long gaps between retries.
+   */
+  private val MAX_BACKOFF_MS: Long = TimeUnit.MINUTES.toMillis(10)
 
   /**
    * Default renewal interval when neither the identity token nor service credentials

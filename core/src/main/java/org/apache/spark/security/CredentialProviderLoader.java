@@ -30,6 +30,8 @@ import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.annotation.Private;
 
 /**
@@ -232,10 +234,9 @@ public final class CredentialProviderLoader {
    * Intended for use by {@code UserCredentialManager} when no explicit scheme configuration
    * (e.g., {@code spark.security.credentials.provider.<scheme>}) is provided.
    *
-   * @param conf Spark configuration properties (used for potential future filtering)
    * @return a set of all supported scheme names (lowercased), possibly empty
    */
-  public static Set<String> discoverAllSchemes(Map<String, String> conf) {
+  public static Set<String> discoverAllSchemes() {
     List<CredentialProvider> providers = getProviders();
     Set<String> schemes = new java.util.HashSet<>();
     for (CredentialProvider provider : providers) {
@@ -252,6 +253,7 @@ public final class CredentialProviderLoader {
   /**
    * Resets the cached provider list and initialization tracking. Intended for testing only.
    */
+  @VisibleForTesting
   public static void resetForTesting() {
     synchronized (CredentialProviderLoader.class) {
       cachedProviders = null;
