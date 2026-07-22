@@ -171,6 +171,8 @@
 | org.apache.spark.sql.catalyst.expressions.ILike | ilike | SELECT ilike('Spark', '_Park') | struct<ilike(Spark, _Park):boolean> |
 | org.apache.spark.sql.catalyst.expressions.If | if | SELECT if(1 < 2, 'a', 'b') | struct<(IF((1 < 2), a, b)):string> |
 | org.apache.spark.sql.catalyst.expressions.In | in | SELECT 1 in(1, 2, 3) | struct<(1 IN (1, 2, 3)):boolean> |
+| org.apache.spark.sql.catalyst.expressions.InetAton | inet_aton | SELECT inet_aton('192.168.1.1') | struct<inet_aton(192.168.1.1):bigint> |
+| org.apache.spark.sql.catalyst.expressions.InetNtoa | inet_ntoa | SELECT inet_ntoa(3232235777) | struct<inet_ntoa(3232235777):string> |
 | org.apache.spark.sql.catalyst.expressions.InitCap | initcap | SELECT initcap('sPark sql') | struct<initcap(sPark sql):string> |
 | org.apache.spark.sql.catalyst.expressions.InlineExpressionBuilder | inline | SELECT inline(array(struct(1, 'a'), struct(2, 'b'))) | struct<col1:int,col2:string> |
 | org.apache.spark.sql.catalyst.expressions.InlineExpressionBuilder | inline_outer | SELECT inline_outer(array(struct(1, 'a'), struct(2, 'b'))) | struct<col1:int,col2:string> |
@@ -394,6 +396,7 @@
 | org.apache.spark.sql.catalyst.expressions.TryAesDecrypt | try_aes_decrypt | SELECT try_aes_decrypt(unhex('6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM') | struct<try_aes_decrypt(unhex(6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210), 0000111122223333, GCM, DEFAULT, ):binary> |
 | org.apache.spark.sql.catalyst.expressions.TryDivide | try_divide | SELECT try_divide(3, 2) | struct<try_divide(3, 2):double> |
 | org.apache.spark.sql.catalyst.expressions.TryElementAt | try_element_at | SELECT try_element_at(array(1, 2, 3), 2) | struct<try_element_at(array(1, 2, 3), 2):int> |
+| org.apache.spark.sql.catalyst.expressions.TryInetAton | try_inet_aton | SELECT try_inet_aton('192.168.1.1') | struct<try_inet_aton(192.168.1.1):bigint> |
 | org.apache.spark.sql.catalyst.expressions.TryMakeInterval | try_make_interval | SELECT try_make_interval(100, 11, 1, 1, 12, 30, 01.001001) | struct<try_make_interval(100, 11, 1, 1, 12, 30, 1.001001):interval> |
 | org.apache.spark.sql.catalyst.expressions.TryMakeTimestampExpressionBuilder | try_make_timestamp | SELECT try_make_timestamp(2014, 12, 28, 6, 30, 45.887) | struct<try_make_timestamp(2014, 12, 28, 6, 30, 45.887):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.TryMakeTimestampLTZExpressionBuilder | try_make_timestamp_ltz | SELECT try_make_timestamp_ltz(2014, 12, 28, 6, 30, 45.887) | struct<try_make_timestamp_ltz(2014, 12, 28, 6, 30, 45.887):timestamp> |

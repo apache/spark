@@ -968,6 +968,11 @@ object FunctionRegistry {
     expression[BitmapOrAgg]("bitmap_or_agg"),
     expression[BitmapAndAgg]("bitmap_and_agg"),
 
+    // ipv4 functions
+    expression[InetAton]("inet_aton"),
+    expression[InetNtoa]("inet_ntoa"),
+    expression[TryInetAton]("try_inet_aton"),
+
     // json
     expression[StructsToJson]("to_json"),
     expression[JsonToStructs]("from_json"),
