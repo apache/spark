@@ -73,6 +73,7 @@ ability to generate logical and physical plan for a given query using
    * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)
    * [File](sql-ref-syntax-qry-select-file.html)
    * [JOIN](sql-ref-syntax-qry-select-join.html)
+   * [ASOF JOIN](sql-ref-syntax-qry-select-asof-join.html)
    * [LIKE Predicate](sql-ref-syntax-qry-select-like.html)
    * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
    * [OFFSET Clause](sql-ref-syntax-qry-select-offset.html)
