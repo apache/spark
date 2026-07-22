@@ -22,7 +22,7 @@ import java.time.ZoneId
 import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.types.{IntervalUnit, TimeUnit}
-import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
+import org.apache.arrow.vector.types.pojo.{ArrowType, DictionaryEncoding, Field, FieldType}
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
@@ -455,6 +455,25 @@ class ArrowUtilsSuite extends SparkFunSuite {
       assert(!ArrowUtils.isInterchangeShapedField(listLike, largeVarTypes = true),
         arrowType.toString)
     }
+
+    // A dictionary-encoded field is rejected even though its type alone would pass: its record
+    // batches carry indices whose values live in separate dictionary batches the UDF stream
+    // never writes.
+    val dictField = new Field(
+      "value",
+      new FieldType(
+        true,
+        ArrowType.Utf8.INSTANCE,
+        new DictionaryEncoding(1L, false, new ArrowType.Int(32, true)),
+        null),
+      java.util.Collections.emptyList[Field]())
+    assert(!ArrowUtils.isInterchangeShapedField(dictField, largeVarTypes = false))
+    // The same field without the dictionary passes, isolating the dictionary as the reason.
+    val plainField = new Field(
+      "value",
+      new FieldType(true, ArrowType.Utf8.INSTANCE, null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(ArrowUtils.isInterchangeShapedField(plainField, largeVarTypes = false))
   }
 
   test("time") {

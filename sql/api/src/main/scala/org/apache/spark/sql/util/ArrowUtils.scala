@@ -574,7 +574,10 @@ private[sql] object ArrowUtils {
    * This is an allowlist of the shapes `toArrowField` can produce, not a blocklist of known-bad
    * shapes: an unrecognized Arrow type must fail the check, because the two failure directions
    * are not symmetric -- a shape wrongly rejected merely takes the row-based re-encoding fallback
-   * (slower, still correct), while a shape wrongly forwarded corrupts the stream.
+   * (slower, still correct), while a shape wrongly forwarded corrupts the stream. The same
+   * applies to dictionary-encoded fields: their record batches carry indices whose values live in
+   * separate dictionary batches this stream never writes, so they must take the fallback even
+   * though their type alone would pass.
    */
   def isInterchangeShapedField(field: Field, largeVarTypes: Boolean): Boolean = {
     val shapeOk = field.getType match {
@@ -585,7 +588,7 @@ private[sql] object ArrowUtils {
         // declares; plain structs are fine (their children are checked below).
         !(isTimestampNanosStructField(field) || isCalendarIntervalStructField(field))
       case ArrowType.Bool.INSTANCE | ArrowType.Null.INSTANCE | ArrowType.List.INSTANCE => true
-      case i: ArrowType.Int => i.getIsSigned && Set(8, 16, 32, 64).contains(i.getBitWidth)
+      case i: ArrowType.Int => i.getIsSigned && interchangeIntBitWidths.contains(i.getBitWidth)
       case f: ArrowType.FloatingPoint =>
         f.getPrecision == FloatingPointPrecision.SINGLE ||
         f.getPrecision == FloatingPointPrecision.DOUBLE
@@ -601,8 +604,13 @@ private[sql] object ArrowUtils {
       case _ => false
     }
     shapeOk &&
+    field.getDictionary == null &&
     field.getChildren.asScala.forall(child => isInterchangeShapedField(child, largeVarTypes))
   }
+
+  // Hoisted out of isInterchangeShapedField: it runs per field tree on every batch of the
+  // columnar Python UDF input path, and a literal Set would be re-allocated on each call.
+  private val interchangeIntBitWidths = Set(8, 16, 32, 64)
 
   def fromArrowField(field: Field): DataType = {
     field.getType match {
