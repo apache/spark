@@ -433,6 +433,28 @@ class ArrowUtilsSuite extends SparkFunSuite {
       java.util.Collections.emptyList[Field]())
     assert(!ArrowUtils.isInterchangeShapedField(viewField, largeVarTypes = false))
     assert(!ArrowUtils.isInterchangeShapedField(viewField, largeVarTypes = true))
+
+    // The check is an allowlist of shapes toArrowField can produce, so list-like types Spark
+    // never declares are rejected even though their children would individually pass -- an
+    // unrecognized shape must take the fallback, never the verbatim forward.
+    val intChild = new Field(
+      "element",
+      new FieldType(true, new ArrowType.Int(32, true), null, null),
+      java.util.Collections.emptyList[Field]())
+    Seq[ArrowType](
+      ArrowType.LargeList.INSTANCE,
+      ArrowType.ListView.INSTANCE,
+      ArrowType.LargeListView.INSTANCE,
+      new ArrowType.FixedSizeList(4)).foreach { arrowType =>
+      val listLike = new Field(
+        "value",
+        new FieldType(true, arrowType, null, null),
+        java.util.Collections.singletonList(intChild))
+      assert(!ArrowUtils.isInterchangeShapedField(listLike, largeVarTypes = false),
+        arrowType.toString)
+      assert(!ArrowUtils.isInterchangeShapedField(listLike, largeVarTypes = true),
+        arrowType.toString)
+    }
   }
 
   test("time") {
