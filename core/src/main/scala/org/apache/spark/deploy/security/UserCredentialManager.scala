@@ -336,7 +336,7 @@ private[spark] class UserCredentialManager(
       case _: RejectedExecutionException =>
         // Executor has been shut down (e.g., stop() called concurrently). This is expected
         // during application shutdown -- no further renewals will be scheduled.
-        logDebug("Renewal scheduling rejected - executor is shut down.")
+        logDebug(log"Renewal scheduling rejected - executor is shut down.")
     }
   }
 
