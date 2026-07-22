@@ -176,6 +176,7 @@ GROUP	true
 GROUPING	false
 HANDLER	false
 HAVING	true
+HISTORY	false
 HOUR	false
 HOURS	false
 IDENTIFIED	false
@@ -392,6 +393,7 @@ TIMESTAMP_NTZ	false
 TINYINT	false
 TO	true
 TOUCH	false
+TRACK	false
 TRAILING	true
 TRANSACTION	false
 TRANSACTIONS	false
