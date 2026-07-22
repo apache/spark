@@ -322,7 +322,7 @@ class DataType(google.protobuf.message.Message):
         PRECISION_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
         precision: builtins.int
-        """Number of fractional-second digits. Valid values are 7, 8, and 9."""
+        """Number of fractional-second digits. Valid values are 7, 8, and 9. If omitted, defaults to 9."""
         type_variation_reference: builtins.int
         def __init__(
             self,
@@ -359,7 +359,7 @@ class DataType(google.protobuf.message.Message):
         PRECISION_FIELD_NUMBER: builtins.int
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
         precision: builtins.int
-        """Number of fractional-second digits. Valid values are 7, 8, and 9."""
+        """Number of fractional-second digits. Valid values are 7, 8, and 9. If omitted, defaults to 9."""
         type_variation_reference: builtins.int
         def __init__(
             self,
