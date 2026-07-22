@@ -3333,6 +3333,27 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  test("SPARK-58211: subexpression elimination respects AND/OR short-circuit with chained ANDs") {
+    // A subexpression (1 / id) repeated inside a short-circuited operand of a chained AND/OR
+    // must not be hoisted and eagerly evaluated. For id = 0, `id != 0` is false, so the second
+    // operand should never be evaluated and no divide-by-zero should be raised. The subexpression
+    // is duplicated *inside* operand 2 (not split across operands 2 and 3) so the failure shape
+    // does not depend on how many operands the one-level peel happened to drop, and operand 3 is
+    // non-foldable to keep it in the plan. skipForShortcutExpr must peel every leading AND/OR
+    // operand, not just one, to make this hold for three or more operands.
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR.key -> "true") {
+      val andQuery =
+        "select id != 0 and (1 / id + 1 / id) > 0 and id >= 0 from range(0, 1, 1, 1)"
+      checkAnswer(sql(andQuery), Row(false))
+
+      val orQuery =
+        "select id == 0 or (1 / id + 1 / id) > 0 or id < 0 from range(0, 1, 1, 1)"
+      checkAnswer(sql(orQuery), Row(true))
+    }
+  }
+
   test("SPARK-29213: FilterExec should not throw NPE") {
     // Under ANSI mode, casting string '' as numeric will cause runtime error
     if (!conf.ansiEnabled) {
