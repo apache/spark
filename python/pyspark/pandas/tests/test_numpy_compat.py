@@ -98,6 +98,22 @@ class NumPyCompatTestsMixin:
 
                 self.assert_eq(result, np_func(pdf.a), almost=True)
 
+    def test_np_math_series_uses_native_functions(self):
+        for np_func, values in (
+            (np.cosh, [-2.0, 0.0, 2.0]),
+            (np.deg2rad, [-180.0, 0.0, 180.0]),
+            (np.log2, [0.5, 1.0, 2.0]),
+            (np.rad2deg, [-np.pi, 0.0, np.pi]),
+            (np.sinh, [-2.0, 0.0, 2.0]),
+            (np.tanh, [-2.0, 0.0, 2.0]),
+        ):
+            with self.subTest(name=np_func.__name__):
+                pdf = pd.DataFrame({"a": values})
+                psdf = ps.from_pandas(pdf)
+                result = np_func(psdf.a)
+
+                self.assert_eq(result, np_func(pdf.a), almost=True)
+
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 

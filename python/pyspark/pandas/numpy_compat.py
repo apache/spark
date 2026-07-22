@@ -39,8 +39,8 @@ unary_np_spark_mappings = {
     "conj": lambda _: NotImplemented,
     "conjugate": lambda _: NotImplemented,  # It requires complex type
     "cos": F.cos,
-    "cosh": pandas_udf(lambda s: np.cosh(s), DoubleType()),  # type: ignore[call-overload]
-    "deg2rad": pandas_udf(lambda s: np.deg2rad(s), DoubleType()),  # type: ignore[call-overload]
+    "cosh": F.cosh,
+    "deg2rad": F.radians,
     "degrees": F.degrees,
     "exp": F.exp,
     "exp2": pandas_udf(lambda s: np.exp2(s), DoubleType()),  # type: ignore[call-overload]
@@ -57,12 +57,12 @@ unary_np_spark_mappings = {
     "log": F.log,
     "log10": F.log10,
     "log1p": F.log1p,
-    "log2": pandas_udf(lambda s: np.log2(s), DoubleType()),  # type: ignore[call-overload]
+    "log2": F.log2,
     "logical_not": lambda c: ~(c.cast(BooleanType())),
     "matmul": lambda _: NotImplemented,  # Can return a NumPy array in pandas.
     "negative": lambda c: c * -1,
     "positive": lambda c: c,
-    "rad2deg": pandas_udf(lambda s: np.rad2deg(s), DoubleType()),  # type: ignore[call-overload]
+    "rad2deg": F.degrees,
     "radians": F.radians,
     "reciprocal": pandas_udf(  # type: ignore[call-overload]
         lambda s: np.reciprocal(s), DoubleType()
@@ -71,12 +71,12 @@ unary_np_spark_mappings = {
     "sign": lambda c: F.when(c == 0, 0).when(c < 0, -1).otherwise(1),
     "signbit": lambda c: F.when(c < 0, True).otherwise(False),
     "sin": F.sin,
-    "sinh": pandas_udf(lambda s: np.sinh(s), DoubleType()),  # type: ignore[call-overload]
+    "sinh": F.sinh,
     "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType()),  # type: ignore[call-overload]
     "sqrt": F.sqrt,
     "square": pandas_udf(lambda s: np.square(s), DoubleType()),  # type: ignore[call-overload]
     "tan": F.tan,
-    "tanh": pandas_udf(lambda s: np.tanh(s), DoubleType()),  # type: ignore[call-overload]
+    "tanh": F.tanh,
     "trunc": pandas_udf(lambda s: np.trunc(s), DoubleType()),  # type: ignore[call-overload]
 }
 
