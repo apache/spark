@@ -85,11 +85,22 @@ class NumPyCompatTestsMixin:
         with self.assertRaisesRegex(ValueError, "cannot join with no overlapping index names"):
             np.left_shift(psdf1, psdf2)
 
-    def test_np_inverse_hyperbolic_series_uses_native_functions(self):
+    def test_np_math_functions(self):
         for np_func, values in (
             (np.arccosh, [1.0, 2.0, 4.0]),
             (np.arcsinh, [-2.0, 0.0, 2.0]),
             (np.arctanh, [-0.5, 0.0, 0.5]),
+            (np.cosh, [-2.0, 0.0, 2.0]),
+            (np.deg2rad, [-180.0, 0.0, 180.0]),
+            (np.exp2, [-2.0, 0.0, 2.0]),
+            (np.fabs, [np.iinfo(np.int64).min, -2, 0, 2]),
+            (np.negative, [-2.0, 0.0, 2.0]),
+            (np.positive, [-2.0, 0.0, 2.0]),
+            (np.rad2deg, [-np.pi, 0.0, np.pi]),
+            (np.sign, [-2.0, -0.0, 0.0, 2.0, np.nan]),
+            (np.sinh, [-2.0, 0.0, 2.0]),
+            (np.square, [-2.0, 0.0, 2.0]),
+            (np.tanh, [-2.0, 0.0, 2.0]),
         ):
             with self.subTest(name=np_func.__name__):
                 pdf = pd.DataFrame({"a": values})
