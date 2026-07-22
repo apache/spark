@@ -17,18 +17,32 @@
 
 package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 /**
- * An interface for building a {@link RowLevelOperation}.
+ * Provides an informational summary of the REPLACE operation producing write.
  *
- * @since 3.3.0
+ * @since 4.3.0
  */
-@Experimental
-public interface RowLevelOperationBuilder {
+@Evolving
+public interface ReplaceSummary extends WriteSummary {
+
   /**
-   * Returns a {@link RowLevelOperation} that controls how Spark rewrites data
-   * for DELETE, UPDATE, MERGE, and REPLACE commands.
+   * Returns the number of source rows appended by the replace, including rows that share a scope
+   * tuple, or -1 if not found.
    */
-  RowLevelOperation build();
+  long numInsertedRows();
+
+  /**
+   * Returns the number of target rows removed because their scope tuple matched the source,
+   * or -1 if not found.
+   */
+  long numDeletedRows();
+
+  /**
+   * Returns the number of target rows physically re-emitted by copy-on-write replacement, or -1 if
+   * not found. This is 0 for merge-on-read row-level replacement, and it is not the number of
+   * logical target rows left unaffected by the replace.
+   */
+  long numCopiedRows();
 }

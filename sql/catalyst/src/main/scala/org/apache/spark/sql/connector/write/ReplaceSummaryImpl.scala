@@ -15,20 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write;
-
-import org.apache.spark.annotation.Experimental;
+package org.apache.spark.sql.connector.write
 
 /**
- * An interface for building a {@link RowLevelOperation}.
- *
- * @since 3.3.0
+ * Implementation of [[ReplaceSummary]] that provides REPLACE operation summary.
  */
-@Experimental
-public interface RowLevelOperationBuilder {
-  /**
-   * Returns a {@link RowLevelOperation} that controls how Spark rewrites data
-   * for DELETE, UPDATE, MERGE, and REPLACE commands.
-   */
-  RowLevelOperation build();
+private[sql] case class ReplaceSummaryImpl(
+    numInsertedRows: Long,
+    numDeletedRows: Long,
+    numCopiedRows: Long)
+  extends ReplaceSummary {
 }

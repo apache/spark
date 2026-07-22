@@ -3259,6 +3259,18 @@
     ],
     "sqlState" : "0A000"
   },
+  "INSERT_REPLACE_USING_DUPLICATE_SCOPE_COLUMN" : {
+    "message" : [
+      "INSERT INTO ... REPLACE USING references the scope column <columnName> more than once. Each scope column must be listed at most once."
+    ],
+    "sqlState" : "42701"
+  },
+  "INSERT_REPLACE_USING_NON_DETERMINISTIC_SOURCE_QUERY_NOT_SUPPORTED" : {
+    "message" : [
+      "INSERT INTO ... REPLACE USING does not support a non-deterministic source query. The source determines both which target rows are deleted and which rows are inserted, so it must be deterministic."
+    ],
+    "sqlState" : "0A000"
+  },
   "INSERT_REPLACE_USING_NOT_ENABLED" : {
     "message" : [
       "INSERT INTO ... REPLACE USING is not enabled. Set 'spark.sql.insertIntoReplaceUsing.enabled' to true to enable it."

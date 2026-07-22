@@ -40,7 +40,7 @@ trait RowLevelOperationWithOptions {
   def options: CaseInsensitiveStringMap
 }
 
-class InMemoryRowLevelOperationTable private (
+class InMemoryRowLevelOperationTable protected (
     name: String,
     columns: Array[Column],
     partitioning: Array[Transform],
@@ -87,14 +87,21 @@ class InMemoryRowLevelOperationTable private (
   // (operation, id, metadata, row)
   var lastWriteLog: Seq[InternalRow] = Seq.empty
 
-  override def copy(): Table = {
-    val copied = InMemoryRowLevelOperationTable.withColumns(
+  // Creates an empty instance for copy() to populate. Subclasses override this so that copying a
+  // loaded table preserves the concrete type (e.g. the row-level REPLACE opt-in marker), which the
+  // catalog's loadTable -> copy path would otherwise drop.
+  protected def newEmptyCopy(): InMemoryRowLevelOperationTable = {
+    InMemoryRowLevelOperationTable.withColumns(
       name = name,
       columns = columns(),
       partitioning = partitioning,
       properties = properties,
       constraints = constraints,
       tableId = id)
+  }
+
+  override def copy(): Table = {
+    val copied = newEmptyCopy()
     dataMap.synchronized {
       dataMap.foreach { case (key, splits) =>
         val copiedSplits = splits.map { bufferedRows =>
@@ -312,6 +319,9 @@ private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
 }
 
 object InMemoryRowLevelOperationTable {
+  // Test-only table property that selects the REPLACE-capable subclass on create/alter.
+  val SUPPORTS_ROW_LEVEL_REPLACE = "supports-row-level-replace"
+
   def withColumns(
       name: String,
       columns: Array[Column],
@@ -320,6 +330,62 @@ object InMemoryRowLevelOperationTable {
       constraints: Array[Constraint] = Array.empty,
       tableId: String = java.util.UUID.randomUUID().toString): InMemoryRowLevelOperationTable = {
     new InMemoryRowLevelOperationTable(
+      name, columns, partitioning, properties, constraints, tableId)
+  }
+}
+
+/**
+ * A row-level operation table that opts into the {@code REPLACE} command via
+ * [[SupportsRowLevelReplace]]. Used to exercise `INSERT INTO ... REPLACE USING` execution; the
+ * unmarked [[InMemoryRowLevelOperationTable]] is left as the negative case for the analysis gate.
+ */
+class InMemoryRowLevelReplaceTable protected (
+    name: String,
+    columns: Array[Column],
+    partitioning: Array[Transform],
+    properties: util.Map[String, String],
+    constraints: Array[Constraint],
+    tableId: String)
+  extends InMemoryRowLevelOperationTable(
+    name, columns, partitioning, properties, constraints, tableId)
+  with SupportsRowLevelReplace {
+
+  def this(
+      name: String,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint] = Array.empty,
+      tableId: String = java.util.UUID.randomUUID().toString) = {
+    this(
+      name = name,
+      columns = CatalogV2Util.structTypeToV2Columns(schema),
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints,
+      tableId = tableId)
+  }
+
+  override protected def newEmptyCopy(): InMemoryRowLevelOperationTable = {
+    InMemoryRowLevelReplaceTable.withColumns(
+      name = name,
+      columns = columns(),
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints,
+      tableId = id)
+  }
+}
+
+object InMemoryRowLevelReplaceTable {
+  def withColumns(
+      name: String,
+      columns: Array[Column],
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint] = Array.empty,
+      tableId: String = java.util.UUID.randomUUID().toString): InMemoryRowLevelReplaceTable = {
+    new InMemoryRowLevelReplaceTable(
       name, columns, partitioning, properties, constraints, tableId)
   }
 }

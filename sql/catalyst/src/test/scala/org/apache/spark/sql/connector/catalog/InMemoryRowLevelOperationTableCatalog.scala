@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.util
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.transactions.{Transaction, TransactionInfo}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
 class InMemoryRowLevelOperationTableCatalog
@@ -60,6 +64,43 @@ class InMemoryRowLevelOperationTableCatalog
     txn
   }
 
+  private def supportsRowLevelReplace(properties: util.Map[String, String]): Boolean = {
+    properties != null &&
+      properties.getOrDefault(InMemoryRowLevelOperationTable.SUPPORTS_ROW_LEVEL_REPLACE, "false") ==
+        "true"
+  }
+
+  protected def newRowLevelOperationTable(
+      name: String,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint],
+      tableId: String = java.util.UUID.randomUUID().toString): InMemoryRowLevelOperationTable = {
+    if (supportsRowLevelReplace(properties)) {
+      new InMemoryRowLevelReplaceTable(name, schema, partitioning, properties, constraints, tableId)
+    } else {
+      new InMemoryRowLevelOperationTable(
+        name, schema, partitioning, properties, constraints, tableId)
+    }
+  }
+
+  protected def newRowLevelOperationTableWithColumns(
+      name: String,
+      columns: Array[Column],
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint],
+      tableId: String): InMemoryRowLevelOperationTable = {
+    if (supportsRowLevelReplace(properties)) {
+      InMemoryRowLevelReplaceTable.withColumns(
+        name, columns, partitioning, properties, constraints, tableId)
+    } else {
+      InMemoryRowLevelOperationTable.withColumns(
+        name, columns, partitioning, properties, constraints, tableId)
+    }
+  }
+
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
@@ -69,7 +110,7 @@ class InMemoryRowLevelOperationTableCatalog
 
     val tableName = s"$name.${ident.quoted}"
     val schema = CatalogV2Util.v2ColumnsToStructType(tableInfo.columns)
-    val table = new InMemoryRowLevelOperationTable(
+    val table = newRowLevelOperationTable(
       tableName, schema, tableInfo.partitions, tableInfo.properties, tableInfo.constraints())
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
@@ -91,7 +132,7 @@ class InMemoryRowLevelOperationTableCatalog
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
       CatalogV2Util.structTypeToV2Columns(schema))
 
-    val newTable = InMemoryRowLevelOperationTable.withColumns(
+    val newTable = newRowLevelOperationTableWithColumns(
       name = table.name,
       columns = columnsWithIds,
       partitioning = partitioning,
@@ -134,12 +175,13 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
     }
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, propertyChanges)
     val schema = computeAlterTableSchema(table.schema, changes.toSeq)
-    val newTable = new InMemoryRowLevelOperationTable(
+    val newTable = newRowLevelOperationTable(
       name = table.name,
       schema = schema,
       partitioning = table.partitioning,
       properties = properties,
-      constraints = table.constraints)
+      constraints = table.constraints,
+      tableId = table.id)
     newTable.alterTableWithData(table.data, table.schema)
     newTable.setVersionAndValidatedVersionFrom(table)
     tables.put(ident, newTable)

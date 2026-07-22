@@ -216,6 +216,10 @@ A `Table` gains read and write abilities by implementing mix-in interfaces:
   batch or streaming writes. See [Write Path](#write-path).
 - **`SupportsRowLevelOperations`** enables `DELETE`, `UPDATE`, and `MERGE INTO` through
   a read-and-rewrite cycle. See [Row-Level DML](#row-level-dml).
+- **`SupportsRowLevelReplace`** additionally enables `INSERT INTO ... REPLACE USING (cols)`,
+  which lowers to `RowLevelOperation.Command.REPLACE`. A table must implement this in addition to
+  `SupportsRowLevelOperations`; otherwise `INSERT INTO ... REPLACE` is rejected during analysis and
+  the `REPLACE` command is never passed to the row-level operation builder.
 
 Additional mix-ins enable further capabilities:
 

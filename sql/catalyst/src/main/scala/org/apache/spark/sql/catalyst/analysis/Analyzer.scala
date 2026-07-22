@@ -631,6 +631,7 @@ class Analyzer(
       RewriteDeleteFromTable ::
       RewriteUpdateTable ::
       RewriteMergeIntoTable ::
+      RewriteReplaceUsing ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
       typeCoercionRules() ++
@@ -1346,7 +1347,20 @@ class Analyzer(
       case i: InsertIntoStatement
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
-            i.replaceCriteriaOpt.isDefined =>
+            i.replaceCriteriaOpt.exists(_.isInstanceOf[InsertReplaceUsing]) =>
+        val r = i.table.asInstanceOf[DataSourceV2Relation]
+        val replaceUsingCols = i.replaceCriteriaOpt.get.asInstanceOf[InsertReplaceUsing].cols
+        // Align the source to the target with standard INSERT resolution so RewriteReplaceUsing can
+        // compare scope columns and build the insert payload positionally by ordinal.
+        val alignedQuery = TableOutputResolver.resolveOutputColumns(
+          r.table.name, r.output, i.query, byName = i.byName, conf)
+        ReplaceUsingTable(r, replaceUsingCols, alignedQuery)
+
+      case i: InsertIntoStatement
+          if i.table.isInstanceOf[DataSourceV2Relation] &&
+            i.query.resolved &&
+            i.replaceCriteriaOpt.exists(_.isInstanceOf[InsertReplaceOn]) =>
+        // INSERT REPLACE ON remains unsupported for DSv2 tables.
         throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
           i.table.asInstanceOf[DataSourceV2Relation].table.name())
 
