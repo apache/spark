@@ -253,6 +253,9 @@ class BlockManagerMasterEndpoint(
     case SealRddChecksums(rddId) =>
       context.reply(sealRddChecksums(rddId))
 
+    case VerifyRddChecksumSeal(rddId) =>
+      context.reply(verifyRddChecksumSeal(rddId))
+
     case UpdateRDDBlockVisibility(taskId, visible) =>
       // This is to report the information that whether rdd blocks computed by task(with `taskId`)
       // can be turned to be visible. This is reported by DAGScheduler right after task completes.
@@ -969,6 +972,33 @@ class BlockManagerMasterEndpoint(
       }
     }
     unchecksummed
+  }
+
+  /**
+   * Invariant check for a sealed RDD: every block of `rddId` in the directory is sealed, and every
+   * replica the directory tracks for it carries the sealed content checksum. Returns `None` when
+   * the invariant holds, or `Some(diagnostic)` naming the first block that violates it. Runs on the
+   * message-handler thread, so it observes a consistent snapshot of the directory and the checksum
+   * maps.
+   */
+  private def verifyRddChecksumSeal(rddId: Int): Option[String] = {
+    val rddBlocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
+    rddBlocks.iterator.map { blockId =>
+      val sealedValue = Option(sealedChecksums.get(blockId)).map(_.longValue)
+      val perReplica = Option(blockChecksums.get(blockId)).getOrElse(mutable.HashMap.empty)
+      val locations = Option(blockLocations.get(blockId)).getOrElse(mutable.HashSet.empty)
+      if (sealedValue.isEmpty) {
+        Some(s"$blockId is present but not sealed")
+      } else if (locations.exists(bm =>
+          // Skip the external-shuffle-service pseudo-replica: it has no checksum entry of its own.
+          bm.port != externalShuffleServicePort &&
+            !perReplica.get(bm).contains(sealedValue.get))) {
+        Some(s"$blockId sealed to ${sealedValue.get} but the directory tracks a replica whose " +
+          s"checksum differs: locations=$locations checksums=$perReplica")
+      } else {
+        None
+      }
+    }.collectFirst { case Some(violation) => violation }
   }
 
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
