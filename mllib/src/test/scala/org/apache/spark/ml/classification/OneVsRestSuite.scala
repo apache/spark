@@ -35,6 +35,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.Metadata
+import org.apache.spark.util.SizeEstimator
 
 class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
 
@@ -66,6 +67,18 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     val lrModel = new LogisticRegressionModel("lr", Vectors.dense(0.0), 0.0)
     val model = new OneVsRestModel("ovr", Metadata.empty, Array(lrModel))
     ParamsSuite.checkParams(model)
+  }
+
+  test("SPARK-58181: estimatedSize includes only model-owned state") {
+    val metadata = NominalAttribute.defaultAttr.withNumValues(2).toMetadata()
+    val models = Array(
+      new LogisticRegressionModel("lr1", Vectors.dense(1.0, 2.0), 0.0),
+      new LogisticRegressionModel("lr2", Vectors.dense(3.0, 4.0), 0.0))
+    val model = new OneVsRestModel("ovr", metadata, models)
+
+    val expected = model.estimateMatadataSize + SizeEstimator.estimate(metadata) +
+      models.iterator.map(_.estimatedSize).sum
+    assert(model.estimatedSize === expected)
   }
 
   test("one-vs-rest: default params") {
