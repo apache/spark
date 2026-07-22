@@ -292,7 +292,11 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
       x * x
     }.collect()
     assert(results.toSet === Set(1, 4, 9, 16))
-    // 4 first attempts (all OOM) + 4 successful retries.
+    // Each task runs exactly twice regardless of scheduling order: attempt 0 always OOMs and
+    // attempt 1 always succeeds (maxFailures = 2 caps it there). So the total is a deterministic
+    // 4 * 2 = 8. The exact count is the assertion that matters here: fewer would mean a retry was
+    // lost or deadlocked on a phantom core, more would mean the executor was oversubscribed and
+    // ran a duplicate attempt.
     FailureSuiteState.synchronized {
       assert(FailureSuiteState.tasksRun === 8)
     }

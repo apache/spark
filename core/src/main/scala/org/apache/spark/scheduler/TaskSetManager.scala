@@ -152,8 +152,6 @@ private[spark] class TaskSetManager(
 
   // The number of CPUs a retry of the given task should request, given the ResourceProfile's
   // base taskCpus. For a task that has failed with OOM, this grows by oomRetryCpusIncrement per
-  // The number of CPUs a retry of the given task should request, given the ResourceProfile's
-  // base taskCpus. For a task that has failed with OOM, this grows by oomRetryCpusIncrement per
   // OOM failure, capped at the executor total cores when that is known. When the cap is unknown
   // the request stays at baseCpus (no growth), so it can never exceed the executor's real capacity
   // and become permanently unschedulable. BigDecimal arithmetic is exact; the result is floored at
@@ -165,7 +163,6 @@ private[spark] class TaskSetManager(
       case None => baseCpus
     }
     CpuAmount.normalize(capped.max(baseCpus))
-  }
   }
 
   // Add the tid of task into this HashSet when the task is killed by other attempt tasks.
@@ -568,9 +565,10 @@ private[spark] class TaskSetManager(
               // return null since the TaskDescription for the barrier task is not ready yet
               null
             } else {
-              // For an OOM retry, allocate extra CPUs (capped at the executor cores). dequeueTask
-              // guarantees effectiveCpus <= availCpus, so the scheduler's cpu bookkeeping is safe.
-              // Barrier tasks are excluded above and keep the ResourceProfile's taskCpus.
+              // For an OOM retry (numOomRetries > 0), allocate extra CPUs (capped at the executor
+              // cores). Such a retry is dequeued only when effectiveCpus <= availCpus (see
+              // oomRetryNeedsMoreCpus), so the scheduler's cpu bookkeeping is safe; a first attempt
+              // is never gated and keeps the base taskCpus. Barrier tasks are excluded above.
               val effectiveCpus = if (oomRetryCpusIncrement.signum > 0) {
                 effectiveCpusFor(index, taskCpus)
               } else {
