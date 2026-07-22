@@ -7913,9 +7913,12 @@ class AstBuilder extends DataTypeAstBuilder
             // grouping and aggregate expressions, respectively. This will let the
             // [[ResolveOrdinalInOrderByAndGroupBy]] rule detect the ordinal in the aggregate list
             // and replace it with the corresponding attribute from the child operator.
-            case UnresolvedOrdinal(v: Int) =>
+            case ordinal @ UnresolvedOrdinal(v: Int) =>
               newGroupingExpressions += UnresolvedOrdinal(newAggregateExpressions.length + 1)
-              newAggregateExpressions += UnresolvedPipeAggregateOrdinal(v)
+              // Preserve the ordinal's origin so an out-of-range error points at the position
+              // itself, not the whole pipe statement (matching regular GROUP BY).
+              newAggregateExpressions +=
+                CurrentOrigin.withOrigin(ordinal.origin) { UnresolvedPipeAggregateOrdinal(v) }
             case e: Expression =>
               newGroupingExpressions += e
               newAggregateExpressions += UnresolvedAlias(e, None)
