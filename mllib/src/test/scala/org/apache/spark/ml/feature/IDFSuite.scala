@@ -59,7 +59,7 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
 
     val maxSize = 2 * 1024
     assert(model.estimatedSize < maxSize,
-      s"model.estimatedSize (${model.estimatedSize}) should be less than $maxSize")
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
 
   test("compute IDF with default parameter") {
