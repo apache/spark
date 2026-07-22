@@ -45,7 +45,7 @@ unary_np_spark_mappings = {
     "exp": F.exp,
     "exp2": lambda c: F.pow(F.lit(2.0), c),
     "expm1": F.expm1,
-    "fabs": pandas_udf(lambda s: np.fabs(s), DoubleType()),  # type: ignore[call-overload]
+    "fabs": lambda c: F.abs(c.cast("double")),
     "floor": F.floor,
     "frexp": lambda _: NotImplemented,  # 'frexp' output lengths become different
     # and it cannot be supported via pandas UDF.

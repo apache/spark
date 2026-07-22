@@ -93,6 +93,7 @@ class NumPyCompatTestsMixin:
             (np.cosh, [-2.0, 0.0, 2.0]),
             (np.deg2rad, [-180.0, 0.0, 180.0]),
             (np.exp2, [-2.0, 0.0, 2.0]),
+            (np.fabs, [np.iinfo(np.int64).min, -2, 0, 2]),
             (np.log2, [0.5, 1.0, 2.0]),
             (np.negative, [-2.0, 0.0, 2.0]),
             (np.positive, [-2.0, 0.0, 2.0]),
