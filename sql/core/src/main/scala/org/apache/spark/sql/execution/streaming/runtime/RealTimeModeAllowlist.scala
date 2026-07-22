@@ -55,7 +55,17 @@ object RealTimeModeAllowlist extends Logging {
     "org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec",
     "org.apache.spark.sql.execution.exchange.BroadcastExchangeExec",
     "org.apache.spark.sql.execution.exchange.ReusedExchangeExec",
+    // A pipelined (streaming) shuffle repartitions a stateful query's input by key. In Real-Time
+    // Mode the DAGScheduler co-schedules the shuffle's producer and consumer stages via a
+    // PipelinedShuffleDependency (see IncrementalExecution's pipelined-shuffle rule), so the
+    // exchange is a supported member of a pipelined group rather than a materialization barrier.
+    "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec",
     "org.apache.spark.sql.execution.joins.BroadcastHashJoinExec",
+    // Streaming deduplication and the state-store access operators it plans into. These run in the
+    // pipelined-shuffle consumer stage, keyed by the same columns the shuffle repartitions on.
+    "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreRestoreExec",
+    "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec",
+    "org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDeduplicateExec",
     classOf[EventTimeWatermarkExec].getName
   )
 

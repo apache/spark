@@ -36,8 +36,9 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CommandExecutionMode, LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, SparkStrategy => Strategy, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
+import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
+import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
 import org.apache.spark.sql.execution.streaming.{StreamingErrors, StreamingQueryPlanTraverseHelper}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata, OffsetSeqMetadataBase}
@@ -663,7 +664,34 @@ class IncrementalExecution(
     }
   }
 
-  override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
+  /**
+   * For a Real-Time Mode batch, mark the shuffle exchanges as pipelined so the DAGScheduler
+   * co-schedules a stateful query's producer (source scan) and consumer (stateful operator) stages
+   * as one pipelined group -- records stream through a transient shuffle instead of the consumer
+   * waiting for the producer to fully materialize. The exchange carries the decision as a field
+   * (see ShuffleExchangeExec.pipelined); the PipelinedShuffleDependency it then builds is the whole
+   * opt-in -- routing to the streaming shuffle manager and pipelined-group scheduling both follow
+   * from that dependency type.
+   *
+   * Real-Time Mode is detected structurally by a RealTimeStreamScanExec leaf (there is no
+   * RTM-specific plan flag). Inert for a non-RTM batch, so the ordinary microbatch path is
+   * unchanged.
+   */
+  object MarkPipelinedShuffleForRealTimeMode extends Rule[SparkPlan] {
+    override def apply(plan: SparkPlan): SparkPlan = {
+      val isRealTimeMode = plan.exists(_.isInstanceOf[RealTimeStreamScanExec])
+      if (!isRealTimeMode) {
+        plan
+      } else {
+        plan.transformUp {
+          case s: ShuffleExchangeExec if !s.pipelined => s.copy(pipelined = true)
+        }
+      }
+    }
+  }
+
+  override def preparations: Seq[Rule[SparkPlan]] =
+    state +: (super.preparations :+ MarkPipelinedShuffleForRealTimeMode)
 
   /** no need to try-catch again as this is already done once */
   override def assertAnalyzed(): Unit = analyzed
