@@ -60,8 +60,8 @@ unary_np_spark_mappings = {
     "log2": F.log2,
     "logical_not": lambda c: ~(c.cast(BooleanType())),
     "matmul": lambda _: NotImplemented,  # Can return a NumPy array in pandas.
-    "negative": lambda c: c * -1,
-    "positive": lambda c: c,
+    "negative": F.negative,
+    "positive": F.positive,
     "rad2deg": F.degrees,
     "radians": F.radians,
     "reciprocal": pandas_udf(  # type: ignore[call-overload]
