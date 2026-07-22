@@ -100,7 +100,9 @@ trait SupportsArchiveFormat extends Logging {
 
   /**
    * Materializes each kept entry (those passing [[archiveEntryFilter]]) to a temp file under
-   * `localDir`, lazily one at a time, so only one entry occupies disk at once.
+   * `localDir`, lazily one at a time. Each `next()` writes a new temp file and does not remove
+   * earlier ones, so a caller that wants only one entry on disk at a time (e.g.
+   * [[readLocalizedEntries]]) must delete each file before advancing the iterator.
    *
    * @param path     the archive path
    * @param conf     Hadoop configuration used to open the archive
