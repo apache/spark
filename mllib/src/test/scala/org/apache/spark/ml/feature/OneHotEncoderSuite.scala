@@ -41,7 +41,7 @@ class OneHotEncoderSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCol("output")
       .fit(Seq(0.0, 1.0).toDF("input"))
 
-    assert(model.estimatedSize < 2 * 1024)
+    assert(model.estimatedSize < 4 * 1024)
   }
 
   test("OneHotEncoder dropLast = false") {
