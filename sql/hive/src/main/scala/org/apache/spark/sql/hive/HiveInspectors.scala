@@ -256,7 +256,8 @@ private[hive] trait HiveInspectors {
         messageParameters = Map.empty)
 
     case c => throw new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_3093", messageParameters = Map("c" -> c.toString))
+      errorClass = "UNSUPPORTED_HIVE_FUNCTION_TYPE.UNKNOWN_TYPE",
+      messageParameters = Map("c" -> c.toString))
   }
 
   private def isSubClassOf(t: Type, parent: Class[_]): Boolean = t match {
@@ -1267,8 +1268,7 @@ private[hive] trait HiveInspectors {
 
     private def decimalTypeInfo(decimalType: DecimalType): TypeInfo = decimalType match {
       case DecimalType.Fixed(precision, scale) => new DecimalTypeInfo(precision, scale)
-      case dt => throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3094", messageParameters = Map("dt" -> toSQLType(dt)))
+      case dt => throw unsupportedHiveType(dt)
     }
 
     def toTypeInfo: TypeInfo = dt match {
@@ -1297,9 +1297,7 @@ private[hive] trait HiveInspectors {
       case _: YearMonthIntervalType => intervalYearMonthTypeInfo
       // Hive has no TIME type, so there is no Hive TypeInfo to map it to.
       case _: TimeType => throw unsupportedHiveType(dt)
-      case dt =>
-        throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3095", messageParameters = Map("dt" -> toSQLType(dt)))
+      case dt => throw unsupportedHiveType(dt)
     }
   }
 }

@@ -8810,6 +8810,11 @@
           "raw java.util.Map. Spark cannot infer the key and value types."
         ]
       },
+      "UNKNOWN_TYPE" : {
+        "message" : [
+          "<c>."
+        ]
+      },
       "WILDCARD" : {
         "message" : [
           "wildcard type parameter. Spark cannot infer a concrete data type for wildcard type parameters, such as List<?> or Map<?, ?>."
@@ -11535,21 +11540,6 @@
   "_LEGACY_ERROR_TEMP_3089" : {
     "message" : [
       "Corrupted <typeName> in catalog: <numCols> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3093" : {
-    "message" : [
-      "Unsupported java type <c>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3094" : {
-    "message" : [
-      "<dt> is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3095" : {
-    "message" : [
-      "<dt> cannot be converted to Hive TypeInfo"
     ]
   },
   "_LEGACY_ERROR_TEMP_3096" : {
