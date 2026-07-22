@@ -74,7 +74,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
         the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
     functionType : int, optional
-        an enum value in :class:`~pyspark.sql.functions.ArrowUDFType`.
+        an enum value in :class:`pyspark.sql.functions.ArrowUDFType`.
         Default: SCALAR. This parameter exists for compatibility.
         Using Python type hints is encouraged.
 
