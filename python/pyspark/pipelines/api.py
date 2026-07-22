@@ -16,7 +16,7 @@
 #
 from typing import Callable, Dict, List, Literal, Optional, Union, overload
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.pipelines.graph_element_registry import get_active_graph_element_registry
 from pyspark.pipelines.type_error_utils import validate_optional_list_of_str_arg
 from pyspark.pipelines.flow import AutoCdcFlow, Flow, QueryFunction
@@ -536,7 +536,9 @@ def create_auto_cdc_flow(
     apply_as_deletes: Optional[Union[str, Column]] = None,
     column_list: Optional[Union[List[str], List[Column]]] = None,
     except_column_list: Optional[Union[List[str], List[Column]]] = None,
-    stored_as_scd_type: Optional[Literal[1, "1"]] = None,
+    stored_as_scd_type: Optional[Literal[1, 2, "1", "2"]] = None,
+    track_history_column_list: Optional[Union[List[str], List[Column]]] = None,
+    track_history_except_column_list: Optional[Union[List[str], List[Column]]] = None,
     name: Optional[str] = None,
 ) -> None:
     """
@@ -581,8 +583,20 @@ def create_auto_cdc_flow(
         PySpark Columns. Only one of column_list and except_column_list can be specified. When \
         this is specified, all columns in the `DataFrame` of the target table except those in \
         this list will be in the output table.
-    :param stored_as_scd_type: The SCD type for the target table. Only 1 (or "1") is supported. \
-        When not specified, the server default applies.
+    :param stored_as_scd_type: The SCD type for the target table. 1 (or "1") and 2 (or "2") are \
+        supported. When not specified, the server default applies.
+    :param track_history_column_list: SCD2-only. Columns whose value change opens a new history \
+        record; two consecutive upsert events for the same key are coalesced into the same \
+        history record when they agree on every tracked column. When not specified, every \
+        eligible selected user column is tracked. This should be a list of column identifiers \
+        without qualifiers, expressed as either Python strings or PySpark Columns. Only one of \
+        track_history_column_list and track_history_except_column_list can be specified, and \
+        both require stored_as_scd_type to be 2.
+    :param track_history_except_column_list: SCD2-only. Columns excluded from history tracking. \
+        This should be a list of column identifiers without qualifiers, expressed as either \
+        Python strings or PySpark Columns. Only one of track_history_column_list and \
+        track_history_except_column_list can be specified, and both require stored_as_scd_type \
+        to be 2.
     :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified, \
         this will build a "default flow" with name equal to the target name.
     """
@@ -627,6 +641,13 @@ def create_auto_cdc_flow(
     except_column_list = _normalize_optional_column_list(
         arg_name="except_column_list", column_list=except_column_list
     )
+    track_history_column_list = _normalize_optional_column_list(
+        arg_name="track_history_column_list", column_list=track_history_column_list
+    )
+    track_history_except_column_list = _normalize_optional_column_list(
+        arg_name="track_history_except_column_list",
+        column_list=track_history_except_column_list,
+    )
 
     if isinstance(sequence_by, str):
         sequence_by = _connect_expr(sequence_by)
@@ -652,13 +673,28 @@ def create_auto_cdc_flow(
             },
         )
 
-    if stored_as_scd_type is not None and str(stored_as_scd_type) != "1":
+    if stored_as_scd_type is not None and str(stored_as_scd_type) not in ("1", "2"):
         raise PySparkTypeError(
             errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
                 "arg_name": "stored_as_scd_type",
-                "expected_type": "Literal[1, '1']",
+                "expected_type": "Literal[1, 2, '1', '2']",
                 "arg_type": type(stored_as_scd_type).__name__,
+            },
+        )
+
+    # Track-history columns describe how consecutive upserts are coalesced into history records,
+    # a notion that only exists under SCD2. Reject them for any other SCD type. The engine
+    # enforces this too, but failing here gives a clearer, client-side error.
+    is_scd2 = stored_as_scd_type is not None and str(stored_as_scd_type) == "2"
+    if not is_scd2 and (
+        track_history_column_list is not None or track_history_except_column_list is not None
+    ):
+        raise PySparkValueError(
+            errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+            messageParameters={
+                "arg_names": "track_history_column_list, track_history_except_column_list",
+                "condition": "specified unless stored_as_scd_type is 2 (or '2')",
             },
         )
 
@@ -674,6 +710,8 @@ def create_auto_cdc_flow(
         column_list=column_list,
         except_column_list=except_column_list,
         stored_as_scd_type=stored_as_scd_type,
+        track_history_column_list=track_history_column_list,
+        track_history_except_column_list=track_history_except_column_list,
         source_code_location=source_code_location,
     )
 

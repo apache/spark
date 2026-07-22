@@ -59,8 +59,12 @@ class AutoCdcFlow:
     :param apply_as_deletes: Optional delete condition for the merge operation.
     :param column_list: Optional columns to include in the output table.
     :param except_column_list: Optional columns to exclude from the output table.
-    :param stored_as_scd_type: Optional SCD type for the target table. Only 1 (or "1") is \
-        supported.
+    :param stored_as_scd_type: Optional SCD type for the target table. 1 (or "1") and 2 (or "2") \
+        are supported.
+    :param track_history_column_list: Optional SCD2-only columns whose value change opens a new \
+        history record.
+    :param track_history_except_column_list: Optional SCD2-only columns excluded from history \
+        tracking.
     :param source_code_location: The location of the source code that created this flow.
     """
 
@@ -72,5 +76,7 @@ class AutoCdcFlow:
     apply_as_deletes: Optional[Column]
     column_list: Optional[List[Column]]
     except_column_list: Optional[List[Column]]
-    stored_as_scd_type: Optional[Literal[1, "1"]]
+    stored_as_scd_type: Optional[Literal[1, 2, "1", "2"]]
+    track_history_column_list: Optional[List[Column]]
+    track_history_except_column_list: Optional[List[Column]]
     source_code_location: SourceCodeLocation

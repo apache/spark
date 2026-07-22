@@ -1323,6 +1323,103 @@ class PythonPipelineSuite
     assert(mergeFlow.changeArgs.storedAsScdType == ScdType.Type1)
   }
 
+  // SCD2 flows are only asserted at registration (via buildAutoCdcFlow) rather than through
+  // resolve().validate(): the engine's SCD2 execution path is still landing in a parallel
+  // workstream and rejects SCD2 during graph analysis. These tests pin the API-to-ChangeArgs
+  // contract those changes plug into.
+  test("AutoCDC API: SCD2 with track_history_column_list forwards to ChangeArgs") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    stored_as_scd_type = 2,
+        |    track_history_column_list = ["value"],
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type2)
+    assert(
+      flow.changeArgs.trackHistorySelection.contains(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("value")))))
+  }
+
+  test("AutoCDC API: SCD2 with track_history_except_column_list forwards to ChangeArgs") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    stored_as_scd_type = 2,
+        |    track_history_except_column_list = ["timestamp"],
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type2)
+    assert(
+      flow.changeArgs.trackHistorySelection.contains(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("timestamp")))))
+  }
+
+  test("AutoCDC API: SCD2 without track-history columns leaves selection unset") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    stored_as_scd_type = 2,
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type2)
+    assert(flow.changeArgs.trackHistorySelection.isEmpty)
+  }
+
+  test("AutoCDC API: specifying both track_history column lists is rejected") {
+    val ex = intercept[RuntimeException] {
+      buildGraph("""
+          |@dp.table
+          |def src():
+          |  return spark.readStream.format("rate").load()
+          |
+          |dp.create_streaming_table("target")
+          |
+          |dp.create_auto_cdc_flow(
+          |    target = "target",
+          |    source = "src",
+          |    keys = ["value"],
+          |    sequence_by = "timestamp",
+          |    stored_as_scd_type = 2,
+          |    track_history_column_list = ["value"],
+          |    track_history_except_column_list = ["timestamp"],
+          |)
+          |""".stripMargin)
+    }
+    assert(
+      ex.getMessage.contains("AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST"))
+  }
+
   /**
    * Executes Python code in a separate process and returns the exit code.
    *
