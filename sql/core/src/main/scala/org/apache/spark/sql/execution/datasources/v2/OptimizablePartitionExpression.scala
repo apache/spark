@@ -472,10 +472,11 @@ case class SubstringPartitionExpr(
 case class DateFormatPartitionExpr(
     partitionColumn: String, format: String) extends OptimizablePartitionExpression {
 
-  private val partitionColumnUnixTimestamp = UnixTimestamp(partitionColumn.toPartCol, format)
+  private val partitionColumnUnixTimestamp =
+    UnixTimestamp(partitionColumn.toPartCol, format, failOnError = false)
 
   private def litUnixTimestamp(lit: Literal): UnixTimestamp =
-    UnixTimestamp(DateFormatClass(lit, format), format)
+    UnixTimestamp(DateFormatClass(lit, format), format, failOnError = false)
 
   override def lessThan(lit: Literal): Option[Expression] = {
     // As the partition column has truncated information, we need to turn "<" to "<=".
@@ -626,7 +627,7 @@ case class TruncDatePartitionExpr(partitionColumn: String, format: String)
 
   override def lessThanOrEqual(lit: Literal): Option[Expression] = {
     val expr = lit.dataType match {
-      case TimestampType | DateType | StringType =>
+      case TimestampType | DateType =>
         Some(partitionColumn.toPartCol <= TruncDate(lit, Literal(format)))
       case _ => None
     }
@@ -648,7 +649,7 @@ case class TruncDatePartitionExpr(partitionColumn: String, format: String)
 
   override def greaterThanOrEqual(lit: Literal): Option[Expression] = {
     val expr = lit.dataType match {
-      case TimestampType | DateType | StringType =>
+      case TimestampType | DateType =>
         Some(partitionColumn.toPartCol >= TruncDate(lit, Literal(format)))
       case _ => None
     }

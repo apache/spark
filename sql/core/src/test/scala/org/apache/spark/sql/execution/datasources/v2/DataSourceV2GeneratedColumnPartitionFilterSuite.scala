@@ -278,10 +278,13 @@ class DataSourceV2GeneratedColumnPartitionFilterSuite extends QueryTest with Dat
 
         // Under each read policy, unix_timestamp() returns null for the partition written in the
         // other policy's format; the derived filter's IS NULL guard must keep it so no row is lost.
-        Seq("CORRECTED", "LEGACY").foreach { policy =>
+        for {
+          policy <- Seq("CORRECTED", "LEGACY")
+          ansi <- Seq("true", "false")
+        } {
           withSQLConf(
             "spark.sql.legacy.timeParserPolicy" -> policy,
-            "spark.sql.ansi.enabled" -> "false") {
+            "spark.sql.ansi.enabled" -> ansi) {
             val df = sql(query)
             checkAnswer(df, Seq(Row(1), Row(2)))
             assert(pushedPartitionFilterRefs(df).contains("month"),
@@ -345,6 +348,31 @@ class DataSourceV2GeneratedColumnPartitionFilterSuite extends QueryTest with Dat
           "expected a derived partition filter on `monthStart` to be pushed")
         assert(numPartitionsRead(df) == 1,
           "expected only the matching month partition to be read")
+      }
+    }
+  }
+
+  test("trunc-partitioned string column does not derive unsafe range partition filters") {
+    withCatalystFilterCatalog {
+      withTable(s"$cat.ns.events") {
+        sql(
+          s"""CREATE TABLE $cat.ns.events (
+             |  id INT,
+             |  eventDateStr STRING,
+             |  quarterStart DATE GENERATED ALWAYS AS (trunc(eventDateStr, 'quarter'))
+             |) USING foo PARTITIONED BY (quarterStart)""".stripMargin)
+        sql(
+          s"""INSERT INTO $cat.ns.events (id, eventDateStr) VALUES
+             |  (1, '10000-01-01'),
+             |  (2, '2022-05-01')""".stripMargin)
+
+        // Lexicographic order differs from chronological order for 5-digit years, so a range
+        // filter on the string base column must not derive a partition filter on `quarterStart`.
+        val df = sql(s"SELECT id FROM $cat.ns.events WHERE eventDateStr < '2022-04-01'")
+        checkAnswer(df, Row(1))
+        assert(!pushedPartitionFilterRefs(df).contains("quarterStart"),
+          "expected no derived partition filter on `quarterStart` for a string range filter")
+        assert(numPartitionsRead(df) == 2, "expected all partitions to be read (no pruning)")
       }
     }
   }

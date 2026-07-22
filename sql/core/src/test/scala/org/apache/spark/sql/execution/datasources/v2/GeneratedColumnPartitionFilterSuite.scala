@@ -357,9 +357,9 @@ class GeneratedColumnPartitionFilterSuite
     Seq(("date", DateType, "TRUNC(eventDateStr, 'quarter')")),
     "eventDateStr",
     TruncDatePartitionExpr("date", "quarter"),
-    "eventDateStr < '2022-04-01'" -> Seq(orNull("date <= DATE '2022-04-01'")),
+    "eventDateStr < '2022-04-01'" -> Nil,
     "eventDateStr = '2022-04-01'" -> Seq(orNull("date = DATE '2022-04-01'")),
-    "eventDateStr > '2022-04-01'" -> Seq(orNull("date >= DATE '2022-04-01'")),
+    "eventDateStr > '2022-04-01'" -> Nil,
     "eventDateStr is null" -> Seq("(date IS NULL)"))
 
   testOptimizablePartitionExpression(
