@@ -191,7 +191,8 @@ case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
     shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS,
-    advisoryPartitionSize: Option[Long] = None)
+    advisoryPartitionSize: Option[Long] = None,
+    pipelined: Boolean = false)
   extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =
@@ -252,7 +253,8 @@ case class ShuffleExchangeExec(
         child.output,
         outputPartitioning,
         serializer,
-        writeMetrics)
+        writeMetrics,
+        pipelined)
       metrics("numPartitions").set(dep.partitioner.numPartitions)
       val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
       SQLMetrics.postDriverMetricUpdates(
@@ -346,7 +348,8 @@ object ShuffleExchangeExec {
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,
       serializer: Serializer,
-      writeMetrics: Map[String, SQLMetric])
+      writeMetrics: Map[String, SQLMetric],
+      pipelined: Boolean = false)
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
@@ -537,15 +540,30 @@ object ShuffleExchangeExec {
       }
     }
     val dependency =
-      new ShuffleDependency[Int, InternalRow, InternalRow](
-        rddWithPartitionIds,
-        new PartitionIdPassthrough(part.numPartitions),
-        serializer,
-        shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
-        rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize),
-        _checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled,
-        checksumMismatchQueryLevelRollbackEnabled =
-          SQLConf.get.shuffleChecksumMismatchQueryLevelRollbackEnabled)
+      if (pipelined) {
+        // A pipelined shuffle is transient and incrementally readable: the DAGScheduler
+        // co-schedules its producer and consumer stages instead of materializing the shuffle
+        // first. The PipelinedShuffleDependency type is the entire opt-in -- routing to the
+        // streaming shuffle manager and pipelined-group co-scheduling both follow from it. The
+        // checksum-mismatch retry knobs are intentionally not carried over: a transient shuffle is
+        // never recomputed, so PipelinedShuffleDependency does not expose them (they stay off).
+        new PipelinedShuffleDependency[Int, InternalRow, InternalRow](
+          rddWithPartitionIds,
+          new PartitionIdPassthrough(part.numPartitions),
+          serializer,
+          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
+          rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize))
+      } else {
+        new ShuffleDependency[Int, InternalRow, InternalRow](
+          rddWithPartitionIds,
+          new PartitionIdPassthrough(part.numPartitions),
+          serializer,
+          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
+          rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize),
+          _checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled,
+          checksumMismatchQueryLevelRollbackEnabled =
+            SQLConf.get.shuffleChecksumMismatchQueryLevelRollbackEnabled)
+      }
 
     dependency
   }
