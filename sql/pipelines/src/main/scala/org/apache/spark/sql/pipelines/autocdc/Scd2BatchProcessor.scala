@@ -815,14 +815,25 @@ case class Scd2BatchProcessor(
    * Drop delete-encoded rows (tombstones and decomposition tails) that became redundant after
    * reconciliation.
    *
-   * A tombstone or decomposition tail is redundant when the immediately preceding row's reconciled
-   * [[endAtColName]] equals its own sequence: the preceding upsert already encodes the delete
-   * boundary, so the standalone delete-encoded row should no longer be routed to aux.
+   * The rule is the same for both row kinds: a delete-encoded row encodes a delete boundary in its
+   * [[endAtColName]], and it is redundant once the immediately preceding reconciled upsert closes
+   * (its [[endAtColName]]) exactly on that same boundary. When they coincide, the closed upsert
+   * already carries the boundary, so the standalone delete-encoded row can be dropped rather than
+   * routed to aux. Only the preceding upsert's `endAt` matters here; its `startAt` (identity) is
+   * irrelevant to the comparison.
    *
-   * For example, an open upsert `[startAt=10, endAt=null)` followed by a tombstone at `15`
-   * reconciles into a closed upsert `[10, 15)`, making the tombstone redundant. Likewise, an
-   * existing closed `[10, 20)` bisected by an event at `15` reconciles the event into `[15, 20)`,
-   * making the `[null, 20)` decomposition tail redundant.
+   * Both examples reduce to that single check - the preceding upsert's reconciled `endAt` equals
+   * the delete-encoded row's boundary:
+   *   - Tombstone: an open upsert `[startAt=10, endAt=null)` followed by a tombstone at `15`
+   *     reconciles into a closed upsert `[10, 15)`. Its `endAt=15` matches the tombstone's
+   *     boundary `15`, so the tombstone is redundant.
+   *   - Decomposition tail: an existing closed `[10, 20)` is bisected by an out-of-order event at
+   *     `15`. Decomposition first splits the original row into an open head `[10, null)` plus a
+   *     decomposition tail `[null, 20)` - a synthetic row with a null recordStartAt that carries
+   *     the original right boundary `20` so it can be re-closed later. The bisecting event then
+   *     reconciles into `[15, 20)`, whose `endAt=20` matches the tail's boundary `20`, so the tail
+   *     is redundant. (A tail that does *not* coincide with a preceding upsert survives and is
+   *     later turned into a tombstone by [[promoteDecompositionTailsToTombstones]].)
    */
   private[autocdc] def dropLeftoverDeletesPostReconciliation(
       reconciledDf: DataFrame): DataFrame = {
@@ -891,6 +902,9 @@ case class Scd2BatchProcessor(
       case c if c == Scd2BatchProcessor.startAtColName =>
         val metadata = reconciledDf.schema(c).metadata
         F.when(isDecompositionTail, endAt).otherwise(startAt).as(c, metadata)
+      // The other cases match framework columns whose names are known and identifier-safe; only
+      // this default case handles arbitrary user-column names, which may contain dots or other
+      // special characters, so it is the only one that needs quoting.
       case c =>
         F.col(QuotingUtils.quoteIdentifier(c))
     }
