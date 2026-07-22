@@ -39,6 +39,7 @@ scripts under ``sbin/``.
 
 import argparse
 import contextlib
+import getpass
 import json
 import os
 import signal
@@ -48,7 +49,7 @@ import sys
 import tempfile
 import time
 import uuid
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict, Optional
 
 from pyspark.errors import PySparkRuntimeError
 
@@ -56,13 +57,6 @@ _SERVER_CLASS = "org.apache.spark.sql.connect.service.SparkConnectServer"
 # A fixed SPARK_IDENT_STRING keeps the spark-daemon.sh pid and log file names stable
 # regardless of $USER.
 _SPARK_IDENT = "local-connect"
-
-
-def _start_failed(reason: str) -> PySparkRuntimeError:
-    return PySparkRuntimeError(
-        errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
-        messageParameters={"reason": reason},
-    )
 
 
 def _pid_alive(pid: int) -> bool:
@@ -76,67 +70,6 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def _per_user_runtime_dir() -> str:
-    try:
-        owner = str(os.getuid())
-    except AttributeError:  # Windows; the reuse path is rejected there anyway
-        import getpass
-
-        owner = getpass.getuser()
-    path = os.path.join(tempfile.gettempdir(), "spark-connect-{}".format(owner))
-    try:
-        os.mkdir(path, 0o700)
-    except FileExistsError:
-        # The temp dir is world-writable; never trust a directory someone else created.
-        if hasattr(os, "getuid") and os.stat(path).st_uid != os.getuid():
-            raise _start_failed("{} exists but is not owned by the current user".format(path))
-        os.chmod(path, 0o700)
-    return path
-
-
-class LocalConnectServer:
-    """One persistent local Connect server, as recorded in the discovery file."""
-
-    def __init__(self, host: str, port: int, token: str, pid: int, spark_version: str):
-        self.host = host
-        self.port = port
-        self.token = token
-        self.pid = pid
-        self.spark_version = spark_version
-
-    @property
-    def url(self) -> str:
-        return "sc://{}:{}".format(self.host, self.port)
-
-    def is_listening(self) -> bool:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(0.5)
-            return sock.connect_ex((self.host, self.port)) == 0
-
-    def is_reusable(self) -> bool:
-        """Whether this client can reuse the server: same Spark version, pid alive, port open.
-
-        The pid probe runs only on POSIX: on Windows ``os.kill(pid, 0)`` terminates the
-        target process instead of testing it, so there the port probe is the only liveness
-        signal.
-        """
-        from pyspark.version import __version__
-
-        if self.spark_version != __version__:
-            return False
-        if os.name == "posix" and not _pid_alive(self.pid):
-            return False
-        return self.is_listening()
-
-    def stop(self) -> bool:
-        """Best-effort SIGTERM to the server JVM."""
-        try:
-            os.kill(self.pid, signal.SIGTERM)
-            return True
-        except OSError:
-            return False
-
-
 class Discovery:
     """Reads and writes the discovery file recording the persistent local server.
 
@@ -144,19 +77,54 @@ class Discovery:
     ``SPARK_LOCAL_CONNECT_DISCOVERY`` points; the daemon's pid file and logs sit next to it.
     """
 
+    @staticmethod
+    def _runtime_dir() -> str:
+        path = os.path.join(tempfile.gettempdir(), "spark-connect-{}".format(getpass.getuser()))
+        if os.path.exists(path):
+            os.chmod(path, 0o700)
+        else:
+            os.mkdir(path, 0o700)
+        return path
+
     def __init__(self, path: Optional[str] = None):
         self.path = (
             path
             or os.environ.get("SPARK_LOCAL_CONNECT_DISCOVERY")
-            or os.path.join(_per_user_runtime_dir(), "connect-local.json")
+            or os.path.join(self._runtime_dir(), "connect-local.json")
         )
+        self._lock_file = None
 
     @property
     def directory(self) -> str:
         return os.path.dirname(self.path) or os.getcwd()
 
-    def load(self) -> Optional[LocalConnectServer]:
+    @property
+    def daemon_pid_path(self) -> str:
+        return os.path.join(
+            self.directory, "spark-{}-{}-1.pid".format(_SPARK_IDENT, _SERVER_CLASS)
+        )
+
+    def __enter__(self) -> "Discovery":
+        parent = os.path.dirname(self.path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        self._lock_file = open(self.path + ".lock", "a+")
+        import fcntl
+
+        fcntl.flock(self._lock_file.fileno(), fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        assert self._lock_file is not None
+        self._lock_file.close()
+        self._lock_file = None
+
+    def _assert_locked(self) -> None:
+        assert self._lock_file is not None, "Discovery must be used as a context manager"
+
+    def load(self) -> Optional[Dict[str, Any]]:
         """Read the discovery file, returning ``None`` if it is absent or malformed."""
+        self._assert_locked()
         try:
             with open(self.path, "r") as f:
                 data = json.load(f)
@@ -165,73 +133,93 @@ class Discovery:
         if not isinstance(data, dict):
             return None
         try:
-            server = LocalConnectServer(
-                host=data["host"],
-                port=int(data["port"]),
-                token=data["token"],
-                pid=int(data["pid"]),
-                spark_version=data["spark_version"],
-            )
+            data["port"] = int(data["port"])
+            data["pid"] = int(data["pid"])
         except (KeyError, TypeError, ValueError):
             return None
-        if not all(isinstance(v, str) for v in (server.host, server.token, server.spark_version)):
+        if not all(isinstance(data[k], str) for k in ("host", "token", "spark_version")):
             return None
-        return server
+        return data
 
-    def save(self, server: LocalConnectServer) -> None:
+    def save(self, data: Dict[str, Any]) -> None:
         """Atomically write the discovery file with ``0600`` perms; it holds the auth token."""
+        self._assert_locked()
         parent = os.path.dirname(self.path)
         if parent:
             os.makedirs(parent, exist_ok=True)
-        payload = {
-            "host": server.host,
-            "port": server.port,
-            "token": server.token,
-            "pid": server.pid,
-            "spark_version": server.spark_version,
-        }
         tmp = "{}.{}.tmp".format(self.path, os.getpid())
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as f:
-            f.write(json.dumps(payload))
+            f.write(json.dumps(data))
         os.replace(tmp, self.path)
 
     def clear(self) -> None:
+        self._assert_locked()
         with contextlib.suppress(OSError):
             os.remove(self.path)
-
-    @contextlib.contextmanager
-    def lock(self) -> Iterator[None]:
-        """Cross-process file lock serializing server start-up.
-
-        Without ``fcntl`` this is a no-op: racing callers may each start a server, and the
-        losers reconnect to the one that wins the discovery-file update.
-        """
-        try:
-            import fcntl
-        except ImportError:
-            yield
-            return
-        path = self.path + ".lock"
-        parent = os.path.dirname(path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            yield
-        finally:
-            os.close(fd)  # closing the fd releases the flock
+        with contextlib.suppress(OSError):
+            os.remove(self.daemon_pid_path)
 
 
-def _daemon_pid_file(directory: str) -> str:
-    """The pid file spark-daemon.sh maintains for the server started by this module."""
-    return os.path.join(directory, "spark-{}-{}-1.pid".format(_SPARK_IDENT, _SERVER_CLASS))
+class LocalConnectServer:
+    """The persistent server described by a locked ``Discovery``."""
+
+    def __init__(self, discovery: Discovery):
+        self._discovery = discovery
+        self._reload()
+
+    def _reload(self) -> None:
+        data = self._discovery.load()
+        self.host = data["host"] if data else None
+        self.port = data["port"] if data else None
+        self.token = data["token"] if data else None
+        self.pid = data["pid"] if data else None
+        self.spark_version = data["spark_version"] if data else None
+
+    @property
+    def url(self) -> str:
+        assert self.host is not None and self.port is not None
+        return "sc://{}:{}".format(self.host, self.port)
+
+    def is_listening(self) -> bool:
+        if self.host is None or self.port is None:
+            return False
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.5)
+            return sock.connect_ex((self.host, self.port)) == 0
+
+    def is_reusable(self) -> bool:
+        from pyspark.version import __version__
+
+        if self.spark_version != __version__ or self.pid is None:
+            return False
+        if os.name == "posix" and not _pid_alive(self.pid):
+            return False
+        return self.is_listening()
+
+    def reuse_or_start(self, master: str, opts: Dict[str, Any]) -> str:
+        if not self.is_reusable():
+            ServerLauncher(master, opts, self._discovery).launch()
+            self._reload()
+        assert self.token is not None
+        os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = self.token
+        return self.url
+
+    def stop(self) -> bool:
+        stopped = False
+        if self.pid is not None:
+            try:
+                os.kill(self.pid, signal.SIGTERM)
+                stopped = True
+            except OSError:
+                pass
+        self._discovery.clear()
+        return stopped
 
 
 class ServerLauncher:
     """Starts a persistent local server via ``sbin/start-connect-server.sh`` and waits until
-    it accepts connections. Callers must hold ``Discovery.lock()``.
+    it accepts connections. Callers must hold a ``Discovery`` context.
     """
 
     _READY_TIMEOUT = 120
@@ -242,16 +230,16 @@ class ServerLauncher:
         self._discovery = discovery
         self._directory = discovery.directory
         self._log_dir = os.path.join(self._directory, "logs")
-        self._pid_file = _daemon_pid_file(self._directory)
+        self._pid_file = discovery.daemon_pid_path
 
-    def launch(self) -> LocalConnectServer:
+    def launch(self) -> None:
         os.makedirs(self._directory, exist_ok=True)
         token = self._token()
         port = self._pick_port()
         conf_file = self._write_seed_properties()
         try:
             self._run_script(port, token, conf_file)
-            return self._await_ready(port, token)
+            self._await_ready(port, token)
         finally:
             if conf_file is not None:
                 with contextlib.suppress(OSError):
@@ -344,7 +332,10 @@ class ServerLauncher:
         spark_home = os.environ.get("SPARK_HOME") or _find_spark_home()
         script = os.path.join(spark_home, "sbin", "start-connect-server.sh")
         if not os.path.isfile(script):
-            raise _start_failed("cannot find {}".format(script))
+            raise PySparkRuntimeError(
+                errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+                messageParameters={"reason": "cannot find {}".format(script)},
+            )
 
         env = dict(os.environ)
         for var in ("SPARK_REMOTE", "SPARK_LOCAL_REMOTE", "SPARK_CONNECT_MODE_ENABLED"):
@@ -378,33 +369,54 @@ class ServerLauncher:
                 # spark-daemon.sh refuses to start while its pid file points at a live
                 # process -- here a server this client just rejected as not reusable
                 # (e.g. after a Spark upgrade).
-                raise _start_failed(
-                    "a local Connect server that is not reusable by this client is already "
-                    "running (pid {}); stop it with "
-                    "`python -m pyspark.sql.connect.local_server --stop`".format(stale_pid)
+                raise PySparkRuntimeError(
+                    errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+                    messageParameters={
+                        "reason": "a local Connect server that is not reusable by this client is "
+                        "already running (pid {}); stop it with "
+                        "`python -m pyspark.sql.connect.local_server --stop`".format(stale_pid)
+                    },
                 )
             output = (result.stderr or "") + (result.stdout or "")
             last_line = output.strip().splitlines()[-1] if output.strip() else ""
-            raise _start_failed(
-                "start-connect-server.sh exited with code {}: {}".format(
-                    result.returncode, last_line
-                )
+            raise PySparkRuntimeError(
+                errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+                messageParameters={
+                    "reason": "start-connect-server.sh exited with code {}: {}".format(
+                        result.returncode, last_line
+                    )
+                },
             )
 
-    def _await_ready(self, port: int, token: str) -> LocalConnectServer:
+    def _await_ready(self, port: int, token: str) -> None:
         from pyspark.version import __version__
 
         deadline = time.time() + self._READY_TIMEOUT
         while time.time() < deadline:
             pid = self._daemon_pid()
             if pid is not None:
-                server = LocalConnectServer("localhost", port, token, pid, __version__)
-                if server.is_listening():
-                    self._discovery.save(server)
-                    return server
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                    sock.settimeout(0.5)
+                    listening = sock.connect_ex(("localhost", port)) == 0
+                if listening:
+                    self._discovery.save(
+                        {
+                            "host": "localhost",
+                            "port": port,
+                            "token": token,
+                            "pid": pid,
+                            "spark_version": __version__,
+                        }
+                    )
+                    return
                 if not _pid_alive(pid):
-                    raise _start_failed(
-                        "the server exited during start-up; see logs under {}".format(self._log_dir)
+                    raise PySparkRuntimeError(
+                        errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+                        messageParameters={
+                            "reason": "the server exited during start-up; see logs under {}".format(
+                                self._log_dir
+                            )
+                        },
                     )
             time.sleep(0.25)
 
@@ -412,10 +424,12 @@ class ServerLauncher:
         if pid is not None:
             with contextlib.suppress(OSError):
                 os.kill(pid, signal.SIGTERM)
-        raise _start_failed(
-            "the server did not become ready within {} seconds; see logs under {}".format(
-                self._READY_TIMEOUT, self._log_dir
-            )
+        raise PySparkRuntimeError(
+            errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+            messageParameters={
+                "reason": "the server did not become ready within {} seconds; "
+                "see logs under {}".format(self._READY_TIMEOUT, self._log_dir)
+            },
         )
 
 
@@ -427,39 +441,24 @@ def reuse_or_start_local_connect_server(master: str, opts: Dict[str, Any]) -> st
     the reuse opt-in is set; see ``SparkSession.getOrCreate`` in ``pyspark.sql.session``.
     """
     if os.name != "posix":
-        raise _start_failed(
-            "spark.local.connect.reuse relies on the POSIX scripts under sbin/; "
-            "on this platform start a server manually (sbin/start-connect-server.sh) and "
-            'connect with .remote("sc://...")'
+        raise PySparkRuntimeError(
+            errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+            messageParameters={
+                "reason": "spark.local.connect.reuse relies on the POSIX scripts under sbin/; "
+                "on this platform start a server manually (sbin/start-connect-server.sh) and "
+                'connect with .remote("sc://...")'
+            },
         )
-    discovery = Discovery()
-    server = discovery.load()
-    if server is None or not server.is_reusable():
-        # Re-check under the lock: another process may have started a server meanwhile.
-        with discovery.lock():
-            server = discovery.load()
-            if server is None or not server.is_reusable():
-                server = ServerLauncher(master, opts, discovery).launch()
-    os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = server.token
-    return server.url
+    with Discovery() as discovery:
+        return LocalConnectServer(discovery).reuse_or_start(master, opts)
 
 
 def stop_local_connect_server() -> bool:
     """Stop the recorded persistent local Connect server, if any; safe to call when none is
     running. Also available as ``python -m pyspark.sql.connect.local_server --stop``.
     """
-    discovery = Discovery()
-    # Under the lock so a stop racing a concurrent launch cannot unlink the newcomer's record.
-    with discovery.lock():
-        server = discovery.load()
-        stopped = False
-        if server is not None and server.pid != os.getpid():
-            stopped = server.stop()
-        discovery.clear()
-        # Drop the spark-daemon.sh pid file too, or it would refuse the next start.
-        with contextlib.suppress(OSError):
-            os.remove(_daemon_pid_file(discovery.directory))
-        return stopped
+    with Discovery() as discovery:
+        return LocalConnectServer(discovery).stop()
 
 
 def main() -> None:
