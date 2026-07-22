@@ -3302,10 +3302,12 @@ object SQLConf {
       .createWithDefault(false)
 
   val MIN_BATCHES_TO_RETAIN = buildConf("spark.sql.streaming.minBatchesToRetain")
-    .internal()
-    .doc("The minimum number of batches that must be retained and made recoverable.")
+    .doc("The minimum number of batches that must be retained and made recoverable. " +
+      "This also controls the lifecycle of checkpoint files: state, offset and commit log " +
+      "files older than this many batches are eligible for cleanup. Must be positive.")
     .version("2.1.1")
     .intConf
+    .checkValue(_ > 0, "minBatchesToRetain must be positive")
     .createWithDefault(100)
 
   val RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT =
