@@ -110,7 +110,11 @@ abstract class PushDownLocalSortSuiteBase
 
   test("Push a wider sort down through a window to feed a sort aggregate above it") {
     withTempView("t") {
-      spark.range(200).selectExpr("id % 10 as a", "id % 7 as b", "id % 5 as c")
+      // `c` varies within each (a, b) group (70 % 13 != 0) and `b` repeats within each partition
+      // `a`, so widening the window's sort from [a, b] to [a, b, c] genuinely reorders rows within
+      // the window's `ORDER BY b` ties. `RANK()` is tie-safe -- its value does not depend on the
+      // order of tied rows -- so the result stays stable while the sort count still drops.
+      spark.range(500).selectExpr("id % 10 as a", "id % 7 as b", "id % 13 as c")
         .createOrReplaceTempView("t")
       // Plan shape within one stage: shuffle -> Sort([a,b,c]) -> Window([a],[b]) -> Sort([a,b,c])
       // -> SortAggregate(group by a,b,c). The window needs [a,b] and the sort aggregate needs the
@@ -121,8 +125,8 @@ abstract class PushDownLocalSortSuiteBase
       withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
         val query =
           """
-            |SELECT a, b, c, collect_list(rn) AS cl
-            |FROM (SELECT a, b, c, ROW_NUMBER() OVER (PARTITION BY a ORDER BY b) AS rn FROM t)
+            |SELECT a, b, c, collect_list(rk) AS cl
+            |FROM (SELECT a, b, c, RANK() OVER (PARTITION BY a ORDER BY b) AS rk FROM t)
             |GROUP BY a, b, c
             |""".stripMargin
         checkSorts(query, 1, 2)

@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, SortOrder}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.aggregate.SortAggregateExec
 import org.apache.spark.sql.execution.window.{WindowExecBase, WindowGroupLimitExec}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -53,11 +52,10 @@ import org.apache.spark.sql.internal.SQLConf
  *         Exchange(hashpartitioning([a]))
  * }}}
  *
- * When an operator on the path renames an ordering column in its output (a `ProjectExec` with
- * `b AS x`, or a `SortAggregateExec` whose result renames a grouping key), the ordering is
- * rewritten from the operator's output space back to its child's space (`x` -> `b`) as it is
- * pushed through, so a sort over the renamed column is still matched below. Only plain renames
- * are followed, and the rule never crosses a shuffle or a non-order-preserving operator.
+ * When a `ProjectExec` on the path renames an ordering column in its output (`b AS x`), the
+ * ordering is rewritten from the project's output space back to its child's space (`x` -> `b`) as
+ * it is pushed through, so a sort over the renamed column is still matched below. Only plain
+ * renames are followed, and the rule never crosses a shuffle or a non-order-preserving operator.
  */
 object PushDownLocalSort extends Rule[SparkPlan] {
 
@@ -94,14 +92,13 @@ object PushDownLocalSort extends Rule[SparkPlan] {
       Some(SortExec(upperOrder, global = false, child = lower.child))
 
     case op: UnaryExecNode if isOrderPreserving(op) =>
-      // Some order-preserving operators rename ordering columns in their output (a `ProjectExec`
-      // with `b AS x`, or a `SortAggregateExec` whose result renames a grouping key). Rewrite
-      // `upperOrder` from the operator's output space back to its child's space before pushing
-      // further down. Only plain renames are followed; an expression alias leaves the sort key
-      // referencing an output attribute the child does not produce, so the check below rejects it.
+      // A `ProjectExec` may rename ordering columns in its output (`b AS x`). Rewrite `upperOrder`
+      // from the operator's output space back to its child's space before pushing further down, so
+      // a sort over the renamed column is still matched below. Only plain renames are followed; an
+      // expression alias leaves the sort key referencing an output attribute the child does not
+      // produce, so the `subsetOf(op.child.outputSet)` check below rejects it.
       val outputExprs = plan match {
         case p: ProjectExec => p.projectList
-        case a: SortAggregateExec => a.resultExpressions
         case _ => Nil
       }
       val rewrittenUpperOrder = if (outputExprs.isEmpty) {
@@ -128,7 +125,14 @@ object PushDownLocalSort extends Rule[SparkPlan] {
   private def isOrderPreserving(plan: UnaryExecNode): Boolean = plan match {
     case _: ProjectExec => true
     case _: FilterExec => true
-    case _: SortAggregateExec => true
+    // Pushing a wider sort under a window refines the input order the window sees within ties of
+    // its own `ORDER BY`. For order-sensitive window functions (`first_value`/`last_value`/
+    // `collect_list`, `lead`/`lag`, `ROWS`-frame aggregates) and a `row_number`-based
+    // `WindowGroupLimitExec`, that can change the result -- but only for a non-unique window
+    // `ORDER BY`, where the result is already non-deterministic by Spark's contract, so this does
+    // not change any deterministic result. This differs from `CollectMetricsExec`, which is
+    // deliberately excluded: its observed metric is a documented, expected-stable side output, not
+    // a non-deterministic query result, so refining the order it sees would be a real surprise.
     case _: WindowExecBase => true
     case _: WindowGroupLimitExec => true
     case _ => false
