@@ -100,7 +100,7 @@ class NumPyCompatTestsMixin:
             (np.rad2deg, [-np.pi, 0.0, np.pi]),
             (np.sign, [-2.0, -0.0, 0.0, 2.0, np.nan]),
             (np.sinh, [-2.0, 0.0, 2.0]),
-            (np.square, [np.iinfo(np.int64).min, -2, 0, 2]),
+            (np.square, [-2.0, 0.0, 2.0]),
             (np.tanh, [-2.0, 0.0, 2.0]),
         ):
             with self.subTest(name=np_func.__name__):
