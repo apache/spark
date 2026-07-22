@@ -59,7 +59,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         Examples
         --------
@@ -101,7 +101,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         See Also
         --------
@@ -185,7 +185,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         See Also
         --------
@@ -238,7 +238,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         See Also
         --------
@@ -301,7 +301,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         See Also
         --------
@@ -344,7 +344,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         See Also
         --------
@@ -394,7 +394,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         See Also
         --------
@@ -437,7 +437,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         See Also
         --------
@@ -490,7 +490,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         See Also
         --------
@@ -525,7 +525,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         Examples
         --------
@@ -546,7 +546,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         Examples
         --------
@@ -574,7 +574,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         Examples
         --------
@@ -639,7 +639,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         Examples
         --------
@@ -681,7 +681,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`~pyspark.sql.DataFrame`
+        :class:`DataFrame`
 
         Examples
         --------
