@@ -18,6 +18,7 @@ package org.apache.spark.sql.connect.test
 
 import java.io.{File, IOException, OutputStream}
 import java.lang.ProcessBuilder.Redirect
+import java.net.ServerSocket
 import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
 
@@ -33,7 +34,6 @@ import org.scalatest.time.SpanSugar._ // scalastyle:ignore
 import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.client.{RetryPolicy, SparkConnectClient}
-import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.test.IntegrationTestUtils._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -52,9 +52,11 @@ object SparkConnectServerUtils {
   // The equivalent command to start the connect server via command line:
   // bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
 
-  // Server port
-  val port: Int =
-    ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
+  // Bind a throwaway socket to port 0 to obtain an OS-assigned free port for the server process.
+  val port: Int = {
+    val socket = new ServerSocket(0)
+    try socket.getLocalPort finally socket.close()
+  }
 
   @volatile private var stopped = false
 

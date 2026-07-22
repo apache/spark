@@ -32,7 +32,6 @@ import org.apache.spark.sql.classic
 import org.apache.spark.sql.connect
 import org.apache.spark.sql.connect.client.{CustomSparkConnectBlockingStub, ExecutePlanResponseReattachableIterator, RetryPolicy, SparkConnectClient, SparkConnectStubState}
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
-import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
@@ -46,9 +45,8 @@ import org.apache.spark.sql.util.CloseableIterator
  */
 trait SparkConnectServerTest extends SharedSparkSession {
 
-  // Server port
-  val serverPort: Int =
-    ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
+  // The port the running service is bound to, set after start.
+  var serverPort: Int = -1
 
   val eventuallyTimeout = 30.seconds
 
@@ -65,12 +63,16 @@ trait SparkConnectServerTest extends SharedSparkSession {
     // Other suites using mocks leave a mess in the global executionManager,
     // shut it down so that it's cleared before starting server.
     SparkConnectService.executionManager.shutdown()
-    // Start the real service.
+    startService()
+  }
+
+  /** Starts the service on an OS-assigned free port (port 0) and records it in `serverPort`. */
+  protected def startService(confs: Seq[(String, String)] = extraServerConfs): Unit = {
     withSparkEnvConfs(
-      (Seq(
-        (Connect.CONNECT_GRPC_BINDING_PORT.key, serverPort.toString)) ++ extraServerConfs): _*) {
+      (Seq((Connect.CONNECT_GRPC_BINDING_PORT.key, "0")) ++ confs): _*) {
       SparkConnectService.start(spark.sparkContext)
     }
+    serverPort = SparkConnectService.localPort
   }
 
   override def afterAll(): Unit = {
