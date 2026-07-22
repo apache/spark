@@ -24,6 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.SerdeInfo
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.datasources.parquet.SparkToParquetSchemaConverter
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
@@ -1108,6 +1109,20 @@ class QueryCompilationErrorsSuite
         parameters = Map("format" -> "JSON")
       )
     }
+  }
+
+  test("CREATE_TABLE_WITH_BOTH_PROVIDER_AND_SERDE: USING and a serde clause together") {
+    // Not reachable via SQL (the parser rejects USING with a serde clause); throw directly.
+    val serdeInfo = SerdeInfo(storedAs = Some("PARQUET"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        throw QueryCompilationErrors.cannotCreateTableWithBothProviderAndSerdeError(
+          Some("parquet"), Some(serdeInfo))
+      },
+      condition = "CREATE_TABLE_WITH_BOTH_PROVIDER_AND_SERDE",
+      parameters = Map(
+        "provider" -> "Some(parquet)",
+        "serDeInfo" -> serdeInfo.describe))
   }
 }
 
