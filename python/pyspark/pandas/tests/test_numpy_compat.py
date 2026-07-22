@@ -97,6 +97,7 @@ class NumPyCompatTestsMixin:
             (np.negative, [-2.0, 0.0, 2.0]),
             (np.positive, [-2.0, 0.0, 2.0]),
             (np.rad2deg, [-np.pi, 0.0, np.pi]),
+            (np.sign, [-2.0, -0.0, 0.0, 2.0, np.nan]),
             (np.sinh, [-2.0, 0.0, 2.0]),
             (np.tanh, [-2.0, 0.0, 2.0]),
         ):
