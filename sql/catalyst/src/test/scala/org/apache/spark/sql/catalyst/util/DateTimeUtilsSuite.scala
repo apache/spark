@@ -2071,6 +2071,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkContaining(36 * MICROS_PER_HOUR, date(2024, 3, 12, 9, 0, 0), laOrigin, la)
     checkContaining(MICROS_PER_DAY, date(2024, 11, 4, 2, 0, 0), date(2024, 11, 1, 7, 0, 0), la)
 
+    // Pacific/Apia's 2011 date-line shift throws the 1-day estimate off by one bucket (epoch
+    // origin) or two (1900 origin), so the search must step more than once.
+    val apiaZone = DateTimeUtils.getZoneId("Pacific/Apia")
+    checkContaining(MICROS_PER_DAY, date(2012, 1, 2, 0, 0, 0, 0, apiaZone),
+      date(1970, 1, 1), apiaZone)
+    checkContaining(MICROS_PER_DAY, date(2012, 1, 2, 0, 0, 0, 0, apiaZone),
+      date(1900, 1, 1, 0, 0, 0, 0, apiaZone), apiaZone)
+
     // Boundaries land on the grid across the spring-forward, not 1h off as a walk would drift.
     val (idx, _) = timeBucketFromTimestampDTInterval(36 * MICROS_PER_HOUR,
       date(2024, 3, 12, 9, 0, 0), laOrigin, la)

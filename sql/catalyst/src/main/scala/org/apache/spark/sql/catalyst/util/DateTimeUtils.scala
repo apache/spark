@@ -1310,20 +1310,24 @@ object DateTimeUtils extends SparkDateTimeUtils {
     def boundary(kk: Long): Long =
       timeBucketFromIndexDTInterval(bucketMicros, kk, originMicros, zoneId)
 
-    val bucketStart = boundary(k)
     if (bucketMicros / MICROS_PER_DAY != 0) {
-      // Multi-day: a DST offset shift moves the boundary by less than one bucket, so one +/-1 step
-      // recovers the correct index.
-      if (bucketStart > tsMicros) {
-        return (k - 1, boundary(k - 1))
+      // Multi-day: calendar-day arithmetic makes boundaries drift off the linear grid as offset
+      // shifts accumulate between origin and ts. A DST shift (e.g. Pacific/Los_Angeles) is 1h, so
+      // the estimate is off by at most one; a date-line shift (e.g. Pacific/Apia 2011) can reach a
+      // full bucket, so it can be off by more than one. Step the index until the bucket contains
+      // ts: the first loop walks down while the start is past ts, the second walks up while the
+      // next start is not, landing on boundary(k) <= ts < boundary(k + 1).
+      var adjusted = k
+      while (boundary(adjusted) > tsMicros) {
+        adjusted = MathUtils.subtractExact(adjusted, 1L)
       }
-      val nextStart = boundary(MathUtils.addExact(k, 1L))
-      if (nextStart <= tsMicros) {
-        return (k + 1, nextStart)
+      while (boundary(MathUtils.addExact(adjusted, 1L)) <= tsMicros) {
+        adjusted = MathUtils.addExact(adjusted, 1L)
       }
+      return (adjusted, boundary(adjusted))
     }
-    // Sub-day, or multi-day with no offset shift: no adjustment needed.
-    (k, bucketStart)
+    // Sub-day: pure UTC arithmetic, the linear estimate is exact.
+    (k, boundary(k))
   }
 
   /**
