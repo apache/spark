@@ -350,7 +350,7 @@ class SourceProgress protected[spark] (
  * trigger. See [[StreamingQueryProgress]] for more information.
  *
  * @param description
- *   Description of the source corresponding to this status.
+ *   Description of the sink corresponding to this status.
  * @param numOutputRows
  *   Number of rows written to the sink or -1 for Continuous Mode (temporarily) or Sink V1 (until
  *   decommissioned).

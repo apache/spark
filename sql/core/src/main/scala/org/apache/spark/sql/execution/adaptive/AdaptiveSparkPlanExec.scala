@@ -131,6 +131,10 @@ case class AdaptiveSparkPlanExec(
       // join drops its child ordering, which `ReplaceHashWithSortAgg` would otherwise rely on to
       // turn a hash aggregate into a sort aggregate.
       ConvertSortMergeJoinToShuffledHashJoin(ensureRequirements),
+      // `CombineAdjacentAggregation` must run before `ReplaceHashWithSortAgg`: it combines a pair
+      // of adjacent partial and final aggregate into a single `Complete` mode aggregate, which
+      // `ReplaceHashWithSortAgg` can then replace with a sort aggregate when the ordering allows.
+      CombineAdjacentAggregation,
       ReplaceHashWithSortAgg,
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
