@@ -455,7 +455,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         isOverwrite,
         partition)
 
-    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) if asSerde =>
+    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) if asSerde ||
+         (conf.hiveTableShowCreateTableAsSerde &&
+           DDLUtils.isHiveTable(catalogManager.v1SessionCatalog.getTableRawMetadata(ident))) =>
       ShowCreateTableAsSerdeCommand(ident, output)
 
     // If target is view, force use v1 command
