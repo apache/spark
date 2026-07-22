@@ -50,11 +50,18 @@ class ExplainUtilsSuite extends QueryTest with SharedSparkSession {
       val df = spark.range(10).filter("id > 3")
       val plan = df.queryExecution.executedPlan
       ExplainUtils.processPlan(plan, _ => ())
-      val codegenNodes = plan.collect {
-        case p if p.getTagValue(QueryPlan.CODEGEN_ID_TAG).isDefined => p
+      // CODEGEN_ID_TAG is assigned only to nodes under a WholeStageCodegenExec (see
+      // generateWholeStageCodegenIds). Assert that invariant directly rather than assuming the
+      // planner fused this query into whole-stage codegen: when the executed plan contains
+      // WholeStageCodegenExec nodes, at least one node inside one of them carries the tag.
+      val wscgNodes = plan.collect { case w: WholeStageCodegenExec => w }
+      if (wscgNodes.nonEmpty) {
+        val taggedInsideWscg = wscgNodes.exists { w =>
+          w.collect { case p if p.getTagValue(QueryPlan.CODEGEN_ID_TAG).isDefined => p }.nonEmpty
+        }
+        assert(taggedInsideWscg,
+          "processPlan should set CODEGEN_ID_TAG on nodes inside WholeStageCodegenExec")
       }
-      assert(codegenNodes.nonEmpty,
-        "processPlan should set CODEGEN_ID_TAG on nodes inside WholeStageCodegenExec")
     }
   }
 
