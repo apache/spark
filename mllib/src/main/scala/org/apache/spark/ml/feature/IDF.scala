@@ -128,7 +128,16 @@ class IDFModel private[ml] (
   private[ml] def this() = this("", null)
 
   private[spark] override def estimatedSize: Long = {
-    estimateMatadataSize + Option(idfModel).map(SizeEstimator.estimate).getOrElse(0L)
+    var size = estimateMatadataSize
+    if (idfModel != null) {
+      if (idfModel.idf != null) {
+        size += idfModel.idf.asML.getSizeInBytes
+      }
+      if (idfModel.docFreq != null) {
+        size += SizeEstimator.estimate(idfModel.docFreq)
+      }
+    }
+    size
   }
 
   /** @group setParam */
