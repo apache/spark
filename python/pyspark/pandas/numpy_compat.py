@@ -43,7 +43,7 @@ unary_np_spark_mappings = {
     "deg2rad": F.radians,
     "degrees": F.degrees,
     "exp": F.exp,
-    "exp2": pandas_udf(lambda s: np.exp2(s), DoubleType()),  # type: ignore[call-overload]
+    "exp2": lambda c: F.pow(F.lit(2.0), c),
     "expm1": F.expm1,
     "fabs": pandas_udf(lambda s: np.fabs(s), DoubleType()),  # type: ignore[call-overload]
     "floor": F.floor,
