@@ -63,10 +63,12 @@ object PushDownLocalSort extends Rule[SparkPlan] {
     if (!conf.getConf(SQLConf.PUSH_DOWN_LOCAL_SORT_ENABLED)) {
       return plan
     }
+    val throughCardinalityReducer =
+      conf.getConf(SQLConf.PUSH_DOWN_LOCAL_SORT_THROUGH_CARDINALITY_REDUCER_ENABLED)
 
     plan.transform {
       case upper @ SortExec(upperOrder, false, child, _) =>
-        pushDown(child, upperOrder).getOrElse(upper)
+        pushDown(child, upperOrder, throughCardinalityReducer).getOrElse(upper)
     }
   }
 
@@ -76,11 +78,14 @@ object PushDownLocalSort extends Rule[SparkPlan] {
    * to `upperOrder` and returns the rebuilt subtree (which re-exposes `upperOrder` at its top);
    * returns `None` if no safe widening applies, leaving the plan untouched. As it crosses an
    * operator that renames ordering columns, `upperOrder` is rewritten into that operator's child
-   * space so the search continues against the child's own attributes.
+   * space so the search continues against the child's own attributes. `throughCardinalityReducer`
+   * controls whether cardinality-reducing operators (`FilterExec`, `WindowGroupLimitExec`) may be
+   * crossed.
    */
   private def pushDown(
       plan: SparkPlan,
-      upperOrder: Seq[SortOrder]): Option[SparkPlan] = plan match {
+      upperOrder: Seq[SortOrder],
+      throughCardinalityReducer: Boolean): Option[SparkPlan] = plan match {
     case lower @ SortExec(lowerOrder, false, _, _)
         // Only widen when the upper ordering strictly covers the lower one. When they are
         // equivalent the upper sort is plainly redundant and is left to `RemoveRedundantSorts`; a
@@ -91,7 +96,7 @@ object PushDownLocalSort extends Rule[SparkPlan] {
           AttributeSet(upperOrder.flatMap(_.references)).subsetOf(lower.child.outputSet) =>
       Some(SortExec(upperOrder, global = false, child = lower.child))
 
-    case op: UnaryExecNode if isOrderPreserving(op) =>
+    case op: UnaryExecNode if isOrderPreserving(op, throughCardinalityReducer) =>
       // A `ProjectExec` may rename ordering columns in its output (`b AS x`). Rewrite `upperOrder`
       // from the operator's output space back to its child's space before pushing further down, so
       // a sort over the renamed column is still matched below. Only plain renames are followed; an
@@ -114,7 +119,8 @@ object PushDownLocalSort extends Rule[SparkPlan] {
       }
       if (SortOrder.orderingSatisfies(rewrittenUpperOrder, op.requiredChildOrdering.head) &&
           AttributeSet(rewrittenUpperOrder.flatMap(_.references)).subsetOf(op.child.outputSet)) {
-        pushDown(op.child, rewrittenUpperOrder).map(newChild => op.withNewChildren(Seq(newChild)))
+        pushDown(op.child, rewrittenUpperOrder, throughCardinalityReducer)
+          .map(newChild => op.withNewChildren(Seq(newChild)))
       } else {
         None
       }
@@ -122,7 +128,9 @@ object PushDownLocalSort extends Rule[SparkPlan] {
     case _ => None
   }
 
-  private def isOrderPreserving(plan: UnaryExecNode): Boolean = plan match {
+  private def isOrderPreserving(
+      plan: UnaryExecNode,
+      throughCardinalityReducer: Boolean): Boolean = plan match {
     // A non-deterministic project/filter must not be crossed: moving the sort below it changes
     // which rows a seeded non-deterministic expression is evaluated over (a different row-value
     // association for a project, a different surviving set for a filter). This mirrors the
@@ -145,7 +153,4 @@ object PushDownLocalSort extends Rule[SparkPlan] {
     case _: WindowExecBase => true
     case _ => false
   }
-
-  private def throughCardinalityReducer: Boolean =
-    conf.getConf(SQLConf.PUSH_DOWN_LOCAL_SORT_THROUGH_CARDINALITY_REDUCER_ENABLED)
 }
