@@ -62,7 +62,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, MergeStatus, Spar
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{DeserializationStream, JavaSerializer, KryoDeserializationStream, KryoSerializer, KryoSerializerInstance, SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
+import org.apache.spark.shuffle.{BlockingShuffleManager, MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.storage.LogBlockType.LogBlockType
@@ -199,7 +199,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     liveListenerBus = spy[LiveListenerBus](new LiveListenerBus(conf))
     master = spy[BlockManagerMaster](new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        liveListenerBus, None, blockManagerInfo, mapOutputTracker, shuffleManager,
+        liveListenerBus, None, blockManagerInfo, mapOutputTracker,
         isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
@@ -2056,7 +2056,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("we reject putting blocks when we have the wrong shuffle resolver") {
-    val badShuffleManager = mock(classOf[ShuffleManager])
+    val badShuffleManager = mock(classOf[BlockingShuffleManager])
     val badShuffleResolver = mock(classOf[ShuffleBlockResolver])
     when(badShuffleManager.shuffleBlockResolver).thenReturn(badShuffleResolver)
     val shuffleBlockId = ShuffleDataBlockId(0, 0, 0)
@@ -2091,7 +2091,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // Retry initialization should succeed once ShuffleManager is initialized
     when(mockEnv.isShuffleManagerInitialized).thenReturn(true)
     when(mockEnv.waitForShuffleManagerInit(mc.anyLong())).thenReturn(true)
-    when(mockEnv.shuffleManager).thenReturn(sortShuffleMgr)
+    when(mockEnv.blockingShuffleManager).thenReturn(sortShuffleMgr)
+    when(mockEnv.shuffleBlockResolver).thenReturn(Some(sortShuffleMgr.shuffleBlockResolver))
     assert(bm.migratableResolver != null)
   }
 
