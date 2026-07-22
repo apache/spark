@@ -61,6 +61,8 @@ class AutoCdcFlow:
     :param except_column_list: Optional columns to exclude from the output table.
     :param stored_as_scd_type: Optional SCD type for the target table. Only 1 (or "1") is \
         supported.
+    :param spark_conf: A dict where the keys are the Spark configuration property names and the
+        values are the property values. These properties will be set on the flow.
     :param source_code_location: The location of the source code that created this flow.
     """
 
@@ -73,4 +75,5 @@ class AutoCdcFlow:
     column_list: Optional[List[Column]]
     except_column_list: Optional[List[Column]]
     stored_as_scd_type: Optional[Literal[1, "1"]]
+    spark_conf: Dict[str, str]
     source_code_location: SourceCodeLocation

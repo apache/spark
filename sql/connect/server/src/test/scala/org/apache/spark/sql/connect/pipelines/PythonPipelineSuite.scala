@@ -1103,6 +1103,26 @@ class PythonPipelineSuite
     assert(flow.destinationIdentifier == graphIdentifier("target"))
   }
 
+  test("AutoCDC API: spark_conf is forwarded to the flow's sqlConf") {
+    val flow = buildAutoCdcFlow("""
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    spark_conf = {"spark.sql.shuffle.partitions": "8"},
+        |)
+        |""".stripMargin)
+
+    assert(flow.sqlConf == Map("spark.sql.shuffle.partitions" -> "8"))
+  }
+
   test("AutoCDC API: multi-part `keys` column is rejected at flow registration") {
     val ex = intercept[RuntimeException] {
       buildAutoCdcFlow("""

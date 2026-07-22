@@ -159,7 +159,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             flow_name=flow.name,
             target_dataset_name=flow.target,
             auto_cdc_flow_details=auto_cdc_details,
-            sql_conf={},
+            sql_conf=flow.spark_conf,
             source_code_location=source_code_location_to_proto(flow.source_code_location),
         )
 
