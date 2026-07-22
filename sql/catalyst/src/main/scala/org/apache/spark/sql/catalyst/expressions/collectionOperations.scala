@@ -1485,7 +1485,7 @@ case class Reverse(child: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(array, value) - Returns true if the array contains the value. Returns null if the value is not found and the array contains a null element; otherwise returns false.",
+  usage = "_FUNC_(array, value) - Returns true if the array contains the value, false if not. Returns null if the array or value is null, or if the value is not found and the array contains a null element.",
   arguments = """
     Arguments:
       * array - The array to search.

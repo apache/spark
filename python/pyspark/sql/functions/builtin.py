@@ -19892,9 +19892,9 @@ def array(
 @_try_remote_functions
 def array_contains(col: "ColumnOrName", value: Any) -> Column:
     """
-    Collection function: Returns true if the array contains the given value. Returns null if
-    the array is null, or if the value is not found and the array contains a null element;
-    otherwise returns false.
+    Collection function: Returns true if the array contains the value, false if not. Returns
+    null if the array or value is null, or if the value is not found and the array contains a
+    null element.
 
     .. versionadded:: 1.5.0
 
