@@ -139,7 +139,8 @@ class SparkDeclarativePipelinesServerSuite
       .setStoredAsScdType(scdType)
     columns.foreach(c => autoCdcDetails.addColumnList(unresolvedColumn(c)))
     exceptColumns.foreach(c => autoCdcDetails.addExceptColumnList(unresolvedColumn(c)))
-    trackHistoryColumns.foreach(c => autoCdcDetails.addTrackHistoryColumnList(unresolvedColumn(c)))
+    trackHistoryColumns.foreach(c =>
+      autoCdcDetails.addTrackHistoryColumnList(unresolvedColumn(c)))
     trackHistoryExceptColumns.foreach(c =>
       autoCdcDetails.addTrackHistoryExceptColumnList(unresolvedColumn(c)))
     DefineFlow
@@ -179,11 +180,10 @@ class SparkDeclarativePipelinesServerSuite
           buildPlanFromPipelineCommand(
             PipelineCommand
               .newBuilder()
-              .setDefineFlow(
-                autoCdcDefineFlow(
-                  graphId,
-                  DefineFlow.SCDType.SCD_TYPE_1,
-                  trackHistoryColumns = Seq("val")))
+              .setDefineFlow(autoCdcDefineFlow(
+                graphId,
+                DefineFlow.SCDType.SCD_TYPE_1,
+                trackHistoryColumns = Seq("val")))
               .build()))
       }
     }
