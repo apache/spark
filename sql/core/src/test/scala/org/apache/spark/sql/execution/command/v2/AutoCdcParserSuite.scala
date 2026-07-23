@@ -972,4 +972,26 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
           |TRACK HISTORY ON value1, value2""".stripMargin)
     }
   }
+
+  test("new keywords history, track, scd remain usable as identifiers") {
+    // history / track / scd are non-reserved, so they must still parse as ordinary table and
+    // column identifiers. This guards their non-reserved classification against regressions.
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO track
+        |FROM STREAM(scd)
+        |KEYS (history)
+        |SEQUENCE BY track
+        |COLUMNS (history, track, scd)
+        |STORED AS SCD TYPE 2
+        |TRACK HISTORY ON (history, scd)""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("track"))
+    assert(streamSource(cdc.source).multipartIdentifier == Seq("scd"))
+    assert(cdc.keys.map(_.name) == Seq("history"))
+    assert(cdc.sequenceByExpr == UnresolvedAttribute("track"))
+    assert(cdc.includeColumns.get.map(_.name) == Seq("history", "track", "scd"))
+    assert(cdc.storedAsScdType == 2)
+    assert(cdc.trackHistoryColumns.get.map(_.name) == Seq("history", "scd"))
+  }
 }

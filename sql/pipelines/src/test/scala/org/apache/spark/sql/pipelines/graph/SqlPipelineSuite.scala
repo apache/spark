@@ -1290,6 +1290,24 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     assert(ex.getMessage.contains("TRACK HISTORY requires STORED AS SCD TYPE 2"))
   }
 
+  test("AUTO CDC TRACK HISTORY with explicit STORED AS SCD TYPE 1 is rejected") {
+    // The implicit-default-SCD1 case is covered above; this pins the explicit SCD TYPE 1 path.
+    val ex = intercept[SqlGraphElementRegistrationException] {
+      unresolvedDataflowGraphFromSql(
+        sqlText = s"""
+                     |CREATE STREAMING TABLE st
+                     |FLOW AUTO CDC
+                     |FROM STREAM $externalTable1Ident
+                     |KEYS (id)
+                     |SEQUENCE BY id
+                     |STORED AS SCD TYPE 1
+                     |TRACK HISTORY ON (id)
+                     |""".stripMargin
+      )
+    }
+    assert(ex.getMessage.contains("TRACK HISTORY requires STORED AS SCD TYPE 2"))
+  }
+
   test("Explicit column list is rejected for CREATE STREAMING TABLE FLOW AUTO CDC") {
     val ex = intercept[SqlGraphElementRegistrationException] {
       unresolvedDataflowGraphFromSql(
