@@ -1166,26 +1166,12 @@ jobs:
           - sbt
           - maven
     env:
-      # Modules whose main sources compile under Scala 3. Extend as SPARK-54150
-      # subtasks land. The two lists must name the same modules; SBT uses project
-      # names and Maven uses directories.
+      # Modules whose main sources compile under Scala 3, given as directories.
+      # Extend as SPARK-54150 subtasks land; this is the only list to update. Maven
+      # takes these directly, and the SBT project names are read out of each POM
+      # below, since SBT addresses projects by <sbt.project.name> rather than by path
+      # and the two cannot be derived from one another by rule.
       SCALA3_MODULES: >-
-        tags/compile
-        common-utils/compile
-        common-utils-java/compile
-        unsafe/compile
-        kvstore/compile
-        variant/compile
-        sketch/compile
-        launcher/compile
-        network-common/compile
-        network-shuffle/compile
-        connect-shims/compile
-        udf-worker-proto/compile
-        udf-worker-core/compile
-        udf-worker-grpc/compile
-      # Space separated here for readability; joined with commas for Maven's -pl below.
-      SCALA3_MAVEN_MODULES: >-
         common/tags
         common/utils
         common/utils-java
@@ -1258,7 +1244,21 @@ jobs:
       if: matrix.build-tool == 'sbt'
       run: |
         ./dev/change-scala-version.sh 3
-        ./build/sbt -Pscala-3 $SCALA3_MODULES
+        # Read the SBT project name out of each module POM. Falling back to the
+        # artifactId when the property is missing would silently build the wrong
+        # project, or nothing at all, so treat that as an error instead.
+        sbt_commands=""
+        for module in $SCALA3_MODULES; do
+          name=$(grep -o '<sbt.project.name>[^<]*' "$module/pom.xml" | head -1 | cut -d'>' -f2)
+          if [ -z "$name" ]; then
+            echo "ERROR: $module/pom.xml declares no <sbt.project.name>, so the SBT"
+            echo "       project name cannot be derived. Add the property to that POM."
+            exit 1
+          fi
+          sbt_commands="$sbt_commands $name/compile"
+        done
+        echo "SBT commands:$sbt_commands"
+        ./build/sbt -Pscala-3 $sbt_commands
     - name: Build with Maven
       if: matrix.build-tool == 'maven'
       run: |
@@ -1267,7 +1267,7 @@ jobs:
         # -Dmaven.test.skip, not -DskipTests: the latter still compiles test sources,
         # which are not migrated to Scala 3 yet. -am pulls in the parent POM.
         ./build/mvn --no-transfer-progress -Pscala-3 -Dmaven.test.skip=true \
-          -pl "$(echo $SCALA3_MAVEN_MODULES | tr ' ' ',')" -am install
+          -pl "$(echo $SCALA3_MODULES | tr ' ' ',')" -am install
     - name: Check that the Scala 3 compiler actually ran
       run: |
         # Only dotty emits .tasty files, so their presence rules out a silent
