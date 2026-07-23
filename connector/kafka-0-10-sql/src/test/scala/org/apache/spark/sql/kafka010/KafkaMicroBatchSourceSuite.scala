@@ -1850,7 +1850,7 @@ abstract class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBa
           "maxOffsetsBehindLatest" -> "4",
           "avgOffsetsBehindLatest" -> "3.0").asJava)
 
-    // test null latestAvailablePartitionOffsets
+    // test inRealTimeMode is true and latestConsumedOffset is not present
     assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), None).isEmpty)
   }
 
