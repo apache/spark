@@ -1770,48 +1770,6 @@ private[spark] class DAGScheduler(
    */
   private def rejectUnadmittablePipelinedGroup(
       jobId: Int, finalRDD: RDD[_], partitions: Array[Int], listener: JobListener): Boolean = {
-    // Reject up-front (before any stage is created) two group members the admission model cannot
-    // support, walking the group's RDD graph once:
-    //  - A barrier member. A barrier stage exposes its output only after a global sync, which
-    //    contradicts a pipelined consumer reading the producer's output incrementally as it runs;
-    //    and its failure recovery resubmits the stage, which the group's atomic completion cannot
-    //    accommodate (a resubmitted producer would drop a co-scheduled consumer's buffered
-    //    completions). Reject it here rather than let it be co-scheduled.
-    //  - A member on a non-default resource profile. Admission below measures capacity and
-    //    occupancy against the default profile, but each stage derives its profile from its RDDs
-    //    (see createShuffleMapStage/createResultStage). A member carrying a non-default profile would be
-    //    admitted against the default profile's free slots yet run in a different, often smaller
-    //    pool -- and could then queue or deadlock there.
-    var offendingBarrier = false
-    var offendingRp: Option[ResourceProfile] = None
-    traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
-      if (rdd.isBarrier()) {
-        offendingBarrier = true
-      }
-      val rp = rdd.getResourceProfile()
-      if (offendingRp.isEmpty && rp != null && rp.id != DEFAULT_RESOURCE_PROFILE_ID) {
-        offendingRp = Some(rp)
-      }
-      rdd.dependencies.foreach(dep => enqueue(dep.rdd))
-    }
-    if (offendingBarrier) {
-      logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: a pipelined stage group contains a " +
-        log"barrier member")
-      listener.jobFailed(new SparkException(
-        "A pipelined shuffle job with a barrier stage in the pipelined group is not supported: a " +
-          "barrier stage exposes its output only after a global sync, which is incompatible with " +
-          "a pipelined consumer reading its output incrementally."))
-      return true
-    }
-    if (offendingRp.nonEmpty) {
-      logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: a pipelined stage group member uses a " +
-        log"non-default resource profile")
-      listener.jobFailed(new SparkException(
-        "A pipelined shuffle job with a member on a non-default resource profile is not " +
-          s"supported (resource profile id ${offendingRp.get.id}): the whole pipelined stage " +
-          "group must run on the default resource profile."))
-      return true
-    }
     if (!sc.conf.get(config.PIPELINED_GROUP_SLOT_CHECK_ENABLED)) {
       // The only deadlock-prevention check for gang admission is off. Legitimate only when the
       // deployment admits capacity out-of-band (e.g. a slot reservation); otherwise a pipelined
