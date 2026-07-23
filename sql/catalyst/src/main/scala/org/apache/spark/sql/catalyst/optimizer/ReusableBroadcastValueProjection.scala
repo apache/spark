@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, DYNAMIC_PRUNING_SUBQUERY}
@@ -33,7 +34,8 @@ private[sql] object ReusableBroadcastValueProjection extends PredicateHelper {
       case _: OuterReference | _: SubqueryExpression => true
       case _ => false
     } && (expression match {
-      case attribute: Attribute => UnsafeRow.isFixedLength(attribute.dataType)
+      case attribute: Attribute =>
+        UnsafeRow.isFixedLength(attribute.dataType) || attribute.dataType == StringType
       case _: Literal => true
       case DateAdd(startDate, days: Literal) =>
         isSafeValueExpression(startDate) && isSafeValueExpression(days)
@@ -41,8 +43,7 @@ private[sql] object ReusableBroadcastValueProjection extends PredicateHelper {
           (cast.dataType == TimestampType || cast.dataType == TimestampNTZType) =>
         isSafeValueExpression(cast.child)
       case DateFormatClass(timestamp, format: Literal, Some(_))
-          if format.dataType == StringType &&
-            format.value != null && format.value.toString == "yyyy-MM-dd" =>
+          if format.dataType == StringType && format.value != null =>
         isSafeValueExpression(timestamp)
       case _ => false
     })
@@ -73,44 +74,24 @@ private[sql] object ReusableBroadcastValueProjection extends PredicateHelper {
             None
           }
 
-        case Join(left, right, Inner, Some(condition), _) =>
-          val predicates = splitConjunctivePredicates(condition)
-          val keyPairs = predicates.map {
-            case EqualTo(leftKey, rightKey)
-                if leftKey.references.nonEmpty && rightKey.references.nonEmpty &&
-                  leftKey.references.subsetOf(left.outputSet) &&
-                  rightKey.references.subsetOf(right.outputSet) =>
-              Some(leftKey -> rightKey)
-            case EqualTo(rightKey, leftKey)
-                if leftKey.references.nonEmpty && rightKey.references.nonEmpty &&
-                  leftKey.references.subsetOf(left.outputSet) &&
-                  rightKey.references.subsetOf(right.outputSet) =>
-              Some(leftKey -> rightKey)
+        case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, _, _, left, right, _) =>
+          val valueFromLeft = value.references.nonEmpty &&
+            value.references.subsetOf(left.outputSet)
+          val valueFromRight = value.references.nonEmpty &&
+            value.references.subsetOf(right.outputSet)
+          val candidate = (valueFromLeft, valueFromRight) match {
+            case (true, false) => Some((left, leftKeys))
+            case (false, true) => Some((right, rightKeys))
             case _ => None
           }
 
-          if (keyPairs.isEmpty || keyPairs.exists(_.isEmpty)) {
-            None
-          } else {
-            val pairs = keyPairs.flatten
-            val valueFromLeft = value.references.nonEmpty &&
-              value.references.subsetOf(left.outputSet)
-            val valueFromRight = value.references.nonEmpty &&
-              value.references.subsetOf(right.outputSet)
-            val candidate = (valueFromLeft, valueFromRight) match {
-              case (true, false) => Some((left, pairs.map(_._1)))
-              case (false, true) => Some((right, pairs.map(_._2)))
-              case _ => None
-            }
-
-            candidate.filter { case (source, hashKeys) =>
-              !source.isStreaming && source.deterministic &&
-                hashKeys.nonEmpty && hashKeys.forall(isSafeSourceHashKey) &&
-                !source.containsAnyPattern(CTE, DYNAMIC_PRUNING_SUBQUERY) &&
-                !source.exists(_.sameResult(excludedPlan))
-            }.map { case (source, hashKeys) =>
-              BroadcastValueProjection(source, hashKeys, value)
-            }
+          candidate.filter { case (source, hashKeys) =>
+            !source.isStreaming && source.deterministic &&
+              hashKeys.nonEmpty && hashKeys.forall(isSafeSourceHashKey) &&
+              !source.containsAnyPattern(CTE, DYNAMIC_PRUNING_SUBQUERY) &&
+              !source.exists(_.sameResult(excludedPlan))
+          }.map { case (source, hashKeys) =>
+            BroadcastValueProjection(source, hashKeys, value)
           }
 
         case _ => None

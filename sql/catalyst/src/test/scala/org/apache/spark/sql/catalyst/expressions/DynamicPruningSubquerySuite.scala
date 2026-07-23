@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.optimizer.ReusableBroadcastValueProjection
+import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LocalRelation, Project}
 import org.apache.spark.sql.types.IntegerType
 
 class DynamicPruningSubquerySuite extends SparkFunSuite {
@@ -141,5 +143,30 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
       Some(projection.copy(sourceHashKeys = Seq(missing)))).resolved)
     assert(!pruning.withBroadcastValueProjection(
       Some(projection.copy(valueExpression = missing))).resolved)
+  }
+
+  test("extract broadcast hash keys without rejecting residual join predicates") {
+    val leftKey = AttributeReference("left_key", IntegerType)()
+    val leftRegion = AttributeReference("left_region", IntegerType)()
+    val leftValue = AttributeReference("left_value", IntegerType)()
+    val rightKey = AttributeReference("right_key", IntegerType)()
+    val rightRegion = AttributeReference("right_region", IntegerType)()
+    val rightValue = AttributeReference("right_value", IntegerType)()
+    val left = LocalRelation(leftKey, leftRegion, leftValue)
+    val right = LocalRelation(rightKey, rightRegion, rightValue)
+    val excluded = LocalRelation(AttributeReference("excluded", IntegerType)())
+    val residual = LessThanOrEqual(leftValue, rightValue)
+    val condition = And(
+      And(EqualTo(leftKey, rightKey), EqualTo(rightRegion, leftRegion)), residual)
+    val join = Join(left, right, Inner, Some(condition), JoinHint.NONE)
+
+    assert(ReusableBroadcastValueProjection.find(leftValue, join, excluded).contains(
+      BroadcastValueProjection(left, Seq(leftKey, leftRegion), leftValue)))
+    assert(ReusableBroadcastValueProjection.find(rightValue, join, excluded).contains(
+      BroadcastValueProjection(right, Seq(rightKey, rightRegion), rightValue)))
+
+    val nullSafeJoin = Join(
+      left, right, Inner, Some(And(EqualNullSafe(leftKey, rightKey), residual)), JoinHint.NONE)
+    assert(ReusableBroadcastValueProjection.find(leftValue, nullSafeJoin, excluded).isEmpty)
   }
 }

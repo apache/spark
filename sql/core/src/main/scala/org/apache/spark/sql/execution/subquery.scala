@@ -138,6 +138,9 @@ case class InSubqueryExec(
       case None => (plan.executeCollect(), false)
     }
     result = if (unavailable) {
+      assert(isDynamicPruning,
+        "An unavailable projected broadcast value domain is only supported for " +
+          "dynamic partition pruning.")
       InSubqueryExecResultState.unavailableResult
     } else if (plan.output.length > 1) {
       rows.asInstanceOf[Array[Any]]

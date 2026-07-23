@@ -21,6 +21,7 @@ import java.util.concurrent.{Future => JFuture}
 
 import scala.concurrent.duration.Duration
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Expression, NamedExpression, UnsafeRow}
@@ -107,7 +108,10 @@ case class ProjectedBroadcastValueSubqueryExec(
 
   override def executeCollect(): Array[InternalRow] = executeCollectResult() match {
     case Available(rows) => rows
-    case Unavailable => Array.empty
+    case Unavailable =>
+      throw SparkException.internalError(
+        "An unavailable projected broadcast value domain must be consumed through " +
+          "executeCollectResult.")
   }
 
   private[execution] def executeCollectResult(): BroadcastValueResult[Array[InternalRow]] =
