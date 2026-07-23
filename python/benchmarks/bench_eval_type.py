@@ -2333,10 +2333,10 @@ class TransformWithStateRowUDFPeakmemBench(_TransformWithStateRowBenchMixin, _Pe
 # Each batch carries either inputData or initState rows -- never both -- with the
 # inactive column written as an all-null struct. Matching the JVM ``initData ++
 # data`` ordering, all initial-state batches are emitted first, then all data
-# batches. ``TransformWithStateInPySparkRowInitStateSerializer`` walks each
-# batch row by row, materializing every column (key included) into a ``Row`` via
-# ``.as_py()``, then regroups consecutive rows by the leading key column so each
-# key surfaces as one ``(mode, key, (input_rows, init_rows))`` call. This is the
+# batches. ``read_udfs`` walks each batch row by row, materializing every column
+# (key included) into a ``Row`` via ``.as_py()``, then regroups consecutive rows
+# by the leading key column so each key surfaces as one
+# ``(mode, key, (input_rows, init_rows))`` call. This is the
 # per-row Python object round trip the Row variant is built around, layered on
 # top of the nested-struct init-state deserialization, in contrast to the
 # columnar Pandas init-state variant above.
