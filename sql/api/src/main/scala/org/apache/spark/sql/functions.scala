@@ -23,14 +23,18 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
+import org.apache.spark.sql.catalyst.util.SparkIntervalUtils
 import org.apache.spark.sql.errors.CompilationErrors
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.{SqlApiConf, ToScalaUDF}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -12770,6 +12774,46 @@ object functions {
    */
   def time_trunc(unit: Column, time: Column): Column = {
     Column.fn("time_trunc", unit, time)
+  }
+
+  /**
+   * Returns the start of the time bucket containing the input time value. Buckets are aligned to
+   * midnight (00:00:00).
+   *
+   * @param bucketWidth
+   *   A Column representing a day-time interval (e.g., INTERVAL '15' MINUTE)
+   * @param time
+   *   The time column to bucket
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_of_day_bucket(bucketWidth: Column, time: Column): Column =
+    Column.fn("time_of_day_bucket", bucketWidth, time)
+
+  /**
+   * Returns the start of the time bucket containing the input time value. Buckets are aligned to
+   * midnight (00:00:00).
+   *
+   * @param bucketWidth
+   *   A string representing a day-time interval (e.g., "15 minutes")
+   * @param time
+   *   The time column to bucket
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_of_day_bucket(bucketWidth: String, time: Column): Column = {
+    val interval = SparkIntervalUtils.stringToInterval(UTF8String.fromString(bucketWidth))
+    if (interval.months != 0) {
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3231",
+        messageParameters = Map("interval" -> bucketWidth))
+    }
+    val micros = Math.addExact(
+      Math.multiplyExact(interval.days.toLong, MICROS_PER_DAY),
+      interval.microseconds)
+    time_of_day_bucket(lit(SparkIntervalUtils.microsToDuration(micros)), time)
   }
 
   /**

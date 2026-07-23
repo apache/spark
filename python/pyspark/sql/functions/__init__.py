@@ -255,6 +255,7 @@ __all__ = [  # noqa: F405
     "time_from_micros",
     "time_from_millis",
     "time_from_seconds",
+    "time_of_day_bucket",
     "time_to_micros",
     "time_to_millis",
     "time_to_seconds",
