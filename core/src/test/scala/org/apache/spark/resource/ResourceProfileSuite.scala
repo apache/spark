@@ -420,7 +420,8 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
   }
 
   test("SPARK-58192: cpus amounts that round to zero at the accounting scale are rejected") {
-    Seq(0.0, -1.0, 1e-10).foreach { amount =>
+    Seq(0.0, -1.0, 1e-10, Double.NaN,
+      Double.PositiveInfinity, Double.NegativeInfinity).foreach { amount =>
       val e = intercept[IllegalArgumentException] {
         new TaskResourceRequests().cpus(amount)
       }
@@ -437,18 +438,14 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     }
     assert(new TaskResourceRequests().resource(ResourceProfile.CPUS, 0.5)
       .requests(ResourceProfile.CPUS).amount === 0.5)
-    // The constructor itself stays lenient for finite amounts: it also runs when the history
-    // server deserializes persisted data (event logs, the protobuf KVStore), which can carry
-    // amounts written before cpus values were validated.
+    // The constructor itself stays fully lenient: it also runs when the history server
+    // deserializes persisted data (event logs, the protobuf KVStore), which can carry any
+    // amount an earlier release accepted -- the pre-4.3 check was `amount <= 1.0 || whole`,
+    // which admitted 0, negatives, and even -Infinity, and protobuf round-trips non-finite
+    // doubles unchanged.
     assert(new TaskResourceRequest(ResourceProfile.CPUS, 0.0).amount === 0.0)
-    // Non-finite amounts were never constructible, so they cannot appear in persisted data;
-    // the constructor rejects them so no path can register an unusable profile.
-    Seq(Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity).foreach { amount =>
-      val e = intercept[IllegalArgumentException] {
-        new TaskResourceRequest(ResourceProfile.CPUS, amount)
-      }
-      assert(e.getMessage.contains("must be a finite number"), s"for amount $amount")
-    }
+    assert(new TaskResourceRequest(ResourceProfile.CPUS, Double.NegativeInfinity)
+      .amount === Double.NegativeInfinity)
   }
 
   test("SPARK-58192: numTasksBasedOnCores clamps to [0, Int.MaxValue]") {
