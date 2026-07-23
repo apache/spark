@@ -6664,11 +6664,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: deferred consumer completions are dropped when the producer fails") {
-    // If a producer fails while a co-scheduled consumer's completion is deferred, the deferred
-    // stage/job-completion bookkeeping must be DROPPED (not applied): the group is torn down / the
-    // job fails, and applying a partial consumer success would be incorrect. The consumer's
-    // per-task side effects (TaskEnd) already ran inline when its tasks finished, so on the drop
-    // path there is nothing to re-emit and no TaskEnd is duplicated.
+    // If a producer fails while a co-scheduled consumer's completions are buffered, those buffered
+    // successes must be DROPPED (not applied): the group is torn down / the job fails, and applying
+    // a partial consumer success would be incorrect (S6). The buffered tasks genuinely succeeded,
+    // so their TaskEnd events are still emitted on the drop path (otherwise listeners that track
+    // active tasks would believe these tasks are still running); only the stage/job-completion
+    // bookkeeping is withheld.
     val taskEndCount = new java.util.concurrent.atomic.AtomicInteger(0)
     val countingListener = new SparkListener {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = taskEndCount.incrementAndGet()
@@ -6687,25 +6688,25 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val producerTaskSet = taskSets.head
       val consumerTaskSet = taskSets(1)
 
-      // Consumer finishes early -> its completion bookkeeping is deferred, but its 2 TaskEnd events
-      // fire in real time.
+      // Consumer finishes early -> its whole completion events are buffered (deferred): no result
+      // and no TaskEnd yet, since the entire event is withheld until the producer's fate is known.
       complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
-      assert(results.isEmpty, "consumer job result should be deferred while the producer runs")
+      assert(results.isEmpty, "consumer completions should be buffered while the producer runs")
       sc.listenerBus.waitUntilEmpty(10000)
-      assert(taskEndCount.get() === 2,
-        "consumer's TaskEnd events must fire inline, before the producer's fate; got " +
+      assert(taskEndCount.get() === 0,
+        "buffered consumer completions must not fire TaskEnd until released; got " +
           taskEndCount.get())
 
-      // The producer now FAILS its whole task set. The job fails; the deferred consumer completion
-      // must NOT be applied as a result, and no consumer TaskEnd is re-emitted on the drop path.
+      // The producer now FAILS its whole task set. The job fails; the buffered consumer successes
+      // must NOT be applied as results, but their TaskEnd events ARE emitted on the drop path so
+      // active-task-tracking listeners see the tasks finish.
       failed(producerTaskSet, "producer blew up")
       assert(failure.get() != null, "job should fail when the producer fails")
       assert(results.isEmpty,
-        "deferred consumer completion must be dropped when the producer fails, not applied")
+        "buffered consumer successes must be dropped when the producer fails, not applied")
       sc.listenerBus.waitUntilEmpty(10000)
       assert(taskEndCount.get() === 2,
-        "drop path must not re-emit consumer TaskEnd events (they already fired); got " +
-          taskEndCount.get())
+        "drop path must emit the buffered consumer TaskEnd events; got " + taskEndCount.get())
       assertDataStructuresEmpty()
     } finally {
       sc.removeSparkListener(countingListener)
@@ -6713,14 +6714,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
 
-  test("pipelined shuffle: a deferred consumer task fires its TaskEnd exactly once, in real time") {
-    // A deferred consumer's per-task side effects (task-end
-    // listener event, accumulator update) run in REAL TIME as its tasks finish -- NOT withheld
-    // until replay -- and each runs exactly once (the completion bookkeeping alone is deferred,
-    // then replayed with finishOnly=true, which must not re-post the TaskEnd). The producer (2
-    // tasks) and consumer (2 tasks) yield exactly 4 TaskEnd events total; a buffer+replay
-    // double-post would inflate that to 6, and a withhold-until-replay bug would delay the 2
-    // consumer events.
+  test("pipelined shuffle: a deferred consumer task fires its TaskEnd exactly once (at replay)") {
+    // A deferred CompletionEvent must have its side effects (task-end listener event, accumulator
+    // update) applied exactly once -- at replay -- not once when buffered and again when replayed.
+    // The producer (2 tasks) and consumer (2 tasks) yield exactly 4 TaskEnd events total; a
+    // buffer+replay double-post would inflate that count.
     val taskEndCount = new java.util.concurrent.atomic.AtomicInteger(0)
     val countingListener = new SparkListener {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = taskEndCount.incrementAndGet()
@@ -6734,17 +6732,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val producerStageId = taskSets.head.stageId
       val consumerTaskSet = taskSets(1)
 
-      // Consumer finishes first. Its completion BOOKKEEPING is buffered (no result yet), but its
-      // per-task TaskEnd events fire immediately.
+      // Consumer finishes first -> its two completions are buffered (deferred, no TaskEnd yet).
       complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
       assert(results.isEmpty, "consumer job result must be deferred until the producer finishes")
       sc.listenerBus.waitUntilEmpty(10000)
-      assert(taskEndCount.get() === 2,
-        "consumer's 2 TaskEnd events must fire in real time, not at replay; got " +
+      assert(taskEndCount.get() === 0,
+        "deferred consumer completions must not fire TaskEnd until replay; got " +
           taskEndCount.get())
 
-      // Producer finishes -> the two deferred consumer completions replay (finishOnly=true): the
-      // job result is applied now, but NO additional TaskEnd is posted (they already fired above).
+      // Producer finishes -> the two deferred consumer completions replay.
       completeShuffleMapStageSuccessfully(producerStageId, 0, 2)
       assert(results === Map(0 -> 42, 1 -> 43))
       sc.listenerBus.waitUntilEmpty(10000)
