@@ -304,8 +304,10 @@ class VectorIndexerModel private[ml] (
   private[ml] def this() = this("", -1, Map.empty)
 
   private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
     // categoryMaps: Map[Int, Map[Double, Int]]
-    estimateMatadataSize + SizeEstimator.estimate(categoryMaps)
+    size += SizeEstimator.estimate(categoryMaps)
+    size
   }
 
   /** Java-friendly version of [[categoryMaps]] */
