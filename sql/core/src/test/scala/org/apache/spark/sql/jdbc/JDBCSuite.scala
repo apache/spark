@@ -21,7 +21,7 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, DriverManager, ResultSet, SQLException, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.time.format.DateTimeFormatter
-import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
+import java.util.{Calendar, GregorianCalendar, Locale, Properties, TimeZone}
 
 import scala.jdk.CollectionConverters._
 import scala.util.Random
@@ -917,6 +917,59 @@ class JDBCSuite extends SharedSparkSession {
     assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") === MsSqlServerDialect())
     assert(JdbcDialects.get("jdbc:derby:db") === DerbyDialect())
     assert(JdbcDialects.get("test.invalid") === NoopDialect)
+  }
+
+  test("JDBC dialect aliases") {
+    assert(JdbcDialects.get("jdbc:aws-wrapper:mysql://127.0.0.1/db") === MySQLDialect())
+    assert(JdbcDialects.get("jdbc:aws-wrapper:postgresql://127.0.0.1/db") ===
+      PostgresDialect())
+
+    val alias = "jdbc:test-wrapper:mysql:"
+    try {
+      JdbcDialects.registerDialectAlias(alias, "jdbc:mysql:")
+      assert(JdbcDialects.get("jdbc:test-wrapper:mysql://127.0.0.1/db") === MySQLDialect())
+      assert(JdbcDialects.get("JDBC:TEST-WRAPPER:MYSQL://127.0.0.1/db") === MySQLDialect())
+
+      JdbcDialects.registerDialectAlias(alias, "jdbc:postgresql:")
+      assert(JdbcDialects.get("jdbc:test-wrapper:mysql://127.0.0.1/db") ===
+        PostgresDialect())
+    } finally {
+      JdbcDialects.unregisterDialectAlias(alias)
+    }
+    assert(JdbcDialects.get("jdbc:test-wrapper:mysql://127.0.0.1/db") === NoopDialect)
+  }
+
+  test("A registered JDBC dialect takes precedence over an alias") {
+    val dialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean =
+        url.toLowerCase(Locale.ROOT).startsWith("jdbc:aws-wrapper:mysql:")
+    }
+    JdbcDialects.registerDialect(dialect)
+    try {
+      assert(JdbcDialects.get("jdbc:aws-wrapper:mysql://127.0.0.1/db") === dialect)
+    } finally {
+      JdbcDialects.unregisterDialect(dialect)
+    }
+  }
+
+  test("JDBC dialect alias validation") {
+    Seq(
+      "mysql:" -> "jdbc:mysql:",
+      "jdbc:mysql" -> "jdbc:mysql:",
+      "jdbc:test-wrapper:" -> "mysql:",
+      "jdbc:test-wrapper:" -> "jdbc:mysql").foreach { case (alias, canonical) =>
+      val error = intercept[IllegalArgumentException] {
+        JdbcDialects.registerDialectAlias(alias, canonical)
+      }
+      assert(error.getMessage.contains("must start with 'jdbc:' and end with ':'"))
+    }
+  }
+
+  test("JDBC dialect matching does not inspect the URL authority or path") {
+    assert(JdbcDialects.get("jdbc:unknown:mysql://127.0.0.1/db") === NoopDialect)
+    assert(JdbcDialects.get("jdbc:p6spy:mysql://127.0.0.1/db") === NoopDialect)
+    assert(JdbcDialects.get("jdbc:postgresql://host.mysql.com/db") === PostgresDialect())
+    assert(JdbcDialects.get("jdbc:mysql://host.postgresql.com/db") === MySQLDialect())
   }
 
   test("SPARK-57447: (H2|MySQL|Postgres)Dialect escape a single quote in indexExists") {

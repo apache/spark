@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, Date, Driver, ResultSetMetaData, SQLException, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
+import java.util.Locale
 import java.util.ServiceLoader
 import java.util.concurrent.TimeUnit
 
@@ -992,6 +993,52 @@ private[sql] trait NoLegacyJDBCError extends JdbcDialect {
 @DeveloperApi
 object JdbcDialects {
 
+  private[this] var aliases = List[(String, String)]()
+
+  /**
+   * Register an alias from a JDBC URL prefix to the canonical prefix understood by a dialect.
+   * The alias affects dialect lookup only; Spark still passes the original URL to the JDBC driver.
+   * Registering the same alias again replaces its previous canonical prefix.
+   * Aliases are used only when no registered dialect handles the original URL.
+   *
+   * Prefixes must start with `jdbc:` and end with `:`. Matching is case-insensitive.
+   *
+   * @param aliasPrefix The JDBC URL prefix used by a wrapper driver.
+   * @param canonicalPrefix The corresponding prefix understood by the underlying dialect.
+   */
+  @Since("4.3.0")
+  def registerDialectAlias(aliasPrefix: String, canonicalPrefix: String): Unit = {
+    val alias = normalizePrefix(aliasPrefix)
+    val canonical = normalizePrefix(canonicalPrefix)
+    aliases = (alias, canonical) :: aliases.filterNot(_._1 == alias)
+  }
+
+  /**
+   * Unregister a JDBC dialect alias. Does nothing if the alias is not registered.
+   *
+   * @param aliasPrefix The JDBC URL prefix used by a wrapper driver.
+   */
+  @Since("4.3.0")
+  def unregisterDialectAlias(aliasPrefix: String): Unit = {
+    val alias = normalizePrefix(aliasPrefix)
+    aliases = aliases.filterNot(_._1 == alias)
+  }
+
+  private def normalizePrefix(prefix: String): String = {
+    val normalized = prefix.toLowerCase(Locale.ROOT)
+    require(normalized.startsWith("jdbc:") && normalized.endsWith(":"),
+      s"JDBC dialect alias prefixes must start with 'jdbc:' and end with ':': $prefix")
+    normalized
+  }
+
+  private def resolveAlias(url: String): String = {
+    val normalizedUrl = url.toLowerCase(Locale.ROOT)
+    aliases.collectFirst {
+      case (alias, canonical) if normalizedUrl.startsWith(alias) =>
+        canonical + url.substring(alias.length)
+    }.getOrElse(url)
+  }
+
   /**
    * Register a dialect for use on all new matching jdbc `org.apache.spark.sql.DataFrame`.
    * Reading an existing dialect will cause a move-to-front.
@@ -1021,12 +1068,17 @@ object JdbcDialects {
     }
   }
   registerDialects()
+  registerDialectAlias("jdbc:aws-wrapper:mysql:", "jdbc:mysql:")
+  registerDialectAlias("jdbc:aws-wrapper:postgresql:", "jdbc:postgresql:")
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
    */
   def get(url: String): JdbcDialect = {
-    val matchingDialects = dialects.filter(_.canHandle(url))
+    val matchingDialects = dialects.filter(_.canHandle(url)) match {
+      case Nil => dialects.filter(_.canHandle(resolveAlias(url)))
+      case matches => matches
+    }
     matchingDialects.length match {
       case 0 => NoopDialect
       case 1 => matchingDialects.head
