@@ -134,7 +134,7 @@ Project [reverse(abcde) AS reverse(abcde)#x]
 select i, left('ahoj', i), right('ahoj', i) from range(-5, 6) t(i) order by i
 -- !query analysis
 Sort [i#xL ASC NULLS FIRST], true
-+- Project [i#xL, left(ahoj, cast(i#xL as int)) AS left(ahoj, i)#x, right(ahoj, cast(i#xL as int)) AS right(ahoj, i)#x]
++- Project [i#xL, left(ahoj, cast(i#xL as int)) AS left(ahoj, i)#x, right(ahoj, i#xL) AS right(ahoj, i)#x]
    +- SubqueryAlias t
       +- Project [id#xL AS i#xL]
          +- Range (-5, 6, step=1)

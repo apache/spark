@@ -34,7 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -831,7 +831,18 @@ case class AdaptiveSparkPlanExec(
     try {
       logicalPlan.invalidateStatsCache()
       val optimized = optimizer.execute(logicalPlan)
-      val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
+      // Strip DelegateExpression once here and reuse the SAME lowered tree for both planning and
+      // the returned logical plan. `createSparkPlan` is the single place that strips
+      // DelegateExpression before planning; feeding it the already-lowered tree makes its internal
+      // strip a no-op (the same instance is returned when no delegate remains), so the re-planned
+      // stage sees the real executed expression AND the physical plan's `logicalLink` targets point
+      // at `lowered`'s own nodes. Returning the unlowered `optimized` instead would leave those
+      // links pointing at lowered copies absent from the returned tree, so
+      // `replaceWithQueryStagesInLogicalPlan` could not match a completed stage back by reference
+      // equality and would lose that stage's statistics.
+      val lowered = LowerDelegateExpression(optimized)
+      val sparkPlan = QueryExecution.createSparkPlan(
+        context.session.sessionState.planner, lowered)
       val newPlan = applyPhysicalRules(
         applyQueryPostPlannerStrategyRules(sparkPlan),
         preprocessingRules ++ queryStagePreparationRules,
@@ -850,7 +861,7 @@ case class AdaptiveSparkPlanExec(
         case _ => newPlan
       }
 
-      Some((finalPlan, optimized))
+      Some((finalPlan, lowered))
     } catch {
       case e: InvalidAQEPlanException[_] =>
         logOnLevel(log"Re-optimize - ${MDC(ERROR, e.getMessage())}:\n" +

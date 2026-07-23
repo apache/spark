@@ -558,7 +558,8 @@ class ResolverGuard(
           _: TryValidateUTF8 | _: StringReplace | _: Overlay | _: StringTranslate | _: FindInSet |
           _: String2TrimExpression | _: StringTrimBoth | _: StringInstr | _: SubstringIndex |
           _: StringLocate | _: StringLPad | _: BinaryPad | _: StringRPad | _: FormatString |
-          _: InitCap | _: StringRepeat | _: StringSpace | _: Substring | _: Right | _: Left |
+          _: InitCap | _: StringRepeat | _: StringSpace | _: Substring | _: DelegateExpression |
+          _: Left |
           _: Length | _: BitLength | _: OctetLength | _: Levenshtein | _: SoundEx | _: Ascii |
           _: Chr | _: Base64 | _: UnBase64 | _: Decode | _: StringDecode | _: Encode | _: ToBinary |
           _: FormatNumber | _: Sentences | _: StringSplitSQL | _: SplitPart | _: Empty2Null |

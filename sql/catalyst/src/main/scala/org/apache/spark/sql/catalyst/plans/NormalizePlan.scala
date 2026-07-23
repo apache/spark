@@ -50,7 +50,7 @@ object NormalizePlan extends PredicateHelper {
    */
   def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
     val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
-    withNormalizedRuntimeReplaceable.transformAllExpressions {
+    lazy val rule: PartialFunction[Expression, Expression] = {
       case subqueryExpression: SubqueryExpression =>
         val normalizedPlan = normalizeExpressions(subqueryExpression.plan)
         subqueryExpression.withNewPlan(normalizedPlan)
@@ -60,7 +60,16 @@ object NormalizePlan extends PredicateHelper {
         commonExpressionRef.copy(id = new CommonExpressionId(id = 0))
       case expressionWithRandomSeed: ExpressionWithRandomSeed =>
         expressionWithRandomSeed.withNewSeed(0)
+      case d: DelegateExpression =>
+        // `inputs` are display-only metadata, not children, so `transformAllExpressions` never
+        // reaches them -- yet a `Rand` seed or `CommonExpressionId` there is just as
+        // run-dependent as in the `definition` child. Normalize them explicitly with the same
+        // rule (e.g. `right(rand(), 1)` under the Hybrid Analyzer, whose fixed-point and
+        // single-pass runs pick different seeds, would otherwise fail structural comparison).
+        // `definition` is reached by the surrounding traversal.
+        d.copy(inputs = d.inputs.map(_.transform(rule)))
     }
+    withNormalizedRuntimeReplaceable.transformAllExpressions(rule)
   }
 
   /**
@@ -86,7 +95,15 @@ object NormalizePlan extends PredicateHelper {
    * we must normalize them to check if two different queries are identical.
    */
   def normalizeExprIds(plan: LogicalPlan): LogicalPlan = {
-    plan.transformAllExpressions {
+    // Defined as a named rule (rather than inline) so it can also be applied to a
+    // `DelegateExpression`'s `inputs`, which are display-only metadata -- not children -- and so
+    // are never reached by `transformAllExpressions`. Normalizing them explicitly keeps the
+    // informational call deterministic across runs (e.g. `right(g#0, g#0)` in EXPLAIN), since expr
+    // ids come from a process-global counter; the `definition` child is reached by the normal
+    // traversal.
+    lazy val rule: PartialFunction[Expression, Expression] = {
+      case d: DelegateExpression =>
+        d.copy(inputs = d.inputs.map(_.transform(rule)))
       case s: ScalarSubquery =>
         s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
       case s: LateralSubquery =>
@@ -114,6 +131,7 @@ object NormalizePlan extends PredicateHelper {
       case a: FunctionTableSubqueryArgumentExpression =>
         a.copy(plan = normalizeExprIds(a.plan), exprId = ExprId(0))
     }
+    plan.transformAllExpressions(rule)
   }
 
   /**
