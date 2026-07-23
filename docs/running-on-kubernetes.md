@@ -1599,7 +1599,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>false</code></td>
   <td>
     If true, Spark will create a dedicated Kubernetes Service for the Spark driver Web UI.
-    When enabled, after the driver Web UI starts, Spark will patch the Service's 
+    When enabled, after the driver Web UI starts, Spark will patch the Service's
     <code>targetPort</code> to match the actual bound UI port, which allows using
     <code>spark.ui.port=0</code> (random port). Requires the driver's ServiceAccount to have
     <code>get</code> and <code>patch</code> verbs on <code>services</code>.
