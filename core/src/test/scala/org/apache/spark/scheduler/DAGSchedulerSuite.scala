@@ -4422,6 +4422,28 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(rpMerged.id == expectedid.get)
   }
 
+  test("SPARK-58192: per-stage resource-profile properties do not mutate the shared job " +
+      "Properties") {
+    // An explicit executor cores makes the default profile's max-concurrency known, so
+    // addPySparkConfigsToProperties writes the per-stage resource local properties.
+    conf.set(config.EXECUTOR_CORES.key, "4")
+    val jobProps = new Properties()
+    val rdd = sc.parallelize(1 to 10, 2).map(x => (x, x))
+    submit(rdd, Array(0, 1), properties = jobProps)
+
+    // The submitted task set carries the profile's max concurrent tasks on its own copy ...
+    val taskSetProps = taskSets.head.properties
+    assert(taskSetProps.getProperty(ResourceProfile.MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY) === "4")
+    // ... while the shared job Properties instance is left untouched, so sibling stages of the
+    // same job that use a different resource profile cannot clobber each other's value (a
+    // GPU-limited stage and a CPU-limited stage would otherwise share this map, per SPARK-58192).
+    assert(jobProps.getProperty(ResourceProfile.MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY) === null)
+    assert(jobProps.getProperty(ResourceProfile.EXECUTOR_CORES_LOCAL_PROPERTY) === null)
+
+    complete(taskSets.head, Seq((Success, 42), (Success, 42)))
+    assert(results === Map(0 -> 42, 1 -> 42))
+  }
+
   test("test 2 resource profiles errors by default") {
     import org.apache.spark.resource._
     val ereqs = new ExecutorResourceRequests().cores(4)

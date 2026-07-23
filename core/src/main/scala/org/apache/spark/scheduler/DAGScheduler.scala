@@ -1873,8 +1873,11 @@ private[spark] class DAGScheduler(
     val partitionsToCompute: Seq[Int] = stage.findMissingPartitions()
 
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
-    // with this Stage
-    val properties = jobIdToActiveJob(jobId).properties
+    // with this Stage. Clone it per stage so the profile-specific values written by
+    // addPySparkConfigsToProperties below don't leak -- through the shared, mutable job
+    // Properties instance passed to every task and TaskSet of the job -- into sibling stages
+    // of the same job that use a different resource profile.
+    val properties = Utils.cloneProperties(jobIdToActiveJob(jobId).properties)
     addPySparkConfigsToProperties(stage, properties)
 
     runningStages += stage
