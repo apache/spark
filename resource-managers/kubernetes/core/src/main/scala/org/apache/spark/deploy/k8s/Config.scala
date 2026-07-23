@@ -74,7 +74,8 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY =
     ConfigBuilder("spark.kubernetes.driver.service.ipFamilyPolicy")
-      .doc("K8s IP Family Policy for Driver Service")
+      .doc("K8s IP Family Policy for Driver Service. The driver UI Service reuses this " +
+        "setting to keep the same IP family.")
       .version("3.4.0")
       .stringConf
       .checkValues(Set("SingleStack", "PreferDualStack", "RequireDualStack"))
@@ -82,7 +83,8 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_DRIVER_SERVICE_IP_FAMILIES =
     ConfigBuilder("spark.kubernetes.driver.service.ipFamilies")
-      .doc("A list of IP families for K8s Driver Service")
+      .doc("A list of IP families for K8s Driver Service. The driver UI Service reuses this " +
+        "setting to keep the same IP family.")
       .version("3.4.0")
       .stringConf
       .checkValues(Set("IPv4", "IPv6", "IPv4,IPv6", "IPv6,IPv4"))

@@ -22,6 +22,8 @@ import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config.{
+  KUBERNETES_DRIVER_SERVICE_IP_FAMILIES,
+  KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY,
   KUBERNETES_DRIVER_UI_SERVICE_ENABLED,
   KUBERNETES_DRIVER_UI_SERVICE_NAME,
   KUBERNETES_DRIVER_UI_SERVICE_TYPE
@@ -63,6 +65,11 @@ private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriver
   private lazy val serviceName: String = kubernetesConf.get(KUBERNETES_DRIVER_UI_SERVICE_NAME)
     .getOrElse(kubernetesConf.driverUIServiceName)
 
+  // The UI Service reuses the driver Service IP family settings to keep the same IP family.
+  private lazy val ipFamilyPolicy = kubernetesConf.get(KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY)
+  private lazy val ipFamilies =
+    kubernetesConf.get(KUBERNETES_DRIVER_SERVICE_IP_FAMILIES).split(",").toList.asJava
+
   override def configurePod(pod: SparkPod): SparkPod = pod
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
@@ -85,6 +92,8 @@ private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriver
         .endMetadata()
       .withNewSpec()
         .withType(serviceType)
+        .withIpFamilyPolicy(ipFamilyPolicy)
+        .withIpFamilies(ipFamilies)
         .withSelector(kubernetesConf.labels.asJava)
         .addNewPort()
           .withName(UI_PORT_NAME)
