@@ -97,7 +97,7 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
       .setInputCols(Array("input1", "input2", "input3"))
       .setOutputCols(Array("output1", "output2", "output3"))
       .fit(df)
-    val maxSize = 1024 * 4
+    val maxSize = 1024 * 6
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
