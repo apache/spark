@@ -250,10 +250,16 @@ slots.
   advance stage or job completion, nor make its output visible to a downstream consumer, until the
   group does — whether that output is a `ResultStage`'s job result or a materialized shuffle feeding a
   downstream group (§2.2).
-- **Defer the finish decision, not per-task work.** When a member finishes before its group, only its
-  stage-finish / job-finish transition is deferred until group completion. Per-task side effects that
-  must always run — accumulator updates, output-commit coordination, task-end listener events — run
-  immediately.
+- **Defer the whole completion until the group completes.** When a member finishes before its group,
+  its completion event is buffered in full and replayed once — at group completion — so its
+  accumulator updates, task-end listener event, and stage-finish / job-finish transition all run at
+  that single point, each exactly once, and none can advance group/job completion early. Buffering
+  the entire event (rather than only the finish transition and running the per-task effects inline) is
+  what makes exactly-once fall out for free: there is no inline half to reconcile against the replay.
+  The one side effect that still runs immediately is `OutputCommitCoordinator` bookkeeping — it merely
+  records that the attempt finished and cannot advance completion; a result task's actual output
+  *commit* already happened on the executor during task execution, before the scheduler saw the event
+  (see the idempotency bullet below).
   - *Deferred output registration.* A member's materialized output edge (to a consumer outside the
     group, §7) is written as its tasks run, but its map-output registration is **deferred to group
     completion** — so an out-of-group consumer, which waits for the group anyway (§7), only ever sees
@@ -263,10 +269,12 @@ slots.
     consistency-clean: the group's internal replay never reaches the materialized consumer, because
     it has not started.
 - **Replay window.** There is a window between a member finishing and group completion. A failure in
-  that window is a group failure: the deferred finish transitions are dropped, and recovery is as in
+  that window is a group failure: the buffered completion events are dropped without applying their
+  stage/job success (their `TaskEnd` events are still flushed, §5.1), and recovery is as in
   §6 — the group reruns as a unit (in v1, via caller rerun).
-- **In-group result-stage side effects must be idempotent.** Per-task side effects run immediately
-  (above), including a result stage's output commit. If a result task commits and a sibling then
+- **In-group result-stage side effects must be idempotent.** A result stage's output commit happens
+  on the executor during task execution — before the scheduler buffers the completion event, and
+  therefore not something deferral can hold back. If a result task commits and a sibling then
   fails in the replay window, the group reruns and re-delivers that output (in v1, via caller rerun) —
   the standard streaming model, where a batch is re-delivered on recovery and the sink must absorb it.
   So v1 requires an in-group result stage's side effects to be idempotent — the sink must absorb
@@ -302,20 +310,26 @@ slots.
 The listener bus is an external contract that monitoring tools depend on, so it is worth stating
 exactly when each event is delivered. The rule follows directly from group-atomic completion (the
 point at which the group's outputs become observable — distinct from the per-task output-commit
-above): **task-level events flow in real time, but stage-completion and job-completion events are
-held until the group completes — so a listener never observes a member as *successfully completed*
-before the group as a whole has.**
+above): **a member's completion events are held until the group completes — so a listener never
+observes a member as *successfully completed*, nor sees its tasks' `TaskEnd` events, before the
+group as a whole has.** `TaskStart` still fires in real time (a member's tasks genuinely start when
+admitted); it is the *completion* half — `TaskEnd` and the stage/job-completion events — that is
+deferred, because the whole completion event is buffered until group completion (§5).
 
 | Event | Timing | Rationale |
 |-------|--------|-----------|
-| `SparkListenerTaskStart` / `SparkListenerTaskEnd` | Real time, as they occur | Per-task facts are true when they happen; a group's members genuinely run concurrently. Deferring these would freeze a member's live progress and metrics for the whole group's duration. Note a successful `TaskEnd` means "this task finished," not "its output is committed" — already true in Spark, since a stage attempt can later be discarded. |
+| `SparkListenerTaskStart` | Real time, as tasks start | A group's members genuinely run concurrently once admitted; a monitor should show their tasks starting live. |
+| `SparkListenerTaskEnd` | Deferred to group completion (for a member that finishes early); on group failure, still emitted (the tasks did finish) but with no accompanying success completion | The whole completion event is buffered until the group completes (§5), so `TaskEnd` rides along with it and is emitted once, at replay. On group failure the buffered `TaskEnd` events are still flushed — the tasks genuinely finished, and active-task-tracking listeners must see them end — but no stage/job *success* is emitted. Note a successful `TaskEnd` means "this task finished," not "its output is committed" — already true in Spark, since a stage attempt can later be discarded. |
 | `SparkListenerStageSubmitted` | Real time, at group admission | All member stages are submitted together (§4); a monitor should show them active simultaneously. |
 | `SparkListenerStageCompleted` | Deferred to group completion; on group failure, emitted with a failure reason | "Completed" should track group completion, which is atomic at the group level. A member whose tasks finish early is reported as still running until the group completes — which matches the truth that its results are not usable until then. This avoids emitting a success-shaped completion for an attempt that a later group failure would discard. |
 | `SparkListenerJobEnd(JobSucceeded)` | At group completion only | Job completion delivers results to the caller and cancels sibling stages; emitting it before the group completes risks double/inconsistent result delivery if the group later fails. Non-negotiable. |
 | `SparkListenerJobEnd(JobFailed)` | On group failure | Group-atomic failure (§6): buffered success transitions are dropped, never replayed as success. |
 
-Failure-path consequence: already-emitted task events stand as-is (they were true), consistent with
-how Spark treats task events from a stage attempt that is later discarded.
+Failure-path consequence: on group failure, any `TaskStart` already emitted stands as-is, and the
+buffered `TaskEnd` events for an early-finishing member are flushed (the tasks did finish) — but no
+stage/job *success* is ever emitted for the discarded attempt. This is consistent with how Spark
+treats task events from a stage attempt that is later discarded: the task-level facts stand, the
+success-shaped completion does not.
 
 ---
 
