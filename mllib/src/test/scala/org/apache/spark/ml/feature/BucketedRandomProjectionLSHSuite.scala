@@ -54,7 +54,7 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
       .setOutputCol("values")
       .setBucketLength(1.0)
       .fit(dataset)
-    val maxSize = 4096
+    val maxSize = 1024 * 4
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }

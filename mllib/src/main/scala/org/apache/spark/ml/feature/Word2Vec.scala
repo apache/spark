@@ -220,7 +220,9 @@ class Word2VecModel private[ml] (
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
     if (wordVectors != null) {
+      // wordIndex: Map[String, Int]
       size += SizeEstimator.estimate(wordVectors.wordIndex)
+      // wordVectors: Array[Float]
       size += SizeEstimator.estimate(wordVectors.wordVectors)
     }
     size
