@@ -35,7 +35,8 @@ private class TestNonKerberosTokenProvider extends HadoopDelegationTokenProvider
   override def serviceName: String = "test-direct"
 
   override def delegationTokensRequired(
-      sparkConf: SparkConf, hadoopConf: Configuration): Boolean = true
+      sparkConf: SparkConf, hadoopConf: Configuration): Boolean =
+    sparkConf.getBoolean("spark.security.credentials.directProviders.enabled", false)
 
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
@@ -66,7 +67,8 @@ private class TestFailingProvider extends HadoopDelegationTokenProvider {
   override def serviceName: String = "test-failing"
 
   override def delegationTokensRequired(
-      sparkConf: SparkConf, hadoopConf: Configuration): Boolean = true
+      sparkConf: SparkConf, hadoopConf: Configuration): Boolean =
+    sparkConf.getBoolean("spark.security.credentials.directProviders.enabled", false)
 
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
