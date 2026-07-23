@@ -33,4 +33,4 @@ For more information, see the [installation guide][install]. If you're building 
 
 PySpark is not intended to be a complete distribution of Spark. It's meant for local development or for interacting with an existing cluster (be it Spark standalone, YARN, or Kubernetes). Using PySpark to set up a new standalone Spark cluster is not supported. To set up a standalone cluster please [use the full distribution of Spark](https://spark.apache.org/downloads.html).
 
-When using PySpark with an existing Spark standalone cluster you must ensure that the major and minor version (e.g. `4.3.*`) match or you may experience odd errors.
+When using PySpark with an existing Spark cluster you must ensure that the major and minor version (e.g. `4.3.*`) match or you may experience odd errors.
