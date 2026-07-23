@@ -46,6 +46,7 @@ on:
     - 'dev/spark-test-image/python-314/Dockerfile'
     - 'dev/spark-test-image/python-314-nogil/Dockerfile'
     - '.github/workflows/build_infra_images_cache.yml'
+    - 'pyproject.toml'
   # Create infra image when cutting down branches/tags
   create:
   workflow_dispatch:
@@ -143,6 +144,8 @@ jobs:
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-311/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-311-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-311-cache:${{ github.ref_name }}
@@ -171,6 +174,8 @@ jobs:
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-312/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-312-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-312-cache:${{ github.ref_name }}
@@ -199,6 +204,8 @@ jobs:
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-313/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-313-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-313-cache:${{ github.ref_name }}
@@ -213,6 +220,8 @@ jobs:
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-314/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-314-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-314-cache:${{ github.ref_name }}
