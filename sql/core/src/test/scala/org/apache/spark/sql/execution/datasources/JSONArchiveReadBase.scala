@@ -185,10 +185,8 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("JSON: the DSv2 path refuses to infer a schema for an archive (UNABLE_TO_INFER_SCHEMA)") {
-    // Archive scanning is wired into the v1 file source only, so the DSv2 reader cannot read
-    // archives. On the v2 path inference must keep returning None for an archive input -- raising
-    // UNABLE_TO_INFER_SCHEMA -- rather than inferring a schema the v2 scan would then mis-read as
-    // raw archive bytes. Forcing json off the v1 source list routes the read through JsonTable.
+    // Forcing json off the v1 source list routes the archive read through the DSv2 JsonTable, which
+    // cannot read archives and must fail with UNABLE_TO_INFER_SCHEMA, not parse raw bytes.
     withArchiveFile() { archive =>
       writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
