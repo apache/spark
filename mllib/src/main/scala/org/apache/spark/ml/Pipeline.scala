@@ -35,6 +35,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
@@ -321,6 +322,13 @@ class PipelineModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("1.4.0") val stages: Array[Transformer])
   extends Model[PipelineModel] with MLWritable with Logging {
+
+  private[spark] override def estimatedSize: Long = {
+    estimateMatadataSize + stages.iterator.map {
+      case model: Model[_] => model.estimatedSize
+      case stage => SizeEstimator.estimate(stage)
+    }.sum
+  }
 
   /** A Java/Python-friendly auxiliary constructor. */
   private[ml] def this(uid: String, stages: ju.List[Transformer]) = {
