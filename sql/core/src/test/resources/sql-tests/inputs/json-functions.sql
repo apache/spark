@@ -108,6 +108,24 @@ select json_object_keys('{[1,2]}');
 select json_object_keys('{"key": 45, "random_string"}');
 select json_object_keys('[1, 2, 3]');
 
+-- json_typeof
+select json_typeof();
+select json_typeof(null);
+select json_typeof(200);
+select json_typeof('');
+select json_typeof('{}');
+select json_typeof('{"key": 1, "arr": [1, 2]}');
+select json_typeof('[]');
+select json_typeof('[1, 2, 3]');
+select json_typeof('"hello"');
+select json_typeof('123');
+select json_typeof('1.5');
+select json_typeof('true');
+select json_typeof('false');
+select json_typeof('null');
+select json_typeof('bad');
+select json_typeof('{"key": 45, "random_string"}');
+
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;
 

@@ -826,6 +826,169 @@ NULL
 
 
 -- !query
+select json_typeof()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`json_typeof`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 20,
+    "fragment" : "json_typeof()"
+  } ]
+}
+
+
+-- !query
+select json_typeof(null)
+-- !query schema
+struct<json_typeof(NULL):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_typeof(200)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"200\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"json_typeof(200)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "json_typeof(200)"
+  } ]
+}
+
+
+-- !query
+select json_typeof('')
+-- !query schema
+struct<json_typeof():string>
+-- !query output
+NULL
+
+
+-- !query
+select json_typeof('{}')
+-- !query schema
+struct<json_typeof({}):string>
+-- !query output
+object
+
+
+-- !query
+select json_typeof('{"key": 1, "arr": [1, 2]}')
+-- !query schema
+struct<json_typeof({"key": 1, "arr": [1, 2]}):string>
+-- !query output
+object
+
+
+-- !query
+select json_typeof('[]')
+-- !query schema
+struct<json_typeof([]):string>
+-- !query output
+array
+
+
+-- !query
+select json_typeof('[1, 2, 3]')
+-- !query schema
+struct<json_typeof([1, 2, 3]):string>
+-- !query output
+array
+
+
+-- !query
+select json_typeof('"hello"')
+-- !query schema
+struct<json_typeof("hello"):string>
+-- !query output
+string
+
+
+-- !query
+select json_typeof('123')
+-- !query schema
+struct<json_typeof(123):string>
+-- !query output
+number
+
+
+-- !query
+select json_typeof('1.5')
+-- !query schema
+struct<json_typeof(1.5):string>
+-- !query output
+number
+
+
+-- !query
+select json_typeof('true')
+-- !query schema
+struct<json_typeof(true):string>
+-- !query output
+boolean
+
+
+-- !query
+select json_typeof('false')
+-- !query schema
+struct<json_typeof(false):string>
+-- !query output
+boolean
+
+
+-- !query
+select json_typeof('null')
+-- !query schema
+struct<json_typeof(null):string>
+-- !query output
+null
+
+
+-- !query
+select json_typeof('bad')
+-- !query schema
+struct<json_typeof(bad):string>
+-- !query output
+NULL
+
+
+-- !query
+select json_typeof('{"key": 45, "random_string"}')
+-- !query schema
+struct<json_typeof({"key": 45, "random_string"}):string>
+-- !query output
+NULL
+
+
+-- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query schema
 struct<>
