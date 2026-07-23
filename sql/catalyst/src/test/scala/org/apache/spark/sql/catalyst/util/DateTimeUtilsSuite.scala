@@ -2363,7 +2363,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     // one second either side, before the first transition, beyond the materialized horizon, and a
     // deterministic pseudo-random spread.
     val zones = Seq("America/Los_Angeles", "Europe/Berlin", "Atlantic/Azores", "Asia/Kolkata",
-      "UTC", "Pacific/Apia", "Australia/Lord_Howe", "America/Sao_Paulo", "Asia/Tokyo", "Africa/Cairo")
+      "UTC", "Pacific/Apia", "Australia/Lord_Howe", "America/Sao_Paulo", "Asia/Tokyo",
+      "Africa/Cairo")
     for (z <- zones) {
       val zid = getZoneId(z)
       val rules = zid.getRules
@@ -2398,18 +2399,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("SPARK-57737: truncTimestamp fast path matches an independent oracle across DST zones") {
-    // The fast path's DST-cross guard (ZoneOffsetCache.currentWindowContains) admits the
-    // offset-arithmetic result only when the truncated candidate stays in the original instant's
-    // constant-offset window, otherwise deferring to the slow path. Pin that end-to-end: for a
-    // spread of zones, levels, and instants (transition boundaries + a pseudo-random spread),
-    // truncTimestamp must equal a ground-truth java.time truncation computed independently here.
+    // The fast path's DST-cross guard admits the offset-arithmetic result only when the truncated
+    // candidate carries the same offset as the original instant, otherwise deferring to the slow
+    // path. Pin that end-to-end: for a spread of zones, levels, and instants (transition
+    // boundaries + a pseudo-random spread), truncTimestamp must equal a ground-truth java.time
+    // truncation computed independently here.
     val zones = Seq("America/Los_Angeles", "Europe/Berlin", "America/Sao_Paulo", "Pacific/Apia",
       "Australia/Lord_Howe", "Asia/Kolkata", "America/Havana", "UTC")
     val levels = Seq(DateTimeUtils.TRUNC_TO_YEAR, DateTimeUtils.TRUNC_TO_QUARTER,
       DateTimeUtils.TRUNC_TO_MONTH, DateTimeUtils.TRUNC_TO_WEEK, DateTimeUtils.TRUNC_TO_DAY,
       DateTimeUtils.TRUNC_TO_HOUR, DateTimeUtils.TRUNC_TO_MINUTE)
     // The truncated period-start in wall-clock time (a LocalDateTime), computed independently.
-    def periodStartLocal(micros: Long, level: Int, zid: java.time.ZoneId): java.time.LocalDateTime = {
+    def periodStartLocal(micros: Long, level: Int, zid: ZoneId): LocalDateTime = {
       val zdt = DateTimeUtils.microsToInstant(micros).atZone(zid)
       level match {
         case DateTimeUtils.TRUNC_TO_YEAR => zdt.toLocalDate.withDayOfYear(1).atStartOfDay
