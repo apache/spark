@@ -712,7 +712,7 @@ class SparkSession(SparkConversionMixin):
         """Accessor for the JVM SQL-specific configurations"""
         return self._jsparkSession.sessionState().conf()
 
-    if not is_remote_only():
+    if TYPE_CHECKING or not is_remote_only():
 
         def newSession(self) -> "SparkSession":
             """
@@ -800,7 +800,7 @@ class SparkSession(SparkConversionMixin):
                 )
         return session
 
-    if not is_remote_only():
+    if TYPE_CHECKING or not is_remote_only():
 
         @property
         def sparkContext(self) -> "SparkContext":

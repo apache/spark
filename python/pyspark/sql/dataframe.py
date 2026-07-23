@@ -170,7 +170,7 @@ class DataFrame:
         """
         ...
 
-    if not is_remote_only():
+    if TYPE_CHECKING or not is_remote_only():
 
         @property
         def rdd(self) -> "RDD[Row]":
