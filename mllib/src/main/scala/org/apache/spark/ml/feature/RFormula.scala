@@ -34,7 +34,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SizeEstimator
 
 /**
  * Base trait for [[RFormula]] and [[RFormulaModel]].
@@ -354,21 +353,6 @@ class RFormulaModel private[feature](
 
   // For ml connect only
   private[ml] def this() = this("", null, null)
-
-  private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize
-    if (resolvedFormula != null) {
-      size += SizeEstimator.estimate(resolvedFormula)
-    }
-    if (pipelineModel != null) {
-      size += SizeEstimator.estimate(pipelineModel.uid)
-      size += pipelineModel.stages.iterator.map {
-        case model: Model[_] => model.estimatedSize
-        case stage => SizeEstimator.estimate(stage)
-      }.sum
-    }
-    size
-  }
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
