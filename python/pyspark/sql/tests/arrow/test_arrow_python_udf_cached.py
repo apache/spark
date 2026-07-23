@@ -18,7 +18,7 @@
 import datetime
 import unittest
 
-from pyspark.sql.functions import col, pandas_udf, udf
+from pyspark.sql.functions import col, udf
 from pyspark.sql import Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
@@ -72,12 +72,34 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         finally:
             super().tearDownClass()
 
+    def _assert_columnar_arrow_eval(self, df, expected_nodes):
+        # Assert the executed plan contains exactly `expected_nodes` ArrowEvalPythonExec
+        # operators and every one of them takes the columnar input path -- otherwise the
+        # test silently stops exercising the code this suite exists to pin.
+        nodes = []
+        stack = [df._jdf.queryExecution().executedPlan()]
+        while stack:
+            node = stack.pop()
+            name = node.getClass().getSimpleName()
+            if name == "AdaptiveSparkPlanExec":
+                stack.append(node.executedPlan())
+                continue
+            if name == "ArrowEvalPythonExec":
+                nodes.append(node)
+            children = node.children()
+            for i in range(children.size()):
+                stack.append(children.apply(i))
+        self.assertEqual(len(nodes), expected_nodes, "unexpected number of ArrowEvalPythonExec")
+        for node in nodes:
+            self.assertTrue(node.supportsColumnar(), "expected the columnar input path")
+
     def _assert_udf_on_cached_strings(self):
         df = self.spark.createDataFrame(
             [("hello",), (None,), ("world",)], schema="v string"
         ).cache()
         try:
             result = df.select(udf(lambda x: x.upper() if x is not None else None)(col("v")))
+            self._assert_columnar_arrow_eval(result, expected_nodes=1)
             assertDataFrameEqual(result, [Row("HELLO"), Row(None), Row("WORLD")])
         finally:
             df.unpersist()
@@ -103,23 +125,33 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([(1, "a"), (2, "b")], schema="i long, s string").cache()
         try:
             result = df.select(col("s"), udf(lambda x: x + 1, "long")(col("i")))
+            self._assert_columnar_arrow_eval(result, expected_nodes=1)
             assertDataFrameEqual(result, [Row("a", 2), Row("b", 3)])
         finally:
             df.unpersist()
 
-    def test_chained_udfs_on_timestamps_with_non_utc_session(self):
-        # A pandas UDF's timestamp output comes back from the worker labeled UTC, while the
-        # following Arrow-optimized Python UDF runs as a separate exec node whose stream
-        # declares the session time zone. The labels differ but the physical layout is
-        # identical (int64 epoch microseconds), so the congruence gate must not reject the
-        # pass-through for this normal mixed-UDF pipeline -- and the values must round-trip
-        # regardless of which path is taken.
+    def test_udf_on_timestamps_cached_under_different_time_zone(self):
+        # Pins the timestamp pass-through end to end: the plan takes the columnar path and
+        # the stored epoch round-trips unchanged across a session-timezone change between
+        # cache materialization and the UDF query. Note the cache rebuilds its Arrow schema
+        # at read time with the query's session timezone, so the actual and declared timezone
+        # labels the gate compares are equal by construction here; the layout-equal
+        # label-mismatch case (e.g. an external DSv2 Arrow source labeling UTC while the
+        # stream schema declares the session timezone) has no in-tree columnar producer and
+        # is pinned by the ArrowUtilsSuite congruence tests instead.
         ts = datetime.datetime(2025, 1, 6, 12, 30, 45)
-        with self.sql_conf({"spark.sql.session.timeZone": "America/Los_Angeles"}):
-            df = self.spark.createDataFrame([(ts,)], schema="ts timestamp")
-            identity = pandas_udf(lambda s: s, "timestamp")
-            result = df.select(udf(lambda t: t, "timestamp")(identity(col("ts"))))
-            assertDataFrameEqual(result, [Row(ts)])
+        with self.sql_conf({"spark.sql.session.timeZone": "UTC"}):
+            df = self.spark.createDataFrame([(ts,)], schema="ts timestamp").cache()
+            df.count()  # materialize: the cached vectors are labeled with the UTC session tz
+        try:
+            with self.sql_conf({"spark.sql.session.timeZone": "America/Los_Angeles"}):
+                result = df.select(udf(lambda t: t, "timestamp")(col("ts")))
+                self._assert_columnar_arrow_eval(result, expected_nodes=1)
+                # The stored epoch round-trips; naive-datetime wall time is preserved because
+                # createDataFrame and collect both convert against the machine-local timezone.
+                assertDataFrameEqual(result, [Row(ts)])
+        finally:
+            df.unpersist()
 
 
 if __name__ == "__main__":
