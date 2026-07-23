@@ -41,12 +41,18 @@ import org.apache.spark.annotation.{Since, Stable}
 class TaskResourceRequest(val resourceName: String, val amount: Double)
   extends Serializable {
 
-  // Cpus amounts are validated in TaskResourceRequests.cpus (and by the spark.task.cpus
-  // config parser), not here: this constructor also runs when the history server
-  // deserializes persisted data (JsonProtocol event logs, the protobuf KVStore), and a log
-  // written before cpus amounts were validated can legally carry e.g. a cpus amount of 0 --
-  // rejecting it here would abort replay of valid historical applications.
-  if (resourceName != ResourceProfile.CPUS) {
+  // Cpus amounts are fully validated in TaskResourceRequests.cpus (and by the spark.task.cpus
+  // config parser), not here: this constructor also runs when the history server deserializes
+  // persisted data (JsonProtocol event logs, the protobuf KVStore), and a log written before
+  // cpus amounts were validated can legally carry e.g. a cpus amount of 0 -- rejecting it
+  // here would abort replay of valid historical applications. Non-finite amounts are the
+  // exception: they have never been constructible (so they cannot appear in persisted data)
+  // and would leak an unusable profile into the driver registry before downstream accounting
+  // throws, so reject them even here.
+  if (resourceName == ResourceProfile.CPUS) {
+    require(!amount.isNaN && !amount.isInfinity,
+      s"The cpus amount ${amount} must be a finite number.")
+  } else {
     assert(amount <= 1.0 || amount % 1 == 0,
       s"The resource amount ${amount} must be either <= 1.0, or a whole number.")
   }

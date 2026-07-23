@@ -90,17 +90,28 @@ class TaskResourceRequests() extends Serializable {
    *               ie amount equals 0.5 translates into 2 tasks per resource address.
    */
   def resource(resourceName: String, amount: Double): this.type = {
-    val treq = new TaskResourceRequest(resourceName, amount)
-    _taskResources.put(resourceName, treq)
-    this
+    // Cpus amounts are validated only at request entry points (the TaskResourceRequest
+    // constructor stays lenient to deserialize persisted data), so route them through the
+    // validating method regardless of which entry point the caller picked.
+    if (resourceName == CPUS) {
+      cpus(amount)
+    } else {
+      val treq = new TaskResourceRequest(resourceName, amount)
+      _taskResources.put(resourceName, treq)
+      this
+    }
   }
 
   /**
    * Add a certain [[TaskResourceRequest]] to the request set.
    */
   def addRequest(treq: TaskResourceRequest): this.type = {
-    _taskResources.put(treq.resourceName, treq)
-    this
+    if (treq.resourceName == CPUS) {
+      cpus(treq.amount)
+    } else {
+      _taskResources.put(treq.resourceName, treq)
+      this
+    }
   }
 
   override def toString: String = {

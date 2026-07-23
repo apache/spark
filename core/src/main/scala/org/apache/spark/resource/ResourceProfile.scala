@@ -310,9 +310,9 @@ private[spark] class TaskResourceProfile(
     override val taskResources: Map[String, TaskResourceRequest])
   extends ResourceProfile(Map.empty, taskResources) {
 
-  // The task.amount in TaskResourceProfile falls within the range of 0 to 1.0,
-  // or it's a whole number, and it has been checked in the TaskResourceRequest.
-  // Therefore, we can safely skip this check.
+  // Custom task amounts are checked in the TaskResourceRequest constructor (<= 1.0 or a
+  // whole number) and cpus amounts at the request entry points (TaskResourceRequests / the
+  // spark.task.cpus config parser). Therefore, we can safely skip this check.
   override protected def validate(): Unit = {}
 
   override protected[spark] def getCustomExecutorResources()

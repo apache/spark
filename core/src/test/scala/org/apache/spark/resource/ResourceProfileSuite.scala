@@ -426,10 +426,29 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
       }
       assert(e.getMessage.contains("must be at least 1e-9"), s"for amount $amount")
     }
-    // The constructor itself stays lenient: it also runs when the history server
-    // deserializes persisted data (event logs, the protobuf KVStore), which can carry
+    // Every live entry point validates, not just cpus(): resource() and addRequest() route
+    // cpus amounts through the same check (spark.task.resource.cpus.amount flows through
+    // resource() as well), while valid amounts still land in the request map.
+    intercept[IllegalArgumentException] {
+      new TaskResourceRequests().resource(ResourceProfile.CPUS, 1e-10)
+    }
+    intercept[IllegalArgumentException] {
+      new TaskResourceRequests().addRequest(new TaskResourceRequest(ResourceProfile.CPUS, 0.0))
+    }
+    assert(new TaskResourceRequests().resource(ResourceProfile.CPUS, 0.5)
+      .requests(ResourceProfile.CPUS).amount === 0.5)
+    // The constructor itself stays lenient for finite amounts: it also runs when the history
+    // server deserializes persisted data (event logs, the protobuf KVStore), which can carry
     // amounts written before cpus values were validated.
     assert(new TaskResourceRequest(ResourceProfile.CPUS, 0.0).amount === 0.0)
+    // Non-finite amounts were never constructible, so they cannot appear in persisted data;
+    // the constructor rejects them so no path can register an unusable profile.
+    Seq(Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity).foreach { amount =>
+      val e = intercept[IllegalArgumentException] {
+        new TaskResourceRequest(ResourceProfile.CPUS, amount)
+      }
+      assert(e.getMessage.contains("must be a finite number"), s"for amount $amount")
+    }
   }
 
   test("SPARK-58192: numTasksBasedOnCores clamps to [0, Int.MaxValue]") {
