@@ -90,7 +90,6 @@ RUN python3.12 -m pip install \
     'zstandard==0.25.0' \
     'ipython' \
     'ipython_genutils' \
-    'jinja2' \
     'matplotlib' \
     'mypy==1.19.1' \
     'numpy==2.4.1' \
