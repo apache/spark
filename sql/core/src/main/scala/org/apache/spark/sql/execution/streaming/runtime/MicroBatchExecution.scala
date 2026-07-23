@@ -31,7 +31,7 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2TableReference}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTime, CurrentTimestampLike, FileSourceMetadataAttribute, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, Unassigned, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -1184,10 +1184,11 @@ class MicroBatchExecution(
     // Rewire the plan to use the new attributes that were returned by the source.
     val newAttributePlan = newBatchesPlan.transformAllExpressionsWithPruning(
       _.containsPattern(CURRENT_LIKE)) {
-      case ct: CurrentTimestamp =>
-        // CurrentTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
-        // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit
-        // dummy string to prevent UnresolvedException and to prevent to be used in the future.
+      case ct: CurrentTimestampLike =>
+        // CurrentTimestampLike (current_timestamp(), now()) is not a TimeZoneAwareExpression
+        // while CurrentBatchTimestamp is. Without TimeZoneId, CurrentBatchTimestamp is unresolved.
+        // Here, we use an explicit dummy string to prevent UnresolvedException and to prevent to
+        // be used in the future.
         CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
           ct.dataType, Some("Dummy TimeZoneId"))
       case lt: LocalTimestamp =>
@@ -1196,6 +1197,9 @@ class MicroBatchExecution(
       case cd: CurrentDate =>
         CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
           cd.dataType, cd.timeZoneId)
+      case ct: CurrentTime =>
+        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
+          ct.dataType, ct.timeZoneId)
     }
 
     val triggerLogicalPlan = sink match {
