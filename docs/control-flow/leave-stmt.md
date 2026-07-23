@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Exits the execution of a labeled statement, which may be a looping construct or a labeled compound block.
+Exits a labeled looping statement or compound statement, transferring control to the statement that follows it.
 
 This statement may only be used within a [compound statement](compound-stmt.html).
 
