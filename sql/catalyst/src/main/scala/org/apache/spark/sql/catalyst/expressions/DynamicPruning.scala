@@ -42,6 +42,7 @@ trait DynamicPruning extends Predicate
  */
 case class DynamicPruningSubquery(
     pruningKey: Expression,
+    pruningPlanOutput: Seq[Attribute],
     buildQuery: LogicalPlan,
     buildKeys: Seq[Expression],
     broadcastKeyIndices: Seq[Int],
@@ -88,10 +89,21 @@ case class DynamicPruningSubquery(
   override def toString: String = s"dynamicpruning#${exprId.id} $conditionString"
 
   override lazy val canonicalized: DynamicPruning = {
+    val buildOutput = buildQuery.output
+    val canonicalizedBuildKeys = buildKeys.map(QueryPlan.normalizeExpressions(_, buildOutput))
+    // as of now the broadcast key indice can only be 1
+    require(broadcastKeyIndices.size == 1)
+    val canonicalizedBroadcastKey = canonicalizedBuildKeys(broadcastKeyIndices(0))
+    val sortedCanonicalizedBuildKeys = canonicalizedBuildKeys.sortBy(_.hashCode())
+    val canonicalizedBroadcastKeyIndices =
+      Seq(sortedCanonicalizedBuildKeys.indexOf(canonicalizedBroadcastKey))
+
     copy(
-      pruningKey = pruningKey.canonicalized,
+      pruningKey = QueryPlan.normalizeExpressions(pruningKey, pruningPlanOutput),
+      pruningPlanOutput = Seq.empty,
       buildQuery = buildQuery.canonicalized,
-      buildKeys = buildKeys.map(QueryPlan.normalizeExpressions(_, buildQuery.output)),
+      buildKeys = sortedCanonicalizedBuildKeys,
+      broadcastKeyIndices = canonicalizedBroadcastKeyIndices,
       exprId = ExprId(0))
   }
 
