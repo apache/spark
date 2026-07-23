@@ -1134,7 +1134,19 @@ private[spark] class DAGScheduler(
                 // Drop any pipelined-completion deferral keyed on this stage (as consumer), and
                 // remove it from other consumers' pending-producer sets (as producer), so no
                 // deferral outlives its job (e.g. on job abort before the producers finished).
-                dependentStageMap -= stage
+                // A consumer's buffered completion events hold TaskEnds that have not been emitted
+                // yet (the whole event is deferred until group completion). This teardown is a job
+                // failure / cancellation, so the buffered successes must NOT be applied as results
+                // -- but their TaskEnds must still be flushed, exactly as the producer-failed drop
+                // path does (see releaseDeferredPipelinedConsumers), or a listener tracking active
+                // tasks (e.g. AppStatusListener) would leak these tasks as perpetually running.
+                // Normally releaseDeferredPipelinedConsumers has already drained the deferral by
+                // the time cleanup runs (cancelRunningIndependentStages finishes each running
+                // producer first); this covers the case where it has not -- e.g. a producer left in
+                // resubmit limbo (finished but not available) that cancelRunningIndependentStages
+                // skips because it is neither running nor failed.
+                dependentStageMap.remove(stage).foreach(_.delayedTaskCompletionEvents.foreach(
+                  postTaskEnd))
                 dependentStageMap.values.foreach(_.parents -= stage)
               }
               // data structures based on StageId
