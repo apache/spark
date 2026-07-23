@@ -61,6 +61,14 @@ case class BroadcastHashJoinExec private(
     require(condition.isEmpty, "null aware anti join optimize condition should be empty.")
   }
 
+  override protected def doCanonicalizePart2(
+      part1Canonicalized: BaseJoinExec,
+      leftCanonicalizedKeys: Seq[Expression],
+      rightCanonicalizedKeys: Seq[Expression]): BaseJoinExec = {
+    part1Canonicalized.asInstanceOf[BroadcastHashJoinExec].copy(
+      leftKeys = leftCanonicalizedKeys, rightKeys = rightCanonicalizedKeys)
+  }
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
