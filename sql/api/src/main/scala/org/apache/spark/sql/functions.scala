@@ -7284,8 +7284,8 @@ object functions {
   def base64(e: Column): Column = Column.fn("base64", e)
 
   /**
-   * Computes the BASE32 (RFC 4648) encoding of a binary column and returns it as a
-   * string column. This is the reverse of from_base32.
+   * Computes the BASE32 (RFC 4648) encoding of a binary column and returns it as a string column.
+   * This is the reverse of from_base32.
    *
    * @param e
    *   The target column to work on. A column that evaluates to a binary.
@@ -8121,8 +8121,8 @@ object functions {
   def unbase64(e: Column): Column = Column.fn("unbase64", e)
 
   /**
-   * Decodes a BASE32 (RFC 4648) encoded string column and returns it as a binary column.
-   * This is the reverse of to_base32.
+   * Decodes a BASE32 (RFC 4648) encoded string column and returns it as a binary column. This is
+   * the reverse of to_base32.
    *
    * @param e
    *   target column to work on. A column that evaluates to a string.
