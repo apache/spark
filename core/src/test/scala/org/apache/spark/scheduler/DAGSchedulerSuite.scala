@@ -6803,6 +6803,60 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined shuffle: job teardown flushes a buffered consumer's TaskEnds even when the " +
+      "release path never drained it") {
+    // A consumer's whole completion event is buffered while its producer runs (coarse model), so
+    // its TaskEnds are held, not yet emitted. Normally releaseDeferredPipelinedConsumers drains
+    // them (cancelRunningIndependentStages finishes each running producer before cleanup). But a
+    // producer left in resubmit limbo -- finished with no error yet NOT available, so
+    // producerAboutToResubmit held the deferral AND markStageAsFinished removed it from
+    // runningStages -- is skipped by cancelRunningIndependentStages (neither running nor failed).
+    // If the job is then cancelled, cleanup must still flush the buffered TaskEnds (results stay
+    // dropped) so a listener tracking active tasks does not leak them as perpetually running.
+    val taskEndCount = new java.util.concurrent.atomic.AtomicInteger(0)
+    val countingListener = new SparkListener {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = taskEndCount.incrementAndGet()
+    }
+    sc.addSparkListener(countingListener)
+    try {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      val jobId = submit(consumerRdd, Array(0, 1))
+      val producerStageId = taskSets.head.stageId
+      val consumerTaskSet = taskSets(1)
+
+      // Consumer finishes early -> whole completion buffered; no TaskEnd yet.
+      complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+      sc.listenerBus.waitUntilEmpty()
+      assert(taskEndCount.get() === 0, "buffered consumer TaskEnds are held while the producer runs")
+
+      // Drive the producer into resubmit limbo: finished, no error, but not available -> the
+      // deferral is retained and the producer leaves runningStages. No task failed, so it also has
+      // no failedAttemptIds -- cancelRunningIndependentStages will skip it.
+      val producerStage = scheduler.stageIdToStage(producerStageId).asInstanceOf[ShuffleMapStage]
+      assert(!producerStage.isAvailable, "precondition: producer not available")
+      scheduler.markStageAsFinished(producerStage, errorMessage = None, willRetry = false)
+      assert(scheduler.dependentStageMap.keys.exists(_.rdd eq consumerRdd),
+        "precondition: the deferral is retained (producer about to resubmit)")
+      assert(!scheduler.runningStages.contains(producerStage) &&
+        producerStage.failedAttemptIds.isEmpty,
+        "precondition: producer is neither running nor failed, so cancel will skip it")
+
+      // Cancel the job. The release path never drains this consumer, so cleanup must flush it.
+      cancel(jobId)
+      sc.listenerBus.waitUntilEmpty()
+      assert(scheduler.dependentStageMap.isEmpty, "the deferral must not outlive the job")
+      assert(results.isEmpty, "a cancelled job's buffered consumer success must not be applied")
+      assert(taskEndCount.get() === 2,
+        s"teardown must flush the 2 buffered consumer TaskEnds (else active tasks leak); got " +
+          taskEndCount.get())
+      assertDataStructuresEmpty()
+    } finally {
+      sc.removeSparkListener(countingListener)
+    }
+  }
+
 }
 
 class DAGSchedulerAbortStageOffSuite extends DAGSchedulerSuite {
