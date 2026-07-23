@@ -61,7 +61,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
             ident, "ADD COLUMN with qualified column")
         }
         if (!c.nullable) {
-          throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError()
+          throw QueryCompilationErrors.unsupportedTableOperationError(
+            ident, "ADD COLUMN with NOT NULL")
         }
       }
       // For V1 ALTER TABLE ADD COLUMNS command, the default value expression is hidden in the

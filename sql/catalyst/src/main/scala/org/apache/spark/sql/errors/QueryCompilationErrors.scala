@@ -1179,12 +1179,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "columns" -> columns))
   }
 
-  def addColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1052",
-      messageParameters = Map.empty)
-  }
-
   def unsupportedTableOperationError(
       catalog: CatalogPlugin,
       ident: Identifier,
