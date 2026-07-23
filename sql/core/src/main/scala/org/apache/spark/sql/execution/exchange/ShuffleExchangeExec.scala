@@ -344,6 +344,18 @@ object ShuffleExchangeExec {
     }
   }
 
+  /** Backward-compatible overload for callers that do not report custom shuffle metrics. */
+  def prepareShuffleDependency(
+      rdd: RDD[InternalRow],
+      outputAttributes: Seq[Attribute],
+      newPartitioning: Partitioning,
+      serializer: Serializer,
+      writeMetrics: Map[String, SQLMetric])
+    : ShuffleDependency[Int, InternalRow, InternalRow] = {
+    prepareShuffleDependency(
+      rdd, outputAttributes, newPartitioning, serializer, writeMetrics, Map.empty)
+  }
+
   /**
    * Returns a [[ShuffleDependency]] that will partition rows of its child based on
    * the partitioning scheme defined in `newPartitioning`. Those partitions of
@@ -557,6 +569,11 @@ object ShuffleExchangeExec {
           SQLConf.get.shuffleChecksumMismatchQueryLevelRollbackEnabled)
 
     dependency
+  }
+
+  /** Backward-compatible overload for callers that do not report custom shuffle metrics. */
+  def createShuffleWriteProcessor(metrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
+    createShuffleWriteProcessor(metrics, Map.empty)
   }
 
   /**
