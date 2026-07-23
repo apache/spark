@@ -4444,6 +4444,60 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(results === Map(0 -> 42, 1 -> 42))
   }
 
+  test("SPARK-58192: custom-resource-limited max concurrent tasks is propagated even when the " +
+      "cores limit is unknown") {
+    // No explicit spark.executor.cores and a local master: the profile cannot use cores to bound
+    // concurrency (isCoresLimitKnown is false), but the single gpu proves at most one task runs
+    // at a time, which caps the pyspark memory split regardless of the unknown core count.
+    val ereqs = new ExecutorResourceRequests().cores(64).resource(GPU, 1, "disc")
+    val treqs = new TaskResourceRequests().cpus(0.1).resource(GPU, 1)
+    val rp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+
+    val rdd = sc.parallelize(1 to 10, 2).map(x => (x, x)).withResources(rp)
+    submit(rdd, Array(0, 1), properties = new Properties())
+
+    // Without the gpu-limit propagation, PythonRunner would fall back to its cpu-based estimate
+    // of floor(64 / 0.1) = 640 slots and split (or fail-fast) the pyspark memory 640 ways for a
+    // profile that can only ever run one Python worker at a time.
+    val taskSetProps = taskSets.head.properties
+    assert(taskSetProps.getProperty(ResourceProfile.MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY) === "1")
+    assert(taskSetProps.getProperty(ResourceProfile.EXECUTOR_CORES_LOCAL_PROPERTY) === "64")
+
+    complete(taskSets.head, Seq((Success, 42), (Success, 42)))
+    assert(results === Map(0 -> 42, 1 -> 42))
+  }
+
+  test("SPARK-58192: task-only stage profile inherits the default profile's pyspark memory") {
+    conf.set(config.EXECUTOR_CORES.key, "4")
+    conf.set(config.Python.PYSPARK_EXECUTOR_MEMORY.key, "2g")
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val taskRp = new TaskResourceProfile(new TaskResourceRequests().cpus(2).requests)
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+      .withResources(taskRp)
+    submit(reduceRdd, Array(0, 1), properties = new Properties())
+
+    // The default-profile shuffle stage carries the executor-wide pyspark memory (2g = 2048 MiB)
+    // and its cpu-slot concurrency floor(4 / 1) = 4.
+    val parentProps = taskSets(0).properties
+    assert(parentProps.getProperty(ResourceProfile.PYSPARK_MEMORY_LOCAL_PROPERTY) === "2048")
+    assert(parentProps.getProperty(ResourceProfile.MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY) === "4")
+
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)), (Success, makeMapStatus("hostB", 2))))
+
+    // A task-only profile declares no executor resources, so its tasks run on executors created
+    // from the default profile's executor requests: the child stage must inherit the default
+    // profile's pyspark memory rather than dropping the limit, split across its own
+    // floor(4 / 2) = 2 cpu slots.
+    val childProps = taskSets(1).properties
+    assert(childProps.getProperty(ResourceProfile.PYSPARK_MEMORY_LOCAL_PROPERTY) === "2048")
+    assert(childProps.getProperty(ResourceProfile.MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY) === "2")
+
+    complete(taskSets(1), Seq((Success, 42), (Success, 42)))
+    assert(results === Map(0 -> 42, 1 -> 42))
+  }
+
   test("test 2 resource profiles errors by default") {
     import org.apache.spark.resource._
     val ereqs = new ExecutorResourceRequests().cores(4)
