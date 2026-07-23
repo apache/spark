@@ -33,9 +33,10 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.IntegratedUDFTestUtils
-import org.apache.spark.sql.connect.{PythonTestDepsChecker, SparkConnectTestUtils}
+import org.apache.spark.sql.connect.{ConnectBroadcast, ConnectBroadcastRef, ConnectBroadcastResolver, PythonTestDepsChecker, SparkConnectTestUtils}
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, SparkConnectPlanner, StreamingForeachBatchHelper}
@@ -46,6 +47,7 @@ import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
@@ -147,6 +149,52 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
     sessionHolder.close()
     assert(sessionHolder.getBroadcast(id).isEmpty)
+  }
+
+  test("SPARK-51705: registry holds a JVM-value broadcast for the Scala path") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    // Scala path: the server broadcasts the deserialized JVM value directly, so the registry holds
+    // a Broadcast[T] (not Broadcast[PythonBroadcast]).
+    val value = Map("a" -> 1, "b" -> 2)
+    val bcast = spark.sparkContext.broadcast(value)
+    val id = sessionHolder.registerBroadcast(bcast)
+    assert(sessionHolder.getBroadcast(id).contains(bcast))
+    assert(sessionHolder.getBroadcast(id).get.value == value)
+  }
+
+  test("SPARK-51705: ConnectBroadcastRef.readResolve swaps the id for the registered broadcast") {
+    val bcast = spark.sparkContext.broadcast(Map("a" -> 1))
+    val ref = new ConnectBroadcastRef(bcast.id)
+
+    // With the registry bound, the id-only token round-trips into the real driver-side broadcast.
+    val resolved = ConnectBroadcastResolver.withRegistry(Map(bcast.id -> bcast)) {
+      Utils.deserialize[AnyRef](Utils.serialize(ref), Utils.getContextOrSparkClassLoader)
+    }
+    assert(resolved.isInstanceOf[Broadcast[_]])
+    assert(resolved.asInstanceOf[Broadcast[_]].id == bcast.id)
+    assert(resolved.asInstanceOf[Broadcast[Map[String, Int]]].value == Map("a" -> 1))
+
+    // With no registry bound (client-side round-trip), readResolve yields the unresolved
+    // placeholder rather than throwing during deserialization.
+    val unresolved =
+      Utils.deserialize[AnyRef](Utils.serialize(ref), Utils.getContextOrSparkClassLoader)
+    assert(unresolved.isInstanceOf[Broadcast[_]])
+    intercept[IllegalStateException](unresolved.asInstanceOf[Broadcast[_]].value)
+  }
+
+  test("SPARK-51705: capturing a ConnectBroadcast serializes as an id-only token") {
+    val value = Map("a" -> 1)
+    val bcast = spark.sparkContext.broadcast(value)
+    // A ConnectBroadcast stands in for the driver-side broadcast on the (JVM-less) client.
+    val connectBroadcast =
+      new ConnectBroadcast[Map[String, Int]](bcast.id, value, (_, _, _) => ())
+    // Serializing it (as a captured closure would) writes only the id token; rehydrating under the
+    // registry yields the real broadcast, exactly as closure capture does end to end.
+    val bytes = Utils.serialize(connectBroadcast)
+    val rehydrated = ConnectBroadcastResolver.withRegistry(Map(bcast.id -> bcast)) {
+      Utils.deserialize[AnyRef](bytes, Utils.getContextOrSparkClassLoader)
+    }
+    assert(rehydrated.asInstanceOf[Broadcast[_]].id == bcast.id)
   }
 
   private def streamingForeachBatchFunction(pysparkPythonPath: String): Array[Byte] = {

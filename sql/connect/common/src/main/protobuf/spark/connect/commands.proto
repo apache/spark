@@ -68,10 +68,24 @@ message Command {
 // sends this command with the returned hash. The server materializes a PythonBroadcast on the
 // live driver SparkContext and returns a CreateBroadcastResult with the driver-side broadcast id.
 message CreateBroadcastCommand {
-  // (Required) sha256 hash returned by client.cache_artifact(cloudpickle(value)).
+  // (Required) sha256 hash of the previously-uploaded value bytes in the cache/ artifact channel.
+  // For PYTHON the bytes are cloudpickle(value); for JVM they are SparkSerDeUtils.serialize(value).
   string artifact_hash = 1;
   // (Optional) Uncompressed byte size, used to enforce the BROADCAST_VALUE_TOO_LARGE quota.
   int64 size_bytes = 2;
+  // (Optional) (SPARK-51705) How the server should materialize the value from the uploaded bytes.
+  // Defaults to PYTHON when unset for backward compatibility with the Python-only v1.
+  BroadcastValueType value_type = 3;
+}
+
+// (SPARK-51705) Discriminates how CreateBroadcastCommand materializes the broadcast value.
+enum BroadcastValueType {
+  // Unset -> treated as PYTHON for backward compatibility.
+  BROADCAST_VALUE_TYPE_UNSPECIFIED = 0;
+  // Wrap the staged bytes as a PythonBroadcast file; the Python worker reads it. Broadcast[PythonBroadcast].
+  BROADCAST_VALUE_TYPE_PYTHON = 1;
+  // Java-deserialize the bytes into a JVM value T and sc.broadcast(T). Broadcast[T] for Scala UDFs.
+  BROADCAST_VALUE_TYPE_JVM = 2;
 }
 
 // (SPARK-51705) Release a broadcast variable created over Spark Connect.

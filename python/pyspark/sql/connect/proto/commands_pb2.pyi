@@ -56,6 +56,33 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+class _BroadcastValueType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _BroadcastValueTypeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_BroadcastValueType.ValueType],
+    builtins.type,
+):  # noqa: F821
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    BROADCAST_VALUE_TYPE_UNSPECIFIED: _BroadcastValueType.ValueType  # 0
+    """Unset -> treated as PYTHON for backward compatibility."""
+    BROADCAST_VALUE_TYPE_PYTHON: _BroadcastValueType.ValueType  # 1
+    """Wrap the staged bytes as a PythonBroadcast file; the Python worker reads it. Broadcast[PythonBroadcast]."""
+    BROADCAST_VALUE_TYPE_JVM: _BroadcastValueType.ValueType  # 2
+    """Java-deserialize the bytes into a JVM value T and sc.broadcast(T). Broadcast[T] for Scala UDFs."""
+
+class BroadcastValueType(_BroadcastValueType, metaclass=_BroadcastValueTypeEnumTypeWrapper):
+    """(SPARK-51705) Discriminates how CreateBroadcastCommand materializes the broadcast value."""
+
+BROADCAST_VALUE_TYPE_UNSPECIFIED: BroadcastValueType.ValueType  # 0
+"""Unset -> treated as PYTHON for backward compatibility."""
+BROADCAST_VALUE_TYPE_PYTHON: BroadcastValueType.ValueType  # 1
+"""Wrap the staged bytes as a PythonBroadcast file; the Python worker reads it. Broadcast[PythonBroadcast]."""
+BROADCAST_VALUE_TYPE_JVM: BroadcastValueType.ValueType  # 2
+"""Java-deserialize the bytes into a JVM value T and sc.broadcast(T). Broadcast[T] for Scala UDFs."""
+global___BroadcastValueType = BroadcastValueType
+
 class _StreamingQueryEventType:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
@@ -344,20 +371,33 @@ class CreateBroadcastCommand(google.protobuf.message.Message):
 
     ARTIFACT_HASH_FIELD_NUMBER: builtins.int
     SIZE_BYTES_FIELD_NUMBER: builtins.int
+    VALUE_TYPE_FIELD_NUMBER: builtins.int
     artifact_hash: builtins.str
-    """(Required) sha256 hash returned by client.cache_artifact(cloudpickle(value))."""
+    """(Required) sha256 hash of the previously-uploaded value bytes in the cache/ artifact channel.
+    For PYTHON the bytes are cloudpickle(value); for JVM they are SparkSerDeUtils.serialize(value).
+    """
     size_bytes: builtins.int
     """(Optional) Uncompressed byte size, used to enforce the BROADCAST_VALUE_TOO_LARGE quota."""
+    value_type: global___BroadcastValueType.ValueType
+    """(Optional) (SPARK-51705) How the server should materialize the value from the uploaded bytes.
+    Defaults to PYTHON when unset for backward compatibility with the Python-only v1.
+    """
     def __init__(
         self,
         *,
         artifact_hash: builtins.str = ...,
         size_bytes: builtins.int = ...,
+        value_type: global___BroadcastValueType.ValueType = ...,
     ) -> None: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "artifact_hash", b"artifact_hash", "size_bytes", b"size_bytes"
+            "artifact_hash",
+            b"artifact_hash",
+            "size_bytes",
+            b"size_bytes",
+            "value_type",
+            b"value_type",
         ],
     ) -> None: ...
 

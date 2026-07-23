@@ -38,6 +38,7 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
@@ -59,6 +60,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CloseableIterator, ExecutionListenerManager}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkSerDeUtils
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -105,6 +107,42 @@ class SparkSession private[sql] (
   /** @inheritdoc */
   override def sparkContext: SparkContext =
     throw ConnectClientUnsupportedErrors.sparkContext()
+
+  /**
+   * (SPARK-51705) Create a broadcast variable usable inside a Scala UDF on Spark Connect.
+   *
+   * The Connect client has no `SparkContext`, so `sparkContext.broadcast(...)` is unavailable.
+   * This serializes `value`, uploads it once through the artifact cache channel, asks the server
+   * to materialize a driver-side `Broadcast[T]`, and returns a [[ConnectBroadcast]] proxy
+   * carrying the server-assigned id (plus the local value for driver-side `.value` reads). When
+   * the proxy is captured inside a UDF closure it serializes as an id-only token that the server
+   * swaps for the real broadcast; the executor path is then identical to classic Spark.
+   */
+  def broadcast[T: scala.reflect.ClassTag](value: T): Broadcast[T] = {
+    val bytes = SparkSerDeUtils.serialize(value)
+    val hash = client.artifactManager.cacheArtifact(bytes)
+    val command = newCommand { builder =>
+      builder.getCreateBroadcastCommandBuilder
+        .setArtifactHash(hash)
+        .setSizeBytes(bytes.length.toLong)
+        .setValueType(proto.BroadcastValueType.BROADCAST_VALUE_TYPE_JVM)
+    }
+    val response = execute(command)
+      .find(_.hasCreateBroadcastResult)
+      .getOrElse(throw new RuntimeException("CreateBroadcastResult must be present"))
+    val broadcastId = response.getCreateBroadcastResult.getBroadcastId
+    new ConnectBroadcast[T](broadcastId, value, unpersistBroadcast)
+  }
+
+  /** Route a [[ConnectBroadcast]] unpersist/destroy through an UnpersistBroadcastCommand RPC. */
+  private[connect] def unpersistBroadcast(id: Long, blocking: Boolean, destroy: Boolean): Unit = {
+    execute(newCommand { builder =>
+      builder.getUnpersistBroadcastCommandBuilder
+        .setBroadcastId(id)
+        .setBlocking(blocking)
+        .setDestroy(destroy)
+    })
+  }
 
   /** @inheritdoc */
   val conf: RuntimeConfig = new RuntimeConfig(client)

@@ -30,7 +30,6 @@ import com.google.common.base.Ticker
 import com.google.common.cache.{Cache, CacheBuilder}
 
 import org.apache.spark.{SparkEnv, SparkException, SparkSQLException}
-import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.connect.proto
@@ -607,24 +606,29 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   /**
    * (SPARK-51705) Registry of broadcast variables created over Spark Connect for this session,
    * keyed by the driver-side broadcast id (Broadcast.id). This id is what the client embeds in
-   * the pickled UDF closure (via Broadcast._from_id) and what the executor/worker keys on, so it
-   * is used both as the client handle (CreateBroadcastResult.broadcast_id /
-   * PythonUDF.broadcast_ids) and as the registry key. Membership in this per-session map enforces
-   * isolation: SparkConnectPlanner.resolveBroadcasts rejects ids that are absent
-   * (BROADCAST_NOT_FOUND). Sibling to `pythonAccumulator`.
+   * the UDF closure and what the executor/worker keys on, so it is used both as the client handle
+   * (CreateBroadcastResult.broadcast_id / PythonUDF.broadcast_ids / ScalarScalaUDF.broadcast_ids)
+   * and as the registry key. Membership in this per-session map enforces isolation:
+   * SparkConnectPlanner.resolveBroadcasts rejects ids that are absent (BROADCAST_NOT_FOUND).
+   * Sibling to `pythonAccumulator`.
+   *
+   * The value type is `Broadcast[_]` because it holds both `Broadcast[PythonBroadcast]` (Python
+   * UDFs, whose worker reads the staged file) and `Broadcast[T]` of a JVM value (Scala UDFs,
+   * whose executor calls `.value` to get `T` directly). Consumers cast to the expected element
+   * type.
    */
-  private[connect] val broadcasts: ConcurrentMap[Long, Broadcast[PythonBroadcast]] =
+  private[connect] val broadcasts: ConcurrentMap[Long, Broadcast[_]] =
     new ConcurrentHashMap()
 
-  private[connect] def registerBroadcast(bcast: Broadcast[PythonBroadcast]): Long = {
+  private[connect] def registerBroadcast(bcast: Broadcast[_]): Long = {
     broadcasts.put(bcast.id, bcast)
     bcast.id
   }
 
-  private[connect] def getBroadcast(id: Long): Option[Broadcast[PythonBroadcast]] =
+  private[connect] def getBroadcast(id: Long): Option[Broadcast[_]] =
     Option(broadcasts.get(id))
 
-  private[connect] def removeBroadcast(id: Long): Option[Broadcast[PythonBroadcast]] =
+  private[connect] def removeBroadcast(id: Long): Option[Broadcast[_]] =
     Option(broadcasts.remove(id))
 
   /**

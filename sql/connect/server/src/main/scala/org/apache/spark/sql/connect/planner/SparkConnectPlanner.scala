@@ -61,6 +61,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Catalog, DataFrameWriter, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.connect.ConnectBroadcastResolver
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -2108,6 +2109,35 @@ class SparkConnectPlanner(
   }
 
   private def unpackScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
+    // (SPARK-51705) Resolve any broadcast ids this closure captured and bind them to the
+    // deserialization thread, so ConnectBroadcastRef.readResolve can swap each id-only token in the
+    // serialized closure for the real driver-side Broadcast[_] from the per-session registry. An id
+    // that is unknown to this session fails loudly with BROADCAST_NOT_FOUND (rather than silently
+    // yielding a broken closure). No-op when the UDF captured no broadcasts.
+    val registry = resolveScalaBroadcasts(fun.getBroadcastIdsList)
+    ConnectBroadcastResolver.withRegistry(registry) {
+      unpackScalaUDFPayload[T](fun)
+    }
+  }
+
+  private def resolveScalaBroadcasts(
+      broadcastIds: java.util.List[java.lang.Long]): Map[Long, Broadcast[_]] = {
+    if (broadcastIds.isEmpty) {
+      Map.empty
+    } else {
+      val builder = Map.newBuilder[Long, Broadcast[_]]
+      broadcastIds.forEach { boxedId =>
+        val id = boxedId.longValue()
+        val bcast = sessionHolder
+          .getBroadcast(id)
+          .getOrElse(throw InvalidInputErrors.broadcastNotFound(id))
+        builder += (id -> bcast)
+      }
+      builder.result()
+    }
+  }
+
+  private def unpackScalaUDFPayload[T](fun: proto.ScalarScalaUDF): T = {
     try {
       logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
       Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
@@ -2252,7 +2282,10 @@ class SparkConnectPlanner(
       val bcast = sessionHolder
         .getBroadcast(id)
         .getOrElse(throw InvalidInputErrors.broadcastNotFound(id))
-      resolved.add(bcast)
+      // The registry is typed Broadcast[_] (it also holds Broadcast[T] for Scala UDFs); a Python
+      // UDF only ever references broadcasts it created via the Python path, which are always
+      // Broadcast[PythonBroadcast].
+      resolved.add(bcast.asInstanceOf[Broadcast[PythonBroadcast]])
     }
     resolved
   }
@@ -4044,13 +4077,18 @@ class SparkConnectPlanner(
    * (SPARK-51705) Materialize a broadcast variable from an already-uploaded cache/<sha256>
    * artifact and register it on this session.
    *
-   * The client uploaded cloudpickle(value) through the existing artifact cache channel; here we
-   * read the block back (decrypting transparently under spark.io.encryption), stage it to a temp
-   * file under the local dir (PythonBroadcast needs a path, and the cache block may be memory
-   * only), wrap it in a PythonBroadcast, and broadcast it on the live driver SparkContext -- the
-   * same object pythonAccumulator uses. The returned broadcast id is the driver-side
-   * Broadcast.id, which the client embeds into the pickled UDF closure and which the worker keys
-   * on.
+   * The client uploaded the serialized value through the existing artifact cache channel; here we
+   * read the block back (decrypting transparently under spark.io.encryption) and materialize a
+   * driver-side broadcast on the live SparkContext -- the same object pythonAccumulator uses. How
+   * the value is materialized depends on `value_type`:
+   *   - PYTHON (default): the bytes are cloudpickle(value); stage them to a temp file and wrap in
+   *     a PythonBroadcast, so the Python worker reads the file. Broadcast[PythonBroadcast].
+   *   - JVM: the bytes are SparkSerDeUtils.serialize(value); Java-deserialize them (with the
+   *     artifact classloader, so user classes added via addArtifact resolve) into a JVM value and
+   *     sc.broadcast it directly, so a Scala UDF's executor reads it as Broadcast[T].
+   *
+   * The returned broadcast id is the driver-side Broadcast.id, which the client embeds into the
+   * UDF closure and which the executor/worker keys on.
    */
   private def handleCreateBroadcastCommand(
       command: proto.CreateBroadcastCommand,
@@ -4060,30 +4098,41 @@ class SparkConnectPlanner(
     val blockId = sessionHolder.artifactManager.getCachedBlockId(hash).getOrElse {
       throw InvalidInputErrors.cannotFindCachedLocalRelation(hash)
     }
-    // Stage the (possibly memory-only, possibly encrypted) cache block to a temp file that
-    // PythonBroadcast can read. Mirrors the block-read idiom in transformCachedLocalRelation.
     val bytes = blockManager
       .getLocalBytes(blockId)
       .getOrElse {
         throw InvalidInputErrors.notFoundCachedLocalRelation(blockId.hash, blockId.sessionUUID)
       }
-    val dir = new File(Utils.getLocalDir(session.sparkContext.conf))
-    val file = Files.createTempFile(dir.toPath, "broadcast", "").toFile
-    try {
-      val in = bytes.toInputStream()
-      val out = new FileOutputStream(file)
-      Utils.tryWithSafeFinally {
-        Utils.copyStream(in, out)
-      } {
-        out.close()
-        in.close()
+    val bcast =
+      try {
+        command.getValueType match {
+          case proto.BroadcastValueType.BROADCAST_VALUE_TYPE_JVM =>
+            // Java-deserialize and broadcast the value directly, so a Scala UDF reads Broadcast[T].
+            // Use the artifact classloader so user classes added via session.addArtifact resolve,
+            // mirroring unpackScalaUDF.
+            val valueBytes = Utils.tryWithResource(bytes.toInputStream())(_.readAllBytes())
+            val value =
+              Utils.deserialize[AnyRef](valueBytes, Utils.getContextOrSparkClassLoader)
+            session.sparkContext.broadcast(value)
+          case _ =>
+            // PYTHON (or unspecified, for back-compat). Stage the (possibly memory-only, possibly
+            // encrypted) cache block to a temp file that PythonBroadcast reads on the worker.
+            // Mirrors the block-read idiom in transformCachedLocalRelation.
+            val dir = new File(Utils.getLocalDir(session.sparkContext.conf))
+            val file = Files.createTempFile(dir.toPath, "broadcast", "").toFile
+            val in = bytes.toInputStream()
+            val out = new FileOutputStream(file)
+            Utils.tryWithSafeFinally {
+              Utils.copyStream(in, out)
+            } {
+              out.close()
+              in.close()
+            }
+            session.sparkContext.broadcast(new PythonBroadcast(file.getAbsolutePath))
+        }
+      } finally {
+        blockManager.releaseLock(blockId)
       }
-    } finally {
-      blockManager.releaseLock(blockId)
-    }
-
-    val pythonBroadcast = new PythonBroadcast(file.getAbsolutePath)
-    val bcast = session.sparkContext.broadcast(pythonBroadcast)
     val broadcastId = sessionHolder.registerBroadcast(bcast)
     logInfo(log"Created broadcast with id ${MDC(LogKeys.BROADCAST_ID, broadcastId)}")
 

@@ -1891,6 +1891,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     OUTPUTTYPE_FIELD_NUMBER: builtins.int
     NULLABLE_FIELD_NUMBER: builtins.int
     AGGREGATE_FIELD_NUMBER: builtins.int
+    BROADCAST_IDS_FIELD_NUMBER: builtins.int
     payload: builtins.bytes
     """(Required) Serialized JVM object containing UDF definition, input encoders and output encoder"""
     @property
@@ -1907,6 +1908,17 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     """(Required) True if the UDF can return null value"""
     aggregate: builtins.bool
     """(Required) Indicate if the UDF is an aggregate function"""
+    @property
+    def broadcast_ids(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """(Optional) (SPARK-51705) Server-assigned ids of broadcast variables captured by this UDF's
+        closure. The captured broadcasts serialize as id-only tokens (ConnectBroadcast.writeReplace);
+        this out-of-band id list lets SparkConnectPlanner bind the per-session SessionHolder broadcast
+        registry (via a thread-local) before deserializing the payload, so ConnectBroadcastRef
+        .readResolve can swap each id for the real driver-side Broadcast[T]. An id that is unknown to
+        this session fails loudly with BROADCAST_NOT_FOUND.
+        """
     def __init__(
         self,
         *,
@@ -1916,6 +1928,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         outputType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         nullable: builtins.bool = ...,
         aggregate: builtins.bool = ...,
+        broadcast_ids: collections.abc.Iterable[builtins.int] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["outputType", b"outputType"]
@@ -1925,6 +1938,8 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "broadcast_ids",
+            b"broadcast_ids",
             "inputTypes",
             b"inputTypes",
             "nullable",

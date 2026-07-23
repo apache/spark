@@ -493,6 +493,13 @@ message ScalarScalaUDF {
   bool nullable = 4;
   // (Required) Indicate if the UDF is an aggregate function
   bool aggregate = 5;
+  // (Optional) (SPARK-51705) Server-assigned ids of broadcast variables captured by this UDF's
+  // closure. The captured broadcasts serialize as id-only tokens (ConnectBroadcast.writeReplace);
+  // this out-of-band id list lets SparkConnectPlanner bind the per-session SessionHolder broadcast
+  // registry (via a thread-local) before deserializing the payload, so ConnectBroadcastRef
+  // .readResolve can swap each id for the real driver-side Broadcast[T]. An id that is unknown to
+  // this session fails loudly with BROADCAST_NOT_FOUND.
+  repeated int64 broadcast_ids = 6;
 }
 
 message JavaUDF {
