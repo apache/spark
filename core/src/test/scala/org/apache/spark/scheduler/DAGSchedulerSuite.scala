@@ -7644,6 +7644,26 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
+  test("regular job on a non-default resource profile is NOT rejected (RP check is pipelined-only)") {
+    // The resource-profile rejection is not keyed on a pipelined dependency, so it must run ONLY
+    // for a job that has one (handleJobSubmitted gates checkPipelinedGroupsSupportedInRDDGraph on
+    // hasPipelined). A perfectly ordinary job that merely attaches a non-default profile via
+    // RDD.withResources -- a GA stage-level-scheduling feature -- has NO pipelined dependency and
+    // must run untouched. Without the gate the whole graph walk fires and rejects it with
+    // PIPELINED_SHUFFLE_UNSUPPORTED, a regression on plain withResources jobs.
+    val rdd = new MyRDD(sc, 2, Nil).withResources(rpWithCores(4, 2))
+    // A non-default profile drives submitMissingTasks through addPySparkConfigsToProperties, which
+    // needs a non-null Properties; pass one (the default submit() overload leaves it null).
+    submit(rdd, Array(0, 1), properties = new Properties())
+    assert(failure === null,
+      "a regular job with a non-default resource profile must not be rejected by the pipelined " +
+        "fail-fast")
+    assert(taskSets.nonEmpty, "the job must proceed to task submission, not be failed up front")
+    complete(taskSets(0), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
   private def submitAndCaptureFailure(finalRdd: RDD[_], partitions: Array[Int]): Exception = {
     val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
     val failListener = new JobListener {

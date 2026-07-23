@@ -1144,8 +1144,10 @@ private[spark] class DAGScheduler(
    * listener.jobFailed) without leaving partial scheduler state behind, exactly like the
    * speculation check.
    *
-   * Inert for a job with no pipelined dependency. Throws PIPELINED_SHUFFLE_UNSUPPORTED on
-   * violation. Enforces:
+   * Call only for a job that has a pipelined dependency (handleJobSubmitted gates on
+   * hasPipelined): the resource-profile check below is not keyed on a pipelined dependency, so on a
+   * regular job it would reject an ordinary RDD.withResources(...) use. Throws
+   * PIPELINED_SHUFFLE_UNSUPPORTED on violation. Enforces:
    *  - Fan-out: a pipelined producer feeding more than one consumer. 1:N is a supported model not
    *    yet built (it needs multicast to N live readers), so it is rejected for now. A
    *    PipelinedShuffleDependency's producer is `dep.rdd`; a "consumer" is any RDD that lists that
@@ -2018,11 +2020,17 @@ private[spark] class DAGScheduler(
     }
     var finalStage: ResultStage = null
     try {
-      // Reject group-level unsupported pipelined idioms (e.g. fan-out) from the RDD graph, up
-      // front -- before any stage is created, so a rejection leaves no partial scheduler state.
-      // Inert for a job with no pipelined dependency. Inside this try so any incidental exception
+      // Reject group-level unsupported pipelined idioms (e.g. fan-out, a non-default resource
+      // profile, a reliable checkpoint in a member stage) from the RDD graph, up front -- before
+      // any stage is created, so a rejection leaves no partial scheduler state. Gated on
+      // hasPipelined: every idiom this checks concerns a pipelined group, so it must not run for a
+      // job with no pipelined dependency (the resource-profile check in particular is not keyed on
+      // a pipelined dependency and would otherwise reject an ordinary job that merely uses a
+      // non-default profile via RDD.withResources). Inside this try so any incidental exception
       // from the graph walk is handled by the same listener.jobFailed path as stage creation.
-      checkPipelinedGroupsSupportedInRDDGraph(finalRDD)
+      if (hasPipelined) {
+        checkPipelinedGroupsSupportedInRDDGraph(finalRDD)
+      }
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
