@@ -27,7 +27,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar._
@@ -604,6 +604,36 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
     assert(mockEndpointRef.decommissionReceived)
+  }
+
+  test("pending replacement loss reason should be cleared when executor kill is rejected") {
+    val conf = new SparkConf()
+      .set(SCHEDULER_REVIVE_INTERVAL.key, "1m")
+      .set(EXECUTOR_INSTANCES, 0)
+      .setMaster(
+        "coarseclustermanager[org.apache.spark.scheduler.TestCoarseGrainedSchedulerBackend]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[TestCoarseGrainedSchedulerBackend]
+    val scheduler = backend.getTaskSchedulerImpl()
+    val mockEndpointRef = mock[RpcEndpointRef]
+    val mockAddress = mock[RpcAddress]
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty,
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    assert(backend.killExecutors(
+      Seq("1"),
+      adjustTargetNumExecutors = false,
+      countFailures = true,
+      force = true,
+      lossReason = Some(ExecutorProcessLost("Executor heartbeat timed out"))).isEmpty)
+
+    backend.driverEndpoint.send(RemoveExecutor("1", ExecutorKilled))
+    eventually(timeout(5.seconds)) {
+      verify(scheduler).executorLost("1", ExecutorKilled)
+    }
   }
 
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {

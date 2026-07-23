@@ -219,9 +219,16 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
         // Asynchronously kill the executor to avoid blocking the current thread
         killExecutorThread.submit(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
+            val heartbeatTimeoutReason = ExecutorProcessLost(
+              s"Executor heartbeat timed out after ${now - lastSeenMs} ms")
             // Note: we want to get an executor back after expiring this one,
             // so do not simply call `sc.killExecutor` here (SPARK-8119)
-            sc.killAndReplaceExecutor(executorId)
+            sc.schedulerBackend match {
+              case backend: CoarseGrainedSchedulerBackend =>
+                backend.killAndReplaceExecutor(executorId, heartbeatTimeoutReason)
+              case _ =>
+                sc.killAndReplaceExecutor(executorId)
+            }
             // SPARK-27348: in case of the executors which are not gracefully shut down,
             // we should remove lost executors from CoarseGrainedSchedulerBackend manually
             // here to guarantee two things:
@@ -231,9 +238,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
             //    those executors to avoid app hang
             sc.schedulerBackend match {
               case backend: CoarseGrainedSchedulerBackend =>
-                backend.driverEndpoint.send(RemoveExecutor(executorId,
-                  ExecutorProcessLost(
-                    s"Executor heartbeat timed out after ${now - lastSeenMs} ms")))
+                backend.driverEndpoint.send(RemoveExecutor(executorId, heartbeatTimeoutReason))
 
               // LocalSchedulerBackend is used locally and only has one single executor
               case _: LocalSchedulerBackend =>
