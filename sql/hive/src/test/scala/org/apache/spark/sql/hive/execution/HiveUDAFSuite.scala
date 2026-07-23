@@ -29,8 +29,9 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
 import test.org.apache.spark.sql.MyDoubleAvg
 
 import org.apache.spark.SPARK_DOC_ROOT
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -41,6 +42,14 @@ import org.apache.spark.tags.SlowHiveTest
 class HiveUDAFSuite extends QueryTest
   with TestHiveSingleton with AdaptiveSparkPlanHelper {
   import testImplicits._
+
+  // Sums the `numTasksFallBacked` metric across every `ObjectHashAggregateExec` in the executed
+  // plan. The DataFrame must be executed (e.g. via `checkAnswer`) before this is read.
+  private def numFallbackTasks(df: DataFrame): Long = {
+    collect(df.queryExecution.executedPlan) {
+      case agg: ObjectHashAggregateExec => agg.metrics("numTasksFallBacked").value
+    }.sum
+  }
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -124,6 +133,52 @@ class HiveUDAFSuite extends QueryTest
           Row(0, Row(50, 0)),
           Row(1, Row(50, 0))
         ))
+      }
+    }
+  }
+
+  test("SPARK-58294: Hive UDAF with two aggregation buffers in Complete mode") {
+    withTempView("v") {
+      spark.range(100).createTempView("v")
+      // With `CombineAdjacentAggregation` enabled and a single input partition, the adjacent
+      // partial/final pair is merged into a single `Complete`-mode `ObjectHashAggregateExec`.
+      // `MockUDAF2` deliberately uses distinct aggregation-buffer classes per mode (one for
+      // consuming original input via PARTIAL1, another for merging partial buffers via FINAL).
+      // The Hive UDAF wrapper must convert the PARTIAL1 buffer to a FINAL buffer on `eval` so the
+      // Complete-mode path (which calls `update` but not `merge`) terminates correctly instead of
+      // handing a PARTIAL1 buffer to the FINAL evaluator.
+      val query = "SELECT id % 2, mock2(id) FROM v GROUP BY id % 2"
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val aggs = collect(sql(query).queryExecution.executedPlan) {
+          case agg: ObjectHashAggregateExec => agg
+        }
+        // Combined into a single `Complete`-mode aggregate.
+        assert(aggs.length == 1)
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Complete))
+
+        // Rebuild the query inside each `withSQLConf` block: `SparkPlan.executeRDD` memoizes the
+        // RDD, so reusing one DataFrame across thresholds would replay the first execution instead
+        // of re-planning under the new threshold, exercising only one of the two paths.
+        // Threshold 1 forces every task with more than one group to fall back to sort-based
+        // aggregation (there are two groups: `id % 2` in {0, 1}).
+        withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+          val df = sql(query)
+          checkAnswer(df, Seq(
+            Row(0, Row(50, 0)),
+            Row(1, Row(50, 0))
+          ))
+          assert(numFallbackTasks(df) > 0, "threshold 1 must trigger the sort-based fallback path")
+        }
+
+        // Threshold 100 is above the two groups, so no task falls back.
+        withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100") {
+          val df = sql(query)
+          checkAnswer(df, Seq(
+            Row(0, Row(50, 0)),
+            Row(1, Row(50, 0))
+          ))
+          assert(numFallbackTasks(df) == 0, "threshold 100 must not trigger the fallback path")
+        }
       }
     }
   }
