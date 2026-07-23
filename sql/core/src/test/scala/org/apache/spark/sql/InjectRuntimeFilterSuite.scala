@@ -370,6 +370,51 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-58272: preserve selective runtime filters over memory-only and cold caches") {
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "1MB",
+        SQLConf.RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD.key -> "0",
+        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
+      Seq(
+        ("memory_only_filtered_bloom_keys", StorageLevel.MEMORY_ONLY, true),
+        ("cold_filtered_bloom_keys", StorageLevel.MEMORY_AND_DISK, false)).foreach {
+        case (cacheName, storageLevel, materialize) =>
+          withTempView(cacheName) {
+            withCache(cacheName) {
+              val cached = spark.range(0, 40, 1, numPartitions = 4)
+                .selectExpr("CAST(id AS INT) AS c2")
+                .persist(storageLevel)
+              cached.createOrReplaceTempView(cacheName)
+
+              if (materialize) {
+                assert(cached.count() == 40)
+              }
+
+              val relation = spark.table(cacheName).queryExecution.withCachedData.collectFirst {
+                case cachedRelation: InMemoryRelation => cachedRelation
+              }.get
+              assert(!relation.statsAvailable)
+              assert(relation.isOutputRepeatable == materialize)
+
+              val query = s"SELECT * FROM bf1 JOIN " +
+                s"(SELECT * FROM $cacheName WHERE c2 = 8) filtered_keys " +
+                "ON bf1.c1 = filtered_keys.c2"
+              val actual = sql(query)
+              assert(getNumBloomFilters(actual.queryExecution.optimizedPlan) == 1)
+
+              var expected: Array[Row] = null
+              withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+                expected = sql(query).collect()
+              }
+              checkAnswer(actual, expected)
+            }
+          }
+      }
+    }
+  }
+
   test("SPARK-58272: use materialized caches without predicates only with pruning statistics") {
     withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
