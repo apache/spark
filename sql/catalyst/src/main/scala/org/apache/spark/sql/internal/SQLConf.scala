@@ -2913,6 +2913,7 @@ object SQLConf {
   val STATE_STORE_MAINTENANCE_SNAPSHOT_THREAD_RATIO =
     buildConf("spark.sql.streaming.stateStore.snapshotToCleanupThreadRatio")
       .internal()
+      .version("5.0.0")
       .doc("Ratio of total maintenance threads allocated to the snapshot " +
         "pool. The remainder goes to the cleanup pool. The snapshot " +
         "count is rounded to the nearest integer and clamped so each " +
