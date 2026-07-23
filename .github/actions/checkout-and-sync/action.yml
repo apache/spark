@@ -44,14 +44,14 @@ runs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.ref }}
-    - name: Resolve apache/spark HEAD SHA
-      id: resolve-sha
-      shell: bash
-      run: echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       if: inputs.set-safe-directory == 'true'
       shell: bash
       run: git config --global --add safe.directory ${GITHUB_WORKSPACE}
+    - name: Resolve apache/spark HEAD SHA
+      id: resolve-sha
+      shell: bash
+      run: echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       shell: bash
