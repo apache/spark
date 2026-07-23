@@ -441,7 +441,7 @@ class GroupByTestsMixin:
             pdf.groupby(pdf.b // 5)["a"].diff().sort_index(),
         )
 
-        self.assert_eq(psdf.groupby("b").diff().sum(), pdf.groupby("b").diff().sum().astype(int))
+        self.assert_eq(psdf.groupby("b").diff().sum(), pdf.groupby("b").diff().sum())
         self.assert_eq(psdf.groupby(["b"])["a"].diff().sum(), pdf.groupby(["b"])["a"].diff().sum())
 
         # multi-index columns
