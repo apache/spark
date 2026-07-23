@@ -525,7 +525,8 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
 
   test("column-update: analysis fails when assignment key is outside requiredDataAttributes") {
     // Connector declares only [pk] but the user assigns to `id`. We enforce
-    // updatedColumns ⊆ requiredDataAttributes at analysis time (root-column granularity).
+    // updatedColumns is a subset of requiredDataAttributes at analysis time
+    // (root-column granularity).
     createAndInitTableWithReqAttrs("pk", "pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }""".stripMargin)
 
