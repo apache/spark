@@ -176,6 +176,7 @@ GROUP	false
 GROUPING	false
 HANDLER	false
 HAVING	false
+HISTORY	false
 HOUR	false
 HOURS	false
 IDENTIFIED	false
@@ -332,6 +333,7 @@ ROLLBACK	false
 ROLLUP	false
 ROW	false
 ROWS	false
+SCD	false
 SCHEMA	false
 SCHEMAS	false
 SECOND	false
@@ -392,6 +394,7 @@ TIMESTAMP_NTZ	false
 TINYINT	false
 TO	false
 TOUCH	false
+TRACK	false
 TRAILING	false
 TRANSACTION	false
 TRANSACTIONS	false
