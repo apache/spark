@@ -87,7 +87,13 @@ class SparkSqlParser extends AbstractSqlParser {
       parameterContext: ParameterContext): LogicalPlan = {
     parseWithParameters(sqlText, parameterContext) { parser =>
       val ctx = parser.compoundOrSingleStatement()
-      withErrorHandling(ctx, Some(sqlText)) {
+      val contextHasParams = parameterContext match {
+        case NamedParameterContext(params) => params.nonEmpty
+        case PositionalParameterContext(params) => params.nonEmpty
+        case HybridParameterContext(args, _) => args.nonEmpty
+      }
+      val errorHandlingSqlText = if (contextHasParams) None else Some(sqlText)
+      withErrorHandling(ctx, errorHandlingSqlText) {
         astBuilder.visitCompoundOrSingleStatement(ctx) match {
           case compoundBody: CompoundPlanStatement => compoundBody
           case plan: LogicalPlan => plan
