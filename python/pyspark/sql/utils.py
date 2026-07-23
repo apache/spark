@@ -470,6 +470,11 @@ def pyspark_column_op(
     if (fillna is not None) and (_is_extension_dtypes(left) or _is_extension_dtypes(right)):
         fillna = None
     # TODO(SPARK-43877): Fix behavior difference for compare binary functions.
+    # When running on Spark Connect, expressions are adjusted on the Connect side
+    # to produce correct boolean values for compare ops, so skip fillna here.
+    if is_remote():
+        return result
+
     return result.fillna(fillna) if fillna is not None else result
 
 
