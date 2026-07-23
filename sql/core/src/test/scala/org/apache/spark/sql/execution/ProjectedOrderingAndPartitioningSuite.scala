@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFunction}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -492,7 +492,7 @@ class ProjectedOrderingAndPartitioningSuite
     // KP([bucket(32, id)], keys1d) through Project(id as pk) should produce
     // KP([bucket(32, pk)], keys1d): the alias is pushed into the bucket's column argument.
     val id = AttributeReference("id", IntegerType)()
-    val bucketExpr = TransformExpression(BucketFunction, Seq(id), Some(32))
+    val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(32), id))
     val keys1d = Seq(InternalRow(0), InternalRow(1), InternalRow(2))
     val child = DummyLeafExecWithPartitioning(
       output = Seq(id),
@@ -507,7 +507,7 @@ class ProjectedOrderingAndPartitioningSuite
           case te: TransformExpression =>
             assert(te.isSameFunction(bucketExpr),
               "bucket function and numBuckets must be preserved after alias substitution")
-            assert(te.children.head.asInstanceOf[Attribute].name === "pk",
+            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "pk",
               "bucket's column argument must be rewritten to the aliased attribute")
           case other => fail(s"Expected TransformExpression, got $other")
         }
@@ -524,7 +524,7 @@ class ProjectedOrderingAndPartitioningSuite
     // Result: KP([bucket(32, id)], keys1d, isNarrowed=true, isGrouped=false).
     val id = AttributeReference("id", IntegerType)()
     val ts = AttributeReference("ts", IntegerType)()
-    val bucketExpr = TransformExpression(BucketFunction, Seq(id), Some(32))
+    val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(32), id))
     val yearsExpr = TransformExpression(YearsFunction, Seq(ts))
     // Projected to position [0] (bucket): (0),(1),(0) -- bucket value 0 appears twice.
     val keys2d = Seq(InternalRow(0, 2020), InternalRow(1, 2020), InternalRow(0, 2021))
@@ -539,7 +539,7 @@ class ProjectedOrderingAndPartitioningSuite
         kp.expressions.head match {
           case te: TransformExpression =>
             assert(te.isSameFunction(bucketExpr), "bucket must be the surviving expression")
-            assert(te.children.head.asInstanceOf[Attribute].name === "id")
+            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "id")
           case other => fail(s"Expected TransformExpression, got $other")
         }
         assert(kp.isNarrowed, "dropping years(ts) position must mark the KP as narrowed")
@@ -554,7 +554,7 @@ class ProjectedOrderingAndPartitioningSuite
     // Result: KP([bucket(32, id), years(ts_alias)], keys2d) -- not narrowed.
     val id = AttributeReference("id", IntegerType)()
     val ts = AttributeReference("ts", IntegerType)()
-    val bucketExpr = TransformExpression(BucketFunction, Seq(id), Some(32))
+    val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(32), id))
     val yearsExpr = TransformExpression(YearsFunction, Seq(ts))
     val keys2d = Seq(InternalRow(0, 2020), InternalRow(1, 2020), InternalRow(0, 2021))
     val child = DummyLeafExecWithPartitioning(
@@ -569,14 +569,14 @@ class ProjectedOrderingAndPartitioningSuite
         kp.expressions(0) match {
           case te: TransformExpression =>
             assert(te.isSameFunction(bucketExpr))
-            assert(te.children.head.asInstanceOf[Attribute].name === "id",
+            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "id",
               "bucket's argument must remain id (no alias for id in this projection)")
           case other => fail(s"Expected TransformExpression at pos 0, got $other")
         }
         kp.expressions(1) match {
           case te: TransformExpression =>
             assert(te.isSameFunction(yearsExpr))
-            assert(te.children.head.asInstanceOf[Attribute].name === "ts_alias",
+            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "ts_alias",
               "years() argument must be rewritten to ts_alias")
           case other => fail(s"Expected TransformExpression at pos 1, got $other")
         }

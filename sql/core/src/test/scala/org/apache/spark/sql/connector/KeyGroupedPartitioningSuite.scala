@@ -45,6 +45,7 @@ import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with ExplainSuiteHelper {
   private val functions = Seq(
@@ -133,7 +134,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
     val distribution = physical.ClusteredDistribution(
-      Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
+      Seq(TransformExpression(BucketFunction, Seq(Literal(32), attr("ts")))))
 
     checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
   }
@@ -145,7 +146,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
     val distribution = physical.ClusteredDistribution(
-      Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
+      Seq(TransformExpression(BucketFunction, Seq(Literal(32), attr("ts")))))
 
     // Has exactly one partition.
     val partitionKeys = Seq(0).map(v => InternalRow.fromSeq(Seq(v)))
@@ -201,13 +202,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
       val df = sql(s"SELECT * FROM testcat.ns.$table")
       val distribution = physical.ClusteredDistribution(
-        Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
+        Seq(TransformExpression(BucketFunction, Seq(Literal(32), attr("ts")))))
 
       checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
     }
   }
 
-  test("non-clustered distribution: V2 function with multiple args") {
+  test("clustered distribution: V2 function with multiple args") {
     val partitions: Array[Transform] = Array(
       Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(2))
     )
@@ -223,7 +224,11 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     val distribution = physical.ClusteredDistribution(
       Seq(TransformExpression(TruncateFunction, Seq(attr("data"), Literal(2)))))
 
-    checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
+    // With truncate transform support, KeyedPartitioning should now work
+    val partitionKeys = Seq("aa", "bb", "cc").map(v =>
+      InternalRow(UTF8String.fromString(v)))
+    checkQueryPlan(df, distribution,
+      physical.KeyedPartitioning(distribution.clustering, partitionKeys))
   }
 
   /**
@@ -4189,6 +4194,606 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           "GroupPartitionsExec expected to coalesce partitions sharing the narrowed key [id]")
       }
     }
+  }
+
+  test("SPARK-50593: cross-function truncate vs bucket should NOT trigger SPJ") {
+    val partitions1 = Array(
+      Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(3))
+    )
+    val partitions2 = Array(
+      Expressions.bucket(4, "data")
+    )
+
+    createTable("trunc_cross1", columns, partitions1)
+    sql("INSERT INTO testcat.ns.trunc_cross1 VALUES " +
+      "(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+      "(1, 'bbb', CAST('2021-01-01' AS timestamp))")
+
+    createTable("trunc_cross2", columns2, partitions2)
+    sql("INSERT INTO testcat.ns.trunc_cross2 VALUES " +
+      "(1, 5, 'aaa'), " +
+      "(5, 10, 'bbb')")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("trunc_cross1", "trunc_cross2")}
+           |trunc_cross1.id, trunc_cross2.store_id
+           |FROM testcat.ns.trunc_cross1 JOIN testcat.ns.trunc_cross2
+           |ON trunc_cross1.data = trunc_cross2.data
+           |ORDER BY trunc_cross1.id
+           |""".stripMargin)
+
+      // Different functions (truncate vs bucket) are not mutually reducible, so a shuffle
+      // must still be planned.
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.nonEmpty,
+        "truncate vs bucket are not compatible - a shuffle should be present, " +
+          "but none was planned")
+      checkAnswer(df, Seq(Row(0, 1), Row(1, 5)))
+    }
+  }
+
+  test("SPARK-50593: truncate(3) vs truncate(5) triggers SPJ via width reducer") {
+    // Exercises the Literal[]-based reducer path end-to-end: truncate widths 3 and 5
+    // are mutually reducible (reduce the larger to the smaller), so SPJ must avoid the shuffle.
+    val table1 = "trunc_three"
+    val table2 = "trunc_five"
+
+    val partitions1 = Array(
+      Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(3)))
+    val partitions2 = Array(
+      Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(5)))
+
+    createTable(table1, columns, partitions1)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+      "(0, 'apple', CAST('2022-01-01' AS timestamp)), " +
+      "(1, 'grape', CAST('2021-01-01' AS timestamp)), " +
+      "(2, 'orange', CAST('2020-01-01' AS timestamp))")
+
+    createTable(table2, columns, partitions2)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+      "(10, 'apple', CAST('2022-01-01' AS timestamp)), " +
+      "(20, 'grape', CAST('2021-01-01' AS timestamp)), " +
+      "(30, 'orange', CAST('2020-01-01' AS timestamp))")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint(table1, table2)}
+           |$table1.id AS left_id, $table2.id AS right_id
+           |FROM testcat.ns.$table1 JOIN testcat.ns.$table2
+           |ON $table1.data = $table2.data
+           |ORDER BY $table1.id
+           |""".stripMargin)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty,
+        "truncate(3) vs truncate(5) should avoid shuffle via the width reducer, " +
+          "but a shuffle was planned")
+      checkAnswer(df, Seq(Row(0, 10), Row(1, 20), Row(2, 30)))
+    }
+  }
+
+  test("SPARK-50593: existing bucket SPJ still works with Literal[] API") {
+    // Exercises the new Literal[]-based reducer path end-to-end: bucket(4) and
+    // bucket(2) differ, so SPJ can only avoid the shuffle if BucketFunction's reducer
+    // (now implemented via Literal[] params) correctly returns a GCD-based Reducer.
+    // BucketFunction overrides only the new API, so this also covers the deprecated->new
+    // fallback: the single-int dispatch tries reducer(int, ...) first (UOE), then the Literal[].
+    val table1 = "bucket_compat1"
+    val table2 = "bucket_compat2"
+
+    val partitions1 = Array(Expressions.bucket(4, "id"))
+    val partitions2 = Array(Expressions.bucket(2, "store_id"))
+
+    createTable(table1, columns, partitions1)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+      "(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+      "(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+      "(2, 'ccc', CAST('2020-01-01' AS timestamp)), " +
+      "(3, 'ddd', CAST('2019-01-01' AS timestamp))")
+
+    createTable(table2, columns2, partitions2)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+      "(0, 5, 'aaa'), " +
+      "(1, 10, 'bbb'), " +
+      "(2, 15, 'ccc'), " +
+      "(3, 20, 'ddd')")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint(table1, table2)}
+           |$table1.id, $table2.store_id
+           |FROM testcat.ns.$table1 JOIN testcat.ns.$table2
+           |ON $table1.id = $table2.store_id
+           |ORDER BY $table1.id
+           |""".stripMargin)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty,
+        "bucket(4) vs bucket(2) should avoid shuffle via the GCD reducer, " +
+          "but a shuffle was planned")
+      checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3)))
+    }
+  }
+
+  test("SPARK-50593: bucket(4) vs bucket(3) - no common divisor, must shuffle") {
+    // GCD(4, 3) = 1 -- BucketFunction.reducer returns null. Spark must NOT enable SPJ.
+    // Regression guard: a buggy null-handling in TransformExpression.reducer (e.g.,
+    // Try(...).toOption instead of Try(Option(...))) would treat null as Some(null),
+    // enable SPJ, and produce wrong join results for incompatible bucket layouts.
+    val table1 = "bucket_gcd1_a"
+    val table2 = "bucket_gcd1_b"
+
+    val partitions1 = Array(Expressions.bucket(4, "id"))
+    val partitions2 = Array(Expressions.bucket(3, "store_id"))
+
+    createTable(table1, columns, partitions1)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+      "(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+      "(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+      "(2, 'ccc', CAST('2020-01-01' AS timestamp))")
+
+    createTable(table2, columns2, partitions2)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+      "(0, 5, 'aaa'), " +
+      "(1, 10, 'bbb'), " +
+      "(2, 15, 'ccc')")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint(table1, table2)}
+           |$table1.id, $table2.store_id
+           |FROM testcat.ns.$table1 JOIN testcat.ns.$table2
+           |ON $table1.id = $table2.store_id
+           |ORDER BY $table1.id
+           |""".stripMargin)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.nonEmpty,
+        "bucket(4) vs bucket(3) have no common divisor (GCD=1), so the reducer " +
+          "returns null. SPJ must NOT be enabled; a shuffle is required.")
+      checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2)))
+    }
+  }
+
+  test("SPARK-50593: isSameFunction recurses into nested transforms, respects column-ref slots") {
+    import org.apache.spark.sql.catalyst.expressions.{Add, Expression, GetStructField}
+    val a = attr("a")
+    val b = attr("b")
+    def bucket(n: Int, e: Expression): TransformExpression =
+      TransformExpression(BucketFunction, Seq(Literal(n), e))
+    def years(e: Expression): TransformExpression = TransformExpression(YearsFunction, Seq(e))
+    def days(e: Expression): TransformExpression = TransformExpression(DaysFunction, Seq(e))
+
+    // Nested identical -> same (recursing into the inner transform), with column identity ignored.
+    // isSameFunction stays correct for nested shapes even though the SPJ gate currently rejects
+    // them; keeping this behavior is the right shape for any future nested support.
+    assert(bucket(4, years(a)).isSameFunction(bucket(4, years(a))))
+    assert(bucket(4, years(a)).isSameFunction(bucket(4, years(b))), "column identity is ignored")
+    // Nested different inner -> not same.
+    assert(!bucket(4, years(a)).isSameFunction(bucket(4, days(a))))
+    // Different outer literal -> not same.
+    assert(!bucket(4, years(a)).isSameFunction(bucket(2, years(a))))
+    // Flat sanity (no nesting).
+    assert(bucket(4, a).isSameFunction(bucket(4, b)))
+    assert(!bucket(4, a).isSameFunction(bucket(2, b)))
+
+    // A non-reference column slot (a + 1) carries value-changing semantics, so it is conservatively
+    // treated as not-same -- even compared to itself.
+    val add = bucket(4, Add(a, Literal(1)))
+    assert(!add.isSameFunction(bucket(4, Add(b, Literal(1)))))
+    assert(!add.isSameFunction(add), "a non-reference slot is treated as not-same by design")
+
+    // Struct-field column references are recognized (reflexivity preserved for genuine refs).
+    val s = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
+    val sf = GetStructField(s, 0)
+    assert(bucket(4, sf).isSameFunction(bucket(4, sf)))
+  }
+
+  test("SPARK-50593: supportsExpressions admits flat parameterized transforms, " +
+      "rejects nested and non-reference slots") {
+    import org.apache.spark.sql.catalyst.expressions.{Add, Expression}
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    def bucket(n: Int, e: Expression): TransformExpression =
+      TransformExpression(BucketFunction, Seq(Literal(n), e))
+
+    // Flat parameterized transform over a bare column -> admitted (one non-literal child = column).
+    assert(physical.KeyedPartitioning.supportsExpressions(Seq(bucket(4, a))))
+    // Bare identity column -> admitted.
+    assert(physical.KeyedPartitioning.supportsExpressions(Seq(a)))
+
+    // Nested transform -> rejected: the non-literal child is a transform, not a column reference.
+    // SPJ reasons about a transform via its function and literal params alone, which is unsound
+    // when the remaining argument is itself a transform.
+    val nested = bucket(4, TransformExpression(YearsFunction, Seq(a)))
+    assert(!physical.KeyedPartitioning.supportsExpressions(Seq(nested)))
+
+    // Value-changing slot (a + 1) -> rejected: not a plain column reference.
+    assert(!physical.KeyedPartitioning.supportsExpressions(Seq(bucket(4, Add(a, Literal(1))))))
+
+    // Two non-literal column references -> rejected: a partition expression must map to exactly one
+    // clustering column (the positional keyPositions model needs a single column per transform).
+    assert(!physical.KeyedPartitioning.supportsExpressions(
+      Seq(TransformExpression(BucketFunction, Seq(Literal(4), a, b)))))
+  }
+
+  test("SPARK-50593: integer truncate is reducible via lcm (generalized reducer, non-bucket)") {
+    // A second reducible transform exercising the generalized Literal[] reducer API with reducer
+    // math distinct from bucket (GCD) and string truncate (prefix-min): integer truncate snaps to
+    // a coarser grid, so truncate(v, W1) and truncate(v, W2) reduce onto multiples of lcm(W1, W2).
+    import org.apache.spark.sql.catalyst.expressions.Expression
+    val id = attr("id")
+    def itrunc(e: Expression, w: Int): TransformExpression =
+      TransformExpression(IntegerTruncateFunction, Seq(e, Literal(w)))
+
+    // Same width -> same function (no reduction needed).
+    assert(itrunc(id, 4).isSameFunction(itrunc(id, 4)))
+
+    // W2 is a multiple of W1: the finer side (W1=2) reduces onto the coarser grid (W2=4).
+    assert(itrunc(id, 2).isCompatible(itrunc(id, 4)))
+    val r = itrunc(id, 2).reducers(itrunc(id, 4))
+    assert(r.isDefined, "truncate(2) must reduce onto truncate(4)")
+    val red = r.get.asInstanceOf[Reducer[Integer, Integer]]
+    // truncate(.,2) values snapped to multiples of 4: 6 -> 4, 2 -> 0, 8 -> 8
+    assert(red.reduce(6) == 4 && red.reduce(2) == 0 && red.reduce(8) == 8)
+    // The coarser side (4) is already the common grid -> no reducer.
+    assert(itrunc(id, 4).reducers(itrunc(id, 2)).isEmpty)
+
+    // Neither divides the other: both sides reduce to the lcm grid.
+    assert(itrunc(id, 6).isCompatible(itrunc(id, 4)))          // lcm(6, 4) = 12
+    assert(itrunc(id, 6).reducers(itrunc(id, 4)).isDefined)
+    assert(itrunc(id, 4).reducers(itrunc(id, 6)).isDefined)
+    assert(itrunc(id, 3).isCompatible(itrunc(id, 5)))          // coprime -> lcm(3, 5) = 15
+  }
+
+  test("SPARK-50593: deprecated int reducer API still works (legacy connector backward compat)") {
+    // The reducer dispatch attempts the deprecated reducer(int, func, int) first for single-int
+    // params, so a ReducibleFunction that overrides ONLY the deprecated method still reduces.
+    // This mirrors how Iceberg 1.10.0 (and earlier) ship -- they predate the Literal[] API.
+    val bucketExpr4 = TransformExpression(LegacyBucketFunction, Seq(Literal(4), attr("id")))
+    val bucketExpr2 = TransformExpression(LegacyBucketFunction, Seq(Literal(2), attr("id")))
+
+    val reducer = bucketExpr4.reducers(bucketExpr2)
+    assert(reducer.isDefined, "Expected a reducer for legacy_bucket(4) on legacy_bucket(2)")
+
+    // Verify the returned Reducer actually reduces bucket 4 -> bucket 2 (GCD = 2).
+    // bucket(4, x) produces values in [0, 4); reducing by GCD=2 gives v % 2.
+    val r = reducer.get.asInstanceOf[Reducer[Integer, Integer]]
+    assert(r.reduce(3) == 1, s"Expected reduce(3) == 1, got ${r.reduce(3)}")
+    assert(r.reduce(2) == 0, s"Expected reduce(2) == 0, got ${r.reduce(2)}")
+  }
+
+  test("SPARK-50593: a non-IntegerType param (DateType) does not reach the deprecated " +
+      "int reducer") {
+    // DateType is stored as a boxed Integer (epoch days) internally, so the reducer dispatch must
+    // key off the DataType, not the runtime class -- otherwise a DateType param is mistaken for the
+    // bucket-style int param and routed to the deprecated reducer(int, ...). LegacyBucketFunction
+    // overrides ONLY that deprecated method, so with a DateType param it must be unreachable,
+    // leaving the pair not reducible (rather than producing a bogus GCD reducer over epoch-days).
+    val l = TransformExpression(LegacyBucketFunction, Seq(Literal(8, DateType), attr("id")))
+    val r = TransformExpression(LegacyBucketFunction, Seq(Literal(4, DateType), attr("id")))
+    assert(!l.isSameFunction(r))
+    assert(!l.isCompatible(r), "a DateType param must not reach the deprecated int reducer")
+    assert(l.reducers(r).isEmpty && r.reducers(l).isEmpty)
+  }
+
+  test("SPARK-50593: mismatched column/literal argument layout is not reducible") {
+    // Both transforms pass the strict gate (one column-reference non-literal child), but the column
+    // and literal sit in swapped positions: truncate(id, 2) is (col, lit) while truncate(4, sid) is
+    // (lit, col). The reducer only sees the literal positions ([2] vs [4]), so without an
+    // argument-layout check it would wrongly reduce these and co-locate non-matching rows.
+    // IntegerTruncateFunction has two same-typed (Int) args, which makes this layout reachable.
+    val l = TransformExpression(IntegerTruncateFunction, Seq(attr("id"), Literal(2)))
+    val r = TransformExpression(IntegerTruncateFunction, Seq(Literal(4), attr("store_id")))
+    assert(!l.isSameFunction(r))
+    assert(!l.isCompatible(r), "swapped column/literal layout must not be reducible")
+    assert(l.reducers(r).isEmpty && r.reducers(l).isEmpty)
+
+    // Control: same layout (col, lit) on both sides remains reducible via lcm(2, 4).
+    val a = TransformExpression(IntegerTruncateFunction, Seq(attr("id"), Literal(2)))
+    val b = TransformExpression(IntegerTruncateFunction, Seq(attr("store_id"), Literal(4)))
+    assert(a.isCompatible(b), "aligned (col, lit) layout must remain reducible")
+  }
+
+  test("SPARK-50593: a dual-API connector reduces via the generalized overload") {
+    // DualApiBucketFunction implements both overloads: the deprecated reducer(int, ...) returns
+    // null, the generalized reducer(Literal[], ...) returns a valid GCD reducer. Generalized-first
+    // dispatch reduces via the generalized overload directly; the deprecated overload is not
+    // consulted (its null is irrelevant).
+    val l = TransformExpression(DualApiBucketFunction, Seq(Literal(4), attr("id")))
+    val r = TransformExpression(DualApiBucketFunction, Seq(Literal(2), attr("store_id")))
+    assert(l.isCompatible(r), "the generalized overload must produce a reducer")
+    val red = l.reducers(r)
+    assert(red.isDefined, "generalized reducer must be reached")
+    assert(red.get.asInstanceOf[Reducer[Integer, Integer]].reduce(3) == 1)
+  }
+
+  test("SPARK-50593: the generalized overload's null is authoritative, no deprecated fallback") {
+    // DualApiGeneralizedNullFunction's generalized reducer returns null (not reducible) for a
+    // single-int pair its deprecated reducer WOULD reduce (gcd). Under generalized-first dispatch
+    // the generalized null is authoritative: Spark must not fall back to the deprecated overload,
+    // so the pair is not reducible. (Deprecated-first would instead co-partition via gcd(4,2)=2.)
+    val l = TransformExpression(DualApiGeneralizedNullFunction, Seq(Literal(4), attr("id")))
+    val r = TransformExpression(DualApiGeneralizedNullFunction, Seq(Literal(2), attr("store_id")))
+    assert(l.reducers(r).isEmpty,
+      "a generalized null must not fall back to the deprecated overload")
+    assert(r.reducers(l).isEmpty, "symmetric")
+  }
+
+  test("SPARK-50593: a complex (non-scalar) literal param is not reducible") {
+    // Reducer parameters must not carry Catalyst-internal containers. ArrayParamFunction's
+    // generalized reducer returns a reducer unconditionally, so reaching it at all is the leak; the
+    // guard must refuse the ArrayData-backed literal param first. Different array values keep
+    // isSameFunction false, forcing the reducer path where the guard applies.
+    val l = TransformExpression(ArrayParamFunction,
+      Seq(Literal.create(Array(1, 2, 3), ArrayType(IntegerType)), attr("id")))
+    val r = TransformExpression(ArrayParamFunction,
+      Seq(Literal.create(Array(4, 5, 6), ArrayType(IntegerType)), attr("store_id")))
+    assert(!l.isSameFunction(r))
+    assert(!l.isCompatible(r), "a complex literal param must not be reducible")
+    assert(l.reducers(r).isEmpty && r.reducers(l).isEmpty)
+  }
+
+  test("SPARK-50593: a UDT-typed literal param is not reducible (complex-type guard)") {
+    // noComplexLiteralParams rejects a UDT-typed literal param by its DataType. UdtParamFunction
+    // declares the UDT as its literal input type, so literalParamsMatchInputTypes passes (UDT ==
+    // UDT) and only the complex-type guard can reject it. UdtParamFunction reduces unconditionally,
+    // so reaching its reducer is the leak (here a StructBackedUDT, whose value is an InternalRow).
+    val udt = new StructBackedUDT
+    val l = TransformExpression(UdtParamFunction,
+      Seq(Literal(udt.serialize(new StructBacked(1)), udt), attr("id")))
+    val r = TransformExpression(UdtParamFunction,
+      Seq(Literal(udt.serialize(new StructBacked(2)), udt), attr("store_id")))
+    assert(!l.isSameFunction(r))
+    assert(!l.isCompatible(r), "a UDT-typed literal param must not be reducible")
+    assert(l.reducers(r).isEmpty && r.reducers(l).isEmpty)
+  }
+
+  test("SPARK-50593: bundled reducers tolerate a length-mismatched params call (no AIOOBE)") {
+    // sameArgumentLayout is arity-less, so a 0-vs-1-parameter pair (e.g. truncate(col) vs
+    // truncate(col, w), whose column slots align) reaches the connector reducer with
+    // mismatched-length param arrays. The bundled reducers model the documented contract by
+    // length-checking before indexing -- returning null rather than throwing ArrayIndexOutOfBounds
+    // (which attempt()'s Try would swallow into a silent missed SPJ + a misleading warning).
+    val empty = Array.empty[org.apache.spark.sql.connector.expressions.Literal[_]]
+    val one = Array[org.apache.spark.sql.connector.expressions.Literal[_]](literal(3))
+    assert(BucketFunction.reducer(empty, BucketFunction, one) == null)
+    assert(TruncateFunction.reducer(empty, TruncateFunction, one) == null)
+    assert(IntegerTruncateFunction.reducer(empty, IntegerTruncateFunction, one) == null)
+  }
+
+  test("SPARK-50593: a non-UOE reducer exception is logged and treated as not reducible") {
+    // An UnsupportedOperationException means "overload not implemented" (silent). Any other
+    // throwable is a bug in an implemented reducer: the dispatch logs it (not the misleading
+    // "implements no reducer" hint) and treats the pair as not reducible -- it falls back to a
+    // shuffle.
+    val id = attr("id")
+    val l = TransformExpression(ThrowingReducerFunction, Seq(id, Literal(2)))
+    val r = TransformExpression(ThrowingReducerFunction, Seq(id, Literal(4)))
+    val appender = new LogAppender("non-UOE reducer exception")
+    withLogAppender(appender) {
+      assert(l.reducers(r).isEmpty, "a throwing reducer must be treated as not reducible")
+    }
+    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(messages.exists(_.contains("reducer threw an exception")),
+      "the non-UOE exception must be logged")
+    assert(!messages.exists(_.contains("implements no reducer")),
+      "must not emit the 'implements no reducer' hint for an implemented-but-throwing reducer")
+  }
+
+  test("SPARK-50593: deprecated overload is not probed once the generalized one reduces") {
+    // Generalized-first dispatch: the generalized reducer is tried first, and the deprecated int
+    // overload must not be probed once it reduced. Here the generalized reducer succeeds and the
+    // deprecated one throws; SPJ must succeed via the generalized path with NO "reducer threw"
+    // warning (which an eager probe of the deprecated overload would spuriously log).
+    val l = TransformExpression(GeneralizedOkDeprecatedThrowsFunction, Seq(Literal(4), attr("id")))
+    val r = TransformExpression(
+      GeneralizedOkDeprecatedThrowsFunction, Seq(Literal(2), attr("store_id")))
+    val appender = new LogAppender("deprecated overload probed eagerly")
+    withLogAppender(appender) {
+      assert(l.reducers(r).isDefined, "the generalized reducer must produce a reducer")
+    }
+    assert(!appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .exists(_.contains("reducer threw an exception")),
+      "the deprecated overload must not be probed (and throw) once the generalized one reduced")
+  }
+
+  test("SPARK-50593: a throwing generalized overload is surfaced, not masked by the deprecated " +
+      "one") {
+    // DeprecatedOkGeneralizedThrowsFunction implements both: the generalized overload throws, the
+    // deprecated one would reduce. Generalized-first dispatch treats the generalized bug as
+    // authoritative -- it logs the exception and does NOT fall back to the deprecated overload, so
+    // the pair shuffles. (Deprecated-first would have silently reduced via the deprecated overload,
+    // masking the new-API bug.)
+    val l = TransformExpression(DeprecatedOkGeneralizedThrowsFunction, Seq(Literal(4), attr("id")))
+    val r = TransformExpression(
+      DeprecatedOkGeneralizedThrowsFunction, Seq(Literal(2), attr("store_id")))
+    val appender = new LogAppender("generalized bug masked")
+    withLogAppender(appender) {
+      assert(l.reducers(r).isEmpty, "a throwing generalized overload must not fall back and reduce")
+    }
+    assert(appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .exists(_.contains("reducer threw an exception")), "the generalized bug must be surfaced")
+  }
+
+  test("SPARK-50593: a typed-null integer param is not routed to the deprecated int reducer") {
+    // LegacyIntReducerFunction implements ONLY the deprecated int reducer (accepts any int), so the
+    // generalized probe is Unimplemented and dispatch falls back to the deprecated overload. A
+    // typed-null IntegerType param must be excluded by isSingleInt from that fallback -- otherwise
+    // null.asInstanceOf[Int] fabricates a 0 the legacy reducer accepts, falsely co-partitioning
+    // null vs 0. So the pair must NOT be reducible.
+    val col = AttributeReference("id", IntegerType)()
+    val l = TransformExpression(LegacyIntReducerFunction, Seq(Literal(null, IntegerType), col))
+    val r = TransformExpression(LegacyIntReducerFunction, Seq(Literal(null, IntegerType), col))
+    assert(l.reducers(r).isEmpty,
+      "a typed-null int param must not reach the deprecated int fallback")
+  }
+
+  test("SPARK-50593: a column whose type differs from the declared input type is not reducible " +
+      "(identity-vs-transform, exact-typed literal)") {
+    // Models a cross-side join `a = b` on ShortType keys: left is identity(a), right is
+    // truncate(b, 4). The literal slot matches the declared input type exactly, but the column does
+    // not -- identityReducer evals the transform (with the identity column substituted in), feeding
+    // it through SpecificInternalRow(inputTypes), so a ShortType column at an IntegerType-declared
+    // position would ClassCastException. argsMatchInputTypes checks the column too, so the pair is
+    // not reducible (shuffle). IntegerTruncateFunction declares (IntegerType, IntegerType).
+    val a = AttributeReference("a", ShortType)()   // left, identity side
+    val b = AttributeReference("b", ShortType)()   // right, transform's value column
+    val identity = physical.KeyedPartitioning(Seq(a), Seq.empty)
+    val truncated = physical.KeyedPartitioning(
+      Seq(TransformExpression(IntegerTruncateFunction, Seq(b, Literal(4)))), Seq.empty)
+    val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(a)))
+    val trSpec = physical.KeyedShuffleSpec(truncated, physical.ClusteredDistribution(Seq(b)))
+    assert(idSpec.reducers(trSpec).isEmpty,
+      "a mismatched-type column must not be reducible via the identity-vs-transform eval path")
+  }
+
+  test("SPARK-50593: identityReducer validates the substituted identity column, not the " +
+      "transform's own column") {
+    // The transform's own column matches its declared input type, but the identity column actually
+    // evaluated (substituted in) does not. identityReducer must reject based on the substituted
+    // column -- what it evals -- else it builds a reducer that ClassCastExceptions at eval. (The
+    // planner's keyPositions normally forces the two columns to share a type; this builds the specs
+    // directly to pin identityReducer's own correctness.)
+    val idCol = AttributeReference("a", ShortType)()   // evaluated column: ShortType
+    val tCol = AttributeReference("b", StringType)()   // transform's column: matches declared type
+    val identity = physical.KeyedPartitioning(Seq(idCol), Seq.empty)
+    val truncated = physical.KeyedPartitioning(
+      Seq(TransformExpression(TruncateFunction, Seq(tCol, Literal(3)))), Seq.empty)
+    val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(idCol)))
+    val trSpec = physical.KeyedShuffleSpec(truncated, physical.ClusteredDistribution(Seq(tCol)))
+    assert(idSpec.reducers(trSpec).isEmpty,
+      "must validate the substituted identity column (ShortType), not the transform's own column")
+  }
+
+  test("SPARK-50593: an arity-flexible transform (children > declared inputTypes) is not " +
+      "reducible via the identity-vs-transform eval path") {
+    // ZeroOrOneParamFunction declares inputTypes() of length 1 but admits transforms with 2
+    // children (col + one literal). The eval path (identityReducer) feeds every child through
+    // ApplyFunctionExpression's SpecificInternalRow(inputTypes()) -- sized 1 -- so evaluating a
+    // 2-child transform would ArrayIndexOutOfBoundsException at reduce time. argsMatchInputTypes'
+    // exact-arity check rejects it, so the pair is not reducible (shuffle) instead of crashing.
+    // (The transform-vs-transform path keeps its mixed-arity flexibility -- see the zero-vs-one
+    // test below -- because it passes literals to the connector reducer and never evals.)
+    val col = AttributeReference("id", IntegerType)()
+    val identity = physical.KeyedPartitioning(Seq(col), Seq.empty)
+    val arityFlexible = physical.KeyedPartitioning(
+      Seq(TransformExpression(ZeroOrOneParamFunction, Seq(col, Literal(2)))), Seq.empty)
+    val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(col)))
+    val afSpec = physical.KeyedShuffleSpec(arityFlexible, physical.ClusteredDistribution(Seq(col)))
+    assert(idSpec.reducers(afSpec).isEmpty,
+      "a child beyond the declared arity must not reach the eval path (would AIOOBE)")
+  }
+
+  test("SPARK-50593: zero-param vs one-param transforms reach the reducer (no arity block)") {
+    // raw(id) has children [id]; withParam(id, 2) has children [id, 2]. Both pass
+    // supportsExpressions (one column ref each). The dispatch must not require equal child counts
+    // before the reducer: ZeroOrOneParamFunction is reducible across the 0-vs-1-parameter shape, so
+    // the pair must reach it (the column slots align under zip; the extra parameter is reconciled
+    // by the reducer).
+    val raw = TransformExpression(ZeroOrOneParamFunction, Seq(attr("id")))
+    val withParam = TransformExpression(ZeroOrOneParamFunction, Seq(attr("id"), Literal(2)))
+    assert(!raw.isSameFunction(withParam)) // different arity -> not the "same" transform
+    assert(raw.isCompatible(withParam),
+      "zero-param vs one-param must reach the connector reducer, not be blocked by arity")
+    assert(raw.reducers(withParam).isDefined && withParam.reducers(raw).isDefined)
+  }
+
+  test("SPARK-50593: CalendarIntervalType literal param is reducible (not treated as complex)") {
+    // CalendarIntervalType is non-complex but not an AtomicType; its literal param must not be
+    // rejected as a complex container before the reducer is consulted. IntervalParamFunction is
+    // reducible; differing interval params keep isSameFunction false, forcing the reducer path.
+    val l = TransformExpression(IntervalParamFunction,
+      Seq(attr("id"), Literal(new CalendarInterval(1, 0, 0), CalendarIntervalType)))
+    val r = TransformExpression(IntervalParamFunction,
+      Seq(attr("id"), Literal(new CalendarInterval(2, 0, 0), CalendarIntervalType)))
+    assert(!l.isSameFunction(r))
+    assert(l.isCompatible(r), "a CalendarIntervalType param must reach the connector reducer")
+    assert(l.reducers(r).isDefined)
+  }
+
+  // Builds (identity spec, truncate(col, <ShortType width>) spec) on the same column. The ShortType
+  // width mismatches truncate's declared IntegerType input, so the pair must be treated as not
+  // reducible. Shared by the reducers and gate tests below, which must agree on that decision.
+  private def mismatchedIdVsTransformSpecs()
+      : (physical.KeyedShuffleSpec, physical.KeyedShuffleSpec) = {
+    val data = AttributeReference("data", StringType)()
+    val identity = physical.KeyedPartitioning(Seq(data), Seq.empty)
+    val truncated = physical.KeyedPartitioning(
+      Seq(TransformExpression(TruncateFunction, Seq(data, Literal(2.toShort, ShortType)))),
+      Seq.empty)
+    val dist = physical.ClusteredDistribution(Seq(data))
+    (physical.KeyedShuffleSpec(identity, dist), physical.KeyedShuffleSpec(truncated, dist))
+  }
+
+  test("SPARK-50593: a literal param whose type differs from the declared input type is not " +
+      "reducible (identity-vs-transform)") {
+    // A bound function may declare inputTypes() that differ from the literal's actual type (a legal
+    // implicit cast). truncate declares (StringType, IntegerType); a connector can report a Short
+    // width literal. The identity-vs-transform reducer binds and directly evals the transform,
+    // skipping Analyzer coercion -- a raw Short into an IntegerType slot would throw. Rather than
+    // coerce a value the partitions were not built on, this pair is not reducible (reducers =>
+    // None); the companion gate test asserts areKeysCompatible also rejects it, so it shuffles.
+    val (idSpec, trSpec) = mismatchedIdVsTransformSpecs()
+    assert(idSpec.reducers(trSpec).isEmpty,
+      "a mismatched-type literal param must not be reducible via the identity-vs-transform path")
+  }
+
+  test("SPARK-50593: identity-vs-transform compatibility gate agrees with reducers on a " +
+      "mismatched-type literal param") {
+    // The compatibility gate (areKeysCompatible -> isExpressionCompatible) and reducers MUST agree:
+    // if the gate says compatible but reducers returns None, EnsureRequirements keeps the identity
+    // side's raw keys (the reducedDataTypes check can't catch it -- both StringType) and SPJ joins
+    // raw-vs-transformed keys -> silent wrong results. So a mismatched-type literal must make the
+    // gate return false (force a shuffle), consistent with reducers returning None above.
+    val (idSpec, trSpec) = mismatchedIdVsTransformSpecs()
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(!idSpec.areKeysCompatible(trSpec),
+        "gate must reject a mismatched-type literal so it agrees with reducers (no mis-join)")
+      assert(!trSpec.areKeysCompatible(idSpec), "symmetric")
+    }
+  }
+
+  test("SPARK-50593: a literal param whose type differs from the declared input type is not " +
+      "reducible (transform-vs-transform)") {
+    // Both sides are truncate transforms whose width literal is ShortType, while the function
+    // declares (StringType, IntegerType). A literal whose type differs from the declared input type
+    // is treated as not reducible (no coercion), so the pair falls back to a shuffle. Uses a
+    // type-tolerant reducer (reads the width via Number) so emptiness is attributable to the gate,
+    // not to an incidental ClassCastException in the connector. The same widths typed as
+    // IntegerType remain reducible (control).
+    val data = AttributeReference("data", StringType)()
+    def trunc(w: Short): TransformExpression =
+      TransformExpression(TypeTolerantTruncateFunction, Seq(data, Literal(w, ShortType)))
+    assert(trunc(4).reducers(trunc(3)).isEmpty,
+      "mismatched-type (Short) width params must not be reducible")
+    assert(trunc(3).reducers(trunc(4)).isEmpty)
+
+    // Control: IntegerType widths (matching the declared input type) still reduce.
+    def itrunc(w: Int): TransformExpression =
+      TransformExpression(TypeTolerantTruncateFunction, Seq(data, Literal(w)))
+    val reduced = itrunc(4).reducers(itrunc(3))
+    assert(reduced.isDefined, "IntegerType widths must remain reducible")
+    assert(reduced.get.asInstanceOf[Reducer[Any, Any]]
+      .reduce(UTF8String.fromString("abcd")) == UTF8String.fromString("abc"))
   }
 
   test("SPARK-57881: storage-partitioned join leverages union output KeyedPartitioning to " +
