@@ -100,6 +100,8 @@ To build Spark and its example programs, run:
 
 ```bash
 ./build/mvn -DskipTests clean package
+
+hello
 ```
 
 (You do not need to do this if you downloaded a pre-built package.)
