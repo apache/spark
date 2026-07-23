@@ -32,17 +32,22 @@ import org.apache.spark.util.ArrayImplicits._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise returns `expr3`.",
+  usage = "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise returns `expr3`. If `expr3` is not provided, returns NULL when `expr1` is false.",
   examples = """
     Examples:
       > SELECT _FUNC_(1 < 2, 'a', 'b');
        a
+      > SELECT _FUNC_(1 > 2, 'a');
+       NULL
   """,
   since = "1.0.0",
   group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
   extends ComplexTypeMergingExpression with ConditionalExpression with TernaryLike[Expression] {
+
+  def this(predicate: Expression, trueValue: Expression) =
+    this(predicate, trueValue, Literal(null))
 
   @transient
   override lazy val inputTypesForMerging: Seq[DataType] = {
