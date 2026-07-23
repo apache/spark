@@ -1,0 +1,65 @@
+================================================================================================
+BYTE_STREAM_SPLIT INT32
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
+BYTE_STREAM_SPLIT INT32:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Spark vectorized readIntegers                         2              2           0        509.3           2.0       1.0X
+Spark vectorized readIntegersAsLongs                  3              3           0        406.9           2.5       0.8X
+Spark vectorized readIntegersAsDoubles                2              2           0        450.2           2.2       0.9X
+parquet-mr readInteger (per-value)                    8              8           0        133.8           7.5       0.3X
+
+
+================================================================================================
+BYTE_STREAM_SPLIT INT64
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
+BYTE_STREAM_SPLIT INT64:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Spark vectorized readLongs                            7              7           0        159.9           6.3       1.0X
+Spark vectorized readLongsAsInts                      7              7           0        157.6           6.3       1.0X
+parquet-mr readLong (per-value)                      13             13           1         81.1          12.3       0.5X
+
+
+================================================================================================
+BYTE_STREAM_SPLIT FLOAT
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
+BYTE_STREAM_SPLIT FLOAT:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Spark vectorized readFloats                           2              2           0        486.9           2.1       1.0X
+Spark vectorized readFloatsAsDoubles                  2              3           0        433.6           2.3       0.9X
+parquet-mr readFloat (per-value)                      8              8           0        133.7           7.5       0.3X
+
+
+================================================================================================
+BYTE_STREAM_SPLIT DOUBLE
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
+BYTE_STREAM_SPLIT DOUBLE:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Spark vectorized readDoubles                          6              7           1        161.4           6.2       1.0X
+parquet-mr readDouble (per-value)                    13             13           0         81.0          12.4       0.5X
+
+
+================================================================================================
+BYTE_STREAM_SPLIT FLBA
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
+BYTE_STREAM_SPLIT FLBA:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------
+Spark vectorized readBinary (width=12)                              24             25           3         43.6          22.9       1.0X
+Spark per-value readBinary (old updater path, width=12)             29             29           1         36.2          27.6       0.8X
+parquet-mr readBinary (per-value, width=12)                         39             39           1         26.8          37.3       0.6X
+
+

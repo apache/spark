@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.pipelines
 
 import java.util.concurrent.ThreadPoolExecutor
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.util.control.NonFatal
 
@@ -62,6 +62,17 @@ class PipelineEventSender(
    */
   private val isShutdown = new AtomicBoolean(false)
 
+  // Running total of non-terminal events dropped because the queue was full.
+  private val droppedEventCount = new AtomicLong(0L)
+
+  // Timestamp (ms) of the last dropped-event warning, used to throttle them. Only read/written in
+  // `recordDroppedEvent`, which runs inside the synchronized `sendEvent`, so a plain var suffices.
+  private var lastDropWarningTimestamp = 0L
+
+  // Overridable so tests can drive the throttle-reset path without waiting on the wall clock.
+  protected def droppedEventLogIntervalMs: Long =
+    PipelineEventSender.DROPPED_EVENT_LOG_INTERVAL_MS
+
   /**
    * Send an event async by submitting it to the executor, if the sender is not shut down.
    * Otherwise, throws an IllegalStateException, to raise awareness of the shutdown state.
@@ -85,11 +96,38 @@ class PipelineEventSender(
             }
           }
         })
+      } else {
+        recordDroppedEvent(event)
       }
     } else {
       throw IllegalStateErrors.eventSendAfterShutdown(sessionHolder.key.toString)
     }
   }
+
+  /**
+   * Record a non-terminal event that was dropped because the queue was at capacity. Always bumps
+   * the counter so the running total reported in the warnings stays accurate, and logs a warning
+   * at most once per [[droppedEventLogIntervalMs]] (the first drop always logs).
+   */
+  private def recordDroppedEvent(event: PipelineEvent): Unit = {
+    val totalDropped = droppedEventCount.incrementAndGet()
+    val now = System.currentTimeMillis()
+    if (now - lastDropWarningTimestamp >= droppedEventLogIntervalMs) {
+      lastDropWarningTimestamp = now
+      logWarning(
+        log"Dropped pipeline event for session " +
+          log"${MDC(LogKeys.SESSION_ID, sessionHolder.sessionId)} because the event queue is " +
+          log"full (capacity ${MDC(LogKeys.MAX_SIZE, queueCapacity)}); " +
+          log"${MDC(LogKeys.NUM_EVENTS, totalDropped)} non-terminal event(s) dropped so far. " +
+          log"Most recent dropped event: ${MDC(LogKeys.MESSAGE, event.message)}")
+    }
+  }
+
+  /**
+   * Total number of non-terminal events dropped because the queue was full. Exposed for tests;
+   * production observability is the warning logs emitted on drop and at shutdown.
+   */
+  private[connect] def numDroppedEvents: Long = droppedEventCount.get()
 
   private def shouldEnqueueEvent(event: PipelineEvent): Boolean = {
     event.details match {
@@ -126,6 +164,16 @@ class PipelineEventSender(
           log"Pipeline event sender for session " +
             log"${MDC(LogKeys.SESSION_ID, sessionHolder.sessionId)} failed to terminate")
         executor.shutdownNow()
+      }
+      // Summarize total drops at shutdown so drops suppressed by the throttle window are still
+      // surfaced.
+      val totalDropped = droppedEventCount.get()
+      if (totalDropped > 0) {
+        logWarning(
+          log"Pipeline event sender for session " +
+            log"${MDC(LogKeys.SESSION_ID, sessionHolder.sessionId)} dropped a total of " +
+            log"${MDC(LogKeys.NUM_EVENTS, totalDropped)} non-terminal event(s) because the " +
+            log"event queue (capacity ${MDC(LogKeys.MAX_SIZE, queueCapacity)}) was full.")
       }
       logInfo(
         log"Pipeline event sender shutdown completed for session " +
@@ -173,4 +221,10 @@ class PipelineEventSender(
       .setMessage(event.messageWithError)
     protoEventBuilder.build()
   }
+}
+
+object PipelineEventSender {
+  // Minimum interval between dropped-event warnings, to avoid flooding the logs when the queue
+  // stays full. Mirrors AsyncEventQueue.LOGGING_INTERVAL.
+  private val DROPPED_EVENT_LOG_INTERVAL_MS = 60L * 1000
 }

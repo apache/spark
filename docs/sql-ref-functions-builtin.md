@@ -51,7 +51,7 @@ user-defined function that may share the same name.
 #### Examples
 {% include_api_gen generated-map-funcs-examples.html %}
 
-### Date and Timestamp Functions
+### Date, Time and Timestamp Functions
 {% include_api_gen generated-datetime-funcs-table.html %}
 #### Examples
 {% include_api_gen generated-datetime-funcs-examples.html %}

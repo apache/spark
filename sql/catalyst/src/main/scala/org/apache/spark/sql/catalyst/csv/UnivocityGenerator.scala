@@ -85,6 +85,15 @@ class UnivocityGenerator(
       (getter, ordinal) =>
         timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(getter.getLong(ordinal)))
 
+    case t: TimestampNTZNanosType =>
+      (getter, ordinal) =>
+        timestampNTZFormatter.formatWithoutTimeZoneNanos(
+          getter.getTimestampNTZNanos(ordinal), t.precision)
+
+    case t: TimestampLTZNanosType =>
+      (getter, ordinal) =>
+        timestampFormatter.formatNanos(getter.getTimestampLTZNanos(ordinal), t.precision)
+
     case _: TimeType => (getter, ordinal) => timeFormatter.format(getter.getLong(ordinal))
 
     case YearMonthIntervalType(start, end) =>

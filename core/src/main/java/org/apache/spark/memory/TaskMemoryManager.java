@@ -29,6 +29,7 @@ import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
+import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
 
@@ -94,7 +95,13 @@ public class TaskMemoryManager {
    */
   private final BitSet allocatedPages = new BitSet(PAGE_TABLE_SIZE);
 
+  /** Pages allocated at the caller's minimum after a partial allocation also failed. */
+  @GuardedBy("this")
+  private final BitSet pagesAllocatedFromMinimumRetry = new BitSet(PAGE_TABLE_SIZE);
+
   private final MemoryManager memoryManager;
+
+  private final MemoryAllocator tungstenMemoryAllocator;
 
   private final long taskAttemptId;
 
@@ -114,7 +121,25 @@ public class TaskMemoryManager {
   /**
    * The amount of memory that is acquired but not used.
    */
-  private volatile long acquiredButNotUsed = 0L;
+  @GuardedBy("this")
+  private long acquiredButNotUsed = 0L;
+
+  /**
+   * Prevent nested page allocations while spilling from recursively entering allocator recovery.
+   */
+  private final ThreadLocal<Boolean> inPageAllocationRecovery =
+    ThreadLocal.withInitial(() -> false);
+
+  private static final class PageAllocationRequest {
+    private MemoryConsumer consumer;
+    private long minimumSize;
+  }
+
+  /**
+   * Carries a padded page request's minimum usable size through the existing virtual allocatePage
+   * entry point, so subclasses overriding that method continue to intercept page allocations.
+   */
+  private final ThreadLocal<PageAllocationRequest> pageAllocationRequest = new ThreadLocal<>();
 
   /**
    * Current off heap memory usage by this task.
@@ -144,8 +169,17 @@ public class TaskMemoryManager {
    * Construct a new TaskMemoryManager.
    */
   public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
+    this(memoryManager, taskAttemptId, memoryManager.tungstenMemoryAllocator());
+  }
+
+  @VisibleForTesting
+  TaskMemoryManager(
+      MemoryManager memoryManager,
+      long taskAttemptId,
+      MemoryAllocator tungstenMemoryAllocator) {
     this.tungstenMemoryMode = memoryManager.tungstenMemoryMode();
     this.memoryManager = memoryManager;
+    this.tungstenMemoryAllocator = tungstenMemoryAllocator;
     this.taskAttemptId = taskAttemptId;
     this.consumers = new HashSet<>();
   }
@@ -253,6 +287,24 @@ public class TaskMemoryManager {
       int idx) {
     MemoryMode mode = requestingConsumer.getMode();
     MemoryConsumer consumerToSpill = cList.get(idx);
+    long released = spillConsumer(requestingConsumer, requested, consumerToSpill);
+    if (released > 0) {
+      // When our spill handler releases memory, `ExecutionMemoryPool#releaseMemory()` will
+      // immediately notify other tasks that memory has been freed, and they may acquire the
+      // newly-freed memory before we have a chance to do so (SPARK-35486). Therefore we may
+      // not be able to acquire all the memory that was just spilled. In that case, we will
+      // try again in the next loop iteration.
+      return memoryManager.acquireExecutionMemory(requested, taskAttemptId, mode);
+    } else {
+      cList.remove(idx);
+      return 0;
+    }
+  }
+
+  private long spillConsumer(
+      MemoryConsumer requestingConsumer,
+      long requested,
+      MemoryConsumer consumerToSpill) {
     if (logger.isDebugEnabled()) {
       logger.debug("Task {} try to spill {} from {} for {}", taskAttemptId,
         Utils.bytesToString(requested), consumerToSpill, requestingConsumer);
@@ -265,17 +317,8 @@ public class TaskMemoryManager {
             Utils.bytesToString(released), Utils.bytesToString(requested), consumerToSpill,
             requestingConsumer);
         }
-
-        // When our spill handler releases memory, `ExecutionMemoryPool#releaseMemory()` will
-        // immediately notify other tasks that memory has been freed, and they may acquire the
-        // newly-freed memory before we have a chance to do so (SPARK-35486). Therefore we may
-        // not be able to acquire all the memory that was just spilled. In that case, we will
-        // try again in the next loop iteration.
-        return memoryManager.acquireExecutionMemory(requested, taskAttemptId, mode);
-      } else {
-        cList.remove(idx);
-        return 0;
       }
+      return released;
     } catch (ClosedByInterruptException | InterruptedIOException e) {
       // This called by user to kill a task (e.g: speculative task).
       logger.error("Error while calling spill() on {}", e,
@@ -292,6 +335,96 @@ public class TaskMemoryManager {
           put("message", e.getMessage());
         }});
       // checkstyle.on: RegexpSinglelineJava
+    }
+  }
+
+  /**
+   * Spill task-managed memory after the allocator rejects a grant which the memory manager thought
+   * was available. Unlike acquireExecutionMemory(), this does not request another grant and cannot
+   * block waiting for fair-share memory.
+   */
+  private synchronized long spillConsumersForPageAllocation(
+      long required,
+      MemoryConsumer requestingConsumer) {
+    TreeMap<Long, List<MemoryConsumer>> sortedConsumers = new TreeMap<>();
+    for (MemoryConsumer c : consumers) {
+      if (c.getUsed() > 0 && c.getMode() == requestingConsumer.getMode()) {
+        long key = c == requestingConsumer ? 0 : c.getUsed();
+        List<MemoryConsumer> list =
+          sortedConsumers.computeIfAbsent(key, k -> new ArrayList<>(1));
+        list.add(c);
+      }
+    }
+
+    long released = 0L;
+    while (released < required && !sortedConsumers.isEmpty()) {
+      Map.Entry<Long, List<MemoryConsumer>> currentEntry =
+        sortedConsumers.ceilingEntry(required - released);
+      if (currentEntry == null) {
+        currentEntry = sortedConsumers.lastEntry();
+      }
+      List<MemoryConsumer> cList = currentEntry.getValue();
+      int idx = cList.size() - 1;
+      MemoryConsumer consumerToSpill = cList.get(idx);
+      long usedBeforeSpill = consumerToSpill.getUsed();
+      spillConsumer(requestingConsumer, required - released, consumerToSpill);
+      // Measure net tracked memory released. Spill callbacks must not reacquire execution memory;
+      // if a custom consumer violates that contract, conservatively treat it as making no progress.
+      long actuallyReleased = Math.max(0L, usedBeforeSpill - consumerToSpill.getUsed());
+      if (actuallyReleased > 0) {
+        released = Math.addExact(released, actuallyReleased);
+      } else {
+        cList.remove(idx);
+      }
+      if (cList.isEmpty()) {
+        sortedConsumers.remove(currentEntry.getKey());
+      }
+    }
+    return released;
+  }
+
+  private long recoverFromPageAllocationFailure(
+      long required,
+      MemoryConsumer requestingConsumer) {
+    if (inPageAllocationRecovery.get()) {
+      return 0;
+    }
+
+    inPageAllocationRecovery.set(true);
+    try {
+      return spillConsumersForPageAllocation(required, requestingConsumer);
+    } finally {
+      inPageAllocationRecovery.remove();
+    }
+  }
+
+  private long acquireAdditionalExecutionMemoryForPageAllocation(
+      long required,
+      MemoryConsumer requestingConsumer) {
+    if (inPageAllocationRecovery.get()) {
+      return 0;
+    }
+
+    inPageAllocationRecovery.set(true);
+    try {
+      return acquireExecutionMemory(required, requestingConsumer);
+    } finally {
+      inPageAllocationRecovery.remove();
+    }
+  }
+
+  private void logPageAllocationFailure(long allocationSize, int retryCount, OutOfMemoryError e) {
+    try {
+      if (retryCount == 0) {
+        logger.warn("Failed to allocate a page ({} bytes), try spilling task memory.", e,
+          MDC.of(LogKeys.PAGE_SIZE, allocationSize));
+      } else {
+        logger.warn("Failed to allocate a page ({} bytes) after {} spill retries.",
+          MDC.of(LogKeys.PAGE_SIZE, allocationSize),
+          MDC.of(LogKeys.NUM_RETRY, retryCount));
+      }
+    } catch (OutOfMemoryError ignored) {
+      // Preserve allocator recovery even if diagnostics cannot allocate memory.
     }
   }
 
@@ -355,10 +488,6 @@ public class TaskMemoryManager {
     return memoryManager.pageSizeBytes();
   }
 
-  public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
-    return allocatePage(size, consumer, 0);
-  }
-
   /**
    * Allocate a block of memory that will be tracked in the MemoryManager's page table; this is
    * intended for allocating large blocks of Tungsten memory that will be shared between operators.
@@ -368,12 +497,45 @@ public class TaskMemoryManager {
    *
    * @throws TooLargePageException
    */
-  private MemoryBlock allocatePage(
+  public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
+    PageAllocationRequest request = pageAllocationRequest.get();
+    long minimumSize = request != null && request.consumer == consumer
+      ? Math.min(request.minimumSize, size)
+      : size;
+    return allocatePageInternal(size, minimumSize, consumer);
+  }
+
+  MemoryBlock allocatePageWithMinimum(
       long size,
-      MemoryConsumer consumer,
-      int retryCount) {
+      long minimumSize,
+      MemoryConsumer consumer) {
+    assert(minimumSize >= 0 && minimumSize <= size);
+    PageAllocationRequest request = pageAllocationRequest.get();
+    if (request == null) {
+      request = new PageAllocationRequest();
+      pageAllocationRequest.set(request);
+    }
+    MemoryConsumer previousConsumer = request.consumer;
+    long previousMinimumSize = request.minimumSize;
+    request.consumer = consumer;
+    request.minimumSize = minimumSize;
+    try {
+      return allocatePage(size, consumer);
+    } finally {
+      request.consumer = previousConsumer;
+      request.minimumSize = previousMinimumSize;
+    }
+  }
+
+  private MemoryBlock allocatePageInternal(
+      long size,
+      long minimumSize,
+      MemoryConsumer consumer) {
     assert(consumer != null);
     assert(consumer.getMode() == tungstenMemoryMode);
+    if (inPageAllocationRecovery.get()) {
+      return null;
+    }
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
       throw new TooLargePageException(size);
     }
@@ -394,33 +556,108 @@ public class TaskMemoryManager {
       allocatedPages.set(pageNumber);
     }
     MemoryBlock page = null;
+    boolean pageAllocated = false;
+    int retryCount = 0;
+    long allocationSize = acquired;
+    long partialAllocationSize = 0;
+    boolean tryingPartialAllocation = false;
+    boolean minimumRetryAfterPartialAllocationFailure = false;
     try {
-      page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
-    } catch (OutOfMemoryError e) {
-      if (retryCount == 0) {
-        logger.warn("Failed to allocate a page ({} bytes) for {} times, try again.", e,
-            MDC.of(LogKeys.PAGE_SIZE, acquired),
-            MDC.of(LogKeys.NUM_RETRY, retryCount));
-      } else {
-        logger.warn("Failed to allocate a page ({} bytes) for {} times, try again.",
-            MDC.of(LogKeys.PAGE_SIZE, acquired),
-            MDC.of(LogKeys.NUM_RETRY, retryCount));
+      while (true) {
+        try {
+          page = tungstenMemoryAllocator.allocate(allocationSize);
+          break;
+        } catch (OutOfMemoryError e) {
+          logPageAllocationFailure(allocationSize, retryCount, e);
+          if (tryingPartialAllocation) {
+            if (minimumSize > 0 && minimumSize < allocationSize) {
+              // Reuse the retained grant for one final attempt at the caller's usable minimum.
+              long surplus = Math.subtractExact(acquired, minimumSize);
+              releaseExecutionMemory(surplus, consumer);
+              acquired = minimumSize;
+              allocationSize = minimumSize;
+              minimumRetryAfterPartialAllocationFailure = true;
+              retryCount++;
+              continue;
+            }
+            return null;
+          }
+          long released = recoverFromPageAllocationFailure(allocationSize, consumer);
+          if (released > 0) {
+            long remaining = allocationSize - partialAllocationSize;
+            partialAllocationSize += Math.min(released, remaining);
+          } else if (partialAllocationSize > 0 && partialAllocationSize < allocationSize) {
+            // Preserve one bounded attempt to combine the memory made available by spilling with
+            // any remaining free-tail grant, then fall back to a partial page for callers that can
+            // use one. The additional grant may already include the spilled memory, so do not add
+            // it to partialAllocationSize.
+            long additionalAcquired =
+              acquireAdditionalExecutionMemoryForPageAllocation(size, consumer);
+            if (additionalAcquired > 0) {
+              long overlap =
+                additionalAcquired >= partialAllocationSize ? partialAllocationSize : 0L;
+              if (overlap > 0) {
+                releaseExecutionMemory(overlap, consumer);
+              }
+              acquired = Math.addExact(acquired, additionalAcquired - overlap);
+            }
+            allocationSize =
+              additionalAcquired > 0 ? additionalAcquired : partialAllocationSize;
+            tryingPartialAllocation = true;
+          } else if (partialAllocationSize == 0) {
+            // Preserve one bounded attempt to acquire a smaller free-tail grant. The previous
+            // recursive implementation could return a partial page this way after retaining the
+            // rejected grant, but could also retry without bound.
+            long additionalAcquired =
+              acquireAdditionalExecutionMemoryForPageAllocation(size, consumer);
+            if (additionalAcquired <= 0) {
+              return null;
+            }
+            acquired = Math.addExact(acquired, additionalAcquired);
+            allocationSize = additionalAcquired;
+            tryingPartialAllocation = true;
+          } else if (minimumSize > 0 && minimumSize < allocationSize) {
+            // The original grant is still reserved. If the caller padded a smaller allocation to
+            // the configured page size, make one bounded attempt at the minimum usable size without
+            // acquiring more execution memory.
+            long surplus = Math.subtractExact(acquired, minimumSize);
+            releaseExecutionMemory(surplus, consumer);
+            acquired = minimumSize;
+            allocationSize = minimumSize;
+            tryingPartialAllocation = true;
+            minimumRetryAfterPartialAllocationFailure = true;
+          } else {
+            return null;
+          }
+          retryCount++;
+        }
       }
-      // there is no enough memory actually, it means the actual free memory is smaller than
-      // MemoryManager thought, we should keep the acquired memory.
+      page.pageNumber = pageNumber;
+      pageTable[pageNumber] = page;
       synchronized (this) {
-        acquiredButNotUsed += acquired;
-        allocatedPages.clear(pageNumber);
+        acquiredButNotUsed = Math.addExact(acquiredButNotUsed, acquired - page.size());
+        if (minimumRetryAfterPartialAllocationFailure) {
+          pagesAllocatedFromMinimumRetry.set(pageNumber);
+        }
       }
-      // this could trigger spilling to free some pages.
-      return allocatePage(size, consumer, retryCount + 1);
+      pageAllocated = true;
+      if (logger.isTraceEnabled()) {
+        logger.trace("Allocate page number {} ({} bytes)", pageNumber, allocationSize);
+      }
+      return page;
+    } finally {
+      if (!pageAllocated) {
+        if (page != null) {
+          page.pageNumber = MemoryBlock.FREED_IN_TMM_PAGE_NUMBER;
+          tungstenMemoryAllocator.free(page);
+        }
+        synchronized (this) {
+          pageTable[pageNumber] = null;
+          allocatedPages.clear(pageNumber);
+          acquiredButNotUsed = Math.addExact(acquiredButNotUsed, acquired);
+        }
+      }
     }
-    page.pageNumber = pageNumber;
-    pageTable[pageNumber] = page;
-    if (logger.isTraceEnabled()) {
-      logger.trace("Allocate page number {} ({} bytes)", pageNumber, acquired);
-    }
-    return page;
   }
 
   /**
@@ -437,6 +674,7 @@ public class TaskMemoryManager {
     pageTable[page.pageNumber] = null;
     synchronized (this) {
       allocatedPages.clear(page.pageNumber);
+      pagesAllocatedFromMinimumRetry.clear(page.pageNumber);
     }
     if (logger.isTraceEnabled()) {
       logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
@@ -446,8 +684,17 @@ public class TaskMemoryManager {
     // Doing this allows the MemoryAllocator to detect when a TaskMemoryManager-managed
     // page has been inappropriately directly freed without calling TMM.freePage().
     page.pageNumber = MemoryBlock.FREED_IN_TMM_PAGE_NUMBER;
-    memoryManager.tungstenMemoryAllocator().free(page);
+    tungstenMemoryAllocator.free(page);
     releaseExecutionMemory(pageSize, consumer);
+  }
+
+  boolean isPageAllocationFromMinimumRetry(MemoryBlock page) {
+    synchronized (this) {
+      int pageNumber = page.pageNumber;
+      return pageNumber >= 0 && pageNumber < PAGE_TABLE_SIZE &&
+        allocatedPages.get(pageNumber) &&
+        pagesAllocatedFromMinimumRetry.get(pageNumber);
+    }
   }
 
   /**
@@ -526,6 +773,7 @@ public class TaskMemoryManager {
    * value can be used to detect memory leaks.
    */
   public long cleanUpAllAllocatedMemory() {
+    final long acquiredButNotUsedToRelease;
     synchronized (this) {
       for (MemoryConsumer c: consumers) {
         if (c != null && c.getUsed() > 0) {
@@ -543,14 +791,19 @@ public class TaskMemoryManager {
             logger.debug("unreleased page: {} in task {}", page, taskAttemptId);
           }
           page.pageNumber = MemoryBlock.FREED_IN_TMM_PAGE_NUMBER;
-          memoryManager.tungstenMemoryAllocator().free(page);
+          tungstenMemoryAllocator.free(page);
         }
       }
       Arrays.fill(pageTable, null);
+      allocatedPages.clear();
+      pagesAllocatedFromMinimumRetry.clear();
+      acquiredButNotUsedToRelease = acquiredButNotUsed;
+      acquiredButNotUsed = 0L;
     }
 
     // release the memory that is not used by any consumer (acquired for pages in tungsten mode).
-    memoryManager.releaseExecutionMemory(acquiredButNotUsed, taskAttemptId, tungstenMemoryMode);
+    memoryManager.releaseExecutionMemory(
+      acquiredButNotUsedToRelease, taskAttemptId, tungstenMemoryMode);
 
     return memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
   }

@@ -163,13 +163,13 @@ trait SparkDateTimeUtils {
    * Truncates a time value (in nanoseconds) to the specified fractional precision `p`.
    *
    * For example, if `p = 3`, we keep millisecond resolution and discard any digits beyond the
-   * thousand-nanosecond place. So a value like `123456` microseconds (12:34:56.123456) becomes
-   * `123000` microseconds (12:34:56.123).
+   * millisecond place. So a value like `123456789` nanoseconds (12:34:56.123456789) becomes
+   * `123000000` nanoseconds (12:34:56.123).
    *
    * @param nanos
    *   The original time in nanoseconds.
    * @param p
-   *   The fractional second precision (range 0 to 6).
+   *   The fractional second precision (range 0 to 9).
    * @return
    *   The truncated nanosecond value, preserving only `p` fractional digits.
    */
@@ -178,10 +178,15 @@ trait SparkDateTimeUtils {
       TimeType.MIN_PRECISION <= p && p <= TimeType.MAX_PRECISION,
       s"Fractional second precision $p out" +
         s" of range [${TimeType.MIN_PRECISION}..${TimeType.MAX_PRECISION}].")
-    val scale = TimeType.NANOS_PRECISION - p
-    val factor = math.pow(10, scale).toLong
+    val factor = timeTruncationFactors(TimeType.NANOS_PRECISION - p)
     (nanos / factor) * factor
   }
+
+  // Precomputed 10^k for k in [0, NANOS_PRECISION], indexed by the truncation scale
+  // (NANOS_PRECISION - p). `truncateTimeToPrecision` runs per value on hot read/cast paths, so the
+  // factor is looked up here instead of recomputed with `math.pow` on every call.
+  private val timeTruncationFactors: Array[Long] =
+    (0 to TimeType.NANOS_PRECISION).map(k => math.pow(10, k).toLong).toArray
 
   /**
    * Converts the timestamp `micros` from one timezone to another.
@@ -220,7 +225,9 @@ trait SparkDateTimeUtils {
    * user-reachable input here. An out-of-range value therefore indicates an internal caller bug
    * and raises an internal error rather than silently retaining all sub-microsecond digits.
    */
-  private def truncateNanosWithinMicroToPrecision(nanosWithinMicro: Int, precision: Int): Int = {
+  private[sql] def truncateNanosWithinMicroToPrecision(
+      nanosWithinMicro: Int,
+      precision: Int): Int = {
     precision match {
       case 7 => (nanosWithinMicro / 100) * 100
       case 8 => (nanosWithinMicro / 10) * 10
@@ -230,6 +237,24 @@ trait SparkDateTimeUtils {
           s"Fractional second precision $precision is out of range " +
             s"[${TimestampNTZNanosType.MIN_PRECISION}, ${TimestampNTZNanosType.MAX_PRECISION}].")
     }
+  }
+
+  /**
+   * Floors a `TimestampNanosVal` to the given timestamp precision `p` in [7, 9] by truncating its
+   * sub-microsecond `nanosWithinMicro` component (see [[truncateNanosWithinMicroToPrecision]]).
+   * `epochMicros` is left untouched, so this only ever drops trailing sub-microsecond digits.
+   *
+   * Used by the same-family cross-precision nanosecond cast paths (`TIMESTAMP_NTZ(p1) ->
+   * TIMESTAMP_NTZ(p2)` and `TIMESTAMP_LTZ(q1) -> TIMESTAMP_LTZ(q2)`): widening (`p2 >= p1`) is
+   * lossless and returns the input unchanged, while narrowing (`p2 < p1`) floors toward `-inf` to
+   * the target precision step.
+   */
+  def truncateTimestampNanosToPrecision(
+      v: TimestampNanosVal,
+      precision: Int): TimestampNanosVal = {
+    val truncated = truncateNanosWithinMicroToPrecision(v.nanosWithinMicro.toInt, precision)
+    if (truncated == v.nanosWithinMicro) v
+    else TimestampNanosVal.fromParts(v.epochMicros, truncated.toShort)
   }
 
   /**
@@ -291,6 +316,37 @@ trait SparkDateTimeUtils {
   }
 
   /**
+   * Converts a `TIMESTAMP_LTZ(p)` nanosecond value into the `TIMESTAMP_NTZ(precision)` wall-clock
+   * value observed in the time zone `zoneId`. The LTZ value denotes an absolute instant;
+   * rendering it as a local date-time at `zoneId` yields the NTZ representation. Time-zone
+   * offsets shift only whole seconds, so the sub-microsecond `nanosWithinMicro` component is
+   * preserved before being floored to the target `precision` (same flooring as same-family
+   * narrowing casts).
+   */
+  def timestampLTZNanosToNTZNanos(
+      v: TimestampNanosVal,
+      zoneId: ZoneId,
+      precision: Int): TimestampNanosVal = {
+    val localDateTime = timestampNanosToInstant(v).atZone(zoneId).toLocalDateTime
+    localDateTimeToTimestampNanos(localDateTime, precision)
+  }
+
+  /**
+   * Converts a `TIMESTAMP_NTZ(q)` nanosecond value into the `TIMESTAMP_LTZ(precision)` instant
+   * obtained by interpreting its wall-clock local date-time in the time zone `zoneId`. This is
+   * the reverse of [[timestampLTZNanosToNTZNanos]]; the sub-microsecond `nanosWithinMicro`
+   * component is preserved across the (whole-second) offset shift before being floored to the
+   * target `precision`.
+   */
+  def timestampNTZNanosToLTZNanos(
+      v: TimestampNanosVal,
+      zoneId: ZoneId,
+      precision: Int): TimestampNanosVal = {
+    val instant = timestampNanosToLocalDateTime(v).atZone(zoneId).toInstant
+    instantToTimestampNanos(instant, precision)
+  }
+
+  /**
    * Converts the local date to the number of days since 1970-01-01.
    */
   def localDateToDays(localDate: LocalDate): Int = MathUtils.toIntExact(localDate.toEpochDay)
@@ -332,6 +388,45 @@ trait SparkDateTimeUtils {
    * Converts the number of nanoseconds within the day to the local time.
    */
   def nanosToLocalTime(nanos: Long): LocalTime = LocalTime.ofNanoOfDay(nanos)
+
+  /**
+   * Extracts the time-of-day component (nanoseconds since midnight) from a `TIMESTAMP_NTZ`
+   * microsecond value. `TIMESTAMP_NTZ` is a UTC wall-clock value, so its time-of-day is the value
+   * taken modulo one day. `floorMod` keeps the result in `[0, NANOS_PER_DAY)` even for pre-epoch
+   * (negative) timestamps.
+   */
+  def timestampNTZToNanosOfDay(micros: Long): Long = {
+    Math.floorMod(micros, MICROS_PER_DAY) * NANOS_PER_MICROS
+  }
+
+  /**
+   * Extracts the time-of-day component (nanoseconds since midnight) from a nanosecond-precision
+   * `TIMESTAMP_NTZ` value, preserving the sub-microsecond digits carried in `nanosWithinMicro`.
+   * Since `nanosWithinMicro` is in `[0, 999]`, the result stays in `[0, NANOS_PER_DAY)`.
+   */
+  def timestampNTZNanosToNanosOfDay(v: TimestampNanosVal): Long = {
+    Math.floorMod(v.epochMicros, MICROS_PER_DAY) * NANOS_PER_MICROS + v.nanosWithinMicro
+  }
+
+  /**
+   * Extracts the time-of-day component (nanoseconds since midnight) from a `TIMESTAMP_LTZ`
+   * microsecond value. `TIMESTAMP_LTZ` denotes an absolute instant, so its time-of-day is the
+   * local wall-clock time observed in the session time zone `zoneId`. The result stays in
+   * `[0, NANOS_PER_DAY)`.
+   */
+  def timestampToNanosOfDay(micros: Long, zoneId: ZoneId): Long = {
+    getLocalDateTime(micros, zoneId).toLocalTime.toNanoOfDay
+  }
+
+  /**
+   * Extracts the time-of-day component (nanoseconds since midnight) from a nanosecond-precision
+   * `TIMESTAMP_LTZ` value. `TIMESTAMP_LTZ` denotes an absolute instant, so its time-of-day is the
+   * local wall-clock time observed in the session time zone `zoneId`. The sub-microsecond digits
+   * carried in `nanosWithinMicro` are preserved, and the result stays in `[0, NANOS_PER_DAY)`.
+   */
+  def timestampLTZNanosToNanosOfDay(v: TimestampNanosVal, zoneId: ZoneId): Long = {
+    timestampNanosToInstant(v).atZone(zoneId).toLocalTime.toNanoOfDay
+  }
 
   /**
    * Converts a local date at the default JVM time zone to the number of days since 1970-01-01 in
@@ -547,6 +642,35 @@ trait SparkDateTimeUtils {
   def stringToDateAnsi(s: UTF8String, context: QueryContext = null): Int = {
     stringToDate(s).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, DateType, context)
+    }
+  }
+
+  /**
+   * Returns the number of fractional-second digits in a timestamp/time string, i.e. the count of
+   * decimal digits immediately following the first `.` (0 if there is no fractional part). In a
+   * well-formed timestamp/time string the only `.` is the one that introduces the seconds
+   * fraction, so this is sufficient to derive the precision `p` of a typed literal per the ANSI
+   * SQL rule (the precision of a timestamp literal is the number of digits in its
+   * `<seconds fraction>`). Digits beyond the fractional run (e.g. a trailing time zone) are not
+   * counted.
+   *
+   * This is intentionally a lightweight pre-parse digit counter: it does not validate that `s` is
+   * a well-formed timestamp. Callers use the returned count only to choose a parse path (the
+   * digit count routes between the microsecond path, the nanosecond path, and the ">9 digits"
+   * error); each of those paths then re-parses and validates the whole string, so a malformed
+   * input such as `"abcd.1234"` is still rejected downstream by the chosen parser. Consequently
+   * the result is meaningful only for strings that are otherwise valid timestamp/time literals.
+   */
+  def fractionalSecondsDigits(s: String): Int = {
+    val dot = s.indexOf('.')
+    if (dot < 0) {
+      0
+    } else {
+      var i = dot + 1
+      while (i < s.length && s.charAt(i) >= '0' && s.charAt(i) <= '9') {
+        i += 1
+      }
+      i - (dot + 1)
     }
   }
 
@@ -1000,8 +1124,10 @@ trait SparkDateTimeUtils {
         return None
       }
 
-      // Unpack the segments.
-      var (hr, min, sec, ms) = (segments(3), segments(4), segments(5), segments(6))
+      // Unpack the segments. `segments(6)` holds microseconds and `segments(9)` holds the
+      // sub-microsecond nanosecond remainder (digits 7-9), in [0, 999].
+      var (hr, min, sec, ms, subMicroNanos) =
+        (segments(3), segments(4), segments(5), segments(6), segments(9))
 
       // Handle AM/PM conversion in separate cases.
       if (!hasSuffix) {
@@ -1028,16 +1154,20 @@ trait SparkDateTimeUtils {
         }
       }
 
-      val localTime = LocalTime.of(hr, min, sec, MICROSECONDS.toNanos(ms).toInt)
+      val nanoOfSecond = (MICROSECONDS.toNanos(ms) + subMicroNanos).toInt
+      val localTime = LocalTime.of(hr, min, sec, nanoOfSecond)
       Some(localTimeToNanos(localTime))
     } catch {
       case NonFatal(_) => None
     }
   }
 
-  def stringToTimeAnsi(s: UTF8String, context: QueryContext = null): Long = {
+  def stringToTimeAnsi(s: UTF8String, context: QueryContext = null): Long =
+    stringToTimeAnsi(s, TimeType.DEFAULT_PRECISION, context)
+
+  def stringToTimeAnsi(s: UTF8String, precision: Int, context: QueryContext): Long = {
     stringToTime(s).getOrElse {
-      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimeType(), context)
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimeType(precision), context)
     }
   }
 

@@ -586,6 +586,19 @@ package object config {
       .checkValue(_ > 0, "The maximum number of threads should be positive")
       .createWithDefault(8)
 
+  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_BUFFER_RACING_MIGRATIONS =
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.bufferRacingMigrations")
+      .internal()
+      .doc("Whether to buffer a shuffle-migration relocation report that arrives before the " +
+        "map output it relocates has been registered on the driver, and replay it once " +
+        "registration happens. When false, such a relocation is dropped (legacy behavior), " +
+        "which can leave the map output pointing at the decommissioned origin executor and " +
+        "surface downstream as a fetch failure once that executor is removed.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED =
     ConfigBuilder("spark.storage.decommission.rddBlocks.enabled")
       .doc("Whether to transfer RDD blocks during block manager decommissioning.")
@@ -1761,6 +1774,21 @@ package object config {
       .stringConf
       .createWithDefault("sort")
 
+  private[spark] val SHUFFLE_MANAGER_INCREMENTAL =
+    ConfigBuilder("spark.shuffle.manager.incremental")
+      .doc("The ShuffleManager implementation used for pipelined (incrementally-readable) " +
+        "shuffle dependencies, whose consumer stage may begin reading output while the producer " +
+        "stage is still running. Regular shuffle dependencies continue to use " +
+        "spark.shuffle.manager. The two managers coexist in the same JVM and each shuffle is " +
+        "routed by its dependency type, so a cluster can run both regular and pipelined (e.g. " +
+        "real-time mode) queries. Defaults to the built-in streaming shuffle manager; accepts " +
+        "the short alias \"streaming\" (the default) or a fully-qualified " +
+        "PipelinedShuffleManager class name.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .createWithDefault("streaming")
+
   private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
     ConfigBuilder("spark.shuffle.reduceLocality.enabled")
       .doc("Whether to compute locality preferences for reduce tasks")
@@ -1780,6 +1808,68 @@ package object config {
       .version("2.0.0")
       .intConf
       .createWithDefault(8)
+
+  // ---------------------------------------------------------------------------
+  // Streaming shuffle writer configs
+  // ---------------------------------------------------------------------------
+
+  private[spark] val STREAMING_SHUFFLE_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.shuffle.streaming.checksum.enabled")
+      .doc("Whether to append a CRC32C checksum to each streaming shuffle data buffer. " +
+        "When enabled, the writer computes the checksum and embeds it in the DataMessage header; " +
+        "the reader recomputes and compares. A mismatch fails the task, providing early " +
+        "detection of data corruption in transit.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val STREAMING_SHUFFLE_READER_MAX_MEMORY =
+    ConfigBuilder("spark.shuffle.streaming.readerMaxMemory")
+      .doc("Best-effort memory limit in bytes for data buffered in a streaming shuffle reader " +
+        "task. The per-writer byte quota is derived from this value divided by the number of " +
+        "shuffle writers. When the quota is exhausted the reader applies TCP back-pressure.")
+      .version("4.3.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(32 << 20) // 32 MB
+
+  private[spark] val STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.streaming.networkBufferSize")
+      .doc("Target byte size for each network buffer sent from a streaming shuffle writer to a " +
+        "reader. Larger values reduce per-message overhead; smaller values reduce latency.")
+      .version("4.3.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "spark.shuffle.streaming.networkBufferSize must be positive.")
+      .createWithDefault(32768) // 32 KB
+
+  private[spark] val STREAMING_SHUFFLE_NETWORK_BUFFER_MAX_WAIT_TIME_MS =
+    ConfigBuilder("spark.shuffle.streaming.networkBufferMaxWaitTimeMs")
+      .doc("Maximum time in milliseconds a partially-filled network buffer is held before " +
+        "being flushed to the reader. Lower values reduce latency at the cost of smaller, " +
+        "less efficient messages.")
+      .version("4.3.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .longConf
+      .createWithDefault(50)
+
+  private[spark] val STREAMING_SHUFFLE_WRITER_MAX_MEMORY =
+    ConfigBuilder("spark.shuffle.streaming.writerMaxMemory")
+      .doc("Best-effort memory limit in bytes for in-flight data buffers in a streaming " +
+        "shuffle writer task. Includes TCP send/receive buffers. The writer back-pressures " +
+        "the upstream iterator when this limit is reached. This is a best-effort bound: " +
+        "back-pressure is accounted per network buffer, so an individual serialized row that " +
+        "exceeds the network buffer size can push actual in-flight memory above this limit.")
+      .version("4.3.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "spark.shuffle.streaming.writerMaxMemory must be positive.")
+      .createWithDefault(32 << 20) // 32 MB
 
   private[spark] val SHUFFLE_DETECT_CORRUPT =
     ConfigBuilder("spark.shuffle.detectCorrupt")
@@ -2078,6 +2168,30 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val MASTER_REST_SERVER_ALLOWED_APP_RESOURCE_PATTERNS =
+    ConfigBuilder("spark.master.rest.allowedAppResourcePatterns")
+      .doc("Comma-separated list of regular expressions matched against the application " +
+        "resource (application jar path) in the Spark Master REST API. When non-empty, a " +
+        "driver submission is rejected unless its application resource fully matches at " +
+        "least one of the patterns. When empty (the default), all application resources " +
+        "are allowed. Example: \"file:.*,hdfs://.*\".")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  private[spark] val MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE =
+    ConfigBuilder("spark.master.rest.maxRequestBodySize")
+      .doc("The maximum size of the request body accepted by the Spark Master REST API. " +
+        "Requests whose body exceeds this size are rejected with HTTP 413 " +
+        "(Request Entity Too Large).")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "The max request body size must be positive.")
+      .createWithDefaultString("100m")
+
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")
     .intConf
@@ -2285,7 +2399,7 @@ package object config {
       "Compression will use spark.io.compression.codec")
     .version("0.6.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   private[spark] val RDD_PARALLEL_LISTING_THRESHOLD =
     ConfigBuilder("spark.rdd.parallelListingThreshold")
@@ -2393,6 +2507,7 @@ package object config {
       .doc("When true, scheduler log messages for streaming tasks include " +
         "the structured streaming query ID and batch ID.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
@@ -2401,6 +2516,7 @@ package object config {
       .doc("Maximum number of characters of the streaming query ID to include " +
         "in scheduler log messages. Set to -1 to include the full query ID.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .createWithDefault(5)
 
@@ -2864,6 +2980,75 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val STORAGE_RDD_BLOCK_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.storage.rddBlockChecksum.enabled")
+      .internal()
+      .doc("When true, the BlockManager computes a content checksum over the serialized bytes " +
+        "of every serialized RDD cache block at store time and reports it to the driver. Only " +
+        "serialized blocks are covered; deserialized in-memory blocks are not checksummed.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STORAGE_RDD_BLOCK_CHECKSUM_ALGORITHM =
+    ConfigBuilder("spark.storage.rddBlockChecksum.algorithm")
+      .internal()
+      .doc("The checksum algorithm used for RDD block content checksums (e.g. local-checkpoint " +
+        "verification). Only built-in JDK algorithms are supported.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(Set("ADLER32", "CRC32", "CRC32C"))
+      .createWithDefault("CRC32C")
+
+  private[spark] val STORAGE_RDD_BLOCK_CHECKSUM_VERIFY_ON_REPLICATION =
+    ConfigBuilder("spark.storage.rddBlockChecksum.verifyOnReplication")
+      .internal()
+      .doc("When true, a replica of a checksummed RDD block recomputes the content checksum over " +
+        "the received bytes to verify the transfer, instead of trusting the checksum sent by the " +
+        "source. Off by default: the source's checksum is recorded directly, since the transport " +
+        "layer already provides integrity.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.checkpoint.local.verifyChecksum.enabled")
+      .internal()
+      .doc("When true, Spark fingerprints the serialized bytes of locally-checkpointed RDD " +
+        "partitions at store time and, at the checkpoint commit point, detects partitions that " +
+        "were materialized inconsistently by more than one task attempt (Spark non-determinism " +
+        "combined with retries/speculation) and seals each partition to a single version. Guards " +
+        "against silently inconsistent local checkpoints. This implies checksum computation for " +
+        "the checkpointed RDD regardless of spark.storage.rddBlockChecksum.enabled. Only applied " +
+        "to a localCheckpoint with a SERIALIZED storage level (e.g. DISK_ONLY); a deserialized " +
+        "level (the default MEMORY_AND_DISK) has no checksummable bytes and is left unverified - " +
+        "see spark.checkpoint.local.verifyChecksum.forceSerialized to opt a default checkpoint " +
+        "into a serialized level. Sealing runs at checkpoint finalization: an eager checkpoint " +
+        "is sealed before any consumer reads it, while a lazy one is sealed after its first job " +
+        "materializes it (so reads within that job, before finalization, may still see an " +
+        "unsealed copy).")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val LOCAL_CHECKPOINT_VERIFY_CHECKSUM_FORCE_SERIALIZED =
+    ConfigBuilder("spark.checkpoint.local.verifyChecksum.forceSerialized")
+      .internal()
+      .doc("When true (and verifyChecksum.enabled is true), localCheckpoint adapts a " +
+        "deserialized storage level to its serialized equivalent so the checkpoint's blocks " +
+        "can be checksummed and sealed. Off by default so localCheckpoint's storage level is " +
+        "not silently changed; enable it to verify checkpoints that would otherwise use the " +
+        "deserialized default.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val STAGE_MAX_ATTEMPTS =
     ConfigBuilder("spark.stage.maxAttempts")
       .doc("Specify the max attempts for a stage - the spark job will be aborted if any of its " +
@@ -2965,20 +3150,12 @@ package object config {
         "The value only can be one or more of 'stdout, stderr'.")
       .createWithDefault(Seq("stdout", "stderr"))
 
-  private[spark] val YARN_AM_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
-    ConfigBuilder("spark.yarn.am.limitActiveProcessorCount.enabled")
-      .doc("Whether to add -XX:ActiveProcessorCount=<spark.yarn.am.cores> to the YARN " +
-        "Application Master JVM options in client mode. In cluster mode, use " +
-        "`spark.driver.limitActiveProcessorCount.enabled` instead.")
-      .version("4.2.0")
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
     ConfigBuilder("spark.driver.limitActiveProcessorCount.enabled")
       .doc("Whether to add -XX:ActiveProcessorCount=<spark.driver.cores> to the driver JVM " +
         "options. Currently, this only takes effect in YARN cluster mode.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -2987,6 +3164,7 @@ package object config {
       .doc("Whether to add -XX:ActiveProcessorCount=<spark.executor.cores> to executor JVM " +
         "options. Currently, this only takes effect in YARN mode.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 }

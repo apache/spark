@@ -260,7 +260,7 @@ object InterpretedUnsafeProjection {
       case CalendarIntervalType =>
         // We can't call setNullAt() for CalendarIntervalType, we call write directly.
         unsafeWriter
-      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+      case _: AnyTimestampNanoType =>
         // We can't call setNullAt() for nanos timestamp types, we call write directly.
         unsafeWriter
       case BooleanType | ByteType =>
@@ -308,7 +308,7 @@ object InterpretedUnsafeProjection {
   @scala.annotation.tailrec
   private def getElementSize(dataType: DataType): Int = dataType match {
     case NullType | _: StringType | BinaryType | CalendarIntervalType | VariantType |
-         _: TimestampNTZNanosType | _: TimestampLTZNanosType |
+         _: AnyTimestampNanoType |
          _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
     case udt: UserDefinedType[_] =>
       getElementSize(udt.sqlType)

@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -61,8 +61,10 @@ trait TimeExpression extends Expression {
   arguments = """
     Arguments:
       * str - A string to be parsed to time.
+        An expression that evaluates to a string.
       * format - Time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
                  time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -157,6 +159,24 @@ object TimePart {
     }
 }
 
+private[expressions] object NanosTimestampCast {
+  /**
+   * Casts a nanosecond-precision timestamp (`TIMESTAMP_NTZ(p)` / `TIMESTAMP_LTZ(p)`, `p` in
+   * `[7, 9]`) down to the matching microsecond timestamp type so that expressions accepting only
+   * the microsecond timestamp types can reuse it:
+   *   - TimestampNTZNanosType(p) -> TimestampNTZType
+   *   - TimestampLTZNanosType(p) -> TimestampType
+   *
+   * The cast keeps `epochMicros` and drops the sub-microsecond digits, which is lossless for the
+   * integer time-of-day fields (hour/minute/second). Inputs of any other type are returned as is.
+   */
+  def castToMicros(child: Expression): Expression = child.dataType match {
+    case _: TimestampNTZNanosType => Cast(child, TimestampNTZType)
+    case _: TimestampLTZNanosType => Cast(child, TimestampType)
+    case _ => child
+  }
+}
+
 /**
  * * Parses a column to a time based on the supplied format.
  */
@@ -170,8 +190,10 @@ object TimePart {
   arguments = """
     Arguments:
       * str - A string to be parsed to time.
+        An expression that evaluates to a string.
       * format - Time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
                  time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -240,11 +262,23 @@ case class MinutesOfTime(child: Expression)
 
     If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
     it returns the minute of that timestamp.
+    If `expr` is a nanosecond-precision timestamp TIMESTAMP_NTZ(p) or TIMESTAMP_LTZ(p)
+    with p in [7, 9] (since 4.3.0), it returns the minute of that timestamp, ignoring the
+    sub-microsecond digits.
     If `expr` is a TIME type (since 4.1.0), it returns the minute of the time-of-day.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to extract the minute component from.
+        An expression that evaluates to a timestamp or time.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
+       58
+      > SELECT _FUNC_(TIMESTAMP_NTZ '2009-07-30 12:58:59.123456789');
+       58
+      > SELECT _FUNC_(TIMESTAMP_LTZ '2009-07-30 12:58:59.123456789');
        58
       > SELECT _FUNC_(TIME'23:59:59.999999');
        59
@@ -262,7 +296,9 @@ object MinuteExpressionBuilder extends ExpressionBuilder {
         case _: TimeType =>
           MinutesOfTime(child)
         case _ =>
-          Minute(child)
+          // Casts nanosecond-precision timestamps down to the microsecond timestamp type;
+          // other types are passed through unchanged.
+          Minute(NanosTimestampCast.castToMicros(child))
       }
     }
   }
@@ -298,11 +334,23 @@ case class HoursOfTime(child: Expression)
 
     If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
     it returns the hour of that timestamp.
+    If `expr` is a nanosecond-precision timestamp TIMESTAMP_NTZ(p) or TIMESTAMP_LTZ(p)
+    with p in [7, 9] (since 4.3.0), it returns the hour of that timestamp, ignoring the
+    sub-microsecond digits.
     If `expr` is a TIME type (since 4.1.0), it returns the hour of the time-of-day.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to extract the hour component from.
+        An expression that evaluates to a timestamp or time.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('2018-02-14 12:58:59');
+       12
+      > SELECT _FUNC_(TIMESTAMP_NTZ '2018-02-14 12:58:59.123456789');
+       12
+      > SELECT _FUNC_(TIMESTAMP_LTZ '2018-02-14 12:58:59.123456789');
        12
       > SELECT _FUNC_(TIME'13:59:59.999999');
        13
@@ -319,7 +367,9 @@ object HourExpressionBuilder extends ExpressionBuilder {
         case _: TimeType =>
           HoursOfTime(child)
         case _ =>
-          Hour(child)
+          // Casts nanosecond-precision timestamps down to the microsecond timestamp type;
+          // other types are passed through unchanged.
+          Hour(NanosTimestampCast.castToMicros(child))
       }
     }
   }
@@ -335,7 +385,7 @@ case class SecondsOfTimeWithFraction(child: Expression)
     }
     StaticInvoke(
       classOf[DateTimeUtils.type],
-      DecimalType(8, 6),
+      DecimalType(2 + precision, precision),
       "getSecondsOfTimeWithFraction",
       Seq(child, Literal(precision)),
       Seq(child.dataType, IntegerType))
@@ -381,11 +431,23 @@ case class SecondsOfTime(child: Expression)
 
     If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
     it returns the second of that timestamp.
+    If `expr` is a nanosecond-precision timestamp TIMESTAMP_NTZ(p) or TIMESTAMP_LTZ(p)
+    with p in [7, 9] (since 4.3.0), it returns the second of that timestamp, ignoring the
+    sub-microsecond digits.
     If `expr` is a TIME type (since 4.1.0), it returns the second of the time-of-day.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to extract the second component from.
+        An expression that evaluates to a timestamp or time.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('2018-02-14 12:58:59');
+       59
+      > SELECT _FUNC_(TIMESTAMP_NTZ '2018-02-14 12:58:59.123456789');
+       59
+      > SELECT _FUNC_(TIMESTAMP_LTZ '2018-02-14 12:58:59.123456789');
        59
       > SELECT _FUNC_(TIME'13:25:59.999999');
        59
@@ -402,7 +464,9 @@ object SecondExpressionBuilder extends ExpressionBuilder {
         case _: TimeType =>
           SecondsOfTime(child)
         case _ =>
-          Second(child)
+          // Casts nanosecond-precision timestamps down to the microsecond timestamp type;
+          // other types are passed through unchanged.
+          Second(NanosTimestampCast.castToMicros(child))
       }
     }
   }
@@ -422,7 +486,7 @@ object SecondExpressionBuilder extends ExpressionBuilder {
   """,
   arguments = """
     Arguments:
-      * precision - An optional integer literal in the range [0..6], indicating how many
+      * precision - An optional integer literal in the range [0..9], indicating how many
                     fractional digits of seconds to include. If omitted, the default is 6.
   """,
   examples = """
@@ -486,12 +550,12 @@ case class CurrentTime(
     precisionValue match {
       case n: Number =>
         val p = n.intValue()
-        if (p < TimeType.MIN_PRECISION || p > TimeType.MICROS_PRECISION) {
+        if (p < TimeType.MIN_PRECISION || p > TimeType.MAX_PRECISION) {
           return DataTypeMismatch(
             errorSubClass = "VALUE_OUT_OF_RANGE",
             messageParameters = Map(
               "exprName" -> toSQLId("precision"),
-              "valueRange" -> s"[${TimeType.MIN_PRECISION}, ${TimeType.MICROS_PRECISION}]",
+              "valueRange" -> s"[${TimeType.MIN_PRECISION}, ${TimeType.MAX_PRECISION}]",
               "currentValue" -> toSQLValue(p, IntegerType)
             )
           )
@@ -538,8 +602,11 @@ case class CurrentTime(
   arguments = """
     Arguments:
       * hour - the hour to represent, from 0 to 23
+        An expression that evaluates to an integer.
       * minute - the minute to represent, from 0 to 59
+        An expression that evaluates to an integer.
       * second - the second to represent, from 0 to 59.999999
+        An expression that evaluates to a decimal.
   """,
   examples = """
     Examples:
@@ -661,8 +728,11 @@ case class SubtractTimes(left: Expression, right: Expression)
           - "SECOND"
           - "MILLISECOND"
           - "MICROSECOND"
+        An expression that evaluates to a string.
       * start - a starting TIME expression
+        An expression that evaluates to a time.
       * end - an ending TIME expression
+        An expression that evaluates to a time.
   """,
   examples = """
     Examples:
@@ -725,7 +795,9 @@ case class TimeDiff(
           - "SECOND" - zero out the fraction part of seconds
           - "MILLISECOND" - zero out the microseconds
           - "MICROSECOND" - zero out the nanoseconds
+        An expression that evaluates to a string.
       * time - a TIME expression
+        An expression that evaluates to a time.
   """,
   examples = """
     Examples:
@@ -789,6 +861,7 @@ abstract class TimeFromBase extends UnaryExpression with RuntimeReplaceable with
     Arguments:
       * seconds - seconds since midnight (0 to 86399.999999).
                   Supports decimals for fractional seconds.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -819,6 +892,7 @@ case class TimeFromSeconds(child: Expression) extends TimeFromBase {
   arguments = """
     Arguments:
       * millis - milliseconds since midnight (0 to 86399999)
+        An expression that evaluates to an integral.
   """,
   examples = """
     Examples:
@@ -848,6 +922,7 @@ case class TimeFromMillis(child: Expression) extends TimeFromBase {
   arguments = """
     Arguments:
       * micros - microseconds since midnight (0 to 86399999999)
+        An expression that evaluates to an integral.
   """,
   examples = """
     Examples:

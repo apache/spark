@@ -19,40 +19,12 @@ package org.apache.spark.sql.test
 
 import scala.concurrent.duration._
 
-import org.scalatest.{BeforeAndAfterEach, Suite}
-import org.scalatest.concurrent.Eventually
+import org.scalatest.Suite
 
-import org.apache.spark.{DebugFilesystem, SparkConf}
-import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
-import org.apache.spark.sql.{classic, QueryTest, QueryTestBase, SparkSession, SparkSessionProvider, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
-import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.{QueryTest, QueryTestBase, SparkSessionBinderBase}
+import org.apache.spark.sql.classic
 
-trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
-
-  /**
-   * Suites extending [[SharedSparkSession]] are sharing resources (e.g. SparkSession) in their
-   * tests. That trait initializes the spark session in its [[beforeAll()]] implementation before
-   * the automatic thread snapshot is performed, so the audit code could fail to report threads
-   * leaked by that shared session.
-   *
-   * The behavior is overridden here to take the snapshot before the spark session is initialized.
-   */
-  override protected val enableAutoThreadAudit = false
-
-  protected override def beforeAll(): Unit = {
-    doThreadPreAudit()
-    super.beforeAll()
-  }
-
-  protected override def afterAll(): Unit = {
-    try {
-      super.afterAll()
-    } finally {
-      doThreadPostAudit()
-    }
-  }
+trait SharedSparkSession extends QueryTest with classic.SparkSessionBinder {
 
   // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
   // execution as a map keyed by (planNodeId, planNodeName, metricName) -> metricValue.
@@ -82,124 +54,12 @@ trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
   }
 }
 
+
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
-trait SharedSparkSessionBase
-  extends QueryTestBase
-  with SparkSessionProvider
-  with BeforeAndAfterEach
-  with Eventually { self: Suite =>
+trait SharedSparkSessionBase extends QueryTestBase with SparkSessionBinderBase { self: Suite =>
 
-  protected def sparkConf = {
-    val conf = new SparkConf()
-      .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
-      .set(UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
-      .set(SQLConf.CODEGEN_FALLBACK.key, "false")
-      .set(SQLConf.CODEGEN_FACTORY_MODE.key, CodegenObjectFactoryMode.CODEGEN_ONLY.toString)
-      // Disable ConvertToLocalRelation for better test coverage. Test cases built on
-      // LocalRelation will exercise the optimization rules better by disabling it as
-      // this rule may potentially block testing of other optimization rules such as
-      // ConstantPropagation etc.
-      .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
-    conf.set(
-      StaticSQLConf.WAREHOUSE_PATH,
-      conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass.getCanonicalName)
-    conf.set(StaticSQLConf.LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH, false)
-    conf.set(StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD,
-      sys.env.getOrElse("SPARK_TEST_SQL_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD",
-        StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
-    conf.set(StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD,
-      sys.env.getOrElse("SPARK_TEST_SQL_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD",
-        StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
-  }
-
-  /**
-   * The [[TestSparkSession]] to use for all tests in this suite.
-   *
-   * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local
-   * mode with the default test configurations.
-   */
-  private var _spark: TestSparkSession = null
-
-  /**
-   * The [[TestSparkSession]] to use for all tests in this suite.
-   */
-  protected override def spark: classic.SparkSession = _spark
-
-  /**
-   * The [[TestSQLContext]] to use for all tests in this suite.
-   */
-  protected implicit def sqlContext: SQLContext = _spark.sqlContext
-
-  protected def createSparkSession: TestSparkSession = {
-    classic.SparkSession.cleanupAnyExistingSession()
-    new TestSparkSession(sparkConf)
-  }
-
-  protected def sqlConf: SQLConf = _spark.sessionState.conf
-
-  /**
-   * Initialize the [[TestSparkSession]].  Generally, this is just called from
-   * beforeAll; however, in test using styles other than FunSuite, there is
-   * often code that relies on the session between test group constructs and
-   * the actual tests, which may need this session.  It is purely a semantic
-   * difference, but semantically, it makes more sense to call
-   * 'initializeSession' between a 'describe' and an 'it' call than it does to
-   * call 'beforeAll'.
-   */
-  protected def initializeSession(): Unit = {
-    if (_spark == null) {
-      _spark = createSparkSession
-    }
-  }
-
-  /**
-   * Make sure the [[TestSparkSession]] is initialized before any tests are run.
-   */
-  protected override def beforeAll(): Unit = {
-    initializeSession()
-
-    // Ensure we have initialized the context before calling parent code
-    super.beforeAll()
-  }
-
-  /**
-   * Stop the underlying [[org.apache.spark.SparkContext]], if any.
-   */
-  protected override def afterAll(): Unit = {
-    try {
-      super.afterAll()
-    } finally {
-      try {
-        if (_spark != null) {
-          try {
-            _spark.sessionState.catalog.reset()
-          } finally {
-            _spark.stop()
-            _spark = null
-          }
-        }
-      } finally {
-        SparkSession.clearActiveSession()
-        SparkSession.clearDefaultSession()
-      }
-    }
-  }
-
-  protected override def beforeEach(): Unit = {
-    super.beforeEach()
-    DebugFilesystem.clearOpenStreams()
-  }
-
-  protected override def afterEach(): Unit = {
-    super.afterEach()
-    // Clear all persistent datasets after each test
-    spark.sharedState.cacheManager.clearCache()
-    // files can be closed from other threads, so wait a bit
-    // normally this doesn't take more than 1s
-    eventually(timeout(10.seconds), interval(2.seconds)) {
-      DebugFilesystem.assertNoOpenStreams()
-    }
-  }
+  protected override def spark: classic.SparkSession =
+    super.spark.asInstanceOf[classic.SparkSession]
 }

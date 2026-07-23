@@ -26,6 +26,7 @@ from pyspark.ml.param.shared import (
     HasRegParam,
     HasCheckpointInterval,
     HasSeed,
+    HasIntermediateStorageLevel,
 )
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.common import inherit_doc
@@ -98,7 +99,14 @@ class _ALSModelParams(HasPredictionCol, HasBlockSize):
 
 
 @inherit_doc
-class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval, HasSeed):
+class _ALSParams(
+    _ALSModelParams,
+    HasMaxIter,
+    HasRegParam,
+    HasCheckpointInterval,
+    HasSeed,
+    HasIntermediateStorageLevel,
+):
     """
     Params for :py:class:`ALS`.
 
@@ -145,12 +153,6 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
         "whether to use nonnegative constraint for least squares",
         typeConverter=TypeConverters.toBoolean,
     )
-    intermediateStorageLevel: Param[str] = Param(
-        Params._dummy(),
-        "intermediateStorageLevel",
-        "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
-        typeConverter=TypeConverters.toString,
-    )
     finalStorageLevel: Param[str] = Param(
         Params._dummy(),
         "finalStorageLevel",
@@ -173,7 +175,6 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
             ratingCol="rating",
             nonnegative=False,
             checkpointInterval=10,
-            intermediateStorageLevel="MEMORY_AND_DISK",
             finalStorageLevel="MEMORY_AND_DISK",
             coldStartStrategy="nan",
         )
@@ -226,13 +227,6 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
         Gets the value of nonnegative or its default value.
         """
         return self.getOrDefault(self.nonnegative)
-
-    @since("2.0.0")
-    def getIntermediateStorageLevel(self) -> str:
-        """
-        Gets the value of intermediateStorageLevel or its default value.
-        """
-        return self.getOrDefault(self.intermediateStorageLevel)
 
     @since("2.0.0")
     def getFinalStorageLevel(self) -> str:

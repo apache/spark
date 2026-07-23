@@ -88,4 +88,19 @@ class DataFrameSuite extends QueryTest with RemoteSparkSession {
       spark.conf.unset("spark.sql.analyzer.strictDataFrameColumnResolution")
     }
   }
+
+  test("zip") {
+    val sparkSession = spark
+    import sparkSession.implicits._
+
+    val df = Seq((1, 2, 3), (4, 5, 6)).toDF("a", "b", "c")
+    val left = df.select("a")
+    val right = df.select("b")
+
+    val zipped = left.zip(right)
+    assert(zipped.columns === Array("a", "b"))
+    val rows = zipped.collect().sortBy(_.getInt(0))
+    assert(rows(0).getInt(0) === 1 && rows(0).getInt(1) === 2)
+    assert(rows(1).getInt(0) === 4 && rows(1).getInt(1) === 5)
+  }
 }

@@ -18,22 +18,28 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, Period, ZoneOffset}
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
+import com.fasterxml.jackson.core.StreamReadConstraints
+
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{GetJsonObject, JsonToStructs, Literal,
+  MultiGetJsonObject}
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
+import org.apache.spark.sql.execution.{InputAdapter, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
+import org.apache.spark.unsafe.types.UTF8String
 
 class JsonFunctionsSuite extends SharedSparkSession {
   import testImplicits._
@@ -79,6 +85,387 @@ class JsonFunctionsSuite extends SharedSparkSession {
         functions.get_json_object($"jstring", "$.f4"),
         functions.get_json_object($"jstring", "$.f5")),
       expected)
+  }
+
+  test("SPARK-47670: share simple top-level get_json_object paths") {
+    val input = Seq[String](
+      """{"a":"one","a.b":"dotted","b":2,"obj":{"x":1},"arr":[1,2]}""",
+      """{"a":"first","a":"second","b":3}""",
+      """{"a":null,"a":"after_null","b":4}""",
+      """{"a":"before_error","b":"""",
+      """{'a':'single','b':5}""",
+      """[1,2,3]""",
+      """{"a":"trailing","b":6} trailing text""",
+      """{}""",
+      null)
+
+    def result(jsonOptimization: Boolean, sharedParsing: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsing.toString) {
+        val df = input.toDF("json")
+        rows = df.select(
+          get_json_object($"json", "$.a"),
+          get_json_object($"json", "$['a.b']"),
+          get_json_object($"json", "$.b"),
+          get_json_object($"json", "$.b").cast(IntegerType),
+          get_json_object($"json", "$.obj"),
+          get_json_object($"json", "$.arr"),
+          get_json_object($"json", "$.missing")).collect().toSeq
+      }
+      rows
+    }
+
+    val legacy = result(jsonOptimization = false, sharedParsing = false)
+    assert(result(jsonOptimization = true, sharedParsing = false) == legacy)
+    assert(result(jsonOptimization = true, sharedParsing = true) == legacy)
+  }
+
+  test("SPARK-57626: share simple nested get_json_object paths") {
+    val malformed = """{"a":{"b":1,"c":"\q"},"d":2}"""
+    val input = Seq[String](
+      """{"a":{"b":1,"c":"x"},"a.b":{"c.d":"dot"},"d":2}""",
+      """{"a":{"b":"first"},"a":{"b":"second","c":"later"},"d":3}""",
+      """{"a":null,"a":{"b":"after-null","c":null,"c":"after-c-null"},""" +
+        """"a.b":{"c.d":4},"d":5}""",
+      """{"a":"not-object","a":{"b":{"nested":1},"c":[1,2]},""" +
+        """"a.b":{"c.d":"dot"},"d":null,"d":6}""",
+      malformed,
+      """{'a':{'b':'single','c':7},'a.b':{'c.d':8},'d':9}""",
+      """[1,2,3]""",
+      """{}""",
+      null)
+
+    def result(jsonOptimization: Boolean, sharedParsing: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsing.toString) {
+        val query = input.toDF("json").select(
+          get_json_object($"json", "$.a.b"),
+          get_json_object($"json", "$['a']['c']"),
+          get_json_object($"json", "$['a.b']['c.d']"),
+          get_json_object($"json", "$.d"))
+        if (jsonOptimization && sharedParsing) {
+          assert(query.queryExecution.optimizedPlan.exists { plan =>
+            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+          })
+        }
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val legacy = result(jsonOptimization = false, sharedParsing = false)
+    assert(result(jsonOptimization = true, sharedParsing = false) == legacy)
+    assert(result(jsonOptimization = true, sharedParsing = true) == legacy)
+    assert(legacy.take(6) == Seq(
+      Row("1", "x", "dot", "2"),
+      Row("first", "later", null, "3"),
+      Row("after-null", "after-c-null", "4", "5"),
+      Row("{\"nested\":1}", "[1,2]", "dot", "6"),
+      Row(null, null, null, null),
+      Row("single", "7", "8", "9")))
+  }
+
+  test("SPARK-57990: share simple array-index get_json_object paths") {
+    val input = Seq[String](
+      """[{"name":"root-zero","value":"raw"},{"name":"root-one"}]""",
+      """{"items":[{"name":"item-zero"},{"name":"item-one","value":{"x":1}}],""" +
+        """"matrix":[[0,"one"]]}""",
+      """{"items":[null,{"name":"after-null","value":[1,2]}],""" +
+        """"matrix":[[0,null]]}""",
+      """{"items":[{"name":"first"}],"items":[{"name":"second-zero"},""" +
+        """{"name":"second-one"}]}""",
+      """{"items":[{"name":null,"name":"after-null"},""" +
+        """{"name":"first","name":"second"}]}""",
+      """{"items":[{"name":"before"},{"bad":"\q"}],"other":1}""",
+      """[{"name":"before"},{"bad":"\q"}]""",
+      """{'items':[{'name':'single'},{'value':7}]}""",
+      """[]""",
+      """{}""",
+      """1""",
+      null)
+
+    def result(jsonOptimization: Boolean, sharedParsing: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsing.toString) {
+        val query = input.toDF("json").select(
+          get_json_object($"json", "$[0].name"),
+          get_json_object($"json", "$[1].name"),
+          get_json_object($"json", "$[0].value"),
+          get_json_object($"json", "$.items[0].name"),
+          get_json_object($"json", "$.items[1].name"),
+          get_json_object($"json", "$.items[1].value"),
+          get_json_object($"json", "$.matrix[0][1]"),
+          get_json_object($"json", "$.items[9].name"))
+        val hasSharedParsing = query.queryExecution.optimizedPlan.exists { plan =>
+          plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+        }
+        if (jsonOptimization) {
+          assert(hasSharedParsing == sharedParsing)
+        }
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val legacy = result(jsonOptimization = false, sharedParsing = false)
+    assert(result(jsonOptimization = true, sharedParsing = false) == legacy)
+    assert(result(jsonOptimization = true, sharedParsing = true) == legacy)
+    assert(legacy.take(8) == Seq(
+      Row("root-zero", "root-one", "raw", null, null, null, null, null),
+      Row(null, null, null, "item-zero", "item-one", "{\"x\":1}", "one", null),
+      Row(null, null, null, null, "after-null", "[1,2]", "null", null),
+      Row(null, null, null, "first", "second-one", null, null, null),
+      Row(null, null, null, "after-null", "first", null, null, null),
+      Row(null, null, null, null, null, null, null, null),
+      Row(null, null, null, null, null, null, null, null),
+      Row(null, null, null, "single", null, "7", null, null)))
+  }
+
+  test("SPARK-57990: shared get_json_object preserves object-or-array coalesce semantics") {
+    val input = Seq[String](
+      """{"name":"object","nested":[{"name":"object-nested"}]}""",
+      """[{"name":"array","nested":[{"name":"array-nested"}]},{"other":1}]""",
+      """{"name":null,"nested":[null]}""",
+      """[null]""",
+      """1""",
+      """[{"name":"before"},{"bad":"\q"}]""",
+      """{"name":"before","bad":"\q"}""",
+      null)
+
+    def result(sharedParsing: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "true",
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsing.toString) {
+        val query = input.toDF("json").select(
+          coalesce(
+            get_json_object($"json", "$.name"),
+            get_json_object($"json", "$[0].name")),
+          coalesce(
+            get_json_object($"json", "$.nested[0].name"),
+            get_json_object($"json", "$[0].nested[0].name")))
+        val hasSharedParsing = query.queryExecution.optimizedPlan.exists { plan =>
+          plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+        }
+        assert(hasSharedParsing == sharedParsing)
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val legacy = result(sharedParsing = false)
+    assert(result(sharedParsing = true) == legacy)
+    assert(legacy == Seq(
+      Row("object", "object-nested"),
+      Row("array", "array-nested"),
+      Row(null, null),
+      Row(null, null),
+      Row(null, null),
+      Row(null, null),
+      Row(null, null),
+      Row(null, null)))
+  }
+
+  test("SPARK-57990: shared get_json_object validates simple array-index paths") {
+    import GetJsonObject.{IndexedPathSegment, NamedPathSegment}
+
+    def simplePath(path: String): Option[Seq[GetJsonObject.SimpleJsonPathSegment]] = {
+      GetJsonObject.simplePath(UTF8String.fromString(path))
+    }
+
+    assert(simplePath("$.a[0]['b'][2]") == Some(Seq(
+      NamedPathSegment("a"), IndexedPathSegment(0), NamedPathSegment("b"),
+      IndexedPathSegment(2))))
+    Seq("$", "$[*]", "$.a[*]", "$.a[-1]", "$.a[1x]", "$[9223372036854775808]")
+      .foreach(path => assert(simplePath(path).isEmpty, path))
+
+    val expression = MultiGetJsonObject(
+      Literal("""["raw",{"x":1},[2,3],null]"""),
+      Seq("$[0]", "$[1]", "$[1]", "$[2][1]", "$[3]", "$[9]"))
+    val row = expression.eval().asInstanceOf[InternalRow]
+    assert(row.getUTF8String(0).toString == "raw")
+    assert(row.getUTF8String(1).toString == "{\"x\":1}")
+    assert(row.getUTF8String(2).toString == "{\"x\":1}")
+    assert(row.getUTF8String(3).toString == "3")
+    assert(row.getUTF8String(4).toString == "null")
+    assert(row.isNullAt(5))
+    assert(row.getUTF8String(4) == GetJsonObject(
+      Literal("""["raw",{"x":1},[2,3],null]"""), Literal("$[3]")).eval())
+
+    val nestedNull = MultiGetJsonObject(
+      Literal("""{"a":[null],"b":1}"""), Seq("$.a[0]", "$.b")).eval()
+      .asInstanceOf[InternalRow]
+    assert(nestedNull.getUTF8String(0).toString == "null")
+    assert(nestedNull.getUTF8String(0) == GetJsonObject(
+      Literal("""{"a":[null],"b":1}"""), Literal("$.a[0]")).eval())
+    assert(nestedNull.getUTF8String(1).toString == "1")
+
+    val prefixConflict = MultiGetJsonObject(
+      Literal("""[{"x":1}]"""), Seq("$[0]", "$[0].x"))
+    val error = intercept[IllegalArgumentException](prefixConflict.eval())
+    assert(error.getMessage.contains("must not be prefixes"))
+  }
+
+  test("SPARK-57626: shared nested get_json_object isolates value rendering failures") {
+    val invalidSurrogate = "\\" + "uD800"
+    val input = Seq(
+      s"""{"a":{"b":"before","c":"$invalidSurrogate","d":"after"},"z":"root"}""")
+
+    def result(jsonOptimization: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
+        rows = input.toDF("json").select(
+          get_json_object($"json", "$.a.b"),
+          get_json_object($"json", "$.a.c"),
+          get_json_object($"json", "$.a.d"),
+          get_json_object($"json", "$.z")).collect().toSeq
+      }
+      rows
+    }
+
+    assert(result(jsonOptimization = true) == result(jsonOptimization = false))
+    assert(result(jsonOptimization = true) == Seq(Row("before", null, "after", "root")))
+  }
+
+  test("SPARK-47670: shared get_json_object isolates value rendering failures") {
+    val invalidSurrogate = "\\" + "uD800"
+    val input = Seq(
+      s"""{"a":"before","b":"$invalidSurrogate","c":"after"}""",
+      s"""{"a":"before","b":{"nested":"$invalidSurrogate"},"c":"after"}""",
+      s"""{"a":"before","b":"$invalidSurrogate","b":"valid","c":"after"}""")
+
+    def result(jsonOptimization: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
+        rows = input.toDF("json").select(
+          get_json_object($"json", "$.a"),
+          get_json_object($"json", "$.b"),
+          get_json_object($"json", "$.c")).collect().toSeq
+      }
+      rows
+    }
+
+    assert(result(jsonOptimization = true) == result(jsonOptimization = false))
+    assert(result(jsonOptimization = true) == Seq(
+      Row("before", null, "after"),
+      Row("before", s"""{"nested":"$invalidSurrogate"}""", "after"),
+      Row("before", null, "after")))
+  }
+
+  test("SPARK-47670: shared get_json_object falls back after parser-side rendering failure") {
+    val oversized = "x" * (StreamReadConstraints.DEFAULT_MAX_STRING_LEN + 1)
+
+    def result(sharedParsingEnabled: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "true",
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsingEnabled.toString) {
+        val query = Seq(s"""{"a":"$oversized","b.c":2}""").toDF("json").select(
+          get_json_object($"json", "$.a"),
+          get_json_object($"json", "$['b.c']"))
+
+        if (sharedParsingEnabled) {
+          assert(query.queryExecution.optimizedPlan.exists { plan =>
+            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+          })
+        }
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val sharedResult = result(sharedParsingEnabled = true)
+    assert(sharedResult == result(sharedParsingEnabled = false))
+    assert(sharedResult == Seq(Row(null, "2")))
+  }
+
+  test("SPARK-47670: shared get_json_object does not return partial malformed results") {
+    val malformed = """{"a":1,"b":"\q}"}"""
+
+    def result(jsonOptimization: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
+        val query = Seq(malformed).toDF("json").select(
+          get_json_object($"json", "$.a"),
+          get_json_object($"json", "$.b"))
+        if (jsonOptimization) {
+          assert(query.queryExecution.optimizedPlan.exists { plan =>
+            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+          })
+        }
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val shared = result(jsonOptimization = true)
+    val legacy = result(jsonOptimization = false)
+    assert(shared == legacy)
+    assert(shared == Seq(Row(null, null)))
+  }
+
+  test("SPARK-47670: shared get_json_object handles deeply nested values on a small stack") {
+    val depth = 999
+    val nested = "[" * depth + "1" + "]" * depth
+    val expression = MultiGetJsonObject(
+      Literal(s"""{"a":$nested,"b":2}"""), Seq("$.a", "$.b"))
+    val result = Array.ofDim[Any](1)
+    val thread = new Thread(
+      null,
+      new Runnable {
+        override def run(): Unit = {
+          try {
+            result(0) = expression.eval()
+          } catch {
+            case error: Throwable => result(0) = error
+          }
+        }
+      },
+      "deep-json-copy",
+      256 * 1024)
+
+    thread.start()
+    thread.join(30000)
+    assert(!thread.isAlive, "Deep JSON extraction did not finish")
+    result(0) match {
+      case error: Throwable => fail("Deep JSON extraction failed", error)
+      case row: InternalRow =>
+        assert(row.getUTF8String(0).numBytes() == 2 * depth + 1)
+        assert(row.getUTF8String(1).toString == "2")
+      case other => fail(s"Unexpected deep JSON extraction result: $other")
+    }
+  }
+
+  test("SPARK-57626: shared nested get_json_object supports project code generation") {
+    withSQLConf(SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
+      val df = Seq("""{"a":{"x":1,"y":2}}""").toDF("json").select(
+        get_json_object($"json", "$.a.x"),
+        get_json_object($"json", "$.a.y"))
+
+      checkAnswer(df, Row("1", "2"))
+      def containsSharedExtraction(plan: SparkPlan): Boolean = plan match {
+        case _: InputAdapter => false
+        case other
+            if other.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject])) => true
+        case other => other.children.exists(containsSharedExtraction)
+      }
+      assert(df.queryExecution.executedPlan.exists {
+        case stage: WholeStageCodegenExec => containsSharedExtraction(stage.child)
+        case _ => false
+      }, s"Shared get_json_object project was outside whole-stage codegen:\n${df.queryExecution}")
+    }
   }
 
   test("SPARK-42782: Hive compatibility check for get_json_object") {
@@ -363,6 +750,96 @@ class JsonFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.select(from_json($"value", "a INT, b STRING", Map[String, String]())),
       Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("SPARK-57164: from_json with a nanos timestamp DDL schema string") {
+    val df = Seq("""{"c": "2020-01-01T00:00:00.123456789"}""").toDF("value")
+    // Fix the session timezone so the TIMESTAMP_LTZ expected value is deterministic.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        val nano = TimestampNanosTestUtils.nanoOfSecTruncator(p)(123456789)
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            val parsed = df.select(
+              from_json($"value", s"c $spelling", Map.empty[String, String]).as("v"))
+            // The schema string resolves to the nanos type ...
+            assert(parsed.schema("v").dataType.asInstanceOf[StructType]("c").dataType === expected)
+            // ... and the JSON datasource correctly parses the nanosecond timestamp, truncating
+            // sub-precision digits toward zero.
+            val expectedValue = expected match {
+              case _: TimestampNTZNanosType => LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano)
+              case _: TimestampLTZNanosType =>
+                LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano).toInstant(ZoneOffset.UTC)
+            }
+            checkAnswer(parsed, Row(Row(expectedValue)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57456: to_json with nanos timestamp types") {
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        // The pattern must carry `p` fractional digits to emit the full declared precision; the
+        // floored value has exactly `p` significant digits, so the rendered fraction is the first
+        // `p` digits of 123456789.
+        val fracPat = "S" * p
+        val frac = "123456789".take(p)
+        val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+        Seq(
+          (TimestampNTZNanosType(p): DataType, "timestampNTZFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.$fracPat", ldt: Any,
+            s"""{"ts":"2020-01-01T00:00:00.$frac"}"""),
+          (TimestampLTZNanosType(p): DataType, "timestampFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX", ldt.toInstant(ZoneOffset.UTC): Any,
+            s"""{"ts":"2020-01-01T00:00:00.${frac}Z"}""")).foreach {
+          case (nanosType, optKey, fmt, value, expectedJson) =>
+            val schema = new StructType().add("ts", nanosType)
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value))), schema)
+            checkAnswer(
+              df.select(to_json(struct($"ts"), Map(optKey -> fmt))),
+              Row(expectedJson))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57456: roundtrip in to_json and from_json - nanos timestamps") {
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        val fracPat = "S" * p
+        val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+        Seq(
+          (TimestampNTZNanosType(p): DataType, "timestampNTZFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.$fracPat", ldt: Any),
+          (TimestampLTZNanosType(p): DataType, "timestampFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX", ldt.toInstant(ZoneOffset.UTC): Any)).foreach {
+          case (nanosType, optKey, fmt, value) =>
+            val schema = new StructType().add("ts", nanosType)
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value))), schema)
+            val options = Map(optKey -> fmt)
+            // The input column already carries precision `p`, so the to_json -> from_json
+            // round-trip with a `p`-digit pattern is loss-free.
+            val readBack = df
+              .select(to_json(struct($"ts"), options).as("json"))
+              .select(from_json($"json", schema, options).as("data"))
+              .select($"data.ts".as("ts"))
+            checkAnswer(readBack, df.select($"ts"))
+        }
+      }
+    }
   }
 
   test("from_json with NULL in options map values") {
@@ -1338,6 +1815,25 @@ class JsonFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-47670: separately projected from_json fields preserve malformed-input semantics") {
+    withSQLConf(
+        SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "true",
+        SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      val schema = StructType.fromDDL("a int, b struct<x: int>")
+      val input = Seq("""{"a":1,"b":{"x":""").toDF("json")
+      val parsed = from_json($"json", schema)
+      val query = input.select(parsed.getField("a"), parsed.getField("b"))
+
+      val parsedSchemas = query.queryExecution.optimizedPlan.expressions.flatMap(_.collect {
+        case jsonToStructs: JsonToStructs => jsonToStructs.schema
+      })
+      assert(parsedSchemas == Seq(
+        StructType.fromDDL("a int"),
+        StructType.fromDDL("b struct<x: int>")))
+      checkAnswer(query, Row(null, null))
+    }
+  }
+
   test("SPARK-35982: from_json/to_json for map types where value types are year-month intervals") {
     val ymDF = Seq(Period.of(1, 2, 0)).toDF()
     Seq(
@@ -1516,7 +2012,10 @@ class JsonFunctionsSuite extends SharedSparkSession {
       (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
       (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
       (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
-      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456"),
+      (7, LocalTime.of(14, 30, 45, 123456700), "14:30:45.1234567"),
+      (8, LocalTime.of(14, 30, 45, 123456780), "14:30:45.12345678"),
+      (9, LocalTime.of(14, 30, 45, 123456789), "14:30:45.123456789")
     )
 
     testData.foreach { case (precision, time, timeStr) =>

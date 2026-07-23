@@ -27,8 +27,9 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -37,7 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -131,6 +132,124 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
             assert(sampled.contains(edge), s"expected edge value $edge for $dt")
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-57317: create literals from external nanosecond timestamp values") {
+    val instant = Instant.parse("2020-12-31T23:59:59.123456789Z")
+    val ldt = LocalDateTime.parse("2020-12-31T23:59:59.123456789")
+    TimestampNanosTestUtils.foreachNanosPrecision { precision =>
+      val ltzType = TimestampLTZNanosType(precision)
+      val ntzType = TimestampNTZNanosType(precision)
+      val ltzVal = DateTimeUtils.instantToTimestampNanos(instant, precision)
+      val ntzVal = DateTimeUtils.localDateTimeToTimestampNanos(ldt, precision)
+
+      // Scalar external values (java.time.Instant / LocalDateTime) must be converted to the
+      // internal TimestampNanosVal, not kept as epoch micros (a Long) by the schema-less path.
+      val ltzLit = Literal.create(instant, ltzType)
+      assert(ltzLit.dataType === ltzType)
+      assert(ltzLit.value === ltzVal)
+      val ntzLit = Literal.create(ldt, ntzType)
+      assert(ntzLit.dataType === ntzType)
+      assert(ntzLit.value === ntzVal)
+
+      // Arrays of external nanosecond timestamp values are converted element-wise.
+      val arrayLit = Literal.create(Seq(instant), ArrayType(ltzType))
+      val array = arrayLit.value.asInstanceOf[ArrayData]
+      assert(array.numElements() === 1)
+      assert(array.get(0, ltzType) === ltzVal)
+
+      // Structs containing nanosecond timestamp fields are converted field-wise.
+      val structType = new StructType().add("c", ntzType)
+      val structLit = Literal.create(Row(ldt), structType)
+      assert(structLit.value.asInstanceOf[InternalRow].get(0, ntzType) === ntzVal)
+
+      // Values already in Catalyst internal form and nulls keep using the schema-less path.
+      assert(Literal.create(ltzVal, ltzType).value === ltzVal)
+      assert(Literal.create(null, ltzType).value === null)
+    }
+  }
+
+  test("SPARK-57339: format nanosecond-precision timestamp literals in toString and sql") {
+    // UTC session timezone keeps LTZ and NTZ formatted strings identical for the same wall-clock.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val ldt = LocalDateTime.of(2020, 1, 1, 13, 24, 35, 123456789)
+      val instant = ldt.toInstant(ZoneOffset.UTC)
+
+      TimestampNanosTestUtils.foreachNanosPrecision { precision =>
+        val ltzType = TimestampLTZNanosType(precision)
+        val ntzType = TimestampNTZNanosType(precision)
+        val ltzVal = DateTimeUtils.instantToTimestampNanos(instant, precision)
+        val ntzVal = DateTimeUtils.localDateTimeToTimestampNanos(ldt, precision)
+        val ltzLit = Literal(ltzVal, ltzType)
+        val ntzLit = Literal(ntzVal, ntzType)
+
+        // ".123456789" truncated to `precision` fractional digits (trailing zeros stripped by
+        // the FractionTimestampFormatter, but "123456789" has none for p in [7,9]).
+        val frac = ".123456789".substring(0, 1 + precision)
+        val expected = s"2020-01-01 13:24:35$frac"
+
+        assert(ltzLit.toString === expected, s"LTZ toString at precision $precision")
+        assert(ntzLit.toString === expected, s"NTZ toString at precision $precision")
+        assert(ltzLit.sql === s"TIMESTAMP_LTZ '$expected'",
+          s"LTZ sql at precision $precision")
+        assert(ntzLit.sql === s"TIMESTAMP_NTZ '$expected'",
+          s"NTZ sql at precision $precision")
+
+        // Round-trip: parsing the sql output must reproduce the same literal value.
+        checkEvaluation(Literal.fromSQL(ltzLit.sql), ltzVal)
+        checkEvaluation(Literal.fromSQL(ntzLit.sql), ntzVal)
+
+        // Trailing-zero edge: nanosWithinMicro=0 means the formatter strips sub-micro digits.
+        // sql must still emit exactly `precision` fractional digits so the round-trip is correct.
+        val zeroNanosLdt = LocalDateTime.of(2020, 1, 1, 13, 24, 35, 123456000)
+        val zeroNanosInstant = zeroNanosLdt.toInstant(ZoneOffset.UTC)
+        val zeroNtzVal = DateTimeUtils.localDateTimeToTimestampNanos(zeroNanosLdt, precision)
+        val zeroLtzVal = DateTimeUtils.instantToTimestampNanos(zeroNanosInstant, precision)
+        val zeroNtzLit = Literal(zeroNtzVal, ntzType)
+        val zeroLtzLit = Literal(zeroLtzVal, ltzType)
+
+        assert(zeroNtzLit.sql.startsWith("TIMESTAMP_NTZ '"),
+          s"NTZ zero-nanos sql prefix at precision $precision")
+        assert(zeroLtzLit.sql.startsWith("TIMESTAMP_LTZ '"),
+          s"LTZ zero-nanos sql prefix at precision $precision")
+
+        val ntzFrac = zeroNtzLit.sql.dropWhile(_ != '.').takeWhile(_ != '\'')
+        val ltzFrac = zeroLtzLit.sql.dropWhile(_ != '.').takeWhile(_ != '\'')
+        assert(ntzFrac.length == precision + 1,
+          s"NTZ zero-nanos sql must have exactly $precision fractional digits, got: $ntzFrac")
+        assert(ltzFrac.length == precision + 1,
+          s"LTZ zero-nanos sql must have exactly $precision fractional digits, got: $ltzFrac")
+
+        // toString strips trailing zeros (display-only, no padding) - same for all precisions.
+        assert(zeroNtzLit.toString === "2020-01-01 13:24:35.123456",
+          s"NTZ zero-nanos toString at precision $precision (display strips trailing zeros)")
+        assert(zeroLtzLit.toString === "2020-01-01 13:24:35.123456",
+          s"LTZ zero-nanos toString at precision $precision (display strips trailing zeros)")
+
+        checkEvaluation(Literal.fromSQL(zeroNtzLit.sql), zeroNtzVal)
+        checkEvaluation(Literal.fromSQL(zeroLtzLit.sql), zeroLtzVal)
+
+        // Whole-second edge: no fractional part at all. padToNanosPrecision must insert
+        // "." + zeros so the SQL literal carries exactly `precision` fractional digits.
+        val wholeLdt = LocalDateTime.of(2020, 1, 1, 13, 24, 35, 0)
+        val wholeInstant = wholeLdt.toInstant(ZoneOffset.UTC)
+        val wholeNtzVal = DateTimeUtils.localDateTimeToTimestampNanos(wholeLdt, precision)
+        val wholeLtzVal = DateTimeUtils.instantToTimestampNanos(wholeInstant, precision)
+        val wholeNtzLit = Literal(wholeNtzVal, ntzType)
+        val wholeLtzLit = Literal(wholeLtzVal, ltzType)
+
+        assert(wholeNtzLit.toString === "2020-01-01 13:24:35",
+          s"NTZ whole-second toString at precision $precision")
+        assert(wholeLtzLit.toString === "2020-01-01 13:24:35",
+          s"LTZ whole-second toString at precision $precision")
+        assert(wholeNtzLit.sql === s"TIMESTAMP_NTZ '2020-01-01 13:24:35.${"0" * precision}'",
+          s"NTZ whole-second sql at precision $precision")
+        assert(wholeLtzLit.sql === s"TIMESTAMP_LTZ '2020-01-01 13:24:35.${"0" * precision}'",
+          s"LTZ whole-second sql at precision $precision")
+        checkEvaluation(Literal.fromSQL(wholeNtzLit.sql), wholeNtzVal)
+        checkEvaluation(Literal.fromSQL(wholeLtzLit.sql), wholeLtzVal)
       }
     }
   }
@@ -722,5 +841,66 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val lit = Literal.create(geom, GeometryType(0))
     assert(lit.dataType === GeometryType(0))
     assert(lit.value.isInstanceOf[BinaryView])
+  }
+
+  test("SPARK-57777: render explicit collation in string literal SQL") {
+    // The default `StringType` (case object) has no explicit collation, so it renders
+    // without a `collate` clause.
+    assert(Literal(UTF8String.fromString("x"), StringType).sql === "'x'")
+    // A non-default (non-singleton) `UTF8_BINARY` `StringType` is an explicit collation, so it
+    // renders the clause and stays distinguishable from the default on re-parse.
+    assert(Literal(UTF8String.fromString("x"), StringType("UTF8_BINARY")).sql ===
+      "'x' collate UTF8_BINARY")
+    // Other explicit collations are rendered as before.
+    assert(Literal(UTF8String.fromString("x"), StringType("UTF8_LCASE")).sql ===
+      "'x' collate UTF8_LCASE")
+  }
+
+  test("valueSizeInBytes") {
+    // A null value reports the type's default size.
+    assert(Literal.create(null, StringType).valueSizeInBytes === Some(StringType.defaultSize))
+    assert(Literal.create(null, IntegerType).valueSizeInBytes === Some(IntegerType.defaultSize))
+
+    // Fixed-length types report their default size.
+    assert(Literal(1).valueSizeInBytes === Some(IntegerType.defaultSize))
+    assert(Literal(1L).valueSizeInBytes === Some(LongType.defaultSize))
+    assert(Literal(1.0).valueSizeInBytes === Some(DoubleType.defaultSize))
+    assert(Literal(true).valueSizeInBytes === Some(BooleanType.defaultSize))
+    assert(Literal(Decimal(1), DecimalType(10, 0)).valueSizeInBytes ===
+      Some(DecimalType(10, 0).defaultSize))
+
+    // Variable-length string / binary report their real byte length, not the default size.
+    assert(Literal(UTF8String.fromString(""), StringType).valueSizeInBytes === Some(0))
+    assert(Literal(UTF8String.fromString("abc"), StringType).valueSizeInBytes === Some(3))
+    // A multi-byte UTF-8 character counts its encoded bytes (U+00E9 encodes to 2 bytes). Build the
+    // character with `Character.toChars` rather than a unicode escape: scalariform decodes such an
+    // escape (even in a comment) before scalastyle's NonASCIICharacterChecker sees it, so it would
+    // trip the nonascii lint despite the source being pure ASCII.
+    assert(Literal(UTF8String.fromString(new String(Character.toChars(0xE9))), StringType)
+      .valueSizeInBytes === Some(2))
+    assert(Literal(Array[Byte](1, 2, 3, 4), BinaryType).valueSizeInBytes === Some(4))
+
+    // Array sums element sizes.
+    assert(Literal.create(Array("a", "bc"), ArrayType(StringType)).valueSizeInBytes === Some(3))
+    assert(Literal.create(Array(1, 2, 3), ArrayType(IntegerType)).valueSizeInBytes ===
+      Some(3 * IntegerType.defaultSize))
+
+    // Map sums key and value sizes.
+    assert(Literal.create(Map("a" -> "bc"), MapType(StringType, StringType)).valueSizeInBytes ===
+      Some(3))
+
+    // Struct sums field sizes.
+    val structType = StructType(Seq(
+      StructField("s", StringType), StructField("i", IntegerType)))
+    assert(Literal.create(Row("abc", 1), structType).valueSizeInBytes ===
+      Some(3 + IntegerType.defaultSize))
+
+    // CalendarInterval reports its (fixed) default size.
+    assert(Literal(new CalendarInterval(1, 2, 3), CalendarIntervalType).valueSizeInBytes ===
+      Some(CalendarIntervalType.defaultSize))
+
+    // An unmeasurable variable-length type (e.g. variant) returns None.
+    assert(Literal(new VariantVal(Array[Byte](1, 2), Array[Byte](3)), VariantType).valueSizeInBytes
+      === None)
   }
 }

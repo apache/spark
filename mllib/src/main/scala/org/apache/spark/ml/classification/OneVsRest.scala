@@ -42,6 +42,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.ThreadUtils
 
 private[ml] trait ClassifierTypeTrait {
@@ -147,6 +148,11 @@ final class OneVsRestModel private[ml] (
 
   @Since("2.4.0")
   val numFeatures: Int = models.head.numFeatures
+
+  private[spark] override def estimatedSize: Long = {
+    estimateMatadataSize + SizeEstimator.estimate(labelMetadata) +
+      models.iterator.map(_.estimatedSize).sum
+  }
 
   /** @group setParam */
   @Since("2.1.0")

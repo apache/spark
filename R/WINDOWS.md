@@ -22,7 +22,7 @@ To build SparkR on Windows, the following steps are required
 
 1. Make sure `bash` is available and in `PATH` if you already have a built-in `bash` on Windows. If you do not have, install [Cygwin](https://www.cygwin.com/).
 
-2. Install R (>= 3.5) and [Rtools](https://cloud.r-project.org/bin/windows/Rtools/). Make sure to
+2. Install R (>= 4.0) and [Rtools](https://cloud.r-project.org/bin/windows/Rtools/). Make sure to
 include Rtools and R in `PATH`.
 
 3. Install JDK that SparkR supports (see `R/pkg/DESCRIPTION`), and set `JAVA_HOME` in the system environment variables.

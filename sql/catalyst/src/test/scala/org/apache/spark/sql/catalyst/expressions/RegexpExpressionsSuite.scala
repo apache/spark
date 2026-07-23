@@ -361,9 +361,40 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nonNullExpr = RegExpReplace(Literal("100-200"), Literal("(\\d+)"), Literal("num"))
     checkEvaluation(nonNullExpr, "num-num", row1)
 
+    // A replacement that references a non-existent group makes the replace fail.
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      create_row("100-200", "(\\d+)", "$2"),
+      "INVALID_REGEXP_REPLACE",
+      Map(
+        "source" -> "100-200",
+        "pattern" -> "(\\d+)",
+        "replacement" -> "$2",
+        "position" -> "1"))
+
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
       RegExpReplace(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("SPARK-57932: regexp_replace position is a code-point position for supplementary chars") {
+    // scalastyle:off nonascii
+    checkEvaluation(
+      RegExpReplace(Literal("😀aXa"), Literal("a"), Literal("Z"), Literal(3)),
+      "😀aXZ")
+    checkEvaluation(
+      RegExpReplace(Literal("😀😀"), Literal("😀"),
+        Literal("Z"), Literal(3)),
+      "😀😀")
+    // Position beyond the string length: nothing is replaced.
+    checkEvaluation(
+      RegExpReplace(Literal("😀a"), Literal("a"), Literal("Z"), Literal(4)),
+      "😀a")
+    // Position at the last code-point.
+    checkEvaluation(
+      RegExpReplace(Literal("a😀b"), Literal("b"), Literal("Z"), Literal(3)),
+      "a😀Z")
+    // scalastyle:on nonascii
   }
 
   test("SPARK-22570: RegExpReplace should not create a lot of global variables") {
@@ -625,6 +656,17 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
       new RegExpInStr(Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("SPARK-57932: regexp_instr returns a code-point position for supplementary characters") {
+    // scalastyle:off nonascii
+    checkEvaluation(RegExpInStr(Literal("😀ab"), Literal("ab"), Literal(0)), 2)
+    checkEvaluation(RegExpInStr(Literal("a😀b"), Literal("b"), Literal(0)), 3)
+    checkEvaluation(
+      RegExpInStr(Literal("😀😁xy"), Literal("xy"), Literal(0)), 3)
+    // A match made up entirely of supplementary characters.
+    checkEvaluation(RegExpInStr(Literal("😀😁😂"), Literal("😁"), Literal(0)), 2)
+    // scalastyle:on nonascii
   }
 
   test("SPARK-39758: invalid regexp pattern") {

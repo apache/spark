@@ -381,29 +381,33 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       ).toDF("a", "b", "c")
       df.createTempView("v")
 
-      val e1 = intercept[AnalysisException] {
-        val plan = createScriptTransformationExec(
-          script = "cat",
-          output = Seq(
-            AttributeReference("a", IntegerType)(),
-            AttributeReference("b", CalendarIntervalType)()),
-          child = df.select($"a", $"b").queryExecution.sparkPlan,
-          ioschema = hiveIOSchema)
-        QueryTest.executePlan(plan, hiveContext)
-      }.getMessage
-      assert(e1.contains("\"INTERVAL\" cannot be converted to Hive TypeInfo"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          val plan = createScriptTransformationExec(
+            script = "cat",
+            output = Seq(
+              AttributeReference("a", IntegerType)(),
+              AttributeReference("b", CalendarIntervalType)()),
+            child = df.select($"a", $"b").queryExecution.sparkPlan,
+            ioschema = hiveIOSchema)
+          QueryTest.executePlan(plan, hiveContext)
+        },
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> "\"INTERVAL\""))
 
-      val e2 = intercept[AnalysisException] {
-        val plan = createScriptTransformationExec(
-          script = "cat",
-          output = Seq(
-            AttributeReference("a", IntegerType)(),
-            AttributeReference("c", new TestUDT.MyDenseVectorUDT)()),
-          child = df.select($"a", $"c").queryExecution.sparkPlan,
-          ioschema = hiveIOSchema)
-        QueryTest.executePlan(plan, hiveContext)
-      }.getMessage
-      assert(e2.contains("UDT(\"ARRAY<DOUBLE>\") cannot be converted to Hive TypeInfo"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          val plan = createScriptTransformationExec(
+            script = "cat",
+            output = Seq(
+              AttributeReference("a", IntegerType)(),
+              AttributeReference("c", new TestUDT.MyDenseVectorUDT)()),
+            child = df.select($"a", $"c").queryExecution.sparkPlan,
+            ioschema = hiveIOSchema)
+          QueryTest.executePlan(plan, hiveContext)
+        },
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> "UDT(\"ARRAY<DOUBLE>\")"))
     }
   }
 
@@ -416,23 +420,27 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         (1, new CalendarInterval(7, 1, 1000), new TestUDT.MyDenseVector(Array(1, 2, 3)))
       ).toDF("a", "b", "c")
       df.createTempView("v")
-      val e1 = intercept[AnalysisException] {
-        sql(
-          """
-            |SELECT TRANSFORM(a, b) USING 'cat' AS (a, b)
-            |FROM v
-          """.stripMargin).collect()
-      }.getMessage
-      assert(e1.contains("\"INTERVAL\" cannot be converted to Hive TypeInfo"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """
+              |SELECT TRANSFORM(a, b) USING 'cat' AS (a, b)
+              |FROM v
+            """.stripMargin).collect()
+        },
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> "\"INTERVAL\""))
 
-      val e2 = intercept[AnalysisException] {
-        sql(
-          """
-            |SELECT TRANSFORM(a, c) USING 'cat' AS (a, c)
-            |FROM v
-          """.stripMargin).collect()
-      }.getMessage
-      assert(e2.contains("UDT(\"ARRAY<DOUBLE>\") cannot be converted to Hive TypeInfo"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """
+              |SELECT TRANSFORM(a, c) USING 'cat' AS (a, c)
+              |FROM v
+            """.stripMargin).collect()
+        },
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> "UDT(\"ARRAY<DOUBLE>\")"))
     }
   }
 

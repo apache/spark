@@ -288,7 +288,7 @@ class AutoCdcMergeFlow(
       // CDC operational metadata column at the end.
       StructType(
         userSelectedSchema.fields :+ StructField(
-          Scd1BatchProcessor.cdcMetadataColName,
+          AutoCdcReservedNames.cdcMetadataColName,
           Scd1BatchProcessor.cdcMetadataColSchema(sequencingType),
           nullable = false
         )
@@ -334,7 +334,7 @@ class AutoCdcMergeFlow(
           deleteSequence = F.lit(null),
           upsertSequence = F.lit(null),
           sequencingType = sequencingType
-        ).as(Scd1BatchProcessor.cdcMetadataColName)
+        ).as(AutoCdcReservedNames.cdcMetadataColName)
 
         df.select(userSelectedCols :+ emptyCdcMetadataCol: _*)
       case ScdType.Type2 =>

@@ -24,13 +24,15 @@ import org.apache.datasketches.common._
 import org.apache.datasketches.frequencies.{ErrorType, ItemsSketch}
 import org.apache.datasketches.memory.Memory
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{ArrayOfDecimalsSerDe, Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ArrayOfCollatedStringsSerDe, ArrayOfDecimalsSerDe, Cast, CollatedString, Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
-import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, UnsafeRowUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -59,6 +61,15 @@ import org.apache.spark.unsafe.types.UTF8String
       `k` An optional INTEGER literal greater than 0. If k is not specified, it defaults to 5.
       `maxItemsTracked` An optional INTEGER literal greater than or equal to k and has upper limit of 1000000. If maxItemsTracked is not specified, it defaults to 10000.
   """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the top k most frequent items of.
+        An expression that evaluates to a boolean, numeric, date, timestamp, or string.
+      * k - The number of top items to return.
+        An expression that evaluates to an integer. Must be a constant.
+      * maxItemsTracked - The maximum number of items to track in the sketch.
+        An expression that evaluates to an integer. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);
@@ -69,6 +80,11 @@ import org.apache.spark.unsafe.types.UTF8String
 
       > SELECT _FUNC_(expr, 10, 100) FROM VALUES (0), (1), (1), (2), (2), (2) AS tab(expr);
        [{"item":2,"count":3},{"item":1,"count":2},{"item":0,"count":1}]
+  """,
+  note = """
+    When `expr` is a string with a non-UTF8_BINARY collation, values that are equal under the
+    collation are counted as one item, and the returned item is one of the actual input values of
+    that group; which one is returned is not deterministic (as with the `mode` function).
   """,
   group = "agg_funcs",
   since = "4.1.0")
@@ -154,7 +170,7 @@ case class ApproxTopK(
     buffer.merge(input)
 
   override def eval(buffer: ApproxTopKAggregateBuffer[Any]): GenericArrayData =
-    buffer.eval(kVal, itemDataType)
+    buffer.eval(kVal, itemDataType, itemDataType)
 
   override def serialize(buffer: ApproxTopKAggregateBuffer[Any]): Array[Byte] =
     buffer.serialize(ApproxTopK.genSketchSerDe(itemDataType))
@@ -228,7 +244,8 @@ object ApproxTopK {
     itemType match {
       case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
            _: LongType | _: FloatType | _: DoubleType | _: DateType |
-           _: TimestampType | _: TimestampNTZType | _: StringType | _: DecimalType => true
+           _: TimestampType | _: TimestampNTZType | _: StringType |
+           _: DecimalType | _: TimeType => true
       // BinaryType is not supported now, as ItemsSketch seems cannot count the frequency correctly
       case _ => false
     }
@@ -249,12 +266,16 @@ object ApproxTopK {
         new ItemsSketch[Boolean](maxMapSize).asInstanceOf[ItemsSketch[Any]]
       case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
         new ItemsSketch[Number](maxMapSize).asInstanceOf[ItemsSketch[Any]]
-      case _: LongType | _: TimestampType | _: TimestampNTZType =>
+      case _: LongType | _: TimestampType | _: TimestampNTZType | _: TimeType =>
         new ItemsSketch[Long](maxMapSize).asInstanceOf[ItemsSketch[Any]]
       case _: DoubleType =>
         new ItemsSketch[Double](maxMapSize).asInstanceOf[ItemsSketch[Any]]
-      case _: StringType =>
-        new ItemsSketch[String](maxMapSize).asInstanceOf[ItemsSketch[Any]]
+      case st: StringType =>
+        if (UnsafeRowUtils.isBinaryStable(st)) {
+          new ItemsSketch[String](maxMapSize).asInstanceOf[ItemsSketch[Any]]
+        } else {
+          new ItemsSketch[CollatedString](maxMapSize).asInstanceOf[ItemsSketch[Any]]
+        }
       case _: DecimalType =>
         new ItemsSketch[Decimal](maxMapSize).asInstanceOf[ItemsSketch[Any]]
     }
@@ -265,12 +286,16 @@ object ApproxTopK {
       case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
       case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
         new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-      case _: LongType | _: TimestampType | _: TimestampNTZType =>
+      case _: LongType | _: TimestampType | _: TimestampNTZType | _: TimeType =>
         new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
       case _: DoubleType =>
         new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-      case _: StringType =>
-        new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
+      case st: StringType =>
+        if (UnsafeRowUtils.isBinaryStable(st)) {
+          new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
+        } else {
+          new ArrayOfCollatedStringsSerDe(st.collationId).asInstanceOf[ArrayOfItemsSerDe[Any]]
+        }
       case dt: DecimalType =>
         new ArrayOfDecimalsSerDe(dt).asInstanceOf[ArrayOfItemsSerDe[Any]]
     }
@@ -285,7 +310,9 @@ object ApproxTopK {
 
   def dataTypeToDDL(dataType: DataType): String = dataType match {
     case _: StringType =>
-      // Hide collation information in DDL format, otherwise CollationExpressionWalkerSuite fails
+      // Strip collation from the user-facing state DDL to keep the persisted format stable across
+      // collations. Collation is recovered from the state struct's static field-2 type (see
+      // withCollationOf in ApproxTopKCombine.update and the JSON encoding in CombineInternal).
       s"item string not null"
     case other =>
       StructField("item", other, nullable = false).toDDL
@@ -293,6 +320,11 @@ object ApproxTopK {
 
   def DDLToDataType(ddl: String): DataType = {
     StructType.fromDDL(ddl).fields.head.dataType
+  }
+
+  def withCollationOf(base: DataType, source: DataType): DataType = (base, source) match {
+    case (_: StringType, st: StringType) => st
+    case _ => base
   }
 
   def checkStateFieldAndType(state: Expression): TypeCheckResult = {
@@ -324,6 +356,14 @@ object ApproxTopK {
       TypeCheckSuccess
     }
   }
+
+  def widenItemValue(item: Any, sketchType: DataType, outputType: DataType): Any =
+    (sketchType, outputType) match {
+      case _ if sketchType == outputType => item
+      case (_: StringType, _: StringType) => item
+      case _ =>
+        Cast(Literal(item, sketchType), outputType, Some(SQLConf.get.sessionLocalTimeZone)).eval()
+    }
 }
 
 /**
@@ -357,9 +397,17 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
           sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
         case _: TimestampNTZType =>
           sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
+        case _: TimeType =>
+          sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
         case st: StringType =>
-          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
-          sketch.asInstanceOf[ItemsSketch[String]].update(cKey.toString)
+          val orig = v.asInstanceOf[UTF8String]
+          if (UnsafeRowUtils.isBinaryStable(st)) {
+            sketch.asInstanceOf[ItemsSketch[String]].update(orig.toString)
+          } else {
+            val cKey = CollationFactory.getCollationKey(orig, st.collationId).toString
+            sketch.asInstanceOf[ItemsSketch[CollatedString]]
+              .update(new CollatedString(cKey, orig.toString))
+          }
         case _: DecimalType =>
           sketch.asInstanceOf[ItemsSketch[Decimal]].update(v.asInstanceOf[Decimal])
       }
@@ -393,7 +441,7 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
    * Evaluate the buffer and return top K items (including null) with their estimated frequency.
    * The result is sorted by frequency in descending order.
    */
-  def eval(k: Int, itemDataType: DataType): GenericArrayData = {
+  def eval(k: Int, sketchItemType: DataType, outputItemType: DataType): GenericArrayData = {
     // frequent items from sketch
     val frequentItems = sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
     // total number of frequent items (including null, if any)
@@ -423,14 +471,20 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
         (null, nullCount.toLong)
       } else {
         // insert frequent item into result
-        val item: Any = itemDataType match {
+        val rawItem: Any = sketchItemType match {
           case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
                _: LongType | _: FloatType | _: DoubleType | _: DecimalType |
-               _: DateType | _: TimestampType | _: TimestampNTZType =>
+               _: DateType | _: TimestampType | _: TimestampNTZType | _: TimeType =>
             curFrequentItem.getItem
           case _: StringType =>
-            UTF8String.fromString(curFrequentItem.getItem.asInstanceOf[String])
+            curFrequentItem.getItem match {
+              case cs: CollatedString => UTF8String.fromString(cs.original)
+              case s: String => UTF8String.fromString(s)
+              case other => throw SparkException.internalError(
+                s"Unexpected sketch item type for a string column: ${other.getClass.getName}")
+            }
         }
+        val item = ApproxTopK.widenItemValue(rawItem, sketchItemType, outputItemType)
         fiIndex += 1 // move to next frequent item
         (item, itemEstimate)
       }
@@ -487,6 +541,13 @@ object ApproxTopKAggregateBuffer {
   usage = """
     _FUNC_(expr, maxItemsTracked) - Accumulates items into a sketch.
       `maxItemsTracked` An optional positive INTEGER literal with upper limit of 1000000. If maxItemsTracked is not specified, it defaults to 10000.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression whose values are accumulated into the sketch.
+        An expression that evaluates to a boolean, numeric, date, timestamp, or string.
+      * maxItemsTracked - The maximum number of items to track in the sketch.
+        An expression that evaluates to an integer. Must be a constant.
   """,
   examples = """
     Examples:
@@ -653,22 +714,25 @@ class CombineInternal[T](
    * Serialize the CombineInternal instance to a byte array.
    * Serialization format:
    *     maxItemsTracked (4 bytes int) +
-   *     itemDataTypeDDL length n in byte  (4 bytes int) +
-   *     itemDataTypeDDL (n bytes) +
+   *     itemDataType JSON length n in byte  (4 bytes int) +
+   *     itemDataType JSON (n bytes) +
    *     sketchBytes
+   *
+   * The item data type is encoded as collation-preserving JSON (not the collation-stripped DDL)
+   * so that a collated sketch is deserialized and merged by collation key across shuffle
+   * boundaries (SPARK-58069).
    */
   def serialize(): Array[Byte] = {
     val sketchWithNullCountBytes = sketchWithNullCount.serialize(
       ApproxTopK.genSketchSerDe(itemDataType).asInstanceOf[ArrayOfItemsSerDe[T]])
-    val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(itemDataType)
-    val ddlBytes: Array[Byte] = itemDataTypeDDL.getBytes(StandardCharsets.UTF_8)
+    val typeBytes: Array[Byte] = itemDataType.json.getBytes(StandardCharsets.UTF_8)
     val byteArray = new Array[Byte](
-      sketchWithNullCountBytes.length + Integer.BYTES + Integer.BYTES + ddlBytes.length)
+      sketchWithNullCountBytes.length + Integer.BYTES + Integer.BYTES + typeBytes.length)
 
     val byteBuffer = ByteBuffer.wrap(byteArray)
     byteBuffer.putInt(maxItemsTracked)
-    byteBuffer.putInt(ddlBytes.length)
-    byteBuffer.put(ddlBytes)
+    byteBuffer.putInt(typeBytes.length)
+    byteBuffer.put(typeBytes)
     byteBuffer.put(sketchWithNullCountBytes)
     byteArray
   }
@@ -679,22 +743,21 @@ object CombineInternal {
    * Deserialize a byte array to a CombineInternal instance.
    * Serialization format:
    *     maxItemsTracked (4 bytes int) +
-   *     itemDataTypeDDL length n in byte  (4 bytes int) +
-   *     itemDataTypeDDL (n bytes) +
+   *     itemDataType JSON length n in byte  (4 bytes int) +
+   *     itemDataType JSON (n bytes) +
    *     sketchBytes
    */
   def deserialize(buffer: Array[Byte]): CombineInternal[Any] = {
     val byteBuffer = ByteBuffer.wrap(buffer)
     // read maxItemsTracked
     val maxItemsTracked = byteBuffer.getInt
-    // read itemDataTypeDDL
-    val ddlLength = byteBuffer.getInt
-    val ddlBytes = new Array[Byte](ddlLength)
-    byteBuffer.get(ddlBytes)
-    val itemDataTypeDDL = new String(ddlBytes, StandardCharsets.UTF_8)
-    val itemDataType = ApproxTopK.DDLToDataType(itemDataTypeDDL)
+    // read itemDataType JSON
+    val typeLength = byteBuffer.getInt
+    val typeBytes = new Array[Byte](typeLength)
+    byteBuffer.get(typeBytes)
+    val itemDataType = DataType.fromJson(new String(typeBytes, StandardCharsets.UTF_8))
     // read sketchBytes
-    val sketchBytes = new Array[Byte](buffer.length - Integer.BYTES - Integer.BYTES - ddlLength)
+    val sketchBytes = new Array[Byte](buffer.length - Integer.BYTES - Integer.BYTES - typeLength)
     byteBuffer.get(sketchBytes)
     val sketchWithNullCount = ApproxTopKAggregateBuffer.deserialize(
       sketchBytes, ApproxTopK.genSketchSerDe(itemDataType))
@@ -817,7 +880,8 @@ case class ApproxTopKCombine(
     val inputSketchBytes = inputState.getBinary(0)
     val inputMaxItemsTracked = inputState.getInt(1)
     val inputItemDataTypeDDL = inputState.getUTF8String(3).toString
-    val inputItemDataType = ApproxTopK.DDLToDataType(inputItemDataTypeDDL)
+    val inputItemDataType = ApproxTopK.withCollationOf(
+      ApproxTopK.DDLToDataType(inputItemDataTypeDDL), uncheckedItemDataType)
     // update maxItemsTracked (throw error if not match)
     buffer.updateMaxItemsTracked(combineSizeSpecified, inputMaxItemsTracked)
     // update itemDataType (throw error if not match)

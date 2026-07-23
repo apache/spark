@@ -25,11 +25,13 @@ import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector
 import org.apache.logging.log4j.Level
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.OrcFile
 import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
 import org.apache.orc.OrcProto.Stream.Kind
+import org.apache.orc.TypeDescription
 import org.apache.orc.impl.RecordReaderImpl
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
@@ -120,6 +122,7 @@ abstract class OrcSuite
           if (recordReader != null) {
             recordReader.close()
           }
+          reader.close()
         }
       }
     }
@@ -190,6 +193,7 @@ abstract class OrcSuite
           if (recordReader != null) {
             recordReader.close()
           }
+          reader.close()
         }
       }
     }
@@ -872,6 +876,30 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
             ArrayType(
               StructType(
                 StructField("456", StringType) :: Nil))))))
+    }
+  }
+
+  test("SPARK-57455: plain ORC timestamp stays TimestampType without Spark nanos metadata") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val outputFile = new Path(new File(dir, "part-00000.orc").getCanonicalPath)
+        val schema = TypeDescription.fromString("struct<ts:timestamp>")
+        val writerOptions = OrcFile
+          .writerOptions(spark.sessionState.newHadoopConf())
+          .setSchema(schema)
+        Utils.tryWithResource(OrcFile.createWriter(outputFile, writerOptions)) { writer =>
+          val batch = schema.createRowBatch()
+          val tsCol = batch.cols(0).asInstanceOf[TimestampColumnVector]
+          batch.size = 1
+          tsCol.time(0) = 0L
+          tsCol.nanos(0) = 123000000
+          writer.addRowBatch(batch)
+        }
+
+        val readBack = spark.read.orc(dir.getCanonicalPath)
+        assert(readBack.schema("ts").dataType === TimestampType)
+        assert(readBack.count() === 1)
+      }
     }
   }
 

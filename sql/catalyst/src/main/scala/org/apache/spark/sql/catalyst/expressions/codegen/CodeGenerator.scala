@@ -183,6 +183,41 @@ class CodegenContext extends Logging {
   var currentPartitionIndexVar: String = "partitionIndex"
 
   /**
+   * Holding a map of current lambda variables.
+   */
+  var currentLambdaVars: mutable.Map[Long, ExprCode] = mutable.HashMap.empty
+
+  def withLambdaVars(
+      namedLambdas: Seq[NamedLambdaVariable],
+      f: Seq[ExprCode] => ExprCode): ExprCode = {
+    val lambdaVars = namedLambdas.map { lambda =>
+      val id = lambda.exprId.id
+      if (currentLambdaVars.get(id).nonEmpty) {
+        throw QueryExecutionErrors.lambdaVariableAlreadyDefinedError(id)
+      }
+      val isNull = if (lambda.nullable) {
+        JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "lambdaIsNull"))
+      } else {
+        FalseLiteral
+      }
+      val value = addMutableState(javaType(lambda.dataType), "lambdaValue")
+      val lambdaVar = ExprCode(isNull, JavaCode.global(value, lambda.dataType))
+      currentLambdaVars.put(id, lambdaVar)
+      lambdaVar
+    }
+
+    val result = f(lambdaVars)
+    namedLambdas.map(_.exprId.id).foreach(currentLambdaVars.remove)
+    result
+  }
+
+  def getLambdaVar(id: Long): ExprCode = {
+    currentLambdaVars.getOrElse(
+      id,
+      throw QueryExecutionErrors.lambdaVariableNotDefinedError(id))
+  }
+
+  /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
    * 2-tuple: java type, variable name.
    * As an example, ("int", "count") will produce code:
@@ -669,7 +704,7 @@ class CodegenContext extends Logging {
     case CalendarIntervalType => s"$c1.compareTo($c2)"
     // TimestampNanosVal exposes only `compareTo`; the AtomicType fallback below emits
     // `$c1.compare($c2)`, which would not resolve as a Java method call.
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => s"$c1.compareTo($c2)"
+    case _: AnyTimestampNanoType => s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
@@ -1864,7 +1899,7 @@ object CodeGenerator extends Logging {
     } else {
       "update"
     }
-    if (isNull.isDefined && isPrimitiveType) {
+    if (isNull.isDefined) {
       s"""
          |if (${isNull.get}) {
          |  $array.setNullAt($i);
@@ -2022,7 +2057,7 @@ object CodeGenerator extends Logging {
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
     case IntegerType | DateType | _: YearMonthIntervalType => java.lang.Integer.TYPE
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
       java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE
@@ -2031,8 +2066,6 @@ object CodeGenerator extends Logging {
     case _: GeographyType | _: GeometryType => classOf[BinaryView]
     case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
-      classOf[org.apache.spark.unsafe.types.TimestampNanosVal]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayData]
     case _: MapType => classOf[MapData]

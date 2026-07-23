@@ -20,7 +20,7 @@ import java.util.concurrent.ThreadPoolExecutor
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog}
-import org.apache.spark.util.Clock
+import org.apache.spark.util.{Clock, ErrorNotifier}
 
 /**
  * A version of [[StreamingQueryCheckpointMetadata]] that supports async state checkpointing.

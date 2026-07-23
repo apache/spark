@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.expressions.xml.{StructsToXmlEvaluator, XmlExpressionEvalUtils, XmlToStructsEvaluator}
 import org.apache.spark.sql.catalyst.util.DropMalformedMode
@@ -109,7 +109,20 @@ case class XmlToStructs(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val expr = ctx.addReferenceObj("this", this)
-    defineCodeGen(ctx, ev, input => s"(InternalRow) $expr.nullSafeEval($input)")
+    // nullSafeEval returns an InternalRow for struct output and a VariantVal for variant output.
+    // The variant result can be null (e.g. a malformed record rescued under PERMISSIVE mode), so
+    // cast to the actual output type and null-check the result.
+    val resultType = CodeGenerator.javaType(dataType)
+    val result = ctx.freshName("xmlResult")
+    nullSafeCodeGen(ctx, ev, input =>
+      s"""
+         |$resultType $result = ($resultType) $expr.nullSafeEval($input);
+         |if ($result == null) {
+         |  ${ev.isNull} = true;
+         |} else {
+         |  ${ev.value} = $result;
+         |}
+       """.stripMargin)
   }
 
   override def inputTypes: Seq[AbstractDataType] =

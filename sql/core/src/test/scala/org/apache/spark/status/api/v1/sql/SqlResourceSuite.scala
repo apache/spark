@@ -25,6 +25,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode, SQLExecutionUIData, SQLPlanMetric}
+import org.apache.spark.status.api.v1.JacksonMessageWriter
 
 object SqlResourceSuite {
 
@@ -38,16 +39,21 @@ object SqlResourceSuite {
   val SIZE_OF_FILES_READ = "size of files read"
   val PLAN_DESCRIPTION = "== Physical Plan ==\nCollectLimit (3)\n+- * Filter (2)\n +- Scan text..."
   val DESCRIPTION = "csv at MyDataFrames.scala:57"
+  val WHOLE_STAGE_CODEGEN_1_DESC = "WholeStageCodegen (1)"
+  val FILTER_DESC = "Filter (isnotnull(value#1))"
+  val SCAN_TEXT_DESC = "Scan text [value#1]"
+  val MODIFIED_CONFIGS: Map[String, String] =
+    Map("spark.sql.shuffle.partitions" -> "200", "spark.sql.adaptive.enabled" -> "true")
 
   val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = Map(1L -> Some(1L))
 
-  val filterNode = new SparkPlanGraphNode(1, FILTER, "",
+  val filterNode = new SparkPlanGraphNode(1, FILTER, FILTER_DESC,
     metrics = Seq(SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 1, "")))
   val nodes: Seq[SparkPlanGraphNode] = Seq(
-    new SparkPlanGraphCluster(0, WHOLE_STAGE_CODEGEN_1, "",
+    new SparkPlanGraphCluster(0, WHOLE_STAGE_CODEGEN_1, WHOLE_STAGE_CODEGEN_1_DESC,
       nodes = ArrayBuffer(filterNode),
       metrics = Seq(SQLPlanMetric(DURATION, 0, ""))),
-    new SparkPlanGraphNode(2, SCAN_TEXT, "",
+    new SparkPlanGraphNode(2, SCAN_TEXT, SCAN_TEXT_DESC,
       metrics = Seq(
       SQLPlanMetric(METADATA_TIME, 2, ""),
       SQLPlanMetric(NUMBER_OF_FILES_READ, 3, ""),
@@ -85,7 +91,7 @@ object SqlResourceSuite {
       description = DESCRIPTION,
       details = "",
       physicalPlanDescription = PLAN_DESCRIPTION,
-      Map.empty,
+      MODIFIED_CONFIGS,
       metrics = metrics,
       submissionTime = 1586768888233L,
       completionTime = Some(new Date(1586768888999L)),
@@ -101,26 +107,31 @@ object SqlResourceSuite {
 
   private def getNodes(): Seq[Node] = {
     val node = Node(0, WHOLE_STAGE_CODEGEN_1,
-      wholeStageCodegenId = None, metrics = Seq(Metric(DURATION, "0 ms")))
+      wholeStageCodegenId = None, metrics = Seq(Metric(DURATION, "0 ms")),
+      desc = WHOLE_STAGE_CODEGEN_1_DESC)
     val node2 = Node(1, FILTER,
-      wholeStageCodegenId = Some(1), metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
+      wholeStageCodegenId = Some(1), metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")),
+      desc = FILTER_DESC)
     val node3 = Node(2, SCAN_TEXT, wholeStageCodegenId = None,
       metrics = Seq(Metric(METADATA_TIME, "2 ms"),
         Metric(NUMBER_OF_FILES_READ, "1"),
         Metric(NUMBER_OF_OUTPUT_ROWS, "1"),
-        Metric(SIZE_OF_FILES_READ, "330.0 B")))
+        Metric(SIZE_OF_FILES_READ, "330.0 B")),
+      desc = SCAN_TEXT_DESC)
 
     // reverse order because of supporting execution order by aligning with Spark-UI
     Seq(node3, node2, node)
   }
 
   private def getExpectedNodesWhenWholeStageCodegenIsOff(): Seq[Node] = {
-    val node = Node(1, FILTER, metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")))
+    val node = Node(1, FILTER, metrics = Seq(Metric(NUMBER_OF_OUTPUT_ROWS, "1")),
+      desc = FILTER_DESC)
     val node2 = Node(2, SCAN_TEXT,
       metrics = Seq(Metric(METADATA_TIME, "2 ms"),
         Metric(NUMBER_OF_FILES_READ, "1"),
         Metric(NUMBER_OF_OUTPUT_ROWS, "1"),
-        Metric(SIZE_OF_FILES_READ, "330.0 B")))
+        Metric(SIZE_OF_FILES_READ, "330.0 B")),
+      desc = SCAN_TEXT_DESC)
 
     // reverse order because of supporting execution order by aligning with Spark-UI
     Seq(node2, node)
@@ -145,6 +156,7 @@ object SqlResourceSuite {
     assert(executionData.queryId == "efe98ba7-1532-491e-9b4f-4be621cef37c")
     assert(executionData.errorMessage == null)
     assert(executionData.rootExecutionId == 1)
+    assert(executionData.modifiedConfigs == MODIFIED_CONFIGS)
   }
 
 }
@@ -246,5 +258,26 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
     assert(executionData.queryId == null)
     assert(executionData.errorMessage == null)
     assert(executionData.rootExecutionId == -1)
+  }
+
+  test("SPARK-57987: JSON serialization of default modifiedConfigs and node desc") {
+    val mapper = new JacksonMessageWriter().mapper
+    val nodeWithEmptyDesc = Node(0, SCAN_TEXT, metrics = Seq.empty)
+    val executionData = new ExecutionData(
+      id = 0,
+      status = "COMPLETED",
+      description = DESCRIPTION,
+      planDescription = "",
+      submissionTime = new Date(),
+      duration = 0,
+      runningJobIds = Seq.empty,
+      successJobIds = Seq.empty,
+      failedJobIds = Seq.empty,
+      nodes = Seq(nodeWithEmptyDesc),
+      edges = Seq.empty)
+    val executionJson = mapper.writeValueAsString(executionData).replaceAll("\\s", "")
+    assert(executionJson.contains("\"modifiedConfigs\":{}"))
+    assert(executionJson.contains(
+      "\"nodes\":[{\"nodeId\":0,\"nodeName\":\"Scantext\",\"metrics\":[]}]"))
   }
 }

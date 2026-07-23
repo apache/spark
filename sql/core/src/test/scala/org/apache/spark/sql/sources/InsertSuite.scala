@@ -997,9 +997,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  for ((label, insertClause) <- Seq(
-      ("REPLACE ON", "AS t REPLACE ON t.i = 1"),
-      ("REPLACE USING", "AS t REPLACE USING (i)"))) {
+  for ((label, insertClause, operation) <- Seq(
+      ("REPLACE WHERE", "REPLACE WHERE i = 1", "INSERT INTO ... REPLACE WHERE"),
+      ("REPLACE ON", "AS t REPLACE ON t.i = 1", "INSERT INTO ... REPLACE ON/USING"),
+      ("REPLACE USING", "AS t REPLACE USING (i)", "INSERT INTO ... REPLACE ON/USING"))) {
     test(s"INSERT INTO ... $label is unsupported for V1 tables") {
       withTable("test_table") {
         val schema = new StructType().add("i", "int").add("j", "string")
@@ -1027,7 +1028,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sqlState = "0A000",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`test_table`",
-            "operation" -> "INSERT INTO ... REPLACE ON/USING")
+            "operation" -> operation)
         )
       }
     }
@@ -2615,7 +2616,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("INSERT INTO TABLE insertTable PARTITION(part1=1, part2='') SELECT 1")
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> ("The spec ([part1=Some(1), part2=Some()]) " +
             "contains an empty partition column value"))
@@ -2624,7 +2625,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("INSERT INTO TABLE insertTable PARTITION(part1='', part2) SELECT 1 ,'' AS part2")
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> ("The spec ([part1=Some(), part2=None]) " +
             "contains an empty partition column value"))
@@ -3086,6 +3087,37 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           },
           condition = "UNSUPPORTED_OVERWRITE.PATH",
           parameters = Map("path" -> ("file:" + path)))
+      }
+    }
+  }
+
+  test("SPARK-56919: INSERT OVERWRITE should not lose table path when AQE fails") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true",
+      SQLConf.PLANNED_WRITE_ENABLED.key -> "false") {
+      withTempPath { path =>
+        val tablePath = path.getAbsolutePath
+        spark.range(10).toDF("id")
+          .write.mode("overwrite").parquet(tablePath)
+        assert(new java.io.File(tablePath).exists())
+
+        spark.udf.register("fail_udf", (i: Long) => {
+          throw new RuntimeException("SPARK-56919")
+          i
+        })
+
+        // The repartition forces a shuffle stage. With planned write disabled,
+        // materializeAdaptiveSparkPlan runs the stage, which fails via the UDF.
+        intercept[Exception] {
+          spark.sql(s"SELECT fail_udf(id) as id FROM parquet.`$tablePath`")
+            .repartition(2)
+            .write.mode("overwrite").parquet(tablePath)
+        }
+
+        // The table path must survive a failed overwrite.
+        assert(new java.io.File(tablePath).exists(),
+          "Table path should not be permanently lost after a failed INSERT OVERWRITE")
       }
     }
   }

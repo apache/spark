@@ -192,7 +192,8 @@ trait CreatableRelationProvider {
       case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
       case BinaryType | BooleanType | ByteType | _: CharType | DateType | _: DecimalType |
            DoubleType | FloatType | IntegerType | LongType | NullType | ObjectType(_) | ShortType |
-           _: StringType | TimestampNTZType | TimestampType | _: VarcharType => true
+           _: StringType | _: TimeType | TimestampNTZType | TimestampType |
+           _: VarcharType => true
       case _ => false
     }
   }

@@ -1545,3 +1545,5 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
 }
 
 private[client] class Shim_v4_1 extends Shim_v4_0
+
+private[client] class Shim_v4_2 extends Shim_v4_1

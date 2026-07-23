@@ -48,6 +48,13 @@ import org.apache.spark.unsafe.types.UTF8String
     _FUNC_(expr, lgConfigK) - Returns the HllSketch's updatable binary representation.
       `lgConfigK` (optional) the log-base-2 of K, with K is the number of buckets or
       slots for the HllSketch. """,
+  arguments = """
+    Arguments:
+      * expr - The expression to aggregate into the HLL sketch.
+        An expression that evaluates to an integer, long, string, or binary.
+      * lgConfigK - The log-base-2 of K, where K is the number of buckets for the sketch.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT hll_sketch_estimate(_FUNC_(col, 12)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
@@ -233,7 +240,7 @@ object HllSketchAgg {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, allowDifferentLgConfigK) - Returns the estimated number of unique values.
+    _FUNC_(expr, allowDifferentLgConfigK) - Returns the merged HllSketch's updatable binary representation.
       `allowDifferentLgConfigK` (optional) Allow sketches with different lgConfigK values
        to be unioned (defaults to false).""",
   examples = """

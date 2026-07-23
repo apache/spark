@@ -834,6 +834,7 @@ blockquote {
   line-height: 1.6;
   padding-left: 30px;
   min-height: 100vh;
+  overflow-x: auto;
 }
 
 .left-menu-wrapper {
@@ -850,6 +851,8 @@ blockquote {
   overflow-y: scroll;
   padding-right: 20px;
   font-size: 0.9em !important;
+  z-index: 2;
+  background-color: #FFF;
 }
 
 .left-menu h3 {

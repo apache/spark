@@ -60,6 +60,13 @@ import org.apache.spark.util.ArrayImplicits._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(sep[, str | array(str)]+) - Returns the concatenation of the strings separated by `sep`, skipping null values.",
+  arguments = """
+    Arguments:
+      * sep - The separator placed between the concatenated values.
+        An expression that evaluates to a string.
+      * str - The values to concatenate, skipping null values. There can be one or more of them.
+        Each is an expression that evaluates to a string or an array of strings.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(' ', 'Spark', 'SQL');
@@ -452,6 +459,11 @@ trait String2StringExpression extends ImplicitCastInputTypes {
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns `str` with all characters changed to uppercase.",
+  arguments = """
+    Arguments:
+      * str - The string to convert to uppercase.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('SparkSql');
@@ -485,6 +497,11 @@ case class Upper(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns `str` with all characters changed to lowercase.",
+  arguments = """
+    Arguments:
+      * str - The string to convert to lowercase.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('SparkSql');
@@ -593,6 +610,13 @@ case class BinaryPredicate(override val prettyName: String, left: Expression, ri
     Returns NULL if either input expression is NULL. Otherwise, returns False.
     Both left or right must be of STRING or BINARY type.
   """,
+  arguments = """
+    Arguments:
+      * left - The expression to search within.
+        An expression that evaluates to a string or binary.
+      * right - The expression to search for inside the left expression.
+        An expression that evaluates to a string or binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 'Spark');
@@ -634,6 +658,13 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
     _FUNC_(left, right) - Returns a boolean. The value is True if left starts with right.
     Returns NULL if either input expression is NULL. Otherwise, returns False.
     Both left or right must be of STRING or BINARY type.
+  """,
+  arguments = """
+    Arguments:
+      * left - The string to test.
+        An expression that evaluates to a string or binary.
+      * right - The prefix to check for at the start of the string.
+        An expression that evaluates to a string or binary.
   """,
   examples = """
     Examples:
@@ -683,6 +714,13 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
     _FUNC_(left, right) - Returns a boolean. The value is True if left ends with right.
     Returns NULL if either input expression is NULL. Otherwise, returns False.
     Both left or right must be of STRING or BINARY type.
+  """,
+  arguments = """
+    Arguments:
+      * left - The expression to test.
+        An expression that evaluates to a string or binary.
+      * right - The suffix expression to check the left expression ends with.
+        An expression that evaluates to a string or binary.
   """,
   examples = """
     Examples:
@@ -735,6 +773,7 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -783,6 +822,7 @@ case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with Implic
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -829,6 +869,7 @@ case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with Impl
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -877,6 +918,7 @@ case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with Impli
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -928,9 +970,12 @@ case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with Im
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
       * search - a string expression. If `search` is not found in `str`, `str` is returned unchanged.
+        An expression that evaluates to a string.
       * replace - a string expression. If `replace` is not specified or is an empty string, nothing replaces
           the string that is removed from `str`.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1013,6 +1058,17 @@ object Overlay {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(input, replace, pos[, len]) - Replace `input` with `replace` that starts at `pos` and is of length `len`.",
+  arguments = """
+    Arguments:
+      * input - The string to have part of its content replaced.
+        An expression that evaluates to a string or binary.
+      * replace - The replacement content to insert.
+        An expression that evaluates to a string or binary.
+      * pos - The 1-based start position of the replacement.
+        An expression that evaluates to an integer.
+      * len - The number of characters to replace.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL' PLACING '_' FROM 6);
@@ -1129,8 +1185,10 @@ object StringTranslate {
    * Build a translation dictionary from Strings. This method assumes that the input strings are
    * already valid. The result dictionary maps each character in `matching` to the corresponding
    * character in `replace`. If `replace` is shorter than `matching`, the extra characters in
-   * `matching` will be mapped to null terminator, which causes characters to get deleted during
-   * translation. If `replace` is longer than `matching`, the extra characters will be ignored.
+   * `matching` will be mapped to the empty string, which causes those characters to get deleted
+   * during translation. If `replace` is longer than `matching`, the extra characters will be
+   * ignored. Note that the empty string is used as the deletion marker so that a literal `U+0000`
+   * in `replace` is preserved as a one-character replacement rather than triggering deletion.
    */
   private def buildDict(matching: String, replace: String): JMap[String, String] = {
     val dict = new HashMap[String, String]()
@@ -1144,12 +1202,12 @@ object StringTranslate {
         j += repCharCount
         repStr
       } else {
-        "\u0000"
+        "" // deletion marker
       }
 
       val matchCharCount = Character.charCount(matching.codePointAt(i))
       val matchStr = matching.substring(i, i + matchCharCount)
-      if (null == dict.get(matchStr)) {
+      if (!dict.containsKey(matchStr)) {
         dict.put(matchStr, rep)
       }
       i += matchCharCount
@@ -1167,6 +1225,15 @@ object StringTranslate {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(input, from, to) - Translates the `input` string by replacing the characters present in the `from` string with the corresponding characters in the `to` string.",
+  arguments = """
+    Arguments:
+      * input - The string to translate.
+        An expression that evaluates to a string.
+      * from - The characters to be replaced.
+        An expression that evaluates to a string.
+      * to - The corresponding replacement characters.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('AaBbCc', 'abc', '123');
@@ -1247,6 +1314,13 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     _FUNC_(str, str_array) - Returns the index (1-based) of the given string (`str`) in the comma-delimited list (`str_array`).
       Returns 0, if the string was not found or if the given string (`str`) contains a comma.
   """,
+  arguments = """
+    Arguments:
+      * str - The string to search for.
+        An expression that evaluates to a string.
+      * str_array - The comma-delimited list to search within.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('ab','abc,b,ab,c,def');
@@ -1288,7 +1362,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 
 trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
-  protected def srcStr: Expression
+  private[sql] def srcStr: Expression
   protected def trimStr: Option[Expression]
   protected def direction: String
 
@@ -1413,7 +1487,9 @@ object StringTrim {
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
       * trimStr - the trim string characters to trim, the default value is a single space
+        An expression that evaluates to a string.
       * BOTH, FROM - these are keywords to specify trimming string characters from both ends of
           the string
       * LEADING, FROM - these are keywords to specify trimming string characters from the left
@@ -1487,7 +1563,9 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
       * trimStr - the trim string characters to trim, the default value is a single space
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1546,7 +1624,9 @@ object StringTrimLeft {
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
       * trimStr - the trim string characters to trim, the default value is a single space
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1611,7 +1691,9 @@ object StringTrimRight {
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
       * trimStr - the trim string characters to trim, the default value is a single space
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1651,6 +1733,57 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
       trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str, substr[, start[, occurrence]]) - Returns the (1-based) index of the specified
+      occurrence of `substr` in `str`, starting the search from position `start`.
+      If `start` is positive, the search proceeds forward;
+      if `start` is negative, the search proceeds backward.
+      `start` = 0 returns 0.
+      If `start` is not specified, it defaults to 1.
+      `occurrence` must be a positive integer and defaults to 1.
+  """,
+  arguments = """
+    Arguments:
+      * str - The string to search within.
+        An expression that evaluates to a string.
+      * substr - The substring to search for.
+        An expression that evaluates to a string.
+      * start - The 1-based position from which to start the search.
+        An expression that evaluates to an integer.
+      * occurrence - Which occurrence of the substring to find.
+        An expression that evaluates to an integer.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('SparkSQL', 'SQL');
+       6
+      > SELECT _FUNC_('abcabc', 'b', 1);
+       2
+      > SELECT _FUNC_('abcabc', 'b', 1, 2);
+       5
+      > SELECT _FUNC_('abcabc', 'b', -1, 1);
+       5
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+object StringInstrExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val size = expressions.size
+    if (size == 2) {
+      StringInstr(expressions.head, expressions(1))
+    } else if (size == 3) {
+      StringInstrWithOccurrence(expressions.head, expressions(1), expressions(2), Literal(1))
+    } else if (size == 4) {
+      StringInstrWithOccurrence(expressions.head, expressions(1), expressions(2), expressions(3))
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3, 4), size)
+    }
+  }
+}
+
 /**
  * A function that returns the position of the first occurrence of substr in the given string.
  * Returns null if either of the arguments are null and
@@ -1658,17 +1791,6 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of `substr` in `str`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('SparkSQL', 'SQL');
-       6
-  """,
-  since = "1.5.0",
-  group = "string_funcs")
-// scalastyle:on line.size.limit
 case class StringInstr(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
@@ -1702,6 +1824,70 @@ case class StringInstr(str: Expression, substr: Expression)
 }
 
 /**
+ * A function that returns the position of the specified occurrence of `substr` in the given
+ * string, starting the search from position `start`. If `start` is positive, the search proceeds
+ * forward; if `start` is negative, the search proceeds backward. `start` = 0 returns 0. If
+ * `start` is not specified, it defaults to 1. If `occurrence` is specified, it determines which
+ * occurrence of `substr` to return; `occurrence` must be a positive integer and defaults to 1.
+ *
+ * Returns null if either of the arguments are null and
+ * returns 0 if substr could not be found in str.
+ *
+ * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
+ */
+case class StringInstrWithOccurrence(
+    str: Expression,
+    sub: Expression,
+    start: Expression,
+    occurrence: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
+  override def first: Expression = str
+  override def second: Expression = sub
+  override def third: Expression = start
+  override def fourth: Expression = occurrence
+  override def dataType: DataType = IntegerType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      IntegerType,
+      IntegerType
+    )
+
+  override def nullSafeEval(string: Any, sub: Any, start: Any, occurrence: Any): Any = {
+    val occ = occurrence.asInstanceOf[Int]
+    if (occ <= 0) {
+      throw QueryExecutionErrors.invalidOccurrenceError(prettyName, occ)
+    }
+    CollationSupport.StringInstrWithOccurrence.exec(string.asInstanceOf[UTF8String],
+      sub.asInstanceOf[UTF8String], start.asInstanceOf[Int], occ, collationId) + 1
+  }
+
+  override def prettyName: String = "instr"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (string, substring, start, occurrence) => {
+      val eval = CollationSupport.StringInstrWithOccurrence
+        .genCode(string, substring, start, occurrence, collationId) + " + 1"
+      s"""
+        if ($occurrence <= 0) {
+          throw QueryExecutionErrors.invalidOccurrenceError("$prettyName", $occurrence);
+        } else {
+          ${ev.value} = $eval;
+        }
+      """
+    })
+  }
+
+  override protected def withNewChildrenInternal(first: Expression, second: Expression,
+      third: Expression, fourth: Expression): StringInstrWithOccurrence =
+    copy(str = first, sub = second, start = third, occurrence = fourth)
+}
+
+/**
  * Returns the substring from string str before count occurrences of the delimiter delim.
  * If count is positive, everything the left of the final delimiter (counting from left) is
  * returned. If count is negative, every to the right of the final delimiter (counting from the
@@ -1715,6 +1901,15 @@ case class StringInstr(str: Expression, substr: Expression)
       left) is returned. If `count` is negative, everything to the right of the final delimiter
       (counting from the right) is returned. The function substring_index performs a case-sensitive match
       when searching for `delim`.
+  """,
+  arguments = """
+    Arguments:
+      * str - The string to take the substring from.
+        An expression that evaluates to a string.
+      * delim - The delimiter to count occurrences of.
+        An expression that evaluates to a string.
+      * count - The number of delimiter occurrences that bound the returned substring.
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:
@@ -1766,6 +1961,15 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   usage = """
     _FUNC_(substr, str[, pos]) - Returns the position of the first occurrence of `substr` in `str` after position `pos`.
       The given `pos` and return value are 1-based.
+  """,
+  arguments = """
+    Arguments:
+      * substr - The substring to search for.
+        An expression that evaluates to a string.
+      * str - The string to search within.
+        An expression that evaluates to a string.
+      * pos - The 1-based position from which to start the search.
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:
@@ -1895,6 +2099,15 @@ trait PadExpressionBuilderBase extends ExpressionBuilder {
       If `pad` is not specified, `str` will be padded to the left with space characters if it is
       a character string, and with zeros if it is a byte sequence.
   """,
+  arguments = """
+    Arguments:
+      * str - The string to be left-padded.
+        An expression that evaluates to a string or binary.
+      * len - The target length of the resulting string.
+        An expression that evaluates to an integer.
+      * pad - The string to pad with on the left.
+        An expression that evaluates to a string or binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('hi', 5, '??');
@@ -1980,6 +2193,15 @@ case class BinaryPad(funcName: String, str: Expression, len: Expression, pad: Ex
       If `pad` is not specified, `str` will be padded to the right with space characters if it is
       a character string, and with zeros if it is a binary string.
   """,
+  arguments = """
+    Arguments:
+      * str - The string to right-pad.
+        An expression that evaluates to a string or binary.
+      * len - The length to pad the string to.
+        An expression that evaluates to an integer.
+      * pad - The string used to pad on the right.
+        An expression that evaluates to a string or binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('hi', 5, '??');
@@ -2042,6 +2264,13 @@ case class StringRPad(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(strfmt, obj, ...) - Returns a formatted string from printf-style format strings.",
+  arguments = """
+    Arguments:
+      * strfmt - The printf-style format string.
+        An expression that evaluates to a string.
+      * obj - The value to be formatted into the string.
+        An expression of any type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_("Hello World %d %s", 100, "days");
@@ -2160,6 +2389,11 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     _FUNC_(str) - Returns `str` with the first letter of each word in uppercase.
       All other letters are in lowercase. Words are delimited by white space.
   """,
+  arguments = """
+    Arguments:
+      * str - The string to capitalize the first letter of each word in.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('sPark sql');
@@ -2195,6 +2429,13 @@ case class InitCap(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, n) - Returns the string which repeats the given string value n times.",
+  arguments = """
+    Arguments:
+      * str - The string to repeat.
+        An expression that evaluates to a string.
+      * n - The number of times to repeat the string.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('123', 2);
@@ -2235,6 +2476,11 @@ case class StringRepeat(str: Expression, times: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(n) - Returns a string consisting of `n` spaces.",
+  arguments = """
+    Arguments:
+      * n - The number of spaces to produce.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT concat(_FUNC_(2), '1');
@@ -2276,6 +2522,15 @@ case class StringSpace(child: Expression)
     _FUNC_(str, pos[, len]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.
 
     _FUNC_(str FROM pos[ FOR len]]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.
+  """,
+  arguments = """
+    Arguments:
+      * str - The string or byte array to take the substring from.
+        An expression that evaluates to a string or binary.
+      * pos - The 1-based starting position of the substring.
+        An expression that evaluates to an integer.
+      * len - The length of the substring to return.
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:
@@ -2351,6 +2606,13 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str, len) - Returns the rightmost `len`(`len` can be string type) characters from the string `str`,if `len` is less or equal than 0 the result is an empty string.",
+  arguments = """
+    Arguments:
+      * str - The string to take the rightmost characters from.
+        An expression that evaluates to a string.
+      * len - The number of characters to take from the right.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
@@ -2391,6 +2653,13 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str, len) - Returns the leftmost `len`(`len` can be string type) characters from the string `str`,if `len` is less or equal than 0 the result is an empty string.",
+  arguments = """
+    Arguments:
+      * str - The string to take the leftmost characters from.
+        An expression that evaluates to a string or binary.
+      * len - The number of characters to take from the left.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
@@ -2430,6 +2699,11 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the character length of string data or number of bytes of binary data. The length of string data includes the trailing spaces. The length of binary data includes binary zeros.",
+  arguments = """
+    Arguments:
+      * expr - The string or binary value to measure the length of.
+        An expression that evaluates to a string or binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL ');
@@ -2477,6 +2751,11 @@ case class Length(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the bit length of string data or number of bits of binary data.",
+  arguments = """
+    Arguments:
+      * expr - The string or binary value to measure the bit length of.
+        An expression that evaluates to a string or binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
@@ -2522,6 +2801,11 @@ case class BitLength(child: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the byte length of string data or number of bytes of binary " +
     "data.",
+  arguments = """
+    Arguments:
+      * expr - The string or binary value to measure the byte length of.
+        An expression that evaluates to a string or binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
@@ -2569,6 +2853,15 @@ case class OctetLength(child: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(str1, str2[, threshold]) - Returns the Levenshtein distance between the two given strings. If threshold is set and distance more than it, return -1.""",
+  arguments = """
+    Arguments:
+      * str1 - The first string to compare.
+        An expression that evaluates to a string.
+      * str2 - The second string to compare.
+        An expression that evaluates to a string.
+      * threshold - The maximum distance to compute; if exceeded, -1 is returned.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('kitten', 'sitting');
@@ -2721,11 +3014,59 @@ case class Levenshtein(
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str1, str2) - Returns the Jaro-Winkler similarity between the two given strings. The result is a double between 0 and 1, where 1 means identical.",
+  arguments = """
+    Arguments:
+      * str1 - The first string to compare.
+        An expression that evaluates to a string.
+      * str2 - The second string to compare.
+        An expression that evaluates to a string.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('MARTHA', 'MARHTA');
+       0.9611111111111111
+      > SELECT _FUNC_('kitten', 'sitting');
+       0.746031746031746
+      > SELECT _FUNC_('ABC', 'XYZ');
+       0.0
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class JaroWinkler(left: Expression, right: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    DoubleType,
+    "jaroWinklerSimilarity",
+    Seq(left, right),
+    inputTypes)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    StringTypeWithCollation(supportsTrimCollation = true),
+    StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def prettyName: String = "jaro_winkler_similarity"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
+    copy(left = newLeft, right = newRight)
+}
+
 /**
  * A function that return Soundex code of the given string expression.
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns Soundex code of the string.",
+  arguments = """
+    Arguments:
+      * str - The string to compute the Soundex code of.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Miller');
@@ -2757,6 +3098,11 @@ case class SoundEx(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns the numeric value of the first character of `str`.",
+  arguments = """
+    Arguments:
+      * str - The string whose first character's numeric value is returned.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('222');
@@ -2790,6 +3136,11 @@ case class Ascii(child: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the ASCII character having the binary equivalent to `expr`. If n is larger than 256 the result is equivalent to chr(n % 256)",
+  arguments = """
+    Arguments:
+      * expr - The number to convert to its ASCII character.
+        An expression that evaluates to a long.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(65);
@@ -2823,6 +3174,11 @@ case class Chr(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(bin) - Converts the argument from a binary `bin` to a base 64 string.",
+  arguments = """
+    Arguments:
+      * bin - The binary value to encode as a base 64 string.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
@@ -2878,6 +3234,11 @@ object Base64 {
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Converts the argument from a base 64 string `str` to a binary.",
+  arguments = """
+    Arguments:
+      * str - The base 64 string to decode to binary.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('U3BhcmsgU1FM');
@@ -3027,7 +3388,9 @@ object Decode {
   arguments = """
     Arguments:
       * bin - a binary expression to decode
+        An expression that evaluates to a binary.
       * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32' to decode `bin` into a STRING. It is case insensitive.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -3123,7 +3486,9 @@ object StringDecode {
   arguments = """
     Arguments:
       * str - a string expression
+        An expression that evaluates to a string.
       * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32' to encode `str` into a BINARY. It is case insensitive.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -3202,6 +3567,13 @@ object Encode {
       `fmt` can be a case-insensitive string literal of "hex", "utf-8", "utf8", or "base64".
       By default, the binary format for conversion is "hex" if `fmt` is omitted.
       The function returns NULL if at least one of the input parameters is NULL.
+  """,
+  arguments = """
+    Arguments:
+      * str - The string to convert to a binary value.
+        An expression that evaluates to a string.
+      * fmt - The format describing how to interpret the string (e.g. "hex", "utf-8", "base64").
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:
@@ -3315,6 +3687,13 @@ case class ToBinary(
       decimal places. If `expr2` is 0, the result has no decimal point or fractional part.
       `expr2` also accept a user specified format.
       This is supposed to function like MySQL's FORMAT.
+  """,
+  arguments = """
+    Arguments:
+      * expr1 - The number to format.
+        An expression that evaluates to a numeric.
+      * expr2 - The number of decimal places to round to, or a format string.
+        An expression that evaluates to an integer or string.
   """,
   examples = """
     Examples:
@@ -3482,10 +3861,13 @@ case class FormatNumber(x: Expression, d: Expression)
   arguments = """
     Arguments:
       * str - A STRING expression to be parsed.
+        An expression that evaluates to a string.
       * lang - An optional STRING expression with a language code from ISO 639 Alpha-2 (e.g. 'DE'),
           Alpha-3, or a language subtag of up to 8 characters.
+        An expression that evaluates to a string.
       * country - An optional STRING expression with a country code from ISO 3166 alpha-2 country
           code or a UN M.49 numeric-3 area code.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -3588,6 +3970,15 @@ case class StringSplitSQL(
       throws an error. If `partNum` is negative, the parts are counted backward from the
       end of the string. If the `delimiter` is an empty string, the `str` is not split.
   """,
+  arguments = """
+    Arguments:
+      * str - The string to split.
+        An expression that evaluates to a string.
+      * delimiter - The string used to split the input into parts.
+        An expression that evaluates to a string.
+      * partNum - The 1-based index of the split part to return.
+        An expression that evaluates to an integer.
+  """,
   examples =
     """
     Examples:
@@ -3652,6 +4043,11 @@ case class Empty2Null(child: Expression) extends UnaryExpression with String2Str
     This checksum function is widely applied on credit card numbers and government identification
     numbers to distinguish valid numbers from mistyped, incorrect numbers.
   """,
+  arguments = """
+    Arguments:
+      * str - The string of digits to validate against the Luhn algorithm.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('8112189876');
@@ -3689,6 +4085,11 @@ case class Luhncheck(input: Expression) extends RuntimeReplaceable with Implicit
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns `str` enclosed by single quotes and each instance of single quote in it is preceded by a backslash.",
+  arguments = """
+    Arguments:
+      * str - The string to enclose in single quotes and escape.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Don\'t');

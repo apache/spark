@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit;
 import scala.concurrent.duration.Duration;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.execution.streaming.AvailableNowTrigger$;
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
@@ -183,7 +182,6 @@ public class Trigger {
    * A trigger for real time mode, with batch at the specified duration.
    *
    */
-  @Experimental
   public static Trigger RealTime(long batchDurationMs) {
     return RealTimeTrigger.apply(batchDurationMs);
   }
@@ -192,7 +190,6 @@ public class Trigger {
    * A trigger for real time mode, with batch at the specified duration.
    *
    */
-  @Experimental
   public static Trigger RealTime(long batchDuration, TimeUnit timeUnit) {
     return RealTimeTrigger.create(batchDuration, timeUnit);
   }
@@ -205,7 +202,6 @@ public class Trigger {
    *    df.writeStream.trigger(Trigger.RealTime(10.seconds))
    * }}}
    */
-  @Experimental
   public static Trigger RealTime(Duration batchDuration) {
     return RealTimeTrigger.apply(batchDuration);
   }
@@ -217,7 +213,6 @@ public class Trigger {
    *    df.writeStream.trigger(Trigger.RealTime("10 seconds"))
    * }}}
    */
-  @Experimental
   public static Trigger RealTime(String batchDuration) {
     return RealTimeTrigger.apply(batchDuration);
   }
@@ -226,7 +221,6 @@ public class Trigger {
    * A trigger for real time mode, with batch at the specified duration. The default duration is 5
    * minutes.
    */
-  @Experimental
   public static Trigger RealTime() {
     return RealTimeTrigger.apply();
   }

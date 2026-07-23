@@ -151,15 +151,6 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
     // Make sure the table was not dropped and recreated.
     ref.info.tableId.foreach(V2TableUtil.validateTableId(ref.name, _, table))
 
-    // Detect columns that were dropped and re-added with the same name but a different
-    // column ID. This catches replacements that preserve the schema but change identity.
-    val colIdErrors = V2TableUtil.validateColumnIds(
-      table = table,
-      originalCapturedCols = ref.info.columns)
-    if (colIdErrors.nonEmpty) {
-      throw QueryCompilationErrors.columnIdMismatchAfterAnalysis(ref.name, colIdErrors)
-    }
-
     // Do not allow schema evolution to pre-analysed dataframes that are later used in
     // transactional writes. This is because the entire plans was built based on the original schema
     // and any schema change would make the plan structurally invalid. This is inline with the
@@ -167,12 +158,17 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
     val dataErrors = V2TableUtil.validateCapturedColumns(
       table = table,
       originCols = ref.info.columns,
-      mode = PROHIBIT_CHANGES)
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     if (dataErrors.nonEmpty) {
-      throw QueryCompilationErrors.columnsMissingOrAddedAfterAnalysis(ref.name, dataErrors)
+      throw QueryCompilationErrors.columnsChangedAfterAnalysis(ref.name, dataErrors)
     }
 
-    val metaErrors = V2TableUtil.validateCapturedMetadataColumns(table, ref.info.metadataColumns)
+    val metaErrors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      ref.info.metadataColumns,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     if (metaErrors.nonEmpty) {
       throw QueryCompilationErrors.metadataColumnsChangedAfterAnalysis(ref.name, metaErrors)
     }
@@ -187,7 +183,8 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
     val dataErrors = V2TableUtil.validateCapturedColumns(
       table,
       ref.info.columns,
-      mode = ALLOW_NEW_TOP_LEVEL_FIELDS)
+      mode = ALLOW_NEW_TOP_LEVEL_FIELDS,
+      checkIds = false)
     if (dataErrors.nonEmpty) {
       throw QueryCompilationErrors.columnsChangedAfterViewWithPlanCreation(
         ctx.viewName,
@@ -195,7 +192,11 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
         dataErrors)
     }
 
-    val metaErrors = V2TableUtil.validateCapturedMetadataColumns(table, ref.info.metadataColumns)
+    val metaErrors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      ref.info.metadataColumns,
+      mode = PROHIBIT_CHANGES, // metadata columns are projected on demand
+      checkIds = false)
     if (metaErrors.nonEmpty) {
       throw QueryCompilationErrors.metadataColumnsChangedAfterViewWithPlanCreation(
         ctx.viewName,

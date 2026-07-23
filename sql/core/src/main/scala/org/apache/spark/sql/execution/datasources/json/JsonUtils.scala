@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.SparkException
-import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -42,9 +41,11 @@ object JsonUtils {
   }
 
   /**
-   * Sample JSON RDD as configured by `samplingRatio`.
+   * Sample a JSON record RDD as configured by `samplingRatio`. Generic over the record type so the
+   * multiLine path (`RDD[PortableDataStream]`) and the archive inference paths (`RDD[InputStream]`
+   * for multi-line, `RDD[Array[Byte]]` for line-delimited) share one sampler.
    */
-  def sample(json: RDD[PortableDataStream], options: JSONOptions): RDD[PortableDataStream] = {
+  def sample[T](json: RDD[T], options: JSONOptions): RDD[T] = {
     require(options.samplingRatio > 0,
       s"samplingRatio (${options.samplingRatio}) should be greater than 0")
     if (options.samplingRatio > 0.99) {

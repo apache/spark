@@ -589,6 +589,15 @@ private[sql] object CatalogManager extends Logging {
       parts(1).equalsIgnoreCase(BUILTIN_NAMESPACE)
 
   /**
+   * True when `system.builtin` is the first entry of `pathEntries`. This is the path-shape
+   * condition under which a built-in function found by an unqualified single-part name cannot be
+   * shadowed by any earlier path entry -- the precise property the function-resolution built-in
+   * fast-path relies on. Pure predicate over the path shape; callers decide how to use it.
+   */
+  def isBuiltinFirstOnPath(pathEntries: Seq[Seq[String]]): Boolean =
+    pathEntries.headOption.exists(isSystemBuiltinPathEntry)
+
+  /**
    * Extract `system.builtin` / `system.session` entries from a resolved PATH, mapped to
    * [[SessionCatalog.SessionFunctionKind]] in path order. Pure data conversion -- callers
    * decide whether and how to use this list.

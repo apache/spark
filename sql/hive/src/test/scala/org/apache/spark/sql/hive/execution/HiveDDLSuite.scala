@@ -610,7 +610,7 @@ class HiveDDLSuite
       exception = intercept[AnalysisException] {
         sql(sql1)
       },
-      condition = "_LEGACY_ERROR_TEMP_1076",
+      condition = "INVALID_PARTITION_SPEC",
       parameters = Map(
         "details" -> "The spec ([partCol1=]) contains an empty partition column value")
     )

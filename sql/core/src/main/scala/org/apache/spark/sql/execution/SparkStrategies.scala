@@ -206,8 +206,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     private def checkHintNonEquiJoin(hint: JoinHint): Unit = {
-      if (hintToShuffleHashJoin(hint) || hintToPreferShuffleHashJoin(hint) ||
-          hintToSortMergeJoin(hint)) {
+      if (hintToShuffleHashJoin(hint) || hintToSortMergeJoin(hint)) {
         assert(hint.leftHint.orElse(hint.rightHint).isDefined)
         hintErrorHandler.joinHintNotSupported(hint.leftHint.orElse(hint.rightHint).get,
           "no equi-join keys")
@@ -425,6 +424,114 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  /**
+   * Plans AS-OF joins using a dedicated sort-merge operator when enabled for the
+   * DataFrame API, or implicitly for SQL ASOF JOIN (`requiresSortMergeAsOfJoin`).
+   */
+  object AsOfJoinSelection extends Strategy with PredicateHelper {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case j: AsOfJoin if conf.useSortMergeAsOfJoinOperator(j.requiresSortMergeAsOfJoin) =>
+        val (leftKeys, rightKeys, residual) = j.condition match {
+          case Some(cond) => extractEquiJoinKeys(cond, j.left, j.right)
+          case None => (Seq.empty[Expression], Seq.empty[Expression], None)
+        }
+        val (leftSort, rightSort) =
+          if (j.leftSortExprs.nonEmpty && j.rightSortExprs.nonEmpty) {
+            (j.leftSortExprs, j.rightSortExprs)
+          } else {
+            val (leftAsOf, rightAsOf) = extractAsOfExprs(j.orderExpression, j.left, j.right)
+            (Seq(leftAsOf), Seq(rightAsOf))
+          }
+
+        joins.SortMergeAsOfJoinExec(
+          leftKeys, rightKeys, leftSort, rightSort,
+          j.asOfCondition, j.orderExpression, j.joinType, residual,
+          planLater(j.left), planLater(j.right)) :: Nil
+      case _ => Nil
+    }
+
+    /**
+     * Extract equi-join key pairs and residual (non-equi) condition
+     * from a conjunction. Only EqualTo is treated as equi-key;
+     * EqualNullSafe is excluded because the scanner implements EqualTo
+     * null semantics (left rows with any null equi-key never match and
+     * are skipped or null-padded), whereas EqualNullSafe requires null
+     * keys to match. Such predicates fall through to the residual
+     * condition, which evaluates them per candidate pair.
+     */
+    private def extractEquiJoinKeys(
+        condition: Expression,
+        left: LogicalPlan,
+        right: LogicalPlan): (Seq[Expression], Seq[Expression], Option[Expression]) = {
+      val leftKeys =
+        new scala.collection.mutable.ArrayBuffer[Expression]()
+      val rightKeys =
+        new scala.collection.mutable.ArrayBuffer[Expression]()
+      val residuals =
+        new scala.collection.mutable.ArrayBuffer[Expression]()
+
+      splitConjunctivePredicates(condition).foreach {
+        case EqualTo(l, r)
+            if l.references.subsetOf(left.outputSet) &&
+              r.references.subsetOf(right.outputSet) =>
+          leftKeys += l; rightKeys += r
+        case EqualTo(l, r)
+            if r.references.subsetOf(left.outputSet) &&
+              l.references.subsetOf(right.outputSet) =>
+          leftKeys += r; rightKeys += l
+        case other =>
+          residuals += other
+      }
+      val residual = residuals.reduceOption(And)
+      (leftKeys.toSeq, rightKeys.toSeq, residual)
+    }
+
+    /**
+     * Extract the left and right as-of key expressions.
+     *
+     * We always extract from orderExpression rather than asOfCondition
+     * because orderExpression is direction-unique by construction
+     * (Subtract(left, right) for Backward, Subtract(right, left) for
+     * Forward, If(...) for Nearest) and is unaffected by tolerance or
+     * allowExactMatches variations that complicate asOfCondition's shape.
+     */
+    private def extractAsOfExprs(
+        orderExpression: Expression,
+        left: LogicalPlan,
+        right: LogicalPlan): (Expression, Expression) = {
+      val leftAttrs = left.outputSet
+      val rightAttrs = right.outputSet
+
+      findFromOrder(orderExpression, leftAttrs, rightAttrs).getOrElse {
+        throw new IllegalStateException(
+          "Cannot extract as-of keys from order expression: " +
+          s"$orderExpression")
+      }
+    }
+
+    /** Extract as-of key pair from orderExpression (distance metric). */
+    private def findFromOrder(
+        expr: Expression,
+        leftAttrs: AttributeSet,
+        rightAttrs: AttributeSet): Option[(Expression, Expression)] = {
+      expr match {
+        // Backward: Subtract(leftAsOf, rightAsOf)
+        // Forward: Subtract(rightAsOf, leftAsOf)
+        case Subtract(l, r, _)
+            if l.references.subsetOf(leftAttrs) &&
+              r.references.subsetOf(rightAttrs) =>
+          Some((l, r))
+        case Subtract(l, r, _)
+            if l.references.subsetOf(rightAttrs) &&
+              r.references.subsetOf(leftAttrs) =>
+          Some((r, l))
+        // Nearest: If(GT(left, right), Sub(left, right), Sub(right, left))
+        case If(_, thenExpr, _) => findFromOrder(thenExpr, leftAttrs, rightAttrs)
+        case _ => None
+      }
+    }
+  }
+
   object EventTimeWatermarkStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
@@ -511,10 +618,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object StreamingDeduplicationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case Deduplicate(keys, child) if child.isStreaming =>
+      case Deduplicate(keys, child, _) if child.isStreaming =>
         StreamingDeduplicateExec(keys, planLater(child)) :: Nil
 
-      case DeduplicateWithinWatermark(keys, child) if child.isStreaming =>
+      case DeduplicateWithinWatermark(keys, child, _) if child.isStreaming =>
         StreamingDeduplicateWithinWatermarkExec(keys, planLater(child)) :: Nil
 
       case _ => Nil
@@ -896,7 +1003,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case cmv: CreateMaterializedViewAsSelect =>
         throw QueryCompilationErrors.unsupportedCreatePipelineDatasetQueryExecutionError(
             pipelineDatasetType = "MATERIALIZED VIEW")
-      case cst: CreateStreamingTableAsSelect =>
+      case _: CreateStreamingTableAsSelect | _: CreateStreamingTable |
+          _: CreateStreamingTableAutoCdc =>
         throw QueryCompilationErrors.unsupportedCreatePipelineDatasetQueryExecutionError(
             pipelineDatasetType = "STREAMING TABLE")
       case _ => Nil
@@ -933,11 +1041,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.ResolvedHint(child, hints) =>
         throw SparkException.internalError(
           "ResolvedHint operator should have been replaced by join hint in the optimizer")
-      case Deduplicate(_, child) if !child.isStreaming =>
+      case Deduplicate(_, child, _) if !child.isStreaming =>
         throw SparkException.internalError(
           "Deduplicate operator for non streaming data source should have been replaced " +
             "by aggregate in the optimizer")
-
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil
       case logical.SerializeFromObject(serializer, child) =>
@@ -973,10 +1080,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.MapInArrow(func, output, child, isBarrier, profile) =>
         execution.python.MapInArrowExec(func, output, planLater(child), isBarrier, profile) :: Nil
       case logical.MapPartitionsExternalUDF(
-          workerSpec, functionExpr, isBarrier, child) =>
+          workerSpec, functionExpr, isBarrier, profile, child) =>
         execution.externalUDF.MapPartitionsExternalUDFExec(
           workerSpec, functionExpr,
-          isBarrier, planLater(child)) :: Nil
+          isBarrier, profile, planLater(child)) :: Nil
       case logical.AttachDistributedSequence(attr, child, cache) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child), cache) :: Nil
       case logical.PythonWorkerLogs(jsonAttr) =>
@@ -1044,7 +1151,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case f: logical.TypedFilter =>
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
-        execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
+        val useSingleTask = e.getTagValue(
+          datasources.MarkSingleTaskExecution.markTag).getOrElse(false)
+        execution.ExpandExec(e.projections, e.output, planLater(child), useSingleTask) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child, sampleMethod) =>
         if (sampleMethod == logical.SampleMethod.System) {
           // V2ScanRelationPushDown is non-excludable and always handles SYSTEM samples
@@ -1054,8 +1163,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             "TABLESAMPLE SYSTEM node was not properly handled by V2ScanRelationPushDown.")
         }
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
-      case logical.LocalRelation(output, data, _, stream) =>
-        LocalTableScanExec(output, data, stream) :: Nil
+      case r @ logical.LocalRelation(output, data, _, stream) =>
+        val useSingleTask = r.getTagValue(
+          datasources.MarkSingleTaskExecution.markTag).getOrElse(false)
+        LocalTableScanExec(output, data, stream, useSingleTask) :: Nil
       case logical.EmptyRelation(l) => EmptyRelationExec(l) :: Nil
       case CommandResult(output, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
       // We should match the combination of limit and offset first, to get the optimal physical
@@ -1122,6 +1233,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           staticPartitions) :: Nil
       case MultiResult(children) =>
         MultiResultExec(children.map(planLater)) :: Nil
+      case b: logical.BinBy =>
+        execution.BinByExec(
+          binWidthMicros = b.binWidthMicros,
+          originMicros = b.originMicros,
+          rangeStart = b.rangeStart,
+          rangeEnd = b.rangeEnd,
+          distributeColumns = b.distributeColumns,
+          scaledDistributeColumns = b.scaledDistributeColumns,
+          appendedAttributes = b.appendedAttributes,
+          timeZoneId = b.timeZoneId,
+          child = planLater(b.child)) :: Nil
       case _ => Nil
     }
   }

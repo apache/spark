@@ -220,7 +220,6 @@ com.google.flatbuffers:flatbuffers-java
 com.google.guava:guava
 com.jamesmurty.utils:java-xmlbuilder
 com.ning:compress-lzf
-com.squareup.okhttp3:logging-interceptor
 com.squareup.okhttp3:okhttp
 com.squareup.okio:okio
 com.tdunning:json
@@ -242,7 +241,7 @@ io.dropwizard.metrics:metrics-json
 io.dropwizard.metrics:metrics-jvm
 io.fabric8:kubernetes-client
 io.fabric8:kubernetes-client-api
-io.fabric8:kubernetes-httpclient-okhttp
+io.fabric8:kubernetes-httpclient-vertx
 io.fabric8:kubernetes-model-admissionregistration
 io.fabric8:kubernetes-model-apiextensions
 io.fabric8:kubernetes-model-apps
@@ -305,6 +304,7 @@ joda-time:joda-time
 net.sf.opencsv:opencsv
 net.sf.supercsv:super-csv
 net.sf.jpam:jpam
+org.apache.arrow:arrow-compression
 org.apache.arrow:arrow-format
 org.apache.arrow:arrow-memory-core
 org.apache.arrow:arrow-memory-netty
@@ -349,7 +349,7 @@ org.apache.logging.log4j:log4j-1.2-api
 org.apache.logging.log4j:log4j-api
 org.apache.logging.log4j:log4j-core
 org.apache.logging.log4j:log4j-layout-template-json
-org.apache.logging.log4j:log4j-slf4j-impl
+org.apache.logging.log4j:log4j-slf4j2-impl
 org.apache.orc:orc-core
 org.apache.orc:orc-format
 org.apache.orc:orc-mapreduce
@@ -408,7 +408,6 @@ org.snakeyaml:snakeyaml-engine
 org.xerial.snappy:snappy-java
 org.yaml:snakeyaml
 oro:oro
-stax:stax-api
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
@@ -510,7 +509,7 @@ javax.transaction:transaction-api
 Common Development and Distribution License (CDDL) 1.1
 ------------------------------------------------------
 javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
-javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
+javax.servlet:javax.servlet-api https://oss.oracle.com/licenses/CDDL+GPL-1.1
 
 
 

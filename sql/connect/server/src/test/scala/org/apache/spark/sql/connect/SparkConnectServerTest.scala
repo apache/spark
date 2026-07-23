@@ -54,13 +54,21 @@ trait SparkConnectServerTest extends SharedSparkSession {
 
   val allocator = new RootAllocator()
 
+  // Additional server-side confs to set (via withSparkEnvConfs) before starting the real
+  // service. Override in subclasses that need to exercise non-default Connect server behavior
+  // (e.g. tuning gRPC keepalive) through the actual production startGRPCService() wiring,
+  // rather than only through hand-built test doubles.
+  protected def extraServerConfs: Seq[(String, String)] = Seq.empty
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     // Other suites using mocks leave a mess in the global executionManager,
     // shut it down so that it's cleared before starting server.
     SparkConnectService.executionManager.shutdown()
     // Start the real service.
-    withSparkEnvConfs((Connect.CONNECT_GRPC_BINDING_PORT.key, serverPort.toString)) {
+    withSparkEnvConfs(
+      (Seq(
+        (Connect.CONNECT_GRPC_BINDING_PORT.key, serverPort.toString)) ++ extraServerConfs): _*) {
       SparkConnectService.start(spark.sparkContext)
     }
   }
@@ -280,9 +288,9 @@ trait SparkConnectServerTest extends SharedSparkSession {
   protected def withCustomBlockingStub(
       retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies())(
       f: CustomSparkConnectBlockingStub => Unit): Unit = {
-    val conf = SparkConnectClient.Configuration(port = serverPort)
+    val conf = SparkConnectClient.Configuration(port = serverPort, retryPolicies = retryPolicies)
     val channel = conf.createChannel()
-    val stubState = new SparkConnectStubState(channel, retryPolicies)
+    val stubState = new SparkConnectStubState(channel, conf)
     val bstub = new CustomSparkConnectBlockingStub(channel, stubState)
     try f(bstub)
     finally {
