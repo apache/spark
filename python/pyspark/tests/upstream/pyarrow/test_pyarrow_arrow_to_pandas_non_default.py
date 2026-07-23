@@ -16,22 +16,24 @@
 #
 
 """
-Tests for PyArrow Array.to_pandas(coerce_temporal_nanoseconds=True) using golden
-file comparison.
+Tests for PyArrow Array.to_pandas() with non-default arguments, using golden file
+comparison.
 
-PySpark relies on this argument in production: when building pandas objects from
+PySpark relies on these arguments in production: when building pandas objects from
 Arrow data (see ``python/pyspark/sql/pandas/conversion.py``), it calls
-``to_pandas(coerce_temporal_nanoseconds=True)`` so that the Arrow path produces the
-same nanosecond-resolution ``datetime64[ns]`` / ``timedelta64[ns]`` values as the
-non-Arrow path.  This test records how each Arrow temporal type behaves under that
-argument so CI fails loudly if the behavior drifts across pandas/PyArrow/NumPy
+``to_pandas(coerce_temporal_nanoseconds=True)`` (and, when applicable,
+``date_as_object=True``) so that the Arrow path produces the same
+nanosecond-resolution ``datetime64[ns]`` / ``timedelta64[ns]`` values as the
+non-Arrow path.  These tests record how each Arrow type behaves under those
+arguments so CI fails loudly if the behavior drifts across pandas/PyArrow/NumPy
 upgrades.
 
-``coerce_temporal_nanoseconds=True`` forces temporal values to nanosecond
-resolution.  The interesting rows are therefore the temporal types (timestamp and
-duration in units s/ms/us/ns, plus tz-aware timestamp, date, and time); a handful
-of non-temporal control rows (int/float/string) are included to demonstrate that
-the argument leaves non-temporal types unaffected.
+The shared ``_PyArrowToPandasTestBase`` holds the golden-file matrix driver and
+the per-cell conversion helper.  Each concrete test class supplies its own source
+arrays (the rows relevant to the argument under test) and one test method per
+argument combination (each producing its own golden file).  New ``to_pandas``
+arguments (e.g. ``zero_copy_only``) can be added as additional classes without
+touching the existing ones.
 
 ## Golden File Cell Format
 
@@ -47,7 +49,7 @@ Values are formatted via tolist() for stable, Python-native representation.
 Set SPARK_GENERATE_GOLDEN_FILES=1 before running:
 
     SPARK_GENERATE_GOLDEN_FILES=1 python -m pytest \\
-        python/pyspark/tests/upstream/pyarrow/test_pyarrow_arrow_to_pandas_coerce_temporal.py
+        python/pyspark/tests/upstream/pyarrow/test_pyarrow_arrow_to_pandas_non_default.py
 
 ## PyArrow and pandas Version Compatibility
 
@@ -80,18 +82,13 @@ if have_pyarrow:
     import pyarrow as pa
 
 
-@unittest.skipIf(
-    not have_pyarrow or not have_pandas or not have_numpy,
-    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
-)
-class PyArrowArrayToPandasCoerceTemporalTests(GoldenFileTestMixin, unittest.TestCase):
+class _PyArrowToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
     """
-    Tests pa.Array.to_pandas(coerce_temporal_nanoseconds=True) via golden file comparison.
+    Shared machinery for pa.Array.to_pandas() golden file tests.
 
-    Covers the temporal Arrow types the argument affects (timestamp and duration in
-    units s/ms/us/ns, tz-aware timestamp, date, and time), plus an overflow case and
-    a few non-temporal control rows.  Each type is tested without nulls, with a null,
-    and empty.
+    Concrete subclasses provide their own ``_build_source_arrays`` (the rows) and
+    one or more ``test_*`` methods that call ``compare_or_generate_golden_matrix``.
+    This base defines no ``test_*`` methods, so it contributes no tests itself.
     """
 
     def compare_or_generate_golden_matrix(
@@ -154,10 +151,39 @@ class PyArrowArrayToPandasCoerceTemporalTests(GoldenFileTestMixin, unittest.Test
                 f"\n{len(errors)} golden file mismatches:\n" + "\n".join(errors),
             )
 
+    def _to_pandas_cell(self, arr, **to_pandas_kwargs) -> str:
+        """
+        Convert ``arr`` via ``to_pandas(**to_pandas_kwargs)`` and format the
+        result as a golden-file cell, returning ``ERR@<ExceptionClass>`` if the
+        conversion raises.
+        """
+        try:
+            return self.repr_value(arr.to_pandas(**to_pandas_kwargs), max_len=0)
+        except Exception as e:
+            return f"ERR@{type(e).__name__}"
+
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas or not have_numpy,
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
+)
+class PyArrowArrayToPandasCoerceTemporalTests(_PyArrowToPandasTestBase):
+    """
+    Tests pa.Array.to_pandas(coerce_temporal_nanoseconds=True) via golden file comparison.
+
+    Covers the temporal Arrow types the argument affects (timestamp and duration in
+    units s/ms/us/ns, tz-aware timestamp, date, and time), plus overflow cases and
+    a few non-temporal control rows.  Each type is tested without nulls, with a null,
+    and empty.
+
+    The date rows are recorded under two output columns: the default
+    ``date_as_object=True`` (object-dtype ``datetime.date``, which coercion does not
+    affect) and ``date_as_object=False`` (the numeric ``datetime64[ns]`` path where
+    coercion takes effect).
+    """
+
     def _build_source_arrays(self):
         """Build an ordered dict of named source PyArrow arrays for testing."""
-        import pyarrow as pa
-
         sources = {}
 
         # =====================================================================
@@ -202,9 +228,8 @@ class PyArrowArrayToPandasCoerceTemporalTests(GoldenFileTestMixin, unittest.Test
         # =====================================================================
         # Date types. With the default date_as_object=True, pandas yields an
         # object-dtype Series of datetime.date, so coerce_temporal_nanoseconds
-        # has nothing to coerce (the ":date_as_object=False" rows below force
-        # the numeric datetime64[ns] path that the argument actually affects;
-        # see compute_cell).
+        # has nothing to coerce; the "date_as_object=False" column forces the
+        # numeric datetime64[ns] path where the argument actually takes effect.
         # =====================================================================
         d1 = datetime.date(2024, 1, 1)
         d2 = datetime.date(2024, 6, 15)
@@ -214,14 +239,6 @@ class PyArrowArrayToPandasCoerceTemporalTests(GoldenFileTestMixin, unittest.Test
         sources["date64:standard"] = pa.array([d1, d2], pa.date64())
         sources["date64:nullable"] = pa.array([d1, None], pa.date64())
         sources["date64:empty"] = pa.array([], pa.date64())
-        # date_as_object=False forces conversion to datetime64[ns], which is
-        # where coerce_temporal_nanoseconds=True takes effect on date types.
-        sources["date32[date_as_object=False]:standard"] = pa.array([d1, d2], pa.date32())
-        sources["date32[date_as_object=False]:nullable"] = pa.array([d1, None], pa.date32())
-        sources["date32[date_as_object=False]:empty"] = pa.array([], pa.date32())
-        sources["date64[date_as_object=False]:standard"] = pa.array([d1, d2], pa.date64())
-        sources["date64[date_as_object=False]:nullable"] = pa.array([d1, None], pa.date64())
-        sources["date64[date_as_object=False]:empty"] = pa.array([], pa.date64())
 
         # =====================================================================
         # Time types (control: pandas yields object-dtype datetime.time, no
@@ -252,35 +269,47 @@ class PyArrowArrayToPandasCoerceTemporalTests(GoldenFileTestMixin, unittest.Test
 
         return sources
 
+    # Output column recording to_pandas(coerce_temporal_nanoseconds=True).
+    # date_as_object stays at its default (True).
+    COL_PANDAS = "pandas series"
+
+    # Output column recording to_pandas(coerce_temporal_nanoseconds=True,
+    # date_as_object=False). date_as_object=False is the only path on which
+    # coercion observably affects date types.
+    COL_PANDAS_DATE_AS_OBJECT_FALSE = "pandas series (date_as_object=False)"
+
     def test_to_pandas_coerce_temporal_nanoseconds(self):
         """Test pa.Array.to_pandas(coerce_temporal_nanoseconds=True) against golden file."""
         sources = self._build_source_arrays()
         row_names = list(sources.keys())
-        col_names = ["pyarrow array", "pandas series"]
+        col_names = [
+            "pyarrow array",
+            self.COL_PANDAS,
+            self.COL_PANDAS_DATE_AS_OBJECT_FALSE,
+        ]
 
         # Version-specific expected values go here, keyed by (row, col), when a
         # newer pandas/PyArrow/NumPy legitimately changes a cell's output.
-        # add a LooseVersion-guarded block for each known drift.
+        # Add a LooseVersion-guarded block for each known drift.
         overrides: dict[tuple[str, str], str] = {}
         # Pandas 3 uses its dedicated string dtype for non-empty Arrow string arrays.
         if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
-            overrides[("string:standard", "pandas series")] = "['hello', 'world', '']@Series[str]"
+            str_expected = "['hello', 'world', '']@Series[str]"
+            overrides[("string:standard", self.COL_PANDAS)] = str_expected
+            overrides[("string:standard", self.COL_PANDAS_DATE_AS_OBJECT_FALSE)] = str_expected
 
         def compute_cell(row_name, col_name):
             arr = sources[row_name]
             if col_name == "pyarrow array":
                 return self.repr_value(arr, max_len=0)
+            elif col_name == self.COL_PANDAS:
+                return self._to_pandas_cell(arr, coerce_temporal_nanoseconds=True)
+            elif col_name == self.COL_PANDAS_DATE_AS_OBJECT_FALSE:
+                return self._to_pandas_cell(
+                    arr, coerce_temporal_nanoseconds=True, date_as_object=False
+                )
             else:
-                kwargs = {"coerce_temporal_nanoseconds": True}
-                # Rows tagged "date_as_object=False" exercise the numeric date
-                # conversion path, where coerce_temporal_nanoseconds applies.
-                if "date_as_object=False" in row_name:
-                    kwargs["date_as_object"] = False
-                try:
-                    result = arr.to_pandas(**kwargs)
-                    return self.repr_value(result, max_len=0)
-                except Exception as e:
-                    return f"ERR@{type(e).__name__}"
+                raise ValueError(f"unknown column: {col_name}")
 
         self.compare_or_generate_golden_matrix(
             row_names=row_names,
