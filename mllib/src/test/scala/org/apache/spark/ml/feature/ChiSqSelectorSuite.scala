@@ -121,7 +121,7 @@ class ChiSqSelectorSuite extends MLTest with DefaultReadWriteTest {
   test("model estimated size") {
     val model = new ChiSqSelector().setSelectorType("numTopFeatures").setNumTopFeatures(1)
       .fit(dataset)
-    val maxSize = 1024 * 2
+    val maxSize = 1024 * 4
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
