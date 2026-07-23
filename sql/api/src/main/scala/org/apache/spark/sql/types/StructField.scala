@@ -20,7 +20,6 @@ package org.apache.spark.sql.types
 import scala.collection.mutable
 
 import com.fasterxml.jackson.core.JsonGenerator
-
 import org.json4s.{JObject, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._

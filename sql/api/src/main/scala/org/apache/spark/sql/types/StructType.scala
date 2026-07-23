@@ -24,7 +24,6 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonGenerator
-
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkIllegalArgumentException

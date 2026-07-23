@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import com.fasterxml.jackson.core.JsonGenerator
-
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
