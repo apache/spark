@@ -1595,6 +1595,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     K8s IP Family Policy for Driver Service. Valid values are
     <code>SingleStack</code>, <code>PreferDualStack</code>, and <code>RequireDualStack</code>.
+    The driver UI Service reuses this setting to keep the same IP family.
   </td>
   <td>3.4.0</td>
 </tr>
@@ -1604,6 +1605,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     A list of IP families for K8s Driver Service. Valid values are
     <code>IPv4</code> and <code>IPv6</code>.
+    The driver UI Service reuses this setting to keep the same IP family.
   </td>
   <td>3.4.0</td>
 </tr>
