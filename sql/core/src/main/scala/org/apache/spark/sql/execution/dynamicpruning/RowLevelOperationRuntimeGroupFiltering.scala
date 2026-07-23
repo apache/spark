@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, DynamicPruningExpression, Expression, InSubquery, ListQuery, PredicateHelper, V2ExpressionUtils}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, DynamicPruningExpression, Expression, InSubquery, ListQuery, PredicateHelper, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.planning.{DeltaBasedRowLevelOperation, GroupBasedRowLevelOperation}
@@ -25,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
+import org.apache.spark.sql.connector.write.SupportsColumnUpdates
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation, ExtractV2Scan}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -103,7 +105,11 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
         // and must transform the runtime filter condition to use correct expr IDs for each relation
         // note this only applies to group-based row-level operations (i.e. ReplaceData)
         // see RewriteUpdateTable for more details
-        val attrMap = buildTableToScanAttrMap(write.table.output, relation.output)
+        val attrMap = if (write.operation.isInstanceOf[SupportsColumnUpdates]) {
+          buildNarrowTableToScanAttrMap(write.table.output, relation.output, cond.references)
+        } else {
+          buildTableToScanAttrMap(write.table.output, relation.output)
+        }
         val transformedCond = cond transform {
           case attr: AttributeReference if attrMap.contains(attr) => attrMap(attr)
         }
@@ -138,14 +144,41 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
       tableAttrs: Seq[Attribute],
       scanAttrs: Seq[Attribute]): AttributeMap[Attribute] = {
 
-    // Only map tableAttrs that have a matching scan attribute. Callers consume this map via
-    // `attrMap.contains(attr)`, so an entry is only useful when it actually exists; missing
-    // entries are legitimately absent from the (potentially narrowed) column-update scan and
-    // do not need to be mapped.
-    val attrMapping = tableAttrs.flatMap { tableAttr =>
+    val attrMapping = tableAttrs.map { tableAttr =>
       scanAttrs
         .find(scanAttr => conf.resolver(scanAttr.name, tableAttr.name))
         .map(scanAttr => tableAttr -> scanAttr)
+        .getOrElse {
+          throw new AnalysisException(
+            errorClass = "_LEGACY_ERROR_TEMP_3075",
+            messageParameters = Map(
+              "tableAttr" -> tableAttr.toString,
+              "scanAttrs" -> scanAttrs.mkString(",")))
+        }
+    }
+    AttributeMap(attrMapping)
+  }
+
+  /**
+   * Variant of `buildTableToScanAttrMap` for the `SupportsColumnUpdates` narrow-scan path.
+   * Table columns dropped from the narrow scan are legitimately absent and silently skipped.
+   * Only attributes referenced by the group-filter condition are required to resolve.
+   */
+  private def buildNarrowTableToScanAttrMap(
+      tableAttrs: Seq[Attribute],
+      scanAttrs: Seq[Attribute],
+      condRefs: AttributeSet): AttributeMap[Attribute] = {
+
+    val attrMapping = tableAttrs.flatMap { tableAttr =>
+      val matched = scanAttrs.find(scanAttr => conf.resolver(scanAttr.name, tableAttr.name))
+      if (matched.isEmpty && condRefs.contains(tableAttr)) {
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3075",
+          messageParameters = Map(
+            "tableAttr" -> tableAttr.toString,
+            "scanAttrs" -> scanAttrs.mkString(",")))
+      }
+      matched.map(scanAttr => tableAttr -> scanAttr)
     }
     AttributeMap(attrMapping)
   }

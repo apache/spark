@@ -37,7 +37,7 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * reported by {@link RowLevelOperationInfo#updatedColumns()} plus any columns needed for row
    * lookup or routing, e.g. a primary key).
    * <p>
-   * If any of the columns from {@link RowLevelOperationInfo#updatedColumns()}) is
+   * If any of the columns from {@link RowLevelOperationInfo#updatedColumns()} are
    * missing, an analysis exception is thrown.
    * <p>
    * For updates on nested fields such as {@code SET t.s.c1 = -1} the connector should declare the

@@ -529,7 +529,9 @@ class InMemoryRowLevelOperationTable private (
             } else {
               info.schema()
             }
-            PartitionBasedNarrowReplaceData(configuredScan, narrowSchema, info.schema())
+            // info.schema() is empty for column-update UPDATE writes (no INSERT rows);
+            // use the table schema to align any INSERT-tagged rows.
+            PartitionBasedNarrowReplaceData(configuredScan, narrowSchema, schema)
           }
 
           override def description: String = "InMemoryNarrowCoWWrite"
