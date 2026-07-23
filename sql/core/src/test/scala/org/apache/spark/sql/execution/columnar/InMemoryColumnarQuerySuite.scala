@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel._
 
 class TestCachedBatchSerializer(
@@ -675,6 +675,45 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
 
     checkCache(MEMORY_AND_DISK, expected = true)
     checkCache(MEMORY_ONLY, expected = false)
+  }
+
+  test("SPARK-58272: materialized cache stats follow partition recomputation") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val property = "spark.sql.test.cache.recomputedPartitionHasRows"
+      System.clearProperty(property)
+      val liveGate = udf(() => java.lang.Boolean.getBoolean(property)).asNondeterministic()
+      val cached = spark.range(0, 8, 1, numPartitions = 1)
+        .filter(liveGate())
+        .persist(MEMORY_ONLY)
+
+      try {
+        assert(cached.count() == 0)
+        val relation = cached.queryExecution.withCachedData.collectFirst {
+          case plan: InMemoryRelation => plan
+        }.get
+        val builder = relation.cacheBuilder
+        val blockId = RDDBlockId(builder.cachedColumnBuffers.id, 0)
+        val blockManager = spark.sparkContext.env.blockManager
+
+        assert(blockManager.getStatus(blockId).nonEmpty)
+        assert(builder.loadedMaterializedStats.exists(_._1 == 0L))
+
+        System.setProperty(property, "true")
+        blockManager.removeBlock(blockId)
+        assert(blockManager.getStatus(blockId).isEmpty)
+        assert(cached.count() == 8)
+        assert(blockManager.getStatus(blockId).nonEmpty)
+        assert(builder.materializedRowCount == 8L)
+        assert(builder.loadedMaterializedStats.exists(_._1 == 8L))
+
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+          checkAnswer(cached.groupBy("id").count(), (0L until 8L).map(id => Row(id, 1L)))
+        }
+      } finally {
+        cached.unpersist(blocking = true)
+        System.clearProperty(property)
+      }
+    }
   }
 
   test("SPARK-58272: materialized caches require trusted strict file reads") {

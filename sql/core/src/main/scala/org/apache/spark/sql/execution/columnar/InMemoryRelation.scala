@@ -273,7 +273,6 @@ case class CachedRDDBuilder(
   @transient @volatile private var _cachedColumnBuffers: RDD[CachedBatch] = null
   @volatile private var isCachedRDDRepeatable = false
   private var hasStrictFileSourceReads = true
-  private var _materializedStats: Option[(Long, Long)] = None
 
   // The cache's materialization bookkeeping: a partition-keyed accumulator storing
   // (rowCount, sizeInBytes) per partition. AQE creates a separate cache scan stage per reference to
@@ -313,7 +312,6 @@ case class CachedRDDBuilder(
     if (_cachedColumnBuffers != null) {
       _cachedColumnBuffers.unpersist(blocking)
       _cachedColumnBuffers = null
-      _materializedStats = None
       partitionStats = newPartitionStats()
     }
     isCachedRDDRepeatable = false
@@ -329,16 +327,11 @@ case class CachedRDDBuilder(
     if (_cachedColumnBuffers == null) {
       None
     } else {
-      _materializedStats.orElse {
-        partitionStats.foldValuesIfComplete(
-          _cachedColumnBuffers.partitions.length,
-          (0L, 0L)) {
-          case ((rows, bytes), (partitionRows, partitionBytes)) =>
-            (rows + partitionRows, bytes + partitionBytes)
-        }.map { stats =>
-          _materializedStats = Some(stats)
-          stats
-        }
+      partitionStats.foldValuesIfComplete(
+        _cachedColumnBuffers.partitions.length,
+        (0L, 0L)) {
+        case ((rows, bytes), (partitionRows, partitionBytes)) =>
+          (rows + partitionRows, bytes + partitionBytes)
       }
     }
   }
