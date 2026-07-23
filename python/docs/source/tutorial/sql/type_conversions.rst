@@ -19,9 +19,6 @@
 Python to Spark Type Conversions
 ================================
 
-.. TODO: Add additional information on conversions when Arrow is enabled.
-.. TODO: Add in-depth explanation and table for type conversions (SPARK-44734).
-
 .. currentmodule:: pyspark.sql.types
 
 When working with PySpark, you will often need to consider the conversions between Python-native
@@ -103,7 +100,7 @@ All Conversions
       - DoubleType()
     * - **DecimalType**
       - decimal.Decimal
-      - DecimalType()|
+      - DecimalType()
     * - **StringType**
       - string
       - StringType()
@@ -141,6 +138,35 @@ All Conversions
       - The value type in Python of the data type of this field. For example, Int for a StructField with the data type IntegerType.
       - StructField(*name*, *dataType*, [*nullable*])
           .. note:: The default value of *nullable* is True.
+
+Conversion Rules Worth Remembering
+----------------------------------
+
+The table above shows the nominal Python type for each Spark SQL type, but runtime behavior also
+depends on how Spark obtains the data:
+
+- ``None`` is converted to SQL ``NULL`` for any nullable field.
+- Numeric types with fixed-width storage, such as ``ByteType`` and ``ShortType``, must stay within
+  range or Spark will raise an error while materializing rows.
+- When ``createDataFrame`` infers a schema from local Python data, Spark may inspect multiple rows
+  and multiple array elements to determine a common element type. If a value only contains
+  ``None``, or mixes incompatible shapes, schema inference can fail.
+- ``dict`` values are usually inferred as ``MapType``. Nested dictionaries can instead be inferred
+  as ``StructType`` when ``spark.sql.pyspark.inferNestedDictAsStruct.enabled`` is enabled.
+- ``BinaryType`` values are read back as Python ``bytes`` or ``bytearray`` depending on
+  ``spark.sql.execution.pyspark.binaryAsBytes``.
+
+Arrow-Enabled Python UDFs
+-------------------------
+
+When ``spark.sql.execution.pythonUDF.arrow.enabled`` is enabled, PySpark can use Arrow for Python
+UDF data exchange. This usually improves serialization performance, but Arrow and pickle-based
+execution do not always apply the same coercion rules. In practice, that means a Python UDF whose
+actual return values do not match its declared return type can behave differently depending on
+whether Arrow is enabled.
+
+If you need predictable results, keep the returned Python value aligned with the declared Spark SQL
+return type instead of relying on implicit coercion.
 
 Conversions in Practice - UDFs
 ------------------------------
@@ -217,6 +243,59 @@ you can supply a schema, or allow Spark to infer the schema from the provided da
   # root
   # |-- _1: byte (nullable = true)
   # |-- _2: byte (nullable = true)
+
+Configuration-Specific Examples
+-------------------------------
+
+Some conversions are controlled by SQL configs. The examples below show a few common cases.
+
+Nested dictionaries inferred as ``StructType``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+  from pyspark.sql import Row
+
+  NestedRow = Row("payload")
+
+  spark.conf.set("spark.sql.pyspark.inferNestedDictAsStruct.enabled", True)
+  df = spark.createDataFrame(
+      [NestedRow({"name": "A", "payment": 200.5})]
+  )
+  df.printSchema()
+  # root
+  # |-- payload: struct (nullable = true)
+  # |    |-- name: string (nullable = true)
+  # |    |-- payment: double (nullable = true)
+
+``TIMESTAMP_NTZ`` as the default timestamp type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+  import datetime
+
+  spark.conf.set("spark.sql.timestampType", "TIMESTAMP_NTZ")
+  spark.createDataFrame(
+      [(datetime.datetime(2024, 1, 1, 12, 0, 0),)],
+      ["ts"],
+  ).printSchema()
+  # root
+  # |-- ts: timestamp_ntz (nullable = true)
+
+Binary values returned as ``bytes`` or ``bytearray``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+  row = spark.createDataFrame([(b"hello",)], ["bin"]).first()
+  type(row.bin)
+  # <class 'bytes'>
+
+  spark.conf.set("spark.sql.execution.pyspark.binaryAsBytes", False)
+  row = spark.createDataFrame([(b"hello",)], ["bin"]).first()
+  type(row.bin)
+  # <class 'bytearray'>
 
 Conversions in Practice - Nested Data Types
 -------------------------------------------
