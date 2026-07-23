@@ -376,6 +376,13 @@ public class ExternalShuffleBlockResolver {
     }
     int numRemovedBlocks = 0;
     for (String blockId : blockIds) {
+      try {
+        validateBlockId(blockId);
+      } catch (IllegalArgumentException e) {
+        logger.warn("Skipping block with invalid id: {}",
+          MDC.of(LogKeys.BLOCK_ID, blockId));
+        continue;
+      }
       File file = new File(
         ExecutorDiskUtils.getFilePath(executor.localDirs, executor.subDirsPerLocalDir, blockId));
       if (file.delete()) {
@@ -420,6 +427,26 @@ public class ExternalShuffleBlockResolver {
     ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
     return ShuffleChecksumHelper.diagnoseCorruption(
       algorithm, checksumFile, reduceId, data, checksumByReader);
+  }
+
+  /**
+   * Validates that a blockId is a plain file name before it is used to build a file path under
+   * {@code <localDir>/<subDirHex>/}. Legitimate Spark block ids contain only ASCII alphanumerics,
+   * underscores, dots and dashes (see {@code BlockId} in core), so a well-formed blockId never
+   * contains a path separator and is never {@code "."} or {@code ".."}. Such values are rejected.
+   */
+  @VisibleForTesting
+  static void validateBlockId(String blockId) {
+    if (blockId == null || blockId.isEmpty()) {
+      throw new IllegalArgumentException("blockId must not be null or empty");
+    }
+    if (blockId.indexOf('/') >= 0 || blockId.indexOf('\\') >= 0 || blockId.indexOf('\0') >= 0) {
+      throw new IllegalArgumentException(
+        "blockId must not contain a path separator or NUL: " + blockId);
+    }
+    if (blockId.equals("..") || blockId.equals(".")) {
+      throw new IllegalArgumentException("blockId must not be \".\" or \"..\": " + blockId);
+    }
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */

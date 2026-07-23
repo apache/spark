@@ -75,7 +75,12 @@ from pyspark.sql.connect.client.artifact import ArtifactManager
 from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.profiler import ConnectProfilerCollector
 from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
-from pyspark.sql.connect.client.retries import RetryPolicy, Retrying, DefaultPolicy
+from pyspark.sql.connect.client.retries import (
+    RetryPolicy,
+    Retrying,
+    DefaultPolicy,
+    DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+)
 from pyspark.sql.connect.conversion import (
     storage_level_to_proto,
     proto_to_storage_level,
@@ -212,8 +217,22 @@ class ChannelBuilder:
     PARAM_USER_ID = "user_id"
     PARAM_USER_AGENT = "user_agent"
     PARAM_SESSION_ID = "session_id"
+    PARAM_GRPC_KEEPALIVE_ENABLED = "grpc_keepalive_enabled"
+    PARAM_GRPC_KEEPALIVE_TIME_MS = "grpc_keepalive_time_ms"
+    PARAM_GRPC_KEEPALIVE_TIMEOUT_MS = "grpc_keepalive_timeout_ms"
+    PARAM_GRPC_KEEPALIVE_WITHOUT_CALLS = "grpc_keepalive_without_calls"
 
     GRPC_MAX_MESSAGE_LENGTH_DEFAULT = 128 * 1024 * 1024
+
+    # Detects a silently-dead connection (e.g. a NAT gateway/load balancer dropping an idle
+    # connection mapping without sending a TCP RST/FIN) via gRPC/HTTP2 keepalive PINGs, so a
+    # blocked RPC (such as streaming query awaitTermination()) surfaces as UNAVAILABLE instead
+    # of hanging forever. Mirrors the JVM client's defaults (SparkConnectClient.scala). See
+    # SPARK-58094.
+    GRPC_DEFAULT_KEEPALIVE_ENABLED = True
+    GRPC_DEFAULT_KEEPALIVE_TIME_MS = 60 * 1000
+    GRPC_DEFAULT_KEEPALIVE_TIMEOUT_MS = 20 * 1000
+    GRPC_DEFAULT_KEEPALIVE_WITHOUT_CALLS = True
 
     GRPC_DEFAULT_OPTIONS = [
         ("grpc.max_send_message_length", GRPC_MAX_MESSAGE_LENGTH_DEFAULT),
@@ -281,7 +300,7 @@ class ChannelBuilder:
         raise PySparkNotImplementedError
 
     def _insecure_channel(self, target: Any, **kwargs: Any) -> grpc.Channel:
-        channel = grpc.insecure_channel(target, options=self._channel_options, **kwargs)
+        channel = grpc.insecure_channel(target, options=self._effective_channel_options(), **kwargs)
 
         if len(self._interceptors) > 0:
             logger.debug(f"Applying interceptors ({self._interceptors})")
@@ -289,7 +308,9 @@ class ChannelBuilder:
         return channel
 
     def _secure_channel(self, target: Any, credentials: Any, **kwargs: Any) -> grpc.Channel:
-        channel = grpc.secure_channel(target, credentials, options=self._channel_options, **kwargs)
+        channel = grpc.secure_channel(
+            target, credentials, options=self._effective_channel_options(), **kwargs
+        )
 
         if len(self._interceptors) > 0:
             logger.debug(f"Applying interceptors ({self._interceptors})")
@@ -311,6 +332,74 @@ class ChannelBuilder:
             ChannelBuilder.PARAM_TOKEN, os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN")
         )
 
+    @property
+    def keepalive_enabled(self) -> bool:
+        """
+        Whether the client sends gRPC/HTTP2 keepalive PINGs to detect a silently-dead
+        connection. Enabled by default; can be turned off as an escape hatch, e.g. if it
+        interacts badly with a particular network path, or a client environment is prone to
+        stalls long enough to trip false-positive disconnects.
+        """
+        return (
+            self.getDefault(
+                ChannelBuilder.PARAM_GRPC_KEEPALIVE_ENABLED,
+                str(ChannelBuilder.GRPC_DEFAULT_KEEPALIVE_ENABLED),
+            ).lower()
+            == "true"
+        )
+
+    @property
+    def keepalive_time_ms(self) -> int:
+        """Idle time (in milliseconds) before sending a gRPC/HTTP2 keepalive PING."""
+        return int(
+            self.getDefault(
+                ChannelBuilder.PARAM_GRPC_KEEPALIVE_TIME_MS,
+                ChannelBuilder.GRPC_DEFAULT_KEEPALIVE_TIME_MS,
+            )
+        )
+
+    @property
+    def keepalive_timeout_ms(self) -> int:
+        """Time (in milliseconds) to wait for a keepalive PING ack before failing."""
+        return int(
+            self.getDefault(
+                ChannelBuilder.PARAM_GRPC_KEEPALIVE_TIMEOUT_MS,
+                ChannelBuilder.GRPC_DEFAULT_KEEPALIVE_TIMEOUT_MS,
+            )
+        )
+
+    @property
+    def keepalive_without_calls(self) -> bool:
+        """Whether to keep sending keepalive PINGs when there are no in-flight RPCs."""
+        return (
+            self.getDefault(
+                ChannelBuilder.PARAM_GRPC_KEEPALIVE_WITHOUT_CALLS,
+                str(ChannelBuilder.GRPC_DEFAULT_KEEPALIVE_WITHOUT_CALLS),
+            ).lower()
+            == "true"
+        )
+
+    def _effective_channel_options(self) -> List[Tuple[str, Any]]:
+        """
+        Returns ``self._channel_options`` with the keepalive options
+        (:attr:`keepalive_enabled`/:attr:`keepalive_time_ms`/:attr:`keepalive_timeout_ms`/
+        :attr:`keepalive_without_calls`) applied, unless a caller already set one of those
+        specific keys explicitly via ``channelOptions``/:meth:`setChannelOption`, in which case
+        the explicit value wins.
+        """
+        options = list(self._channel_options)
+        if not self.keepalive_enabled:
+            return options
+        existing_keys = {k for k, _ in options}
+        for key, value in (
+            ("grpc.keepalive_time_ms", self.keepalive_time_ms),
+            ("grpc.keepalive_timeout_ms", self.keepalive_timeout_ms),
+            ("grpc.keepalive_permit_without_calls", 1 if self.keepalive_without_calls else 0),
+        ):
+            if key not in existing_keys:
+                options.append((key, value))
+        return options
+
     def metadata(self) -> Iterable[Tuple[str, str]]:
         """
         Builds the GRPC specific metadata list to be injected into the request. All
@@ -330,6 +419,10 @@ class ChannelBuilder:
                 ChannelBuilder.PARAM_USER_ID,
                 ChannelBuilder.PARAM_USER_AGENT,
                 ChannelBuilder.PARAM_SESSION_ID,
+                ChannelBuilder.PARAM_GRPC_KEEPALIVE_ENABLED,
+                ChannelBuilder.PARAM_GRPC_KEEPALIVE_TIME_MS,
+                ChannelBuilder.PARAM_GRPC_KEEPALIVE_TIMEOUT_MS,
+                ChannelBuilder.PARAM_GRPC_KEEPALIVE_WITHOUT_CALLS,
             ]
         ]
 
@@ -399,6 +492,10 @@ class DefaultChannelBuilder(ChannelBuilder):
     >>> cb = DefaultChannelBuilder("sc://localhost/;use_ssl=true;token=aaa")
     ... cb.secure
     True
+
+    >>> cb = DefaultChannelBuilder("sc://localhost/;grpc_keepalive_time_ms=30000")
+    ... cb.keepalive_time_ms
+    30000
     """
 
     @staticmethod
@@ -722,6 +819,7 @@ class SparkConnectClient(object):
         allow_arrow_batch_chunking: bool = True,
         preferred_arrow_chunk_size: Optional[int] = None,
         rpc_deadlines: Optional[RpcDeadlines] = None,
+        max_retry_exception_elapsed_time: Optional[float] = None,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -773,6 +871,13 @@ class SparkConnectClient(object):
             Per-RPC gRPC call timeouts in seconds (10 min for most RPCs,
             1 hour for analyze/addArtifacts, none for non-reattachable execute).
             Use :meth:`RpcDeadlines.disabled` to turn off all deadlines.
+        max_retry_exception_elapsed_time : float, optional
+            Maximum cumulative elapsed time in seconds the client will keep retrying a
+            RetryException (raised internally when a reattach attempt keeps hitting
+            DEADLINE_EXCEEDED, or when the initial ExecutePlan never reached the server) before
+            giving up and raising the underlying error. Defaults to
+            :data:`~pyspark.sql.connect.client.retries.DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME`
+            (1 hour).
         """
         self.thread_local = threading.local()
 
@@ -788,6 +893,12 @@ class SparkConnectClient(object):
         retry_policy_args = retry_policy or dict()
         default_policy = DefaultPolicy(**retry_policy_args)
         self.set_retry_policies([default_policy])
+
+        self._max_retry_exception_elapsed_time = (
+            max_retry_exception_elapsed_time
+            if max_retry_exception_elapsed_time is not None
+            else DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME
+        )
 
         if self._builder.session_id is None:
             # Generate a unique session ID for this client. This UUID must be unique to allow
@@ -892,7 +1003,10 @@ class SparkConnectClient(object):
         self._progress_handlers.remove(handler)
 
     def _retrying(self) -> "Retrying":
-        return Retrying(self._retry_policies)
+        return Retrying(
+            self._retry_policies,
+            max_retry_exception_elapsed_time=self._max_retry_exception_elapsed_time,
+        )
 
     def disable_reattachable_execute(self) -> "SparkConnectClient":
         self._use_reattachable_execute = False
@@ -1943,11 +2057,12 @@ class SparkConnectClient(object):
         try:
             for attempt in self._retrying():
                 with attempt:
-                    resp = self._stub.Config(
-                        req,
-                        metadata=self._builder.metadata(),
-                        timeout=self._rpc_deadlines.config,
-                    )
+                    with disable_gc():
+                        resp = self._stub.Config(
+                            req,
+                            metadata=self._builder.metadata(),
+                            timeout=self._rpc_deadlines.config,
+                        )
                     self._verify_response_integrity(resp)
                     return ConfigResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")

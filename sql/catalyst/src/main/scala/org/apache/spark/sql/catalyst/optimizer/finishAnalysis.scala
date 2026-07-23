@@ -120,16 +120,17 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val currentDates = collection.mutable.HashMap.empty[ZoneId, Literal]
     val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
 
-    // The CAST bit is included so this rule can find TIME -> TIMESTAMP_NTZ and TIME ->
-    // TIMESTAMP_LTZ casts (which derive their date fields from CURRENT_DATE) and stabilize them
-    // below. CAST is a broad pattern, so this widens the rule's traversal to most plans; the
-    // precise `Cast.isTimeToTimestampNTZ` / `Cast.isTimeToTimestampLTZ` guards keep the rewrite
-    // scoped. We intentionally do not tag these casts with CURRENT_LIKE instead: inline-table
-    // validation treats CURRENT_LIKE as safe to defer, so tagging would let unrelated non-foldable
-    // NTZ/LTZ-target casts (e.g. CAST(rand() AS TIMESTAMP_NTZ)) bypass that validation (see
-    // SPARK-57618 and ResolveInlineTablesSuite).
+    // CAST_TO_TIMESTAMP is a dedicated tree-pattern bit set on Cast nodes whose target type is
+    // any timestamp type (NTZ or LTZ family). This lets the rule reach both TIME -> TIMESTAMP_NTZ
+    // and TIME -> TIMESTAMP_LTZ rewrites (which derive date fields from CURRENT_DATE) without the
+    // broad CAST pattern that previously widened traversal to nearly every plan. Node-level
+    // isTimeToTimestamp{NTZ,LTZ} guards keep rewrite semantics unchanged.
+    // We intentionally do NOT tag these casts with CURRENT_LIKE: inline-table validation treats
+    // CURRENT_LIKE as safe to defer, so tagging would let unrelated non-foldable timestamp-target
+    // casts (e.g. CAST(rand() AS TIMESTAMP_NTZ)) bypass validation (see SPARK-57618).
     def transformCondition(treePatternbits: TreePatternBits): Boolean = {
-      treePatternbits.containsPattern(CURRENT_LIKE) || treePatternbits.containsPattern(CAST)
+      treePatternbits.containsPattern(CURRENT_LIKE) ||
+        treePatternbits.containsPattern(CAST_TO_TIMESTAMP)
     }
 
     plan.transformDownWithSubqueriesAndPruning(transformCondition) {

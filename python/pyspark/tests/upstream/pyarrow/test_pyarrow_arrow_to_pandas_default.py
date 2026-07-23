@@ -44,10 +44,10 @@ Set SPARK_GENERATE_GOLDEN_FILES=1 before running:
     SPARK_GENERATE_GOLDEN_FILES=1 python -m pytest \\
         python/pyspark/tests/upstream/pyarrow/test_pyarrow_arrow_to_pandas_default.py
 
-## PyArrow Version Compatibility
+## PyArrow and pandas Version Compatibility
 
-The golden files capture behavior for a specific PyArrow version.
-Regenerate when upgrading PyArrow, as to_pandas() behavior may change.
+The golden files capture behavior for specific PyArrow and pandas versions.
+Regenerate when upgrading either dependency, as to_pandas() behavior may change.
 """
 
 import datetime
@@ -57,6 +57,7 @@ import unittest
 from decimal import Decimal
 from typing import Callable, List, Optional
 
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
@@ -66,6 +67,11 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
 )
 from pyspark.testing.goldenutils import GoldenFileTestMixin
+
+if have_pandas:
+    import pandas as pd
+if have_pyarrow:
+    import pyarrow as pa
 
 
 @unittest.skipIf(
@@ -388,6 +394,26 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         row_names = list(sources.keys())
         col_names = ["pyarrow array", "pandas series"]
 
+        overrides = {}
+        # Pandas 3 uses its dedicated string dtype for non-empty Arrow string arrays.
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            overrides.update(
+                {
+                    ("string:standard", "pandas series"): ("['hello', 'world', '']@Series[str]"),
+                    ("string:nullable", "pandas series"): ("['hello', nan, 'world']@Series[str]"),
+                    ("large_string:standard", "pandas series"): ("['hello', 'world']@Series[str]"),
+                    ("large_string:nullable", "pandas series"): "['hello', nan]@Series[str]",
+                }
+            )
+            # PyArrow 24 extends the pandas string dtype conversion to empty arrays.
+            if LooseVersion(pa.__version__) >= LooseVersion("24.0.0"):
+                overrides.update(
+                    {
+                        ("string:empty", "pandas series"): "[]@Series[str]",
+                        ("large_string:empty", "pandas series"): "[]@Series[str]",
+                    }
+                )
+
         def compute_cell(row_name, col_name):
             arr = sources[row_name]
             if col_name == "pyarrow array":
@@ -405,6 +431,7 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             compute_cell=compute_cell,
             golden_file_prefix="golden_pyarrow_arrow_to_pandas_default",
             index_name="test case",
+            overrides=overrides,
         )
 
 

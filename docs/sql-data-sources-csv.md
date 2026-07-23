@@ -181,6 +181,12 @@ Data source options of CSV can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>timeFormat</code></td>
+    <td>HH:mm:ss</td>
+    <td>Sets the string that indicates a time format. Custom time formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>. This applies to time type.</td>
+    <td>read/write</td>
+  </tr>
+  <tr>
     <td><code>enableDateTimeParsingFallback</code></td>
     <td>Enabled if the time parser policy has legacy settings or if no custom date or timestamp pattern was provided.</td>
     <td>Allows falling back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>

@@ -754,12 +754,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-57293: nanos<->micros store-assignment and up-cast contract") {
+  test("SPARK-57303: nanos<->micros store-assignment and up-cast contract") {
     foreachNanosPrecision { p =>
-      // Explicit-only: neither direction is an up-cast, so STRICT store assignment rejects both.
-      assert(!Cast.canUpCast(TimestampNTZType, TimestampNTZNanosType(p)))
+      // Lossless widening micros -> nanos(p) is an up-cast, mirroring the micro precedent where a
+      // lower-precision timestamp widens to a higher-precision one.
+      assert(Cast.canUpCast(TimestampNTZType, TimestampNTZNanosType(p)))
+      assert(Cast.canUpCast(TimestampType, TimestampLTZNanosType(p)))
+      // Lossy narrowing nanos(p) -> micros drops sub-microsecond digits, so it is not an up-cast.
       assert(!Cast.canUpCast(TimestampNTZNanosType(p), TimestampNTZType))
-      assert(!Cast.canUpCast(TimestampType, TimestampLTZNanosType(p)))
       assert(!Cast.canUpCast(TimestampLTZNanosType(p), TimestampType))
 
       // ANSI store assignment allows the lossless widening micros -> nanos(p) ...
@@ -769,18 +771,17 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(!Cast.canANSIStoreAssign(TimestampNTZNanosType(p), TimestampNTZType))
       assert(!Cast.canANSIStoreAssign(TimestampLTZNanosType(p), TimestampType))
 
-      // SPARK-57323: DATE <-> nanos requires an explicit CAST in both directions, so STRICT
-      // store assignment and ANSI store assignment both reject it. STRICT goes through
-      // Cast.canUpCast, so the assertions below also guard against a future blanket datetime arm
-      // in UpCastRule silently turning this into a safe store assignment.
-      assert(!Cast.canUpCast(DateType, TimestampNTZNanosType(p)))
+      // SPARK-57303: DATE <-> nanos mirrors micro DATE <-> TIMESTAMP[_NTZ]. The lossless widening
+      // DATE -> nanos is an up-cast and ANSI-store-assignable; the lossy nanos -> DATE drops the
+      // time-of-day, so it is not an up-cast but is still ANSI-store-assignable.
+      assert(Cast.canUpCast(DateType, TimestampNTZNanosType(p)))
       assert(!Cast.canUpCast(TimestampNTZNanosType(p), DateType))
-      assert(!Cast.canUpCast(DateType, TimestampLTZNanosType(p)))
+      assert(Cast.canUpCast(DateType, TimestampLTZNanosType(p)))
       assert(!Cast.canUpCast(TimestampLTZNanosType(p), DateType))
-      assert(!Cast.canANSIStoreAssign(DateType, TimestampNTZNanosType(p)))
-      assert(!Cast.canANSIStoreAssign(TimestampNTZNanosType(p), DateType))
-      assert(!Cast.canANSIStoreAssign(DateType, TimestampLTZNanosType(p)))
-      assert(!Cast.canANSIStoreAssign(TimestampLTZNanosType(p), DateType))
+      assert(Cast.canANSIStoreAssign(DateType, TimestampNTZNanosType(p)))
+      assert(Cast.canANSIStoreAssign(TimestampNTZNanosType(p), DateType))
+      assert(Cast.canANSIStoreAssign(DateType, TimestampLTZNanosType(p)))
+      assert(Cast.canANSIStoreAssign(TimestampLTZNanosType(p), DateType))
     }
   }
 
@@ -789,16 +790,32 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       p1 <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION
       p2 <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION
     } {
-      // Cross-precision nanos casts are never up-casts (only equal precision is, via from == to),
-      // matching the micros <-> nanos precedent above; STRICT store assignment rejects them.
-      assert(Cast.canUpCast(TimestampNTZNanosType(p1), TimestampNTZNanosType(p2)) == (p1 == p2))
-      assert(Cast.canUpCast(TimestampLTZNanosType(p1), TimestampLTZNanosType(p2)) == (p1 == p2))
+      // Lossless widening (p1 <= p2) is an up-cast; lossy narrowing (p1 > p2) is not, matching the
+      // micros <-> nanos precedent above. STRICT store assignment accepts widening, rejects
+      // narrowing.
+      assert(Cast.canUpCast(TimestampNTZNanosType(p1), TimestampNTZNanosType(p2)) == (p1 <= p2))
+      assert(Cast.canUpCast(TimestampLTZNanosType(p1), TimestampLTZNanosType(p2)) == (p1 <= p2))
       // ANSI store assignment allows lossless widening (p1 <= p2) and equal precision, but blocks
       // lossy narrowing (p1 > p2) to avoid silently dropping sub-microsecond digits.
       assert(Cast.canANSIStoreAssign(TimestampNTZNanosType(p1), TimestampNTZNanosType(p2)) ==
         (p1 <= p2))
       assert(Cast.canANSIStoreAssign(TimestampLTZNanosType(p1), TimestampLTZNanosType(p2)) ==
         (p1 <= p2))
+    }
+  }
+
+  test("SPARK-57585: cross-precision TIME store-assignment and up-cast contract") {
+    for {
+      p1 <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION
+      p2 <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION
+    } {
+      // Cross-precision TIME casts are never up-casts (only equal precision is, via from == to),
+      // matching the nanos precedent; STRICT store assignment rejects them. The both-direction
+      // assertions also guard against a future blanket datetime arm in UpCastRule.
+      assert(Cast.canUpCast(TimeType(p1), TimeType(p2)) == (p1 == p2))
+      // ANSI store assignment allows lossless widening (p1 <= p2) and equal precision, but blocks
+      // lossy narrowing (p1 > p2) to avoid silently dropping fractional-seconds digits.
+      assert(Cast.canANSIStoreAssign(TimeType(p1), TimeType(p2)) == (p1 <= p2))
     }
   }
 
@@ -814,12 +831,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(Cast.canCast(ntz, ltz))
       assert(Cast.canAnsiCast(ltz, ntz))
       assert(Cast.canAnsiCast(ntz, ltz))
-      // The cross-family reinterpretation against the session zone is never a safe up-cast.
-      assert(!Cast.canUpCast(ltz, ntz))
-      assert(!Cast.canUpCast(ntz, ltz))
-      // They stay explicit-only: never silent store assignments (mirroring the other nanos casts).
-      assert(!Cast.canANSIStoreAssign(ltz, ntz))
-      assert(!Cast.canANSIStoreAssign(ntz, ltz))
+      // SPARK-57303: the cross-family LTZ <-> NTZ pair is treated on the precision axis like the
+      // micro TIMESTAMP <-> TIMESTAMP_NTZ pair: widening (target precision >= source) is an up-cast
+      // and ANSI-store-assignable, while lossy narrowing is neither.
+      assert(Cast.canUpCast(ltz, ntz) == (p <= q))
+      assert(Cast.canUpCast(ntz, ltz) == (q <= p))
+      assert(Cast.canANSIStoreAssign(ltz, ntz) == (p <= q))
+      assert(Cast.canANSIStoreAssign(ntz, ltz) == (q <= p))
       // The conversion depends on the session time zone in both directions.
       assert(Cast.needsTimeZone(ltz, ntz))
       assert(Cast.needsTimeZone(ntz, ltz))
@@ -832,29 +850,97 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cross-family nanos cast: micro boundary (precision 6) admissibility and store contract") {
     // TIMESTAMP_LTZ(6) = TIMESTAMP and TIMESTAMP_NTZ(6) = TIMESTAMP_NTZ, so the precision-6
-    // cross-family casts are the mixed micro/nanos pairs covered here.
+    // cross-family casts are the mixed micro/nanos pairs covered here. Each entry pairs a cast with
+    // whether it is a lossless widening (target precision >= source); p in [7, 9] always widens
+    // from the micro side (6) and always narrows to it.
     foreachNanosPrecision { p =>
       val pairs = Seq(
-        (TimestampType: DataType, TimestampNTZNanosType(p): DataType),   // LTZ(6) -> NTZ(p)
-        (TimestampNTZNanosType(p): DataType, TimestampType: DataType),   // NTZ(p) -> LTZ(6)
-        (TimestampNTZType: DataType, TimestampLTZNanosType(p): DataType),// NTZ(6) -> LTZ(p)
-        (TimestampLTZNanosType(p): DataType, TimestampNTZType: DataType))// LTZ(p) -> NTZ(6)
-      pairs.foreach { case (from, to) =>
-        // Explicit casts are allowed (ANSI and non-ANSI), but are never safe up-casts and never
-        // silent store assignments, and they depend on the session time zone.
+        (TimestampType: DataType, TimestampNTZNanosType(p): DataType, true),   // LTZ(6) -> NTZ(p)
+        (TimestampNTZNanosType(p): DataType, TimestampType: DataType, false),  // NTZ(p) -> LTZ(6)
+        (TimestampNTZType: DataType, TimestampLTZNanosType(p): DataType, true),// NTZ(6) -> LTZ(p)
+        (TimestampLTZNanosType(p): DataType, TimestampNTZType: DataType, false))// LTZ(p) -> NTZ(6)
+      pairs.foreach { case (from, to, widening) =>
+        // Explicit casts are allowed (ANSI and non-ANSI) and depend on the session time zone.
         assert(Cast.canCast(from, to))
         assert(Cast.canAnsiCast(from, to))
-        assert(!Cast.canUpCast(from, to))
-        assert(!Cast.canANSIStoreAssign(from, to))
+        // SPARK-57303: widening is an up-cast and store-assignable; narrowing is neither.
+        assert(Cast.canUpCast(from, to) == widening)
+        assert(Cast.canANSIStoreAssign(from, to) == widening)
         assert(Cast.needsTimeZone(from, to))
         // Null-safe like the micro TIMESTAMP <-> TIMESTAMP_NTZ pair.
         assert(!Cast.forceNullable(from, to))
       }
     }
     // Sanity: the all-micro TIMESTAMP <-> TIMESTAMP_NTZ pair (precision 6 <-> 6) stays a silent
-    // store assignment, unlike the mixed micro/nanos pairs above.
+    // store assignment (equal precision).
     assert(Cast.canANSIStoreAssign(TimestampType, TimestampNTZType))
     assert(Cast.canANSIStoreAssign(TimestampNTZType, TimestampType))
+  }
+
+  test("SPARK-57303: full timestamp-family up-cast and store-assignment precision matrix") {
+    // The micro/nanos LTZ/NTZ timestamp types with their effective fractional-second precision
+    // (micros: 6, nanos: 7-9), across both time-zone families.
+    val tsTypes: Seq[DataType] =
+      Seq(TimestampType, TimestampNTZType) ++
+        (TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION).flatMap { p =>
+          Seq(TimestampLTZNanosType(p), TimestampNTZNanosType(p))
+        }
+    def precisionOf(dt: DataType): Int = dt match {
+      case t: TimestampLTZNanosType => t.precision
+      case t: TimestampNTZNanosType => t.precision
+      case _ => 6
+    }
+    // For every ordered pair, canUpCast and canANSIStoreAssign are true iff the target precision is
+    // >= the source precision (lossless widening or equal precision), false for lossy narrowing.
+    for {
+      from <- tsTypes
+      to <- tsTypes
+    } {
+      val widening = precisionOf(from) <= precisionOf(to)
+      withClue(s"$from -> $to: ") {
+        assert(Cast.canUpCast(from, to) == widening)
+        assert(Cast.canANSIStoreAssign(from, to) == widening)
+      }
+    }
+
+    // DATE anchors (micros and nanos): DATE -> ts is a lossless widening (up-cast + store-assign);
+    // ts -> DATE drops the time-of-day (not an up-cast) but stays ANSI-store-assignable.
+    tsTypes.foreach { ts =>
+      assert(Cast.canUpCast(DateType, ts), s"DATE -> $ts should be an up-cast")
+      assert(Cast.canANSIStoreAssign(DateType, ts), s"DATE -> $ts should be store-assignable")
+      assert(!Cast.canUpCast(ts, DateType), s"$ts -> DATE should not be an up-cast")
+      assert(Cast.canANSIStoreAssign(ts, DateType), s"$ts -> DATE should be store-assignable")
+    }
+
+    // TIME anchors: TIME is intentionally outside the timestamp family, so TIME <-> ts matches the
+    // micro TIME <-> TIMESTAMP behavior - never an up-cast, but ANSI-store-assignable both ways.
+    for {
+      tq <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION
+      ts <- tsTypes
+    } {
+      val time = TimeType(tq)
+      assert(!Cast.canUpCast(time, ts), s"$time -> $ts should not be an up-cast")
+      assert(!Cast.canUpCast(ts, time), s"$ts -> $time should not be an up-cast")
+      assert(Cast.canANSIStoreAssign(time, ts), s"$time -> $ts should be store-assignable")
+      assert(Cast.canANSIStoreAssign(ts, time), s"$ts -> $time should be store-assignable")
+    }
+  }
+
+  test("SPARK-57303: try-cast nullability follows up-cast admissibility for the timestamp family") {
+    // `Cast.nullable`'s try-cast branch keys on `Cast.canUpCast`: an up-cast (lossless widening
+    // within the timestamp family, or DATE -> ts) never fails, so a non-null child stays non-null;
+    // a lossy narrowing is not an up-cast, so the try-cast is conservatively nullable.
+    def tryCast(from: DataType, to: DataType): Cast =
+      Cast(AttributeReference("c", from, nullable = false)(), to, evalMode = EvalMode.TRY)
+    foreachNanosPrecision { p =>
+      // Lossless widening micros -> nanos(p) and DATE -> nanos(p): non-null child stays non-null.
+      assert(!tryCast(TimestampNTZType, TimestampNTZNanosType(p)).nullable)
+      assert(!tryCast(TimestampType, TimestampLTZNanosType(p)).nullable)
+      assert(!tryCast(DateType, TimestampNTZNanosType(p)).nullable)
+      // Lossy narrowing nanos(p) -> micros is not an up-cast, so the try-cast is nullable.
+      assert(tryCast(TimestampNTZNanosType(p), TimestampNTZType).nullable)
+      assert(tryCast(TimestampLTZNanosType(p), TimestampType).nullable)
+    }
   }
 
   test("SPARK-40389: canUpCast: return false if casting decimal to integral types can cause" +

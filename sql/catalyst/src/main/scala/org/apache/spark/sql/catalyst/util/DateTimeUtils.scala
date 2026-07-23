@@ -175,7 +175,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
     val scaleFactor = math.pow(10, precision).toLong
     val scaledFraction = (nanos % NANOS_PER_SECOND) * scaleFactor / NANOS_PER_SECOND
     val fraction = scaledFraction.toDouble / scaleFactor
-    Decimal(seconds + fraction, 8, 6)
+    Decimal(seconds + fraction, 2 + precision, precision)
   }
 
   /**
@@ -329,6 +329,36 @@ object DateTimeUtils extends SparkDateTimeUtils {
     Math.addExact(
       Math.multiplyExact(value.epochMicros, NANOS_PER_MICROS),
       value.nanosWithinMicro.toLong)
+  }
+
+  /**
+   * Packs a [[TimestampNanosVal]] into a single int64 of epoch-nanoseconds for a `sink` that uses
+   * that encoding (the Parquet INT64 and Avro `timestamp-nanos` / `local-timestamp-nanos` physical
+   * types), translating the int64 overflow thrown by [[timestampNanosToEpochNanos]] into a
+   * `DATETIME_OVERFLOW` error that names the `sink`. `isNtz` selects how the offending value is
+   * rendered in that error (a zone-less local date-time vs. a UTC instant).
+   */
+  def timestampNanosToEpochNanos(value: TimestampNanosVal, isNtz: Boolean, sink: String): Long = {
+    try {
+      timestampNanosToEpochNanos(value)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(value, isNtz, sink)
+    }
+  }
+
+  /**
+   * Unpacks a single int64 of nanoseconds since the epoch (the representation used by the Arrow
+   * nanosecond timestamp vectors and the Parquet / Avro INT64 epoch-nanoseconds encodings) back
+   * into a [[TimestampNanosVal]], truncating the sub-microsecond digits to the given `precision`
+   * (in [7, 9]). This is the inverse of [[timestampNanosToEpochNanos]]. `floorDiv` / `floorMod`
+   * keep `nanosWithinMicro` in [0, 999] for pre-epoch (negative) values too.
+   */
+  def epochNanosToTimestampNanos(epochNanos: Long, precision: Int): TimestampNanosVal = {
+    val epochMicros = Math.floorDiv(epochNanos, NANOS_PER_MICROS)
+    val rawNanosWithinMicro = Math.floorMod(epochNanos, NANOS_PER_MICROS).toInt
+    val nanosWithinMicro = truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision)
+    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
   }
 
   /**
@@ -613,6 +643,21 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case TRUNC_TO_DAY => truncToUnit(micros, zoneId, ChronoUnit.DAYS)
       case _ => daysToMicros(truncDate(microsToDays(micros, zoneId), level), zoneId)
     }
+  }
+
+  /**
+   * Truncates a nanosecond-precision timestamp to the unit given by `level`. `epochMicros` is
+   * truncated with the same [[truncTimestamp]] used by microsecond timestamps, and the
+   * sub-microsecond `nanosWithinMicro` is always dropped: `date_trunc`'s finest supported unit
+   * is MICROSECOND (see `MIN_LEVEL_OF_TIMESTAMP_TRUNC`), which already discards everything below
+   * a microsecond. NTZ vs. LTZ zone handling is the caller's responsibility via `zoneId`.
+   */
+  def truncTimestampNanos(
+      value: TimestampNanosVal,
+      level: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val truncatedMicros = truncTimestamp(value.epochMicros, level, zoneId)
+    TimestampNanosVal.fromParts(truncatedMicros, 0.toShort)
   }
 
   /**
@@ -1000,7 +1045,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       localTimeToNanos(lt)
     } catch {
       case e @ (_: DateTimeException | _: ArithmeticException) =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
     }
   }
 
@@ -1015,9 +1060,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
       nanos
     } catch {
       case e: DateTimeException =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
       case e: ArithmeticException =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(
           new DateTimeException("Overflow in TIME conversion", e))
     }
   }
@@ -1221,11 +1266,33 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * DayTimeInterval bucketing: bucket k starts at
-   * `timestampAddDayTime(originMicros, k * bucketMicros, zoneId)`, matching the instant that
-   * `originMicros + INTERVAL '<k * bucketSize>'` would produce. For sub-day buckets the
-   * calendar-day component is zero, so the result is pure UTC-microsecond floor division
-   * and `zoneId` has no effect.
+   * Start boundary of DayTimeInterval bucket index `k`, on the fixed grid anchored at
+   * `originMicros`. Sub-day buckets use pure UTC arithmetic; multi-day buckets add the calendar-day
+   * part in `zoneId`.
+   *
+   * `bucketMicros` must be positive; `TimeBucket.checkInputDataTypes` enforces this at
+   * analysis time.
+   *
+   * @param bucketMicros bucket size in microseconds.
+   * @param k            bucket index (may be negative).
+   * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
+   * @param zoneId       zone in which calendar-day arithmetic is performed.
+   */
+  def timeBucketFromIndexDTInterval(
+      bucketMicros: Long, k: Long, originMicros: Long, zoneId: ZoneId): Long = {
+    val bucketOffset = MathUtils.multiplyExact(k, bucketMicros)
+
+    if (bucketMicros / MICROS_PER_DAY != 0) {
+      timestampAddDayTime(originMicros, bucketOffset, zoneId)
+    } else {
+      // Sub-day bucket stays zone-independent even when k*bucketMicros spans days.
+      MathUtils.addExact(originMicros, bucketOffset)
+    }
+  }
+
+  /**
+   * The DayTimeInterval bucket containing `tsMicros`, as `(index, startBoundary)`. The index is
+   * returned so callers walking to the next bucket need not search again.
    *
    * `bucketMicros` must be positive; `TimeBucket.checkInputDataTypes` enforces this at
    * analysis time.
@@ -1235,33 +1302,46 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
    * @param zoneId       zone in which calendar-day arithmetic is performed.
    */
+  def timeBucketFromTimestampDTInterval(
+      bucketMicros: Long, tsMicros: Long, originMicros: Long, zoneId: ZoneId): (Long, Long) = {
+    val diff = MathUtils.subtractExact(tsMicros, originMicros)
+    val k = MathUtils.floorDiv(diff, bucketMicros)
+
+    def boundary(kk: Long): Long =
+      timeBucketFromIndexDTInterval(bucketMicros, kk, originMicros, zoneId)
+
+    if (bucketMicros / MICROS_PER_DAY != 0) {
+      // Multi-day: calendar-day arithmetic makes boundaries drift off the linear grid as offset
+      // shifts accumulate between origin and ts. A DST shift (e.g. Pacific/Los_Angeles) is 1h, so
+      // the estimate is off by at most one; a date-line shift (e.g. Pacific/Apia 2011) can reach a
+      // full bucket, so it can be off by more than one. Step the index until the bucket contains
+      // ts: the first loop walks down while the start is past ts, the second walks up while the
+      // next start is not, landing on boundary(k) <= ts < boundary(k + 1).
+      var adjusted = k
+      while (boundary(adjusted) > tsMicros) {
+        adjusted = MathUtils.subtractExact(adjusted, 1L)
+      }
+      while (boundary(MathUtils.addExact(adjusted, 1L)) <= tsMicros) {
+        adjusted = MathUtils.addExact(adjusted, 1L)
+      }
+      return (adjusted, boundary(adjusted))
+    }
+    // Sub-day: pure UTC arithmetic, the linear estimate is exact.
+    (k, boundary(k))
+  }
+
+  /**
+   * DayTimeInterval bucketing: the start boundary of the bucket containing `tsMicros`.
+   *
+   * @param bucketMicros bucket size in microseconds.
+   * @param tsMicros     timestamp to bucket, in microseconds since the epoch (UTC).
+   * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
+   * @param zoneId       zone in which calendar-day arithmetic is performed.
+   */
   def timeBucketDTInterval(
       bucketMicros: Long, tsMicros: Long, originMicros: Long, zoneId: ZoneId): Long = {
-    val bucketDays = bucketMicros / MICROS_PER_DAY
-
-    val diff = MathUtils.subtractExact(tsMicros, originMicros)
-    var k = MathUtils.floorDiv(diff, bucketMicros)
-
-    if (bucketDays == 0) {
-      val bucketOffset = MathUtils.multiplyExact(k, bucketMicros)
-      MathUtils.addExact(originMicros, bucketOffset)
-    } else {
-      // bucketMicros >= MICROS_PER_DAY, so DST offset shifts (a few hours at most) can
-      // move candidate(k) within one bucket of `origin + k*bucketMicros` but no further.
-      // One +/-1 step recovers the correct k.
-      def candidate(kk: Long): Long =
-        timestampAddDayTime(originMicros, MathUtils.multiplyExact(kk, bucketMicros), zoneId)
-
-      var c = candidate(k)
-      if (c > tsMicros) {
-        k -= 1
-        c = candidate(k)
-      } else {
-        val cNext = candidate(MathUtils.addExact(k, 1L))
-        if (cNext <= tsMicros) c = cNext
-      }
-      c
-    }
+    val (_, start) = timeBucketFromTimestampDTInterval(bucketMicros, tsMicros, originMicros, zoneId)
+    start
   }
 
   /**

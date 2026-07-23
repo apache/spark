@@ -207,8 +207,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     table.increaseVersion()
     val currentVersion = table.version()
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
-      oldColumns = table.columns(),
-      newColumns = CatalogV2Util.structTypeToV2Columns(schema))
+      CatalogV2Util.structTypeToV2Columns(schema))
     val newTable = table match {
       case _: InMemoryTable =>
         new InMemoryTable(
@@ -287,7 +286,8 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
       TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE,
       TableCatalogCapability.SUPPORT_TABLE_CONSTRAINT,
       TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS,
-      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS
+      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
+      TableCatalogCapability.SUPPORT_GENERATED_COLUMN_ON_WRITE
     ).asJava
   }
 

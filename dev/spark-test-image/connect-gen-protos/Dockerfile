@@ -51,7 +51,7 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Keep these versions in sync with the pinned versions in dev/requirements.txt
+# Keep these versions in sync with the pinned versions in pyproject.toml
 RUN python3.12 -m pip install \
     'mypy==1.19.1' \
     'mypy-protobuf==3.3.0' \

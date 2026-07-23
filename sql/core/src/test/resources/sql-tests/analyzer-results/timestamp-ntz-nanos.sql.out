@@ -805,3 +805,157 @@ SELECT map('min', '0001-01-01 00:00:00.000000001' :: timestamp_ntz(9),
 -- !query analysis
 Project [map(min, cast(0001-01-01 00:00:00.000000001 as timestamp_ntz(9)), max, cast(9999-12-31 23:59:59.999999 as timestamp_ntz(9))) AS map(min, CAST(0001-01-01 00:00:00.000000001 AS TIMESTAMP_NTZ(9)), max, TIMESTAMP_NTZ '9999-12-31 23:59:59.999999')#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT v FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000001000' AS v
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') ORDER BY v
+-- !query analysis
+Sort [v#x ASC NULLS FIRST], true
++- Project [v#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Union false, false
+         :  :- Project [2020-01-01 00:00:00.000001 AS v#x]
+         :  :  +- OneRowRelation
+         :  +- Project [2020-01-01 00:00:00.000000999 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'#x]
+         :     +- OneRowRelation
+         +- Project [2020-01-01 00:00:00.000000001 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT v, row_number() OVER (ORDER BY v) AS rn FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900' AS v
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') ORDER BY rn
+-- !query analysis
+Sort [rn#x ASC NULLS FIRST], true
++- Project [v#x, rn#x]
+   +- Project [v#x, rn#x, rn#x]
+      +- Window [row_number() windowspecdefinition(v#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [v#x ASC NULLS FIRST]
+         +- Project [v#x]
+            +- SubqueryAlias __auto_generated_subquery_name
+               +- Union false, false
+                  :- Union false, false
+                  :  :- Project [2020-01-01 00:00:00.0000009 AS v#x]
+                  :  :  +- OneRowRelation
+                  :  +- Project [2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'#x]
+                  :     +- OneRowRelation
+                  +- Project [2020-01-01 00:00:00.0000005 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500'#x]
+                     +- OneRowRelation
+
+
+-- !query
+SELECT v, lead(v) OVER (ORDER BY v) AS next_v FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900' AS v
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') ORDER BY v
+-- !query analysis
+Sort [v#x ASC NULLS FIRST], true
++- Project [v#x, next_v#x]
+   +- Project [v#x, next_v#x, next_v#x]
+      +- Window [lead(v#x, 1, null) windowspecdefinition(v#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 1, 1)) AS next_v#x], [v#x ASC NULLS FIRST]
+         +- Project [v#x]
+            +- SubqueryAlias __auto_generated_subquery_name
+               +- Union false, false
+                  :- Union false, false
+                  :  :- Project [2020-01-01 00:00:00.0000009 AS v#x]
+                  :  :  +- OneRowRelation
+                  :  +- Project [2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'#x]
+                  :     +- OneRowRelation
+                  +- Project [2020-01-01 00:00:00.0000005 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500'#x]
+                     +- OneRowRelation
+
+
+-- !query
+SELECT date_format(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ntz(8), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(cast(2020-01-01 13:24:35.123456789 as timestamp_ntz(8)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(8)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ntz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(cast(2020-01-01 13:24:35.123456789 as timestamp_ntz(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_char(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_char('2020-01-01 13:24:35.123456789' :: timestamp_ntz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(cast(2020-01-01 13:24:35.123456789 as timestamp_ntz(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_varchar('2020-01-01 13:24:35.123456789' :: timestamp_ntz(8), 'HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(cast(2020-01-01 13:24:35.123456789 as timestamp_ntz(8)), HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(8)), HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_format(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(1960-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_format(NULL :: timestamp_ntz(9), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(cast(null as timestamp_ntz(9)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(CAST(NULL AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('SECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
+-- !query analysis
+Project [date_trunc(SECOND, 2020-01-01 12:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(SECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('MICROSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
+-- !query analysis
+Project [date_trunc(MICROSECOND, 2020-01-01 12:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('HOUR', '2020-01-01 12:34:56.123456789' :: timestamp_ntz(9))
+-- !query analysis
+Project [date_trunc(HOUR, cast(2020-01-01 12:34:56.123456789 as timestamp_ntz(9)), Some(America/Los_Angeles)) AS date_trunc(HOUR, CAST(2020-01-01 12:34:56.123456789 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('DAY', '2020-06-21 23:30:00.000000123' :: timestamp_ntz(7))
+-- !query analysis
+Project [date_trunc(DAY, cast(2020-06-21 23:30:00.000000123 as timestamp_ntz(7)), Some(America/Los_Angeles)) AS date_trunc(DAY, CAST(2020-06-21 23:30:00.000000123 AS TIMESTAMP_NTZ(7)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('NANOSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
+-- !query analysis
+Project [date_trunc(NANOSECOND, 2020-01-01 12:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(NANOSECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')#x]
++- OneRowRelation

@@ -234,6 +234,17 @@ class RobustScalerModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Vectors.empty, Vectors.empty)
 
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (range != null) {
+      size += range.getSizeInBytes
+    }
+    if (median != null) {
+      size += median.getSizeInBytes
+    }
+    size
+  }
+
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 

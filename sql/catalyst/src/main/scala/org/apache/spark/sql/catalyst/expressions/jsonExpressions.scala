@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
   RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -41,6 +42,13 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 @ExpressionDescription(
   usage = "_FUNC_(json_txt, path) - Extracts a json object from `path`.",
+  arguments = """
+    Arguments:
+      * json_txt - The JSON text to extract from.
+        An expression that evaluates to a string.
+      * path - The path identifying the JSON object to extract.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
@@ -144,25 +152,31 @@ case class GetJsonObject(json: Expression, path: Expression)
 object GetJsonObject {
   import PathInstruction._
 
-  private[sql] def simpleNamedPath(path: UTF8String): Option[Seq[String]] = {
+  private[sql] sealed trait SimpleJsonPathSegment
+  private[sql] case class NamedPathSegment(name: String) extends SimpleJsonPathSegment
+  private[sql] case class IndexedPathSegment(index: Long) extends SimpleJsonPathSegment
+
+  private[sql] def simplePath(path: UTF8String): Option[Seq[SimpleJsonPathSegment]] = {
     try {
       Option(path).flatMap(value => JsonPathParser.parse(value.toString)).flatMap { instructions =>
-        val names = instructions.grouped(2).map {
-          case List(Key, Named(fieldName)) => Some(fieldName)
+        val segments = instructions.grouped(2).map {
+          case List(Key, Named(fieldName)) => Some(NamedPathSegment(fieldName))
+          case List(Subscript, Index(index)) if index >= 0 => Some(IndexedPathSegment(index))
           case _ => None
         }.toSeq
-        if (names.nonEmpty && names.forall(_.isDefined)) Some(names.flatten) else None
+        if (segments.nonEmpty && segments.forall(_.isDefined)) Some(segments.flatten) else None
       }
     } catch {
       // Numeric subscripts are parsed as Long and can overflow before the parser returns None.
       case _: NumberFormatException => None
     }
   }
+
 }
 
 /**
- * Extracts multiple simple named paths from a JSON string in one parse. This is an internal
- * expression used to share sibling [[GetJsonObject]] expressions; unsupported and
+ * Extracts multiple simple object-key and array-index paths from a JSON string in one parse. This
+ * is an internal expression used to share sibling [[GetJsonObject]] expressions; unsupported and
  * prefix-conflicting JSON paths remain as independent GetJsonObject expressions.
  */
 case class MultiGetJsonObject(
@@ -193,8 +207,8 @@ case class MultiGetJsonObject(
   final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
 
   @transient
-  private lazy val namedPaths = fallbackPaths.map { path =>
-    GetJsonObject.simpleNamedPath(UTF8String.fromString(path)).getOrElse {
+  private lazy val simplePaths = fallbackPaths.map { path =>
+    GetJsonObject.simplePath(UTF8String.fromString(path)).getOrElse {
       throw new IllegalArgumentException(s"Unsupported shared JSON path: $path")
     }
   }
@@ -202,7 +216,7 @@ case class MultiGetJsonObject(
   @transient
   private lazy val evaluator = MultiGetJsonObjectEvaluator(
     fallbackPaths.map(UTF8String.fromString),
-    namedPaths)
+    simplePaths)
 
   override def eval(input: InternalRow): Any = {
     evaluator.evaluate(json.eval(input).asInstanceOf[UTF8String])
@@ -384,14 +398,22 @@ case class JsonToStructs(
       child = child,
       timeZoneId = None)
 
-  override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
-      val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
-      if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
-    case _ =>
-      DataTypeMismatch(
-        errorSubClass = "INVALID_JSON_SCHEMA",
-        messageParameters = Map("schema" -> toSQLType(nullableSchema)))
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // `from_json` parses each input string as one JSON document, so the embedded array
+    // splitting can never apply.
+    if (CaseInsensitiveMap(options).contains(JSONOptions.EXPLODE_EMBEDDED_ARRAY)) {
+      throw QueryCompilationErrors.explodeEmbeddedArrayUnsupportedUsage(
+        "the from_json function")
+    }
+    nullableSchema match {
+      case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
+        val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
+        if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "INVALID_JSON_SCHEMA",
+          messageParameters = Map("schema" -> toSQLType(nullableSchema)))
+    }
   }
 
   override def dataType: DataType = nullableSchema
@@ -434,6 +456,13 @@ object JsonToStructs {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, options]) - Returns a JSON string with a given struct value",
+  arguments = """
+    Arguments:
+      * expr - The struct value to convert to a JSON string.
+        An expression that evaluates to a struct, array, map, or variant.
+      * options - Options controlling how the JSON string is produced.
+        An expression that evaluates to a map. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
@@ -596,6 +625,7 @@ case class SchemaOfJson(
     Arguments:
       * jsonArray - A JSON array. `NULL` is returned in case of any other valid JSON string,
           `NULL` or an invalid JSON.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -642,6 +672,7 @@ case class LengthOfJsonArray(child: Expression)
       * json_object - A JSON object. If a valid JSON object is given, all the keys of the outermost
           object will be returned as an array. If it is any other valid JSON string, an invalid JSON
           string or an empty string, the function returns null.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:

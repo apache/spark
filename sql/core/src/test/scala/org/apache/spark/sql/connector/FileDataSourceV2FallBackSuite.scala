@@ -179,10 +179,13 @@ class FileDataSourceV2FallBackSuite extends SharedSparkSession {
             val inputData = spark.range(10)
             inputData.write.format(format).save(path.getCanonicalPath)
             sparkContext.listenerBus.waitUntilEmpty()
-            assert(commands.length == 1)
-            assert(commands.head._1 == "command")
-            assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
-            assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+            // The write should be executed as a single "command" callback. Other callbacks
+            // (e.g. an eager "collect" on the analyzed plan) may be observed on the listener
+            // bus, so filter to the write command rather than asserting on the total count.
+            val writeCommands = commands.filter(_._1 == "command")
+            assert(writeCommands.length == 1)
+            assert(writeCommands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
+            assert(writeCommands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
               .fileFormat.isInstanceOf[ParquetFileFormat])
             val df = spark.read.format(format).load(path.getCanonicalPath)
             checkAnswer(df, inputData.toDF())

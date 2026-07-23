@@ -54,6 +54,7 @@ case class ApplicationAttemptInfo private[spark](
     sparkUser: String,
     completed: Boolean = false,
     appSparkVersion: String,
+    exitCode: Option[Int] = None,
     logSourceName: Option[String] = None,
     logSourceFullPath: Option[String] = None) {
 

@@ -74,3 +74,17 @@ test('stringAbbreviate', function () {
   expect(utils.stringAbbreviate('12345678901', 10)).toContain('1234567890...');
   expect(utils.stringAbbreviate('12345678901', 10)).toContain('<pre>12345678901</pre>')
 });
+
+test('errorMessageCell escapes HTML in error messages', function () {
+  const payload = '<img src=x onerror=alert(document.domain)>';
+
+  // A single-line message becomes the summary cell; it must be HTML-escaped.
+  const singleLine = utils.errorMessageCell(payload);
+  expect(singleLine).not.toContain(payload);
+  expect(singleLine).toContain('&lt;img src=x onerror=alert(document.domain)&gt;');
+
+  // A multi-line message puts the payload in the expandable <pre> details.
+  const multiLine = utils.errorMessageCell('boom\n' + payload);
+  expect(multiLine).not.toContain(payload);
+  expect(multiLine).toContain('&lt;img src=x onerror=alert(document.domain)&gt;');
+});

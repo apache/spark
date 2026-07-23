@@ -235,6 +235,11 @@ private[sql] class ProtobufDeserializer(
       case (LONG, LongType) =>
         (updater, ordinal, value) => updater.setLong(ordinal, value.asInstanceOf[Long])
 
+      case (LONG, _: TimeType) =>
+        // The int64 field stores nanoseconds-of-day, matching TimeType's internal
+        // nanos-since-midnight representation, so copy the value directly.
+        (updater, ordinal, value) => updater.setLong(ordinal, value.asInstanceOf[Long])
+
       case (LONG, DecimalType.LongDecimal) =>
         (updater, ordinal, value) =>
           updater.setDecimal(

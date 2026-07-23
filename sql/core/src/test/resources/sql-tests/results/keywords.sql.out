@@ -16,15 +16,18 @@ AND	false
 ANTI	false
 ANY	false
 ANY_VALUE	false
+APPLY	false
 APPROX	false
 ARCHIVE	false
 ARRAY	false
 AS	false
 ASC	false
 ASENSITIVE	false
+ASOF	false
 AT	false
 ATOMIC	false
 AUTHORIZATION	false
+AUTO	false
 BEGIN	false
 BERNOULLI	false
 BETWEEN	false
@@ -49,6 +52,7 @@ CASE	false
 CAST	false
 CATALOG	false
 CATALOGS	false
+CDC	false
 CHANGE	false
 CHANGES	false
 CHAR	false
@@ -172,6 +176,7 @@ GROUP	false
 GROUPING	false
 HANDLER	false
 HAVING	false
+HISTORY	false
 HOUR	false
 HOURS	false
 IDENTIFIED	false
@@ -221,6 +226,7 @@ LINES	false
 LIST	false
 LOAD	false
 LOCAL	false
+LOCALTIME	false
 LOCATION	false
 LOCK	false
 LOCKS	false
@@ -230,6 +236,7 @@ LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
+MATCH_CONDITION	false
 MATERIALIZED	false
 MAX	false
 MEASURE	false
@@ -326,6 +333,7 @@ ROLLBACK	false
 ROLLUP	false
 ROW	false
 ROWS	false
+SCD	false
 SCHEMA	false
 SCHEMAS	false
 SECOND	false
@@ -334,6 +342,7 @@ SECURITY	false
 SELECT	false
 SEMI	false
 SEPARATED	false
+SEQUENCE	false
 SERDE	false
 SERDEPROPERTIES	false
 SESSION_USER	false
@@ -385,6 +394,7 @@ TIMESTAMP_NTZ	false
 TINYINT	false
 TO	false
 TOUCH	false
+TRACK	false
 TRAILING	false
 TRANSACTION	false
 TRANSACTIONS	false

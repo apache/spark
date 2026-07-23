@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.{DecimalFormat, DecimalFormatSymbols, SimpleDateFormat}
+import java.time.{LocalDateTime, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 
 import org.scalatest.exceptions.TestFailedException
@@ -30,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -567,6 +569,33 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           UTC_OPT),
         InternalRow(c.getTimeInMillis * 1000L)
       )
+    }
+  }
+
+  test("SPARK-57456: from_json with nanos timestamp") {
+    val jsonData = """{"t": "2016-01-01T00:00:00.123456789"}"""
+    // No timestamp format option: the default formatter parses the full sub-second fraction and
+    // truncates the sub-precision digits toward zero to the declared precision.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      TimestampNanosTestUtils.foreachNanosPrecision { p =>
+        val nano = TimestampNanosTestUtils.nanoOfSecTruncator(p)(123456789)
+        val ldt = LocalDateTime.of(2016, 1, 1, 0, 0, 0, nano)
+        checkEvaluation(
+          JsonToStructs(
+            StructType(StructField("t", TimestampNTZNanosType(p)) :: Nil),
+            Map.empty[String, String],
+            Literal(jsonData),
+            UTC_OPT),
+          InternalRow(TimestampNanosTestUtils.localDateTimeToNanosVal(ldt)))
+        // LTZ: the string has no zone, so it is interpreted in the given time zone (UTC here).
+        checkEvaluation(
+          JsonToStructs(
+            StructType(StructField("t", TimestampLTZNanosType(p)) :: Nil),
+            Map.empty[String, String],
+            Literal(jsonData),
+            UTC_OPT),
+          InternalRow(TimestampNanosTestUtils.instantToNanosVal(ldt.toInstant(ZoneOffset.UTC))))
+      }
     }
   }
 

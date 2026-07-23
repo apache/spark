@@ -561,6 +561,21 @@ It also supports reading the following Avro [logical types](https://avro.apache.
     <td>TimestampType</td>
   </tr>
   <tr>
+    <td>time-micros</td>
+    <td>long</td>
+    <td>TimeType</td>
+  </tr>
+  <tr>
+    <td>timestamp-nanos</td>
+    <td>long</td>
+    <td>TimestampType(p) (with p in 7-9, requires <code>spark.sql.timestampNanosTypes.enabled=true</code>)</td>
+  </tr>
+  <tr>
+    <td>local-timestamp-nanos</td>
+    <td>long</td>
+    <td>TimestampNTZType(p) (with p in 7-9, requires <code>spark.sql.timestampNanosTypes.enabled=true</code>)</td>
+  </tr>
+  <tr>
     <td>decimal</td>
     <td>fixed</td>
     <td>DecimalType</td>
@@ -602,6 +617,21 @@ Spark supports writing of all Spark SQL types into Avro. For most types, the map
     <td>TimestampType</td>
     <td>long</td>
     <td>timestamp-micros</td>
+  </tr>
+  <tr>
+    <td>TimeType</td>
+    <td>long</td>
+    <td>time-micros</td>
+  </tr>
+  <tr>
+    <td>TimestampType(p) (with p in 7-9)</td>
+    <td>long</td>
+    <td>timestamp-nanos</td>
+  </tr>
+  <tr>
+    <td>TimestampNTZType(p) (with p in 7-9)</td>
+    <td>long</td>
+    <td>local-timestamp-nanos</td>
   </tr>
   <tr>
     <td>DecimalType</td>

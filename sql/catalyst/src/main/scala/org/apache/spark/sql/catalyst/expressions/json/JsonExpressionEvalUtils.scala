@@ -26,7 +26,7 @@ import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, GetJsonObject}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonGenerator, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, MapData, PermissiveMode}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -576,26 +576,31 @@ case class GetJsonObjectEvaluator(cachedPath: UTF8String) {
 }
 
 /**
- * Evaluates multiple simple named JSON paths in one parse.
+ * Evaluates multiple simple object-key and array-index JSON paths in one parse.
  */
 case class MultiGetJsonObjectEvaluator(
     fallbackPaths: Seq[UTF8String],
-    namedPaths: Seq[Seq[String]]) {
+    simplePaths: Seq[Seq[GetJsonObject.SimpleJsonPathSegment]]) {
   import SharedFactory._
 
-  require(fallbackPaths.nonEmpty && namedPaths.length == fallbackPaths.length)
+  require(fallbackPaths.nonEmpty && simplePaths.length == fallbackPaths.length)
 
   @transient
   private lazy val useTopLevelFastPath: Boolean =
-    namedPaths.forall(_.length == 1) && namedPaths.distinct.length == namedPaths.length
+    simplePaths.forall {
+      case Seq(_: GetJsonObject.NamedPathSegment) => true
+      case _ => false
+    } && simplePaths.distinct.length == simplePaths.length
 
   @transient
   private lazy val topLevelFieldToOrdinal: Map[String, Int] =
-    namedPaths.zipWithIndex.map { case (path, ordinal) => path.head -> ordinal }.toMap
+    simplePaths.zipWithIndex.map { case (path, ordinal) =>
+      path.head.asInstanceOf[GetJsonObject.NamedPathSegment].name -> ordinal
+    }.toMap
 
   @transient
   private lazy val pathTrie: MultiGetJsonObjectEvaluator.PathTrieNode =
-    MultiGetJsonObjectEvaluator.buildPathTrie(namedPaths)
+    MultiGetJsonObjectEvaluator.buildPathTrie(simplePaths)
 
   @transient
   private lazy val nullRow: InternalRow =
@@ -622,23 +627,30 @@ case class MultiGetJsonObjectEvaluator(
     val matched = Array.ofDim[Boolean](fallbackPaths.length)
 
     try {
-      val validObject = Utils.tryWithResource(
+      val validRoot = Utils.tryWithResource(
         CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
-        if (parser.nextToken() != JsonToken.START_OBJECT) {
-          false
-        } else if (useTopLevelFastPath) {
-          extractTopLevelObject(parser, values, matched)
-        } else {
-          extractObject(parser, pathTrie, values, matched)
+        parser.nextToken() match {
+          case JsonToken.START_OBJECT if pathTrie.namedChildren.isEmpty =>
+            false
+          case JsonToken.START_OBJECT if useTopLevelFastPath =>
+            extractTopLevelObject(parser, values, matched)
+          case JsonToken.START_OBJECT =>
+            extractObject(parser, pathTrie, values, matched)
+          case JsonToken.START_ARRAY if pathTrie.indexedChildren.isEmpty =>
+            false
+          case JsonToken.START_ARRAY =>
+            extractArray(parser, pathTrie, values, matched)
+          case _ =>
+            false
         }
       }
-      if (validObject) {
+      if (validRoot) {
         new GenericInternalRow(values)
       } else {
         nullRow
       }
     } catch {
-      // Every simple named legacy extraction scans through the root object's closing token, so a
+      // Every eligible legacy extraction scans through its root container's closing token, so a
       // syntax failure makes every sibling null without needing per-path reparsing.
       case _: JsonParseException => nullRow
       // A parser-side rendering failure, such as a string-length constraint violation, can leave
@@ -681,7 +693,7 @@ case class MultiGetJsonObjectEvaluator(
     var token = parser.nextToken()
     while (valid && token != null && token != JsonToken.END_OBJECT) {
       if (token == JsonToken.FIELD_NAME) {
-        val child = node.children.get(parser.currentName).filter(_.hasUnmatched(matched))
+        val child = node.namedChildren.get(parser.currentName).filter(_.hasUnmatched(matched))
         val valueToken = parser.nextToken()
         if (child.nonEmpty && valueToken != JsonToken.VALUE_NULL) {
           valid = extractValue(parser, child.get, values, matched)
@@ -696,6 +708,29 @@ case class MultiGetJsonObjectEvaluator(
       }
     }
     valid && token == JsonToken.END_OBJECT
+  }
+
+  private def extractArray(
+      parser: JsonParser,
+      node: MultiGetJsonObjectEvaluator.PathTrieNode,
+      values: Array[Any],
+      matched: Array[Boolean]): Boolean = {
+    var valid = true
+    var index = 0L
+    var token = parser.nextToken()
+    while (valid && token != null && token != JsonToken.END_ARRAY) {
+      val child = node.indexedChildren.get(index).filter(_.hasUnmatched(matched))
+      if (child.nonEmpty) {
+        valid = extractValue(parser, child.get, values, matched)
+      } else {
+        parser.skipChildren()
+      }
+      if (valid) {
+        token = parser.nextToken()
+        index += 1
+      }
+    }
+    valid && token == JsonToken.END_ARRAY
   }
 
   private def extractValue(
@@ -714,6 +749,8 @@ case class MultiGetJsonObjectEvaluator(
       true
     } else if (parser.currentToken == JsonToken.START_OBJECT) {
       extractObject(parser, node, values, matched)
+    } else if (parser.currentToken == JsonToken.START_ARRAY) {
+      extractArray(parser, node, values, matched)
     } else {
       parser.skipChildren()
       true
@@ -794,36 +831,49 @@ case class MultiGetJsonObjectEvaluator(
 object MultiGetJsonObjectEvaluator {
   private final class MutablePathTrieNode {
     val terminalOrdinals: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer.empty
-    val children: mutable.LinkedHashMap[String, MutablePathTrieNode] = mutable.LinkedHashMap.empty
+    val namedChildren: mutable.LinkedHashMap[String, MutablePathTrieNode] =
+      mutable.LinkedHashMap.empty
+    val indexedChildren: mutable.LinkedHashMap[Long, MutablePathTrieNode] =
+      mutable.LinkedHashMap.empty
 
     def freeze(): PathTrieNode = {
       require(
-        terminalOrdinals.isEmpty || children.isEmpty,
+        terminalOrdinals.isEmpty || (namedChildren.isEmpty && indexedChildren.isEmpty),
         "Shared JSON paths must not be prefixes of one another")
-      val frozenChildren = children.iterator.map { case (name, child) =>
+      val frozenNamedChildren = namedChildren.iterator.map { case (name, child) =>
         name -> child.freeze()
       }.toMap
+      val frozenIndexedChildren = indexedChildren.iterator.map { case (index, child) =>
+        index -> child.freeze()
+      }.toMap
       val ordinals = (terminalOrdinals.iterator ++
-        frozenChildren.valuesIterator.flatMap(_.descendantOrdinals.iterator)).toArray
-      PathTrieNode(terminalOrdinals.toArray, frozenChildren, ordinals)
+        frozenNamedChildren.valuesIterator.flatMap(_.descendantOrdinals.iterator) ++
+        frozenIndexedChildren.valuesIterator.flatMap(_.descendantOrdinals.iterator)).toArray
+      PathTrieNode(
+        terminalOrdinals.toArray, frozenNamedChildren, frozenIndexedChildren, ordinals)
     }
   }
 
   private case class PathTrieNode(
       terminalOrdinals: Array[Int],
-      children: Map[String, PathTrieNode],
+      namedChildren: Map[String, PathTrieNode],
+      indexedChildren: Map[Long, PathTrieNode],
       descendantOrdinals: Array[Int]) {
     def hasUnmatched(matched: Array[Boolean]): Boolean = {
       descendantOrdinals.exists(index => !matched(index))
     }
   }
 
-  private def buildPathTrie(paths: Seq[Seq[String]]): PathTrieNode = {
+  private def buildPathTrie(
+      paths: Seq[Seq[GetJsonObject.SimpleJsonPathSegment]]): PathTrieNode = {
     val root = new MutablePathTrieNode
     paths.zipWithIndex.foreach { case (path, ordinal) =>
       var node = root
-      path.foreach { fieldName =>
-        node = node.children.getOrElseUpdate(fieldName, new MutablePathTrieNode)
+      path.foreach {
+        case GetJsonObject.NamedPathSegment(fieldName) =>
+          node = node.namedChildren.getOrElseUpdate(fieldName, new MutablePathTrieNode)
+        case GetJsonObject.IndexedPathSegment(index) =>
+          node = node.indexedChildren.getOrElseUpdate(index, new MutablePathTrieNode)
       }
       node.terminalOrdinals += ordinal
     }

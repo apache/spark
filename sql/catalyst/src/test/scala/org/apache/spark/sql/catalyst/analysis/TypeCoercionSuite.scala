@@ -670,6 +670,17 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     // nanos <-> TIME has no common datetime type.
     widenTest(TimestampLTZNanosType(9), TimeType(6), None)
     widenTest(TimestampNTZNanosType(9), TimeType(6), None)
+
+    // TIME(p) types (SPARK-57585).
+    // Two TIME operands widen to the larger fractional-seconds precision.
+    widenTest(TimeType(3), TimeType(6), Some(TimeType(6)))
+    widenTest(TimeType(6), TimeType(3), Some(TimeType(6)))
+    widenTest(TimeType(0), TimeType(9), Some(TimeType(9)))
+    widenTest(TimeType(6), TimeType(6), Some(TimeType(6)))
+    // TIME has no common datetime type with DATE or the TIMESTAMP families.
+    widenTest(TimeType(6), DateType, None)
+    widenTest(TimeType(6), TimestampType, None)
+    widenTest(TimeType(6), TimestampNTZType, None)
     // No common type with non-datetime types.
     widenTest(IntegerType, TimestampLTZNanosType(9), None)
     widenTest(StringType, TimestampNTZNanosType(9), None)

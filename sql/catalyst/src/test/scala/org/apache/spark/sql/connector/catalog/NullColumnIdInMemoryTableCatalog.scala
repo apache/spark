@@ -30,9 +30,9 @@ import org.apache.spark.sql.internal.connector.ColumnImpl
  * override [[columns]] to strip IDs. Data is copied from the table
  * created by the parent [[InMemoryTableCatalog]].
  *
- * When column IDs are null, [[V2TableUtil.validateColumnIds]]
+ * When field IDs are null, field ID validation in [[org.apache.spark.sql.util.SchemaUtils]]
  * skips validation entirely, meaning drop/re-add of a column is NOT
- * detected via column IDs.
+ * detected via field IDs.
  */
 class NullColumnIdInMemoryTableCatalog extends InMemoryTableCatalog {
 

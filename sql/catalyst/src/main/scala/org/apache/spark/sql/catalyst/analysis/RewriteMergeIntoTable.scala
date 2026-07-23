@@ -31,7 +31,6 @@ import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A rule that rewrites MERGE operations using plans that operate on individual or groups of rows.
@@ -52,6 +51,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r: DataSourceV2Relation =>
+          checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
 
           // NOT MATCHED conditions may only refer to columns in source so they can be pushed down
@@ -85,6 +85,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r: DataSourceV2Relation =>
+          checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
 
           // there are only NOT MATCHED actions, use a left anti join to remove any matching rows
@@ -124,8 +125,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned =>
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
+          checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
-          val table = buildOperationTable(tbl, MERGE, CaseInsensitiveStringMap.empty())
+          val table = buildOperationTable(tbl, MERGE, r.options)
           table.operation match {
             case _: SupportsDelta =>
               buildWriteDeltaPlan(

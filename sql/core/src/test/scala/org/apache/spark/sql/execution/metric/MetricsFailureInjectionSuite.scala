@@ -317,28 +317,55 @@ class MetricsFailureInjectionSuite
         setUpTestTable("test_table")
         withSparkContextConf(
             config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> injectFailure.toString) {
-          val stage1MetricsExpr = incrementMetrics(Seq(stage1Metric, stage1SLAMetric))
-          val udfRand =
-            udf {
-              () => {
-                new Random().nextDouble()
-              }
-            }.asNondeterministic().apply().expr
-          val stage1 = spark.read.table("test_table")
-            .withColumn("non_deterministic_col", Column(udfRand))
-            .filter(Column(stage1MetricsExpr))
-          val stage2MetricsExpr = incrementMetrics(Seq(stage2Metric, stage2SLAMetric))
-          val stage2 = stage1
-            .groupBy("low_cardinality_col")
-            .avg("non_deterministic_col")
-            .filter(Column(stage2MetricsExpr))
-          // Add an extra stage with a single task to avoid flaky failures. If a ResultTask
-          // returns non-deterministic results to the client, it forces the query to abort
-          // instead of retrying the input stages.
-          val finalDf = stage2.repartition(1).as[(Int, Double)]
-          val result = finalDf.collect()
-          // Don't compare the second value, since it's random.
-          assert(result.map(_._1).toSet === (0 until 5).toSet)
+          def runOnce(): Dataset[_] = {
+            val stage1MetricsExpr = incrementMetrics(Seq(stage1Metric, stage1SLAMetric))
+            val udfRand =
+              udf {
+                () => {
+                  new Random().nextDouble()
+                }
+              }.asNondeterministic().apply().expr
+            val stage1 = spark.read.table("test_table")
+              .withColumn("non_deterministic_col", Column(udfRand))
+              .filter(Column(stage1MetricsExpr))
+            val stage2MetricsExpr = incrementMetrics(Seq(stage2Metric, stage2SLAMetric))
+            val stage2 = stage1
+              .groupBy("low_cardinality_col")
+              .avg("non_deterministic_col")
+              .filter(Column(stage2MetricsExpr))
+            // Add an extra stage with a single task to avoid flaky failures. If a ResultTask
+            // returns non-deterministic results to the client, it forces the query to abort
+            // instead of retrying the input stages.
+            val finalDf = stage2.repartition(1).as[(Int, Double)]
+            val result = finalDf.collect()
+            // Don't compare the second value, since it's random.
+            assert(result.map(_._1).toSet === (0 until 5).toSet)
+            finalDf
+          }
+
+          // The INJECT_SHUFFLE_FETCH_FAILURES machinery corrupts mapper-0 of the first
+          // successful attempt of the shuffle map stage. Whether the downstream reducer observes
+          // the resulting FetchFailed (and thus forces the stage-1 recompute that inflates the raw
+          // metric) depends on task scheduling within the shared SparkContext; across the suite it
+          // occasionally does not fire, leaving stage1Metric at exactly 300 and failing
+          // "value > 300" (a ~1/6 flake, more frequent on slower runners such as macOS arm64).
+          // When we require a recompute (injectFailure = true), re-run the query until the
+          // injection actually fires. Each attempt resets the metrics, so a successful attempt is
+          // indistinguishable from a first-try success.
+          var finalDf = runOnce()
+          if (injectFailure) {
+            var attempts = 1
+            while (stage1Metric.value <= 300 && attempts < 10) {
+              stage1Metric.reset()
+              stage2Metric.reset()
+              stage1SLAMetric.reset()
+              stage2SLAMetric.reset()
+              finalDf = runOnce()
+              attempts += 1
+            }
+            assert(stage1Metric.value > 300,
+              s"fetch-failure injection did not force a recompute after $attempts attempts")
+          }
           postRunChecks(finalDf)
           stage1Metric.reset()
           stage2Metric.reset()

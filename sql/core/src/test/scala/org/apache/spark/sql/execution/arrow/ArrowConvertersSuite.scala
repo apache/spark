@@ -744,7 +744,11 @@ class ArrowConvertersSuite extends SharedSparkSession {
          |        "bitWidth" : 64
          |      },
          |      "nullable" : true,
-         |      "children" : [ ]
+         |      "children" : [ ],
+         |      "metadata" : [ {
+         |        "key" : "SPARK::time::precision",
+         |        "value" : "6"
+         |      } ]
          |    } ]
          |  },
          |  "batches" : [ {

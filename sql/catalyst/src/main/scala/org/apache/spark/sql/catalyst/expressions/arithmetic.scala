@@ -36,6 +36,11 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to negate.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -109,6 +114,11 @@ case class UnaryMinus(
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the value of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The input expression whose value is returned.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -140,6 +150,11 @@ case class UnaryPositive(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the absolute value of the numeric or interval value.",
+  arguments = """
+    Arguments:
+      * expr - The numeric or interval value to take the absolute value of.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(-1);
@@ -388,6 +403,13 @@ object BinaryArithmetic {
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`+`expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The first addend.
+        An expression that evaluates to a numeric, interval, date, timestamp, or time.
+      * expr2 - The second addend.
+        An expression that evaluates to a numeric, interval, date, timestamp, or time.
+  """,
   examples = """
     Examples:
       > SELECT 1 _FUNC_ 2;
@@ -562,6 +584,13 @@ object Subtract {
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The first operand.
+        An expression that evaluates to a numeric or interval.
+      * expr2 - The second operand.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT 2 _FUNC_ 3;
@@ -692,6 +721,10 @@ trait DivModLike extends BinaryArithmetic {
 
   def evalOperation(left: Any, right: Any): Any
 
+  /** Java code computing the decimal result that is fed into the overflow check. */
+  protected def decimalOperation(eval1: String, eval2: String, scale: Int): String =
+    s"$eval1.$decimalMethod($eval2)"
+
   /**
    * Special case handling due to division/remainder by 0 => null or ArithmeticException.
    */
@@ -724,14 +757,14 @@ trait DivModLike extends BinaryArithmetic {
         if (failOnError) {
           s"""
              |Decimal $decimalValue = $castUtils.changePrecisionExact(
-             |  ${eval1.value}.$decimalMethod(${eval2.value}), $precision, $scale,
+             |  ${decimalOperation(eval1.value, eval2.value, scale)}, $precision, $scale,
              |  $errorContextCode);
              |${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
              |""".stripMargin
         } else {
           s"""
              |Decimal $decimalValue = $castUtils.changePrecisionOrNull(
-             |  ${eval1.value}.$decimalMethod(${eval2.value}), $precision, $scale);
+             |  ${decimalOperation(eval1.value, eval2.value, scale)}, $precision, $scale);
              |if ($decimalValue != null) {
              |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
              |} else {
@@ -807,6 +840,13 @@ trait DivModLike extends BinaryArithmetic {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`/`expr2`. It always performs floating point division.",
+  arguments = """
+    Arguments:
+      * expr1 - The dividend.
+        An expression that evaluates to a numeric or interval.
+      * expr2 - The divisor.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 2;
@@ -860,13 +900,18 @@ case class Divide(
     }
   }
 
+  // Dividing directly at the result scale returns the same result as dividing at
+  // `DecimalType.MAX_SCALE + 1` and then rounding to the result scale, but with a single
+  // division that stays in the compact representation when the quotient fits in a Long.
+  override protected def decimalOperation(eval1: String, eval2: String, scale: Int): String =
+    s"$eval1.div($eval2, $scale)"
+
   private lazy val div: (Any, Any) => Any = dataType match {
-    case d @ DecimalType.Fixed(precision, scale) =>
-      val fractional = PhysicalDecimalType(precision, scale).fractional
+    case DecimalType.Fixed(precision, scale) =>
       (l, r) => {
-      val value = fractional.asInstanceOf[Fractional[Any]].div(l, r)
-      checkDecimalOverflow(value.asInstanceOf[Decimal], precision, scale)
-    }
+        val value = l.asInstanceOf[Decimal].div(r.asInstanceOf[Decimal], scale)
+        checkDecimalOverflow(value, precision, scale)
+      }
     case ft: FractionalType => PhysicalFractionalType.fractional(ft).div
   }
 
@@ -884,6 +929,13 @@ object Divide {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2`. It returns NULL if an operand is NULL or `expr2` is 0. The result is casted to long.",
+  arguments = """
+    Arguments:
+      * expr1 - The dividend to be divided.
+        An expression that evaluates to an integral, decimal, or interval.
+      * expr2 - The divisor to divide by.
+        An expression that evaluates to an integral, decimal, or interval.
+  """,
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 2;
@@ -967,6 +1019,13 @@ object IntegralDivide {
 
 @ExpressionDescription(
   usage = "expr1 % expr2, or mod(expr1, expr2) - Returns the remainder after `expr1`/`expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The dividend.
+        An expression that evaluates to a numeric.
+      * expr2 - The divisor.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT 2 % 1.8;
@@ -1055,6 +1114,13 @@ object Remainder {
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the positive value of `expr1` mod `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The dividend.
+        An expression that evaluates to a numeric.
+      * expr2 - The divisor.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(10, 3);

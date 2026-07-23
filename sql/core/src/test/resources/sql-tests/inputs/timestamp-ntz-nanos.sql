@@ -249,3 +249,47 @@ SELECT typeof(array(TIMESTAMP_NTZ '9999-12-31 23:59:59',
     '0001-01-01 00:00:00.000000001' :: timestamp_ntz(9)));
 SELECT map('min', '0001-01-01 00:00:00.000000001' :: timestamp_ntz(9),
     'max', TIMESTAMP_NTZ '9999-12-31 23:59:59.999999');
+
+-- SORT / ORDER BY tie-breaks on the sub-microsecond remainder: 001 and 999 share a microsecond,
+-- 1000 rolls into the next, so a micro-truncating sort would misorder them (full value 001<999<1000).
+SELECT v FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000001000' AS v
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') ORDER BY v;
+
+-- row_number() over a nanosecond ORDER BY key: the row numbers follow the sub-microsecond order.
+SELECT v, row_number() OVER (ORDER BY v) AS rn FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900' AS v
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') ORDER BY rn;
+
+-- lead() over a nanosecond ORDER BY key returns the next sub-microsecond value (carrier round-trip).
+SELECT v, lead(v) OVER (ORDER BY v) AS next_v FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900' AS v
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') ORDER BY v;
+
+-- SPARK-57816: date_format / to_char / to_varchar over nanosecond-precision values. The pattern's
+-- fractional-second placeholders render up to nanosecond digits; a 9-`S` field is fixed width, so
+-- digits below the type's precision floor to zeros rather than being dropped. NTZ renders its
+-- wall clock zone-independently. to_char / to_varchar route through the same code path.
+SELECT date_format(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ntz(8), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ntz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+SELECT to_char(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+SELECT to_char('2020-01-01 13:24:35.123456789' :: timestamp_ntz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+SELECT to_varchar('2020-01-01 13:24:35.123456789' :: timestamp_ntz(8), 'HH:mm:ss.SSSSSSSSS');
+-- Pre-epoch value exercises the negative-epoch path.
+SELECT date_format(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+-- NULL nanosecond timestamp.
+SELECT date_format(NULL :: timestamp_ntz(9), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+
+-- SPARK-57821: date_trunc keeps the nanosecond type/family and zeroes the whole fraction (including
+-- the sub-microsecond digits); MICROSECOND keeps epochMicros and only drops nanosWithinMicro. NTZ
+-- is zone-independent, so DAY/HOUR read the wall clock and never shift.
+SELECT date_trunc('SECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789');
+SELECT date_trunc('MICROSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789');
+SELECT date_trunc('HOUR', '2020-01-01 12:34:56.123456789' :: timestamp_ntz(9));
+SELECT date_trunc('DAY', '2020-06-21 23:30:00.000000123' :: timestamp_ntz(7));
+-- An unsupported (sub-microsecond) unit yields NULL; the result still carries the nanos type.
+SELECT date_trunc('NANOSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789');

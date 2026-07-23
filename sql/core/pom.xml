@@ -143,21 +143,9 @@
     </dependency>
     <dependency>
       <groupId>org.apache.parquet</groupId>
-      <artifactId>parquet-encoding</artifactId>
-      <scope>test</scope>
-      <classifier>tests</classifier>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.parquet</groupId>
-      <artifactId>parquet-common</artifactId>
-      <scope>test</scope>
-      <classifier>tests</classifier>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-column</artifactId>
       <scope>test</scope>
-      <classifier>tests</classifier>
+      <type>test-jar</type>
     </dependency>
     <dependency>
       <groupId>org.apache.parquet</groupId>
@@ -295,6 +283,11 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-compress</artifactId>
+    </dependency>
+    <!-- commons-compress reads 7z archives but treats xz (LZMA/LZMA2) as an optional dependency. -->
+    <dependency>
+      <groupId>org.tukaani</groupId>
+      <artifactId>xz</artifactId>
     </dependency>
     <dependency>
       <groupId>org.bouncycastle</groupId>

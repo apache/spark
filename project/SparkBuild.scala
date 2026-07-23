@@ -1282,7 +1282,9 @@ object DependencyOverrides {
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val grpcVersion = sys.props.get("io.grpc.version").getOrElse("1.76.0")
   lazy val grpcDeps = Bom.dependencies("io.grpc" % "grpc-bom" % grpcVersion)
-  lazy val settings = jacksonDeps ++ grpcDeps ++ Seq(
+  lazy val k8sClientVersion = sys.props.get("kubernetes-client.version").getOrElse("7.8.0")
+  lazy val k8sClientDeps = Bom.dependencies("io.fabric8" % "kubernetes-client-bom" % k8sClientVersion)
+  lazy val settings = jacksonDeps ++ grpcDeps ++ k8sClientDeps ++ Seq(
     dependencyOverrides ++= {
       val guavaVersion = sys.props.get("guava.version").getOrElse(
         SbtPomKeys.effectivePom.value.getProperties.get("guava.version").asInstanceOf[String])
@@ -1304,7 +1306,7 @@ object DependencyOverrides {
         "org.slf4j" % "slf4j-api" % slf4jVersion,
         "org.tukaani" % "xz" % xzVersion,
         "org.scala-lang" % "scalap" % scalaVersion.value
-      ) ++ jacksonDeps.key.value ++ grpcDeps.key.value
+      ) ++ jacksonDeps.key.value ++ grpcDeps.key.value ++ k8sClientDeps.key.value
     }
   )
 }

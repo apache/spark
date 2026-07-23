@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -34,6 +35,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.execution.RowToColumnConverter;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
@@ -235,9 +237,11 @@ public class ColumnVectorUtils {
         dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
       } else if (t instanceof TimestampNTZType) {
         dst.appendLong(DateTimeUtils.localDateTimeToMicros((LocalDateTime) o));
+      } else if (t instanceof TimeType) {
+        dst.appendLong(DateTimeUtils.localTimeToNanos((LocalTime) o));
       } else {
         throw new SparkUnsupportedOperationException(
-          "_LEGACY_ERROR_TEMP_3192", Map.of("dt", t.toString()));
+          "UNSUPPORTED_DATATYPE", Map.of("typeName", QueryExecutionErrors.toSQLType(t)));
       }
     }
   }

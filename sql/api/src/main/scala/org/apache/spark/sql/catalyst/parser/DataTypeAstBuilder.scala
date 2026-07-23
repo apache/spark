@@ -394,8 +394,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
           }
           TimeType(precision)
         case GEOGRAPHY =>
-          // Unparameterized geometry type isn't supported and will be caught by the default branch.
-          // Here, we only handle the parameterized GEOGRAPHY type syntax, which comes in two forms:
+          // Unparameterized geography type isn't supported and will be caught by the default
+          // branch. Here, we only handle the parameterized GEOGRAPHY type syntax, which comes in
+          // two forms:
           if (currentCtx.any != null) {
             // The special parameterized GEOGRAPHY type syntax uses a single "ANY" string value.
             // This implies a mixed GEOGRAPHY type, with potentially different SRIDs across rows.
@@ -615,7 +616,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
    * @param dataType
    *   The data type of column defined as IDENTITY column. Used for verification.
    * @return
-   *   Tuple containing start, step and allowExplicitInsert.
+   *   IdentityColumnSpec containing start, step and allowExplicitInsert.
    */
   protected def visitIdentityColumn(
       ctx: IdentityColumnContext,

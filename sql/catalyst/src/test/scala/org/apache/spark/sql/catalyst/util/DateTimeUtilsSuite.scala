@@ -1232,6 +1232,52 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-57459: epochNanosToTimestampNanos unpacks int64 epoch-nanoseconds") {
+    def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+
+    // At full (nanosecond) precision it is the exact inverse of timestampNanosToEpochNanos.
+    assert(epochNanosToTimestampNanos(0L, 9) === nanos(0L, 0))
+    assert(epochNanosToTimestampNanos(999L, 9) === nanos(0L, 999))
+    assert(epochNanosToTimestampNanos(NANOS_PER_MICROS, 9) === nanos(1L, 0))
+    assert(epochNanosToTimestampNanos(1234567L * NANOS_PER_MICROS + 7L, 9) === nanos(1234567L, 7))
+    // Pre-epoch values use floor semantics, keeping nanosWithinMicro in [0, 999].
+    assert(epochNanosToTimestampNanos(-1L, 9) === nanos(-1L, 999))
+    assert(epochNanosToTimestampNanos(-NANOS_PER_MICROS, 9) === nanos(-1L, 0))
+
+    // Lower precisions truncate the sub-microsecond digits.
+    assert(epochNanosToTimestampNanos(123456789L, 9) === nanos(123456L, 789))
+    assert(epochNanosToTimestampNanos(123456789L, 8) === nanos(123456L, 780))
+    assert(epochNanosToTimestampNanos(123456789L, 7) === nanos(123456L, 700))
+
+    // Truncation operates on the floored nanosWithinMicro, so it composes with floor semantics for
+    // pre-epoch values too (-123456211 -> floor (-123457, 789) -> truncate the 789).
+    assert(epochNanosToTimestampNanos(-123456211L, 9) === nanos(-123457L, 789))
+    assert(epochNanosToTimestampNanos(-123456211L, 8) === nanos(-123457L, 780))
+    assert(epochNanosToTimestampNanos(-123456211L, 7) === nanos(-123457L, 700))
+
+    // The int64 extremes decode without overflow: floor keeps nanosWithinMicro in [0, 999].
+    assert(epochNanosToTimestampNanos(Long.MaxValue, 9) === nanos(9223372036854775L, 807))
+    assert(epochNanosToTimestampNanos(Long.MinValue, 9) === nanos(-9223372036854776L, 192))
+
+    // Round-trips with timestampNanosToEpochNanos at full precision. Long.MinValue is excluded: its
+    // decode (-9223372036854776, 192) re-encodes through an intermediate epochMicros * 1000 that
+    // overflows Long, an existing limitation of the multiplyExact-based pack path.
+    Seq(
+      0L, 999L, 1234567L * NANOS_PER_MICROS + 7L, -1234567L * NANOS_PER_MICROS + 13L,
+      Long.MaxValue).foreach { epochNanos =>
+      assert(timestampNanosToEpochNanos(epochNanosToTimestampNanos(epochNanos, 9)) === epochNanos)
+    }
+
+    // Precision outside [7, 9] is an internal-only contract violation and fails loudly.
+    checkError(
+      exception = intercept[SparkException] {
+        epochNanosToTimestampNanos(123456789L, 6)
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Fractional second precision 6 is out of range [7, 9]."))
+  }
+
   test("SPARK-34903: subtract timestamps") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       Seq(
@@ -2003,6 +2049,54 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     intercept[ArithmeticException] {
       timeBucketDTInterval(Long.MaxValue, -6L, -5L, utc)
     }
+  }
+
+  test("timeBucketFromIndexDTInterval / timeBucketFromTimestampDTInterval") {
+    val utc = ZoneOffset.UTC
+    val la = DateTimeUtils.getZoneId("America/Los_Angeles")
+
+    // The containing bucket agrees with timeBucketDTInterval and encloses ts:
+    // boundary(k) == start <= ts < boundary(k + 1).
+    def checkContaining(bucket: Long, ts: Long, origin: Long, zone: ZoneId): Unit = {
+      val (k, start) = timeBucketFromTimestampDTInterval(bucket, ts, origin, zone)
+      assert(start === timeBucketFromIndexDTInterval(bucket, k, origin, zone))
+      assert(start === timeBucketDTInterval(bucket, ts, origin, zone))
+      assert(start <= ts)
+      assert(ts < timeBucketFromIndexDTInterval(bucket, k + 1, origin, zone))
+    }
+    // Sub-day, sub-day with custom origin, and multi-day (36h) across both LA DST transitions.
+    checkContaining(15 * MICROS_PER_MINUTE, date(2024, 1, 1, 11, 27, 0), 0L, la)
+    checkContaining(MICROS_PER_HOUR, date(2024, 1, 1, 11, 27, 0), date(1970, 1, 1, 0, 5, 0), utc)
+    val laOrigin = date(2024, 3, 9, 8, 0, 0)  // 08:00 UTC = 2024-03-09 00:00 PST
+    checkContaining(36 * MICROS_PER_HOUR, date(2024, 3, 12, 9, 0, 0), laOrigin, la)
+    checkContaining(MICROS_PER_DAY, date(2024, 11, 4, 2, 0, 0), date(2024, 11, 1, 7, 0, 0), la)
+
+    // Pacific/Apia's 2011 date-line shift throws the 1-day estimate off by one bucket (epoch
+    // origin) or two (1900 origin), so the search must step more than once.
+    val apiaZone = DateTimeUtils.getZoneId("Pacific/Apia")
+    checkContaining(MICROS_PER_DAY, date(2012, 1, 2, 0, 0, 0, 0, apiaZone),
+      date(1970, 1, 1), apiaZone)
+    checkContaining(MICROS_PER_DAY, date(2012, 1, 2, 0, 0, 0, 0, apiaZone),
+      date(1900, 1, 1, 0, 0, 0, 0, apiaZone), apiaZone)
+
+    // Boundaries land on the grid across the spring-forward, not 1h off as a walk would drift.
+    val (idx, _) = timeBucketFromTimestampDTInterval(36 * MICROS_PER_HOUR,
+      date(2024, 3, 12, 9, 0, 0), laOrigin, la)
+    assert(timeBucketFromIndexDTInterval(36 * MICROS_PER_HOUR, idx, laOrigin, la)
+      === date(2024, 3, 12, 7, 0, 0))       // 2024-03-12 00:00 PDT, the grid (not walked) value
+    assert(timeBucketFromIndexDTInterval(36 * MICROS_PER_HOUR, idx + 1, laOrigin, la)
+      === date(2024, 3, 13, 19, 0, 0))      // 2024-03-13 12:00 PDT
+
+    // Whole-day zone skip: Apia skipped 2011-12-30, so two consecutive 1-day grid boundaries
+    // collapse to the same instant (civil "2011-12-30 00:00" and "2011-12-31 00:00" are identical).
+    val apia = DateTimeUtils.getZoneId("Pacific/Apia")
+    val apiaOrigin = date(2011, 12, 25, 10, 0, 0)  // 2011-12-25 00:00 Apia (UTC-11 -> 10:00 UTC)
+    // This ts lands in the bucket whose start collapsed onto the previous one's, so
+    // boundary(k - 1) == boundary(k).
+    val (collapsed, _) = timeBucketFromTimestampDTInterval(MICROS_PER_DAY,
+      date(2011, 12, 30, 12, 0, 0), apiaOrigin, apia)
+    assert(timeBucketFromIndexDTInterval(MICROS_PER_DAY, collapsed - 1, apiaOrigin, apia)
+      === timeBucketFromIndexDTInterval(MICROS_PER_DAY, collapsed, apiaOrigin, apia))
   }
 
   test("timeBucketYMInterval") {

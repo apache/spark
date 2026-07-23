@@ -658,6 +658,13 @@ The following example shows how to save/load a MLlib model by SparkR.
 </tr>
 </table>
 
+Note that SparkR maps only the microsecond `timestamp` type to R's `POSIXct`. The
+nanosecond-precision timestamp types `TIMESTAMP_NTZ(p)` and `TIMESTAMP_LTZ(p)` (with
+precision `p` in `[7, 9]`, see [Data Types](sql-ref-datatypes.html)) are **not
+supported** in SparkR. Referencing one of these types when building a schema with
+`structField`/`structType` raises an "Unsupported type" error, and columns of these
+types cannot be collected into R.
+
 # Structured Streaming
 
 SparkR supports the Structured Streaming API. Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. For more information see the R API on the [Structured Streaming Programming Guide](./streaming/index.html).

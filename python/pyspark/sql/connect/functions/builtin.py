@@ -2219,6 +2219,59 @@ def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
 variant_delete.__doc__ = pysparkfuncs.variant_delete.__doc__
 
 
+def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName") -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("variant_insert", _to_col(v), path_col, _to_col(value))
+
+
+variant_insert.__doc__ = pysparkfuncs.variant_insert.__doc__
+
+
+def try_variant_insert(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("try_variant_insert", _to_col(v), path_col, _to_col(value))
+
+
+try_variant_insert.__doc__ = pysparkfuncs.try_variant_insert.__doc__
+
+
+def variant_set(
+    v: "ColumnOrName",
+    path: Union[Column, str],
+    value: "ColumnOrName",
+    create_if_missing: bool = True,
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "variant_set", _to_col(v), path_col, _to_col(value), lit(create_if_missing)
+    )
+
+
+variant_set.__doc__ = pysparkfuncs.variant_set.__doc__
+
+
+def variant_array_append(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("variant_array_append", _to_col(v), path_col, _to_col(value))
+
+
+variant_array_append.__doc__ = pysparkfuncs.variant_array_append.__doc__
+
+
+def try_variant_array_append(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("try_variant_array_append", _to_col(v), path_col, _to_col(value))
+
+
+try_variant_array_append.__doc__ = pysparkfuncs.try_variant_array_append.__doc__
+
+
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     assert isinstance(path, (Column, str))
     if isinstance(path, str):
@@ -2626,8 +2679,21 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
 format_string.__doc__ = pysparkfuncs.format_string.__doc__
 
 
-def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
-    return _invoke_function("instr", _to_col(str), lit(substr))
+def instr(
+    str: "ColumnOrName",
+    substr: Union[Column, str],
+    start: Optional[Union[Column, int]] = None,
+    occurrence: Optional[Union[Column, int]] = None,
+) -> Column:
+    if start is None and occurrence is None:
+        return _invoke_function_over_columns("instr", str, lit(substr))
+    elif start is not None and occurrence is None:
+        start = lit(start)
+        return _invoke_function_over_columns("instr", str, lit(substr), start)
+    else:
+        start = lit(start) if start is not None else lit(1)
+        occurrence = lit(occurrence)
+        return _invoke_function_over_columns("instr", str, lit(substr), start, occurrence)
 
 
 instr.__doc__ = pysparkfuncs.instr.__doc__
@@ -3773,6 +3839,13 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
 
 timestamp_micros.__doc__ = pysparkfuncs.timestamp_micros.__doc__
+
+
+def timestamp_nanos(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestamp_nanos", col)
+
+
+timestamp_nanos.__doc__ = pysparkfuncs.timestamp_nanos.__doc__
 
 
 def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
@@ -5308,6 +5381,20 @@ def zeroifnull(col: "ColumnOrName") -> Column:
 
 
 zeroifnull.__doc__ = pysparkfuncs.zeroifnull.__doc__
+
+
+def hmac(
+    key: "ColumnOrName",
+    message: "ColumnOrName",
+    algorithm: Optional["ColumnOrName"] = None,
+) -> Column:
+    if algorithm is None:
+        return _invoke_function_over_columns("hmac", key, message)
+    else:
+        return _invoke_function_over_columns("hmac", key, message, algorithm)
+
+
+hmac.__doc__ = pysparkfuncs.hmac.__doc__
 
 
 def aes_encrypt(

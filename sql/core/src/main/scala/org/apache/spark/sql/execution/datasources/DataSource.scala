@@ -276,9 +276,13 @@ case class DataSource(
         val isSingleVariantColumn = (providingClass == classOf[json.JsonFileFormat] ||
           providingClass == classOf[csv.CSVFileFormat]) &&
           caseInsensitiveOptions.contains(DataSourceOptions.SINGLE_VARIANT_COLUMN)
+        // Like `singleVariantColumn`, an embedded-array JSON scan has a fixed schema and does
+        // not require schema inference.
+        val isExplodeEmbeddedArray = providingClass == classOf[json.JsonFileFormat] &&
+          caseInsensitiveOptions.contains(DataSourceOptions.EXPLODE_EMBEDDED_ARRAY)
         // If the schema inference is disabled, only text sources require schema to be specified
         if (!isSchemaInferenceEnabled && !isTextSource && !isSingleVariantColumn &&
-            userSpecifiedSchema.isEmpty) {
+            !isExplodeEmbeddedArray && userSpecifiedSchema.isEmpty) {
           throw QueryExecutionErrors.createStreamingSourceNotSpecifySchemaError()
         }
 

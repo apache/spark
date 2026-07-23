@@ -24,7 +24,6 @@ import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.IntLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
-import org.apache.parquet.schema.LogicalTypeAnnotation.TimeLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.UnknownLogicalTypeAnnotation;
 import org.apache.parquet.schema.PrimitiveType;
@@ -34,6 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps$;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.*;
 
@@ -76,6 +76,13 @@ public class ParquetVectorUpdaterFactory {
     boolean isUnknownType = type.getLogicalTypeAnnotation() instanceof UnknownLogicalTypeAnnotation;
     if (isUnknownType && sparkType instanceof NullType) {
       return new NullTypeUpdater();
+    }
+
+    // Types Framework: a framework-managed type provides its own vectorized updater.
+    ParquetVectorUpdater frameworkUpdater =
+        ParquetTypeOps$.MODULE$.getVectorUpdaterOrNull(sparkType, descriptor);
+    if (frameworkUpdater != null) {
+      return frameworkUpdater;
     }
 
     switch (typeName) {
@@ -165,17 +172,6 @@ public class ParquetVectorUpdaterFactory {
           return new LongUpdater();
         } else if (canReadAsDecimal(descriptor, sparkType)) {
           return new LongToDecimalUpdater(descriptor, (DecimalType) sparkType);
-        } else if (sparkType instanceof TimeType &&
-          isTimeTypeMatched(LogicalTypeAnnotation.TimeUnit.NANOS)) {
-          // TIME(NANOS) is stored as nanoseconds since midnight, matching the internal
-          // representation, so no unit conversion is needed; the decoded value is truncated to
-          // the requested precision (consistent with the row-based ParquetRowConverter path).
-          return new TimeUpdater(((TimeType) sparkType).precision(), /* fileStoresNanos = */ true);
-        } else if (sparkType instanceof TimeType &&
-          isTimeTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
-          // TIME(MICROS) is converted to nanoseconds, then truncated to the requested precision
-          // (consistent with the row-based ParquetRowConverter path).
-          return new TimeUpdater(((TimeType) sparkType).precision(), /* fileStoresNanos = */ false);
         }
       }
       case FLOAT -> {
@@ -250,11 +246,6 @@ public class ParquetVectorUpdaterFactory {
 
   boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
     return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation annotation &&
-      annotation.getUnit() == unit;
-  }
-
-  boolean isTimeTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
-    return logicalTypeAnnotation instanceof TimeLogicalTypeAnnotation annotation &&
       annotation.getUnit() == unit;
   }
 
@@ -922,76 +913,6 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  // Reads an INT64 TIME column into the internal nanoseconds-since-midnight representation and
-  // truncates it to the requested TimeType precision. `fileStoresNanos` selects the on-disk unit:
-  // TIME(NANOS) stores nanos directly (identity), TIME(MICROS) stores micros (converted to nanos).
-  // Mirrors the row-based ParquetRowConverter path so the vectorized and non-vectorized readers
-  // agree on the decoded value, including when the requested precision is lower than the on-disk
-  // value's precision.
-  // 10^k for k in [0, 9] (TimeType.NANOS_PRECISION), indexed by the truncation scale
-  // (NANOS_PRECISION - p), used to truncate a nanosecond TIME value to the requested
-  // fractional-second precision. Length - 1 equals TimeType.NANOS_PRECISION.
-  private static final long[] TIME_TRUNCATION_FACTORS = {
-    1L, 10L, 100L, 1_000L, 10_000L, 100_000L,
-    1_000_000L, 10_000_000L, 100_000_000L, 1_000_000_000L
-  };
-
-  private static class TimeUpdater implements ParquetVectorUpdater {
-    // The truncation step for the requested precision. The precision is constant per column, so the
-    // factor is looked up once here rather than recomputed per value via the math.pow in
-    // DateTimeUtils.truncateTimeToPrecision (this is the vectorized hot loop).
-    private final long truncationFactor;
-    private final boolean fileStoresNanos;
-
-    TimeUpdater(int precision, boolean fileStoresNanos) {
-      this.fileStoresNanos = fileStoresNanos;
-      // scale = NANOS_PRECISION - precision; NANOS_PRECISION == factors.length - 1.
-      int scale = TIME_TRUNCATION_FACTORS.length - 1 - precision;
-      this.truncationFactor = TIME_TRUNCATION_FACTORS[scale];
-    }
-
-    private long toTruncatedNanos(long value) {
-      long nanos = fileStoresNanos ? value : DateTimeUtils.microsToNanos(value);
-      // Equivalent to DateTimeUtils.truncateTimeToPrecision with the factor hoisted.
-      return (nanos / truncationFactor) * truncationFactor;
-    }
-
-    @Override
-    public void readValues(
-        int total,
-        int offset,
-        WritableColumnVector values,
-        VectorizedValuesReader valuesReader) {
-      valuesReader.readLongs(total, values, offset);
-      for (int i = 0; i < total; i++) {
-        values.putLong(offset + i, toTruncatedNanos(values.getLong(offset + i)));
-      }
-    }
-
-    @Override
-    public void skipValues(int total, VectorizedValuesReader valuesReader) {
-      valuesReader.skipLongs(total);
-    }
-
-    @Override
-    public void readValue(
-        int offset,
-        WritableColumnVector values,
-        VectorizedValuesReader valuesReader) {
-      values.putLong(offset, toTruncatedNanos(valuesReader.readLong()));
-    }
-
-    @Override
-    public void decodeSingleDictionaryId(
-        int offset,
-        WritableColumnVector values,
-        WritableColumnVector dictionaryIds,
-        Dictionary dictionary) {
-      long value = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
-      values.putLong(offset, toTruncatedNanos(value));
-    }
-  }
-
   private static class FloatUpdater implements ParquetVectorUpdater {
     @Override
     public void readValues(
@@ -1504,9 +1425,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; i++) {
-        readValue(offset + i, values, valuesReader);
-      }
+      valuesReader.readFixedLenByteArray(total, arrayLen, values, offset);
     }
 
     @Override

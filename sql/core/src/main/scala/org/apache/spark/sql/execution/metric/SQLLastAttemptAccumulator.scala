@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.{LogEntry, Logging}
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.execution.{BaseSubqueryExec, QueryExecution, SparkPlan, SubqueryAdaptiveBroadcastExec, SubqueryBroadcastExec, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{BaseSubqueryExec, QueryExecution, ReusedSubqueryExec, SparkPlan, SubqueryAdaptiveBroadcastExec, SubqueryBroadcastExec, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.util.{AccumulatorV2, LastAttemptAccumulator}
@@ -374,6 +374,10 @@ object SQLLastAttemptAccumulator extends Logging {
         case _: SubqueryAdaptiveBroadcastExec =>
           // Used by DPP filter only.
           Nil
+        case r: ReusedSubqueryExec =>
+          // Reused subquery is going to reuse stuff executed in the scope of its child,
+          // i.e. the subquery it reuses.
+          recurse(r.child)
         case p =>
           // Bail out if future unknown implementation is encountered.
           bailOutReason = Some(s"Unsupported BaseSubqueryExec: ${p.getClass.getName}")

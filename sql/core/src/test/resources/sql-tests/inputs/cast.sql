@@ -360,10 +360,12 @@ SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ(9));
 SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ) AS TIME(6));
 SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIME(6));
 
--- SPARK-57618: inside an inline table the TIME -> TIMESTAMP_NTZ cast is foldable and carries no
--- CURRENT_LIKE pattern, so it is early-evaluated before ComputeCurrentTime. Coverage stays
--- deterministic: the date anchor still equals current_date() and the value round-trips back to TIME.
-SELECT CAST(x AS DATE) = current_date() FROM VALUES (CAST(TIME'12:34:56' AS TIMESTAMP_NTZ)) t(x);
+-- SPARK-57749: inside an inline table the TIME -> TIMESTAMP_NTZ cast is foldable and carries no
+-- CURRENT_LIKE pattern, so it is early-evaluated at analysis time and is NOT stabilized by
+-- ComputeCurrentTime. Its date anchor is LocalDate.now() at analysis (not necessarily
+-- current_date()), so it is intentionally not compared against current_date() here -- that would be
+-- midnight-sensitive. Coverage stays deterministic via the round-trip back to TIME: the date
+-- cancels, so only the time-of-day is asserted.
 SELECT CAST(x AS TIME(6)) FROM VALUES (CAST(TIME'12:34:56.789012' AS TIMESTAMP_NTZ)) t(x);
 SELECT CAST(x AS TIME(9)) FROM VALUES (CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9))) t(x);
 
@@ -409,10 +411,12 @@ SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_LTZ(9));
 SELECT CAST(CAST(NULL AS TIMESTAMP_LTZ) AS TIME(6));
 SELECT CAST(CAST(NULL AS TIMESTAMP_LTZ(9)) AS TIME(6));
 
--- SPARK-57660: inside an inline table the TIME -> TIMESTAMP_LTZ cast is foldable and carries no
--- CURRENT_LIKE pattern, so it is early-evaluated before ComputeCurrentTime. Coverage stays
--- deterministic: the date anchor still equals current_date() and the value round-trips back to TIME.
-SELECT CAST(x AS DATE) = current_date() FROM VALUES (CAST(TIME'12:34:56' AS TIMESTAMP_LTZ)) t(x);
+-- SPARK-57749: inside an inline table the TIME -> TIMESTAMP_LTZ cast is foldable and carries no
+-- CURRENT_LIKE pattern, so it is early-evaluated at analysis time and is NOT stabilized by
+-- ComputeCurrentTime. Its date anchor is LocalDate.now() at analysis (not necessarily
+-- current_date()), so it is intentionally not compared against current_date() here -- that would be
+-- midnight-sensitive. Coverage stays deterministic via the round-trip back to TIME: the date
+-- cancels, so only the time-of-day is asserted.
 SELECT CAST(x AS TIME(6)) FROM VALUES (CAST(TIME'12:34:56.789012' AS TIMESTAMP_LTZ)) t(x);
 SELECT CAST(x AS TIME(9)) FROM VALUES (CAST(TIME'12:34:56.789012345' AS TIMESTAMP_LTZ(9))) t(x);
 

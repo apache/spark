@@ -19,13 +19,14 @@ package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, Period, ZoneOffset}
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkRuntimeException,
   SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.functions._
@@ -50,8 +51,12 @@ class CsvFunctionsSuite extends SharedSparkSession {
 
   test("SPARK-57164: from_csv with a nanos timestamp DDL schema string") {
     val df = Seq("2020-01-01T00:00:00.123456789").toDF("value")
-    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+    // Fix the session timezone so the TIMESTAMP_LTZ expected value is deterministic.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       foreachNanosPrecision { p =>
+        val nano = TimestampNanosTestUtils.nanoOfSecTruncator(p)(123456789)
         Seq(
           s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
           s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
@@ -62,12 +67,14 @@ class CsvFunctionsSuite extends SharedSparkSession {
               from_csv($"value", lit(s"c $spelling"), Map.empty[String, String].asJava).as("v"))
             // The schema string resolves to the nanos type ...
             assert(parsed.schema("v").dataType.asInstanceOf[StructType]("c").dataType === expected)
-            // ... but the CSV datasource does not support nanosecond timestamps yet, so the
-            // value converter rejects it at execution.
-            checkError(
-              exception = intercept[SparkUnsupportedOperationException](parsed.collect()),
-              condition = "UNSUPPORTED_DATATYPE",
-              parameters = Map("typeName" -> toSQLType(expected)))
+            // ... and the CSV datasource correctly parses the nanosecond timestamp, truncating
+            // sub-precision digits toward zero.
+            val expectedValue = expected match {
+              case _: TimestampNTZNanosType => LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano)
+              case _: TimestampLTZNanosType =>
+                LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano).toInstant(ZoneOffset.UTC)
+            }
+            checkAnswer(parsed, Row(Row(expectedValue)))
         }
       }
     }

@@ -181,6 +181,37 @@ case class DataflowGraph(
     }.toMap
   }
 
+  /**
+   * The internal auxiliary tables owned by each destination [[Table]], derived from the resolved
+   * flows writing to it and that destination's [[inferredSchema]]. Keyed by the destination's
+   * identifier; only destinations that actually require auxiliary tables appear. Today only
+   * AutoCDC flow destination tables have an auxiliary table, and exactly one.
+   *
+   * Auxiliary tables are deliberately NOT part of the logical graph (they are never resolved,
+   * connected, or exposed as [[Input]]s); this is purely a derived view used during dataset
+   * materialization to create/evolve them alongside their owning table. The derivation is pure and
+   * performs no catalog access.
+   */
+  lazy val auxiliaryTableSpecs: Map[TableIdentifier, AuxiliaryTableSpec] = {
+    resolvedFlowsTo.flatMap { case (destinationTableIdentifier, flowsToDestinationTable) =>
+      table.get(destinationTableIdentifier).flatMap { destinationTable =>
+        flowsToDestinationTable
+          // A target is written by at most one AutoCDC flow today (graph validation rejects
+          // multi-flow AutoCDC), so take the single AutoCDC flow if one exists. Furthermore, today
+          // only AutoCDC flows produce an auxiliary table artifact.
+          .collectFirst { case f: AutoCdcMergeFlow => f }
+          .map { autoCdcFlow =>
+            val spec = AutoCdcAuxiliaryTable.buildAuxiliaryTableSpecFor(
+              targetTable = destinationTable,
+              targetTableSchema = inferredSchema(destinationTableIdentifier),
+              inputAutoCdcFlow = autoCdcFlow
+            )
+            destinationTableIdentifier -> spec
+          }
+      }
+    }.toMap
+  }
+
   /** Ensure that the [[DataflowGraph]] is valid and throws errors if not. */
   def validate(): DataflowGraph = {
     validationFailure.toOption match {

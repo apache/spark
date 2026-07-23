@@ -209,6 +209,7 @@ class FileIndexSuite extends SharedSparkSession {
         s"parDiscoveryThreshold=$parDiscoveryThreshold, sqlConf=$sqlConf, options=$options"
       ) {
         withSQLConf(
+          SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
           SQLConf.IGNORE_MISSING_FILES.key -> sqlConf,
           SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> parDiscoveryThreshold.toString,
           "fs.mockFs.impl" -> raceCondition.getName,
@@ -485,7 +486,9 @@ class FileIndexSuite extends SharedSparkSession {
 
   test("SPARK-25062 - InMemoryFileIndex stores BlockLocation objects no matter what subclass " +
     "the FS returns") {
-    withSQLConf("fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
+    withSQLConf(
+        SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
+        "fs.file.impl" -> classOf[SpecialBlockLocationFileSystem].getName) {
       withTempDir { dir =>
         val file = new File(dir, "text.txt")
         stringToFile(file, "text")
@@ -544,8 +547,10 @@ class FileIndexSuite extends SharedSparkSession {
       override def hasNext: Boolean = iter.hasNext
       override def next(): LocatedFileStatus = iter.next()
     })
-    val fileIndex = new TestInMemoryFileIndex(spark, path)
-    assert(fileIndex.leafFileStatuses.toSeq == statuses)
+    withSQLConf(SQLConf.IGNORE_DATA_LOCALITY.key -> "false") {
+      val fileIndex = new TestInMemoryFileIndex(spark, path)
+      assert(fileIndex.leafFileStatuses.toSeq == statuses)
+    }
   }
 
   test("SPARK-48649: Ignore invalid partitions") {

@@ -57,8 +57,8 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
       exception = intercept[AnalysisException] {
         runShowTablesSql("SHOW TABLES FROM a.b", Seq())
       },
-      condition = "_LEGACY_ERROR_TEMP_1126",
-      parameters = Map("catalog" -> "a.b")
+      condition = "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+      parameters = Map("namespace" -> "`a`.`b`")
     )
   }
 

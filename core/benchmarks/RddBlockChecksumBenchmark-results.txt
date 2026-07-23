@@ -1,0 +1,46 @@
+================================================================================================
+RDD block store-time checksum overhead
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+64k long rows, spark.rdd.compress=false:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
+------------------------------------------------------------------------------------------------------------------------
+serialize only (feature off)                        461            484          20          0.0     2303936.3       1.0X
+serialize + CRC32C checksum (feature on)            472            477           4          0.0     2361797.2       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+64k long rows, spark.rdd.compress=true:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
+------------------------------------------------------------------------------------------------------------------------
+serialize only (feature off)                        637            641           7          0.0     3186968.0       1.0X
+serialize + CRC32C checksum (feature on)            631            663          33          0.0     3153669.5       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+8k x 128B records, spark.rdd.compress=false:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
+---------------------------------------------------------------------------------------------------------------------------
+serialize only (feature off)                           192            197           3          0.0      959684.7       1.0X
+serialize + CRC32C checksum (feature on)               202            205           5          0.0     1008471.7       1.1X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+8k x 128B records, spark.rdd.compress=true:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns) Relative time
+--------------------------------------------------------------------------------------------------------------------------
+serialize only (feature off)                          290            292           2          0.0     1447887.3       1.0X
+serialize + CRC32C checksum (feature on)              294            295           1          0.0     1468980.5       1.0X
+
+
+================================================================================================
+Raw checksum algorithm over 4 MiB (reference)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+Checksum algorithm:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+ADLER32                                             361            361           0          0.0     1409212.3       1.0X
+CRC32                                                33             33           0          0.0      129493.3      10.9X
+CRC32C                                               33             33           0          0.0      129364.8      10.9X
+
+

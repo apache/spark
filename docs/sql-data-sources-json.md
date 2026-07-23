@@ -202,15 +202,27 @@ Data source options of JSON can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>timeFormat</code></td>
+    <td>HH:mm:ss</td>
+    <td>Sets the string that indicates a time format. Custom time formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>. This applies to time type.</td>
+    <td>read/write</td>
+  </tr>
+  <tr>
     <td><code>inferTimestamp</code></td>
     <td><code>false</code></td>
-    <td>Allows inferring of <code>TimestampType</code> and <code>TimestampNTZType</code> from strings that match the timestamp patterns defined by the <code>timestampFormat</code> and <code>timestampNTZFormat</code> options respectively.</td>
+    <td>Allows inferring of <code>TimestampType</code> and <code>TimestampNTZType</code> from strings that match the timestamp patterns defined by the <code>timestampFormat</code> and <code>timestampNTZFormat</code> options respectively. When enabled, it also allows inferring of <code>TimeType</code> from strings that match the time pattern defined by the <code>timeFormat</code> option.</td>
     <td>read</td>
   </tr>
   <tr>
     <td><code>singleVariantColumn</code></td>
     <td>(none)</td>
     <td>If specified, the entire JSON record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>explodeEmbeddedArray</code></td>
+    <td>(none)</td>
+    <td>If specified, each input file is treated as a single JSON object document with a top-level array-valued field of the given name (e.g. <code>{"Records": [record1, record2, ...]}</code>). Each element of that array becomes one row, stored as a single column of <code>VariantType</code>, and anything outside the array is ignored. This is useful for ingesting formats such as AWS CloudTrail. Mutually exclusive with <code>singleVariantColumn</code>. Because each file is consumed as a whole document, line-based options such as <code>multiLine</code> and <code>lineSep</code> are ignored.</td>
     <td>read</td>
   </tr>
   <tr>

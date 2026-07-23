@@ -2294,3 +2294,222 @@ SELECT time_from_micros(time_to_micros(TIME'14:30:00.5'))
 -- !query analysis
 Project [time_from_micros(time_to_micros(14:30:00.5)) AS time_from_micros(time_to_micros(TIME '14:30:00.5'))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+  SELECT '12:34:56.789' :: TIME(3) AS c
+    UNION ALL SELECT '01:02:03.456789' :: TIME(6)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [cast(c#x as time(6)) AS c#x]
+         :  +- Project [cast(12:34:56.789 as time(3)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(01:02:03.456789 as time(6)) AS CAST(01:02:03.456789 AS TIME(6))#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+  SELECT '00:00:00' :: TIME(0) AS c
+    UNION ALL SELECT '23:59:59.123456789' :: TIME(9)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [cast(c#x as time(9)) AS c#x]
+         :  +- Project [cast(00:00:00 as time(0)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(23:59:59.123456789 as time(9)) AS CAST(23:59:59.123456789 AS TIME(9))#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+  SELECT '01:02:03.456' :: TIME(3) AS c
+    INTERSECT SELECT '01:02:03.456000' :: TIME(6))
+-- !query analysis
+Project [typeof(c#x) AS typeof(c)#x, c#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Intersect false
+      :- Project [cast(c#x as time(6)) AS c#x]
+      :  +- Project [cast(01:02:03.456 as time(3)) AS c#x]
+      :     +- OneRowRelation
+      +- Project [cast(01:02:03.456000 as time(6)) AS CAST(01:02:03.456000 AS TIME(6))#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+  SELECT '12:34:56.789' :: TIME(3) AS c
+    EXCEPT SELECT '01:02:03.456789' :: TIME(6)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Except false
+         :- Project [cast(c#x as time(6)) AS c#x]
+         :  +- Project [cast(12:34:56.789 as time(3)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(01:02:03.456789 as time(6)) AS CAST(01:02:03.456789 AS TIME(6))#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+  CAST(NULL AS TIME(3)), '01:02:03.456789' :: TIME(6)) AS v)
+-- !query analysis
+Project [typeof(v#x) AS typeof(v)#x, v#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [coalesce(cast(cast(null as time(3)) as time(6)), cast(01:02:03.456789 as time(6))) AS v#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT CASE WHEN true
+  THEN '12:34:56.789' :: TIME(3) ELSE '01:02:03.456789' :: TIME(6) END AS v)
+-- !query analysis
+Project [typeof(v#x) AS typeof(v)#x, v#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [CASE WHEN true THEN cast(cast(12:34:56.789 as time(3)) as time(6)) ELSE cast(01:02:03.456789 as time(6)) END AS v#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT nullif(
+  '12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6)) AS v)
+-- !query analysis
+Project [typeof(v#x) AS typeof(v)#x, v#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [nullif(cast(12:34:56.789 as time(3)), cast(01:02:03.456789 as time(6))) AS v#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT typeof(greatest('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6)))
+-- !query analysis
+Project [typeof(greatest(cast(cast(12:34:56.789 as time(3)) as time(6)), cast(01:02:03.456789 as time(6)))) AS typeof(greatest(CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6))))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT greatest('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6))
+-- !query analysis
+Project [greatest(cast(cast(12:34:56.789 as time(3)) as time(6)), cast(01:02:03.456789 as time(6))) AS greatest(CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT least('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6))
+-- !query analysis
+Project [least(cast(cast(12:34:56.789 as time(3)) as time(6)), cast(01:02:03.456789 as time(6))) AS least(CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(array('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6)))
+-- !query analysis
+Project [typeof(array(cast(cast(12:34:56.789 as time(3)) as time(6)), cast(01:02:03.456789 as time(6)))) AS typeof(array(CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6))))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(map('a', '12:34:56.789' :: TIME(3), 'b', '01:02:03.456789' :: TIME(6)))
+-- !query analysis
+Project [typeof(map(a, cast(cast(12:34:56.789 as time(3)) as time(6)), b, cast(01:02:03.456789 as time(6)))) AS typeof(map(a, CAST(12:34:56.789 AS TIME(3)), b, CAST(01:02:03.456789 AS TIME(6))))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT '01:02:03.456789' :: TIME(6) IN ('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6))
+-- !query analysis
+Project [cast(cast(01:02:03.456789 as time(6)) as time(6)) IN (cast(cast(12:34:56.789 as time(3)) as time(6)),cast(cast(01:02:03.456789 as time(6)) as time(6))) AS (CAST(01:02:03.456789 AS TIME(6)) IN (CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6))))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT '01:02:03.456789123' :: TIME(9) IN (
+  '12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6), '01:02:03.456789123' :: TIME(9))
+-- !query analysis
+Project [cast(cast(01:02:03.456789123 as time(9)) as time(9)) IN (cast(cast(12:34:56.789 as time(3)) as time(9)),cast(cast(01:02:03.456789 as time(6)) as time(9)),cast(cast(01:02:03.456789123 as time(9)) as time(9))) AS (CAST(01:02:03.456789123 AS TIME(9)) IN (CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6)), CAST(01:02:03.456789123 AS TIME(9))))#x]
++- OneRowRelation
+
+
+-- !query
+CREATE TABLE time_widen_tbl (t6 TIME(6)) USING parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`time_widen_tbl`, false
+
+
+-- !query
+INSERT INTO time_widen_tbl SELECT '01:02:03.456' :: TIME(3)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/time_widen_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/time_widen_tbl], Append, `spark_catalog`.`default`.`time_widen_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/time_widen_tbl), [t6]
++- Project [cast(CAST(01:02:03.456 AS TIME(3))#x as time(6)) AS t6#x]
+   +- Project [cast(01:02:03.456 as time(3)) AS CAST(01:02:03.456 AS TIME(3))#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT typeof(t6), t6 FROM time_widen_tbl
+-- !query analysis
+Project [typeof(t6#x) AS typeof(t6)#x, t6#x]
++- SubqueryAlias spark_catalog.default.time_widen_tbl
+   +- Relation spark_catalog.default.time_widen_tbl[t6#x] parquet
+
+
+-- !query
+DROP TABLE time_widen_tbl
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.time_widen_tbl
+
+
+-- !query
+CREATE TABLE time_narrow_tbl (t3 TIME(3)) USING parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`time_narrow_tbl`, false
+
+
+-- !query
+INSERT INTO time_narrow_tbl SELECT '01:02:03.456789' :: TIME(6)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+  "sqlState" : "KD000",
+  "messageParameters" : {
+    "colName" : "`t3`",
+    "srcType" : "\"TIME(6)\"",
+    "tableName" : "`spark_catalog`.`default`.`time_narrow_tbl`",
+    "targetType" : "\"TIME(3)\""
+  }
+}
+
+
+-- !query
+INSERT INTO time_narrow_tbl SELECT CAST('01:02:03.456789' :: TIME(6) AS TIME(3))
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/time_narrow_tbl, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/time_narrow_tbl], Append, `spark_catalog`.`default`.`time_narrow_tbl`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/time_narrow_tbl), [t3]
++- Project [CAST(CAST(01:02:03.456789 AS TIME(6)) AS TIME(3))#x AS t3#x]
+   +- Project [cast(cast(01:02:03.456789 as time(6)) as time(3)) AS CAST(CAST(01:02:03.456789 AS TIME(6)) AS TIME(3))#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT typeof(t3), t3 FROM time_narrow_tbl
+-- !query analysis
+Project [typeof(t3#x) AS typeof(t3)#x, t3#x]
++- SubqueryAlias spark_catalog.default.time_narrow_tbl
+   +- Relation spark_catalog.default.time_narrow_tbl[t3#x] parquet
+
+
+-- !query
+DROP TABLE time_narrow_tbl
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.time_narrow_tbl

@@ -307,6 +307,7 @@ class FileSourceStrategySuite extends SharedSparkSession {
   test("Locality support for FileScanRDD - one file per partition") {
     withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
         "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
         "fs.file.impl.disable.cache" -> "true") {
       val table =
@@ -332,6 +333,7 @@ class FileSourceStrategySuite extends SharedSparkSession {
     withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0",
+        SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
         "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
         "fs.file.impl.disable.cache" -> "true") {
       val table =

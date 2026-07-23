@@ -266,7 +266,8 @@ private[v1] class SqlResource extends BaseAppResource {
       edges,
       if (exec.queryId != null) exec.queryId.toString else null,
       exec.errorMessage.orNull,
-      exec.rootExecutionId)
+      exec.rootExecutionId,
+      exec.modifiedConfigs)
   }
 
   private def printableMetrics(allNodes: collection.Seq[SparkPlanGraphNode],
@@ -286,7 +287,8 @@ private[v1] class SqlResource extends BaseAppResource {
       val wholeStageCodegenId = nodeIdAndWSCGIdMap.get(node.id).flatten
       val metrics =
         node.metrics.flatMap(m => getMetric(metricValues, m.accumulatorId, m.name.trim))
-      Node(nodeId = node.id, nodeName = node.name.trim, wholeStageCodegenId, metrics)
+      Node(nodeId = node.id, nodeName = node.name.trim, wholeStageCodegenId, metrics,
+        desc = node.desc)
     }
 
     nodes.sortBy(_.nodeId).reverse

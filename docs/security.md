@@ -348,8 +348,14 @@ The following options control the authentication of Web UIs:
 <tr>
   <td><code>spark.ui.allowFramingFrom</code></td>
   <td><code>SAMEORIGIN</code></td>
-  <td>Allow framing for a specific named URI via <code>X-Frame-Options</code>. By default, allow only from the same origin.</td>
+  <td>Allow framing for a specific named URI via CSP <code>frame-ancestors</code> directive. By default, allow only from the same origin. Requires <code>spark.ui.contentSecurityPolicy.enabled=true</code> to take effect. When CSP is disabled, <code>X-Frame-Options: SAMEORIGIN</code> is used regardless of this setting.</td>
   <td>1.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.contentSecurityPolicy.frameAncestors.enabled</code></td>
+  <td><code>true</code></td>
+  <td>Whether to include the <code>frame-ancestors</code> directive in the CSP header when <code>spark.ui.contentSecurityPolicy.enabled=true</code>. When enabled, the <code>frame-ancestors</code> directive enforces the <code>spark.ui.allowFramingFrom</code> setting. This setting is ignored when CSP is disabled.</td>
+  <td>4.3.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.filters</code></td>
@@ -766,12 +772,14 @@ Security.
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.ui.xXssProtection</code></td>
-  <td><code>1; mode=block</code></td>
+  <td><code>0</code></td>
   <td>
-    Value for HTTP X-XSS-Protection response header. You can choose appropriate value
-    from below:
+    Value for HTTP X-XSS-Protection response header. The default is <code>0</code> which
+    disables the browser's XSS Auditor. The XSS Auditor has been removed from Chrome and
+    Edge, and was never implemented in Firefox. In browsers that still support it (Safari),
+    it can introduce side-channel vulnerabilities. Use Content-Security-Policy instead.
     <ul>
-      <li><code>0</code> (Disables XSS filtering)</li>
+      <li><code>0</code> (Disables XSS filtering. Recommended.)</li>
       <li><code>1</code> (Enables XSS filtering. If a cross-site scripting attack is detected,
         the browser will sanitize the page.)</li>
       <li><code>1; mode=block</code> (Enables XSS filtering. The browser will prevent rendering
@@ -805,7 +813,7 @@ Security.
 </tr>
 <tr>
   <td><code>spark.ui.contentSecurityPolicy.enabled</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
     When enabled, the Content-Security-Policy (CSP) HTTP response header is set for the Spark UI,
     restricting the sources from which the browser is allowed to load resources as a

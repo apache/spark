@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
+import org.apache.spark.sql.pipelines.autocdc.ScdType
 
 /**
- * Unit tests for the [[AutoCdcAuxiliaryTable]] companion object, in particular the
- * `serializeKeyColumnNames` / `parseKeyColumnNames` round-trip helpers used to persist the
- * AutoCDC key column names as a JSON-encoded reserved table property on the auxiliary table.
+ * Unit tests for the [[AutoCdcAuxiliaryTable]] companion object.
  *
  * These tests are intentionally session-less: the helpers are pure functions on `String` and
  * `Seq[String]`, and verifying their byte-for-byte round-trip contract requires no Spark
@@ -45,6 +49,14 @@ class AutoCdcAuxiliaryTableSuite extends SparkFunSuite {
       AutoCdcAuxiliaryTable.parseKeyColumnNames(json).contains(names),
       s"round-trip failed: input=${names}, serialized=${json}"
     )
+  }
+
+  /** Minimal [[Table]] stub exposing only the properties map the SCD-type validator reads. */
+  private def auxTableWithProperties(props: Map[String, String]): Table = new Table {
+    override def name(): String = "aux"
+    override def capabilities(): java.util.Set[TableCapability] =
+      Set.empty[TableCapability].asJava
+    override def properties(): java.util.Map[String, String] = props.asJava
   }
 
   test("serializeKeyColumnNames/parseKeyColumnNames round-trip preserves plain ASCII names") {
@@ -96,5 +108,52 @@ class AutoCdcAuxiliaryTableSuite extends SparkFunSuite {
     assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("[\"id\", 1]").isEmpty)   // mixed types
     assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("[\"id\", null]").isEmpty)
     assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("[[\"id\"]]").isEmpty)    // nested array
+  }
+
+  test("validateNoScdTypeDrift accepts an auxiliary table whose recorded SCD type matches") {
+    val existing =
+      auxTableWithProperties(Map(AutoCdcAuxiliaryTable.scdTypePropertyKey -> ScdType.Type1.label))
+    // Must not throw.
+    AutoCdcAuxiliaryTable.validateNoScdTypeDrift(
+      existingAuxiliaryTable = existing,
+      targetTableIdentifier = TableIdentifier("target", Some("ns"), Some("cat")),
+      expectedScdType = ScdType.Type1)
+  }
+
+  test("validateNoScdTypeDrift throws SCD_TYPE_DRIFT when the recorded SCD type differs") {
+    val existing =
+      auxTableWithProperties(Map(AutoCdcAuxiliaryTable.scdTypePropertyKey -> ScdType.Type2.label))
+    val ex = intercept[AnalysisException] {
+      AutoCdcAuxiliaryTable.validateNoScdTypeDrift(
+        existingAuxiliaryTable = existing,
+        targetTableIdentifier = TableIdentifier("target", Some("ns"), Some("cat")),
+        expectedScdType = ScdType.Type1)
+    }
+    checkError(
+      exception = ex,
+      condition = "AUTOCDC_INVALID_STATE.SCD_TYPE_DRIFT",
+      sqlState = "42000",
+      parameters = Map(
+        "tableName" -> TableIdentifier("target", Some("ns"), Some("cat")).unquotedString,
+        "expectedScdType" -> ScdType.Type1.label,
+        "recordedScdType" -> ScdType.Type2.label))
+  }
+
+  test("validateNoScdTypeDrift throws AUXILIARY_TABLE_PROPERTY_MISSING when scdType is absent") {
+    // Simulates corrupt/externally-modified metadata (e.g. `ALTER TABLE ... UNSET TBLPROPERTIES`).
+    val existing = auxTableWithProperties(Map.empty)
+    val ex = intercept[AnalysisException] {
+      AutoCdcAuxiliaryTable.validateNoScdTypeDrift(
+        existingAuxiliaryTable = existing,
+        targetTableIdentifier = TableIdentifier("target", Some("ns"), Some("cat")),
+        expectedScdType = ScdType.Type1)
+    }
+    checkError(
+      exception = ex,
+      condition = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MISSING",
+      sqlState = "42000",
+      parameters = Map(
+        "tableName" -> TableIdentifier("target", Some("ns"), Some("cat")).unquotedString,
+        "propertyName" -> AutoCdcAuxiliaryTable.scdTypePropertyKey))
   }
 }

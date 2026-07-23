@@ -46,7 +46,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.HadoopFSUtils
 
 class FileBasedDataSourceSuite extends SharedSparkSession
@@ -1339,65 +1338,6 @@ class FileBasedDataSourceSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-57166: nanosecond timestamp types are not supported in selected file data sources") {
-    // Parquet and ORC support nanosecond-capable timestamps, while these formats still reject them.
-    val unsupportedDataSources = Seq("json", "csv", "xml")
-    val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
-    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      // Test both v1 and v2 data sources.
-      Seq(true, false).foreach { useV1 =>
-        val useV1List = if (useV1) {
-          unsupportedDataSources.mkString(",")
-        } else {
-          ""
-        }
-        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
-          unsupportedDataSources.foreach { format =>
-            nanosTypes.foreach { nanosType =>
-              val expectedType = s""""${nanosType.sql}""""
-              withTempDir { dir =>
-                // Write path: a nanos-typed column cannot be written. The nanos literal is built
-                // directly from its internal value to avoid relying on cast/parser support.
-                val nanosLiteral =
-                  Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
-                val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
-                val writeDir = new File(dir, "write").getCanonicalPath
-                checkError(
-                  exception = intercept[AnalysisException] {
-                    df.write.format(format).mode("overwrite").save(writeDir)
-                  },
-                  condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-                  parameters = Map(
-                    "columnName" -> "`ts`",
-                    "columnType" -> expectedType,
-                    "format" -> formatMapping(format)))
-
-                // Read path: a user-specified nanos schema is rejected. Write a benign file first
-                // so schema validation (not file listing) is what fails.
-                val readDir = new File(dir, "read").getCanonicalPath
-                // XML requires a `rowTag` option on both the read and write paths.
-                val extraOptions =
-                  if (format == "xml") Map("rowTag" -> "row") else Map.empty[String, String]
-                Seq("a").toDF("ts").write.format(format).options(extraOptions)
-                  .mode("overwrite").save(readDir)
-                checkError(
-                  exception = intercept[AnalysisException] {
-                    spark.read.schema(new StructType().add("ts", nanosType))
-                      .format(format).options(extraOptions).load(readDir).collect()
-                  },
-                  condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-                  parameters = Map(
-                    "columnName" -> "`ts`",
-                    "columnType" -> expectedType,
-                    "format" -> formatMapping(format)))
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
   test("SPARK-57166: ORC supports nanosecond timestamp types in v1 and v2") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       // Validate both v1 and v2 ORC paths.
@@ -1425,6 +1365,190 @@ class FileBasedDataSourceSuite extends SharedSparkSession
                   checkAnswer(readBack, df)
                 }
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57457: CSV supports nanosecond timestamp types in v1 and v2") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq(true, false).foreach { useV1 =>
+        val useV1List = if (useV1) "csv" else ""
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+          foreachNanosPrecision { precision =>
+            // CSV is text-based: the format string must carry enough fractional-second digits to
+            // represent the full precision. Use exactly `precision` S-characters so the emitted
+            // string is compact and unambiguously round-trips at the given precision.
+            val fracPat = "S" * precision
+            Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+              nanosType =>
+                withTempDir { dir =>
+                  val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+                  val value: Any = nanosType match {
+                    case _: TimestampNTZNanosType => wallClock
+                    case _: TimestampLTZNanosType => wallClock.toInstant(ZoneOffset.UTC)
+                  }
+                  val df = spark.createDataFrame(
+                    spark.sparkContext.parallelize(Seq(Row(value))),
+                    new StructType().add("ts", nanosType))
+                  val path = new File(dir, s"csv_nanos_${nanosType.typeName}").getCanonicalPath
+                  val (fmtKey, fmtVal) = nanosType match {
+                    case _: TimestampNTZNanosType =>
+                      ("timestampNTZFormat", s"yyyy-MM-dd'T'HH:mm:ss.$fracPat")
+                    case _: TimestampLTZNanosType =>
+                      ("timestampFormat", s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX")
+                  }
+                  df.write.format("csv").option(fmtKey, fmtVal).mode("overwrite").save(path)
+                  val readBack = spark.read
+                    .schema(new StructType().add("ts", nanosType))
+                    .option(fmtKey, fmtVal)
+                    .format("csv").load(path)
+                  checkAnswer(readBack, df)
+                }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57456: JSON supports nanosecond timestamp types in v1 and v2") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq(true, false).foreach { useV1 =>
+        val useV1List = if (useV1) "json" else ""
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+          foreachNanosPrecision { precision =>
+            // JSON is text-based: the format string must carry enough fractional-second digits to
+            // represent the full precision. Use exactly `precision` S-characters.
+            val fracPat = "S" * precision
+            Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+              nanosType =>
+                withTempDir { dir =>
+                  val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+                  val value: Any = nanosType match {
+                    case _: TimestampNTZNanosType => wallClock
+                    case _: TimestampLTZNanosType => wallClock.toInstant(ZoneOffset.UTC)
+                  }
+                  val df = spark.createDataFrame(
+                    spark.sparkContext.parallelize(Seq(Row(value))),
+                    new StructType().add("ts", nanosType))
+                  val path = new File(dir, s"json_nanos_${nanosType.typeName}").getCanonicalPath
+                  val (fmtKey, fmtVal) = nanosType match {
+                    case _: TimestampNTZNanosType =>
+                      ("timestampNTZFormat", s"yyyy-MM-dd'T'HH:mm:ss.$fracPat")
+                    case _: TimestampLTZNanosType =>
+                      ("timestampFormat", s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX")
+                  }
+                  df.write.format("json").option(fmtKey, fmtVal).mode("overwrite").save(path)
+                  val readBack = spark.read
+                    .schema(new StructType().add("ts", nanosType))
+                    .option(fmtKey, fmtVal)
+                    .format("json").load(path)
+                  checkAnswer(readBack, df)
+                }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57456: JSON supports nested nanosecond timestamp types in v1 and v2") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq(true, false).foreach { useV1 =>
+        val useV1List = if (useV1) "json" else ""
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+          foreachNanosPrecision { precision =>
+            val fracPat = "S" * precision
+            Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+              nanosType =>
+                withTempDir { dir =>
+                  val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+                  val leaf: Any = nanosType match {
+                    case _: TimestampNTZNanosType => wallClock
+                    case _: TimestampLTZNanosType => wallClock.toInstant(ZoneOffset.UTC)
+                  }
+                  // Embed the nanos leaf inside a struct, an array, and a map value. The guardrails
+                  // and Jackson read/write paths recurse into all three.
+                  val schema = new StructType()
+                    .add("s", new StructType().add("ts", nanosType))
+                    .add("a", ArrayType(nanosType))
+                    .add("m", MapType(StringType, nanosType))
+                  val row = Row(Row(leaf), Seq(leaf), Map("k" -> leaf))
+                  val df = spark.createDataFrame(
+                    spark.sparkContext.parallelize(Seq(row)), schema)
+                  val (fmtKey, fmtVal) = nanosType match {
+                    case _: TimestampNTZNanosType =>
+                      ("timestampNTZFormat", s"yyyy-MM-dd'T'HH:mm:ss.$fracPat")
+                    case _: TimestampLTZNanosType =>
+                      ("timestampFormat", s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX")
+                  }
+                  val path =
+                    new File(dir, s"json_nested_${nanosType.typeName}").getCanonicalPath
+                  df.write.format("json").option(fmtKey, fmtVal).mode("overwrite").save(path)
+                  val readBack = spark.read.schema(schema).option(fmtKey, fmtVal)
+                    .format("json").load(path)
+                  checkAnswer(readBack, df)
+                }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57456: JSON rejects nanosecond timestamps under the LEGACY time parser policy") {
+    // The legacy timestamp formatter cannot represent sub-microsecond digits, so the nanos
+    // formatter methods raise TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER. Only the LTZ formatter is
+    // legacy under this policy (the NTZ formatter always uses the ISO-8601 path), so this covers
+    // TimestampLTZNanosType.
+    def rootNanosError(e: Throwable): SparkUnsupportedOperationException = {
+      var cause: Throwable = e
+      while (cause != null && !cause.isInstanceOf[SparkUnsupportedOperationException]) {
+        cause = cause.getCause
+      }
+      assert(cause != null,
+        s"Expected TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER, but got: ${e.getMessage}")
+      cause.asInstanceOf[SparkUnsupportedOperationException]
+    }
+
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      val nanosType = TimestampLTZNanosType(9)
+      val schema = new StructType().add("ts", nanosType)
+      val expectedParameters =
+        Map("config" -> ("\"" + SQLConf.LEGACY_TIME_PARSER_POLICY.key + "\""))
+      Seq(true, false).foreach { useV1 =>
+        val useV1List = if (useV1) "json" else ""
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+          withTempDir { dir =>
+            // Write path.
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(
+                Seq(Row(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 1).toInstant(ZoneOffset.UTC)))),
+              schema)
+            val writeDir = new File(dir, "write").getCanonicalPath
+            checkError(
+              exception = rootNanosError(intercept[SparkException] {
+                df.write.format("json").mode("overwrite").save(writeDir)
+              }),
+              condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+              parameters = expectedParameters)
+
+            // Read path: write a benign file first so schema-driven parsing is what fails. Use
+            // FAILFAST so the unsupported-feature error surfaces instead of being turned into a
+            // null record by the permissive bad-record handling.
+            val readDir = new File(dir, "read").getCanonicalPath
+            Seq("a").toDF("ts").write.format("json").mode("overwrite").save(readDir)
+            checkError(
+              exception = rootNanosError(intercept[SparkException] {
+                spark.read.schema(schema).option("mode", "FAILFAST")
+                  .format("json").load(readDir).collect()
+              }),
+              condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+              parameters = expectedParameters)
           }
         }
       }
@@ -1590,6 +1714,89 @@ class FileBasedDataSourceSuite extends SharedSparkSession
       // An empty session conf does too.
       withSQLConf(SQLConf.IGNORED_PATH_SEGMENT_REGEX.key -> "") {
         checkAnswer(spark.read.format("json").load(basePath), Seq(Row("visible"), Row("hidden")))
+      }
+    }
+  }
+
+  test("SPARK-57458: XML supports nanosecond timestamp types") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { precision =>
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            withTempDir { dir =>
+              val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+              val (value, fmtKey, fmtVal) = nanosType match {
+                case _: TimestampNTZNanosType =>
+                  (wallClock.asInstanceOf[Any],
+                    "timestampNTZFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS")
+                case _: TimestampLTZNanosType =>
+                  (wallClock.toInstant(ZoneOffset.UTC).asInstanceOf[Any],
+                    "timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX")
+              }
+              val df = spark.createDataFrame(
+                spark.sparkContext.parallelize(Seq(Row(value))),
+                new StructType().add("ts", nanosType))
+              val path = new File(dir, s"xml_nanos_${nanosType.typeName}").getCanonicalPath
+              df.write.format("xml").option("rowTag", "row")
+                .option(fmtKey, fmtVal).mode("overwrite").save(path)
+              val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+                .format("xml").option("rowTag", "row").option(fmtKey, fmtVal).load(path)
+              checkAnswer(readBack, df)
+            }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57458: XML rejects nanosecond timestamps under the LEGACY time parser policy") {
+    // The legacy timestamp formatter cannot represent sub-microsecond digits, so the nanos
+    // formatter methods raise TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER. Only the LTZ formatter
+    // is legacy under this policy (the NTZ formatter always uses the ISO-8601 path), so this
+    // covers TimestampLTZNanosType. XML is v1-only so there is no v1/v2 branching to test.
+    def rootNanosError(e: Throwable): SparkUnsupportedOperationException = {
+      var cause: Throwable = e
+      while (cause != null && !cause.isInstanceOf[SparkUnsupportedOperationException]) {
+        cause = cause.getCause
+      }
+      assert(cause != null,
+        s"Expected TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER, but got: ${e.getMessage}")
+      cause.asInstanceOf[SparkUnsupportedOperationException]
+    }
+
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      val nanosType = TimestampLTZNanosType(9)
+      val schema = new StructType().add("ts", nanosType)
+      val expectedParameters =
+        Map("config" -> ("\"" + SQLConf.LEGACY_TIME_PARSER_POLICY.key + "\""))
+      withTempDir { dir =>
+        // Write path.
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(
+            Seq(Row(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 1).toInstant(ZoneOffset.UTC)))),
+          schema)
+        val writeDir = new File(dir, "write").getCanonicalPath
+        checkError(
+          exception = rootNanosError(intercept[SparkException] {
+            df.write.format("xml").option("rowTag", "row").mode("overwrite").save(writeDir)
+          }),
+          condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+          parameters = expectedParameters)
+
+        // Read path: write a benign file first so schema-driven parsing is what fails. Use
+        // FAILFAST so the unsupported-feature error surfaces instead of being swallowed as a
+        // null record by the permissive bad-record handling.
+        val readDir = new File(dir, "read").getCanonicalPath
+        Seq("a").toDF("ts").write.format("xml").option("rowTag", "row")
+          .mode("overwrite").save(readDir)
+        checkError(
+          exception = rootNanosError(intercept[SparkException] {
+            spark.read.schema(schema).option("mode", "FAILFAST").option("rowTag", "row")
+              .format("xml").load(readDir).collect()
+          }),
+          condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+          parameters = expectedParameters)
       }
     }
   }

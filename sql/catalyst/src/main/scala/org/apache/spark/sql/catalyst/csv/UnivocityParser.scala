@@ -263,6 +263,16 @@ class UnivocityParser(
         timestampNTZFormatter.parseWithoutTimeZone(datum, false)
       }
 
+    case t: TimestampNTZNanosType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        timestampNTZFormatter.parseWithoutTimeZoneNanos(datum, t.precision, false)
+      }
+
+    case t: TimestampLTZNanosType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        timestampFormatter.parseNanos(datum, t.precision)
+      }
+
     case _: TimeType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         timeFormatter.parse(datum)

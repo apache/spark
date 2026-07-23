@@ -154,6 +154,7 @@ to return the metadata pertaining to a partition or column respectively.
 | BinaryType            | `{ "name" : "binary" }`                                                                                                                                          |
 | BooleanType           | `{ "name" : "boolean" }`                                                                                                                                         |
 | DateType              | `{ "name" : "date" }`                                                                                                                                            |
+| TimeType              | `{ "name" : "time(p)" }`                                                                                                                                         |
 | VariantType           | `{ "name" : "variant" }`                                                                                                                                         |
 | TimestampType         | `{ "name" : "timestamp_ltz" }`                                                                                                                                   |
 | TimestampNTZType      | `{ "name" : "timestamp_ntz" }`                                                                                                                                   |

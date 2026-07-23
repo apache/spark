@@ -54,7 +54,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -303,18 +303,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = Some(e))
   }
 
-  def ansiDateTimeArgumentOutOfRange(e: Exception): SparkDateTimeException = {
-    new SparkDateTimeException(
-      errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
-      messageParameters = Map(
-        "rangeMessage" -> e.getMessage,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = Array.empty,
-      summary = "",
-      cause = Some(e))
-  }
-
-  def ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e: Throwable): SparkDateTimeException = {
+  def ansiDateTimeArgumentOutOfRange(e: Throwable): SparkDateTimeException = {
     new SparkDateTimeException(
       errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
       messageParameters = Map("rangeMessage" -> e.getMessage),
@@ -1707,6 +1696,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def unsupportedHiveTypeError(fieldType: String, fieldName: String): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_HIVE_TYPE",
+      messageParameters = Map(
+        "fieldType" -> toSQLType(fieldType),
+        "fieldName" -> toSQLId(fieldName)))
+  }
   def getTablesByTypeUnsupportedByHiveVersionError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION")
@@ -2530,6 +2526,24 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId("aes_encrypt")))
   }
 
+  def hmacUnsupportedAlgorithmError(algorithm: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.HMAC_ALGORITHM",
+      messageParameters = Map(
+        "parameter" -> toSQLId("algorithm"),
+        "functionName" -> toSQLId("hmac"),
+        "algorithm" -> toSQLValue(algorithm, StringType)))
+  }
+
+  def hmacCryptoError(detailMessage: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.HMAC_CRYPTO_ERROR",
+      messageParameters = Map(
+        "parameter" -> toSQLId("key"),
+        "functionName" -> toSQLId("hmac"),
+        "detailMessage" -> detailMessage))
+  }
+
   def hiveTableWithAnsiIntervalsError(
       table: TableIdentifier): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
@@ -2627,6 +2641,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def calendarIntervalArrowNanosOverflowError(
+      interval: CalendarInterval): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"write the interval value $interval as Arrow IntervalMonthDayNano " +
+          "nanoseconds (the microseconds component must be in +/-(Long.MaxValue / 1000), " +
+          "roughly +/-292 years)")),
+      context = Array.empty,
+      summary = "")
+  }
+
   def timestampNanosEpochNanosOverflowError(
       value: TimestampNanosVal, isNtz: Boolean, sink: String): SparkArithmeticException = {
     // Render TIMESTAMP_NTZ values without a zone (LocalDateTime, no trailing `Z`); TIMESTAMP_LTZ
@@ -2650,6 +2676,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "operation" ->
           s"create a TIMESTAMP_LTZ(9) from $nanos nanoseconds since the epoch"),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def timestampConstructorOverflowError(
+      value: Any,
+      valueType: DataType,
+      unit: String): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" ->
+          s"create a TIMESTAMP from ${toSQLValue(value, valueType)} $unit since the epoch"),
       context = Array.empty,
       summary = "")
   }
@@ -3087,6 +3126,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("path" -> path, "functionName" -> toSQLId(functionName)))
   }
 
+  def variantPathTypeMismatch(path: String, failedAt: String, functionName: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "VARIANT_PATH_TYPE_MISMATCH",
+      messageParameters =
+        Map("path" -> path, "failedAt" -> failedAt, "functionName" -> toSQLId(functionName)))
+  }
+
   def malformedVariant(): Throwable = new SparkRuntimeException(
     "MALFORMED_VARIANT",
     Map.empty
@@ -3441,5 +3487,23 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkIllegalArgumentException(
       errorClass = "INVALID_LINE_SEPARATOR.TOO_LONG",
       messageParameters = Map("length" -> length.toString))
+  }
+
+  def invalidOccurrenceError(functionName: String, occurrence: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.OCCURRENCE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("occurrence"),
+        "actual" -> occurrence.toString
+      )
+    )
+  }
+
+  def binByInvalidRangeError(rangeStart: String, rangeEnd: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "BIN_BY_INVALID_RANGE",
+      messageParameters = Map("rangeStart" -> rangeStart, "rangeEnd" -> rangeEnd)
+    )
   }
 }

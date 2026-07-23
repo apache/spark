@@ -78,7 +78,7 @@ public interface Table extends Relation {
    * empty array can be returned here.
    */
   default Column[] columns() {
-    return CatalogV2Util.structTypeToV2Columns(schema());
+    return CatalogV2Util.structTypeToV2Columns(schema(), true /* keep IDs */);
   }
 
   /**

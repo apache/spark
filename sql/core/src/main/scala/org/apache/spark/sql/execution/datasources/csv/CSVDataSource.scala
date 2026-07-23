@@ -49,7 +49,7 @@ import org.apache.spark.util.Utils
 /**
  * Common functions for parsing CSV files
  */
-abstract class CSVDataSource extends Serializable with Logging {
+abstract class CSVDataSource extends Serializable with Logging with SupportsArchiveFormat {
   def isSplitable: Boolean
 
   /**
@@ -74,7 +74,7 @@ abstract class CSVDataSource extends Serializable with Logging {
       case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
       case None =>
         val hasArchive = parsedOptions.archiveFormatEnabled &&
-          inputPaths.exists(f => ArchiveReader.isArchivePath(f.getPath))
+          inputPaths.exists(f => SupportsArchiveFormat.isArchivePath(f.getPath))
         if (hasArchive && supportsArchiveScan) {
           // Archives (and any loose files alongside them) are inferred in a single CSVInferSchema
           // pass over all inputs -- archive entries are streamed, never unpacked -- so the result
@@ -145,7 +145,8 @@ abstract class CSVDataSource extends Serializable with Logging {
       ignoredPathSegmentRegex: Pattern)(
       parseEntry: (UnivocityParser, CSVHeaderChecker, InputStream) => Iterator[InternalRow])
     : Iterator[InternalRow] = {
-    ArchiveReader(file.toPath).readEntries(conf, ignoredPathSegmentRegex) { (entryName, in) =>
+    SupportsArchiveFormat.readArchiveEntries(
+        file.toPath, conf, ignoredPathSegmentRegex) { (entryName, in) =>
       val headerChecker =
         getHeaderChecker(true, s"CSV archive entry: ${file.urlEncodedPath}!/$entryName")
       val parser = getParser()
@@ -174,8 +175,8 @@ abstract class CSVDataSource extends Serializable with Logging {
     def tokens(dropHeader: Boolean): RDD[Array[String]] = baseRdd.flatMap { stream =>
       val path = new Path(stream.getPath())
       try {
-        if (ArchiveReader.isArchivePath(path)) {
-          ArchiveReader(path).readEntries(stream.getConfiguration) { (_, in) =>
+        if (SupportsArchiveFormat.isArchivePath(path)) {
+          SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
             tokenizeForInference(in, dropHeader, parsedOptions)
           }
         } else {
@@ -313,9 +314,10 @@ object TextInputCSVDataSource extends CSVDataSource {
 
   /**
    * Decodes one archive entry's bytes into the same CSV line strings the non-archive [[readFile]]
-   * path feeds to the parser: [[ArchiveReader.lineIterator]] splits the entry into lines (honoring
-   * a custom line separator) and each line is decoded with the configured charset. Like `readFile`,
-   * the decoded lines are fed to `UnivocityParser.parseIterator` without a re-appended terminator.
+   * path feeds to the parser: [[SupportsArchiveFormat.lineIterator]] splits the entry into lines
+   * (honoring a custom line separator) and each line is decoded with the configured charset. Like
+   * `readFile`, the decoded lines are fed to `UnivocityParser.parseIterator` without a re-appended
+   * terminator.
    *
    * @param in bytes of one already-decompressed archive entry; not closed here (the archive owns
    *           the underlying stream).
@@ -323,7 +325,7 @@ object TextInputCSVDataSource extends CSVDataSource {
    * @return an iterator over the entry's lines.
    */
   private def entryLines(in: InputStream, options: CSVOptions): Iterator[String] = {
-    ArchiveReader.lineIterator(in, options.lineSeparatorInRead).map { line =>
+    lineIterator(in, options.lineSeparatorInRead).map { line =>
       new String(line.getBytes, 0, line.getLength, options.charset)
     }
   }

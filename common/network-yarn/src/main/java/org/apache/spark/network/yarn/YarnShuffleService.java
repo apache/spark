@@ -285,8 +285,11 @@ public class YarnShuffleService extends AuxiliaryService {
       if (shuffleMergeManager == null) {
         shuffleMergeManager = newMergedShuffleFileManagerInstance(transportConf, mergeManagerFile);
       }
+      // Constrain registered localDirs to the NodeManager's configured local directories
+      // (yarn.nodemanager.local-dirs) and to the registering application's own directory.
+      String[] nmLocalDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
       blockHandler = new ExternalBlockHandler(
-        transportConf, registeredExecutorFile, shuffleMergeManager);
+        transportConf, registeredExecutorFile, shuffleMergeManager, nmLocalDirs, true);
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests
