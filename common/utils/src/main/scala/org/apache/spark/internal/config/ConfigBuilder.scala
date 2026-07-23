@@ -56,7 +56,7 @@ private object ConfigHelpers {
 
   def toEnum[E <: Enum[E]](s: String, enumClass: Class[E], key: String): E = {
     enumClass.getEnumConstants.find(_.name().equalsIgnoreCase(s.trim)) match {
-      case Some(enum) => enum
+      case Some(e) => e
       case None => throw configOutOfRangeOfOptionsError(key, s, enumClass.getEnumConstants)
     }
   }
@@ -155,7 +155,7 @@ private[spark] class TypedConfigBuilder[T](
   import ConfigHelpers._
 
   def this(parent: ConfigBuilder, converter: String => T) = {
-    this(parent, converter, { v: T => v.toString })
+    this(parent, converter, { (v: T) => v.toString })
   }
 
   /** Apply a transformation to the user-provided values of the config entry. */
