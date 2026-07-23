@@ -65,6 +65,7 @@ LEAVE label
 - [Compound Statement](../control-flow/compound-stmt.html)
 - [FOR Statement](../control-flow/for-stmt.html)
 - [LOOP Statement](../control-flow/loop-stmt.html)
+- [REPEAT Statement](../control-flow/repeat-stmt.html)
 - [WHILE Statement](../control-flow/while-stmt.html)
 - [IF Statement](../control-flow/if-stmt.html)
 - [ITERATE Statement](../control-flow/iterate-stmt.html)
