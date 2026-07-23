@@ -28,6 +28,9 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * This rule performs string padding for char type.
  *
+ * When reading values from column/field of type CHAR(N), trim trailing spaces if the read-side
+ * trim config is turned on.
+ *
  * When reading values from column/field of type CHAR(N), right-pad the values to length N, if the
  * read-side padding config is turned on.
  *
@@ -41,7 +44,22 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
       return plan
     }
 
-    if (conf.readSideCharPadding) {
+    if (conf.charTrimTrailingSpacesOnRead) {
+      plan.resolveOperatorsUpWithNewOutput {
+        case r: LogicalRelation =>
+          ApplyCharTypePaddingHelper.readSideTrim(r, () =>
+            r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
+        case r: DataSourceV2Relation =>
+          ApplyCharTypePaddingHelper.readSideTrim(r, () =>
+            r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
+        case r: HiveTableRelation =>
+          ApplyCharTypePaddingHelper.readSideTrim(r, () => {
+            val cleanedDataCols = r.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
+            val cleanedPartCols = r.partitionCols.map(CharVarcharUtils.cleanAttrMetadata)
+            r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols)
+          })
+      }
+    } else if (conf.readSideCharPadding) {
       val newPlan = plan.resolveOperatorsUpWithNewOutput {
         case r: LogicalRelation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>

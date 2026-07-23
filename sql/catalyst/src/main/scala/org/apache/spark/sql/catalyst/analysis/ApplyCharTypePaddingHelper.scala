@@ -51,8 +51,21 @@ object ApplyCharTypePaddingHelper {
   private[sql] def readSidePadding(
       relation: LogicalPlan,
       cleanedRelation: () => LogicalPlan): (LogicalPlan, Seq[(Attribute, Attribute)]) = {
+    readSideCharTypeHandling(relation, cleanedRelation, CharVarcharUtils.addPaddingForScan)
+  }
+
+  private[sql] def readSideTrim(
+      relation: LogicalPlan,
+      cleanedRelation: () => LogicalPlan): (LogicalPlan, Seq[(Attribute, Attribute)]) = {
+    readSideCharTypeHandling(relation, cleanedRelation, CharVarcharUtils.trimTrailingSpacesForScan)
+  }
+
+  private def readSideCharTypeHandling(
+      relation: LogicalPlan,
+      cleanedRelation: () => LogicalPlan,
+      charTypeHandler: Attribute => Expression): (LogicalPlan, Seq[(Attribute, Attribute)]) = {
     val projectList = relation.output.map { attr =>
-      CharVarcharUtils.addPaddingForScan(attr) match {
+      charTypeHandler(attr) match {
         case ne: NamedExpression => ne
         case other => Alias(other, attr.name)(explicitMetadata = Some(attr.metadata))
       }

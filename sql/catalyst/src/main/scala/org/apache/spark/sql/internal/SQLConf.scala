@@ -7013,6 +7013,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val CHAR_TRIM_TRAILING_SPACES_ON_READ =
+    buildConf("spark.sql.charTrimTrailingSpacesOnRead")
+      .doc("When true, Spark trims trailing spaces from CHAR type columns/fields when reading " +
+        s"table data. This config takes precedence over ${READ_SIDE_CHAR_PADDING.key}.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_NO_CHAR_PADDING_IN_PREDICATE = buildConf("spark.sql.legacy.noCharPaddingInPredicate")
     .internal()
     .doc("When true, Spark will not apply char type padding for CHAR type columns in string " +
@@ -9188,6 +9196,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def structPredicateDecomposeMaxFields: Int = getConf(STRUCT_PREDICATE_DECOMPOSE_MAX_FIELDS)
 
   def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
+
+  def charTrimTrailingSpacesOnRead: Boolean = getConf(SQLConf.CHAR_TRIM_TRAILING_SPACES_ON_READ)
 
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
