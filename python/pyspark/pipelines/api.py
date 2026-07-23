@@ -16,7 +16,7 @@
 #
 from typing import Callable, Dict, List, Literal, Optional, Union, overload
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.pipelines.graph_element_registry import get_active_graph_element_registry
 from pyspark.pipelines.type_error_utils import validate_optional_list_of_str_arg
 from pyspark.pipelines.flow import AutoCdcFlow, Flow, QueryFunction
@@ -536,8 +536,11 @@ def create_auto_cdc_flow(
     apply_as_deletes: Optional[Union[str, Column]] = None,
     column_list: Optional[Union[List[str], List[Column]]] = None,
     except_column_list: Optional[Union[List[str], List[Column]]] = None,
-    stored_as_scd_type: Optional[Literal[1, "1"]] = None,
+    stored_as_scd_type: Optional[Literal[1, 2, "1", "2"]] = None,
     name: Optional[str] = None,
+    *,
+    track_history_column_list: Optional[Union[List[str], List[Column]]] = None,
+    track_history_except_column_list: Optional[Union[List[str], List[Column]]] = None,
 ) -> None:
     """
     Create an Auto CDC flow into the target table from the Change Data Capture (CDC) source.
@@ -581,8 +584,20 @@ def create_auto_cdc_flow(
         PySpark Columns. Only one of column_list and except_column_list can be specified. When \
         this is specified, all columns in the `DataFrame` of the target table except those in \
         this list will be in the output table.
-    :param stored_as_scd_type: The SCD type for the target table. Only 1 (or "1") is supported. \
-        When not specified, the server default applies.
+    :param stored_as_scd_type: The SCD type for the target table. 1 (or "1") and 2 (or "2") are \
+        supported. When not specified, the server default applies.
+    :param track_history_column_list: SCD2-only. Columns whose value change opens a new history \
+        record; two consecutive upsert events for the same key are coalesced into the same \
+        history record when they agree on every tracked column. When not specified, every \
+        eligible selected user column is tracked. This should be a list of column identifiers \
+        without qualifiers, expressed as either Python strings or PySpark Columns. Only one of \
+        track_history_column_list and track_history_except_column_list can be specified, and \
+        both require stored_as_scd_type to be 2.
+    :param track_history_except_column_list: SCD2-only. Columns excluded from history tracking. \
+        This should be a list of column identifiers without qualifiers, expressed as either \
+        Python strings or PySpark Columns. Only one of track_history_column_list and \
+        track_history_except_column_list can be specified, and both require stored_as_scd_type \
+        to be 2.
     :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified, \
         this will build a "default flow" with name equal to the target name.
     """
@@ -627,6 +642,27 @@ def create_auto_cdc_flow(
     except_column_list = _normalize_optional_column_list(
         arg_name="except_column_list", column_list=except_column_list
     )
+    track_history_column_list = _normalize_optional_column_list(
+        arg_name="track_history_column_list", column_list=track_history_column_list
+    )
+    track_history_except_column_list = _normalize_optional_column_list(
+        arg_name="track_history_except_column_list",
+        column_list=track_history_except_column_list,
+    )
+
+    # An include/except pair is mutually exclusive. The server enforces this too, but failing
+    # here avoids a round-trip. An empty list serializes identically to an omitted one (an unset
+    # repeated field on the wire), so it is a no-op; gate on non-empty lists rather than
+    # `is not None`.
+    _reject_include_and_except_together(
+        "column_list", column_list, "except_column_list", except_column_list
+    )
+    _reject_include_and_except_together(
+        "track_history_column_list",
+        track_history_column_list,
+        "track_history_except_column_list",
+        track_history_except_column_list,
+    )
 
     if isinstance(sequence_by, str):
         sequence_by = _connect_expr(sequence_by)
@@ -652,13 +688,37 @@ def create_auto_cdc_flow(
             },
         )
 
-    if stored_as_scd_type is not None and str(stored_as_scd_type) != "1":
+    if stored_as_scd_type is not None and str(stored_as_scd_type) not in ("1", "2"):
         raise PySparkTypeError(
             errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
                 "arg_name": "stored_as_scd_type",
-                "expected_type": "Literal[1, '1']",
+                "expected_type": "Literal[1, 2, '1', '2']",
                 "arg_type": type(stored_as_scd_type).__name__,
+            },
+        )
+
+    # Track-history columns describe how consecutive upserts are coalesced into history records,
+    # a notion that only exists under SCD2. Reject them for any other SCD type. The engine
+    # enforces this too, but failing here gives a clearer, client-side error.
+    #
+    # An empty list serializes identically to an omitted one (an unset repeated field on the
+    # wire) and is therefore a no-op, so gate on non-empty lists rather than `is not None`.
+    is_scd2 = stored_as_scd_type is not None and str(stored_as_scd_type) == "2"
+    supplied_track_history_args = [
+        arg_name
+        for arg_name, cols in (
+            ("track_history_column_list", track_history_column_list),
+            ("track_history_except_column_list", track_history_except_column_list),
+        )
+        if cols
+    ]
+    if not is_scd2 and supplied_track_history_args:
+        raise PySparkValueError(
+            errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+            messageParameters={
+                "arg_names": ", ".join(supplied_track_history_args),
+                "condition": "specified unless stored_as_scd_type is 2 (or '2')",
             },
         )
 
@@ -674,10 +734,30 @@ def create_auto_cdc_flow(
         column_list=column_list,
         except_column_list=except_column_list,
         stored_as_scd_type=stored_as_scd_type,
+        track_history_column_list=track_history_column_list,
+        track_history_except_column_list=track_history_except_column_list,
         source_code_location=source_code_location,
     )
 
     get_active_graph_element_registry().register_auto_cdc_flow(flow)
+
+
+def _reject_include_and_except_together(
+    include_arg_name: str,
+    include_columns: Optional[List[Column]],
+    except_arg_name: str,
+    except_columns: Optional[List[Column]],
+) -> None:
+    """Reject specifying a non-empty include list and a non-empty except list together.
+
+    An empty list is a no-op (it serializes to an unset repeated field, indistinguishable from an
+    omitted argument), so only non-empty lists count as "specified".
+    """
+    if include_columns and except_columns:
+        raise PySparkValueError(
+            errorClass="CANNOT_SET_TOGETHER",
+            messageParameters={"arg_list": f"{include_arg_name} and {except_arg_name}"},
+        )
 
 
 def _normalize_optional_column_list(

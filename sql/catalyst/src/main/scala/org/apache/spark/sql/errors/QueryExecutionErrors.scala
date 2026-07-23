@@ -2526,6 +2526,24 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId("aes_encrypt")))
   }
 
+  def hmacUnsupportedAlgorithmError(algorithm: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.HMAC_ALGORITHM",
+      messageParameters = Map(
+        "parameter" -> toSQLId("algorithm"),
+        "functionName" -> toSQLId("hmac"),
+        "algorithm" -> toSQLValue(algorithm, StringType)))
+  }
+
+  def hmacCryptoError(detailMessage: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.HMAC_CRYPTO_ERROR",
+      messageParameters = Map(
+        "parameter" -> toSQLId("key"),
+        "functionName" -> toSQLId("hmac"),
+        "detailMessage" -> detailMessage))
+  }
+
   def hiveTableWithAnsiIntervalsError(
       table: TableIdentifier): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(

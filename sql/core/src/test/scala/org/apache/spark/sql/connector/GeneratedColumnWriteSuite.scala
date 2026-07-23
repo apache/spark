@@ -372,6 +372,26 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("INSERT WITH SCHEMA EVOLUTION by position does not auto-fill trailing generated column") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  id INT,
+             |  doubled INT GENERATED ALWAYS AS (id * 2)
+             |) USING foo""".stripMargin)
+
+      withSQLConf(SQLConf.INSERT_INTO_NESTED_TYPE_COERCION_ENABLED.key -> "true") {
+        val ex = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE testcat.$tblName SELECT 5")
+        }
+        assert(ex.getCondition == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS")
+      }
+
+      sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE testcat.$tblName(id) SELECT 5")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(5, 10))
+    }
+  }
+
   test("INSERT by position with matching explicit value succeeds") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {

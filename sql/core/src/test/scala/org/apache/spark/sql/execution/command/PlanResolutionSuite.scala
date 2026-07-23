@@ -1397,6 +1397,23 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     )
   }
 
+  test("INSERT INTO REPLACE WHERE with column list") {
+    val parsed = parseAndResolve(
+      """INSERT INTO testcat.tab (i, s)
+        |REPLACE WHERE i = 1
+        |SELECT * FROM v2Table""".stripMargin)
+    parsed match {
+      case overwriteByExpression: OverwriteByExpression =>
+        // ResolveInsertInto resolves the column list into a Project and converts the statement
+        // into a by-name OverwriteByExpression whose delete expression is the REPLACE WHERE
+        // condition, resolved against the target table.
+        assert(overwriteByExpression.isByName)
+        assert(overwriteByExpression.deleteExpr.resolved)
+      case other =>
+        fail(s"Expected OverwriteByExpression, but got: $other")
+    }
+  }
+
   test("INSERT INTO REPLACE ON is blocked when feature flag is disabled") {
     withSQLConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED.key -> "false") {
       val ex = intercept[ParseException] {

@@ -233,3 +233,66 @@ SELECT assert_true(col1 <= col2) FROM VALUES ('2025-03-01', '2025-03-10')
 -- !query analysis
 Project [assert_true((col1#x <= col2#x), '(col1 <= col2)' is not true!) AS assert_true((col1 <= col2), '(col1 <= col2)' is not true!)#x]
 +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT hex(hmac('key', 'message'))
+-- !query analysis
+Project [hex(hmac(cast(key as binary), cast(message as binary), SHA-256)) AS hex(hmac(key, message, SHA-256))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hex(hmac('key', 'message', 'SHA-256'))
+-- !query analysis
+Project [hex(hmac(cast(key as binary), cast(message as binary), SHA-256)) AS hex(hmac(key, message, SHA-256))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hex(hmac('key', 'message', 'SHA-512'))
+-- !query analysis
+Project [hex(hmac(cast(key as binary), cast(message as binary), SHA-512)) AS hex(hmac(key, message, SHA-512))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT lower(hex(hmac('key', 'message', 'sha256')))
+-- !query analysis
+Project [lower(hex(hmac(cast(key as binary), cast(message as binary), sha256))) AS lower(hex(hmac(key, message, sha256)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hex(hmac(hmac('key', 'message'), 'message2'))
+-- !query analysis
+Project [hex(hmac(hmac(cast(key as binary), cast(message as binary), SHA-256), cast(message2 as binary), SHA-256)) AS hex(hmac(hmac(key, message, SHA-256), message2, SHA-256))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hmac(CAST(NULL AS BINARY), 'message')
+-- !query analysis
+Project [hmac(cast(null as binary), cast(message as binary), SHA-256) AS hmac(CAST(NULL AS BINARY), message, SHA-256)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hmac('key', CAST(NULL AS BINARY))
+-- !query analysis
+Project [hmac(cast(key as binary), cast(null as binary), SHA-256) AS hmac(key, CAST(NULL AS BINARY), SHA-256)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hmac('key', 'message', CAST(NULL AS STRING))
+-- !query analysis
+Project [hmac(cast(key as binary), cast(message as binary), cast(null as string)) AS hmac(key, message, CAST(NULL AS STRING))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hmac('key', 'message', 'SHA-3')
+-- !query analysis
+Project [hmac(cast(key as binary), cast(message as binary), SHA-3) AS hmac(key, message, SHA-3)#x]
++- OneRowRelation

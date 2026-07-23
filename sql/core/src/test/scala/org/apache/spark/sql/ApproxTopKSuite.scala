@@ -707,6 +707,69 @@ class ApproxTopKSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58164: estimate over combine of a coercion-widened sketch (INT -> BIGINT)") {
+    val res = sql(
+      """SELECT approx_top_k_estimate(approx_top_k_combine(sketch, 5))
+        |FROM (SELECT approx_top_k_accumulate(c) AS sketch, 'int' AS tag
+        |        FROM VALUES (1), (1), (2) AS t(c)
+        |      UNION ALL
+        |      SELECT approx_top_k_accumulate(c) AS sketch, 'long' AS tag
+        |        FROM VALUES (CAST(9 AS BIGINT)) AS t(c))
+        |WHERE tag = 'int'""".stripMargin)
+    checkAnswer(res, Row(Seq(Row(1L, 2L), Row(2L, 1L))))
+  }
+
+  test("SPARK-58164: estimate over a coercion-widened accumulate sketch (INT -> BIGINT)") {
+    val res = sql(
+      """SELECT approx_top_k_estimate(sketch, 5)
+        |FROM (SELECT approx_top_k_accumulate(c) AS sketch, 'int' AS tag
+        |        FROM VALUES (1), (1), (2) AS t(c)
+        |      UNION ALL
+        |      SELECT approx_top_k_accumulate(c) AS sketch, 'long' AS tag
+        |        FROM VALUES (CAST(9 AS BIGINT)) AS t(c))
+        |WHERE tag = 'int'""".stripMargin)
+    checkAnswer(res, Row(Seq(Row(1L, 2L), Row(2L, 1L))))
+  }
+
+  test("SPARK-58164: estimate over combine of a coercion-widened sketch across SerDe " +
+    "families (INT -> DOUBLE)") {
+    val res = sql(
+      """SELECT approx_top_k_estimate(approx_top_k_combine(sketch, 5))
+        |FROM (SELECT approx_top_k_accumulate(c) AS sketch, 'int' AS tag
+        |        FROM VALUES (1), (1), (2) AS t(c)
+        |      UNION ALL
+        |      SELECT approx_top_k_accumulate(c) AS sketch, 'double' AS tag
+        |        FROM VALUES (CAST(9 AS DOUBLE)) AS t(c))
+        |WHERE tag = 'int'""".stripMargin)
+    checkAnswer(res, Row(Seq(Row(1.0d, 2L), Row(2.0d, 1L))))
+  }
+
+  test("SPARK-58164: estimate over combine of a coercion-widened sketch within a SerDe " +
+    "family (TINYINT -> INT)") {
+    val res = sql(
+      """SELECT approx_top_k_estimate(approx_top_k_combine(sketch, 5))
+        |FROM (SELECT approx_top_k_accumulate(c) AS sketch, 'byte' AS tag
+        |        FROM VALUES (CAST(1 AS BYTE)), (CAST(1 AS BYTE)), (CAST(2 AS BYTE)) AS t(c)
+        |      UNION ALL
+        |      SELECT approx_top_k_accumulate(c) AS sketch, 'int' AS tag
+        |        FROM VALUES (9) AS t(c))
+        |WHERE tag = 'byte'""".stripMargin)
+    checkAnswer(res, Row(Seq(Row(1, 2L), Row(2, 1L))))
+  }
+
+  test("SPARK-58164: estimate widens each row independently across a coerced union") {
+    val res = sql(
+      """SELECT approx_top_k_estimate(sketch, 5)
+        |FROM (SELECT approx_top_k_accumulate(c) AS sketch
+        |        FROM VALUES (1), (1), (2) AS t(c)
+        |      UNION ALL
+        |      SELECT approx_top_k_accumulate(c) AS sketch
+        |        FROM VALUES (CAST(9 AS BIGINT)), (CAST(9 AS BIGINT)) AS t(c))""".stripMargin)
+    checkAnswer(res, Seq(
+      Row(Seq(Row(1L, 2L), Row(2L, 1L))),
+      Row(Seq(Row(9L, 2L)))))
+  }
+
   // enumerate all combinations of number and datetime types
   gridTest("SPARK-52798: number vs datetime - fail on UNION")(
     for {

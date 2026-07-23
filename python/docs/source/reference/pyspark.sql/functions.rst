@@ -660,6 +660,7 @@ Misc Functions
     current_path
     current_schema
     current_user
+    hmac
     input_file_block_length
     input_file_block_start
     input_file_name

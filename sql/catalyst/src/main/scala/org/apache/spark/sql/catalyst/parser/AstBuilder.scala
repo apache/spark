@@ -939,11 +939,10 @@ class AstBuilder extends DataTypeAstBuilder
       query: LogicalPlan,
       queryAliasCtx: TableAliasContext): LogicalPlan = withOrigin(ctx) {
     ctx match {
-      // For all `InsertIntoStatement` / `OverwriteByExpression`-producing branches, build the
-      // `table` slot directly via `buildWriteTableSlot` so that any
-      // `PlanWithUnresolvedIdentifier` lives *inside* the command's identifier slot. This
-      // preserves the `CTEInChildren` shape and lets `CTESubstitution` place `WithCTE` on the
-      // command's children correctly (SPARK-46625).
+      // For all `InsertIntoStatement`-producing branches, build the `table` slot directly via
+      // `buildWriteTableSlot` so that any `PlanWithUnresolvedIdentifier` lives *inside* the
+      // command's identifier slot. This preserves the `CTEInChildren` shape and lets
+      // `CTESubstitution` place `WithCTE` on the command's children correctly (SPARK-46625).
       case table: InsertIntoTableContext =>
         val insertParams = visitInsertIntoTable(table)
         val privileges = Set(TableWritePrivilege.INSERT)
@@ -973,36 +972,15 @@ class AstBuilder extends DataTypeAstBuilder
         // while REPLACE WHERE still can.
         val isInsertReplaceWhere = ctx.WHERE() != null
         if (isInsertReplaceWhere) {
-          // The unified grammar rule for REPLACE WHERE | ON accepts a table alias for
-          // symmetry with REPLACE ON (whose condition can reference the target via the
-          // alias, e.g. `t.col`). The REPLACE WHERE branch has no use for the alias
-          // because the WHERE condition is evaluated against the target table directly.
-          // Reject explicitly so users get a clear parse error instead of a confusing
-          // column-not-found at analysis time.
-          if (ctx.tableAlias() != null && ctx.tableAlias().strictIdentifier() != null) {
-            throw QueryParsingErrors.insertReplaceWhereTableAliasNotAllowed(ctx.tableAlias())
-          }
-          val options = Option(ctx.optionsClause())
+          val insertParams = visitInsertIntoReplaceWhere(ctx)
           val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
-          // `PlanWithUnresolvedIdentifier` is a `NamedRelation`, so it can occupy
-          // `OverwriteByExpression.table` directly; the materialization happens in
-          // `ResolveIdentifierClause` via its `OverwriteByExpression` special-case.
-          val table = buildWriteTableSlot(ctx.identifierReference, options, privileges)
-          val deleteExpr = expression(ctx.replaceCondition)
-          val isByName = ctx.NAME() != null
-          if (isByName) {
-            OverwriteByExpression.byName(
-              table,
-              df = query,
-              deleteExpr,
-              withSchemaEvolution = ctx.EVOLUTION() != null)
-          } else {
-            OverwriteByExpression.byPosition(
-              table,
-              query = query,
-              deleteExpr,
-              withSchemaEvolution = ctx.EVOLUTION() != null)
-          }
+          createInsertIntoStatement(
+            insertParams = insertParams,
+            tableSlot = buildWriteTableSlot(
+              insertParams.relationCtx, insertParams.options, privileges),
+            query = query,
+            overwrite = true,
+            withSchemaEvolution = ctx.EVOLUTION() != null)
         } else {
           val insertParams = visitInsertIntoReplaceOn(ctx)
           val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
@@ -1109,9 +1087,10 @@ class AstBuilder extends DataTypeAstBuilder
     }
     val replaceUsingCols = visitIdentifierList(ctx.identifierList())
 
-    createInsertIntoReplaceOnOrUsingParams(
+    createInsertIntoReplaceParams(
       relationCtx = ctx.identifierReference(),
       optionsCtx = ctx.optionsClause(),
+      userSpecifiedCols = Seq.empty,
       byName = byName,
       replaceCriteriaOpt = Some(InsertReplaceUsing(replaceUsingCols))
     )
@@ -1129,27 +1108,62 @@ class AstBuilder extends DataTypeAstBuilder
     if (byName && !SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED)) {
       throw QueryParsingErrors.insertReplaceOnByNameNotEnabled(ctx)
     }
+    // Only REPLACE WHERE supports a column list, but the grammar rule is shared with REPLACE ON,
+    // so reject the column list here.
+    if (ctx.identifierList() != null) {
+      throw QueryParsingErrors.insertReplaceOnColumnListNotAllowed(ctx.identifierList())
+    }
     val replaceOnCond = expression(ctx.replaceCondition)
     val tableAliasOpt =
       getTableAliasWithoutColumnAlias(ctx.tableAlias(), "INSERT REPLACE ON")
 
-    createInsertIntoReplaceOnOrUsingParams(
+    createInsertIntoReplaceParams(
       relationCtx = ctx.identifierReference(),
       optionsCtx = ctx.optionsClause(),
+      userSpecifiedCols = Seq.empty,
       byName = byName,
       replaceCriteriaOpt = Some(InsertReplaceOn(replaceOnCond, tableAliasOpt))
     )
   }
 
-  private def createInsertIntoReplaceOnOrUsingParams(
+  /**
+   * Add an INSERT INTO REPLACE WHERE operation to the logical plan.
+   */
+  def visitInsertIntoReplaceWhere(
+      ctx: InsertIntoReplaceBooleanCondContext): InsertTableParams = withOrigin(ctx) {
+    // The grammar rule shared with REPLACE ON accepts a table alias, but REPLACE WHERE has no
+    // use for it. Reject it explicitly for a clear parse error.
+    if (ctx.tableAlias() != null && ctx.tableAlias().strictIdentifier() != null) {
+      throw QueryParsingErrors.insertReplaceWhereTableAliasNotAllowed(ctx.tableAlias())
+    }
+    // BY NAME and a column list are mutually exclusive in the grammar.
+    val userSpecifiedCols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
+    if (userSpecifiedCols.nonEmpty &&
+        !SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_WHERE_COLUMN_LIST_ENABLED)) {
+      throw QueryParsingErrors.insertReplaceWhereColumnListNotEnabled(ctx.identifierList())
+    }
+
+    val deleteExpr = expression(ctx.replaceCondition)
+
+    createInsertIntoReplaceParams(
+      relationCtx = ctx.identifierReference(),
+      optionsCtx = ctx.optionsClause(),
+      userSpecifiedCols = userSpecifiedCols,
+      byName = ctx.NAME() != null,
+      replaceCriteriaOpt = Some(InsertReplaceWhere(deleteExpr))
+    )
+  }
+
+  private def createInsertIntoReplaceParams(
       relationCtx: IdentifierReferenceContext,
       optionsCtx: OptionsClauseContext,
+      userSpecifiedCols: Seq[String],
       byName: Boolean,
       replaceCriteriaOpt: Option[InsertReplaceCriteria]): InsertTableParams = {
     InsertTableParams(
       relationCtx = relationCtx,
       options = Option(optionsCtx),
-      userSpecifiedCols = Seq.empty,
+      userSpecifiedCols = userSpecifiedCols,
       partitionSpec = Map[String, Option[String]](),
       ifPartitionNotExists = false,
       byName = byName,
@@ -1181,9 +1195,9 @@ class AstBuilder extends DataTypeAstBuilder
    * Build the `table` slot of a write command. If the identifier reference is a constant string,
    * returns an [[UnresolvedRelation]] directly; otherwise returns a
    * [[PlanWithUnresolvedIdentifier]] that materializes into an [[UnresolvedRelation]] once the
-   * identifier expression is resolved. Both branches produce a [[NamedRelation]], so the result
-   * fits `NamedRelation`-typed slots (e.g. `OverwriteByExpression.table`) as well as the more
-   * general `LogicalPlan` slot of `InsertIntoStatement.table`.
+   * identifier expression is resolved. Both branches produce a [[NamedRelation]], which occupies
+   * the `InsertIntoStatement.table` slot (a general `LogicalPlan` slot, since `NamedRelation`
+   * extends `LogicalPlan`).
    *
    * Placing the placeholder in the identifier slot (rather than wrapping the entire write command)
    * preserves the `CTEInChildren` shape at parse time, so `CTESubstitution` places `WithCTE` on the
@@ -7919,9 +7933,12 @@ class AstBuilder extends DataTypeAstBuilder
             // grouping and aggregate expressions, respectively. This will let the
             // [[ResolveOrdinalInOrderByAndGroupBy]] rule detect the ordinal in the aggregate list
             // and replace it with the corresponding attribute from the child operator.
-            case UnresolvedOrdinal(v: Int) =>
+            case ordinal @ UnresolvedOrdinal(v: Int) =>
               newGroupingExpressions += UnresolvedOrdinal(newAggregateExpressions.length + 1)
-              newAggregateExpressions += UnresolvedPipeAggregateOrdinal(v)
+              // Preserve the ordinal's origin so an out-of-range error points at the position
+              // itself, not the whole pipe statement (matching regular GROUP BY).
+              newAggregateExpressions +=
+                CurrentOrigin.withOrigin(ordinal.origin) { UnresolvedPipeAggregateOrdinal(v) }
             case e: Expression =>
               newGroupingExpressions += e
               newAggregateExpressions += UnresolvedAlias(e, None)
