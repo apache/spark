@@ -40,7 +40,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private case class FilterCreationSide(
       key: Expression,
       plan: LogicalPlan,
-      useMaterializedThreshold: Boolean)
+      useMaterializedThreshold: Boolean,
+      materializedRowCount: Option[BigInt] = None)
 
   private def injectFilter(
       filterApplicationSideKey: Expression,
@@ -68,7 +69,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     if (filterCreationSidePlan.stats.sizeInBytes > creationSideThreshold) {
       return filterApplicationSidePlan
     }
-    val rowCount = filterCreationSidePlan.stats.rowCount
+    val rowCount = filterCreationSide.materializedRowCount
+      .orElse(filterCreationSidePlan.stats.rowCount)
     val bloomFilterAgg =
       if (rowCount.isDefined && rowCount.get.longValue > 0L) {
         new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideKey)), rowCount.get.longValue)
@@ -189,13 +191,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             safeLineage && currentPlan.stats.sizeInBytes <=
               conf.runtimeFilterMaterializedCreationSideThreshold) {
           leaf.stats.rowCount.filter { rowCount =>
-            hasHitSelectiveFilter || leaf.hasSelectivePredicate ||
-              applicationDistinctCount.exists(_ > rowCount)
+            rowCount <= conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS) &&
+              (hasHitSelectiveFilter || leaf.hasSelectivePredicate ||
+                applicationDistinctCount.exists(_ > rowCount))
           }.map { rowCount =>
             FilterCreationSide(
               targetKey,
               currentPlan,
-              useMaterializedThreshold = true)
+              useMaterializedThreshold = true,
+              materializedRowCount = Some(rowCount))
           }
         } else if (hasHitSelectiveFilter) {
           Some(FilterCreationSide(

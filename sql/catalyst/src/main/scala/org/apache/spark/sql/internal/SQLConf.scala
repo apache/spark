@@ -787,7 +787,8 @@ object SQLConf {
       .doc("Size threshold of a fully materialized, repeatable bloom filter creation side with " +
         "accurate statistics. This replaces the general creation-side threshold because scanning " +
         "materialized output does not recompute its original plan.")
-      .version("5.0.0")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("100MB")
 
