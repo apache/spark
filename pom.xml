@@ -183,9 +183,14 @@
     <scala.library.artifact>scala-library</scala.library.artifact>
     <!-- Build-time plugin, only published for 2.13; own property so it is not rewritten _3. -->
     <scalafmt.plugin.scala.binary.version>2.13</scalafmt.plugin.scala.binary.version>
-    <!-- SPARK-55152: chill has no Scala 3 build; Scala 3 consumes the 2.13 jar, so pin the
-         coordinate here instead of following scala.binary.version. -->
+    <!-- SPARK-55152: chill has no Scala 3 build. Scala 3 consumes the 2.13 jar safely, since
+         scala3-library_3 sits on the 2.13 stdlib and the serialized classes are the same, so
+         pin the coordinate here instead of following scala.binary.version. -->
     <chill.scala.binary.version>2.13</chill.scala.binary.version>
+    <!-- Same as chill: no Scala 3 build published, so pin rather than follow
+         scala.binary.version. -->
+    <kafka.scala.binary.version>2.13</kafka.scala.binary.version>
+    <classutil.scala.binary.version>2.13</classutil.scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.9.10</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>

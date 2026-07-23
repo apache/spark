@@ -43,7 +43,7 @@
     </dependency>
     <dependency>
       <groupId>org.clapper</groupId>
-      <artifactId>classutil_${scala.binary.version}</artifactId>
+      <artifactId>classutil_${classutil.scala.binary.version}</artifactId>
       <exclusions>
         <exclusion>
           <groupId>org.ow2.asm</groupId>
