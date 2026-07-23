@@ -111,16 +111,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
     JdbcDialects.get(url).isCascadingTruncateTable()
   }
 
-  /**
-   * Returns an Insert SQL statement for inserting a row into the target table via JDBC conn.
-   */
-  def getInsertStatement(
+  protected def getInsertColumns(
       table: String,
       rddSchema: StructType,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      dialect: JdbcDialect): String = {
-    val columns = if (tableSchema.isEmpty) {
+      dialect: JdbcDialect): Array[StructField] = {
+    if (tableSchema.isEmpty) {
       rddSchema.fields
     } else {
       // The generated insert statement needs to follow rddSchema's column sequence and
@@ -134,7 +131,30 @@ object JdbcUtils extends Logging with SQLConfHelper {
         }
       }
     }
+  }
+
+  /**
+   * Returns an Insert SQL statement for inserting a row into the target table via JDBC conn.
+   */
+  def getInsertStatement(
+      table: String,
+      rddSchema: StructType,
+      tableSchema: Option[StructType],
+      isCaseSensitive: Boolean,
+      dialect: JdbcDialect): String = {
+    val columns = getInsertColumns(table, rddSchema, tableSchema, isCaseSensitive, dialect)
     dialect.insertIntoTable(table, columns)
+  }
+
+  def getUpsertStatement(
+      table: String,
+      rddSchema: StructType,
+      tableSchema: Option[StructType],
+      isCaseSensitive: Boolean,
+      dialect: JdbcDialect,
+      options: JDBCOptions): String = {
+    val columns = getInsertColumns(table, rddSchema, tableSchema, isCaseSensitive, dialect)
+    dialect.getUpsertStatement(table, columns, isCaseSensitive, options)
   }
 
   /**
@@ -860,6 +880,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       df: DataFrame,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
+      upsert: Boolean,
       options: JdbcOptionsInWrite): Unit = {
     val url = options.url
     val table = options.table
@@ -868,7 +889,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
 
-    val insertStmt = getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect)
+    val insertStmt = if (upsert) {
+      getUpsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect, options)
+    } else {
+      getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect)
+    }
+
     val repartitionedDF = options.numPartitions match {
       case Some(n) if n <= 0 => throw QueryExecutionErrors.invalidJdbcNumPartitionsError(
         n, JDBCOptions.JDBC_NUM_PARTITIONS)

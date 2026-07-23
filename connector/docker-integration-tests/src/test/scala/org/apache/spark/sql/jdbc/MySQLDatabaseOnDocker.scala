@@ -27,5 +27,5 @@ class MySQLDatabaseOnDocker extends DatabaseOnDocker {
 
   override def getJdbcUrl(ip: String, port: Int): String =
     s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
-      s"&useSSL=false&disableMariaDbDriver"
+      s"&useSSL=false&disableMariaDbDriver&allowMultiQueries=true"
 }
