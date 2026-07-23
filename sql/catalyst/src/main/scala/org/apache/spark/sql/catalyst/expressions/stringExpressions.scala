@@ -24,6 +24,8 @@ import java.util.{Base64 => JBase64, HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.commons.codec.binary.{Base32 => CommonsBase32}
+
 import org.apache.spark.QueryContext
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.InternalRow
@@ -3346,6 +3348,110 @@ object UnBase64 {
     } else { // When padding is absent last group should include 2 or more symbols.
       position % 4 != 1
     }
+  }
+}
+
+/**
+ * Converts the argument from binary to a base 32 string.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(bin) - Converts the argument from a binary `bin` to a base 32 string.",
+  arguments = """
+    Arguments:
+      * bin - The binary value to encode as a base 32 string.
+        An expression that evaluates to a binary.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('foobar');
+       MZXW6YTBOI======
+      > SELECT _FUNC_(x'666f6f626172');
+       MZXW6YTBOI======
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+case class Base32(child: Expression)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[Base32],
+    dataType,
+    "encode",
+    Seq(child),
+    Seq(BinaryType),
+    returnNullable = false)
+
+  override def toString: String = s"$prettyName($child)"
+
+  override def prettyName: String = "to_base32"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+object Base32 {
+  private lazy val codec = new CommonsBase32()
+
+  def encode(input: Array[Byte]): UTF8String = {
+    UTF8String.fromBytes(codec.encode(input))
+  }
+}
+
+/**
+ * Converts the argument from a base 32 string to BINARY.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Converts the argument from a base 32 string `str` to a binary.",
+  arguments = """
+    Arguments:
+      * str - The base 32 string to decode to binary.
+        An expression that evaluates to a string.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('MZXW6YTBOI======');
+       foobar
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+case class UnBase32(child: Expression)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes {
+
+  override def dataType: DataType = BinaryType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[UnBase32],
+    dataType,
+    "decode",
+    Seq(child),
+    inputTypes,
+    returnNullable = false)
+
+  override def toString: String = s"$prettyName($child)"
+
+  override def prettyName: String = "from_base32"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+object UnBase32 {
+  private lazy val codec = new CommonsBase32()
+
+  def decode(input: UTF8String): Array[Byte] = {
+    codec.decode(input.toString)
   }
 }
 
