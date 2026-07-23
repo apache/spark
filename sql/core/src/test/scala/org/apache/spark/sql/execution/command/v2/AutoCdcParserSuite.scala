@@ -331,6 +331,20 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(ex.getMessage.contains("Unsupported SCD type: 3"))
   }
 
+  test("AUTO CDC - STORED AS SCD TYPE with an overflowing number is rejected cleanly") {
+    // The number is INTEGER_VALUE (DIGIT+), so an oversized literal must route through the
+    // clear "Unsupported SCD type" error rather than throwing a NumberFormatException.
+    val ex = intercept[ParseException] {
+      parser.parsePlan(
+        """CREATE FLOW f AS AUTO CDC INTO target
+          |FROM STREAM(source)
+          |KEYS (id)
+          |SEQUENCE BY ts
+          |STORED AS SCD TYPE 99999999999999999999""".stripMargin)
+    }
+    assert(ex.getMessage.contains("Unsupported SCD type: 99999999999999999999"))
+  }
+
   test("AUTO CDC - STORED AS SCD TYPE tolerates extra whitespace between words") {
     // SCD, TYPE and the number are separate tokens, so any whitespace between them is accepted.
     val plan = parser.parsePlan(

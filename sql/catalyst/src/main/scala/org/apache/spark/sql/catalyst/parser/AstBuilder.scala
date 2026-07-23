@@ -1434,16 +1434,19 @@ class AstBuilder extends DataTypeAstBuilder
       }
 
       // STORED AS SCD TYPE <n>. Absent clause defaults to SCD Type 1. Only 1 and 2 are
-      // supported; reject anything else with a clear error rather than a generic parse failure.
+      // supported; reject anything else (including oversized numeric literals) with a clear
+      // error rather than a generic parse failure or NumberFormatException. Match on the token
+      // text rather than parsing to Int so an overflowing literal cannot throw.
       val storedAsScdType = Option(params.autoCdcStoredAsClause()) match {
         case Some(c) =>
-          val scdType = c.`type`.getText.toInt
-          if (scdType != 1 && scdType != 2) {
-            operationNotAllowed(
-              s"Unsupported SCD type: $scdType. AUTO CDC only supports STORED AS SCD TYPE 1 " +
-                "or SCD TYPE 2.", c)
+          c.scdType.getText match {
+            case "1" => 1
+            case "2" => 2
+            case other =>
+              operationNotAllowed(
+                s"Unsupported SCD type: $other. AUTO CDC only supports STORED AS SCD TYPE 1 " +
+                  "or SCD TYPE 2.", c)
           }
-          scdType
         case None => 1
       }
 

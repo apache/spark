@@ -793,7 +793,7 @@ autoCdcColumnsClause
     ;
 
 autoCdcStoredAsClause
-    : STORED AS SCD TYPE type=INTEGER_VALUE
+    : STORED AS SCD TYPE scdType=INTEGER_VALUE
     ;
 
 autoCdcTrackHistoryClause
