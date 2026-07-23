@@ -1184,7 +1184,22 @@ jobs:
         udf-worker-proto/compile
         udf-worker-core/compile
         udf-worker-grpc/compile
-      SCALA3_MAVEN_MODULES: "common/tags,common/utils,common/utils-java,common/unsafe,common/kvstore,common/variant,common/sketch,launcher,common/network-common,common/network-shuffle,sql/connect/shims,udf/worker/proto,udf/worker/core,udf/worker/grpc"
+      # Space separated here for readability; joined with commas for Maven's -pl below.
+      SCALA3_MAVEN_MODULES: >-
+        common/tags
+        common/utils
+        common/utils-java
+        common/unsafe
+        common/kvstore
+        common/variant
+        common/sketch
+        launcher
+        common/network-common
+        common/network-shuffle
+        sql/connect/shims
+        udf/worker/proto
+        udf/worker/core
+        udf/worker/grpc
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v6
@@ -1252,7 +1267,7 @@ jobs:
         # -Dmaven.test.skip, not -DskipTests: the latter still compiles test sources,
         # which are not migrated to Scala 3 yet. -am pulls in the parent POM.
         ./build/mvn --no-transfer-progress -Pscala-3 -Dmaven.test.skip=true \
-          -pl "$SCALA3_MAVEN_MODULES" -am install
+          -pl "$(echo $SCALA3_MAVEN_MODULES | tr ' ' ',')" -am install
     - name: Check that the Scala 3 compiler actually ran
       run: |
         # Only dotty emits .tasty files, so their presence rules out a silent
