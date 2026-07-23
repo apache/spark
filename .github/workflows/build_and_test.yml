@@ -1186,6 +1186,15 @@ jobs:
         udf/worker/proto
         udf/worker/core
         udf/worker/grpc
+      # Modules above that publish a test-jar the others depend on. Maven resolves
+      # test-scope dependencies even when it is not compiling tests, so these have to
+      # be packaged before the main-sources-only pass, and -Dmaven.test.skip suppresses
+      # test-jar packaging along with test compilation. Their test sources are Java
+      # only, so this pass never invokes the Scala 3 compiler.
+      SCALA3_TEST_JAR_MODULES: >-
+        common/tags
+        common/network-common
+        common/utils-java
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v6
@@ -1264,9 +1273,19 @@ jobs:
       run: |
         ./dev/change-scala-version.sh 3
         export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
-        # -Dmaven.test.skip, not -DskipTests: the latter still compiles test sources,
-        # which are not migrated to Scala 3 yet. -am pulls in the parent POM.
-        ./build/mvn --no-transfer-progress -Pscala-3 -Dmaven.test.skip=true \
+        export MVN="./build/mvn --no-transfer-progress -Pscala-3"
+        # Package the test-jars the module set depends on. -DskipTests, not
+        # -Dmaven.test.skip, because the jars have to be built; only their execution is
+        # skipped. These modules have Java test sources only.
+        $MVN -DskipTests \
+          -pl "$(echo $SCALA3_TEST_JAR_MODULES | tr ' ' ',')" -am install
+        # Then build main sources only, matching what the SBT leg compiles. Test sources
+        # are not migrated to Scala 3 yet, so -Dmaven.test.skip keeps them out; the
+        # test-jars they would otherwise have produced came from the pass above.
+        # -DskipTests as well because scalatest-maven-plugin reads that rather than
+        # maven.test.skip, and would otherwise run whatever test classes it finds.
+        # -am pulls in the parent POM.
+        $MVN -Dmaven.test.skip=true -DskipTests \
           -pl "$(echo $SCALA3_MODULES | tr ' ' ',')" -am install
     - name: Check that the Scala 3 compiler actually ran
       run: |
