@@ -375,8 +375,11 @@ class TaskResourceRequest:
     A task resource request. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfile` to programmatically specify the resources
     needed for an RDD that will be applied at the stage level. The amount is specified
-    as a float to allow for saying you want more than 1 task per resource. Valid values
-    are less than or equal to 0.5 or whole numbers.
+    as a float to allow for saying you want more than 1 task per resource. For custom
+    resources, valid values are less than or equal to 0.5 or whole numbers, since a task's
+    amount must map onto discrete resource addresses. CPUs (resource name "cpus") are a
+    plain quantity drawn from the executor's core pool rather than an addressable
+    resource, so any positive amount is valid, e.g. 1.5.
     Use :class:`pyspark.resource.TaskResourceRequests` class as a convenience API.
 
     Parameters
@@ -385,9 +388,11 @@ class TaskResourceRequest:
         Name of the resource
     amount : float
         Amount requesting as a float to support fractional resource requests.
-        Valid values are less than or equal to 0.5 or whole numbers. This essentially
-        lets you configure X number of tasks to run on a single resource,
-        ie amount equals 0.5 translates into 2 tasks per resource address.
+        For custom resources, valid values are less than or equal to 0.5 or whole
+        numbers; this essentially lets you configure X number of tasks to run on a
+        single resource, ie amount equals 0.5 translates into 2 tasks per resource
+        address. For cpus, any positive amount is valid, including fractional ones
+        below 1 (e.g. 0.5) or above 1 (e.g. 1.5).
 
     .. versionadded:: 3.1.0
 

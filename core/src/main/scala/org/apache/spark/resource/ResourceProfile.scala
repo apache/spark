@@ -600,7 +600,10 @@ object ResourceProfile extends Logging {
   private[spark] val PYSPARK_MEMORY_LOCAL_PROPERTY = "resource.pyspark.memory"
   private[spark] val EXECUTOR_CORES_LOCAL_PROPERTY = "resource.executor.cores"
   // The maximum number of tasks that can run concurrently on an executor of the stage's resource
-  // profile -- the limiting resource across cores and custom resources. Only set when the cores
-  // limit is known; consumed by PythonRunner to split PySpark worker memory by real concurrency.
+  // profile; consumed by PythonRunner to split PySpark worker memory by real concurrency. See
+  // DAGScheduler.addPySparkConfigsToProperties for which bound is propagated: the
+  // cpus-proportional cores split when executors can be shared across profiles (DRA off),
+  // the profile's limiting resource when the cores limit is known, or a cores-capped
+  // custom-resource upper bound otherwise. Unset when no bound is known.
   private[spark] val MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY = "resource.maxTasksPerExecutor"
 }

@@ -51,5 +51,15 @@ class BasePythonRunnerSuite extends SparkFunSuite {
     assert(e.getMessage.contains("640"))
     // A share of exactly 1 MiB is still enforceable and must not fail.
     assert(BasePythonRunner.getWorkerMemoryMb(Some(640L), 640) === Some(1L))
+    // An explicit spark.executor.pyspark.memory=0 means the limit is disabled (the worker
+    // treats 0 as "no limit"), so it must pass through rather than fail fast, even when
+    // concurrency is high enough that a positive budget would round to zero.
+    assert(BasePythonRunner.getWorkerMemoryMb(Some(0L), 640) === Some(0L))
+    assert(BasePythonRunner.getWorkerMemoryMb(Some(0L), 1) === Some(0L))
+    // The smallest positive budget still fails fast when it cannot give every slot at least
+    // 1 MiB; only an explicit budget of 0 disables the limit.
+    intercept[SparkException] {
+      BasePythonRunner.getWorkerMemoryMb(Some(1L), 2)
+    }
   }
 }

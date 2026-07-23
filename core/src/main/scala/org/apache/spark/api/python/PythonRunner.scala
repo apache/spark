@@ -168,11 +168,12 @@ private[spark] object BasePythonRunner extends Logging {
     val taskSlots = math.max(1, maxConcurrentTasks)
     mem.map { m =>
       val perWorkerMb = m / taskSlots
-      // A per-worker share that rounds down to 0 MiB would be treated as "no limit" by the
-      // worker (setup_memory_limits only applies RLIMIT_AS when the value is positive), letting
-      // the workers' aggregate memory blow past the configured cap. Such a configuration is
-      // unsatisfiable, so fail fast rather than silently removing the limit.
-      if (perWorkerMb <= 0) {
+      // An explicit spark.executor.pyspark.memory=0 means the limit is disabled
+      // (setup_memory_limits treats a non-positive value as "no limit"). Only a *positive*
+      // budget that rounds down to 0 MiB per worker is a problem: it would silently drop the
+      // configured cap and let the workers' aggregate memory blow past it, so fail fast on
+      // that unsatisfiable case rather than removing the limit.
+      if (m > 0 && perWorkerMb <= 0) {
         throw new SparkException(
           s"Cannot honor spark.executor.pyspark.memory=${m}m split across $taskSlots concurrent " +
             "task slots: each worker would get less than 1 MiB. Increase " +

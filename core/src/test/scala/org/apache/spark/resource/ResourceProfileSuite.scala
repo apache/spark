@@ -420,8 +420,12 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
   }
 
   test("SPARK-58192: cpus amounts that round to zero at the accounting scale are rejected") {
+    // The rejection must be an Exception, not an Error: the same constructor runs when
+    // JsonProtocol replays event logs, where an Error would escape ReplayListenerBus's
+    // Exception handling and fail the whole application in the history server. A log written
+    // before cpus amounts were validated can carry a cpus amount of 0.
     Seq(0.0, -1.0, 1e-10).foreach { amount =>
-      val e = intercept[AssertionError] {
+      val e = intercept[IllegalArgumentException] {
         new TaskResourceRequests().cpus(amount)
       }
       assert(e.getMessage.contains("must be at least 1e-9"), s"for amount $amount")

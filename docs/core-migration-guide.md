@@ -38,6 +38,10 @@ license: |
 
 - Since Spark 4.3, the Spark Master REST API rejects a submission whose request body exceeds `spark.master.rest.maxRequestBodySize` (default `100m`) with HTTP 413. To allow larger request bodies, increase `spark.master.rest.maxRequestBodySize`.
 
+- Since Spark 4.3, `spark.task.cpus` accepts fractional values, and the executor-wide `spark.executor.pyspark.memory` allocation is split across the executor's maximum concurrent task slots instead of its raw core count. Each Python worker's memory limit can therefore change for existing configurations: with `spark.task.cpus` greater than 1 each worker receives a proportionally larger share, and when a custom resource (e.g. GPUs) limits concurrency the fewer concurrently running workers share the whole allocation. The aggregate limit across concurrently running workers stays within the configured allocation.
+
+- Since Spark 4.3, a positive `spark.executor.pyspark.memory` allocation that is too small to give each concurrent task slot at least 1 MiB fails the Python task with an error instead of silently running the workers without any memory limit. Setting `spark.executor.pyspark.memory=0` still disables the limit. To restore a working memory limit, increase `spark.executor.pyspark.memory` or reduce the executor's concurrent task capacity.
+
 ## Upgrading from Core 4.1 to 4.2
 
 - Since Spark 4.2, Spark Master REST API uses Java 21 virtual threads by default when running on Java 21 or later. To restore the legacy behavior, you can set `spark.master.rest.virtualThread.enabled` to `false`.

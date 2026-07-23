@@ -107,6 +107,27 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     }
   }
 
+  test("SPARK-58192: executor max tasks with fractional spark.task.cpus") {
+    val listener = new AppStatusListener(store, conf, true)
+    // The default cpus per task reaches the listener as the raw property string, which may be
+    // fractional; the executor's task capacity must use exact decimal slot math - with 4 cores
+    // and 0.5 cpus per task an executor runs 8 concurrent tasks, while integer parsing would
+    // reject the value and integer division would truncate the capacity.
+    listener.onEnvironmentUpdate(SparkListenerEnvironmentUpdate(Map(
+      "JVM Information" -> Seq.empty,
+      "Spark Properties" -> Seq("spark.task.cpus" -> "0.5"),
+      "Hadoop Properties" -> Seq.empty,
+      "System Properties" -> Seq.empty,
+      "Metrics Properties" -> Seq.empty,
+      "Classpath Entries" -> Seq.empty)))
+    listener.onExecutorAdded(SparkListenerExecutorAdded(1L, "1",
+      new ExecutorInfo("1.example.com", 4, Map.empty, Map.empty)))
+
+    check[ExecutorSummaryWrapper]("1") { exec =>
+      assert(exec.info.maxTasks === 8)
+    }
+  }
+
   test("scheduler events") {
     val listener = new AppStatusListener(store, conf, true)
 
