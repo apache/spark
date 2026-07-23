@@ -854,6 +854,12 @@
     ],
     "sqlState" : "42000"
   },
+  "CANNOT_USE_PRESERVED_DATABASE_AS_CURRENT" : {
+    "message" : [
+      "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
@@ -9695,11 +9701,6 @@
   "_LEGACY_ERROR_TEMP_1066" : {
     "message" : [
       "<database> is a system preserved database, you cannot create a database with this name."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1068" : {
-    "message" : [
-      "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
     ]
   },
   "_LEGACY_ERROR_TEMP_1071" : {
