@@ -181,7 +181,7 @@ class AggregatingAccumulator protected(
       }
     } else {
       while (i < typedImperatives.length) {
-        // The input buffer stores deserialized object
+        // The input buffer stores a deserialized object
         typedImperatives(i).mergeBuffersObjects(buffer, otherBuffer)
         i += 1
       }

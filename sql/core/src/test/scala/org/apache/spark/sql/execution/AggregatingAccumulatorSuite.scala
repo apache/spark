@@ -391,7 +391,7 @@ class AggregatingAccumulatorSuite
 
     // Highest RDD id aggregates only the latest RDD.
     checkResult(acc.lastAttemptValueForHighestRDDId().get, InternalRow(10L), acc.schema, false)
-    // All RDDs aggregates both.
+    // All RDDs aggregate both.
     checkResult(acc.lastAttemptValueForAllRDDs().get, InternalRow(13L), acc.schema, false)
     // Narrowing to the earlier RDD returns only its value.
     checkResult(acc.lastAttemptValueForRDDId(rdd1.id).get, InternalRow(3L), acc.schema, false)
