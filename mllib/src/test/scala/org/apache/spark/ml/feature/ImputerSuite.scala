@@ -31,7 +31,7 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
     val df = spark.createDataFrame(Seq((1.0, 2.0), (3.0, 4.0))).toDF("a", "b")
     val model = new Imputer().setInputCols(Array("a", "b")).setOutputCols(Array("x", "y"))
       .fit(df)
-    val maxSize = 2048
+    val maxSize = 1024 * 2
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }

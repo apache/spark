@@ -248,8 +248,11 @@ class ImputerModel private[ml] (
   private[ml] def this() = this("", Array.empty, Array.emptyDoubleArray)
 
   private[spark] override def estimatedSize: Long = {
-    estimateMatadataSize + SizeEstimator.estimate(columnNames) +
-      SizeEstimator.estimate(surrogates)
+    // columnNames: Array[String]
+    var size = estimateMatadataSize + SizeEstimator.estimate(columnNames)
+    // surrogates: Array[Double]
+    size += SizeEstimator.estimate(surrogates)
+    size
   }
 
   @Since("2.2.0")

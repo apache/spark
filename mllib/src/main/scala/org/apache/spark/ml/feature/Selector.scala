@@ -277,6 +277,7 @@ private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
   self: T =>
 
   private[spark] override def estimatedSize: Long = {
+    // selectedFeatures: Array[Int]
     estimateMatadataSize + SizeEstimator.estimate(selectedFeatures)
   }
 

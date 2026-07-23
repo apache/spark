@@ -133,6 +133,7 @@ class VarianceThresholdSelectorModel private[ml](
   private[ml] def this() = this("", Array.emptyIntArray)
 
   private[spark] override def estimatedSize: Long = {
+    // selectedFeatures: Array[Int]
     estimateMatadataSize + SizeEstimator.estimate(selectedFeatures)
   }
 

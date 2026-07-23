@@ -346,7 +346,7 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
   test("model estimated size") {
     val model = selector3.setSelectionMode("numTopFeatures").setSelectionThreshold(1)
       .fit(datasetChi2)
-    val maxSize = 2048
+    val maxSize = 1024 * 2
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
