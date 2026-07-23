@@ -1304,15 +1304,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "namespaceB" -> toSQLId(namespaceB)))
   }
 
-  def cannotCreateTableWithBothProviderAndSerdeError(
-      provider: Option[String], maybeSerdeInfo: Option[SerdeInfo]): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1058",
-      messageParameters = Map(
-        "provider" -> provider.toString,
-        "serDeInfo" -> maybeSerdeInfo.get.describe))
-  }
-
   def invalidFileFormatForStoredAsError(serdeInfo: SerdeInfo): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1059",

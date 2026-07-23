@@ -757,8 +757,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     if (provider.isDefined) {
       // The parser guarantees that USING and STORED AS/ROW FORMAT won't co-exist.
       if (maybeSerdeInfo.isDefined) {
-        throw QueryCompilationErrors.cannotCreateTableWithBothProviderAndSerdeError(
-          provider, maybeSerdeInfo)
+        throw SparkException.internalError(
+          s"Cannot create table with both USING ${provider.get} and " +
+            s"${maybeSerdeInfo.get.describe}")
       }
       (nonHiveStorageFormat, provider.get)
     } else if (maybeSerdeInfo.isDefined) {
