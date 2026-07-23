@@ -198,6 +198,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
               hasSelectivePredicate = hasHitSelectiveFilter || leaf.hasSelectivePredicate,
               materializedRowCount = Some(rowCount))
           }
+        } else if (hasHitSelectiveFilter) {
+          Some(FilterCreationSide(
+            targetKey,
+            currentPlan,
+            useMaterializedThreshold = false,
+            hasSelectivePredicate = true))
         } else {
           None
         }
