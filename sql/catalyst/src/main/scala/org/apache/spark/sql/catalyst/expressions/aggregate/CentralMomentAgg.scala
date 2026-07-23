@@ -85,9 +85,16 @@ abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
     val n1 = n.left
     val n2 = n.right
     val newN = n1 + n2
-    val delta = avg.right - avg.left
+    // When one side is an empty buffer (n1 == 0 or n2 == 0), the combined buffer is just the other
+    // side. Force `delta` to 0.0 in that case so that the `delta * deltaN * n1 * n2` terms vanish
+    // cleanly; otherwise a large `avg` difference can overflow `delta * deltaN` to Infinity before
+    // it is multiplied by the zero count, producing NaN (e.g. `Infinity * 0 = NaN`) and corrupting
+    // the merged moments. `newAvg` is set directly to the non-empty side's average.
+    val isEmptyLeft = n1 === Literal(0.0)
+    val isEmptyRight = n2 === Literal(0.0)
+    val delta = If(isEmptyLeft || isEmptyRight, Literal(0.0), avg.right - avg.left)
     val deltaN = If(newN === 0.0, 0.0, delta / newN)
-    val newAvg = avg.left + deltaN * n2
+    val newAvg = If(isEmptyLeft, avg.right, If(isEmptyRight, avg.left, avg.left + deltaN * n2))
 
     // higher order moments computed according to:
     // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics
