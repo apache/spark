@@ -23,6 +23,8 @@ import scala.collection.{immutable, mutable, Map}
 import scala.util.Try
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.core.JsonGenerator
+
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkIllegalArgumentException
@@ -406,6 +408,15 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override private[sql] def jsonValue =
     ("type" -> typeName) ~
       ("fields" -> map(_.jsonValue))
+
+  override private[sql] def writeJsonTo(generator: JsonGenerator): Unit = {
+    generator.writeStartObject()
+    generator.writeStringField("type", typeName)
+    generator.writeArrayFieldStart("fields")
+    fields.foreach(_.writeJsonTo(generator))
+    generator.writeEndArray()
+    generator.writeEndObject()
+  }
 
   override def apply(fieldIndex: Int): StructField = fields(fieldIndex)
 

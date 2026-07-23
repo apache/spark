@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import com.fasterxml.jackson.core.JsonGenerator
+
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
@@ -83,6 +85,15 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
     ("type" -> typeName) ~
       ("elementType" -> elementType.jsonValue) ~
       ("containsNull" -> containsNull)
+
+  override private[sql] def writeJsonTo(generator: JsonGenerator): Unit = {
+    generator.writeStartObject()
+    generator.writeStringField("type", typeName)
+    generator.writeFieldName("elementType")
+    elementType.writeJsonTo(generator)
+    generator.writeBooleanField("containsNull", containsNull)
+    generator.writeEndObject()
+  }
 
   /**
    * The default size of a value of the ArrayType is the default size of the element type. We

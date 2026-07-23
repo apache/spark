@@ -19,6 +19,8 @@ package org.apache.spark.sql.types
 
 import scala.collection.mutable
 
+import com.fasterxml.jackson.core.JsonGenerator
+
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
@@ -149,6 +151,28 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
   }
 
   private[sql] def jsonValue: JValue = Metadata.toJsonValue(this)
+
+  private[sql] def writeJsonTo(generator: JsonGenerator): Unit = {
+    writeJsonObjectTo(generator)
+  }
+
+  private[types] def writeJsonObjectTo(
+      generator: JsonGenerator,
+      extraFields: Seq[(String, Map[String, String])] = Nil): Unit = {
+    generator.writeStartObject()
+    map.toList.foreach { case (key, value) =>
+      generator.writeFieldName(key)
+      Metadata.writeJsonValue(value, generator)
+    }
+    extraFields.foreach { case (key, value) =>
+      generator.writeObjectFieldStart(key)
+      value.toList.foreach { case (nestedKey, nestedValue) =>
+        generator.writeStringField(nestedKey, nestedValue)
+      }
+      generator.writeEndObject()
+    }
+    generator.writeEndObject()
+  }
 }
 
 /**
@@ -236,6 +260,36 @@ object Metadata {
         JNull
       case x: Metadata =>
         toJsonValue(x.map)
+      case other =>
+        throw DataTypeErrors.unsupportedJavaTypeError(other.getClass)
+    }
+  }
+
+  private def writeJsonValue(obj: Any, generator: JsonGenerator): Unit = {
+    obj match {
+      case map: Map[_, _] =>
+        generator.writeStartObject()
+        map.toList.foreach { case (key, value) =>
+          generator.writeFieldName(key.toString)
+          writeJsonValue(value, generator)
+        }
+        generator.writeEndObject()
+      case arr: Array[_] =>
+        generator.writeStartArray()
+        arr.foreach(writeJsonValue(_, generator))
+        generator.writeEndArray()
+      case x: Long =>
+        generator.writeNumber(x)
+      case x: Double =>
+        generator.writeNumber(x)
+      case x: Boolean =>
+        generator.writeBoolean(x)
+      case x: String =>
+        generator.writeString(x)
+      case null =>
+        generator.writeNull()
+      case x: Metadata =>
+        x.writeJsonTo(generator)
       case other =>
         throw DataTypeErrors.unsupportedJavaTypeError(other.getClass)
     }

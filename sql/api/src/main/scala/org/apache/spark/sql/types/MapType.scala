@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import com.fasterxml.jackson.core.JsonGenerator
+
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
@@ -61,6 +63,17 @@ case class MapType(keyType: DataType, valueType: DataType, valueContainsNull: Bo
       ("keyType" -> keyType.jsonValue) ~
       ("valueType" -> valueType.jsonValue) ~
       ("valueContainsNull" -> valueContainsNull)
+
+  override private[sql] def writeJsonTo(generator: JsonGenerator): Unit = {
+    generator.writeStartObject()
+    generator.writeStringField("type", typeName)
+    generator.writeFieldName("keyType")
+    keyType.writeJsonTo(generator)
+    generator.writeFieldName("valueType")
+    valueType.writeJsonTo(generator)
+    generator.writeBooleanField("valueContainsNull", valueContainsNull)
+    generator.writeEndObject()
+  }
 
   /**
    * The default size of a value of the MapType is (the default size of the key type + the default

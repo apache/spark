@@ -19,6 +19,8 @@ package org.apache.spark.sql.types
 
 import java.util.Objects
 
+import com.fasterxml.jackson.core.JsonGenerator
+
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
@@ -62,6 +64,17 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
       ("class" -> this.getClass.getName) ~
       ("pyClass" -> pyUDT) ~
       ("sqlType" -> sqlType.jsonValue)
+  }
+
+  override private[sql] def writeJsonTo(generator: JsonGenerator): Unit = {
+    generator.writeStartObject()
+    generator.writeStringField("type", "udt")
+    generator.writeStringField("class", this.getClass.getName)
+    generator.writeFieldName("pyClass")
+    generator.writeString(pyUDT)
+    generator.writeFieldName("sqlType")
+    sqlType.writeJsonTo(generator)
+    generator.writeEndObject()
   }
 
   /**
@@ -146,6 +159,16 @@ private[sql] class PythonUserDefinedType(
       ("pyClass" -> pyUDT) ~
       ("serializedClass" -> serializedPyClass) ~
       ("sqlType" -> sqlType.jsonValue)
+  }
+
+  override private[sql] def writeJsonTo(generator: JsonGenerator): Unit = {
+    generator.writeStartObject()
+    generator.writeStringField("type", "udt")
+    generator.writeStringField("pyClass", pyUDT)
+    generator.writeStringField("serializedClass", serializedPyClass)
+    generator.writeFieldName("sqlType")
+    sqlType.writeJsonTo(generator)
+    generator.writeEndObject()
   }
 
   override private[sql] def acceptsType(dataType: DataType): Boolean = dataType match {

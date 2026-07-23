@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import com.fasterxml.jackson.core.JsonGenerator
+
 import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
@@ -84,6 +86,10 @@ class GeographyType private (val crs: String, val algorithm: EdgeInterpolationAl
    * is also in accordance to storage formats.
    */
   override def jsonValue: JValue = JString(s"geography($crs, $algorithm)")
+
+  override private[sql] def writeJsonTo(generator: JsonGenerator): Unit = {
+    generator.writeString(s"geography($crs, $algorithm)")
+  }
 
   private[spark] override def asNullable: GeographyType = this
 
