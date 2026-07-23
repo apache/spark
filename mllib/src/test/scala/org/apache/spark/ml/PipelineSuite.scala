@@ -131,11 +131,17 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   test("PipelineModel estimated size") {
     val dataset = Seq("a", "b", "c").toDF("input")
     val pipeline = new Pipeline().setStages(Array(
+      new HashingTF().setInputCol("input").setOutputCol("features"),
       new StringIndexer().setInputCol("input").setOutputCol("indexed")))
     val model = pipeline.fit(dataset)
+    val minSize = 1024
     val maxSize = 1024 * 16
-    assert(model.estimatedSize < maxSize,
-      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+    val estimatedSize = model.estimatedSize
+    assert(estimatedSize > minSize,
+      s"Estimation ($estimatedSize) should be greater than $minSize")
+    assert(estimatedSize < maxSize,
+      s"Estimation ($estimatedSize) should be less than $maxSize")
+    assert(model.hasParent, "parent should be preserved after estimatedSize call")
   }
 
   test("pipeline model constructors") {
