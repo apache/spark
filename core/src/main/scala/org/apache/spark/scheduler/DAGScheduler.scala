@@ -1759,29 +1759,6 @@ private[spark] class DAGScheduler(
    */
   private def rejectUnadmittablePipelinedGroup(
       jobId: Int, finalRDD: RDD[_], partitions: Array[Int], listener: JobListener): Boolean = {
-    // The whole group must run on the default resource profile. Admission below measures capacity
-    // and occupancy against the default profile, but each stage derives its profile from its RDDs
-    // (see createShuffleMapStage/createResultStage). A member carrying a non-default profile would
-    // therefore be admitted against the default profile's free slots yet run in a different, often
-    // smaller pool -- and could then queue or deadlock there. Reject such a job up front (before
-    // any stage is created, like the checks above), rather than admit it against the wrong pool.
-    var offendingRp: Option[ResourceProfile] = None
-    traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
-      val rp = rdd.getResourceProfile()
-      if (offendingRp.isEmpty && rp != null && rp.id != DEFAULT_RESOURCE_PROFILE_ID) {
-        offendingRp = Some(rp)
-      }
-      rdd.dependencies.foreach(dep => enqueue(dep.rdd))
-    }
-    if (offendingRp.nonEmpty) {
-      logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: a pipelined stage group member uses a " +
-        log"non-default resource profile")
-      listener.jobFailed(new SparkException(
-        "A pipelined shuffle job with a member on a non-default resource profile is not " +
-          s"supported (resource profile id ${offendingRp.get.id}): the whole pipelined stage " +
-          "group must run on the default resource profile."))
-      return true
-    }
     if (!sc.conf.get(config.PIPELINED_GROUP_SLOT_CHECK_ENABLED)) {
       // The only deadlock-prevention check for gang admission is off. Legitimate only when the
       // deployment admits capacity out-of-band (e.g. a slot reservation); otherwise a pipelined

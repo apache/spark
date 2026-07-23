@@ -6393,40 +6393,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("pipelined shuffle: a member on a non-default resource profile is rejected up front") {
-    // Admission measures capacity/occupancy against the DEFAULT resource profile, but a stage
-    // derives its profile from its RDDs. A pipelined group member on a custom profile would be
-    // admitted against the default pool's free slots yet run in a different (often smaller) pool
-    // and could deadlock there. Reject such a job before any stage is created.
-    // Ensure the default profile exists (id 0) before building a custom one, so the custom profile
-    // gets a distinct, non-default id regardless of test-execution order (profile ids come from a
-    // process-wide counter, and the default profile occupies id 0).
-    sc.resourceProfileManager.defaultResourceProfile
-    val ereqs = new ExecutorResourceRequests().cores(4)
-    val treqs = new TaskResourceRequests().cpus(2)
-    val customRp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
-    val producerRdd = new MyRDD(sc, 2, Nil)
-    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
-    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
-      .withResources(customRp)
-    // Sanity: the consumer really carries a non-default profile (otherwise the test is vacuous).
-    assert(consumerRdd.getResourceProfile() != null &&
-      consumerRdd.getResourceProfile().id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
-      s"test setup: expected a non-default profile, got id " +
-        s"${Option(consumerRdd.getResourceProfile()).map(_.id)}")
-    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
-    val failListener = new JobListener {
-      override def taskSucceeded(index: Int, result: Any): Unit = {}
-      override def jobFailed(exception: Exception): Unit = failure.set(exception)
-    }
-    submit(consumerRdd, Array(0, 1), listener = failListener)
-    assert(failure.get() != null,
-      "a pipelined job with a non-default-resource-profile member should be rejected")
-    assert(failure.get().getMessage.contains("non-default resource profile"))
-    assert(taskSets.isEmpty, "no stage should be created for a rejected job")
-    assertDataStructuresEmpty()
-  }
-
   test("regular shuffle job with dynamic allocation enabled is NOT rejected (path is inert)") {
     // The dynamic-allocation fail-fast must apply only to jobs with a pipelined dependency; a plain
     // regular-shuffle job with dynamic allocation on runs normally.
