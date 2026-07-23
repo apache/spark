@@ -727,6 +727,27 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Logarithm, DoubleType, DoubleType)
   }
 
+  test("truncate") {
+    // Truncation toward zero, distinct from floor/ceil (toward -inf/+inf) and round (to nearest).
+    checkEvaluation(Truncate(Literal(Decimal(BigDecimal("1234.5678"))), Literal(2)),
+      Decimal(BigDecimal("1234.56")))
+    checkEvaluation(Truncate(Literal(Decimal(BigDecimal("-1234.5678"))), Literal(2)),
+      Decimal(BigDecimal("-1234.56")))
+    checkEvaluation(Truncate(Literal(Decimal(BigDecimal("1234.5678"))), Literal(-2)),
+      Decimal(BigDecimal("1200")))
+    checkEvaluation(Truncate(Literal(Decimal(BigDecimal("-3.99"))), Literal(0)),
+      Decimal(BigDecimal("-3")))
+    // Default scale is 0.
+    checkEvaluation(new Truncate(Literal(Decimal(BigDecimal("3.99")))), Decimal(BigDecimal("3")))
+    // Integral input with negative scale.
+    checkEvaluation(Truncate(Literal(125), Literal(-1)), 120)
+    // Double input.
+    checkEvaluation(Truncate(Literal(3.1415926), Literal(3)), 3.141)
+    // Null propagation.
+    checkEvaluation(Truncate(Literal.create(null, DoubleType), Literal(2)), null)
+    checkEvaluation(Truncate(Literal(1.23), Literal.create(null, IntegerType)), null)
+  }
+
   test("round/bround/floor/ceil") {
     val scales = -6 to 6
     val doublePi: Double = math.Pi

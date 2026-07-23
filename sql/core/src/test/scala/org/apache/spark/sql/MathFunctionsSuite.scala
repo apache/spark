@@ -324,6 +324,24 @@ class MathFunctionsSuite extends SharedSparkSession {
     testOneToOneMathFunction(rint, math.rint)
   }
 
+  test("truncate") {
+    val df = Seq(5, 55, 555).map(Tuple1(_)).toDF("a")
+    checkAnswer(
+      df.select(truncate($"a", lit(-1)), truncate($"a", lit(-2))),
+      Seq(Row(0, 0), Row(50, 0), Row(550, 500))
+    )
+    // Truncation rounds toward zero, unlike floor for negative values.
+    val df2 = Seq(1234.5678, -1234.5678).map(Tuple1(_)).toDF("a")
+    checkAnswer(
+      df2.select(truncate($"a", lit(2))),
+      Seq(Row(1234.56), Row(-1234.56))
+    )
+    checkAnswer(
+      df2.selectExpr("truncate(a, 2)"),
+      Seq(Row(1234.56), Row(-1234.56))
+    )
+  }
+
   test("round/bround/ceil/floor") {
     val df = Seq(5, 55, 555).map(Tuple1(_)).toDF("a")
     checkAnswer(
