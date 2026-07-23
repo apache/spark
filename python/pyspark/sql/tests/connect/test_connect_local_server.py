@@ -118,10 +118,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         with Discovery() as discovery:
             saved = self._server(port=15002)
             discovery.save(
-                {
-                    k: getattr(saved, k)
-                    for k in ("host", "port", "token", "pid", "spark_version")
-                }
+                {k: getattr(saved, k) for k in ("host", "port", "token", "pid", "spark_version")}
             )
             # The file holds the auth token and must not be readable by other users.
             self.assertEqual(os.stat(discovery.path).st_mode & 0o777, 0o600)
@@ -193,10 +190,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         with Discovery() as discovery:
             server = self._server(pid=12345)
             discovery.save(
-                {
-                    k: getattr(server, k)
-                    for k in ("host", "port", "token", "pid", "spark_version")
-                }
+                {k: getattr(server, k) for k in ("host", "port", "token", "pid", "spark_version")}
             )
         with mock.patch.object(os, "kill") as kill:
             self.assertTrue(local_server.stop_local_connect_server())

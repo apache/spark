@@ -100,9 +100,7 @@ class Discovery:
 
     @property
     def daemon_pid_path(self) -> str:
-        return os.path.join(
-            self.directory, "spark-{}-{}-1.pid".format(_SPARK_IDENT, _SERVER_CLASS)
-        )
+        return os.path.join(self.directory, "spark-{}-{}-1.pid".format(_SPARK_IDENT, _SERVER_CLASS))
 
     def __enter__(self) -> "Discovery":
         parent = os.path.dirname(self.path)
