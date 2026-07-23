@@ -292,8 +292,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         creationSide =>
           creationSide.hasSelectivePredicate || {
             def distinctCount(key: Expression, plan: LogicalPlan): Option[BigInt] = {
-              key.references.toSeq match {
-                case Seq(attribute) => plan.stats.attributeStats.get(attribute)
+              key match {
+                case attribute: Attribute => plan.stats.attributeStats.get(attribute)
                   .flatMap(_.distinctCount)
                 case _ => None
               }

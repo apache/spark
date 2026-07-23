@@ -487,6 +487,10 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
                 (if (shouldInject) 1 else 0))
 
               if (shouldInject) {
+                val derivedJoin = sql(s"SELECT * FROM bf1 JOIN $cacheName " +
+                  s"ON bf1.c1 % 2 = $cacheName.c2 % 2")
+                assert(getNumBloomFilters(derivedJoin.queryExecution.optimizedPlan) == 0)
+
                 val projectedFact = spark.table("bf1").selectExpr("c1 AS fact_key")
                 val projectedKeys = spark.table(cacheName).selectExpr("c2 AS cached_key")
                 val projectedJoin = projectedFact.join(
