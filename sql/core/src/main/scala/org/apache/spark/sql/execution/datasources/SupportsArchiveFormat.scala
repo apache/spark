@@ -99,23 +99,6 @@ trait SupportsArchiveFormat extends Logging {
       s"${getClass.getName} does not support random-access archive reads")
 
   /**
-   * Materializes each kept entry (those passing [[archiveEntryFilter]]) to a temp file under
-   * `localDir`, lazily one at a time. Each `next()` writes a new temp file and does not remove
-   * earlier ones, so a caller that wants only one entry on disk at a time (e.g.
-   * [[readLocalizedEntries]]) must delete each file before advancing the iterator.
-   *
-   * @param path     the archive path
-   * @param conf     Hadoop configuration used to open the archive
-   * @param localDir directory the per-entry temp files are created under
-   * @return an iterator of `(entryName, localFile)` for the kept entries, in archive order
-   */
-  private def localizeEntries(
-      path: Path,
-      conf: Configuration,
-      localDir: File): Iterator[(String, File)] =
-    SupportsArchiveFormat.localizeEntries(path, conf, localDir, archiveEntryFilter)
-
-  /**
    * Reads an archive by unpacking each entry to a temp file and applying `readEntry`, for a
    * format that needs a complete file on disk (random access).
    *
@@ -137,7 +120,7 @@ trait SupportsArchiveFormat extends Logging {
       Utils.deleteRecursively(tempDir)
     })
     val entries =
-      try localizeEntries(file.toPath, conf, tempDir)
+      try SupportsArchiveFormat.localizeEntries(file.toPath, conf, tempDir, archiveEntryFilter)
       catch {
         case NonFatal(e) =>
           Utils.deleteRecursively(tempDir)
@@ -181,9 +164,10 @@ trait SupportsArchiveFormat extends Logging {
         }
       }
 
+      // advance() exits only when done or current has an element, so !done implies current.hasNext.
       override def hasNext: Boolean = {
         advance()
-        !done && current.hasNext
+        !done
       }
 
       override def next(): Object = {
@@ -201,8 +185,6 @@ trait SupportsArchiveFormat extends Logging {
       }
     }
 
-    // The listener above deletes only the temp dir; FileScanRDD closes `rows`. Closing the
-    // per-entry reader from a listener would free the vectorized reader's off-heap vectors early.
     rows.asInstanceOf[Iterator[InternalRow]]
   }
 
@@ -410,8 +392,11 @@ object SupportsArchiveFormat {
       localDir: File,
       entryFilter: String => Boolean): Iterator[(String, File)] =
     readArchiveEntries(path, conf) { (name, in) =>
-      if (entryFilter(name)) Iterator.single((name, copyEntryToLocalFile(in, localDir, name)))
-      else Iterator.empty
+      if (entryFilter(name)) {
+        Iterator.single((name, copyEntryToLocalFile(in, localDir, name)))
+      } else {
+        Iterator.empty
+      }
     }
 
 }

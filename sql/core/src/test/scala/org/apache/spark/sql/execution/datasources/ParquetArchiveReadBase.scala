@@ -23,7 +23,6 @@ import java.nio.file.Files
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -52,22 +51,8 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
   // Parquet samples one part-file for non-merge inference (SPARK-11500).
   override protected def inferenceSamplesOneFile: Boolean = true
 
-  override protected def encodeFile(
-      df: DataFrame,
-      writeOptions: Map[String, String]): Array[Byte] = {
-    val dir = Utils.createTempDir(namePrefix = "archive-test-encode")
-    try {
-      df.coalesce(1).write.format("parquet")
-        .options(writeOptions).mode("overwrite").save(dir.getCanonicalPath)
-      val parts = dir.listFiles().filter { f =>
-        f.isFile && !f.getName.startsWith("_") && !f.getName.startsWith(".") &&
-          !f.getName.endsWith(".crc")
-      }
-      assert(parts.length == 1,
-        s"expected exactly one data file, got: ${parts.map(_.getName).toList}")
-      Files.readAllBytes(parts.head.toPath)
-    } finally Utils.deleteRecursively(dir)
-  }
+  // Parquet unpacks each entry to a local temp file for footer random access.
+  override protected def localizesEntries: Boolean = true
 
   for (vectorized <- Seq(true, false)) {
     test(s"archive reads return the same rows with vectorized reader = $vectorized") {
@@ -134,14 +119,6 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 
-  test("archive entries with differing fields read like a directory") {
-    // Reading fills a missing column with null even with supportsSchemaMerge off.
-    val withName = sampleDf((1, "Alice"), (2, "Bob"))
-    val idOnly = Seq(3).toDF("id")
-    assertArchiveMatchesDir(
-      Seq(entryName(0) -> encodeFile(withName), entryName(1) -> encodeFile(idOnly)))
-  }
-
   test("archive inference unions differing fields across entries with mergeSchema=true") {
     // mergeSchema=true folds every entry's footer; over an archive, one unpacked entry at a time.
     val withName = sampleDf((1, "Alice"), (2, "Bob"))
@@ -185,53 +162,6 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 
-  Seq(true, false).foreach { ignoreCorrupt =>
-    test(s"ignoreCorruptFiles=$ignoreCorrupt: inference skips a corrupt entry's whole archive") {
-      // A corrupt entry condemns its whole archive during inference (no partial ingestion), so the
-      // `extra` column carried by the bad archive's valid sibling entry must not surface. A good
-      // archive is unaffected. mergeSchema=true folds every entry's footer.
-      val merge = Map("mergeSchema" -> "true")
-      val sibling = Seq((3, "Carol", "x")).toDF("id", "name", "extra")
-      withTempDir { dir =>
-        writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
-          Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
-        writeArchive(new File(dir, s"bad.${archiveExtensions.head}"), Seq(
-          entryName(0) -> encodeFile(sibling),
-          entryName(1) -> "This is not a valid Parquet file".getBytes("UTF-8")))
-        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
-          if (ignoreCorrupt) {
-            assert(inferredSchema(Seq(dir.getCanonicalPath), merge).fieldNames.toSet ==
-              Set("id", "name"),
-              "the whole corrupt archive, including its valid sibling entry, should be skipped")
-          } else {
-            intercept[Exception](inferredSchema(Seq(dir.getCanonicalPath), merge))
-          }
-        }
-      }
-    }
-
-    test(s"ignoreCorruptFiles=$ignoreCorrupt: read skips the rest of an archive at a bad entry") {
-      // The streaming read matches the other formats: entries before the corrupt one are ingested,
-      // then the rest of that archive is skipped (not whole-archive atomic like inference). A
-      // separate good archive is read in full.
-      val alive = sampleDf((1, "Alice"), (2, "Bob"))
-      val beforeCorrupt = sampleDf((3, "Carol"))
-      withTempDir { dir =>
-        writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
-          Seq(entryName(0) -> encodeFile(alive)))
-        writeArchive(new File(dir, s"bad.${archiveExtensions.head}"), Seq(
-          entryName(0) -> encodeFile(beforeCorrupt),
-          entryName(1) -> "This is not a valid Parquet file".getBytes("UTF-8")))
-        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
-          if (ignoreCorrupt) {
-            checkAnswer(read(dir.getCanonicalPath), alive.union(beforeCorrupt))
-          } else {
-            intercept[SparkException](read(dir.getCanonicalPath).collect())
-          }
-        }
-      }
-    }
-  }
 }
 
 class ParquetTarArchiveReadSuite

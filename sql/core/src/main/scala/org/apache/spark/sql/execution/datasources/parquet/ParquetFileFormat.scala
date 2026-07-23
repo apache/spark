@@ -118,8 +118,6 @@ class ParquetFileFormat
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
-    // An archive is read by unpacking its entries, so the archive itself is a single split
-    // rather than carved into byte ranges.
     val parquetOptions = new ParquetOptions(options, getSqlConf(sparkSession))
     if (parquetOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
       return false
@@ -579,7 +577,8 @@ object ParquetFileFormat extends Logging {
           Seq.empty
         // A corrupt archive's failure arrives wrapped, not as a bare RuntimeException; a missing
         // file (FileNotFoundException) is excluded since ignoreMissingFiles governs it.
-        case e: Exception if ignoreCorruptFiles && {
+        case e: Exception if ignoreCorruptFiles &&
+            archiveEnabled && SupportsArchiveFormat.isArchivePath(currentFile.getPath) && {
               val root = Utils.getRootCause(e)
               root.isInstanceOf[IOException] && !root.isInstanceOf[FileNotFoundException]
             } =>
@@ -594,7 +593,6 @@ object ParquetFileFormat extends Logging {
   /** Reads every Parquet entry's footer in one archive. */
   private def readArchiveFooters(conf: Configuration, archive: FileStatus): Seq[Footer] = {
     val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), "parquet-archive-infer")
-    // No TaskContext here, so close the archive stream deterministically rather than on task end.
     // localizeEntries eagerly opens/copies the first entry, so build it inside the try -- a corrupt
     // archive throws there and the finally must still delete tempDir.
     var entries: Iterator[(String, File)] = Iterator.empty
