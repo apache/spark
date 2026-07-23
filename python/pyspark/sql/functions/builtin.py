@@ -23375,6 +23375,40 @@ def json_object_keys(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("json_object_keys", col)
 
 
+@_try_remote_functions
+def json_typeof(col: "ColumnOrName") -> Column:
+    """
+    Returns the type of the outermost JSON value as a string: one of 'object', 'array',
+    'string', 'number', 'boolean', or 'null'. Returns null if the input is not a valid JSON
+    string or is an empty string.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the type of the outermost JSON value.
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.json_object_keys`
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('{"a": 1}',), ('[1, 2, 3]',), ('123',), ('',)], ['data'])
+    >>> df.select(json_typeof(df.data).alias('r')).collect()
+    [Row(r='object'), Row(r='array'), Row(r='number'), Row(r=None)]
+    """
+    return _invoke_function_over_columns("json_typeof", col)
+
+
 # TODO: Fix and add an example for StructType with Spark Connect
 #   e.g., StructType([StructField("a", IntegerType())])
 @_try_remote_functions

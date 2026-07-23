@@ -1951,6 +1951,15 @@ class JsonFunctionsSuite extends SharedSparkSession {
     checkAnswer(df.select(json_object_keys($"a")), expected)
   }
 
+  test("json_typeof function") {
+    val df = Seq(null, "{}", "[1, 2, 3]", "\"str\"", "123", "true", "null", "", "bad")
+      .toDF("a")
+    val expected = Seq(Row(null), Row("object"), Row("array"), Row("string"),
+      Row("number"), Row("boolean"), Row("null"), Row(null), Row(null))
+    checkAnswer(df.selectExpr("json_typeof(a)"), expected)
+    checkAnswer(df.select(json_typeof($"a")), expected)
+  }
+
   test("function get_json_object - Codegen Support") {
     withTempView("GetJsonObjectTable") {
       val data = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")

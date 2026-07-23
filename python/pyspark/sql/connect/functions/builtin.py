@@ -2060,6 +2060,13 @@ def json_object_keys(col: "ColumnOrName") -> Column:
 json_object_keys.__doc__ = pysparkfuncs.json_object_keys.__doc__
 
 
+def json_typeof(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("json_typeof", col)
+
+
+json_typeof.__doc__ = pysparkfuncs.json_typeof.__doc__
+
+
 def inline(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("inline", col)
 
