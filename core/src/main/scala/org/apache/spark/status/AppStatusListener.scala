@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -186,9 +187,19 @@ private[spark] class AppStatusListener(
 
     // Parse the raw property string straight into a BigDecimal so the default cpus per task is
     // exact (spark.task.cpus may be fractional, e.g. 0.2), then normalize to the CPU scale.
-    defaultCpusPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key)
-      .map(v => CpuAmount.normalize(BigDecimal(v)))
-      .getOrElse(defaultCpusPerTask)
+    // The bounds are checked on the compact parsed value BEFORE normalizing: this string comes
+    // from a persisted application environment, and setScale on a crafted or corrupt extreme
+    // exponent (e.g. 1e10000000) would materialize an enormous unscaled value inside the
+    // (shared) history server. A legitimate log always carries a value the live config parser
+    // validated, so malformed values keep the previous default instead of failing the replay.
+    envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).foreach { v =>
+      Try(BigDecimal(v)).toOption.filter(CpuAmount.isInRange) match {
+        case Some(d) => defaultCpusPerTask = CpuAmount.normalize(d)
+        case None =>
+          logWarning(log"Ignoring invalid ${MDC(LogKeys.CONFIG, CPUS_PER_TASK.key)} value in " +
+            log"the application environment; keeping the previous default")
+      }
+    }
 
     kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
   }

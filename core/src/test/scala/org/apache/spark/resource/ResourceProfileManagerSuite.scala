@@ -84,6 +84,18 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
       rpmanager.resourceProfileFromId(mismatchCpus.id)
     }
 
+    // An amount above any possible executor's core count could never be scheduled.
+    val oversized = new TaskResourceProfile(
+      Map(ResourceProfile.CPUS ->
+        new TaskResourceRequest(ResourceProfile.CPUS, 2147483647.5)))
+    val e3 = intercept[IllegalArgumentException] {
+      rpmanager.addResourceProfile(oversized)
+    }
+    assert(e3.getMessage.contains("at most"))
+    intercept[SparkException] {
+      rpmanager.resourceProfileFromId(oversized.id)
+    }
+
     // The inverse mismatch -- a cpus-named request under a custom key -- fails the forced
     // limiting-resource computation (no matching executor resource) before insertion.
     val mismatchCustom = new TaskResourceProfile(

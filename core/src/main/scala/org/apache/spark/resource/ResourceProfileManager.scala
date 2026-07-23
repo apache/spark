@@ -135,8 +135,8 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     // including raw profile construction and Spark Connect.
     rp.taskResources.get(ResourceProfile.CPUS).foreach { treq =>
       require(!treq.amount.isNaN && !treq.amount.isInfinity &&
-        CpuAmount.normalize(BigDecimal(treq.amount.toString)).signum > 0,
-        s"The cpus amount ${treq.amount} must be at least 1e-9.")
+        CpuAmount.isInRange(CpuAmount.normalize(BigDecimal(treq.amount.toString))),
+        s"The cpus amount ${treq.amount} must be at least 1e-9 and at most ${Int.MaxValue}.")
     }
     // Force the computation of maxTasks and limitingResource now so we don't have cost later;
     // doing it before the insert also surfaces any other malformed shape (e.g. a task

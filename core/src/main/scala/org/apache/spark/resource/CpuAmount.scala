@@ -54,6 +54,14 @@ private[spark] object CpuAmount {
   def normalize(v: BigDecimal): BigDecimal = v.setScale(SCALE, BigDecimal.RoundingMode.HALF_UP)
 
   /**
+   * Whether an amount lies in the valid cpus range [[MIN_AMOUNT]] to [[MAX_AMOUNT]]. The
+   * comparison is cheap at any scale, so callers handling untrusted input can (and should)
+   * check the compact parsed value with this before [[normalize]] -- setScale on an extreme
+   * exponent (e.g. 1e10000000) would materialize an enormous unscaled value.
+   */
+  def isInRange(v: BigDecimal): Boolean = v >= MIN_AMOUNT && v <= MAX_AMOUNT
+
+  /**
    * The minimal-scale form (trailing zeros removed). Use this for logging/printing (e.g.
    * `0.200000000` renders as `0.2`) and for products that would otherwise blow the normalized
    * unscaled value past `Long` range -- most notably `durationNanos * cpus` in the executor CPU

@@ -128,6 +128,29 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     }
   }
 
+  test("SPARK-58192: invalid spark.task.cpus in the environment falls back to the default") {
+    val listener = new AppStatusListener(store, conf, true)
+    // A corrupt or crafted event log can carry values the live config parser would have
+    // rejected. An extreme exponent must not materialize an enormous decimal inside the
+    // (shared) history server, and a malformed value must not fail the replay -- both keep
+    // the previous default instead.
+    Seq("1e10000000", "abc", "0", "-1").foreach { bad =>
+      listener.onEnvironmentUpdate(SparkListenerEnvironmentUpdate(Map(
+        "JVM Information" -> Seq.empty,
+        "Spark Properties" -> Seq("spark.task.cpus" -> bad),
+        "Hadoop Properties" -> Seq.empty,
+        "System Properties" -> Seq.empty,
+        "Metrics Properties" -> Seq.empty,
+        "Classpath Entries" -> Seq.empty)))
+    }
+    listener.onExecutorAdded(SparkListenerExecutorAdded(1L, "1",
+      new ExecutorInfo("1.example.com", 4, Map.empty, Map.empty)))
+
+    check[ExecutorSummaryWrapper]("1") { exec =>
+      assert(exec.info.maxTasks === 4)
+    }
+  }
+
   test("scheduler events") {
     val listener = new AppStatusListener(store, conf, true)
 

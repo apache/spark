@@ -67,13 +67,15 @@ class TaskResourceRequests() extends Serializable {
   @Since("4.3.0")
   def cpus(amount: Double): this.type = {
     // A positive amount below half of the internal accounting scale (1e-9) would silently
-    // round to zero cpus downstream; reject it here where the original value is still
-    // visible. Validation lives at this request entry point rather than in the
-    // TaskResourceRequest constructor, which must stay lenient to deserialize historical
-    // event logs and history-server stores written before cpus amounts were validated.
+    // round to zero cpus downstream, and one above Int.MaxValue could never be satisfied by
+    // any executor; reject both here where the original value is still visible, mirroring the
+    // spark.task.cpus config bounds. Validation lives at this request entry point rather than
+    // in the TaskResourceRequest constructor, which must stay lenient to deserialize
+    // historical event logs and history-server stores written before cpus amounts were
+    // validated.
     require(!amount.isNaN && !amount.isInfinity &&
-      CpuAmount.normalize(BigDecimal(amount.toString)).signum > 0,
-      s"The cpus amount ${amount} must be at least 1e-9.")
+      CpuAmount.isInRange(CpuAmount.normalize(BigDecimal(amount.toString))),
+      s"The cpus amount ${amount} must be at least 1e-9 and at most ${Int.MaxValue}.")
     val treq = new TaskResourceRequest(CPUS, amount)
     _taskResources.put(CPUS, treq)
     this

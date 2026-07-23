@@ -427,6 +427,16 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
       }
       assert(e.getMessage.contains("must be at least 1e-9"), s"for amount $amount")
     }
+    // Above the maximum: no executor can have more than Int.MaxValue cores, so a larger
+    // request could never be satisfied anywhere. The maximum itself stays valid.
+    Seq(2147483647.5, 1e100).foreach { amount =>
+      val e = intercept[IllegalArgumentException] {
+        new TaskResourceRequests().cpus(amount)
+      }
+      assert(e.getMessage.contains("at most"), s"for amount $amount")
+    }
+    assert(new TaskResourceRequests().cpus(Int.MaxValue.toDouble)
+      .requests(ResourceProfile.CPUS).amount === Int.MaxValue.toDouble)
     // Every live entry point validates, not just cpus(): resource() and addRequest() route
     // cpus amounts through the same check (spark.task.resource.cpus.amount flows through
     // resource() as well), while valid amounts still land in the request map.
