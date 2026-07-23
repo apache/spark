@@ -325,9 +325,6 @@ jobs:
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.SlowSQLTest
             comment: "- other tests"
         exclude:
-          # Always run if yarn == 'true', even infra-image is skip (such as non-master job)
-          # In practice, the build will run in individual PR, but not against the individual commit
-          # in Apache Spark repository.
           - modules: ${{ fromJson(needs.precondition.outputs.required).yarn != 'true' && 'yarn' }}
           # Skip the core/utils group when a PR doesn't touch those modules (e.g. SQL-only or
           # PySpark-only changes). The precondition is opt-out: omitted means run (so periodic
@@ -622,8 +619,9 @@ jobs:
 
   pyspark:
     needs: [precondition, infra-image, precompile]
-    # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
-    if: (!cancelled()) && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
+    if: >-
+      fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
+      fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -660,9 +658,6 @@ jobs:
           - >-
             pyspark-pandas-slow-connect
         exclude:
-          # Always run if pyspark == 'true', even infra-image is skip (such as non-master job)
-          # In practice, the build will run in individual PR, but not against the individual commit
-          # in Apache Spark repository.
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-sql, pyspark-resource, pyspark-testing, pyspark-core, pyspark-errors, pyspark-logger' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
@@ -670,9 +665,6 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-connect-old-client != 'true' &&  'pyspark-connect-old-client'}}
           # pyspark-install is very slow so we only run it when it's changed or explicity requested
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-install != 'true' && 'pyspark-install' }}
-          # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
-          # In practice, the build will run in individual PR, but not against the individual commit
-          # in Apache Spark repository.
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-slow' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect' }}
@@ -855,8 +847,7 @@ jobs:
 
   sparkr:
     needs: [precondition, infra-image, precompile]
-    # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
+    if: fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1000,8 +991,7 @@ jobs:
   # Static analysis
   lint:
     needs: [precondition, infra-image]
-    # always run if lint == 'true', even infra-image is skip (such as non-master job)
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).lint == 'true'
+    if: fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, and dependencies
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1143,8 +1133,7 @@ jobs:
   # Documentation build
   docs:
     needs: [precondition, infra-image]
-    # always run if lint == 'true', even infra-image is skip (such as non-master job)
-    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docs == 'true'
+    if: fromJson(needs.precondition.outputs.required).docs == 'true'
     name: Documentation generation
     runs-on: ubuntu-latest
     timeout-minutes: 120
