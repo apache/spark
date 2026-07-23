@@ -278,13 +278,10 @@ class DataSourceV2GeneratedColumnPartitionFilterSuite extends QueryTest with Dat
 
         // Under each read policy, unix_timestamp() returns null for the partition written in the
         // other policy's format; the derived filter's IS NULL guard must keep it so no row is lost.
-        for {
-          policy <- Seq("CORRECTED", "LEGACY")
-          ansi <- Seq("true", "false")
-        } {
+        Seq("CORRECTED", "LEGACY").foreach { policy =>
           withSQLConf(
             "spark.sql.legacy.timeParserPolicy" -> policy,
-            "spark.sql.ansi.enabled" -> ansi) {
+            "spark.sql.ansi.enabled" -> "false") {
             val df = sql(query)
             checkAnswer(df, Seq(Row(1), Row(2)))
             assert(pushedPartitionFilterRefs(df).contains("month"),

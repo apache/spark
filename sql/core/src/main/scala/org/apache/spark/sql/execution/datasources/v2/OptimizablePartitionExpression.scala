@@ -472,11 +472,10 @@ case class SubstringPartitionExpr(
 case class DateFormatPartitionExpr(
     partitionColumn: String, format: String) extends OptimizablePartitionExpression {
 
-  private val partitionColumnUnixTimestamp =
-    UnixTimestamp(partitionColumn.toPartCol, format, failOnError = false)
+  private val partitionColumnUnixTimestamp = UnixTimestamp(partitionColumn.toPartCol, format)
 
   private def litUnixTimestamp(lit: Literal): UnixTimestamp =
-    UnixTimestamp(DateFormatClass(lit, format), format, failOnError = false)
+    UnixTimestamp(DateFormatClass(lit, format), format)
 
   override def lessThan(lit: Literal): Option[Expression] = {
     // As the partition column has truncated information, we need to turn "<" to "<=".
