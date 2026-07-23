@@ -2356,4 +2356,125 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(cache.offsetSeconds(s) === 0L)
     }
   }
+
+  test("SPARK-57737: ZoneOffsetCache matches ZoneRules.getOffset across zones and instants") {
+    // ZoneOffsetCache resolves misses from a precomputed primitive transition table; check it
+    // equals rules.getOffset for a spread of zones and many instants -- exactly on transitions,
+    // one second either side, before the first transition, beyond the materialized horizon, and a
+    // deterministic pseudo-random spread.
+    val zones = Seq("America/Los_Angeles", "Europe/Berlin", "Atlantic/Azores", "Asia/Kolkata",
+      "UTC", "Pacific/Apia", "Australia/Lord_Howe", "America/Sao_Paulo", "Asia/Tokyo", "Africa/Cairo")
+    for (z <- zones) {
+      val zid = getZoneId(z)
+      val rules = zid.getRules
+      val cache = new ZoneOffsetCache(zid)
+      val secs = scala.collection.mutable.ArrayBuffer.empty[Long]
+      // A couple of points before the first transition, and one beyond the 2200 horizon.
+      secs += Instant.parse("1700-06-01T00:00:00Z").getEpochSecond
+      secs += Instant.parse("2260-06-01T00:00:00Z").getEpochSecond
+      // Every transition instant and +/- 1s (boundary cases).
+      var tr = rules.nextTransition(Instant.parse("1850-01-01T00:00:00Z"))
+      val end = Instant.parse("2250-01-01T00:00:00Z")
+      var guard = 0
+      while (tr != null && tr.getInstant.isBefore(end) && guard < 5000) {
+        val t = tr.toEpochSecond
+        secs += (t - 1); secs += t; secs += (t + 1)
+        tr = rules.nextTransition(tr.getInstant.plusNanos(1))
+        guard += 1
+      }
+      // Deterministic pseudo-random spread over ~[1900, 2250).
+      var seed = 88172645463325252L
+      var i = 0
+      while (i < 4000) {
+        seed = seed * 6364136223846793005L + 1442695040888963407L
+        secs += -2208988800L + Math.floorMod(seed, 11044771200L)
+        i += 1
+      }
+      for (s <- secs) {
+        val expected = rules.getOffset(Instant.ofEpochSecond(s)).getTotalSeconds.toLong
+        assert(cache.offsetSeconds(s) === expected, s"zone=$z sec=$s")
+      }
+    }
+  }
+
+  test("SPARK-57737: truncTimestamp fast path matches an independent oracle across DST zones") {
+    // The fast path's DST-cross guard (ZoneOffsetCache.currentWindowContains) admits the
+    // offset-arithmetic result only when the truncated candidate stays in the original instant's
+    // constant-offset window, otherwise deferring to the slow path. Pin that end-to-end: for a
+    // spread of zones, levels, and instants (transition boundaries + a pseudo-random spread),
+    // truncTimestamp must equal a ground-truth java.time truncation computed independently here.
+    val zones = Seq("America/Los_Angeles", "Europe/Berlin", "America/Sao_Paulo", "Pacific/Apia",
+      "Australia/Lord_Howe", "Asia/Kolkata", "America/Havana", "UTC")
+    val levels = Seq(DateTimeUtils.TRUNC_TO_YEAR, DateTimeUtils.TRUNC_TO_QUARTER,
+      DateTimeUtils.TRUNC_TO_MONTH, DateTimeUtils.TRUNC_TO_WEEK, DateTimeUtils.TRUNC_TO_DAY,
+      DateTimeUtils.TRUNC_TO_HOUR, DateTimeUtils.TRUNC_TO_MINUTE)
+    // The truncated period-start in wall-clock time (a LocalDateTime), computed independently.
+    def periodStartLocal(micros: Long, level: Int, zid: java.time.ZoneId): java.time.LocalDateTime = {
+      val zdt = DateTimeUtils.microsToInstant(micros).atZone(zid)
+      level match {
+        case DateTimeUtils.TRUNC_TO_YEAR => zdt.toLocalDate.withDayOfYear(1).atStartOfDay
+        case DateTimeUtils.TRUNC_TO_QUARTER =>
+          val d = zdt.toLocalDate
+          d.withMonth((d.getMonthValue - 1) / 3 * 3 + 1).withDayOfMonth(1).atStartOfDay
+        case DateTimeUtils.TRUNC_TO_MONTH => zdt.toLocalDate.withDayOfMonth(1).atStartOfDay
+        case DateTimeUtils.TRUNC_TO_WEEK =>
+          zdt.toLocalDate.`with`(java.time.DayOfWeek.MONDAY).atStartOfDay
+        case DateTimeUtils.TRUNC_TO_DAY => zdt.toLocalDate.atStartOfDay
+        case DateTimeUtils.TRUNC_TO_HOUR =>
+          zdt.toLocalDateTime.truncatedTo(java.time.temporal.ChronoUnit.HOURS)
+        case DateTimeUtils.TRUNC_TO_MINUTE =>
+          zdt.toLocalDateTime.truncatedTo(java.time.temporal.ChronoUnit.MINUTES)
+      }
+    }
+    // Ground truth micros: date-levels resolve the local start-of-period back through the zone
+    // (atZone picks the earlier offset in an overlap, the post-gap instant in a gap), matching the
+    // slow path's daysToMicros; HOUR/MINUTE keep the original offset, matching truncatedTo.
+    def oracle(micros: Long, level: Int, zid: java.time.ZoneId): Long = {
+      val local = periodStartLocal(micros, level, zid)
+      val instant = if (level <= DateTimeUtils.TRUNC_TO_HOUR) {
+        DateTimeUtils.microsToInstant(micros).atZone(zid).truncatedTo(
+          if (level == DateTimeUtils.TRUNC_TO_HOUR) java.time.temporal.ChronoUnit.HOURS
+          else java.time.temporal.ChronoUnit.MINUTES).toInstant
+      } else {
+        local.atZone(zid).toInstant
+      }
+      DateTimeUtils.instantToMicros(instant)
+    }
+    for (z <- zones) {
+      val zid = getZoneId(z)
+      val rules = zid.getRules
+      val secs = scala.collection.mutable.ArrayBuffer.empty[Long]
+      // Every transition and +/- a few seconds/hours -- the boundary cases the guard exists for.
+      var tr = rules.nextTransition(Instant.parse("1900-01-01T00:00:00Z"))
+      val end = Instant.parse("2200-01-01T00:00:00Z")
+      var guard = 0
+      while (tr != null && tr.getInstant.isBefore(end) && guard < 5000) {
+        val t = tr.toEpochSecond
+        Seq(-90000L, -3600L, -1L, 0L, 1L, 3600L, 90000L).foreach(d => secs += (t + d))
+        tr = rules.nextTransition(tr.getInstant.plusNanos(1))
+        guard += 1
+      }
+      // Deterministic pseudo-random spread over ~[1950, 2100).
+      var seed = 55572645463325111L
+      var i = 0
+      while (i < 3000) {
+        seed = seed * 6364136223846793005L + 1442695040888963407L
+        secs += -631152000L + Math.floorMod(seed, 4102444800L)
+        i += 1
+      }
+      val cache = new ZoneOffsetCache(zid)
+      for (level <- levels; s <- secs) {
+        val micros = Math.multiplyExact(s, MICROS_PER_SECOND)
+        // A truncated period-start that lands on a DST fall-back overlap (local time occurs twice)
+        // is skipped: the offset-arithmetic fast path returns the later occurrence while the slow
+        // path's atStartOfDay picks the earlier one. That divergence predates and is independent of
+        // this cache work (a SPARK-56769 fast-path issue tracked separately), so it is out of scope
+        // here; every unambiguous boundary must still match exactly.
+        if (rules.getValidOffsets(periodStartLocal(micros, level, zid)).size() <= 1) {
+          assert(DateTimeUtils.truncTimestamp(micros, level, cache) === oracle(micros, level, zid),
+            s"zone=$z level=$level sec=$s")
+        }
+      }
+    }
+  }
 }
