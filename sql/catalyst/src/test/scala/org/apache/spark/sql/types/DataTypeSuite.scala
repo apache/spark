@@ -232,6 +232,19 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
       VarcharType(10, UTF8_LCASE_COLLATION_ID),
       ArrayType(MapType(StringType, LongType, valueContainsNull = false)),
       new ExampleBaseTypeUDT(),
+      // Python UDT: exercises PythonUserDefinedType.writeJsonTo, whose field layout differs
+      // from the Scala UDT path (it omits `class` and adds `serializedClass`). This case has
+      // a non-null pyClass and a non-null serializedClass.
+      new PythonUserDefinedType(
+        StructType(Seq(StructField("intfield", IntegerType, nullable = false))),
+        "pyspark.testing.ExamplePythonUDT",
+        "serialized-python-class-payload"),
+      // Python UDT with a null serializedClass: verifies the streaming path renders a null
+      // string field identically to json4s on this distinct code path.
+      new PythonUserDefinedType(
+        StructType(Seq(StructField("v", DoubleType))),
+        "pyspark.testing.NoSerializedClassUDT",
+        null),
       GeometryType(4326),
       GeographyType(4326),
       StructType(Seq(
