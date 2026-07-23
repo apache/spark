@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.VariantMetadata
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 
@@ -215,38 +216,53 @@ object ParquetReadSupport extends Logging {
       caseSensitive: Boolean,
       useFieldId: Boolean,
       returnNullStructIfAllFieldsMissing: Boolean): Type = {
-    val newParquetType = catalystType match {
-      case t: ArrayType if ParquetSchemaConverter.isComplexType(t.elementType) =>
-        // Only clips array types with nested type as element type.
-        clipParquetListType(parquetType.asGroupType(), t.elementType, caseSensitive, useFieldId,
-          returnNullStructIfAllFieldsMissing)
-
-      case t: MapType
-        if ParquetSchemaConverter.isComplexType(t.keyType) ||
-           ParquetSchemaConverter.isComplexType(t.valueType) =>
-        // Only clips map types with nested key type or value type
-        clipParquetMapType(
-          parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive, useFieldId,
-            returnNullStructIfAllFieldsMissing)
-
-      case t: StructType if VariantMetadata.isVariantStruct(t) =>
-        clipVariantSchema(parquetType.asGroupType(), t, returnNullStructIfAllFieldsMissing)
-
-      case t: StructType =>
-        clipParquetGroup(parquetType.asGroupType(), t, caseSensitive, useFieldId,
-          returnNullStructIfAllFieldsMissing)
-
-      case _ =>
-        // UDTs and primitive types are not clipped.  For UDTs, a clipped version might not be able
-        // to be mapped to desired user-space types.  So UDTs shouldn't participate schema merging.
-        parquetType
-    }
+    // Types Framework: framework FIRST for struct-backed types that declare
+    // parquetStructSchema. Primitive framework types (parquetStructSchema = None)
+    // fall through to *Default which returns parquetType unchanged.
+    val newParquetType = ParquetTypeOps(catalystType)
+      .flatMap(_.parquetStructSchema)
+      .map(st => clipParquetGroup(parquetType.asGroupType(), st, caseSensitive, useFieldId,
+        returnNullStructIfAllFieldsMissing))
+      .getOrElse(clipParquetTypeDefault(parquetType, catalystType, caseSensitive, useFieldId,
+        returnNullStructIfAllFieldsMissing))
 
     if (useFieldId && parquetType.getId != null) {
       newParquetType.withId(parquetType.getId.intValue())
     } else {
       newParquetType
     }
+  }
+
+  private def clipParquetTypeDefault(
+      parquetType: Type,
+      catalystType: DataType,
+      caseSensitive: Boolean,
+      useFieldId: Boolean,
+      returnNullStructIfAllFieldsMissing: Boolean): Type = catalystType match {
+    case t: ArrayType if ParquetSchemaConverter.isComplexType(t.elementType) =>
+      // Only clips array types with nested type as element type.
+      clipParquetListType(parquetType.asGroupType(), t.elementType, caseSensitive, useFieldId,
+        returnNullStructIfAllFieldsMissing)
+
+    case t: MapType
+      if ParquetSchemaConverter.isComplexType(t.keyType) ||
+         ParquetSchemaConverter.isComplexType(t.valueType) =>
+      // Only clips map types with nested key type or value type
+      clipParquetMapType(
+        parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive, useFieldId,
+          returnNullStructIfAllFieldsMissing)
+
+    case t: StructType if VariantMetadata.isVariantStruct(t) =>
+      clipVariantSchema(parquetType.asGroupType(), t, returnNullStructIfAllFieldsMissing)
+
+    case t: StructType =>
+      clipParquetGroup(parquetType.asGroupType(), t, caseSensitive, useFieldId,
+        returnNullStructIfAllFieldsMissing)
+
+    case _ =>
+      // UDTs and primitive types are not clipped.  For UDTs, a clipped version might not be able
+      // to be mapped to desired user-space types.  So UDTs shouldn't participate schema merging.
+      parquetType
   }
 
   /**

@@ -67,6 +67,7 @@ abstract class BaseArrowPythonRunner[IN, OUT <: AnyRef](
 
   override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
+  override val tracebackWithLocals: Boolean = SQLConf.get.pysparkTracebackWithLocals
 
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize
   require(

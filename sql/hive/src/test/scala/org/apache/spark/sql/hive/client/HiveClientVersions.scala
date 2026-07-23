@@ -17,11 +17,21 @@
 
 package org.apache.spark.sql.hive.client
 
+import org.apache.spark.util.Utils
+
 private[client] trait HiveClientVersions {
   private val testVersions = sys.env.get("SPARK_TEST_HIVE_CLIENT_VERSIONS")
-  protected val versions = if (testVersions.nonEmpty) {
+  private val allVersions = if (testVersions.nonEmpty) {
     testVersions.get.split(",").map(_.trim).filter(_.nonEmpty).toIndexedSeq
   } else {
-    IndexedSeq("2.0", "2.1", "2.2", "2.3", "3.0", "3.1", "4.0", "4.1")
+    IndexedSeq("2.0", "2.1", "2.2", "2.3", "3.0", "3.1", "4.0", "4.1", "4.2")
+  }
+
+  protected val versions: IndexedSeq[String] = {
+    if (Utils.isJavaVersionAtLeast21) {
+      allVersions
+    } else {
+      allVersions.filterNot(_ == "4.2")
+    }
   }
 }

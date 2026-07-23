@@ -21,8 +21,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
   ColumnSelection,
-  Scd1BatchProcessor,
   UnqualifiedColumnName
 }
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
@@ -144,7 +144,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     // The auxiliary table only contains keys and the metadata column, hence "name" should not be
     // included.
-    assert(auxSchema.fieldNames.toSeq == Seq("id", Scd1BatchProcessor.cdcMetadataColName))
+    assert(auxSchema.fieldNames.toSeq == Seq("id", AutoCdcReservedNames.cdcMetadataColName))
     assert(getAuxTableKeyColumnNames(target = "target") == Seq("id"))
   }
 
@@ -177,8 +177,33 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     val auxSchema = spark.table(auxTableNameFor("target")).schema
     assert(auxSchema.fieldNames.toSeq ==
-      Seq("region", "id", Scd1BatchProcessor.cdcMetadataColName))
+      Seq("region", "id", AutoCdcReservedNames.cdcMetadataColName))
     assert(getAuxTableKeyColumnNames(target = "target") == Seq("region", "id"))
+  }
+
+  test("a dry run resolves and validates the graph without provisioning the auxiliary " +
+    "table") {
+    val session = spark
+    import session.implicits._
+
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+    )
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 1L))
+    val ctx = singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream.toDF().toDF("id", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version"))
+
+    val updateCtx = TestPipelineUpdateContext(spark, ctx.toDataflowGraph, storageRoot)
+    updateCtx.pipelineExecution.dryRunPipeline()
+
+    assert(!spark.catalog.tableExists(auxTableNameFor("target")))
   }
 
   test("if the AutoCDC auxiliary table is dropped between runs, it is transparently " +

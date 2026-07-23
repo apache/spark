@@ -666,10 +666,21 @@ case class SubqueryExpression(
     subqueryType: SubqueryType,
     override val origin: Origin = CurrentOrigin.get)
     extends ColumnNode {
+  override private[internal] def normalize(): SubqueryExpression = copy(
+    subqueryType = subqueryType match {
+      case SubqueryType.IN(values) => SubqueryType.IN(ColumnNode.normalize(values))
+      case other => other
+    },
+    origin = NO_ORIGIN)
   override def sql: String = subqueryType match {
     case SubqueryType.SCALAR => s"($ds)"
     case SubqueryType.IN(values) => s"(${values.map(_.sql).mkString(",")}) IN ($ds)"
     case _ => s"$subqueryType ($ds)"
   }
-  override private[internal] def children: Seq[ColumnNodeLike] = Seq.empty
+  // The subquery plan `ds` is intentionally not a child: it is a DataFrame plan, not a
+  // ColumnNode, and the converters handle it separately. Only IN's values are child nodes.
+  override private[internal] def children: Seq[ColumnNodeLike] = subqueryType match {
+    case SubqueryType.IN(values) => values
+    case _ => Seq.empty
+  }
 }

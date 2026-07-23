@@ -32,13 +32,14 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkContext, SparkIllegalArgumentException, TestUtils}
+import org.apache.spark.{SparkContext, SparkException, SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, LogicalRelation}
@@ -195,6 +196,39 @@ class DataFrameReaderWriterSuite extends SharedSparkSession with BeforeAndAfter 
       .write
       .format("org.apache.spark.sql.test")
       .save()
+  }
+
+  test("SPARK-57164: DataFrameReader.schema(String) parses nanos timestamp types") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            LastOptions.clear()
+            spark.read
+              .format("org.apache.spark.sql.test")
+              .schema(s"c $spelling")
+              .load()
+            val captured = LastOptions.schema.get
+            assert(captured("c").dataType === expected)
+        }
+      }
+    }
+    // With the preview flag off, schema(String) rejects the nanos spelling at parse time.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SparkException] {
+          spark.read.format("org.apache.spark.sql.test").schema("c TIMESTAMP_NTZ(9)")
+        },
+        condition = "FEATURE_NOT_ENABLED",
+        parameters = Map(
+          "featureName" -> "Nanosecond-precision timestamp types",
+          "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+          "configValue" -> "true"))
+    }
   }
 
   test("options") {

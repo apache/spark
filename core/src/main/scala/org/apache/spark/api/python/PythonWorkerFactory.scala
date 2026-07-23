@@ -65,6 +65,21 @@ case class PythonWorker(channel: SocketChannel) {
     this
   }
 
+  /**
+   * Normalizes the channel to non-blocking mode and then refreshes. Used when a worker is
+   * taken from the idle pool: the pipelined Python UDF path (SPARK-56642) may have switched
+   * the channel to blocking mode without restoring it, and refresh() only opens a selector
+   * for a non-blocking channel. Restoring non-blocking mode here keeps the invariant that a
+   * pooled daemon worker is handed out non-blocking, so selector-path code does not hit a
+   * null selector / selectionKey (SPARK-57931).
+   */
+  def refreshNonBlocking(): this.type = synchronized {
+    if (channel.isBlocking) {
+      channel.configureBlocking(false)
+    }
+    refresh()
+  }
+
   def stop(): Unit = synchronized {
     closeSelector()
     Option(channel).foreach(_.close())
@@ -138,7 +153,12 @@ private[spark] class PythonWorkerFactory(
           daemonWorkers.get(worker).foreach { workerHandle =>
             if (workerHandle.isAlive()) {
               try {
-                return (worker.refresh(), Some(workerHandle))
+                // A daemon worker is always handed out in non-blocking mode (see
+                // createWorker below). The pipelined Python UDF path temporarily switches
+                // the channel to blocking mode and does not restore it, so normalize here
+                // before reuse; otherwise refresh() would not open a selector and the next
+                // task on the selector path would NPE on worker.selector (SPARK-57931).
+                return (worker.refreshNonBlocking(), Some(workerHandle))
               } catch {
                 case _: CancelledKeyException => /* pass */
               }

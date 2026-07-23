@@ -25,6 +25,19 @@ class MaxAbsScalerSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
+  test("MaxAbsScalerModel estimated size") {
+    val model = new MaxAbsScaler()
+      .setInputCol("features")
+      .setOutputCol("scaled")
+      .fit(Seq(
+        Tuple1(Vectors.dense(1.0, 0.0)),
+        Tuple1(Vectors.dense(0.0, 1.0))).toDF("features"))
+
+    val maxSize = 2 * 1024
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("MaxAbsScaler fit basic case") {
     val data = Array(
       Vectors.dense(1, 0, 100),

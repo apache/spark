@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NamePar
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedWith, WithCTE}
-import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
+import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -291,15 +291,13 @@ class QueryExecution(
       assertAnalyzed()
       assertSupported()
 
-      // During a transaction, skip cache substitution. This is to avoid replacing relations
-      // loaded by the transactional catalog with potentially stale relations cached before
-      // the transaction was active.
-      if (transactionOpt.isDefined) {
-        normalized
-      } else {
-        // Clone the plan to avoid sharing the plan instance between different stages like
-        // analyzing, optimizing and planning.
-        sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
+      // Clone the plan to avoid sharing the plan instance between different stages like
+      // analyzing, optimizing and planning.
+      val planToRewrite = normalized.clone()
+      val cacheManager = sparkSession.sharedState.cacheManager
+      transactionOpt match {
+        case Some(txn) => cacheManager.useCachedData(planToRewrite, txn)
+        case None => cacheManager.useCachedData(planToRewrite)
       }
     }
   }
@@ -359,7 +357,9 @@ class QueryExecution(
     val plan = executePhase(QueryPlanningTracker.PLANNING) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
-      QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+      QueryPlanningTracker.withTracker(tracker) {
+        QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+      }
     }
     // Note: For eagerly executed command it might have already been called in
     // `eagerlyExecutedCommand` and is a noop here.
@@ -764,15 +764,27 @@ object QueryExecution {
       EnsureRequirements(),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
+      // `PushDownLocalSort` pushes a wider local sort down onto a narrower one below it, so a
+      // single sort serves several operators' ordering requirements. It must run after
+      // `EnsureRequirements`, which is what inserts the local sorts it pushes down.
+      PushDownLocalSort,
+      // `CombineAdjacentAggregation` must run before `ReplaceHashWithSortAgg`: it combines a pair
+      // of adjacent partial and final aggregate into a single `Complete` mode aggregate, which
+      // `ReplaceHashWithSortAgg` can then replace with a sort aggregate when the ordering allows.
+      CombineAdjacentAggregation,
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
       // sort order of each node is checked to be valid.
       ReplaceHashWithSortAgg,
-      // `RemoveRedundantSorts` and `RemoveRedundantWindowGroupLimits` needs to be added after
-      // `EnsureRequirements` to guarantee the same number of partitions when instantiating
-      // PartitioningCollection.
-      RemoveRedundantSorts,
+      // `RemoveRedundantWindowGroupLimits` needs to be added after `EnsureRequirements` to
+      // guarantee the same number of partitions when instantiating PartitioningCollection.
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
+      // `RemoveRedundantSorts` also needs to run after `EnsureRequirements` for the same reason.
+      // It must run after `DisableUnnecessaryBucketedScan`: disabling a bucketed scan drops its
+      // output ordering, so running sort-removal first could strip a sort that the scan appeared
+      // to satisfy and then silently lose that ordering. (This also matches the AQE rule order,
+      // see `AdaptiveSparkPlanExec.queryStagePreparationRules`.)
+      RemoveRedundantSorts,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),
       CollapseCodegenStages()) ++
@@ -790,14 +802,21 @@ object QueryExecution {
   private[execution] def prepareForExecution(
       preparations: Seq[Rule[SparkPlan]],
       plan: SparkPlan): SparkPlan = {
-    val planChangeLogger = new PlanChangeLogger[SparkPlan]()
-    val preparedPlan = preparations.foldLeft(plan) { case (sp, rule) =>
-      val result = rule.apply(sp)
-      planChangeLogger.logRule(rule.ruleName, sp, result)
-      result
-    }
-    planChangeLogger.logBatch("Preparations", plan, preparedPlan)
-    preparedPlan
+    new PhysicalRuleExecutor("Preparations", preparations).execute(plan)
+  }
+
+  /**
+   * A [[RuleExecutor]] that applies a fixed list of physical-plan rules once each (a single
+   * `FixedPoint(1)` batch). Routing physical preparation and AQE rules through a `RuleExecutor`
+   * reuses its built-in per-rule timing, which records into the active [[QueryPlanningTracker]]
+   * exactly like the analyzer and optimizer, instead of re-implementing the timing loop. A
+   * `FixedPoint(1)` strategy (rather than `Once`) is used so each rule runs exactly once without
+   * triggering the idempotence re-check, as preparation rules are not necessarily idempotent.
+   */
+  private[execution] class PhysicalRuleExecutor(
+      batchName: String,
+      rules: Seq[Rule[SparkPlan]]) extends RuleExecutor[SparkPlan] {
+    override protected def batches: Seq[Batch] = Seq(Batch(batchName, FixedPoint(1), rules: _*))
   }
 
   /**

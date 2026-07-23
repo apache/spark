@@ -99,6 +99,9 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   override val catalogName: String = "mssql"
   override val db = new MsSQLServerDatabaseOnDocker
 
+  // MsSqlServer has no boolean type, so IS [NOT] NULL over a predicate is not pushed down.
+  override protected def supportsIsNullOverPredicate: Boolean = false
+
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mssql.url", db.getJdbcUrl(dockerIp, externalPort))

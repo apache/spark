@@ -49,7 +49,7 @@ trait ExternalUDFExec extends UnaryExecNode {
   // ---------------------------------------------------------------------------
 
   protected def externalUdfMetrics: Map[String, SQLMetric] = Map(
-    // TODO [SPARK-55278]: Emit the correct metrics here
+    // TODO [SPARK-57324]: Emit the correct metrics here
   )
 
   override lazy val metrics: Map[String, SQLMetric] = externalUdfMetrics
@@ -60,10 +60,12 @@ trait ExternalUDFExec extends UnaryExecNode {
 
   /**
    * Creates a [[WorkerSession]] via [[SparkEnv#getExternalUDFDispatcher]].
-   * Registers session cancellation on task failure and session termination
-   * on task completion. The provided function receives the session
-   * and must return the result iterator. The function CAN but MUST NOT
-   * cancel or close the session.
+   * Finalizes the session on task completion (which fires on both success and
+   * failure). [[WorkerSession#close]] is the single finalizer: it fetches the
+   * `FinishResponse` if processing completed, or cancels anything still in
+   * flight and waits for the `CancelResponse`. The provided function receives
+   * the session and must return the result iterator. It may use the session
+   * but MUST NOT close it.
    */
   protected def withUDFWorkerSession(
       taskContext: TaskContext,
@@ -74,12 +76,29 @@ trait ExternalUDFExec extends UnaryExecNode {
       workerSpec)
     val session = dispatcher.createSession(securityScope)
 
-    // Make sure to cancel the session, if the task fails
-    taskContext.addTaskFailureListener { (_, _) =>
-      session.cancel()
-    }
-
-    // Make sure to close the session once we are done
+    // Finalize the session when the task ends. The completion listener fires on
+    // both success and failure, and close() is the single finalizer that
+    // resolves to whichever terminator the stream reached:
+    //
+    //  - Task completed and the result iterator was fully consumed: process()
+    //    sent Finish (input exhausted) and the data drained. close() then
+    //    typically returns the Finished termination -- but a failure during the
+    //    finish/cleanup phase (raised after the data drained, so it reached no one
+    //    through the iterator) is surfaced here too, as Failed / TransportFailed.
+    //  - Task failed, was killed, or stopped before draining (e.g. a downstream
+    //    LIMIT or exception): the stream has not finished, so close() sends a
+    //    Cancel, the worker runs its cleanup, and its CancelResponse is returned
+    //    as a Cancelled termination. An empty Cancel is enough here -- there is
+    //    no extra information to convey to the worker on cancellation -- so we
+    //    rely on close()'s default and pass no cancel thunk.
+    //  - The stream died without a terminator (transport failure / timeout):
+    //    close() returns a best-effort TransportFailed termination rather than
+    //    raising it (a thread interrupt may still propagate); the underlying
+    //    failure has already surfaced through the result iterator.
+    //
+    // The returned Termination (per-execution metrics, finish/cancel callback
+    // result) is not consumed yet -- TODO [SPARK-57324] surface it once metrics
+    // wiring lands.
     taskContext.addTaskCompletionListener[Unit] { _ =>
       session.close()
     }

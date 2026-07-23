@@ -50,6 +50,74 @@ class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
         with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
             df1.union(df2).select(df1.c).collect()
 
+    # zip merges the two column-projected sides into a single plan, so the
+    # per-DataFrame plan-id tags do not survive ResolveZip. A tagged left/right
+    # reference can no longer be found and raises in both strict and lenient
+    # modes - the throw precedes any name-based fallback - unlike Classic, which
+    # resolves by the attribute id that ResolveZip preserves. A base-side
+    # reference (df.zip(right).select(df.a)) raises too when the base's tagged
+    # plan root is a Project that the rewrite dissolves (createDataFrame,
+    # overridden below); only a bare relation root like range survives as the
+    # merged base and resolves (test_resolve_after_zip_bare_base_side,
+    # inherited with no override).
+
+    def test_resolve_after_zip(self):
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        left = df.select((df.a + 1).alias("x"))
+        right = df.select((df.b * 2).alias("y"))
+        with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+            left.zip(right).select(left.x).collect()
+
+    def test_resolve_after_zip_reordered(self):
+        df = self.spark.createDataFrame([(1, 10), (2, 20)], ["a", "b"])
+        left = df.select(df.a.alias("x"))
+        right = df.select(df.b.alias("y"))
+        with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+            left.zip(right).select(right.y, left.x).collect()
+
+    def test_resolve_after_zip_duplicate_names(self):
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], ["a", "b"])
+        left = df.select(df.a.alias("v"))
+        right = df.select(df.b.alias("v"))
+        with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+            left.zip(right).select(left.v).collect()
+
+    def test_resolve_after_zip_shared_producer(self):
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], ["a", "b"])
+        left = df.select(df.a.alias("v"))
+        right = df.select(df.a.alias("v"))
+        with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+            left.zip(right).select(right.v).collect()
+
+    def test_resolve_after_zip_in_expression(self):
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        left = df.select(df.a.alias("x"))
+        right = df.select(df.b.alias("y"))
+        with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+            left.zip(right).select((left.x + right.y).alias("s")).collect()
+
+    def test_resolve_after_zip_in_filter(self):
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        left = df.select(df.a.alias("x"))
+        right = df.select(df.b.alias("y"))
+        with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+            left.zip(right).filter(left.x >= 2).collect()
+
+    def test_resolve_after_zip_chained(self):
+        df = self.spark.createDataFrame([(1, 2, 3), (4, 5, 6)], ["a", "b", "c"])
+        left0 = df.select("a", "b")
+        left = left0.select((left0.a + 1).alias("x"))
+        right0 = df.select("b", "c")
+        right = right0.select((right0.c * 2).alias("y"))
+        with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+            left.zip(right).select(left.x, right.y).collect()
+
+    def test_resolve_after_zip_base_side(self):
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        right = df.select((df.b * 2).alias("y"))
+        with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+            df.zip(right).select(df.a).collect()
+
     def test_df_col_resolution_mode(self):
         self.assertEqual(
             self.spark.conf.get("spark.sql.analyzer.strictDataFrameColumnResolution"),

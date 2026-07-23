@@ -30,6 +30,7 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.zip.CRC32;
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -179,6 +180,42 @@ public class ExpressionImplUtils {
             null,
             aad
     );
+  }
+
+  /**
+   * Computes a keyed-hash message authentication code (HMAC) of the given message using the
+   * given key and hash algorithm.
+   * @param key The secret key.
+   * @param message The message to authenticate.
+   * @param algorithm The hash algorithm. Supported values (case-insensitive):
+   *                  SHA-224, SHA-256, SHA-384, SHA-512, SHA-1, MD5.
+   * @return The raw HMAC bytes.
+   */
+  public static byte[] hmac(byte[] key, byte[] message, UTF8String algorithm) {
+    String macName = hmacName(algorithm.toString());
+    try {
+      Mac mac = Mac.getInstance(macName);
+      mac.init(new SecretKeySpec(key, macName));
+      return mac.doFinal(message);
+    } catch (GeneralSecurityException | IllegalArgumentException e) {
+      throw QueryExecutionErrors.hmacCryptoError(e.getMessage());
+    }
+  }
+
+  /**
+   * Maps a user-facing hash algorithm name to its JCA {@link Mac} algorithm name. Supported
+   * algorithms are SHA-224, SHA-256, SHA-384, SHA-512, SHA-1 and MD5 (case-insensitive).
+   */
+  private static String hmacName(String algorithm) {
+    return switch (algorithm.toUpperCase(Locale.ROOT)) {
+      case "SHA-224", "SHA224" -> "HmacSHA224";
+      case "SHA-256", "SHA256" -> "HmacSHA256";
+      case "SHA-384", "SHA384" -> "HmacSHA384";
+      case "SHA-512", "SHA512" -> "HmacSHA512";
+      case "SHA-1", "SHA1" -> "HmacSHA1";
+      case "MD5" -> "HmacMD5";
+      default -> throw QueryExecutionErrors.hmacUnsupportedAlgorithmError(algorithm);
+    };
   }
 
   /**
@@ -466,5 +503,66 @@ public class ExpressionImplUtils {
       }
     }
     numberFormat.applyLocalizedPattern(pattern.toString());
+  }
+
+  /**
+   * Returns the Jaro-Winkler similarity between two strings.
+   * The result is a double between 0 and 1, where 1 means identical.
+   *
+   * Note: This implementation uses String.charAt() which operates on UTF-16 code units.
+   * Strings containing supplementary characters (surrogate pairs) may produce
+   * inaccurate results.
+   */
+  public static double jaroWinklerSimilarity(UTF8String left, UTF8String right) {
+    String s1 = left.toString();
+    String s2 = right.toString();
+
+    int len1 = s1.length();
+    int len2 = s2.length();
+
+    if (len1 == 0 && len2 == 0) return 1.0;
+    if (len1 == 0 || len2 == 0) return 0.0;
+
+    int matchWindow = Math.max(0, Math.max(len1, len2) / 2 - 1);
+
+    boolean[] s1Matched = new boolean[len1];
+    boolean[] s2Matched = new boolean[len2];
+
+    int matches = 0;
+    int transpositions = 0;
+
+    for (int i = 0; i < len1; i++) {
+      int start = Math.max(0, i - matchWindow);
+      int end = Math.min(i + matchWindow + 1, len2);
+      for (int j = start; j < end; j++) {
+        if (s2Matched[j] || s1.charAt(i) != s2.charAt(j)) continue;
+        s1Matched[i] = true;
+        s2Matched[j] = true;
+        matches++;
+        break;
+      }
+    }
+
+    if (matches == 0) return 0.0;
+
+    int k = 0;
+    for (int i = 0; i < len1; i++) {
+      if (!s1Matched[i]) continue;
+      while (!s2Matched[k]) k++;
+      if (s1.charAt(i) != s2.charAt(k)) transpositions++;
+      k++;
+    }
+
+    double jaro = ((double) matches / len1
+        + (double) matches / len2
+        + (double) (matches - transpositions / 2.0) / matches) / 3.0;
+
+    int prefix = 0;
+    for (int i = 0; i < Math.min(4, Math.min(len1, len2)); i++) {
+      if (s1.charAt(i) == s2.charAt(i)) prefix++;
+      else break;
+    }
+
+    return jaro + prefix * 0.1 * (1.0 - jaro);
   }
 }

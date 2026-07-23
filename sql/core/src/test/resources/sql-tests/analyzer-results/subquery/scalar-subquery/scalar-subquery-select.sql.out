@@ -516,7 +516,7 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS count_t2#xL, scalar-subquery#x [t1a
 SELECT t1c, (SELECT t1c) FROM t1
 -- !query analysis
 Project [t1c#x, scalar-subquery#x [t1c#x] AS scalarsubquery(t1c)#x]
-:  +- Project [outer(t1c#x)]
+:  +- Project [outer(t1c#x) AS t1c#x]
 :     +- OneRowRelation
 +- SubqueryAlias t1
    +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
@@ -530,7 +530,7 @@ Project [t1c#x, scalar-subquery#x [t1c#x] AS scalarsubquery(t1c)#x]
 SELECT t1c, (SELECT t1c WHERE t1c = 8) FROM t1
 -- !query analysis
 Project [t1c#x, scalar-subquery#x [t1c#x && t1c#x] AS scalarsubquery(t1c, t1c)#x]
-:  +- Project [outer(t1c#x)]
+:  +- Project [outer(t1c#x) AS t1c#x]
 :     +- Filter (outer(t1c#x) = 8)
 :        +- OneRowRelation
 +- SubqueryAlias t1

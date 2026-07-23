@@ -17,12 +17,14 @@
 package org.apache.spark.sql.connect.client
 
 import java.time.DateTimeException
+import java.util.concurrent.TimeUnit
 
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import com.google.rpc.ErrorInfo
-import io.grpc.{ManagedChannel, StatusRuntimeException}
+import io.grpc.{Deadline, ManagedChannel, Status, StatusRuntimeException}
 import io.grpc.protobuf.StatusProto
 import org.json4s.{DefaultFormats, Formats}
 import org.json4s.jackson.JsonMethods
@@ -49,10 +51,18 @@ import org.apache.spark.util.ArrayImplicits._
  * the ErrorInfo is missing, the exception will be constructed based on the StatusRuntimeException
  * itself.
  */
-private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Logging {
+private[client] class GrpcExceptionConverter(
+    channel: ManagedChannel,
+    fetchErrorDetailsDeadline: Option[FiniteDuration] = None)
+    extends Logging {
   import GrpcExceptionConverter._
 
-  val grpcStub = SparkConnectServiceGrpc.newBlockingStub(channel)
+  private val grpcStub = SparkConnectServiceGrpc.newBlockingStub(channel)
+
+  private def stubWithDeadline: SparkConnectServiceGrpc.SparkConnectServiceBlockingStub =
+    fetchErrorDetailsDeadline
+      .map(d => grpcStub.withDeadline(Deadline.after(d.toMillis, TimeUnit.MILLISECONDS)))
+      .getOrElse(grpcStub)
 
   def convert[T](sessionId: String, userContext: UserContext, clientType: String)(f: => T): T = {
     try {
@@ -108,7 +118,7 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
     }
 
     try {
-      val errorDetailsResponse = grpcStub.fetchErrorDetails(
+      val errorDetailsResponse = stubWithDeadline.fetchErrorDetails(
         FetchErrorDetailsRequest
           .newBuilder()
           .setSessionId(sessionId)
@@ -160,11 +170,25 @@ private[client] class GrpcExceptionConverter(channel: ManagedChannel) extends Lo
     }
 
     // If no ErrorInfo is found, create a SparkException based on the StatusRuntimeException.
+    val (message, cause) = if (ex.getStatus.getCode == Status.Code.DEADLINE_EXCEEDED) {
+      val msg = s"${ex.toString}: RPC deadline exceeded. Deadlines can be configured via " +
+        "SparkConnectClient.Builder.rpcDeadlines(). To disable all deadlines: " +
+        "SparkConnectClient.builder().rpcDeadlines(RpcDeadlines.disabled).build()"
+      // For DEADLINE_EXCEEDED, we pass `ex` itself as the cause rather than `ex.getCause`.
+      // StatusRuntimeException.getCause() returns status.getCause(), which is always null for
+      // client-side deadline fires (gRPC constructs the status without a wrapped cause). Using
+      // ex.getCause would produce a SparkException with cause = null, losing the gRPC status
+      // code and description from the exception chain. Passing ex preserves full context and
+      // allows callers to programmatically inspect the status code via getCause().getStatus().
+      (msg, ex)
+    } else {
+      (ex.toString, ex.getCause)
+    }
     new SparkException(
-      message = ex.toString,
-      cause = ex.getCause,
+      message = message,
+      cause = cause,
       errorClass = Some("CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE"),
-      messageParameters = Map("message" -> ex.toString),
+      messageParameters = Map("message" -> message),
       context = Array.empty)
   }
 }

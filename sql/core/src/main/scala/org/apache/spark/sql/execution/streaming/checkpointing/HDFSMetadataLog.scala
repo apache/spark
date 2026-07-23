@@ -266,10 +266,10 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
   }
 
   /** Return the latest batch id without reading the file. */
-  def getLatestBatchId(): Option[Long] = listBatches.sorted.lastOption
+  def getLatestBatchId(): Option[Long] = listBatches.maxOption
 
   override def getLatest(): Option[(Long, T)] = {
-    listBatches.sorted.lastOption.map { batchId =>
+    listBatches.maxOption.map { batchId =>
       logInfo(log"Getting latest batch ${MDC(BATCH_ID, batchId)}")
       (batchId, getExistingBatch(batchId))
     }

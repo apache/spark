@@ -90,6 +90,7 @@ class ApplyInPandasWithStatePythonRunner(
 
   override val hideTraceback: Boolean = sqlConf.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = sqlConf.pysparkSimplifiedTraceback
+  override val tracebackWithLocals: Boolean = sqlConf.pysparkTracebackWithLocals
 
   override protected val largeVarTypes: Boolean = sqlConf.arrowUseLargeVarTypes
 

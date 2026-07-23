@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{DeduplicateKeySpec, LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -1166,6 +1166,37 @@ case class UnresolvedQualify(condition: Expression, child: LogicalPlan) extends 
   override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedQualify =
     copy(child = newChild)
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_QUALIFY)
+}
+
+/**
+ * An unresolved logical plan for `dropDuplicates` / `dropDuplicatesWithinWatermark`. It holds the
+ * user-requested deduplication columns (by name, or "all columns") and is resolved by the
+ * `ResolveDeduplicate` analyzer rule into a [[Deduplicate]] / [[DeduplicateWithinWatermark]].
+ *
+ * Resolving the keys in the analyzer (rather than eagerly in the DataFrame API or the Spark Connect
+ * planner) lets both engines share one resolution with a stable key order. A stable order matters
+ * for streaming deduplication, whose state store binds keys by position: a different key order
+ * across restarts would break state-store key-schema compatibility. See SPARK-57489.
+ *
+ * @param keySpec which columns form the deduplication key (an explicit set, or all columns).
+ * @param withinWatermark when true, resolves to `DeduplicateWithinWatermark`.
+ * @param viaSparkClassic whether the deduplication was requested via Spark Classic
+ *   (`Dataset.dropDuplicates*`, true) or Spark Connect (`transformDeduplicate`, false). This only
+ *   matters on the legacy-fallback path, consulted ONLY when the deterministic key order is
+ *   disabled (an existing query restored from a checkpoint that predates this change): Spark
+ *   Classic reproduces its legacy resolution (`toSet`-based dedup, `Set` order) while Spark
+ *   Connect reproduces its own (no dedup, input order). Ignored on the deterministic path.
+ */
+case class UnresolvedDeduplicate(
+    keySpec: DeduplicateKeySpec,
+    withinWatermark: Boolean,
+    viaSparkClassic: Boolean,
+    child: LogicalPlan) extends UnaryNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedDeduplicate =
+    copy(child = newChild)
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_DEDUPLICATE)
 }
 
 /**

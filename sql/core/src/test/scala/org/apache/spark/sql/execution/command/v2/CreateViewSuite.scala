@@ -18,13 +18,13 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, TableCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, TableCatalog, View}
 import org.apache.spark.sql.execution.command
 
 class CreateViewSuite extends command.CreateViewSuiteBase with ViewCommandSuiteBase {
   import testImplicits._
 
-  test("V2: CREATE VIEW propagates DEFAULT COLLATION onto the stored ViewInfo") {
+  test("V2: CREATE VIEW propagates DEFAULT COLLATION onto the stored View") {
     val view = s"$catalog.$namespace.v2_create_collation"
     withTable("spark_catalog.default.src_coll") {
       Seq("a", "b").toDF("col").write.saveAsTable("spark_catalog.default.src_coll")
@@ -56,13 +56,13 @@ class CreateViewSuite extends command.CreateViewSuiteBase with ViewCommandSuiteB
     // The Base version of this scenario asserts the SQL behavior (errors / no-op);
     // here we additionally pin the v2-only post-condition that the persisted entry under
     // the colliding identifier remains a `TableInfo` and is NOT silently swapped for a
-    // `ViewInfo` by the IF NOT EXISTS path.
+    // `View` by the IF NOT EXISTS path.
     val name = "v2_ifne_keeps_table"
     val view = s"$catalog.$namespace.$name"
     withSeededTable(view) {
       sql(s"CREATE VIEW IF NOT EXISTS $view AS SELECT 1 AS col")
       val stored = viewCatalog.getStoredInfo(Array(namespace), name)
-      assert(!stored.isInstanceOf[ViewInfo])
+      assert(!stored.isInstanceOf[View])
     }
   }
 }

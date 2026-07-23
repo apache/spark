@@ -196,16 +196,12 @@ object InternalRow {
     case ShortType => (input, v) => input.setShort(ordinal, v.asInstanceOf[Short])
     case IntegerType | DateType | _: YearMonthIntervalType =>
       (input, v) => input.setInt(ordinal, v.asInstanceOf[Int])
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
       (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
     case FloatType => (input, v) => input.setFloat(ordinal, v.asInstanceOf[Float])
     case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
     case CalendarIntervalType =>
       (input, v) => input.setInterval(ordinal, v.asInstanceOf[CalendarInterval])
-    case _: TimestampNTZNanosType =>
-      (input, v) => input.setTimestampNTZNanos(ordinal, v.asInstanceOf[TimestampNanosVal])
-    case _: TimestampLTZNanosType =>
-      (input, v) => input.setTimestampLTZNanos(ordinal, v.asInstanceOf[TimestampNanosVal])
     case DecimalType.Fixed(precision, _) =>
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)

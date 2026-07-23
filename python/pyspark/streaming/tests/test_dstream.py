@@ -642,7 +642,7 @@ class CheckpointTests(unittest.TestCase):
         self.setupCalled = False
         self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
         self.assertFalse(self.setupCalled)
-        self.assertTrue(self.ssc.sparkContext == self.sc)
+        self.assertEqual(self.ssc.sparkContext, self.sc)
 
         # Verify the getActiveOrCreate() recovers from checkpoint files
         self.ssc.stop(True, True)
@@ -665,7 +665,7 @@ class CheckpointTests(unittest.TestCase):
         self.setupCalled = False
         self.ssc = StreamingContext.getActiveOrCreate(self.cpd, setup)
         self.assertFalse(self.setupCalled)
-        self.assertTrue(self.ssc.sparkContext == self.sc)
+        self.assertEqual(self.ssc.sparkContext, self.sc)
 
         # Verify that getActiveOrCreate() calls setup() in absence of checkpoint files
         self.ssc.stop(True, True)

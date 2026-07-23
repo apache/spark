@@ -454,6 +454,22 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
+  test("create external table without location") {
+    withBasicCatalog { catalog =>
+      val externalTableWithoutLocation = CatalogTable(
+        identifier = TableIdentifier("tbl_ext", Some("db1")),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("col1", "int"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          catalog.createTable(externalTableWithoutLocation, ignoreIfExists = false)
+        },
+        condition = "CREATE_EXTERNAL_TABLE_WITHOUT_LOCATION",
+        parameters = Map.empty)
+    }
+  }
+
   test("create table when database does not exist") {
     withBasicCatalog { catalog =>
       // Creating table in non-existent database should always fail
@@ -1154,7 +1170,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl2", Some("db2")),
             Seq(partWithEmptyValue, part1), ignoreIfExists = true)
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1247,7 +1263,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             purge = false,
             retainData = false)
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> ("The spec (a, b, c) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1260,7 +1276,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             purge = false,
             retainData = false)
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> ("The spec (a, unknown) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1273,7 +1289,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             purge = false,
             retainData = false)
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1340,7 +1356,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithEmptyValue.spec)
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1431,7 +1447,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
             TableIdentifier("tbl1", Some("db2")),
             Seq(part1.spec), Seq(partWithEmptyValue.spec))
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1512,7 +1528,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exception = intercept[AnalysisException] {
           catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithEmptyValue))
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1544,7 +1560,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
             Some(partWithMoreColumns.spec))
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> ("The spec (a, b, c) must be contained within the partition spec (a, b) " +
             s"defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1553,7 +1569,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
             Some(partWithUnknownColumns.spec))
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> ("The spec (a, unknown) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1562,7 +1578,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitionNames(TableIdentifier("tbl2", Some("db2")),
             Some(partWithEmptyValue.spec))
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }
@@ -1592,7 +1608,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
             Some(partWithMoreColumns.spec))
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> ("The spec (a, b, c) must be contained within the partition spec (a, b) " +
             s"defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1601,7 +1617,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
             Some(partWithUnknownColumns.spec))
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> ("The spec (a, unknown) must be contained within the partition " +
             s"spec (a, b) defined in table '`$SESSION_CATALOG_NAME`.`db2`.`tbl2`'")))
@@ -1610,7 +1626,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           catalog.listPartitions(TableIdentifier("tbl2", Some("db2")),
             Some(partWithEmptyValue.spec))
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> "The spec ([a=3, b=]) contains an empty partition column value"))
     }

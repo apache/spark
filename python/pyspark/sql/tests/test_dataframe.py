@@ -140,8 +140,8 @@ class DataFrameTestsMixin:
         )
         df2 = self.spark.range(10).select(col("id").alias("x"))
         df3 = df1.join(df2, df1.x == df2.x).select(df1.y)
-        self.assertTrue(df3.columns, ["y"])
-        self.assertTrue(df3.count() == 9)
+        self.assertEqual(df3.columns, ["y"])
+        self.assertEqual(df3.count(), 9)
 
     def test_duplicated_column_names(self):
         df = self.spark.createDataFrame([(1, 2)], ["c", "c"])

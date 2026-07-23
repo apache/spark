@@ -131,8 +131,7 @@ case class BroadcastHashJoinExec private(
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     if (isNullAwareAntiJoin) {
       streamedPlan.execute().mapPartitionsInternal { streamedIter =>
-        val hashed = broadcastRelation.value.asReadOnlyCopy()
-        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
+        val hashed = BroadcastHashJoinExec.buildReadOnlyRelation(broadcastRelation)
         if (hashed == EmptyHashedRelation) {
           streamedIter.map { row =>
             numOutputRows += 1
@@ -158,8 +157,7 @@ case class BroadcastHashJoinExec private(
       }
     } else {
       streamedPlan.execute().mapPartitions { streamedIter =>
-        val hashed = broadcastRelation.value.asReadOnlyCopy()
-        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
+        val hashed = BroadcastHashJoinExec.buildReadOnlyRelation(broadcastRelation)
         join(streamedIter, hashed, numOutputRows)
       }
     }
@@ -195,11 +193,13 @@ case class BroadcastHashJoinExec private(
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
     val clsName = broadcastRelation.value.getClass.getName
 
-    // Inline mutable state since not many join operations in a task
+    // Inline mutable state since not many join operations in a task.
+    // Cast the helper's HashedRelation result back to the concrete class so the field stays
+    // concretely typed for the hot-path getValue/get calls.
     val relationTerm = ctx.addMutableState(clsName, "relation",
       v => s"""
-         | $v = (($clsName) $broadcast.value()).asReadOnlyCopy();
-         | incPeakExecutionMemory($v.estimatedSize());
+         | $v = ($clsName) org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
+         |   .buildReadOnlyRelation($broadcast);
        """.stripMargin, forceInline = true)
     (broadcastRelation, relationTerm)
   }
@@ -252,6 +252,17 @@ case class BroadcastHashJoinExec private(
 }
 
 object BroadcastHashJoinExec extends JoinSelectionHelper {
+  /**
+   * Returns a read-only copy of the broadcast relation and records its size as peak execution
+   * memory. Shared by `doExecute` and the generated code of `prepareBroadcast`. This is called by
+   * generated Java class, should be public.
+   */
+  def buildReadOnlyRelation(broadcast: Broadcast[HashedRelation]): HashedRelation = {
+    val relation = broadcast.value.asReadOnlyCopy()
+    TaskContext.get().taskMetrics().incPeakExecutionMemory(relation.estimatedSize)
+    relation
+  }
+
   def apply(
       leftKeys: Seq[Expression],
       rightKeys: Seq[Expression],

@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -176,8 +177,12 @@ case class ArrowAggregatePythonExec(
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
+      // In pipelined mode the queue's add() runs in the writer thread and remove() runs in
+      // the task thread; use lock-free mode to skip per-row synchronization.
+      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
       val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), groupingExpressions.length)
+        new File(Utils.getLocalDir(SparkEnv.get.conf)), groupingExpressions.length,
+        lockFree = pipelined)
       context.addTaskCompletionListener[Unit] { _ =>
         queue.close()
       }

@@ -76,6 +76,7 @@ private[spark] object History {
         "(e.g., S3 Lifecycle Policies) for those. " +
         "Example: \"s3a://.*,gs://.*\" disables scanning for all S3 and GCS directories.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .toSequence
       .createWithDefault(Nil)

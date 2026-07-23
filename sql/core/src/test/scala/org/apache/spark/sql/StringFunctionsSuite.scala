@@ -145,6 +145,19 @@ class StringFunctionsSuite extends SharedSparkSession {
     checkAnswer(df.selectExpr("levenshtein(l, null, 0)"), Seq(Row(null), Row(null)))
   }
 
+  test("string jaro_winkler_similarity") {
+    val df = Seq(("MARTHA", "MARHTA"), ("ABC", "XYZ")).toDF("l", "r")
+    checkAnswer(
+      df.select(jaro_winkler_similarity($"l", $"r")),
+      Seq(Row(0.9611111111111111), Row(0.0)))
+    checkAnswer(
+      df.selectExpr("jaro_winkler_similarity(l, r)"),
+      Seq(Row(0.9611111111111111), Row(0.0)))
+    checkAnswer(
+      df.select(jaro_winkler_similarity($"l", lit(null))),
+      Seq(Row(null), Row(null)))
+  }
+
   test("string rlike / regexp / regexp_like") {
     val df = Seq(
       ("1a 2b 14m", "\\d+b"),
@@ -455,6 +468,47 @@ class StringFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.selectExpr("instr(a, b)"),
       Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, b, 2)"),
+      Row(2))
+
+    checkAnswer(
+      df.select(instr($"a", $"b", -1)),
+      Row(2))
+
+    checkAnswer(
+      df.selectExpr("instr(a, '', -1)"),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, b, 1, 2)"),
+      Row(2))
+
+    checkAnswer(
+      df.select(instr($"a", $"b", -1, 2)),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, '', -1, 2)"),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr('abcde', 'cd', -3, 1)"),
+      Row(3))
+
+    // Test throw exception when occurrence <= 0
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        spark.sql("SELECT instr('abc', 'b', 1, 0)").collect()
+      },
+      condition = "INVALID_PARAMETER_VALUE.OCCURRENCE",
+      parameters = Map(
+        "functionName" -> toSQLId("instr"),
+        "parameter" -> toSQLId("occurrence"),
+        "actual" -> "0"
+      )
+    )
   }
 
   test("string substring_index function") {

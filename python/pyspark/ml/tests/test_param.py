@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -194,14 +193,14 @@ class ParamTests(SparkSessionTestCase):
         maxIter = testParams.maxIter
         self.assertEqual(maxIter.name, "maxIter")
         self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
-        self.assertTrue(maxIter.parent == testParams.uid)
+        self.assertEqual(maxIter.parent, testParams.uid)
 
     def test_param(self):
         testParams = TestParams()
         maxIter = testParams.maxIter
         self.assertEqual(maxIter.name, "maxIter")
         self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
-        self.assertTrue(maxIter.parent == testParams.uid)
+        self.assertEqual(maxIter.parent, testParams.uid)
 
     def test_hasparam(self):
         testParams = TestParams()

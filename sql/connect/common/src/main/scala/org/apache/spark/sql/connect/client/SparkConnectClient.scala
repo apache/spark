@@ -20,9 +20,10 @@ package org.apache.spark.sql.connect.client
 import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Base64, Locale, UUID}
-import java.util.concurrent.Executor
+import java.util.concurrent.{Executor, TimeUnit}
 
 import scala.collection.mutable
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.Properties
 import scala.util.control.NonFatal
@@ -54,7 +55,7 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val stubState = new SparkConnectStubState(channel, configuration.retryPolicies)
+  private[this] val stubState = new SparkConnectStubState(channel, configuration)
   private[this] val bstub =
     new CustomSparkConnectBlockingStub(channel, stubState)
   private[this] val stub =
@@ -705,7 +706,7 @@ object SparkConnectClient {
   private val DEFAULT_USER_AGENT: String = "_SPARK_CONNECT_SCALA"
 
   private val AUTH_TOKEN_META_DATA_KEY: Metadata.Key[String] =
-    Metadata.Key.of("Authentication", Metadata.ASCII_STRING_MARSHALLER)
+    Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER)
 
   // for internal tests
   private[sql] def apply(channel: ManagedChannel): SparkConnectClient = {
@@ -804,6 +805,25 @@ object SparkConnectClient {
       retryPolicy(List(policy))
     }
 
+    def rpcDeadlines(deadlines: RpcDeadlines): Builder = {
+      _configuration = _configuration.copy(rpcDeadlines = deadlines)
+      this
+    }
+
+    /**
+     * Sets the maximum cumulative wall-clock time the client will keep retrying a
+     * [[GrpcRetryHandler.RetryException]] (raised internally when a reattach attempt keeps
+     * hitting DEADLINE_EXCEEDED, or when the initial ExecutePlan never reached the server) before
+     * giving up and surfacing the underlying error. Defaults to 1 hour.
+     *
+     * @return
+     *   this builder.
+     */
+    def maxRetryExceptionElapsedTime(duration: FiniteDuration): Builder = {
+      _configuration = _configuration.copy(maxRetryExceptionElapsedTime = duration)
+      this
+    }
+
     private object URIParams {
       val PARAM_USER_ID = "user_id"
       val PARAM_USE_SSL = "use_ssl"
@@ -811,6 +831,10 @@ object SparkConnectClient {
       val PARAM_USER_AGENT = "user_agent"
       val PARAM_SESSION_ID = "session_id"
       val PARAM_GRPC_MAX_MESSAGE_SIZE = "grpc_max_message_size"
+      val PARAM_GRPC_KEEPALIVE_ENABLED = "grpc_keepalive_enabled"
+      val PARAM_GRPC_KEEPALIVE_TIME_MS = "grpc_keepalive_time_ms"
+      val PARAM_GRPC_KEEPALIVE_TIMEOUT_MS = "grpc_keepalive_timeout_ms"
+      val PARAM_GRPC_KEEPALIVE_WITHOUT_CALLS = "grpc_keepalive_without_calls"
     }
 
     private def verifyURI(uri: URI): Unit = {
@@ -873,6 +897,48 @@ object SparkConnectClient {
 
     def grpcMaxRecursionLimit: Int = _configuration.grpcMaxRecursionLimit
 
+    /**
+     * Whether the client sends gRPC/HTTP2 keepalive PINGs to detect a silently-dead connection
+     * (see `grpcKeepAliveTimeMs`/`grpcKeepAliveTimeoutMs`). Enabled by default; can be turned off
+     * as an escape hatch, e.g. if it interacts badly with a particular network path, or a client
+     * environment is prone to stalls long enough to trip false-positive disconnects.
+     */
+    def grpcKeepAliveEnabled(enabled: Boolean): Builder = {
+      _configuration = _configuration.copy(grpcKeepAliveEnabled = enabled)
+      this
+    }
+
+    def grpcKeepAliveEnabled: Boolean = _configuration.grpcKeepAliveEnabled
+
+    def grpcKeepAliveTimeMs(timeMs: Long): Builder = {
+      _configuration = _configuration.copy(grpcKeepAliveTimeMs = timeMs)
+      this
+    }
+
+    def grpcKeepAliveTimeMs: Long = _configuration.grpcKeepAliveTimeMs
+
+    def grpcKeepAliveTimeoutMs(timeoutMs: Long): Builder = {
+      _configuration = _configuration.copy(grpcKeepAliveTimeoutMs = timeoutMs)
+      this
+    }
+
+    def grpcKeepAliveTimeoutMs: Long = _configuration.grpcKeepAliveTimeoutMs
+
+    /**
+     * Whether to keep sending keepalive PINGs when there are no in-flight RPCs on the channel.
+     * Defaults to true, so a long-idle connection (e.g. a parked/unused session) is still
+     * monitored and not just calls that are actively blocked. Set to false to avoid the resulting
+     * steady background PING traffic for deployments with very large numbers of mostly-idle
+     * connections, at the cost of only detecting a dead connection once the next RPC is attempted
+     * on it.
+     */
+    def grpcKeepAliveWithoutCalls(enabled: Boolean): Builder = {
+      _configuration = _configuration.copy(grpcKeepAliveWithoutCalls = enabled)
+      this
+    }
+
+    def grpcKeepAliveWithoutCalls: Boolean = _configuration.grpcKeepAliveWithoutCalls
+
     def option(key: String, value: String): Builder = {
       _configuration = _configuration.copy(metadata = _configuration.metadata + ((key, value)))
       this
@@ -900,6 +966,11 @@ object SparkConnectClient {
             if (java.lang.Boolean.valueOf(value)) enableSsl() else disableSsl()
           case URIParams.PARAM_SESSION_ID => sessionId(value)
           case URIParams.PARAM_GRPC_MAX_MESSAGE_SIZE => grpcMaxMessageSize(value.toInt)
+          case URIParams.PARAM_GRPC_KEEPALIVE_ENABLED => grpcKeepAliveEnabled(value.toBoolean)
+          case URIParams.PARAM_GRPC_KEEPALIVE_TIME_MS => grpcKeepAliveTimeMs(value.toLong)
+          case URIParams.PARAM_GRPC_KEEPALIVE_TIMEOUT_MS => grpcKeepAliveTimeoutMs(value.toLong)
+          case URIParams.PARAM_GRPC_KEEPALIVE_WITHOUT_CALLS =>
+            grpcKeepAliveWithoutCalls(value.toBoolean)
           case _ => option(key, value)
         }
       }
@@ -1037,11 +1108,18 @@ object SparkConnectClient {
       userAgent: String = genUserAgent(
         sys.env.getOrElse("SPARK_CONNECT_USER_AGENT", DEFAULT_USER_AGENT)),
       retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies(),
+      rpcDeadlines: RpcDeadlines = RpcDeadlines(),
+      maxRetryExceptionElapsedTime: FiniteDuration =
+        GrpcRetryHandler.DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None,
       grpcMaxMessageSize: Int = ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE,
       grpcMaxRecursionLimit: Int = ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT,
+      grpcKeepAliveEnabled: Boolean = ConnectCommon.CONNECT_GRPC_KEEPALIVE_ENABLED,
+      grpcKeepAliveTimeMs: Long = ConnectCommon.CONNECT_GRPC_KEEPALIVE_TIME_SECONDS * 1000,
+      grpcKeepAliveTimeoutMs: Long = ConnectCommon.CONNECT_GRPC_KEEPALIVE_TIMEOUT_SECONDS * 1000,
+      grpcKeepAliveWithoutCalls: Boolean = ConnectCommon.CONNECT_GRPC_KEEPALIVE_WITHOUT_CALLS,
       allowArrowBatchChunking: Boolean = true,
       preferredArrowChunkSize: Option[Int] = None) {
 
@@ -1092,6 +1170,18 @@ object SparkConnectClient {
       interceptors.foreach(channelBuilder.intercept(_))
 
       channelBuilder.maxInboundMessageSize(grpcMaxMessageSize)
+      if (grpcKeepAliveEnabled) {
+        // Detects a silently-dead connection (e.g. a NAT gateway/load balancer dropping an idle
+        // connection mapping without sending a TCP RST/FIN) so a blocked RPC (such as streaming
+        // query awaitTermination()) surfaces as UNAVAILABLE instead of hanging forever. Note: a
+        // stall on either end longer than keepAliveTime + keepAliveTimeout (e.g. a long JVM GC
+        // pause) can also cause an otherwise-healthy connection to be dropped -- raise both
+        // values (or disable via grpcKeepAliveEnabled) in environments prone to long GC pauses
+        // or other event-loop stalls.
+        channelBuilder.keepAliveTime(grpcKeepAliveTimeMs, TimeUnit.MILLISECONDS)
+        channelBuilder.keepAliveTimeout(grpcKeepAliveTimeoutMs, TimeUnit.MILLISECONDS)
+        channelBuilder.keepAliveWithoutCalls(grpcKeepAliveWithoutCalls)
+      }
       channelBuilder.build()
     }
 

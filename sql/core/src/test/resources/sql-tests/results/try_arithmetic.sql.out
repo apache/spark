@@ -214,6 +214,54 @@ struct<try_add(INTERVAL '02' SECOND, TIMESTAMP_NTZ '2021-01-01 00:00:00'):timest
 
 
 -- !query
+SELECT try_add(time'08:00:00', interval 1 hour)
+-- !query schema
+struct<try_add(TIME '08:00:00', INTERVAL '01' HOUR):time(6)>
+-- !query output
+09:00:00
+
+
+-- !query
+SELECT try_add(interval 1 hour, time'08:00:00')
+-- !query schema
+struct<try_add(INTERVAL '01' HOUR, TIME '08:00:00'):time(6)>
+-- !query output
+09:00:00
+
+
+-- !query
+SELECT try_add(time'23:59:59.999999', interval 1 hour)
+-- !query schema
+struct<try_add(TIME '23:59:59.999999', INTERVAL '01' HOUR):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_add(time'00:00:00', interval -1 second)
+-- !query schema
+struct<try_add(TIME '00:00:00', INTERVAL '-01' SECOND):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_add(time'08:30:00', null)
+-- !query schema
+struct<try_add(TIME '08:30:00', NULL):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_add(null, interval 1 hour)
+-- !query schema
+struct<try_add(NULL, INTERVAL '01' HOUR):interval hour>
+-- !query output
+NULL
+
+
+-- !query
 SELECT try_add(interval 2 year, interval 2 year)
 -- !query schema
 struct<try_add(INTERVAL '2' YEAR, INTERVAL '2' YEAR):interval year>
@@ -242,7 +290,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"INTERVAL '2' YEAR\"",
     "inputType" : "\"INTERVAL YEAR\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"INTERVAL '2' YEAR + INTERVAL '02' SECOND\""
   },
   "queryContext" : [ {
@@ -599,6 +647,62 @@ NULL
 SELECT try_subtract(interval 106751991 day, interval -3 day)
 -- !query schema
 struct<try_subtract(INTERVAL '106751991' DAY, INTERVAL '-3' DAY):interval day>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_subtract(time'10:00:00', interval 1 hour)
+-- !query schema
+struct<try_subtract(TIME '10:00:00', INTERVAL '01' HOUR):time(6)>
+-- !query output
+09:00:00
+
+
+-- !query
+SELECT try_subtract(time'00:30:00', interval 1 hour)
+-- !query schema
+struct<try_subtract(TIME '00:30:00', INTERVAL '01' HOUR):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_subtract(time'00:00:00', interval 1 second)
+-- !query schema
+struct<try_subtract(TIME '00:00:00', INTERVAL '01' SECOND):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_subtract(time'10:00:00', null)
+-- !query schema
+struct<try_subtract(TIME '10:00:00', NULL):interval hour to second>
+-- !query output
+NULL
+
+
+-- !query
+SELECT try_subtract(time'10:00:00', time'08:00:00')
+-- !query schema
+struct<try_subtract(TIME '10:00:00', TIME '08:00:00'):interval hour to second>
+-- !query output
+0 02:00:00.000000000
+
+
+-- !query
+SELECT try_subtract(time'08:00:00.123456', time'10:00:00')
+-- !query schema
+struct<try_subtract(TIME '08:00:00.123456', TIME '10:00:00'):interval hour to second>
+-- !query output
+-0 01:59:59.876544000
+
+
+-- !query
+SELECT try_subtract(null, time'08:00:00')
+-- !query schema
+struct<try_subtract(NULL, TIME '08:00:00'):interval hour to second>
 -- !query output
 NULL
 

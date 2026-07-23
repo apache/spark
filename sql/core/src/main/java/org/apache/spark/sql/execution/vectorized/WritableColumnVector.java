@@ -783,8 +783,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       for (WritableColumnVector c: childColumns) {
         if (c.type instanceof StructType || c.type instanceof VariantType
             || c.type instanceof CalendarIntervalType
-            || c.type instanceof TimestampNTZNanosType
-            || c.type instanceof TimestampLTZNanosType) {
+            || c.type instanceof AnyTimestampNanoType) {
           c.appendStruct(true);
         } else {
           c.appendNull();
@@ -1089,7 +1088,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
-    } else if (type instanceof TimestampNTZNanosType || type instanceof TimestampLTZNanosType) {
+    } else if (type instanceof AnyTimestampNanoType) {
       // Two columns. EpochMicros as Long. NanosWithinMicro as Short.
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.LongType);

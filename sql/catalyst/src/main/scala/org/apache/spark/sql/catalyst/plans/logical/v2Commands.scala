@@ -803,7 +803,7 @@ case class CreateStreamingTableAsSelect(
 
 /**
  * Command parsed from `CREATE STREAMING TABLE ...` SQL syntax. This command serves as a logical
- * representation of the matching SQL syntac and cannot be executed. It is instead interpreted by
+ * representation of the matching SQL syntax and cannot be executed. It is instead interpreted by
  * the pipeline submodule during a pipeline execution.
  *
  * Differs from [[CreateStreamingTableAsSelect]] in that the AS [subquery] clause is not provided
@@ -822,6 +822,69 @@ case class CreateStreamingTable(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(name = newChild)
+}
+
+/**
+ * Command parsed from `CREATE STREAMING TABLE <name> FLOW AUTO CDC ...` SQL syntax.
+ * This command serves as a parse-time placeholder for a pipeline CDC definition and cannot
+ * be executed directly. It is instead interpreted by the pipeline submodule during a pipeline
+ * execution.
+ *
+ * The target of the CDC operation is the streaming table itself (given by [[name]]).
+ *
+ * [[name]] and [[source]] are exposed as the node's children (left and right respectively) so the
+ * analyzer resolves them through the normal plan resolution path, mirroring how
+ * [[CreatePipelineDatasetAsSelect]] exposes its name and query.
+ *
+ * @param name           The streaming table name, which also serves as the CDC target. Exposed as
+ *                       the node's left child.
+ * @param columns        User-specified columns for the streaming table.
+ * @param partitioning   Column-based partitioning for the streaming table.
+ * @param tableSpec      Additional table specs.
+ * @param ifNotExists    Whether the table should only be created if it doesn't already exist.
+ * @param source         The source relation providing the change events, parsed from a general
+ *                       `relationPrimary` (typically a STREAM(...) source marked as a streaming
+ *                       read). Exposed as the node's right child.
+ * @param keys           Column(s) that uniquely identify a row in the target table.
+ * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
+ * @param sequenceByExpr Expression that orders CDC events to resolve out-of-order arrivals.
+ * @param includeColumns An explicit list of source columns to include. [[None]] when no COLUMNS
+ *                       clause was specified. Mutually exclusive with [[excludeColumns]].
+ * @param excludeColumns Source columns to exclude. [[None]] when no COLUMNS clause was specified.
+ *                       Mutually exclusive with [[includeColumns]].
+ * @param storedAsScdType The SCD type of the target table, from `STORED AS SCD TYPE <n>`. 1 for
+ *                       SCD Type 1 (upsert) and 2 for SCD Type 2 (history-tracking). Defaults to
+ *                       1 when no `STORED AS` clause is specified.
+ * @param trackHistoryColumns SCD2-only. An explicit list of columns whose value change opens a
+ *                       new history record, from `TRACK HISTORY ON (...)`. [[None]] when no TRACK
+ *                       HISTORY clause was specified. Mutually exclusive with
+ *                       [[trackHistoryExceptColumns]].
+ * @param trackHistoryExceptColumns SCD2-only. Columns excluded from history tracking, from
+ *                       `TRACK HISTORY ON * EXCEPT (...)`. [[None]] when no TRACK HISTORY clause
+ *                       was specified. Mutually exclusive with [[trackHistoryColumns]].
+ */
+case class CreateStreamingTableAutoCdc(
+    name: LogicalPlan,
+    columns: Seq[ColumnDefinition],
+    partitioning: Seq[Transform],
+    tableSpec: TableSpecBase,
+    ifNotExists: Boolean,
+    source: LogicalPlan,
+    keys: Seq[UnresolvedAttribute],
+    deleteCondition: Option[Expression],
+    sequenceByExpr: Expression,
+    includeColumns: Option[Seq[UnresolvedAttribute]],
+    excludeColumns: Option[Seq[UnresolvedAttribute]],
+    storedAsScdType: Int,
+    trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
+    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]]
+) extends BinaryCommand with CreatePipelineDataset {
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = source
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): CreateStreamingTableAutoCdc =
+    copy(name = newLeft, source = newRight)
 }
 
 /**

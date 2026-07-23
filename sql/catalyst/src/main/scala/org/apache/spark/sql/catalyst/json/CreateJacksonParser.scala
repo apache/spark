@@ -90,4 +90,14 @@ object CreateJacksonParser extends Serializable {
 
     jsonFactory.createParser(sd)
   }
+
+  def bytes(jsonFactory: JsonFactory, record: Array[Byte]): JsonParser = {
+    jsonFactory.createParser(record, 0, record.length)
+  }
+
+  def bytes(enc: String, jsonFactory: JsonFactory, record: Array[Byte]): JsonParser = {
+    val sd = getStreamDecoder(enc, record, record.length)
+
+    jsonFactory.createParser(sd)
+  }
 }

@@ -160,6 +160,32 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(executor.pod.getSpec.getTerminationGracePeriodSeconds === 0L)
   }
 
+  test("Set allowPrivilegeEscalation to false on the executor container by default") {
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.container.getSecurityContext.getAllowPrivilegeEscalation === false)
+  }
+
+  test("Support spark.kubernetes.executor.securityContext.allowPrivilegeEscalation") {
+    baseConf.set(KUBERNETES_EXECUTOR_ALLOW_PRIVILEGE_ESCALATION, true)
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.container.getSecurityContext.getAllowPrivilegeEscalation === true)
+  }
+
+  test("executor allowPrivilegeEscalation falls back to the shared config") {
+    baseConf.set(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION, true)
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.container.getSecurityContext.getAllowPrivilegeEscalation === true)
+  }
+
   test("basic executor pod with resources") {
     val fpgaResourceID = new ResourceID(SPARK_EXECUTOR_PREFIX, FPGA)
     val gpuExecutorResourceID = new ResourceID(SPARK_EXECUTOR_PREFIX, GPU)

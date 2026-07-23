@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.FileNotFoundException
+import java.util.regex.Pattern
 
 import scala.collection.mutable
 
@@ -28,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{COUNT, PERCENT, TOTAL}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{expressions, InternalRow}
+import org.apache.spark.sql.catalyst.{expressions, FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -77,6 +78,15 @@ abstract class PartitioningAwareFileIndex(
       .map(_.toBoolean)
       .getOrElse(sparkSession.sessionState.conf.ignoreInvalidPartitionPaths)
   }
+
+  protected lazy val ignoredPathSegmentRegex: String = {
+    caseInsensitiveMap
+      .get(FileIndexOptions.IGNORED_PATH_SEGMENT_REGEX)
+      .getOrElse(sparkSession.sessionState.conf.ignoredPathSegmentRegex)
+  }
+
+  private lazy val ignoredPathSegmentRegexPattern: Pattern =
+    FileSourceOptions.compileIgnoredPathSegmentRegex(ignoredPathSegmentRegex)
 
   override def listFiles(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
@@ -265,6 +275,12 @@ abstract class PartitioningAwareFileIndex(
   // counted as data files, so that they shouldn't participate partition discovery.
   private def isDataPath(path: Path): Boolean = {
     val name = path.getName
-    !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
+    // Partition directories ('_'-prefixed names containing '=') are always data paths.
+    if (name.startsWith("_") && name.contains("=")) return true
+    // Metadata summary files are never data paths, regardless of the ignoredPathSegmentRegex regex
+    // (they always survive listing via the shouldFilterOutPathName carve-out).
+    if (name.startsWith("_common_metadata") || name.startsWith("_metadata")) return false
+    // For all other names the ignoredPathSegmentRegex regex decides.
+    !ignoredPathSegmentRegexPattern.matcher(name).find()
   }
 }

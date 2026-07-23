@@ -174,7 +174,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "treeNode" : "Sort [scalar-subquery#x [a#x] ASC NULLS FIRST], true\n:  +- Project [outer(a#x)]\n:     +- LocalRelation [col1#x]\n+- Project [a#x, b#x]\n   +- SubqueryAlias testdata\n      +- View (`testData`, [a#x, b#x])\n         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]\n            +- Project [a#x, b#x]\n               +- SubqueryAlias testData\n                  +- LocalRelation [a#x, b#x]\n"
+    "treeNode" : "Sort [scalar-subquery#x [a#x] ASC NULLS FIRST], true\n:  +- Project [outer(a#x) AS a#x]\n:     +- LocalRelation [col1#x]\n+- Project [a#x, b#x]\n   +- SubqueryAlias testdata\n      +- View (`testData`, [a#x, b#x])\n         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]\n            +- Project [a#x, b#x]\n               +- SubqueryAlias testData\n                  +- LocalRelation [a#x, b#x]\n"
   },
   "queryContext" : [ {
     "objectType" : "",

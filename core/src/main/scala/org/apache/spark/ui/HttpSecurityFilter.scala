@@ -51,10 +51,40 @@ private class HttpSecurityFilter(
 
     val cspNonce = CspNonce.generate()
     try {
-      hres.setHeader("Content-Security-Policy",
-        s"default-src 'self'; script-src 'self' 'nonce-$cspNonce'; " +
-        s"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
-        s"object-src 'none'; base-uri 'self';")
+      if (conf.get(UI_CONTENT_SECURITY_POLICY_ENABLED)) {
+        // Use CSP frame-ancestors as the primary clickjacking protection mechanism.
+        // X-Frame-Options ALLOW-FROM is deprecated and ignored by modern browsers
+        // (Chrome, Firefox, Edge, Safari), so frame-ancestors is used instead.
+        val frameAncestorsDirective =
+          if (conf.get(UI_CONTENT_SECURITY_POLICY_FRAME_ANCESTORS_ENABLED)) {
+            val frameAncestors = conf.get(UI_ALLOW_FRAMING_FROM)
+              .filterNot(v => v.equalsIgnoreCase("SAMEORIGIN"))
+              .map { uri =>
+                if (uri.equalsIgnoreCase("DENY")) {
+                  "frame-ancestors 'none'"
+                } else {
+                  // Sanitize the URI: truncate at semicolons to prevent CSP directive
+                  // injection, and strip newlines to prevent header injection.
+                  val sanitized = uri.replaceAll("[\\r\\n]+", "").split(";", 2)(0).trim
+                  if (sanitized.isEmpty) "frame-ancestors 'self'"
+                  else s"frame-ancestors 'self' $sanitized"
+                }
+              }
+              .getOrElse("frame-ancestors 'self'")
+            s" $frameAncestors;"
+          } else {
+            ""
+          }
+
+        hres.setHeader("Content-Security-Policy",
+          s"default-src 'self'; script-src 'self' 'nonce-$cspNonce'; " +
+          s"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+          s"object-src 'none'; base-uri 'self';$frameAncestorsDirective")
+      }
+
+      // X-Frame-Options is set before access control so that even error responses
+      // include clickjacking protection.
+      hres.setHeader("X-Frame-Options", "SAMEORIGIN")
 
       val requestUser = hreq.getRemoteUser()
 
@@ -77,15 +107,6 @@ private class HttpSecurityFilter(
         return
       }
 
-      // SPARK-10589 avoid frame-related click-jacking vulnerability, using X-Frame-Options
-      // (see http://tools.ietf.org/html/rfc7034). By default allow framing only from the
-      // same origin, but allow framing for a specific named URI.
-      // Example: spark.ui.allowFramingFrom = https://example.com/
-      val xFrameOptionsValue = conf.getOption("spark.ui.allowFramingFrom")
-        .map { uri => s"ALLOW-FROM $uri" }
-        .getOrElse("SAMEORIGIN")
-
-      hres.setHeader("X-Frame-Options", xFrameOptionsValue)
       hres.setHeader("X-XSS-Protection", conf.get(UI_X_XSS_PROTECTION))
       if (conf.get(UI_X_CONTENT_TYPE_OPTIONS)) {
         hres.setHeader("X-Content-Type-Options", "nosniff")

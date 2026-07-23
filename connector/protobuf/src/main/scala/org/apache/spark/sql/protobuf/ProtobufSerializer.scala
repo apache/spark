@@ -149,6 +149,11 @@ private[sql] class ProtobufSerializer(
       case (DateType, INT) =>
         (getter, ordinal) => getter.getInt(ordinal)
 
+      case (_: TimeType, LONG) =>
+        // TimeType is stored internally as nanoseconds-since-midnight; write it
+        // directly into the int64 field as nanos-of-day.
+        (getter, ordinal) => getter.getLong(ordinal)
+
       case (TimestampType, MESSAGE) =>
         (getter, ordinal) =>
           val millis = DateTimeUtils.microsToMillis(getter.getLong(ordinal))

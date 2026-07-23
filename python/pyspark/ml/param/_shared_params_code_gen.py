@@ -334,6 +334,12 @@ if __name__ == "__main__":
             "TypeConverters.toFloat",
         ),
         (
+            "intermediateStorageLevel",
+            "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
+            '"MEMORY_AND_DISK"',
+            "TypeConverters.toString",
+        ),
+        (
             "numTrainWorkers",
             "number of training workers",
             "1",

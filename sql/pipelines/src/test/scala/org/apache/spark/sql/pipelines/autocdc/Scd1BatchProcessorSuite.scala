@@ -33,7 +33,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     .add("name", StringType)
     .add("age", IntegerType)
     .add(
-      Scd1BatchProcessor.cdcMetadataColName,
+      AutoCdcReservedNames.cdcMetadataColName,
       new StructType()
         .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
         .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
@@ -596,7 +596,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Original columns are preserved in their original order, with CDC metadata appended at
     // the very end.
     assert(result.schema.fieldNames.toSeq ==
-      schema.fieldNames.toSeq :+ Scd1BatchProcessor.cdcMetadataColName)
+      schema.fieldNames.toSeq :+ AutoCdcReservedNames.cdcMetadataColName)
   }
 
   test("extendMicrobatchRowsWithCdcMetadata casts delete / upsert sequence fields to " +
@@ -624,7 +624,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val resultDf = processor.extendMicrobatchRowsWithCdcMetadata(batch)
 
     val cdcMetadataDataType =
-      resultDf.schema(Scd1BatchProcessor.cdcMetadataColName).dataType.asInstanceOf[StructType]
+      resultDf.schema(AutoCdcReservedNames.cdcMetadataColName).dataType.asInstanceOf[StructType]
     assert(columnNamesAndDataTypes(cdcMetadataDataType) == Seq(
       Scd1BatchProcessor.cdcDeleteSequenceFieldName -> LongType,
       Scd1BatchProcessor.cdcUpsertSequenceFieldName -> LongType))
@@ -723,7 +723,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val result = processor.projectTargetColumnsOntoMicrobatch(batch)
 
     assert(result.schema.fieldNames.toSeq ==
-      Seq("id", "age", Scd1BatchProcessor.cdcMetadataColName))
+      Seq("id", "age", AutoCdcReservedNames.cdcMetadataColName))
     checkAnswer(
       df = result,
       expectedAnswer = Row(1, 30, Row(null, 10L))
@@ -753,7 +753,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     assert(
       result.schema.fieldNames.toSeq ==
-        Seq("id", "name", Scd1BatchProcessor.cdcMetadataColName)
+        Seq("id", "name", AutoCdcReservedNames.cdcMetadataColName)
     )
     checkAnswer(
       df = result,
@@ -785,7 +785,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // in which the user listed columns in IncludeColumns. The CDC metadata column is appended
     // last as always.
     assert(result.schema.fieldNames.toSeq ==
-      Seq("id", "age", Scd1BatchProcessor.cdcMetadataColName))
+      Seq("id", "age", AutoCdcReservedNames.cdcMetadataColName))
 
     checkAnswer(
       df = result,
@@ -800,7 +800,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       // Even if a column is created with backticks via DDL, those backticks are consumed by Spark
       // before resolving the schema; they won't show up in the schema field.
       .add("user.id", StringType)
-      .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType)
 
     val batch = microbatchOf(schema)(
       Row(1, "u-100", Row(null, 10L))
@@ -826,7 +826,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val result = processor.projectTargetColumnsOntoMicrobatch(batch)
 
     assert(result.schema.fieldNames.toSeq ==
-      Seq("id", "user.id", Scd1BatchProcessor.cdcMetadataColName))
+      Seq("id", "user.id", AutoCdcReservedNames.cdcMetadataColName))
     checkAnswer(
       df = result,
       expectedAnswer = Row(1, "u-100", Row(null, 10L))
@@ -860,7 +860,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       // Output column names follow the microbatch schema's casing, not the casing in the user's
       // columnSelection. The CDC metadata column is appended last as always.
       assert(result.schema.fieldNames.toSeq ==
-        Seq("id", "age", Scd1BatchProcessor.cdcMetadataColName))
+        Seq("id", "age", AutoCdcReservedNames.cdcMetadataColName))
       checkAnswer(
         df = result,
         expectedAnswer = Row(1, 30, Row(null, 10L))
@@ -880,7 +880,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Data column.
     .add("value", StringType)
     // CDC metadata column.
-    .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType)
+    .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType)
 
   /**
    * Schema for the auxiliary input to [[Scd1BatchProcessor.applyTombstonesToMicrobatch]] tests.
@@ -893,7 +893,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Key column.
     .add("id", IntegerType)
     // CDC metadata column.
-    .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType)
+    .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType)
 
   test("applyTombstonesToMicrobatch drops late-arriving deletes and upserts when a matching " +
     "tombstone exists for the same key") {
@@ -1015,7 +1015,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType()
       .add("region", StringType)
       .add("customer_id", IntegerType)
-      .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType)
 
     val microbatch = microbatchOf(schema)(
       Row("US", 1, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(5))),
@@ -1051,7 +1051,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
   test("applyTombstonesToMicrobatch supports backticked key names containing a literal dot") {
     val schema = new StructType()
       .add("user.id", IntegerType)
-      .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType)
 
     val microbatch = microbatchOf(schema)(
       Row(1, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(5)))

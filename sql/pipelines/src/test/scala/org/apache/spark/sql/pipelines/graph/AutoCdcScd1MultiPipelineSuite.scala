@@ -298,9 +298,8 @@ class AutoCdcScd1MultiPipelineSuite
       condition = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
       sqlState = Some("42000"),
       parameters = Map(
-        "flowName" ->
-          fullyQualifiedIdentifier("flow_v2", Some(catalog), Some(namespace)).unquotedString,
-        "auxTableName" -> auxTableNameFor("shared_target"),
+        "tableName" ->
+          fullyQualifiedIdentifier("shared_target", Some(catalog), Some(namespace)).unquotedString,
         // Pipeline #2's AutoCDC key resolves from the source DF, where `MemoryStream[(Int, String,
         // Long)]` produces a nullable StringType for `name`.
         "expectedKeySchema" -> "name STRING",

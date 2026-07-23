@@ -55,11 +55,6 @@ object InvalidInputErrors {
   def deduplicateRequiresColumnsOrAll(): InvalidPlanInput =
     InvalidPlanInput("CONNECT_INVALID_PLAN.DEDUPLICATE_REQUIRES_COLUMNS_OR_ALL", Map.empty)
 
-  def invalidDeduplicateColumn(colName: String, fieldNames: String): InvalidPlanInput =
-    InvalidPlanInput(
-      "CONNECT_INVALID_PLAN.UNRESOLVED_COLUMN_AMONG_FIELD_NAMES",
-      Map("colName" -> colName, "fieldNames" -> fieldNames))
-
   def functionEvalTypeNotSupported(evalType: Int): InvalidPlanInput =
     InvalidPlanInput(
       "CONNECT_INVALID_PLAN.FUNCTION_EVAL_TYPE_NOT_SUPPORTED",

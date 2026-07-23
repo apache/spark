@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFu
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, TimestampType}
 
 class ProjectedOrderingAndPartitioningSuite
   extends SharedSparkSession with AdaptiveSparkPlanHelper {
@@ -601,6 +601,79 @@ class ProjectedOrderingAndPartitioningSuite
         KeyedPartitioning(Seq(x), keys1d)))
     }
     assert(e.getMessage.contains("partitionKeys"))
+  }
+
+  test("SPARK-58138: BIN BY preserves a child partitioning on a pass-through column") {
+    val tsStart = AttributeReference("ts_start", TimestampType)()
+    val tsEnd = AttributeReference("ts_end", TimestampType)()
+    val value = AttributeReference("value", DoubleType)()
+    val host = AttributeReference("host", IntegerType)()
+    val binBy = BinByExec(
+      binWidthMicros = 300000000L, originMicros = 0L, rangeStart = tsStart, rangeEnd = tsEnd,
+      distributeColumns = Seq(value),
+      scaledDistributeColumns = Seq(AttributeReference("value", DoubleType)()),
+      appendedAttributes = Seq(
+        AttributeReference("bin_start", TimestampType)(),
+        AttributeReference("bin_end", TimestampType)(),
+        AttributeReference("bin_distribute_ratio", DoubleType)()),
+      timeZoneId = None,
+      child = DummyLeafExecWithPartitioning(
+        output = Seq(tsStart, tsEnd, value, host),
+        partitioning = HashPartitioning(Seq(host), 4)))
+
+    binBy.outputPartitioning match {
+      case p: HashPartitioning =>
+        assert(p.expressions === Seq(host))
+        assert(p.numPartitions === 4)
+      case other => fail(s"Expected HashPartitioning, got $other")
+    }
+  }
+
+  test("SPARK-58138: BIN BY drops a child partitioning on a scaled DISTRIBUTE column") {
+    val tsStart = AttributeReference("ts_start", TimestampType)()
+    val tsEnd = AttributeReference("ts_end", TimestampType)()
+    val value = AttributeReference("value", DoubleType)()
+    val binBy = BinByExec(
+      binWidthMicros = 300000000L, originMicros = 0L, rangeStart = tsStart, rangeEnd = tsEnd,
+      distributeColumns = Seq(value),
+      scaledDistributeColumns = Seq(AttributeReference("value", DoubleType)()),
+      appendedAttributes = Seq(
+        AttributeReference("bin_start", TimestampType)(),
+        AttributeReference("bin_end", TimestampType)(),
+        AttributeReference("bin_distribute_ratio", DoubleType)()),
+      timeZoneId = None,
+      child = DummyLeafExecWithPartitioning(
+        output = Seq(tsStart, tsEnd, value),
+        partitioning = HashPartitioning(Seq(value), 4)))
+
+    binBy.outputPartitioning match {
+      case p: UnknownPartitioning => assert(p.numPartitions === 4)
+      case other => fail(s"Expected UnknownPartitioning, got $other")
+    }
+  }
+
+  test("SPARK-58138: BIN BY drops a mixed pass-through and DISTRIBUTE partitioning whole") {
+    val tsStart = AttributeReference("ts_start", TimestampType)()
+    val tsEnd = AttributeReference("ts_end", TimestampType)()
+    val value = AttributeReference("value", DoubleType)()
+    val host = AttributeReference("host", IntegerType)()
+    val binBy = BinByExec(
+      binWidthMicros = 300000000L, originMicros = 0L, rangeStart = tsStart, rangeEnd = tsEnd,
+      distributeColumns = Seq(value),
+      scaledDistributeColumns = Seq(AttributeReference("value", DoubleType)()),
+      appendedAttributes = Seq(
+        AttributeReference("bin_start", TimestampType)(),
+        AttributeReference("bin_end", TimestampType)(),
+        AttributeReference("bin_distribute_ratio", DoubleType)()),
+      timeZoneId = None,
+      child = DummyLeafExecWithPartitioning(
+        output = Seq(tsStart, tsEnd, value, host),
+        partitioning = HashPartitioning(Seq(value, host), 4)))
+
+    binBy.outputPartitioning match {
+      case p: UnknownPartitioning => assert(p.numPartitions === 4)
+      case other => fail(s"Expected UnknownPartitioning, got $other")
+    }
   }
 }
 

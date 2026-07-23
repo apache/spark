@@ -54,7 +54,12 @@ class UnresolveRelationsInTransaction(val catalogManager: CatalogManager)
   private def unresolveRelations(
       plan: LogicalPlan,
       catalog: CatalogPlugin): LogicalPlan = {
-    plan.transform {
+    // Walk subqueries too: relations from the transaction's catalog that hide inside scalar /
+    // IN / EXISTS subqueries must also be re-resolved through the txn-aware catalog so the
+    // connector can track every read in the transaction's scope. We use `transformWithSubqueries`
+    // rather than `resolveOperators*` so that subtrees marked `analyzed = true` (e.g. from
+    // cached/pre-analyzed DataFrames or temp views) are still rewritten.
+    plan.transformWithSubqueries {
       case r: DataSourceV2Relation if isLoadedFromCatalog(r, catalog) =>
         V2TableReference.createForTransaction(r)
     }

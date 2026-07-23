@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.types.{PhysicalBinaryType, PhysicalIntegerType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, ObjectType, ShortType, StringType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, ObjectType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VariantType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, UTF8String, VariantVal}
 
 /**
  * :: DeveloperApi ::
@@ -106,9 +106,6 @@ object EncoderUtils {
       case _: DecimalType => classOf[Decimal]
       case _: DayTimeIntervalType => classOf[PhysicalLongType.InternalType]
       case _: YearMonthIntervalType => classOf[PhysicalIntegerType.InternalType]
-      case _: TimeType => classOf[PhysicalLongType.InternalType]
-      case _: TimestampNTZNanosType => classOf[TimestampNanosVal]
-      case _: TimestampLTZNanosType => classOf[TimestampNanosVal]
       case _: StringType => classOf[UTF8String]
       case _: StructType => classOf[InternalRow]
       case _: ArrayType => classOf[ArrayData]
@@ -119,16 +116,16 @@ object EncoderUtils {
     }
   }
 
-  @scala.annotation.tailrec
-  def javaBoxedType(dt: DataType): Class[_] = dt match {
+  def javaBoxedType(dt: DataType): Class[_] =
+    TypeOps(dt).map(_.getBoxedJavaClass).getOrElse(javaBoxedTypeDefault(dt))
+
+  private def javaBoxedTypeDefault(dt: DataType): Class[_] = dt match {
     case _: DecimalType => classOf[Decimal]
     case _: DayTimeIntervalType => classOf[java.lang.Long]
     case _: YearMonthIntervalType => classOf[java.lang.Integer]
     case BinaryType => classOf[Array[Byte]]
     case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
-    case _: TimestampNTZNanosType => classOf[TimestampNanosVal]
-    case _: TimestampLTZNanosType => classOf[TimestampNanosVal]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayData]
     case _: MapType => classOf[MapData]

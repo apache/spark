@@ -20,12 +20,16 @@ import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateView, InsertIntoStatement, LogicalPlan}
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcInto, CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateStreamingTableAutoCdc, CreateView, InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
 import org.apache.spark.sql.pipelines.Language
+import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -162,6 +166,10 @@ class SqlGraphRegistrationContext(
       case createStreamingTableCommand: CreateStreamingTable =>
         // CREATE STREAMING TABLE [ streaming_table_name ] [ options ]
         CreateStreamingTableHandler.handle(createStreamingTableCommand, queryOrigin)
+      case createStreamingTableAutoCdcCommand: CreateStreamingTableAutoCdc =>
+        // CREATE STREAMING TABLE [ streaming_table_name ] [ options ]
+        //   FLOW AUTO CDC FROM [ source ] KEYS ( ... ) SEQUENCE BY [ expr ] ...
+        CreateStreamingTableAutoCdcHandler.handle(createStreamingTableAutoCdcCommand, queryOrigin)
       case createFlowCommand: CreateFlowCommand =>
         // CREATE FLOW [ flow_name ] AS INSERT INTO [ destination_name ] BY NAME
         CreateFlowHandler.handle(createFlowCommand, queryOrigin)
@@ -183,6 +191,9 @@ class SqlGraphRegistrationContext(
         )
         .identifier
 
+      val (partitionCols, clusterCols) =
+        PartitionHelper.splitPartitionAndClusterColumns(cst.partitioning, queryOrigin)
+
       // Register streaming table as a table.
       graphRegistrationContext.registerTable(
         Table(
@@ -190,8 +201,8 @@ class SqlGraphRegistrationContext(
           comment = cst.tableSpec.comment,
           specifiedSchema =
             Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
-          partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
-          clusterCols = None,
+          partitionCols = Option(partitionCols),
+          clusterCols = Option.when(clusterCols.nonEmpty)(clusterCols),
           properties = cst.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
@@ -215,6 +226,9 @@ class SqlGraphRegistrationContext(
         )
         .identifier
 
+      val (partitionCols, clusterCols) =
+        PartitionHelper.splitPartitionAndClusterColumns(cst.partitioning, queryOrigin)
+
       // Register streaming table as a table.
       graphRegistrationContext.registerTable(
         Table(
@@ -222,8 +236,8 @@ class SqlGraphRegistrationContext(
           comment = cst.tableSpec.comment,
           specifiedSchema =
             Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
-          partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
-          clusterCols = None,
+          partitionCols = Option(partitionCols),
+          clusterCols = Option.when(clusterCols.nonEmpty)(clusterCols),
           properties = cst.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
@@ -256,6 +270,162 @@ class SqlGraphRegistrationContext(
     }
   }
 
+  /**
+   * Converts the parse-time AUTO CDC parameters (catalyst expressions and unresolved attributes)
+   * into the [[ChangeArgs]] consumed by an [[AutoCdcFlow]]. Shared by the two SQL AUTO CDC entry
+   * points: `CREATE STREAMING TABLE ... FLOW AUTO CDC ...` and `CREATE FLOW ... AS AUTO CDC INTO`.
+   *
+   * `STORED AS SCD TYPE <n>` selects [[ScdType]] (defaulting to [[ScdType.Type1]] when absent).
+   * `TRACK HISTORY ON ...` populates the SCD2-only [[ChangeArgs.trackHistorySelection]] and is
+   * rejected under SCD1. [[includeColumns]]/[[excludeColumns]] and the two track-history lists are
+   * each mutually exclusive at the grammar level; the guards here are defensive.
+   */
+  private def buildChangeArgs(
+      keys: Seq[UnresolvedAttribute],
+      sequenceByExpr: Expression,
+      deleteCondition: Option[Expression],
+      includeColumns: Option[Seq[UnresolvedAttribute]],
+      excludeColumns: Option[Seq[UnresolvedAttribute]],
+      storedAsScdType: Int,
+      trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
+      trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]],
+      queryOrigin: QueryOrigin): ChangeArgs = {
+    val columnSelection: Option[ColumnSelection] = (includeColumns, excludeColumns) match {
+      case (Some(_), Some(_)) =>
+        throw SqlGraphElementRegistrationException(
+          msg = "AUTO CDC cannot specify both COLUMNS and COLUMNS * EXCEPT.",
+          queryOrigin = queryOrigin
+        )
+      case (Some(included), None) =>
+        Option(ColumnSelection.IncludeColumns(included.map(toUnqualifiedColumnName)))
+      case (None, Some(excluded)) =>
+        Option(ColumnSelection.ExcludeColumns(excluded.map(toUnqualifiedColumnName)))
+      case (None, None) =>
+        None
+    }
+
+    val scdType: ScdType = storedAsScdType match {
+      case 1 => ScdType.Type1
+      case 2 => ScdType.Type2
+      case other =>
+        throw SqlGraphElementRegistrationException(
+          msg = s"Unsupported AUTO CDC SCD type: $other. Only SCD TYPE 1 and SCD TYPE 2 are " +
+            "supported.",
+          queryOrigin = queryOrigin
+        )
+    }
+
+    // TRACK HISTORY is only meaningful under SCD2; reject it for SCD1 before interpreting the
+    // clause. The grammar allows the clause regardless of the STORED AS type, so this is where
+    // the SCD2 requirement is enforced.
+    if (scdType != ScdType.Type2 &&
+      (trackHistoryColumns.isDefined || trackHistoryExceptColumns.isDefined)) {
+      throw SqlGraphElementRegistrationException(
+        msg = "AUTO CDC TRACK HISTORY requires STORED AS SCD TYPE 2.",
+        queryOrigin = queryOrigin
+      )
+    }
+
+    val trackHistorySelection: Option[ColumnSelection] =
+      (trackHistoryColumns, trackHistoryExceptColumns) match {
+        case (Some(_), Some(_)) =>
+          throw SqlGraphElementRegistrationException(
+            msg = "AUTO CDC cannot specify both TRACK HISTORY ON and TRACK HISTORY ON * EXCEPT.",
+            queryOrigin = queryOrigin
+          )
+        case (Some(tracked), None) =>
+          Option(ColumnSelection.IncludeColumns(tracked.map(toUnqualifiedColumnName)))
+        case (None, Some(nonTracked)) =>
+          Option(ColumnSelection.ExcludeColumns(nonTracked.map(toUnqualifiedColumnName)))
+        case (None, None) =>
+          None
+      }
+
+    ChangeArgs(
+      keys = keys.map(toUnqualifiedColumnName),
+      sequencing = Column(sequenceByExpr),
+      storedAsScdType = scdType,
+      deleteCondition = deleteCondition.map(Column(_)),
+      columnSelection = columnSelection,
+      trackHistorySelection = trackHistorySelection
+    )
+  }
+
+  private def toUnqualifiedColumnName(attr: UnresolvedAttribute): UnqualifiedColumnName =
+    UnqualifiedColumnName(attr.nameParts)
+
+  private object CreateStreamingTableAutoCdcHandler {
+    def handle(cst: CreateStreamingTableAutoCdc, queryOrigin: QueryOrigin): Unit = {
+      val stIdentifier = GraphIdentifierManager
+        .parseAndQualifyTableIdentifier(
+          rawTableIdentifier = IdentifierHelper.toTableIdentifier(cst.name),
+          currentCatalog = context.getCurrentCatalogOpt,
+          currentDatabase = context.getCurrentDatabaseOpt
+        )
+        .identifier
+
+      if (cst.columns.nonEmpty) {
+        throw SqlGraphElementRegistrationException(
+          msg = "Explicit column lists are not supported for AUTO CDC streaming tables; " +
+            "omit the column list and let schema be inferred from the flow.",
+          queryOrigin = queryOrigin)
+      }
+
+      val (partitionCols, clusterCols) =
+        PartitionHelper.splitPartitionAndClusterColumns(cst.partitioning, queryOrigin)
+
+      // Register the streaming table as a table. The streaming table is itself the target of the
+      // CDC operation.
+      graphRegistrationContext.registerTable(
+        Table(
+          identifier = stIdentifier,
+          comment = cst.tableSpec.comment,
+          specifiedSchema = None,
+          partitionCols = Option(partitionCols),
+          clusterCols = Option.when(clusterCols.nonEmpty)(clusterCols),
+          properties = cst.tableSpec.properties,
+          origin = queryOrigin.copy(
+            objectName = Option(stIdentifier.unquotedString),
+            objectType = Option(QueryOriginType.Table.toString)
+          ),
+          format = cst.tableSpec.provider,
+          normalizedPath = None,
+          isStreamingTable = true
+        )
+      )
+
+      // Register the AutoCDC flow that backs this streaming table. Both the flow and its
+      // destination are the streaming table itself.
+      graphRegistrationContext.registerFlow(
+        AutoCdcFlow(
+          identifier = stIdentifier,
+          destinationIdentifier = stIdentifier,
+          func = FlowAnalysis.createFlowFunctionFromLogicalPlan(cst.source),
+          sqlConf = context.getSqlConf,
+          queryContext = QueryContext(
+            currentCatalog = context.getCurrentCatalogOpt,
+            currentDatabase = context.getCurrentDatabaseOpt
+          ),
+          origin = queryOrigin.copy(
+            objectName = Option(stIdentifier.unquotedString),
+            objectType = Option(QueryOriginType.Flow.toString)
+          ),
+          changeArgs = buildChangeArgs(
+            keys = cst.keys,
+            sequenceByExpr = cst.sequenceByExpr,
+            deleteCondition = cst.deleteCondition,
+            includeColumns = cst.includeColumns,
+            excludeColumns = cst.excludeColumns,
+            storedAsScdType = cst.storedAsScdType,
+            trackHistoryColumns = cst.trackHistoryColumns,
+            trackHistoryExceptColumns = cst.trackHistoryExceptColumns,
+            queryOrigin = queryOrigin
+          )
+        )
+      )
+    }
+  }
+
   private object CreateMaterializedViewAsSelectHandler {
     def handle(cmv: CreateMaterializedViewAsSelect, queryOrigin: QueryOrigin): Unit = {
       val mvIdentifier = GraphIdentifierManager
@@ -266,6 +436,9 @@ class SqlGraphRegistrationContext(
         )
         .identifier
 
+      val (partitionCols, clusterCols) =
+        PartitionHelper.splitPartitionAndClusterColumns(cmv.partitioning, queryOrigin)
+
       // Register materialized view as a table.
       graphRegistrationContext.registerTable(
         Table(
@@ -273,8 +446,8 @@ class SqlGraphRegistrationContext(
           comment = cmv.tableSpec.comment,
           specifiedSchema =
             Option.when(cmv.columns.nonEmpty)(StructType(cmv.columns.map(_.toV1Column))),
-          partitionCols = Option(PartitionHelper.applyPartitioning(cmv.partitioning, queryOrigin)),
-          clusterCols = None,
+          partitionCols = Option(partitionCols),
+          clusterCols = Option.when(clusterCols.nonEmpty)(clusterCols),
           properties = cmv.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(mvIdentifier.unquotedString),
@@ -415,7 +588,7 @@ class SqlGraphRegistrationContext(
         )
         .identifier
 
-      val (flowTargetDatasetIdentifier, flowQueryLogicalPlan) = cf.flowOperation match {
+      cf.flowOperation match {
         case i: InsertIntoStatement =>
           validateInsertIntoFlow(i, queryOrigin)
           val flowTargetDatasetName = i.table match {
@@ -427,44 +600,64 @@ class SqlGraphRegistrationContext(
                 queryOrigin = queryOrigin
               )
           }
-          val qualifiedFlowTargetDatasetName = GraphIdentifierManager
-            .parseAndQualifyTableIdentifier(
-              rawTableIdentifier = flowTargetDatasetName,
-              currentCatalog = context.getCurrentCatalogOpt,
-              currentDatabase = context.getCurrentDatabaseOpt
+          graphRegistrationContext.registerFlow(
+            UntypedFlow(
+              identifier = flowIdentifier,
+              destinationIdentifier = qualifyDestinationIdentifier(flowTargetDatasetName),
+              func = FlowAnalysis.createFlowFunctionFromLogicalPlan(i.query),
+              sqlConf = context.getSqlConf,
+              once = false,
+              queryContext = QueryContext(
+                currentCatalog = context.getCurrentCatalogOpt,
+                currentDatabase = context.getCurrentDatabaseOpt
+              ),
+              origin = queryOrigin
             )
-            .identifier
-          (qualifiedFlowTargetDatasetName, i.query)
+          )
+        case a: AutoCdcInto =>
+          val flowTargetDatasetName = IdentifierHelper.toTableIdentifier(a.targetTable)
+          graphRegistrationContext.registerFlow(
+            AutoCdcFlow(
+              identifier = flowIdentifier,
+              destinationIdentifier = qualifyDestinationIdentifier(flowTargetDatasetName),
+              func = FlowAnalysis.createFlowFunctionFromLogicalPlan(a.source),
+              sqlConf = context.getSqlConf,
+              queryContext = QueryContext(
+                currentCatalog = context.getCurrentCatalogOpt,
+                currentDatabase = context.getCurrentDatabaseOpt
+              ),
+              origin = queryOrigin,
+              changeArgs = buildChangeArgs(
+                keys = a.keys,
+                sequenceByExpr = a.sequenceByExpr,
+                deleteCondition = a.deleteCondition,
+                includeColumns = a.includeColumns,
+                excludeColumns = a.excludeColumns,
+                storedAsScdType = a.storedAsScdType,
+                trackHistoryColumns = a.trackHistoryColumns,
+                trackHistoryExceptColumns = a.trackHistoryExceptColumns,
+                queryOrigin = queryOrigin
+              )
+            )
+          )
         case _ =>
           throw SqlGraphElementRegistrationException(
-            msg = "Unable flow type. Only INSERT INTO flows are supported.",
+            msg = "Unknown flow type. Only INSERT INTO and AUTO CDC INTO flows are supported.",
             queryOrigin = queryOrigin
           )
       }
+    }
 
-      val qualifiedDestinationIdentifier = GraphIdentifierManager
+    /** Qualifies a raw flow target dataset identifier against the current catalog/database. */
+    private def qualifyDestinationIdentifier(
+        flowTargetDatasetIdentifier: TableIdentifier): TableIdentifier =
+      GraphIdentifierManager
         .parseAndQualifyFlowIdentifier(
           rawFlowIdentifier = flowTargetDatasetIdentifier,
           currentCatalog = context.getCurrentCatalogOpt,
           currentDatabase = context.getCurrentDatabaseOpt
         )
         .identifier
-
-      graphRegistrationContext.registerFlow(
-        UntypedFlow(
-          identifier = flowIdentifier,
-          destinationIdentifier = qualifiedDestinationIdentifier,
-          func = FlowAnalysis.createFlowFunctionFromLogicalPlan(flowQueryLogicalPlan),
-          sqlConf = context.getSqlConf,
-          once = false,
-          queryContext = QueryContext(
-            currentCatalog = context.getCurrentCatalogOpt,
-            currentDatabase = context.getCurrentDatabaseOpt
-          ),
-          origin = queryOrigin
-        )
-      )
-    }
 
     private def validateInsertIntoFlow(
         insertIntoStatement: InsertIntoStatement,
@@ -557,25 +750,24 @@ class SqlGraphRegistrationContext(
 }
 
 object PartitionHelper {
-  import org.apache.spark.sql.connector.expressions.{IdentityTransform, Transform}
+  import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform, Transform}
 
-  def applyPartitioning(partitioning: Seq[Transform], queryOrigin: QueryOrigin): Seq[String] = {
-    partitioning.foreach {
-      case _: IdentityTransform =>
-      case other =>
-        throw SqlGraphElementRegistrationException(
-          msg = s"Invalid partitioning transform ($other)",
-          queryOrigin = queryOrigin
-        )
-    }
-    partitioning.collect {
+  /**
+   * Splits the parsed transforms of a `CREATE STREAMING TABLE`/`CREATE MATERIALIZED VIEW` statement
+   * into partition columns (`PARTITIONED BY`) and cluster columns (`CLUSTER BY`).
+   *
+   * The parser folds both clauses into a single `partitioning` sequence -- `PARTITIONED BY` as
+   * [[IdentityTransform]]s and `CLUSTER BY` as a single [[ClusterByTransform]] -- and guarantees
+   * the two clauses are mutually exclusive. This mirrors how the Connect/Python path populates
+   * `partitionCols` and `clusterCols` from its proto fields.
+   *
+   * @return a pair of (partition columns, cluster columns).
+   */
+  def splitPartitionAndClusterColumns(
+      partitioning: Seq[Transform],
+      queryOrigin: QueryOrigin): (Seq[String], Seq[String]) = {
+    val partitionCols = partitioning.collect {
       case t: IdentityTransform =>
-        if (t.references.length != 1) {
-          throw SqlGraphElementRegistrationException(
-            msg = "Only single column based partitioning is supported.",
-            queryOrigin = queryOrigin
-          )
-        }
         if (t.ref.fieldNames().length != 1) {
           throw SqlGraphElementRegistrationException(
             msg = "Multipart partition identifier not allowed.",
@@ -584,6 +776,30 @@ object PartitionHelper {
         }
         t.ref.fieldNames().head
     }
+    val clusterCols = partitioning.collect {
+      case ClusterByTransform(columnNames) =>
+        columnNames.map { ref =>
+          if (ref.fieldNames().length != 1) {
+            throw SqlGraphElementRegistrationException(
+              msg = "Multipart cluster identifier not allowed.",
+              queryOrigin = queryOrigin
+            )
+          }
+          ref.fieldNames().head
+        }
+    }.flatten
+    // Reject any transform that is neither an identity partition nor a clustering transform (e.g.
+    // a non-identity partition transform like `year(col)`).
+    partitioning.foreach {
+      case _: IdentityTransform =>
+      case ClusterByTransform(_) =>
+      case other =>
+        throw SqlGraphElementRegistrationException(
+          msg = s"Invalid partitioning transform ($other)",
+          queryOrigin = queryOrigin
+        )
+    }
+    (partitionCols, clusterCols)
   }
 }
 
@@ -609,7 +825,7 @@ object SqlGraphRegistrationContext {
    * terminated statement is not returned.
    */
   private def splitSqlTextBySemicolon(sqlText: String): List[String] = StringUtils
-    .splitSemiColonWithIndex(line = sqlText, enableSqlScripting = false)
+    .splitSemiColon(line = sqlText, enableSqlScripting = false)
 
   /** Class that holds the logical plan and query origin parsed from a SQL statement. */
   case class SqlQueryPlanWithOrigin(plan: LogicalPlan, queryOrigin: QueryOrigin)

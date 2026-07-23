@@ -141,7 +141,7 @@ object TypeUtils extends QueryErrorsBase {
 
   private def containsTimestampNanosType(dataType: DataType): Boolean = {
     dataType.existsRecursively {
-      case _: TimestampNTZNanosType | _: TimestampLTZNanosType => true
+      case _: AnyTimestampNanoType => true
       case _ => false
     }
   }

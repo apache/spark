@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CollationFactory, 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
-import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -939,6 +939,34 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // Both fields contribute to the hash (guards against a dropped epochMicros/nanos field).
       assert(hash(a) !== hash(diffNanos))
       assert(hash(a) !== hash(diffMicros))
+    }
+  }
+
+  test("SPARK-58236: CalendarInterval hash folds all fields and agrees across codegen") {
+    def lit(months: Int, days: Int, micros: Long): Literal =
+      Literal.create(new CalendarInterval(months, days, micros), CalendarIntervalType)
+
+    // Murmur3Hash and XxHash64 treat months, days and microseconds as independent fields, so
+    // changing any one of them changes the hash. HiveHash mirrors Hive's day-time interval
+    // instead, dropping months and folding days into microseconds, so it joins only the
+    // interpreted-vs-codegen check below.
+    val base = lit(1, 5, 7L)
+    Seq[Expression => Any](
+      e => Murmur3Hash(Seq(e), 42).eval(),
+      e => XxHash64(Seq(e), 42L).eval()).foreach { hash =>
+      assert(hash(base) === hash(lit(1, 5, 7L)))
+      assert(hash(base) !== hash(lit(2, 5, 7L))) // months
+      assert(hash(base) !== hash(lit(1, 6, 7L))) // days
+      assert(hash(base) !== hash(lit(1, 5, 8L))) // microseconds
+    }
+
+    // The interpreted and codegen paths must agree, above all when days is the only non-zero
+    // field. checkEvaluation runs both and asserts they match, catching a codegen path that
+    // omits days.
+    Seq(lit(0, 5, 0L), lit(0, -5, 0L), lit(3, 5, 0L), lit(1, 5, 7L)).foreach { interval =>
+      checkEvaluation(Murmur3Hash(Seq(interval), 42), Murmur3Hash(Seq(interval), 42).eval())
+      checkEvaluation(XxHash64(Seq(interval), 42L), XxHash64(Seq(interval), 42L).eval())
+      checkEvaluation(HiveHash(Seq(interval)), HiveHash(Seq(interval)).eval())
     }
   }
 

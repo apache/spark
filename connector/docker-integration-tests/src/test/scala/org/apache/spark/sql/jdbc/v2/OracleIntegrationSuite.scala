@@ -20,9 +20,12 @@ package org.apache.spark.sql.jdbc.v2
 import java.sql.Connection
 import java.util.Locale
 
+import scala.util.Using
+
 import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -203,6 +206,60 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     }
   }
 
+  // An object that Oracle's table listing surfaces but that cannot be read as a table.
+  // `setup`/`teardown` are the DDL to create/drop it; `objectName` is its name in SYSTEM.
+  case class NonSelectableObjectCase(setup: Seq[String], objectName: String, teardown: Seq[String])
+
+  private val nonSelectableObjectCases = Map(
+    "synonym to a procedure (ORA-04044)" -> NonSelectableObjectCase(
+      setup = Seq(
+        "CREATE PROCEDURE test_proc AS BEGIN NULL; END;",
+        "CREATE SYNONYM proc_synonym FOR test_proc"),
+      objectName = "PROC_SYNONYM",
+      teardown = Seq("DROP SYNONYM proc_synonym", "DROP PROCEDURE test_proc")),
+    "synonym to a broken function (ORA-04044)" -> NonSelectableObjectCase(
+      // Function referencing a missing object -> created INVALID.
+      setup = Seq(
+        """CREATE FUNCTION broken_func RETURN NUMBER AS
+          |  x NUMBER;
+          |BEGIN
+          |  SELECT col INTO x FROM non_existent_table_xyz;
+          |  RETURN x;
+          |END;""".stripMargin,
+        "CREATE SYNONYM func_synonym FOR broken_func"),
+      objectName = "FUNC_SYNONYM",
+      teardown = Seq("DROP SYNONYM func_synonym", "DROP FUNCTION broken_func")),
+    "invalid view (ORA-04063)" -> NonSelectableObjectCase(
+      // FORCE-create a view over a missing table -> view is INVALID; SELECT raises ORA-04063.
+      setup = Seq("CREATE FORCE VIEW invalid_view AS SELECT * FROM non_existent_table_xyz"),
+      objectName = "INVALID_VIEW",
+      teardown = Seq("DROP VIEW invalid_view")))
+
+  namedGridTest("SPARK-57778: non-selectable object is handled gracefully")(
+      nonSelectableObjectCases) { testCase =>
+    Using.resource(getConnection()) { conn =>
+      testCase.setup.foreach(conn.prepareStatement(_).executeUpdate())
+    }
+    try {
+      val tableCatalog =
+        spark.sessionState.catalogManager.catalog(catalogName).asInstanceOf[TableCatalog]
+
+      // tableExists treats a non-selectable object as non-existent instead of throwing.
+      assert(!tableCatalog.tableExists(Identifier.of(Array("SYSTEM"), testCase.objectName)))
+
+      // Reading it surfaces a dedicated, clear error instead of a raw JDBC failure.
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT * FROM $catalogName.SYSTEM.${testCase.objectName}").collect()
+      }
+      assert(e.getCondition == "JDBC_OBJECT_NOT_SELECTABLE")
+      assert(e.getMessageParameters.get("objectName").contains(testCase.objectName))
+    } finally {
+      Using.resource(getConnection()) { conn =>
+        testCase.teardown.foreach(conn.prepareStatement(_).executeUpdate())
+      }
+    }
+  }
+
   override def testDatetime(tbl: String): Unit = {
     val df1 = sql(s"SELECT name FROM $tbl WHERE " +
       "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")
@@ -340,5 +397,13 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     assert(rows10.length === 2)
     assert(rows10(0).getString(0) === "amy")
     assert(rows10(1).getString(0) === "alex")
+
+    // SPARK-57364: verify MONTH truncation pushes down correctly (not as 'IW')
+    val df11 = sql(s"SELECT name FROM $tbl WHERE trunc(date1, 'MONTH') = date'2022-05-01'")
+    checkFilterPushed(df11)
+    val rows11 = df11.collect()
+    assert(rows11.length === 2)
+    assert(rows11(0).getString(0) === "amy")
+    assert(rows11(1).getString(0) === "alex")
   }
 }

@@ -249,4 +249,14 @@ class MasterSuite extends MasterSuiteBase {
         eventLogCodec = None)
     assert(master.invokePrivate(_createApplication(desc, null)).id === "spark-45756")
   }
+
+  test("SPARK-57451: Allows REST server and spark.authenticate.secret to be enabled together") {
+    val conf = new SparkConf()
+      .set(MASTER_REST_SERVER_ENABLED, true)
+      .set(AUTH_SECRET, "secret")
+    // Creating a Master must not fail when both the REST server and an auth secret are set.
+    noException should be thrownBy {
+      makeMaster(conf)
+    }
+  }
 }
