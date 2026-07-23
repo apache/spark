@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.trees.{TreeNode, TreeNodeTag}
 
 /**
- * Carries an optional value projection without changing the case-class shape of existing nodes.
+ * Carries an optional value projection without changing the case-class shape, canonicalization,
+ * or plan identity of existing nodes. If a rewrite drops the tag, pruning safely falls back to
+ * the existing behavior instead of relying on an incomplete projection.
  *
  * The actual projection is transient: a serialized plan must not retain its source logical plan.
  */

@@ -25,14 +25,17 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.GivenWhenThen
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, DynamicPruningSubquery, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
-import org.apache.spark.sql.catalyst.plans.ExistenceJoin
+import org.apache.spark.sql.catalyst.optimizer.BuildRight
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, InMemoryTableWithV2FilterCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
@@ -385,7 +388,148 @@ abstract class DynamicPartitionPruningSuiteBase
             .collectFirst { case in: InSubqueryExec => in }.get
           assert(pruning.isResultUnavailable)
           assert(pruning.values().isEmpty)
+
+          val collectError = intercept[SparkException] {
+            projected.head.executeCollect()
+          }
+          assert(collectError.getCondition === "INTERNAL_ERROR")
+          assert(collectError.getMessage.contains("executeCollectResult"))
+
+          val ordinaryIn = pruning.copy(isDynamicPruning = false)
+          val ordinaryInError = intercept[AssertionError] {
+            ordinaryIn.updateResult()
+          }
+          assert(ordinaryInError.getMessage.contains("dynamic partition pruning"))
         }
+      }
+    }
+  }
+
+  test("reuse ancestor broadcast string values with a residual join predicate") {
+    withTable("dpp_projection_products", "dpp_projection_promotions",
+        "dpp_projection_sales") {
+      Seq(
+        (101, "books", 10),
+        (202, "toys", 20),
+        (303, "clothing", 30),
+        (404, null.asInstanceOf[String], 40))
+        .toDF("product_id", "category", "price")
+        .write.format(tableFormat).saveAsTable("dpp_projection_products")
+
+      Seq((101, true, 15), (202, true, 25), (303, false, 35), (404, true, 45))
+        .toDF("product_id", "active", "max_price")
+        .write.format(tableFormat).saveAsTable("dpp_projection_promotions")
+
+      Seq(
+        (101, "books"),
+        (202, "toys"),
+        (303, "clothing"),
+        (909, "electronics"))
+        .toDF("product_id", "category")
+        .write.partitionBy("category").format(tableFormat)
+        .saveAsTable("dpp_projection_sales")
+
+      withSQLConf(
+          SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED.key -> "true",
+          SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df = sql(
+          """
+            |WITH eligible AS (
+            |  SELECT /*+ BROADCAST(p) */ p.product_id, p.category
+            |  FROM dpp_projection_products p
+            |  JOIN dpp_projection_promotions promo
+            |    ON p.product_id = promo.product_id
+            |   AND p.price <= promo.max_price
+            |  WHERE promo.active AND promo.product_id > 0
+            |)
+            |SELECT s.product_id, s.category
+            |FROM dpp_projection_sales s
+            |JOIN eligible e
+            |  ON s.product_id = e.product_id
+            | AND s.category = e.category
+            |ORDER BY s.product_id
+            |""".stripMargin)
+
+        checkAnswer(df, Seq(Row(101, "books"), Row(202, "toys")))
+
+        val projected = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case subquery: ProjectedBroadcastValueSubqueryExec => subquery
+        }
+        assert(projected.size === 1, df.queryExecution.executedPlan)
+
+        val pruning = collectDynamicPruningExpressions(df.queryExecution.executedPlan)
+          .collectFirst { case in: InSubqueryExec => in }.get
+        assert(pruning.values().get.map(String.valueOf).toSet ===
+          Set("books", "toys", "clothing"))
+      }
+    }
+  }
+
+  test("bind reordered broadcast value columns for partition pruning") {
+    withTable("dpp_reordered_dates", "dpp_reordered_users", "dpp_reordered_target") {
+      Seq(
+        (Date.valueOf("2024-01-01"), "us", "2024-01-01"),
+        (Date.valueOf("2024-01-08"), "eu", "2024-01-08"),
+        (Date.valueOf("2024-01-15"), "us", "2024-01-15"))
+        .toDF("cohort_date", "region", "cohort_ds")
+        .write.format(tableFormat).saveAsTable("dpp_reordered_dates")
+
+      Seq(
+        ("2024-01-01", "us", "u1", true),
+        ("2024-01-08", "eu", "u2", true),
+        ("2024-01-15", "us", "inactive", false))
+        .toDF("cohort_ds", "region", "user_id", "active")
+        .write.format(tableFormat).saveAsTable("dpp_reordered_users")
+
+      Seq(
+        ("u1", "20240107", "p1"),
+        ("u2", "20240114", "p2"),
+        ("inactive", "20240121", "extra-domain"))
+        .toDF("user_id", "ds", "payload")
+        .write.partitionBy("ds").format(tableFormat).saveAsTable("dpp_reordered_target")
+
+      withSQLConf(
+          SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED.key -> "true",
+          SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df = sql(
+          """
+            |WITH reordered_dates AS (
+            |  SELECT cohort_date, region, cohort_ds
+            |  FROM dpp_reordered_dates
+            |), cohorts AS (
+            |  SELECT /*+ BROADCAST(d) */ u.user_id, d.cohort_date
+            |  FROM reordered_dates d
+            |  JOIN dpp_reordered_users u
+            |    ON d.cohort_ds = u.cohort_ds AND d.region = u.region
+            |  WHERE u.active AND u.user_id <> 'filtered'
+            |)
+            |SELECT c.user_id, w.payload
+            |FROM cohorts c
+            |LEFT JOIN dpp_reordered_target w
+            |  ON w.user_id = c.user_id
+            | AND w.ds = date_format(date_add(c.cohort_date, 6), 'yyyyMMdd')
+            |ORDER BY c.user_id, w.payload
+            |""".stripMargin)
+
+        checkAnswer(df, Seq(Row("u1", "p1"), Row("u2", "p2")))
+
+        val projected = collectWithSubqueries(df.queryExecution.executedPlan) {
+          case subquery: ProjectedBroadcastValueSubqueryExec => subquery
+        }
+        assert(projected.size === 1, df.queryExecution.executedPlan)
+        assert(projected.head.child.output.map(_.name) ===
+          Seq("cohort_date", "region", "cohort_ds"))
+
+        val pruning = collectDynamicPruningExpressions(df.queryExecution.executedPlan)
+          .collectFirst { case in: InSubqueryExec => in }.get
+        assert(pruning.values().get.map(String.valueOf).toSet ===
+          Set("20240107", "20240114", "20240121"))
       }
     }
   }
@@ -2382,7 +2526,60 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
 }
 
 class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
-  with DisableAdaptiveExecutionSuite
+  with DisableAdaptiveExecutionSuite {
+
+  test("preserve direct broadcast pruning for existing hash and null-aware modes") {
+    withSQLConf(
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED.key -> "false",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
+      val source = spark.table("product").queryExecution.optimizedPlan
+      val build = QueryExecution.createSparkPlan(spark.sessionState.planner, source)
+      val probe = spark.range(4).queryExecution.sparkPlan
+      val mismatchedHashJoin = BroadcastHashJoinExec(
+        Seq(probe.output.head),
+        Seq(build.output(1)),
+        Inner,
+        BuildRight,
+        None,
+        probe,
+        build)
+      assert(!mismatchedHashJoin.rightKeys.head.semanticEquals(source.output.head))
+
+      val nullAwareJoin = BroadcastHashJoinExec(
+        Seq(probe.output.head),
+        Seq(build.output.head),
+        LeftAnti,
+        BuildRight,
+        None,
+        probe,
+        build,
+        isNullAwareAntiJoin = true)
+      assert(nullAwareJoin.isNullAwareAntiJoin)
+
+      Seq(
+        "mismatched hash mode" -> mismatchedHashJoin,
+        "null-aware anti join" -> nullAwareJoin).foreach { case (name, existingJoin) =>
+        val pruning = DynamicPruningSubquery(
+          probe.output.head,
+          source,
+          Seq(source.output.head),
+          Seq(0),
+          onlyInBroadcast = true)
+        val plan = FilterExec(DynamicPruningExpression(pruning), existingJoin)
+        val rewritten = PlanDynamicPruningFilters(spark).apply(plan)
+        val directFilters = rewritten.expressions.flatMap(_.collect {
+          case in: InSubqueryExec => in
+        })
+
+        assert(directFilters.size === 1, s"$name:\n$rewritten")
+        assert(directFilters.head.plan.isInstanceOf[SubqueryBroadcastExec],
+          s"$name:\n$rewritten")
+      }
+    }
+  }
+}
 
 class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
   with EnableAdaptiveExecutionSuite {
