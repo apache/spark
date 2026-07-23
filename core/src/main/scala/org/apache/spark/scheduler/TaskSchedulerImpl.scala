@@ -183,6 +183,8 @@ private[spark] class TaskSchedulerImpl(
   // default scheduler is FIFO
   val schedulingMode: SchedulingMode = conf.get(SCHEDULER_MODE)
 
+  private val taskPlacementStrategy = conf.get(TASK_PLACEMENT_STRATEGY)
+
   val rootPool: Pool = new Pool("", schedulingMode, 0, 0)
 
   // This is a var so that we can reset it for testing purposes.
@@ -392,72 +394,94 @@ private[spark] class TaskSchedulerImpl(
    * @param maxLocality max locality to allow when scheduling
    * @param shuffledOffers shuffled resource offers to use for scheduling,
    *                       remaining resources are tracked by below fields as tasks are scheduled
+   * @param offerIndicesByExecutorId offer indices sorted by executor ID for BIN_PACK
    * @param availableCpus  remaining cpus per offer,
    *                       value at index 'i' corresponds to shuffledOffers[i]
    * @param availableResources remaining resources per offer,
    *                           value at index 'i' corresponds to shuffledOffers[i]
    * @param tasks tasks scheduled per offer, value at index 'i' corresponds to shuffledOffers[i]
+   * @param useBinPacking whether to fill each offer before moving to the next one
    * @return tuple of (no delay schedule rejects?, option of min locality of launched task)
    */
   private def resourceOfferSingleTaskSet(
       taskSet: TaskSetManager,
       maxLocality: TaskLocality,
       shuffledOffers: Seq[WorkerOffer],
+      offerIndicesByExecutorId: IndexedSeq[Int],
       availableCpus: Array[Int],
       availableResources: Array[ExecutorResourcesAmounts],
-      tasks: IndexedSeq[ArrayBuffer[TaskDescription]])
+      tasks: IndexedSeq[ArrayBuffer[TaskDescription]],
+      useBinPacking: Boolean)
     : (Boolean, Option[TaskLocality]) = {
     var noDelayScheduleRejects = true
     var minLaunchedLocality: Option[TaskLocality] = None
+    val offerIndices = if (useBinPacking) {
+      // Re-evaluate busy executors for each TaskSet and bin-packed scheduling pass because tasks
+      // assigned by an earlier TaskSet or scheduling pass may have changed which executors should
+      // be packed first. Checking assigned cores also covers provisional barrier tasks, which are
+      // not registered as running until the entire barrier TaskSet can launch.
+      val (busyOfferIndices, idleOfferIndices) = offerIndicesByExecutorId.partition { i =>
+        isExecutorBusy(shuffledOffers(i).executorId) ||
+          availableCpus(i) < shuffledOffers(i).cores
+      }
+      busyOfferIndices.iterator ++ idleOfferIndices.iterator
+    } else {
+      shuffledOffers.indices.iterator
+    }
     // nodes and executors that are excluded for the entire application have already been
     // filtered out by this point
-    for (i <- shuffledOffers.indices) {
-      val execId = shuffledOffers(i).executorId
-      val host = shuffledOffers(i).host
-      val taskSetRpID = taskSet.taskSet.resourceProfileId
+    for (i <- offerIndices) {
+      var launchedTask = false
+      do {
+        launchedTask = false
+        val execId = shuffledOffers(i).executorId
+        val host = shuffledOffers(i).host
+        val taskSetRpID = taskSet.taskSet.resourceProfileId
 
-      // check whether the task can be scheduled to the executor base on resource profile.
-      if (sc.resourceProfileManager
-        .canBeScheduled(taskSetRpID, shuffledOffers(i).resourceProfileId)) {
-        val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
-          availableResources(i))
-        taskResAssignmentsOpt.foreach { taskResAssignments =>
-          try {
-            val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
-            val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
-            val (taskDescOption, didReject, index) =
-              taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)
-            noDelayScheduleRejects &= !didReject
-            for (task <- taskDescOption) {
-              val (locality, resources) = if (task != null) {
-                tasks(i) += task
-                addRunningTask(task.taskId, execId, taskSet)
-                (taskSet.taskInfos(task.taskId).taskLocality, task.resources)
-              } else {
-                assert(taskSet.isBarrier, "TaskDescription can only be null for barrier task")
-                val barrierTask = taskSet.barrierPendingLaunchTasks(index)
-                barrierTask.assignedOfferIndex = i
-                barrierTask.assignedCores = taskCpus
-                (barrierTask.taskLocality, barrierTask.assignedResources)
+        // check whether the task can be scheduled to the executor base on resource profile.
+        if (sc.resourceProfileManager
+          .canBeScheduled(taskSetRpID, shuffledOffers(i).resourceProfileId)) {
+          val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
+            availableResources(i))
+          taskResAssignmentsOpt.foreach { taskResAssignments =>
+            try {
+              val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
+              val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
+              val (taskDescOption, didReject, index) =
+                taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)
+              noDelayScheduleRejects &= !didReject
+              for (task <- taskDescOption) {
+                launchedTask = true
+                val (locality, resources) = if (task != null) {
+                  tasks(i) += task
+                  addRunningTask(task.taskId, execId, taskSet)
+                  (taskSet.taskInfos(task.taskId).taskLocality, task.resources)
+                } else {
+                  assert(taskSet.isBarrier, "TaskDescription can only be null for barrier task")
+                  val barrierTask = taskSet.barrierPendingLaunchTasks(index)
+                  barrierTask.assignedOfferIndex = i
+                  barrierTask.assignedCores = taskCpus
+                  (barrierTask.taskLocality, barrierTask.assignedResources)
+                }
+
+                minLaunchedLocality = minTaskLocality(minLaunchedLocality, Some(locality))
+                availableCpus(i) -= taskCpus
+                assert(availableCpus(i) >= 0)
+                availableResources(i).acquire(resources)
               }
-
-              minLaunchedLocality = minTaskLocality(minLaunchedLocality, Some(locality))
-              availableCpus(i) -= taskCpus
-              assert(availableCpus(i) >= 0)
-              availableResources(i).acquire(resources)
+            } catch {
+              case e: TaskNotSerializableException =>
+                // scalastyle:off line.size.limit
+                logError(log"Resource offer failed, task set " +
+                  log"${MDC(LogKeys.TASK_SET_NAME, taskSet.name)} was not serializable")
+                // scalastyle:on
+                // Do not offer resources for this task, but don't throw an error to allow other
+                // task sets to be submitted.
+                return (noDelayScheduleRejects, minLaunchedLocality)
             }
-          } catch {
-            case e: TaskNotSerializableException =>
-              // scalastyle:off line.size.limit
-              logError(log"Resource offer failed, task set " +
-                log"${MDC(LogKeys.TASK_SET_NAME, taskSet.name)} was not serializable")
-              // scalastyle:on
-              // Do not offer resources for this task, but don't throw an error to allow other
-              // task sets to be submitted.
-              return (noDelayScheduleRejects, minLaunchedLocality)
           }
         }
-      }
+      } while (useBinPacking && launchedTask)
     }
     (noDelayScheduleRejects, minLaunchedLocality)
   }
@@ -506,8 +530,9 @@ private[spark] class TaskSchedulerImpl(
 
   /**
    * Called by cluster manager to offer resources on workers. We respond by asking our active task
-   * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
-   * that tasks are balanced across the cluster.
+   * sets for tasks in order of priority. During the NO_PREF and ANY scheduling passes, the
+   * configured task placement strategy determines whether tasks cycle through eligible offers or
+   * fill one executor before moving to the next.
    */
   def resourceOffers(
       offers: IndexedSeq[WorkerOffer],
@@ -553,6 +578,12 @@ private[spark] class TaskSchedulerImpl(
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val resourceProfileIds = shuffledOffers.map(o => o.resourceProfileId).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
+    val offerIndicesByExecutorId: IndexedSeq[Int] =
+      if (taskPlacementStrategy == TaskPlacementStrategy.BIN_PACK && sortedTaskSets.nonEmpty) {
+        shuffledOffers.indices.sortBy(i => shuffledOffers(i).executorId)
+      } else {
+        shuffledOffers.indices
+      }
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
@@ -588,11 +619,15 @@ private[spark] class TaskSchedulerImpl(
         var noDelaySchedulingRejects = true
         var globalMinLocality: Option[TaskLocality] = None
         for (currentMaxLocality <- taskSet.myLocalityLevels) {
+          val useBinPacking =
+            taskPlacementStrategy == TaskPlacementStrategy.BIN_PACK &&
+              (currentMaxLocality == TaskLocality.NO_PREF ||
+                currentMaxLocality == TaskLocality.ANY)
           var launchedTaskAtCurrentMaxLocality = false
           do {
             val (noDelayScheduleReject, minLocality) = resourceOfferSingleTaskSet(
-              taskSet, currentMaxLocality, shuffledOffers, availableCpus,
-              availableResources, tasks)
+              taskSet, currentMaxLocality, shuffledOffers, offerIndicesByExecutorId,
+              availableCpus, availableResources, tasks, useBinPacking)
             launchedTaskAtCurrentMaxLocality = minLocality.isDefined
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
             noDelaySchedulingRejects &= noDelayScheduleReject
@@ -788,7 +823,8 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /**
-   * Shuffle offers around to avoid always placing tasks on the same workers.  Exposed to allow
+   * Shuffle offers to avoid fixed-order bias during SPREAD and locality-specific placement.
+   * BIN_PACK reorders them during the NO_PREF and ANY scheduling passes. Exposed to allow
    * overriding in tests, so it can be deterministic.
    */
   protected def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
