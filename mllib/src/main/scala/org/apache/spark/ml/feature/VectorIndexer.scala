@@ -37,6 +37,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.collection.{OpenHashSet, Utils}
 
 /** Private trait for params for VectorIndexer and VectorIndexerModel */
@@ -301,6 +302,10 @@ class VectorIndexerModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", -1, Map.empty)
+
+  private[spark] override def estimatedSize: Long = {
+    estimateMatadataSize + SizeEstimator.estimate(categoryMaps)
+  }
 
   /** Java-friendly version of [[categoryMaps]] */
   @Since("1.4.0")
