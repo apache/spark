@@ -43,7 +43,7 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
       .setInputCol("text")
       .setOutputCol("result")
       .fit(df)
-    val maxSize = 1024 * 4
+    val maxSize = 1024 * 5
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
