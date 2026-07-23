@@ -88,7 +88,6 @@ abstract class StreamExecution(
   protected val pollingDelayMs: Long = sparkSession.sessionState.conf.streamingPollingDelay
 
   protected val minLogEntriesToMaintain: Int = sparkSession.sessionState.conf.minBatchesToRetain
-  require(minLogEntriesToMaintain > 0, "minBatchesToRetain has to be positive")
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.

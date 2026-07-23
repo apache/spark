@@ -122,6 +122,9 @@ private[spark] object BlockManagerMessages {
   // divergent copies, and reject future divergent registrations.
   case class SealRddChecksums(rddId: Int) extends ToBlockManagerMaster
 
+  // Invariant-check a sealed RDD; see BlockManagerMasterEndpoint.verifyRddChecksumSeal.
+  case class VerifyRddChecksumSeal(rddId: Int) extends ToBlockManagerMaster
+
   case class GetLocations(blockId: BlockId) extends ToBlockManagerMaster
 
   case class GetLocationsAndStatus(blockId: BlockId, requesterHost: String)

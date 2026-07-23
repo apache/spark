@@ -2640,18 +2640,102 @@ object AsOfJoin {
   }
 
   /**
+   * Shared MATCH_CONDITION operand type rules used by analysis validation and by expression
+   * materialization so the two paths cannot drift.
+   */
+  private[catalyst] object MatchConditionTypes {
+
+    def isValidOperandType(dataType: DataType): Boolean =
+      RowOrdering.isOrderable(dataType) && !containsEmptyStructType(dataType)
+
+    def areOperandsCompatible(leftType: DataType, rightType: DataType): Boolean = {
+      if (!isValidOperandType(leftType) || !isValidOperandType(rightType)) {
+        false
+      } else if (isStringTemporalMismatch(leftType, rightType)) {
+        false
+      } else {
+        (leftType, rightType) match {
+          case (ArrayType(_, _), ArrayType(_, _)) =>
+            usesArrayOrderExpression(leftType, rightType)
+          case _ =>
+            TypeCoercion.findWiderTypeForTwo(leftType, rightType).isDefined ||
+              arePositionalStructsCompatible(leftType, rightType)
+        }
+      }
+    }
+
+    def usesArrayOrderExpression(leftType: DataType, rightType: DataType): Boolean =
+      (leftType, rightType) match {
+        case (ArrayType(leftElem, _), ArrayType(rightElem, _)) =>
+          areArrayElementsCompatible(leftElem, rightElem)
+        case _ => false
+      }
+
+    private def areArrayElementsCompatible(leftElem: DataType, rightElem: DataType): Boolean = {
+      if (DataTypeUtils.sameType(leftElem, rightElem)) {
+        RowOrdering.isOrderable(leftElem)
+      } else {
+        arePositionalStructsCompatible(leftElem, rightElem)
+      }
+    }
+
+    /** Positional struct operands with the same field count (names may differ). */
+    def usesStructDecomposition(leftType: DataType, rightType: DataType): Boolean =
+      (leftType, rightType) match {
+        case (leftStruct: StructType, rightStruct: StructType) =>
+          leftStruct.length == rightStruct.length && leftStruct.nonEmpty
+        case _ => false
+      }
+
+    /** Whole struct columns with identical schemas sort as a single struct value. */
+    def usesIdenticalStructSort(leftType: DataType, rightType: DataType): Boolean =
+      (leftType, rightType) match {
+        case (leftStruct: StructType, rightStruct: StructType) =>
+          leftStruct.sameType(rightStruct) && leftStruct.nonEmpty
+        case _ => false
+      }
+
+    private def isStringTemporalMismatch(leftType: DataType, rightType: DataType): Boolean = {
+      def isString(dataType: DataType): Boolean = dataType.isInstanceOf[StringType]
+      def isTemporal(dataType: DataType): Boolean = dataType.isInstanceOf[DatetimeType]
+      (isTemporal(leftType) && isString(rightType)) || (isString(leftType) && isTemporal(rightType))
+    }
+
+    private def arePositionalStructsCompatible(
+        leftType: DataType,
+        rightType: DataType): Boolean = {
+      (leftType, rightType) match {
+        case (leftStruct: StructType, rightStruct: StructType)
+            if usesStructDecomposition(leftType, rightType) =>
+          leftStruct.zip(rightStruct).forall { case (leftField, rightField) =>
+            areOperandsCompatible(leftField.dataType, rightField.dataType)
+          }
+        case _ => false
+      }
+    }
+
+    private def containsEmptyStructType(dataType: DataType): Boolean = dataType match {
+      case struct: StructType =>
+        struct.isEmpty || struct.exists(field => containsEmptyStructType(field.dataType))
+      case ArrayType(elementType, _) => containsEmptyStructType(elementType)
+      case _ => false
+    }
+  }
+
+  /**
    * Sort-merge ASOF join sorts each side by these expressions (after equi-keys) so the
    * right-side buffer is ordered consistently with MATCH_CONDITION lexicographic comparison.
    *
    * SQL tuple literals `(t.a, t.b)` are flattened to scalar leaves. Whole struct columns
    * (`t.k >= r.k`) sort by the struct value directly so nested struct shapes stay intact.
+   * Array operands sort element-wise; length mismatches follow Spark array ordering semantics.
    */
   def matchSortExpressions(
       leftOperand: Expression,
       rightOperand: Expression): (Seq[Expression], Seq[Expression]) = {
     (leftOperand.dataType, rightOperand.dataType) match {
       case (leftStruct: StructType, rightStruct: StructType)
-          if leftStruct.sameType(rightStruct) && leftStruct.nonEmpty =>
+          if MatchConditionTypes.usesIdenticalStructSort(leftStruct, rightStruct) =>
         if (isSqlTupleStructOperand(leftOperand) || isSqlTupleStructOperand(rightOperand)) {
           val pairs = collectStructLeafPairs(leftOperand, rightOperand, leftStruct)
           (pairs.map(_._1), pairs.map(_._2))
@@ -2675,8 +2759,8 @@ object AsOfJoin {
       expr2: Expression): (Expression, Expression, MatchComparisonOperator) = {
     val leftSet = left.outputSet
     val rightSet = right.outputSet
-    val expr1Side = operandJoinSide(expr1, leftSet, rightSet)
-    val expr2Side = operandJoinSide(expr2, leftSet, rightSet)
+    val expr1Side = operandJoinSide(expr1, leftSet, rightSet, syntacticIsLeft = true)
+    val expr2Side = operandJoinSide(expr2, leftSet, rightSet, syntacticIsLeft = false)
     (expr1Side, expr2Side) match {
       case (Some(true), Some(false)) => (expr1, expr2, operator)
       case (Some(false), Some(true)) => (expr2, expr1, operator.flip)
@@ -2688,10 +2772,13 @@ object AsOfJoin {
   private def operandJoinSide(
       expr: Expression,
       leftSet: AttributeSet,
-      rightSet: AttributeSet): Option[Boolean] = {
+      rightSet: AttributeSet,
+      syntacticIsLeft: Boolean): Option[Boolean] = {
     val refs = expr.references
     if (refs.isEmpty) {
-      None
+      // Literals, CURRENT_TIMESTAMP(), session variables, etc. have no column refs;
+      // use MATCH_CONDITION syntactic position (expr1/expr2) for join-side assignment.
+      Some(syntacticIsLeft)
     } else if (refs.subsetOf(leftSet)) {
       Some(true)
     } else if (refs.subsetOf(rightSet)) {
@@ -2725,13 +2812,17 @@ object AsOfJoin {
       rightOperand: Expression,
       operator: MatchComparisonOperator): Expression = {
     (leftOperand.dataType, rightOperand.dataType) match {
-      case (ArrayType(leftElem, _), ArrayType(rightElem, _))
-          if DataTypeUtils.sameType(leftElem, rightElem) =>
-        buildArrayOrderExpression(leftOperand, rightOperand, leftElem, operator)
-      case (leftStruct: StructType, rightStruct: StructType)
-          if leftStruct.length == rightStruct.length && leftStruct.nonEmpty =>
+      case (ArrayType(elementType, _), _)
+          if MatchConditionTypes.usesArrayOrderExpression(
+            leftOperand.dataType, rightOperand.dataType) =>
+        // MATCH_CONDITION array comparison uses Spark lexicographic ordering (including length).
+        // The ordering distance below is element-wise via ZipWith, padding the shorter side with
+        // null when lengths differ (e.g. [0, null]), not a lexicographic length tie-break.
+        buildArrayOrderExpression(leftOperand, rightOperand, elementType, operator)
+      case (leftType, rightType)
+          if MatchConditionTypes.usesStructDecomposition(leftType, rightType) =>
         buildFlattenedStructOrderExpression(
-          leftOperand, rightOperand, leftStruct, operator)
+          leftOperand, rightOperand, leftType.asInstanceOf[StructType], operator)
       case _ =>
         buildLeafOrderExpression(leftOperand, rightOperand, operator)
     }
@@ -2844,12 +2935,11 @@ object AsOfJoin {
       .zip(structFieldExprs(rightOperand, structType))
       .flatMap {
         case (left, right) =>
-          (left.dataType, right.dataType) match {
-            case (leftStruct: StructType, rightStruct: StructType)
-                if leftStruct.length == rightStruct.length && leftStruct.nonEmpty =>
-              collectStructLeafPairs(left, right, leftStruct)
-            case _ =>
-              Seq((left, right))
+          if (MatchConditionTypes.usesStructDecomposition(left.dataType, right.dataType)) {
+            collectStructLeafPairs(
+              left, right, left.dataType.asInstanceOf[StructType])
+          } else {
+            Seq((left, right))
           }
       }
   }
@@ -2871,17 +2961,19 @@ object AsOfJoin {
   private def decomposeStructOperands(
       leftOperand: Expression,
       rightOperand: Expression): Option[Seq[(Expression, Expression)]] = {
-    (leftOperand.dataType, rightOperand.dataType) match {
-      case (leftStruct: StructType, rightStruct: StructType)
-          if leftStruct.length == rightStruct.length && leftStruct.nonEmpty =>
-        val leftFields = structFieldExprs(leftOperand, leftStruct)
-        val rightFields = structFieldExprs(rightOperand, rightStruct)
-        if (leftFields.length == rightFields.length) {
-          Some(leftFields.zip(rightFields))
-        } else {
-          None
-        }
-      case _ => None
+    if (MatchConditionTypes.usesStructDecomposition(
+        leftOperand.dataType, rightOperand.dataType)) {
+      val leftStruct = leftOperand.dataType.asInstanceOf[StructType]
+      val rightStruct = rightOperand.dataType.asInstanceOf[StructType]
+      val leftFields = structFieldExprs(leftOperand, leftStruct)
+      val rightFields = structFieldExprs(rightOperand, rightStruct)
+      if (leftFields.length == rightFields.length) {
+        Some(leftFields.zip(rightFields))
+      } else {
+        None
+      }
+    } else {
+      None
     }
   }
 

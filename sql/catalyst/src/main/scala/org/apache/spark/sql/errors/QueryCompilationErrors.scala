@@ -682,6 +682,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     unsupportedTableOperationError(tableName, "INSERT INTO ... REPLACE ON/USING")
   }
 
+  def unsupportedInsertReplaceWhere(tableName: String): Throwable = {
+    unsupportedTableOperationError(tableName, "INSERT INTO ... REPLACE WHERE")
+  }
+
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "VIEW_WRITE_NOT_ALLOWED",
@@ -1363,7 +1367,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def createExternalTableWithoutLocationError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1069",
+      errorClass = "CREATE_EXTERNAL_TABLE_WITHOUT_LOCATION",
       messageParameters = Map.empty)
   }
 

@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.{Closeable, InputStream}
+import java.nio.ByteBuffer
+import java.nio.channels.{NonWritableChannelException, SeekableByteChannel}
 import java.util.Locale
 import java.util.regex.Pattern
 import java.util.zip.GZIPInputStream
@@ -25,12 +27,13 @@ import java.util.zip.GZIPInputStream
 import scala.util.control.NonFatal
 
 import org.apache.commons.compress.archivers.{ArchiveEntry, ArchiveInputStream}
+import org.apache.commons.compress.archivers.sevenz.{SevenZArchiveEntry, SevenZFile}
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 import org.apache.commons.io.ByteOrderMark
 import org.apache.commons.io.input.{BOMInputStream, CloseShieldInputStream}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.util.LineReader
 
@@ -39,7 +42,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.HadoopFSUtils
 
 /**
- * Mixed into a file-based data source to let it read tar/zip archives of its files, treating an
+ * Mixed into a file-based data source to let it read tar/zip/7z archives of its files, treating an
  * archive like a directory of the entries it contains. Schema inference is left to each format.
  */
 trait SupportsArchiveFormat extends Logging {
@@ -98,7 +101,7 @@ object SupportsArchiveFormat {
   def isArchivePath(path: Path): Boolean = {
     val name = path.getName.toLowerCase(Locale.ROOT)
     name.endsWith(".tar") || name.endsWith(".tar.gz") || name.endsWith(".tgz") ||
-      name.endsWith(".zip")
+      name.endsWith(".zip") || name.endsWith(".7z")
   }
 
   /**
@@ -123,9 +126,34 @@ object SupportsArchiveFormat {
         }
       case n if n.endsWith(".zip") =>
         new ZipArchiveInputStream(CodecStreams.createInputStreamWithCloseResource(conf, path))
+      case n if n.endsWith(".7z") =>
+        openSevenZStream(path, conf)
       case _ =>
         throw new IllegalArgumentException(
-          s"$path is not a supported archive (expected .tar, .tar.gz, .tgz, or .zip)")
+          s"$path is not a supported archive (expected .tar, .tar.gz, .tgz, .zip, or .7z)")
+    }
+  }
+
+  /**
+   * Opens a `.7z` archive by seeking.
+   *
+   * @param path the archive path
+   * @param conf Hadoop configuration used to open the archive
+   * @return the archive's entries as an [[ArchiveInputStream]] cursor
+   */
+  private def openSevenZStream(
+      path: Path,
+      conf: Configuration): ArchiveInputStream[_ <: ArchiveEntry] = {
+    val fs = path.getFileSystem(conf)
+    val in = fs.open(path)
+    try {
+      val channel = new HadoopSeekableByteChannel(in, fs.getFileStatus(path).getLen)
+      new SevenZArchiveInputStream(
+        SevenZFile.builder().setSeekableByteChannel(channel).get(), channel)
+    } catch {
+      case NonFatal(e) =>
+        try in.close() catch { case NonFatal(_) => }
+        throw e
     }
   }
 
@@ -230,4 +258,66 @@ object SupportsArchiveFormat {
     entries
   }
 
+}
+
+/**
+ * Adapter for [[FSDataInputStream]] to [[SeekableByteChannel]].
+ *
+ * @param in     the underlying seekable Hadoop stream
+ * @param length the file's size in bytes
+ */
+private class HadoopSeekableByteChannel(in: FSDataInputStream, length: Long)
+  extends SeekableByteChannel {
+
+  private var open = true
+
+  override def read(dst: ByteBuffer): Int = {
+    val len = dst.remaining()
+    if (len == 0) return 0
+    // Read straight into dst's backing array when it exposes one, avoiding a per-call copy.
+    if (dst.hasArray) {
+      val n = in.read(dst.array(), dst.arrayOffset() + dst.position(), len)
+      if (n > 0) dst.position(dst.position() + n)
+      n
+    } else {
+      val buf = new Array[Byte](len)
+      val n = in.read(buf, 0, len)
+      if (n > 0) dst.put(buf, 0, n)
+      n
+    }
+  }
+
+  override def position(): Long = in.getPos
+  override def position(newPosition: Long): SeekableByteChannel = { in.seek(newPosition); this }
+  override def size(): Long = length
+  override def isOpen: Boolean = open
+  override def close(): Unit = { open = false; in.close() }
+
+  override def write(src: ByteBuffer): Int = throw new NonWritableChannelException
+  override def truncate(size: Long): SeekableByteChannel = throw new NonWritableChannelException
+}
+
+/**
+ * Exposes the current [[SevenZFile]] entry's bytes as a plain forward [[InputStream]].
+ *
+ * @param sevenZ the 7z file, positioned at the current entry
+ */
+private class SevenZEntryInputStream(sevenZ: SevenZFile) extends InputStream {
+  override def read(): Int = sevenZ.read()
+  override def read(b: Array[Byte], off: Int, len: Int): Int = sevenZ.read(b, off, len)
+}
+
+/**
+ * Adapts a [[SevenZFile]] to the [[ArchiveInputStream]] cursor the engine consumes. Closing it
+ * closes both the `SevenZFile` and the channel it reads from, which `SevenZFile` does not own.
+ *
+ * @param sevenZ  the 7z file to adapt
+ * @param channel the channel `sevenZ` reads from, closed alongside it
+ */
+private class SevenZArchiveInputStream(sevenZ: SevenZFile, channel: SeekableByteChannel)
+  extends ArchiveInputStream[SevenZArchiveEntry](new SevenZEntryInputStream(sevenZ), "UTF-8") {
+
+  override def getNextEntry(): SevenZArchiveEntry = sevenZ.getNextEntry
+
+  override def close(): Unit = try sevenZ.close() finally channel.close()
 }

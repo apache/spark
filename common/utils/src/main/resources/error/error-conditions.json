@@ -221,6 +221,12 @@
     ],
     "sqlState" : "42613"
   },
+  "AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST" : {
+    "message" : [
+      "AutoCDC flow specifies both `track_history_column_list` and `track_history_except_column_list`; at most one may be provided."
+    ],
+    "sqlState" : "42613"
+  },
   "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
       "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
@@ -342,6 +348,12 @@
       "Cannot start AutoCDC flow: the target table <tableName> (format: <format>) does not support row-level operations. AutoCDC requires a target backed by a connector that supports MERGE."
     ],
     "sqlState" : "0A000"
+  },
+  "AUTOCDC_TRACK_HISTORY_REQUIRES_SCD2" : {
+    "message" : [
+      "AutoCDC flow specifies `track_history_column_list` or `track_history_except_column_list` but is not stored as SCD Type 2; history-tracking columns are only supported for SCD Type 2 target tables."
+    ],
+    "sqlState" : "42613"
   },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
@@ -1064,6 +1076,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "COLUMN_IS_NOT_VARIANT_TYPE" : {
+    "message" : [
+      "The semi-structured extraction operator (`:`) can only be applied to a column of the VARIANT type."
+    ],
+    "sqlState" : "42K09"
+  },
   "COLUMN_NOT_DEFINED_IN_TABLE" : {
     "message" : [
       "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
@@ -1622,6 +1640,12 @@
       "Start time provided to function <function> decreased from <previousStartTime> to <currentStartTime>. Start time is required to be non-decreasing."
     ],
     "sqlState" : "22023"
+  },
+  "CREATE_EXTERNAL_TABLE_WITHOUT_LOCATION" : {
+    "message" : [
+      "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
+    ],
+    "sqlState" : "42601"
   },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
@@ -3235,6 +3259,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "INSERT_REPLACE_ON_COLUMN_LIST_NOT_ALLOWED" : {
+    "message" : [
+      "A column list is not allowed with INSERT INTO ... REPLACE ON."
+    ],
+    "sqlState" : "42000"
+  },
   "INSERT_REPLACE_ON_NOT_ENABLED" : {
     "message" : [
       "INSERT INTO ... REPLACE ON is not enabled. Set 'spark.sql.insertIntoReplaceOn.enabled' to true to enable it."
@@ -3250,6 +3280,12 @@
   "INSERT_REPLACE_USING_NOT_ENABLED" : {
     "message" : [
       "INSERT INTO ... REPLACE USING is not enabled. Set 'spark.sql.insertIntoReplaceUsing.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_WHERE_COLUMN_LIST_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... (column_list) REPLACE WHERE is not enabled. Set 'spark.sql.insertIntoReplaceWhereColumnList.enabled' to true to enable it."
     ],
     "sqlState" : "0A000"
   },
@@ -4577,6 +4613,16 @@
           "Invalid extension: <invalidValue>. Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"
         ]
       },
+      "HMAC_ALGORITHM" : {
+        "message" : [
+          "expects one of the algorithms 'SHA-224', 'SHA-256', 'SHA-384', 'SHA-512', 'SHA-1', 'MD5', but got <algorithm>."
+        ]
+      },
+      "HMAC_CRYPTO_ERROR" : {
+        "message" : [
+          "detail message: <detailMessage>"
+        ]
+      },
       "INTEGER" : {
         "message" : [
           "expects an integer literal, but got <invalidValue>."
@@ -4878,6 +4924,11 @@
       "ANALYZE_TABLE_UNEXPECTED_NOSCAN" : {
         "message" : [
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
+        ]
+      },
+      "COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER" : {
+        "message" : [
+          "COMMENT ON COLUMN requires an identifier with at least two parts. Please qualify the column with the table name (e.g. `table.column`, `database.table.column`, or `catalog.database.table.column`)."
         ]
       },
       "CREATE_FUNC_WITH_COLUMN_CONSTRAINTS" : {
@@ -7300,6 +7351,30 @@
     ],
     "sqlState" : "42K09"
   },
+  "STREAMING_ASYNC_OPERATION_FAILED" : {
+    "message" : [
+      "Asynchronous streaming operation failed with exception: <message>"
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_CHECKPOINT_LOG_WRITE_FAILURE" : {
+    "message" : [
+      "Failed to write a streaming query checkpoint log entry."
+    ],
+    "subClass" : {
+      "COMMIT_LOG" : {
+        "message" : [
+          "Failed to write commit log entry for batch <batchId> at checkpoint location <checkpointLocation>. Check that the checkpoint location is writable and retry the query."
+        ]
+      },
+      "OFFSET_LOG" : {
+        "message" : [
+          "Failed to write offset log entry for batch <batchId> at checkpoint location <checkpointLocation>. Check that the checkpoint location is writable and retry the query."
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
     "message" : [
       "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
@@ -7362,6 +7437,11 @@
           "Cannot enable streaming source evolution on a checkpoint that was created without it. The existing checkpoint uses offset log format version <existingVersion>, which does not support the named source tracking required by streaming source evolution. To use source evolution, start the query with a fresh checkpoint."
         ]
       },
+      "CONTINUOUS_PROCESSING_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming sink evolution cannot be used together with continuous processing. Continuous processing persists only V1 commit metadata and would silently drop the per-sink metadata that sink evolution requires. Disable sink evolution by setting spark.sql.streaming.queryEvolution.enableSinkEvolution to false, or use a micro-batch trigger instead of Trigger.Continuous."
+        ]
+      },
       "DUPLICATE_SOURCE_NAMES" : {
         "message" : [
           "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
@@ -7400,9 +7480,9 @@
       "Streaming real-time mode has the following limitation:"
     ],
     "subClass" : {
-      "ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED" : {
+      "ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_NON_ZERO" : {
         "message" : [
-          "Async progress tracking is not supported in real-time mode. Set option asyncProgressTrackingEnabled to false and retry your query."
+          "The checkpointing interval for async progress tracking must be set to 0, which means each progress update is checkpointed. Set option asyncProgressTrackingCheckpointIntervalMs to 0 in DataStreamWriter options and retry your query."
         ]
       },
       "IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED" : {
@@ -8759,6 +8839,11 @@
           "raw java.util.Map. Spark cannot infer the key and value types."
         ]
       },
+      "UNKNOWN_TYPE" : {
+        "message" : [
+          "<c>."
+        ]
+      },
       "WILDCARD" : {
         "message" : [
           "wildcard type parameter. Spark cannot infer a concrete data type for wildcard type parameters, such as List<?> or Map<?, ?>."
@@ -9627,11 +9712,6 @@
   "_LEGACY_ERROR_TEMP_1068" : {
     "message" : [
       "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1069" : {
-    "message" : [
-      "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
     ]
   },
   "_LEGACY_ERROR_TEMP_1071" : {
@@ -11495,21 +11575,6 @@
   "_LEGACY_ERROR_TEMP_3089" : {
     "message" : [
       "Corrupted <typeName> in catalog: <numCols> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3093" : {
-    "message" : [
-      "Unsupported java type <c>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3094" : {
-    "message" : [
-      "<dt> is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3095" : {
-    "message" : [
-      "<dt> cannot be converted to Hive TypeInfo"
     ]
   },
   "_LEGACY_ERROR_TEMP_3096" : {

@@ -1807,9 +1807,9 @@ class WindowAggPandasUDFPeakmemBench(_WindowAggPandasBenchMixin, _PeakmemBenchBa
 # Stateful streaming with Pandas. UDF signature is
 # ``(api_client, mode, key, pdfs)`` and returns ``Iterator[pandas.DataFrame]``.
 # The input wire stream is a single plain Arrow stream pre-sorted by the
-# grouping key column at offset 0; ``TransformWithStateInPandasSerializer``
-# chunks rows into one ``(mode, key, pdfs)`` tuple per group, then emits a
-# phantom ``PROCESS_TIMER`` and ``COMPLETE`` call with an empty pdf iterator.
+# grouping key column at offset 0; ``read_udfs`` in worker.py chunks rows into
+# one ``(mode, key, pdfs)`` tuple per group, then emits a phantom
+# ``PROCESS_TIMER`` and ``COMPLETE`` call with an empty pdf iterator.
 # ``StatefulProcessorApiClient.__init__`` opens a real TCP socket to the JVM
 # state server; the stub listener below satisfies that connect. The benchmark
 # UDFs never invoke any state API method, so no protocol exchange is needed.
@@ -2006,10 +2006,9 @@ class TransformWithStatePandasUDFPeakmemBench(
 # either inputData or initState rows -- never both -- with the inactive column
 # written as an all-null struct. Matching the JVM ``initData ++ data`` ordering,
 # all initial-state batches are emitted first (initState populated), then all
-# data batches (inputData populated). ``TransformWithStateInPandasInitStateSerializer``
-# regroups rows by the leading key column, so each key surfaces as an init-only
-# call followed by a data-only call; the empty side of each call is filtered out
-# before the UDF sees it.
+# data batches (inputData populated). The worker regroups rows by the leading
+# key column, so each key surfaces as an init-only call followed by a data-only
+# call; the empty side of each call is filtered out before the UDF sees it.
 
 
 class _TransformWithStatePandasInitStateBenchMixin(_TransformWithStatePandasBenchMixin):
@@ -2501,8 +2500,8 @@ class TransformWithStateRowInitStateUDFPeakmemBench(
 # ``(key, pdfs, state)`` and returns ``Iterator[pandas.DataFrame]``, where
 # ``state`` is a ``GroupState`` the UDF may read (``getOption``) and write
 # (``update``/``remove``). Unlike TransformWithState, no state server socket is
-# involved: ``ApplyInPandasWithStateSerializer`` reconstructs each ``GroupState``
-# entirely from a metadata column carried inline in the Arrow stream.
+# involved: each ``GroupState`` is reconstructed entirely from a metadata column
+# carried inline in the Arrow stream.
 #
 # The wire stream is a single plain Arrow IPC stream whose batch schema is the
 # data columns followed by one trailing struct column (``__state``, matching the
@@ -2511,7 +2510,7 @@ class TransformWithStateRowInitStateUDFPeakmemBench(
 # state value), ``startOffset``, ``numRows``, ``isLastChunk``. Data and state
 # columns must share a row count, so exactly one populated state row per data
 # chunk sits at the top of each group's range and the remaining state rows are
-# null structs (which the serializer treats as end-of-data padding).
+# null structs (treated as end-of-data padding when read back).
 
 
 class _ApplyInPandasWithStateBenchMixin:

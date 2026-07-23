@@ -90,6 +90,13 @@ abstract class Covariance(val left: Expression, val right: Expression, nullOnDiv
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the population covariance of a set of number pairs.",
+  arguments = """
+    Arguments:
+      * expr1 - The first variable of the number pairs.
+        An expression that evaluates to a numeric.
+      * expr2 - The second variable of the number pairs.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(c1, c2) FROM VALUES (1,1), (2,2), (3,3) AS tab(c1, c2);
@@ -119,6 +126,13 @@ case class CovPopulation(
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the sample covariance of a set of number pairs.",
+  arguments = """
+    Arguments:
+      * expr1 - The first variable of the number pairs.
+        An expression that evaluates to a numeric.
+      * expr2 - The second variable of the number pairs.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(c1, c2) FROM VALUES (1,1), (2,2), (3,3) AS tab(c1, c2);

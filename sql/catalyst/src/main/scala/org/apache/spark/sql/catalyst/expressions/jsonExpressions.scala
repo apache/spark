@@ -42,6 +42,13 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 @ExpressionDescription(
   usage = "_FUNC_(json_txt, path) - Extracts a json object from `path`.",
+  arguments = """
+    Arguments:
+      * json_txt - The JSON text to extract from.
+        An expression that evaluates to a string.
+      * path - The path identifying the JSON object to extract.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
@@ -449,6 +456,13 @@ object JsonToStructs {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, options]) - Returns a JSON string with a given struct value",
+  arguments = """
+    Arguments:
+      * expr - The struct value to convert to a JSON string.
+        An expression that evaluates to a struct, array, map, or variant.
+      * options - Options controlling how the JSON string is produced.
+        An expression that evaluates to a map. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
@@ -611,6 +625,7 @@ case class SchemaOfJson(
     Arguments:
       * jsonArray - A JSON array. `NULL` is returned in case of any other valid JSON string,
           `NULL` or an invalid JSON.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -657,6 +672,7 @@ case class LengthOfJsonArray(child: Expression)
       * json_object - A JSON object. If a valid JSON object is given, all the keys of the outermost
           object will be returned as an array. If it is any other valid JSON string, an invalid JSON
           string or an empty string, the function returns null.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:

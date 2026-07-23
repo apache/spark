@@ -3001,6 +3001,32 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PUSH_DOWN_LOCAL_SORT_ENABLED =
+    buildConf("spark.sql.execution.pushDownLocalSort")
+      .internal()
+      .doc("When true, pushes a wider local sort down through order-preserving " +
+        "operators to replace a narrower local sort below it, so that a single sort can satisfy " +
+        "multiple operators' ordering requirements. This reduces the total number of local sorts " +
+        "computed in a stage, for example when a sort aggregate is stacked on a window over the " +
+        "same clustering keys.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
+  val PUSH_DOWN_LOCAL_SORT_THROUGH_CARDINALITY_REDUCER_ENABLED =
+    buildConf("spark.sql.execution.pushDownLocalSort.throughCardinalityReducer")
+      .internal()
+      .doc("When true, `spark.sql.execution.pushDownLocalSort` may also push a wider local sort " +
+        "down through cardinality-reducing operators (`FilterExec` and `WindowGroupLimitExec`). " +
+        "This is disabled by default because moving the wider sort below a selective reducer can " +
+        "sort the full input instead of only the surviving rows, which may outweigh the saved " +
+        "sort. Has no effect when `spark.sql.execution.pushDownLocalSort` is false.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val REPLACE_HASH_WITH_SORT_AGG_ENABLED = buildConf("spark.sql.execution.replaceHashWithSortAgg")
     .internal()
     .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
@@ -3302,10 +3328,12 @@ object SQLConf {
       .createWithDefault(false)
 
   val MIN_BATCHES_TO_RETAIN = buildConf("spark.sql.streaming.minBatchesToRetain")
-    .internal()
-    .doc("The minimum number of batches that must be retained and made recoverable.")
+    .doc("The minimum number of batches that must be retained and made recoverable. " +
+      "This also controls the lifecycle of checkpoint files: state, offset and commit log " +
+      "files older than this many batches are eligible for cleanup. Must be positive.")
     .version("2.1.1")
     .intConf
+    .checkValue(_ > 0, "minBatchesToRetain must be positive")
     .createWithDefault(100)
 
   val RATIO_EXTRA_SPACE_ALLOWED_IN_CHECKPOINT =
@@ -3759,6 +3787,17 @@ object SQLConf {
     "spark.sql.streaming.realTimeMode.allowlistCheck")
     .doc("Whether to check all operators, sinks used in real-time mode are in the allowlist.")
     .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val STREAMING_ASYNC_PROGRESS_TRACKING_REAL_TIME_MODE_ENABLED_BY_DEFAULT = buildConf(
+    "spark.sql.streaming.realTimeMode.asyncProgressTrackingByDefault.enabled")
+    .internal()
+    .doc("Whether asynchronous progress tracking should be enabled in real-time mode by " +
+      "default for stateless queries. If explicitly set, the stream writer option for async " +
+      "progress tracking will still take precedence over this flag.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(true)
 
@@ -4932,6 +4971,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ARROW_CACHE_PREFETCH_ENABLED =
+    buildConf("spark.sql.execution.arrow.cache.prefetch.enabled")
+      .doc("When true, Arrow cache read path prefetches and decompresses the next batch " +
+        "in a background thread while the current batch is being consumed. This can " +
+        "significantly improve read performance for compressed Arrow caches (e.g., ZSTD) " +
+        "by overlapping decompression with consumption. Increases memory usage by up to " +
+        "one additional batch worth of Arrow vectors.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.transformWithStateInPySpark.maxStateRecordsPerBatch")
       .doc("When using TransformWithState in PySpark (both Python Row and Pandas), limit " +
@@ -5438,6 +5489,16 @@ object SQLConf {
         "Allows using the BY NAME clause with INSERT INTO REPLACE USING.")
       .internal()
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val INSERT_INTO_REPLACE_WHERE_COLUMN_LIST_ENABLED =
+    buildConf("spark.sql.insertIntoReplaceWhereColumnList.enabled")
+      .doc("Enable the SQL syntax INSERT INTO ... (column_list) REPLACE WHERE (...). " +
+        "Allows using a column list with INSERT INTO REPLACE WHERE.")
+      .internal()
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
@@ -8893,6 +8954,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowPySparkUDFColumnarInputEnabled: Boolean =
     getConf(ARROW_PYSPARK_UDF_COLUMNAR_INPUT_ENABLED)
+
+  def arrowCachePrefetchEnabled: Boolean = getConf(ARROW_CACHE_PREFETCH_ENABLED)
 
   def arrowTransformWithStateInPySparkMaxStateRecordsPerBatch: Int =
     getConf(ARROW_TRANSFORM_WITH_STATE_IN_PYSPARK_MAX_STATE_RECORDS_PER_BATCH)

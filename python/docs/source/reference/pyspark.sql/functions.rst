@@ -603,6 +603,7 @@ VARIANT Functions
     schema_of_variant_agg
     try_variant_get
     variant_array_append
+    try_variant_array_append
     variant_delete
     variant_get
     variant_insert
@@ -659,6 +660,7 @@ Misc Functions
     current_path
     current_schema
     current_user
+    hmac
     input_file_block_length
     input_file_block_start
     input_file_name

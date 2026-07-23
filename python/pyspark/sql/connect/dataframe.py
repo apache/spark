@@ -107,6 +107,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql.plot import PySparkPlotAccessor
 
 
 class DataFrame(ParentDataFrame):
@@ -1663,8 +1664,8 @@ class DataFrame(ParentDataFrame):
             method = "pearson"
         if not method == "pearson":
             raise PySparkValueError(
-                errorClass="VALUE_NOT_PEARSON",
-                messageParameters={"arg_name": "method", "arg_value": method},
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "method", "allowed_values": "['pearson']"},
             )
         table, _ = DataFrame(
             plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
@@ -2435,7 +2436,7 @@ class DataFrame(ParentDataFrame):
         return self._execution_info
 
     @property
-    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+    def plot(self) -> "PySparkPlotAccessor":
         from pyspark.sql.plot import PySparkPlotAccessor
 
         return PySparkPlotAccessor(self)

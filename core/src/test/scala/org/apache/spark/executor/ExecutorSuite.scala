@@ -22,7 +22,7 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.{HashMap, Properties}
-import java.util.concurrent.{CountDownLatch, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.{CountDownLatch, RejectedExecutionException, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.immutable
@@ -718,6 +718,88 @@ class ExecutorSuite extends SparkFunSuite
       } finally {
         // Restore the original runningTasks
         runningTasksField.set(executor, originalRunningTasks)
+      }
+    }
+  }
+
+  test("SPARK-57465: RejectedExecutionException with executorShutdown=true " +
+    "reports ExecutorShutdownFailure") {
+    withRejectedExecutionSetup(executorShutdown = true, "shutting down") { (serializer, captor) =>
+      val failReason = serializer.newInstance()
+        .deserialize[TaskFailedReason](captor.getValue)
+      assert(failReason.isInstanceOf[ExecutorShutdownFailure])
+      assert(failReason.countTowardsTaskFailures === false)
+      assert(failReason.asInstanceOf[ExecutorShutdownFailure].executorId === "id")
+    }
+  }
+
+  test("SPARK-57465: RejectedExecutionException with executorShutdown=false " +
+    "reports ExceptionFailure") {
+    withRejectedExecutionSetup(executorShutdown = false, "pool full") { (serializer, captor) =>
+      val failReason = serializer.newInstance()
+        .deserialize[TaskFailedReason](captor.getValue)
+      assert(failReason.isInstanceOf[ExceptionFailure])
+      assert(failReason.countTowardsTaskFailures === true)
+      val ef = failReason.asInstanceOf[ExceptionFailure]
+      assert(ef.exception.get.isInstanceOf[RejectedExecutionException])
+    }
+  }
+
+  /**
+   * Helper for SPARK-57465 tests: sets up an executor with a mocked threadPool that throws
+   * RejectedExecutionException on execute(), launches a task, captures the statusUpdate,
+   * and yields the serializer + captured ByteBuffer for assertions.
+   */
+  private def withRejectedExecutionSetup(
+      executorShutdown: Boolean,
+      rejectionMessage: String)(
+      f: (JavaSerializer, ArgumentCaptor[ByteBuffer]) => Unit): Unit = {
+    val conf = new SparkConf
+    // Defense-in-depth: set a very large heartbeat interval so the heartbeater thread
+    // cannot fire during this test even if cleanup is delayed.
+    conf.set(EXECUTOR_HEARTBEAT_INTERVAL.key, "3600s")
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    val serializedTask = serializer.newInstance().serialize(new FakeTask(0, 0))
+    val taskDescription = createFakeTaskDescription(serializedTask)
+
+    val mockExecutorBackend = mock[ExecutorBackend]
+    val statusCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
+
+    withExecutor("id", "localhost", env) { executor =>
+      val executorClass = classOf[Executor]
+      val shutdownField = executorClass.getDeclaredField("executorShutdown")
+      shutdownField.setAccessible(true)
+      val shutdownFlag = shutdownField.get(executor).asInstanceOf[AtomicBoolean]
+
+      if (executorShutdown) {
+        shutdownFlag.set(true)
+      }
+
+      val threadPoolField = executorClass.getDeclaredField("threadPool")
+      threadPoolField.setAccessible(true)
+      val mockThreadPool = mock[ThreadPoolExecutor]
+      when(mockThreadPool.execute(any[Runnable]))
+        .thenThrow(new RejectedExecutionException(rejectionMessage))
+      threadPoolField.set(executor, mockThreadPool)
+
+      executor.launchTask(mockExecutorBackend, taskDescription)
+
+      verify(mockExecutorBackend).statusUpdate(
+        meq(taskDescription.taskId),
+        meq(TaskState.FAILED),
+        statusCaptor.capture()
+      )
+
+      f(serializer, statusCaptor)
+
+      // SPARK-57465: Reset executorShutdown to false so that withExecutor's finally block
+      // can call executor.stop() fully. Executor.stop() is guarded by
+      // `if (!executorShutdown.getAndSet(true))` -- leaving the flag true causes stop() to
+      // short-circuit, leaking the heartbeater thread which eventually triggers
+      // System.exit(HEARTBEAT_FAILURE) and crashes the entire test fork.
+      if (executorShutdown) {
+        shutdownFlag.set(false)
       }
     }
   }

@@ -631,7 +631,7 @@ def main():
             # Run SBT Checkstyle after the build to prevent a side-effect to the build.
             should_run_java_style_checks = True
         if not changed_files or any(
-            f.endswith("lint-python") or f.endswith("tox.ini") or f.endswith(".py")
+            f.endswith("lint-python") or f.endswith("pyproject.toml") or f.endswith(".py")
             for f in changed_files
         ):
             run_python_style_checks()

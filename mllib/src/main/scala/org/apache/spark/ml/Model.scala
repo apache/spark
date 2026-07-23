@@ -57,5 +57,14 @@ abstract class Model[M <: Model[M]] extends Transformer { self =>
    * 4, For 3-rd extension, if external languages are used, it is recommended to override
    * this method and return a proper size.
    */
-  private[spark] def estimatedSize: Long = SizeEstimator.estimate(self)
+  private[spark] def estimatedSize: Long = {
+    // SPARK-57521: Estimate size using a parentless copy to avoid traversing shared
+    // infrastructure (SparkSession, loggers, thread pools) reachable through the parent
+    // estimator. The copy shares all internal data references (coefficients, labels, etc.)
+    // so the estimate reflects the model's actual learned state. Only the parent reference
+    // is removed — on a freshly-created, method-local object that no other thread can observe.
+    val copy = this.copy(ParamMap.empty).asInstanceOf[Model[M]]
+    copy.parent = null
+    SizeEstimator.estimate(copy)
+  }
 }

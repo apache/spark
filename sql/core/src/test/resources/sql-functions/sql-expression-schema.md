@@ -166,6 +166,7 @@
 | org.apache.spark.sql.catalyst.expressions.Hex | hex | SELECT hex(17) | struct<hex(17):string> |
 | org.apache.spark.sql.catalyst.expressions.HllSketchEstimate | hll_sketch_estimate | SELECT hll_sketch_estimate(hll_sketch_agg(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col) | struct<hll_sketch_estimate(hll_sketch_agg(col, 12)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.HllUnion | hll_union | SELECT hll_sketch_estimate(hll_union(hll_sketch_agg(col1), hll_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2) | struct<hll_sketch_estimate(hll_union(hll_sketch_agg(col1, 12), hll_sketch_agg(col2, 12), false)):bigint> |
+| org.apache.spark.sql.catalyst.expressions.Hmac | hmac | SELECT hex(hmac('key', 'message')) | struct<hex(hmac(key, message, SHA-256)):string> |
 | org.apache.spark.sql.catalyst.expressions.HourExpressionBuilder | hour | SELECT hour('2018-02-14 12:58:59') | struct<hour(2018-02-14 12:58:59):int> |
 | org.apache.spark.sql.catalyst.expressions.Hypot | hypot | SELECT hypot(3, 4) | struct<HYPOT(3, 4):double> |
 | org.apache.spark.sql.catalyst.expressions.ILike | ilike | SELECT ilike('Spark', '_Park') | struct<ilike(Spark, _Park):boolean> |
@@ -554,9 +555,10 @@
 | org.apache.spark.sql.catalyst.expressions.variant.SchemaOfVariantAgg | schema_of_variant_agg | SELECT schema_of_variant_agg(parse_json(j)) FROM VALUES ('1'), ('2'), ('3') AS tab(j) | struct<schema_of_variant_agg(parse_json(j)):string> |
 | org.apache.spark.sql.catalyst.expressions.variant.ToVariantObject | to_variant_object | SELECT to_variant_object(named_struct('a', 1, 'b', 2)) | struct<to_variant_object(named_struct(a, 1, b, 2)):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.TryParseJsonExpressionBuilder | try_parse_json | SELECT try_parse_json('{"a":1,"b":0.8}') | struct<try_parse_json({"a":1,"b":0.8}):variant> |
+| org.apache.spark.sql.catalyst.expressions.variant.TryVariantArrayAppendExpressionBuilder | try_variant_array_append | SELECT try_variant_array_append(parse_json('[1, 2, 3]'), '$', 4) | struct<try_variant_array_append(parse_json([1, 2, 3]), $, 4):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.TryVariantGetExpressionBuilder | try_variant_get | SELECT try_variant_get(parse_json('{"a": 1}'), '$.a', 'int') | struct<try_variant_get(parse_json({"a": 1}), $.a):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.TryVariantInsertExpressionBuilder | try_variant_insert | SELECT try_variant_insert(parse_json('{"a": 1}'), '$.b', 2) | struct<try_variant_insert(parse_json({"a": 1}), $.b, 2):variant> |
-| org.apache.spark.sql.catalyst.expressions.variant.VariantArrayAppend | variant_array_append | SELECT variant_array_append(parse_json('[1, 2, 3]'), '$', 4) | struct<variant_array_append(parse_json([1, 2, 3]), $, 4):variant> |
+| org.apache.spark.sql.catalyst.expressions.variant.VariantArrayAppendExpressionBuilder | variant_array_append | SELECT variant_array_append(parse_json('[1, 2, 3]'), '$', 4) | struct<variant_array_append(parse_json([1, 2, 3]), $, 4):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantDelete | variant_delete | SELECT variant_delete(parse_json('{"a": 1, "b": 2, "c": 3, "items": [1, 2, 3]}'), NULL, '$.a', '$.c') | struct<variant_delete(parse_json({"a": 1, "b": 2, "c": 3, "items": [1, 2, 3]}), NULL, $.a, $.c):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantGetExpressionBuilder | variant_get | SELECT variant_get(parse_json('{"a": 1}'), '$.a', 'int') | struct<variant_get(parse_json({"a": 1}), $.a):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantInsertExpressionBuilder | variant_insert | SELECT variant_insert(parse_json('{"a": 1}'), '$.b', 2) | struct<variant_insert(parse_json({"a": 1}), $.b, 2):variant> |

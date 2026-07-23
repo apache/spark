@@ -316,6 +316,13 @@ case class CurrentBatchTimestamp(
  */
 @ExpressionDescription(
   usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` after `start_date`.",
+  arguments = """
+    Arguments:
+      * start_date - The starting date.
+        An expression that evaluates to a date.
+      * num_days - The number of days to add to the start date.
+        An expression that evaluates to an integer, short, or byte.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30', 1);
@@ -356,6 +363,13 @@ case class DateAdd(startDate: Expression, days: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` before `start_date`.",
+  arguments = """
+    Arguments:
+      * start_date - The starting date.
+        An expression that evaluates to a date.
+      * num_days - The number of days to subtract from the start date.
+        An expression that evaluates to an integer, short, or byte.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30', 1);
@@ -549,6 +563,11 @@ trait GetDateField extends UnaryExpression with ImplicitCastInputTypes {
 // scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the day of year of the date/timestamp.",
+  arguments = """
+    Arguments:
+      * date - The date, timestamp or string to extract the day of year from.
+        An expression that evaluates to a date, timestamp or string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-04-09');
@@ -570,6 +589,11 @@ case class DayOfYear(child: Expression) extends GetDateField {
 
 @ExpressionDescription(
   usage = "_FUNC_(days) - Create date from the number of days since 1970-01-01.",
+  arguments = """
+    Arguments:
+      * days - The number of days since 1970-01-01.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -598,6 +622,11 @@ case class DateFromUnixDate(child: Expression) extends UnaryExpression
 
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the number of days since 1970-01-01.",
+  arguments = """
+    Arguments:
+      * date - The date to convert to the number of days since 1970-01-01.
+        An expression that evaluates to a date.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(DATE("1970-01-02"));
@@ -667,6 +696,11 @@ abstract class IntegralToTimestampBase extends UnaryExpression
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(seconds) - Creates timestamp from the number of seconds (can be fractional) since UTC epoch.",
+  arguments = """
+    Arguments:
+      * seconds - The number of seconds since the UTC epoch.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000);
@@ -803,6 +837,11 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(milliseconds) - Creates timestamp from the number of milliseconds since UTC epoch.",
+  arguments = """
+    Arguments:
+      * milliseconds - The number of milliseconds since the UTC epoch.
+        An expression that evaluates to an integral.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000123);
@@ -827,6 +866,11 @@ case class MillisToTimestamp(child: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(microseconds) - Creates timestamp from the number of microseconds since UTC epoch.",
+  arguments = """
+    Arguments:
+      * microseconds - The number of microseconds since the UTC epoch.
+        An expression that evaluates to an integral.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1230219000123123);
@@ -851,6 +895,11 @@ case class MicrosToTimestamp(child: Expression)
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(nanoseconds) - Creates timestamp with the local time zone and nanosecond precision (TIMESTAMP_LTZ(9)) from the number of nanoseconds since UTC epoch.",
+  arguments = """
+    Arguments:
+      * nanoseconds - The number of nanoseconds since the UTC epoch.
+        An expression that evaluates to an integral or decimal.
+  """,
   examples = """
     Examples:
       > SET spark.sql.timestampNanosTypes.enabled=true;
@@ -966,6 +1015,11 @@ abstract class TimestampToLongBase extends UnaryExpression
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the number of seconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
+  arguments = """
+    Arguments:
+      * timestamp - The timestamp to convert to seconds since the epoch.
+        An expression that evaluates to a timestamp.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
@@ -999,6 +1053,11 @@ case class CastTimestampNTZToLong(child: Expression) extends TimestampToLongBase
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
+  arguments = """
+    Arguments:
+      * timestamp - The timestamp to convert to milliseconds since the epoch.
+        An expression that evaluates to a timestamp.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
@@ -1019,6 +1078,11 @@ case class UnixMillis(child: Expression) extends TimestampToLongBase {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the number of microseconds since 1970-01-01 00:00:00 UTC.",
+  arguments = """
+    Arguments:
+      * timestamp - The timestamp to convert to microseconds since the epoch.
+        An expression that evaluates to a timestamp.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
@@ -1090,6 +1154,11 @@ case class UnixNanos(child: Expression)
 // scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the year component of the date/timestamp.",
+  arguments = """
+    Arguments:
+      * date - The date, timestamp or string to extract the year from.
+        An expression that evaluates to a date, timestamp or string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30');
@@ -1119,6 +1188,11 @@ case class YearOfWeek(child: Expression) extends GetDateField {
 // scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the quarter of the year for date, in the range 1 to 4.",
+  arguments = """
+    Arguments:
+      * date - The date, timestamp or string to extract the quarter from.
+        An expression that evaluates to a date, timestamp or string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-08-31');
@@ -1141,6 +1215,11 @@ case class Quarter(child: Expression) extends GetDateField {
 // scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the month component of the date/timestamp.",
+  arguments = """
+    Arguments:
+      * date - The date, timestamp or string to extract the month from.
+        An expression that evaluates to a date, timestamp or string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30');
@@ -1162,6 +1241,11 @@ case class Month(child: Expression) extends GetDateField {
 // scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the day of month of the date/timestamp.",
+  arguments = """
+    Arguments:
+      * date - The date, timestamp or string to extract the day of month from.
+        An expression that evaluates to a date, timestamp or string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30');
@@ -1184,6 +1268,11 @@ case class DayOfMonth(child: Expression) extends GetDateField {
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the day of the week for date/timestamp (1 = Sunday, 2 = Monday, ..., 7 = Saturday).",
+  arguments = """
+    Arguments:
+      * date - The date, timestamp or string to extract the day of the week from.
+        An expression that evaluates to a date, timestamp or string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30');
@@ -1206,6 +1295,11 @@ case class DayOfWeek(child: Expression) extends GetDateField {
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).",
+  arguments = """
+    Arguments:
+      * date - The date, timestamp or string to extract the day of the week from.
+        An expression that evaluates to a date, timestamp or string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30');
@@ -1228,6 +1322,11 @@ case class WeekDay(child: Expression) extends GetDateField {
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the week of the year of the given date. A week is considered to start on a Monday and week 1 is the first week with >3 days.",
+  arguments = """
+    Arguments:
+      * date - The date, timestamp or string to extract the week of the year from.
+        An expression that evaluates to a date, timestamp or string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2008-02-20');
@@ -1250,6 +1349,11 @@ case class WeekOfYear(child: Expression) extends GetDateField {
 // scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the three-letter abbreviated month name from the given date.",
+  arguments = """
+    Arguments:
+      * date - The date, timestamp or string to extract the abbreviated month name from.
+        An expression that evaluates to a date, timestamp or string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2008-02-20');
@@ -1272,6 +1376,11 @@ case class MonthName(child: Expression) extends GetDateField with DefaultStringP
 // scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the three-letter abbreviated day name from the given date.",
+  arguments = """
+    Arguments:
+      * date - The date, timestamp or string to extract the abbreviated day name from.
+        An expression that evaluates to a date, timestamp or string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(DATE('2008-02-20'));
@@ -1299,8 +1408,10 @@ case class DayName(child: Expression) extends GetDateField with DefaultStringPro
   arguments = """
     Arguments:
       * timestamp - A date, time, timestamp or string to be converted to the given format.
+        An expression that evaluates to a timestamp or time.
       * fmt - Date/time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid date
               and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1532,9 +1643,11 @@ object DateFormatClass {
   arguments = """
     Arguments:
       * timeExp - A date/timestamp or string which is returned as a UNIX timestamp.
+        An expression that evaluates to a string, date, or timestamp.
       * fmt - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
               Default value is "yyyy-MM-dd HH:mm:ss". See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
               for valid date and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1586,9 +1699,11 @@ case class ToUnixTimestamp(
   arguments = """
     Arguments:
       * timeExp - A date/timestamp or string. If not provided, this defaults to current time.
+        An expression that evaluates to a string, date, or timestamp.
       * fmt - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
               Default value is "yyyy-MM-dd HH:mm:ss". See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime Patterns</a>
               for valid date and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1671,8 +1786,10 @@ case class GetTimestamp(
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp without time zone.
+        An expression that evaluates to a string, date, or timestamp.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1708,8 +1825,10 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp with local time zone.
+        An expression that evaluates to a string, date, timestamp, or numeric.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1746,8 +1865,10 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
+        An expression that evaluates to a string, date, timestamp, or numeric.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1967,8 +2088,10 @@ abstract class UnixTime extends ToTimestamp {
   arguments = """
     Arguments:
       * unix_time - UNIX Timestamp to be converted to the provided format.
+        An expression that evaluates to a long.
       * fmt - Date/time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
               for valid date and time format patterns. The 'yyyy-MM-dd HH:mm:ss' pattern is used if omitted.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -2046,6 +2169,11 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
  */
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the last day of the month which the date belongs to.",
+  arguments = """
+    Arguments:
+      * date - The date whose month's last day is returned.
+        An expression that evaluates to a date.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2009-01-12');
@@ -2093,6 +2221,13 @@ case class LastDay(startDate: Expression)
       When both of the input parameters are not NULL and day_of_week is an invalid input,
       the function throws SparkIllegalArgumentException if `spark.sql.ansi.enabled` is set to true, otherwise NULL.
       """,
+  arguments = """
+    Arguments:
+      * start_date - The date after which to find the next occurrence of the given day of week.
+        An expression that evaluates to a date.
+      * day_of_week - The name of the day of week to find (e.g. "Mon", "Tuesday").
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2015-01-14', 'TU');
@@ -2446,6 +2581,13 @@ sealed trait UTCTimestamp extends BinaryExpression with ImplicitCastInputTypes {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp, timezone) - Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1' would yield '2017-07-14 03:40:00.0'.",
+  arguments = """
+    Arguments:
+      * timestamp - The timestamp to interpret as a time in UTC.
+        An expression that evaluates to a timestamp.
+      * timezone - The target time zone to render the timestamp in.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
@@ -2480,6 +2622,13 @@ case class FromUTCTimestamp(left: Expression, right: Expression) extends UTCTime
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp, timezone) - Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield '2017-07-14 01:40:00.0'.",
+  arguments = """
+    Arguments:
+      * timestamp - The timestamp to interpret as a time in the given time zone.
+        An expression that evaluates to a timestamp.
+      * timezone - The time zone the timestamp is interpreted as being in.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
@@ -2519,6 +2668,13 @@ abstract class AddMonthsBase extends BinaryExpression with ImplicitCastInputType
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(start_date, num_months) - Returns the date that is `num_months` after `start_date`.",
+  arguments = """
+    Arguments:
+      * start_date - The starting date to add months to.
+        An expression that evaluates to a date.
+      * num_months - The number of months to add to the start date.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2016-08-31', 1);
@@ -2612,6 +2768,15 @@ case class TimestampAddYMInterval(
       are the last day of month, time of day will be ignored. Otherwise, the difference is
       calculated based on 31 days per month, and rounded to 8 digits unless roundOff=false.
   """,
+  arguments = """
+    Arguments:
+      * timestamp1 - The first timestamp to compare.
+        An expression that evaluates to a timestamp.
+      * timestamp2 - The second timestamp to compare.
+        An expression that evaluates to a timestamp.
+      * roundOff - Whether to round off the result to 8 decimal places.
+        An expression that evaluates to a boolean.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30');
@@ -2679,8 +2844,10 @@ case class MonthsBetween(
   arguments = """
     Arguments:
       * date_str - A string to be parsed to date.
+        An expression that evaluates to a string, date, or timestamp.
       * fmt - Date format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -2755,8 +2922,10 @@ case class ParseToDate(
   arguments = """
     Arguments:
       * date_str - A string to be parsed to date.
+        An expression that evaluates to a string, date, or timestamp.
       * fmt - Date format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -2798,8 +2967,10 @@ object TryToDateExpressionBuilder extends ExpressionBuilder {
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
+        An expression that evaluates to a string, date, timestamp, or numeric.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -2957,11 +3128,13 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
   arguments = """
     Arguments:
       * date - date value or valid date string
+        An expression that evaluates to a date.
       * fmt - the format representing the unit to be truncated to
           - "YEAR", "YYYY", "YY" - truncate to the first date of the year that the `date` falls in
           - "QUARTER" - truncate to the first date of the quarter that the `date` falls in
           - "MONTH", "MM", "MON" - truncate to the first date of the month that the `date` falls in
           - "WEEK" - truncate to the Monday of the week that the `date` falls in
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -3026,7 +3199,9 @@ case class TruncDate(date: Expression, format: Expression)
           - "SECOND" -  zero out the second fraction part
           - "MILLISECOND" - zero out the microseconds
           - "MICROSECOND" - everything remains
+        An expression that evaluates to a string.
       * ts - datetime value or valid timestamp string
+        An expression that evaluates to a timestamp.
   """,
   examples = """
     Examples:
@@ -3108,6 +3283,13 @@ case class TruncTimestamp(
  */
 @ExpressionDescription(
   usage = "_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`.",
+  arguments = """
+    Arguments:
+      * endDate - The end date to count days up to.
+        An expression that evaluates to a date.
+      * startDate - The start date to count days from.
+        An expression that evaluates to a date.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('2009-07-31', '2009-07-30');
@@ -3146,8 +3328,11 @@ case class DateDiff(endDate: Expression, startDate: Expression)
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
+        An expression that evaluates to an integer.
       * month - the month-of-year to represent, from 1 (January) to 12 (December)
+        An expression that evaluates to an integer.
       * day - the day-of-month to represent, from 1 to 31
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:
@@ -3367,15 +3552,23 @@ case class MakeTimestampLTZNanos(
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
+        An expression that evaluates to an integer.
       * month - the month-of-year to represent, from 1 (January) to 12 (December)
+        An expression that evaluates to an integer.
       * day - the day-of-month to represent, from 1 to 31
+        An expression that evaluates to an integer.
       * hour - the hour-of-day to represent, from 0 to 23
+        An expression that evaluates to an integer.
       * min - the minute-of-hour to represent, from 0 to 59
+        An expression that evaluates to an integer.
       * sec - the second-of-minute and its micro-fraction to represent, from
               0 to 60. If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
+        An expression that evaluates to a decimal.
       * date - a date to represent, from 0001-01-01 to 9999-12-31
+        An expression that evaluates to a date.
       * time - a local time to represent, from 00:00:00 to 23:59:59.999999
+        An expression that evaluates to a time.
   """,
   examples = """
     Examples:
@@ -3421,15 +3614,23 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
+        An expression that evaluates to an integer.
       * month - the month-of-year to represent, from 1 (January) to 12 (December)
+        An expression that evaluates to an integer.
       * day - the day-of-month to represent, from 1 to 31
+        An expression that evaluates to an integer.
       * hour - the hour-of-day to represent, from 0 to 23
+        An expression that evaluates to an integer.
       * min - the minute-of-hour to represent, from 0 to 59
+        An expression that evaluates to an integer.
       * sec - the second-of-minute and its micro-fraction to represent, from
               0 to 60. If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
+        An expression that evaluates to a decimal.
       * date - a date to represent, from 0001-01-01 to 9999-12-31
+        An expression that evaluates to a date.
       * time - a local time to represent, from 00:00:00 to 23:59:59.999999
+        An expression that evaluates to a time.
   """,
   examples = """
     Examples:
@@ -3478,16 +3679,25 @@ object TryMakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
+        An expression that evaluates to an integer.
       * month - the month-of-year to represent, from 1 (January) to 12 (December)
+        An expression that evaluates to an integer.
       * day - the day-of-month to represent, from 1 to 31
+        An expression that evaluates to an integer.
       * hour - the hour-of-day to represent, from 0 to 23
+        An expression that evaluates to an integer.
       * min - the minute-of-hour to represent, from 0 to 59
+        An expression that evaluates to an integer.
       * sec - the second-of-minute and its micro-fraction to represent, from
               0 to 60. If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
+        An expression that evaluates to a decimal.
       * timezone - the time zone identifier. For example, CET, UTC and etc.
+        An expression that evaluates to a string.
       * date - a date to represent, from 0001-01-01 to 9999-12-31
+        An expression that evaluates to a date.
       * time - a local time to represent, from 00:00:00 to 23:59:59.999999
+        An expression that evaluates to a time.
   """,
   examples = """
     Examples:
@@ -3545,16 +3755,25 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
+        An expression that evaluates to an integer.
       * month - the month-of-year to represent, from 1 (January) to 12 (December)
+        An expression that evaluates to an integer.
       * day - the day-of-month to represent, from 1 to 31
+        An expression that evaluates to an integer.
       * hour - the hour-of-day to represent, from 0 to 23
+        An expression that evaluates to an integer.
       * min - the minute-of-hour to represent, from 0 to 59
+        An expression that evaluates to an integer.
       * sec - the second-of-minute and its micro-fraction to represent, from
               0 to 60. If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
+        An expression that evaluates to a decimal.
       * timezone - the time zone identifier. For example, CET, UTC and etc.
+        An expression that evaluates to a string.
       * date - a date to represent, from 0001-01-01 to 9999-12-31
+        An expression that evaluates to a date.
       * time - a local time to represent, from 00:00:00 to 23:59:59.999999
+        An expression that evaluates to a time.
   """,
   examples = """
     Examples:
@@ -3817,17 +4036,26 @@ case class TryMakeTimestamp(
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
+        An expression that evaluates to an integer.
       * month - the month-of-year to represent, from 1 (January) to 12 (December)
+        An expression that evaluates to an integer.
       * day - the day-of-month to represent, from 1 to 31
+        An expression that evaluates to an integer.
       * hour - the hour-of-day to represent, from 0 to 23
+        An expression that evaluates to an integer.
       * min - the minute-of-hour to represent, from 0 to 59
+        An expression that evaluates to an integer.
       * sec - the second-of-minute and its micro-fraction to represent, from 0 to 60.
               The value can be either an integer like 13 , or a fraction like 13.123.
               If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
+        An expression that evaluates to a decimal.
       * date - a date expression
+        An expression that evaluates to a date.
       * time - a time expression (optional). Default is 00:00:00.
+        An expression that evaluates to a time.
       * timezone - the time zone identifier (optional). For example, CET, UTC and etc.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -3967,16 +4195,25 @@ case class MakeTimestampFromDateTime(
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
+        An expression that evaluates to an integer.
       * month - the month-of-year to represent, from 1 (January) to 12 (December)
+        An expression that evaluates to an integer.
       * day - the day-of-month to represent, from 1 to 31
+        An expression that evaluates to an integer.
       * hour - the hour-of-day to represent, from 0 to 23
+        An expression that evaluates to an integer.
       * min - the minute-of-hour to represent, from 0 to 59
+        An expression that evaluates to an integer.
       * sec - the second-of-minute and its micro-fraction to represent, from
               0 to 60. If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
+        An expression that evaluates to a decimal.
       * date - a date expression
+        An expression that evaluates to a date.
       * time - a time expression (optional). Default is 00:00:00.
+        An expression that evaluates to a time.
       * timezone - the time zone identifier (optional). For example, CET, UTC and etc.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -4365,8 +4602,11 @@ object SubtractDates {
     Arguments:
       * sourceTz - the time zone for the input timestamp.
                    If it is missed, the current session time zone is used as the source time zone.
+        An expression that evaluates to a string.
       * targetTz - the time zone to which the input timestamp should be converted
+        An expression that evaluates to a string.
       * sourceTs - a timestamp without time zone
+        An expression that evaluates to a timestamp.
   """,
   examples = """
     Examples:

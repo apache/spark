@@ -38,6 +38,51 @@ private[sql] object ArrowUtils {
 
   // todo: support more types.
 
+  /**
+   * Check if a Spark DataType is supported by Arrow. This recursively checks complex types
+   * (Array, Struct, Map).
+   *
+   * Note: This checks compatibility with toArrowField(), not toArrowType(). Types like
+   * GeometryType, GeographyType, and VariantType are not supported by toArrowType() (which only
+   * handles primitive Arrow types), but ARE supported by toArrowField() which converts them to
+   * Arrow Struct representations with metadata. Since Arrow cache uses toArrowField() via
+   * toArrowSchema() to create the schema, these types are supported.
+   */
+  def isSupportedByArrow(dt: DataType): Boolean = {
+    dt match {
+      // Primitive types
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
+          _: StringType | BinaryType | NullType =>
+        true
+
+      // Decimal
+      case _: DecimalType => true
+
+      // Temporal types
+      case DateType | TimestampType | TimestampNTZType | _: TimeType => true
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType => true
+
+      // Interval types
+      case _: YearMonthIntervalType | _: DayTimeIntervalType | CalendarIntervalType => true
+
+      // Complex types - recursively check element types
+      case ArrayType(elementType, _) => isSupportedByArrow(elementType)
+      case StructType(fields) => fields.forall(f => isSupportedByArrow(f.dataType))
+      case MapType(keyType, valueType, _) =>
+        isSupportedByArrow(keyType) && isSupportedByArrow(valueType)
+
+      // Special types
+      // Note: These are not in toArrowType(), but are handled by toArrowField()
+      case udt: UserDefinedType[_] => isSupportedByArrow(udt.sqlType)
+      case _: GeometryType => true // Converted to Struct with srid + wkb fields
+      case _: GeographyType => true // Converted to Struct with srid + wkb fields
+      case _: VariantType => true // Converted to Struct with value + metadata fields
+
+      // Unsupported types
+      case _ => false
+    }
+  }
+
   /** Maps data type from Spark to Arrow. NOTE: timeZoneId required for TimestampTypes */
   def toArrowType(dt: DataType, timeZoneId: String, largeVarTypes: Boolean = false): ArrowType =
     TypeApiOps(dt)

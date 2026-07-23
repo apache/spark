@@ -32,6 +32,10 @@ memory usage and GC pressure. You can call `spark.catalog.uncacheTable("tableNam
 
 To list relations cached with an explicit name, use `spark.catalog.listCachedTables()`. Entries cached only via `Dataset.cache()` without a name are not included.
 
+Spark supports two cache formats:
+- **Default cache format**: The standard in-memory columnar cache (used by default).
+- **Arrow cache format**: An Apache Arrow-based cache that can improve read performance for columnar workloads and enables Arrow ecosystem interoperability. See [Arrow Cache Format documentation](sql-arrow-cache-format.html) for details and configuration.
+
 Configuration of in-memory caching can be done via `spark.conf.set` or by running
 `SET key=value` commands using SQL.
 
