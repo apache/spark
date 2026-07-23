@@ -3598,6 +3598,11 @@
         <scala.version>${scala3.version}</scala.version>
         <scala.binary.version>3</scala.binary.version>
         <scala.library.artifact>scala3-library_3</scala.library.artifact>
+        <!-- scala-maven-plugin passes -doc-format:html and -doc-title to the doc-jar goal
+             by default. Scala 3's scaladoc rejects both, and since -doc-title is dropped
+             its argument is then read as a source file, failing the build. Skip scaladoc
+             until the plugin configuration is made version-aware. -->
+        <maven.scaladoc.skip>true</maven.scaladoc.skip>
       </properties>
       <dependencyManagement>
         <dependencies>

@@ -86,6 +86,18 @@ sed_i '1,/<scala\.version>/s|<scala\.version>[^<]*</scala\.version>|<scala.versi
 sed_i '1,/<scala\.binary\.version>[0-9][0-9.]*</s/<scala\.binary\.version>[0-9][0-9.]*</<scala.binary.version>'$TO_VERSION'</' \
   "$BASEDIR/pom.xml"
 
+# The stdlib is published under a different coordinate per version, so flip it alongside
+# the two properties above. Leaving it behind would rewrite the POM into a state that only
+# resolves once -Pscala-3 is also passed, since the profile is what supplies the Scala 3
+# value; keeping all three together means the rewritten POM is consistent on its own.
+if [ $TO_VERSION = "3" ]; then
+  SCALA_LIBRARY_ARTIFACT="scala3-library_3"
+else
+  SCALA_LIBRARY_ARTIFACT="scala-library"
+fi
+sed_i '1,/<scala\.library\.artifact>/s|>[^<]*</scala\.library\.artifact>|>'"$SCALA_LIBRARY_ARTIFACT"'</scala.library.artifact>|' \
+  "$BASEDIR/pom.xml"
+
 # Update source of scaladocs. 2.13 is the default and needs no flag; only Scala 3 is
 # selected with -Pscala-3, so this tracks the non-default version rather than the target.
 echo "$BASEDIR/docs/_plugins/build_api_docs.rb"
