@@ -179,6 +179,8 @@ class DecisionTreeRegressionModel private[ml] (
   require(rootNode != null,
     "DecisionTreeRegressionModel given null rootNode, but it requires a non-null rootNode.")
 
+  assignLeafIndices()
+
   /**
    * Construct a decision tree regression model.
    *
