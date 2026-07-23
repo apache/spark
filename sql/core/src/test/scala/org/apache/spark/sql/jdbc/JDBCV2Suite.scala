@@ -1243,30 +1243,17 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkPushedInfo(df10, "PushedFilters: [ID IS NOT NULL, ID > 1]")
     checkAnswer(df10, Row("mary", 2))
 
-    // RAND(1) is non-deterministic. By default (SPARK-58207) it is not pushed down and stays as a
-    // post-scan filter; the legacy config restores pushing it down (JDBC fully enforces it in H2).
-    // RAND(1) < bonus is trivially true for the matching row (bonus = 1300 >= 1), so the answer is
-    // the same either way.
-    Seq(true, false).foreach { legacyPush =>
-      withSQLConf(SQLConf.LEGACY_ALLOW_NON_DETERMINISTIC_V2_FILTER_PUSHDOWN.key ->
-          legacyPush.toString) {
-        val df11 = sql(
-          """
-            |SELECT * FROM h2.test.employee
-            |WHERE GREATEST(bonus, 1100) > 1200 AND RAND(1) < bonus
-            |""".stripMargin)
-        if (legacyPush) {
-          checkFiltersRemoved(df11)
-          checkPushedInfo(df11, "PushedFilters: " +
-            "[BONUS IS NOT NULL, (GREATEST(BONUS, 1100.0)) > 1200.0, RAND(1) < BONUS]")
-        } else {
-          checkFiltersRemoved(df11, removed = false)
-          checkPushedInfo(df11, "PushedFilters: " +
-            "[BONUS IS NOT NULL, (GREATEST(BONUS, 1100.0)) > 1200.0]")
-        }
-        checkAnswer(df11, Row(2, "david", 10000, 1300, true))
-      }
-    }
+    // RAND(1) is non-deterministic, so (SPARK-58207) it is not pushed down and stays as a
+    // post-scan filter. RAND(1) < bonus is trivially true for the matching row (bonus = 1300 >= 1).
+    val df11 = sql(
+      """
+        |SELECT * FROM h2.test.employee
+        |WHERE GREATEST(bonus, 1100) > 1200 AND RAND(1) < bonus
+        |""".stripMargin)
+    checkFiltersRemoved(df11, removed = false)
+    checkPushedInfo(df11, "PushedFilters: " +
+      "[BONUS IS NOT NULL, (GREATEST(BONUS, 1100.0)) > 1200.0]")
+    checkAnswer(df11, Row(2, "david", 10000, 1300, true))
 
     val df12 = sql(
       """

@@ -7864,20 +7864,6 @@ object SQLConf {
       .createWithDefault(false)
   }
 
-  val LEGACY_ALLOW_NON_DETERMINISTIC_V2_FILTER_PUSHDOWN =
-    buildConf("spark.sql.legacy.allowNonDeterministicV2FilterPushDown")
-      .internal()
-      .doc("When set to true, restores the legacy behavior of pushing non-deterministic filters " +
-        "down to DataSource V2 sources that implement SupportsPushDownV2Filters. Pushing a " +
-        "non-deterministic predicate is unsafe because a source may evaluate it a different " +
-        "number of times or at a different point than Spark (e.g. use it for pruning yet also " +
-        "return it for post-scan re-evaluation, evaluating it twice with different results). " +
-        "When false, such filters are kept as post-scan filters.")
-      .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .booleanConf
-      .createWithDefault(false)
-
   val XML_VARIANT_RESPECT_INFER_SCHEMA =
     buildConf("spark.sql.xml.variant.respectInferSchema")
       .doc(
