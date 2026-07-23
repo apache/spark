@@ -8012,6 +8012,7 @@ object SQLConf {
         "when the cache is first built for a JVM, so changing it has no effect on an " +
         "already-built cache.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ >= 0, "descriptorCacheSize must be non-negative; 0 disables the cache")
       .createWithDefault(8)

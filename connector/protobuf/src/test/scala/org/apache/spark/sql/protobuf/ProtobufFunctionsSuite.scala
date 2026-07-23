@@ -2384,8 +2384,13 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
 
   test("descriptor cache: distinct bytes are parsed and cached separately") {
     ProtobufUtils.clearDescriptorCacheForTesting()
+    // Derive a second, genuinely distinct descriptor set from the same source rather than relying
+    // on testFileDesc vs proto2FileDesc being different bytes: under SBT both point at one combined
+    // descriptor file, so they hash to the same cache key. proto2_messages.proto has no imports, so
+    // its single-file set parses standalone and is distinct from the full combined set either way.
+    val proto2Standalone = descriptorSetWithoutImports(proto2FileDesc, "FoobarWithRequiredFieldBar")
     val basic = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
-    val proto2 = ProtobufUtils.buildDescriptor("FoobarWithRequiredFieldBar", Some(proto2FileDesc))
+    val proto2 = ProtobufUtils.buildDescriptor("FoobarWithRequiredFieldBar", Some(proto2Standalone))
     assert(proto2.descriptor ne basic.descriptor)
     assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 2)
   }
