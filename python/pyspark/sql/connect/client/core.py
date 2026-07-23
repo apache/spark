@@ -2057,11 +2057,12 @@ class SparkConnectClient(object):
         try:
             for attempt in self._retrying():
                 with attempt:
-                    resp = self._stub.Config(
-                        req,
-                        metadata=self._builder.metadata(),
-                        timeout=self._rpc_deadlines.config,
-                    )
+                    with disable_gc():
+                        resp = self._stub.Config(
+                            req,
+                            metadata=self._builder.metadata(),
+                            timeout=self._rpc_deadlines.config,
+                        )
                     self._verify_response_integrity(resp)
                     return ConfigResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")

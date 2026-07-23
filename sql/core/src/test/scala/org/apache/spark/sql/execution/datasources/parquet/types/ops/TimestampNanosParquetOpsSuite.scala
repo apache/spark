@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
 import java.time.{Instant, LocalDateTime, ZoneOffset}
 
+import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.filter2.predicate.FilterApi
 import org.apache.parquet.filter2.predicate.SparkFilterApi.longColumn
 import org.apache.parquet.io.api.PrimitiveConverter
@@ -258,6 +259,49 @@ class TimestampNanosParquetOpsSuite extends SparkFunSuite {
     ops.newConverter(field, updater).asInstanceOf[PrimitiveConverter].addLong(epochNanos)
     captured
   }
+
+  // ---------- vectorized read updater (getVectorUpdater / getVectorUpdaterOrNull) ----------
+
+  private def nanosTimestampColumn(isAdjustedToUTC: Boolean): ColumnDescriptor = {
+    val field = Types.primitive(INT64, REQUIRED)
+      .as(LogicalTypeAnnotation.timestampType(isAdjustedToUTC, TimeUnit.NANOS))
+      .named("c")
+    new ColumnDescriptor(Array("c"), field, 0, 0)
+  }
+
+  test("getVectorUpdater returns a framework updater for INT64 TIMESTAMP(NANOS)") {
+    // LTZ: isAdjustedToUTC=true
+    assert(ltz.getVectorUpdater(nanosTimestampColumn(isAdjustedToUTC = true)).isDefined)
+    // NTZ: isAdjustedToUTC=false
+    assert(ntz.getVectorUpdater(nanosTimestampColumn(isAdjustedToUTC = false)).isDefined)
+    // Java-friendly companion entry point used by ParquetVectorUpdaterFactory.
+    assert(ParquetTypeOps.getVectorUpdaterOrNull(
+      TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION),
+      nanosTimestampColumn(isAdjustedToUTC = true)) != null)
+  }
+
+  test("getVectorUpdater returns None for incompatible encodings (clean reject, vectorized)") {
+    // TIMESTAMP(MICROS) - wrong unit
+    val timestampMicros = Types.primitive(INT64, REQUIRED)
+      .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS)).named("c")
+    // raw INT64 - no annotation
+    val rawInt64 = Types.primitive(INT64, REQUIRED).named("c")
+    // TIME(NANOS) - wrong annotation kind
+    val timeNanos = Types.primitive(INT64, REQUIRED)
+      .as(LogicalTypeAnnotation.timeType(false, TimeUnit.NANOS)).named("c")
+
+    // None -> the factory falls through to a clean SchemaColumnConvertNotSupportedException,
+    // matching the row-path reject set (isNanosTimestamp), instead of silently mis-decoding.
+    Seq(timestampMicros, rawInt64, timeNanos).foreach { field =>
+      val descriptor = new ColumnDescriptor(Array("c"), field, 0, 0)
+      assert(ltz.getVectorUpdater(descriptor).isEmpty,
+        s"expected None for ${field.getLogicalTypeAnnotation}")
+      assert(ntz.getVectorUpdater(descriptor).isEmpty,
+        s"expected None for ${field.getLogicalTypeAnnotation}")
+    }
+  }
+
+  // ---------- helpers ----------
 
   private def assertNanosTimestampSchema(
       parquetType: Type, expectedAdjustedToUTC: Boolean): Unit = {

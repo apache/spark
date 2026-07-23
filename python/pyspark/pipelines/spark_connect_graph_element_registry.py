@@ -148,9 +148,15 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             sequence_by=to_plan(flow.sequence_by),
             column_list=to_plans(flow.column_list),
             except_column_list=to_plans(flow.except_column_list),
+            track_history_column_list=to_plans(flow.track_history_column_list),
+            track_history_except_column_list=to_plans(flow.track_history_except_column_list),
         )
         if flow.stored_as_scd_type is not None:
-            auto_cdc_details.stored_as_scd_type = pb2.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_1
+            scd_type_by_value = {
+                "1": pb2.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_1,
+                "2": pb2.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_2,
+            }
+            auto_cdc_details.stored_as_scd_type = scd_type_by_value[str(flow.stored_as_scd_type)]
         if flow.apply_as_deletes is not None:
             auto_cdc_details.apply_as_deletes.CopyFrom(to_plan(flow.apply_as_deletes))
 

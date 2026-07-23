@@ -5383,6 +5383,20 @@ def zeroifnull(col: "ColumnOrName") -> Column:
 zeroifnull.__doc__ = pysparkfuncs.zeroifnull.__doc__
 
 
+def hmac(
+    key: "ColumnOrName",
+    message: "ColumnOrName",
+    algorithm: Optional["ColumnOrName"] = None,
+) -> Column:
+    if algorithm is None:
+        return _invoke_function_over_columns("hmac", key, message)
+    else:
+        return _invoke_function_over_columns("hmac", key, message, algorithm)
+
+
+hmac.__doc__ = pysparkfuncs.hmac.__doc__
+
+
 def aes_encrypt(
     input: "ColumnOrName",
     key: "ColumnOrName",
