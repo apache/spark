@@ -613,6 +613,10 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertFalse(self.connect.read.table(self.tbl_name).isStreaming)
         self.assertFalse(self.connect.sql("SELECT 1 AS X LIMIT 0").isStreaming)
 
+    def test_get_num_partitions(self):
+        self.assertEqual(self.connect.range(10).repartition(4).getNumPartitions(), 4)
+        self.assertEqual(self.connect.range(10).coalesce(1).getNumPartitions(), 1)
+
     def test_input_files(self):
         # SPARK-41216: Test input files
         tmpPath = tempfile.mkdtemp()
