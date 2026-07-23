@@ -571,19 +571,38 @@ private[sql] object ArrowUtils {
    * This compares against the declared field rather than allowlisting "declarable" shapes: the
    * declared schema is the exact header the consumer will decode with, so congruence with it is
    * the complete correctness condition, not an approximation of it. Field names, nullability, and
-   * metadata are ignored -- they do not affect the buffer layout. The two failure directions stay
-   * asymmetric: a false reject merely takes the row-based re-encoding fallback (slower, still
-   * correct, and with the value-domain guards such as DATETIME_OVERFLOW reinstated), while a
-   * false accept corrupts the stream -- so anything not provably congruent must be rejected.
+   * metadata are ignored -- they do not affect the buffer layout -- except for Map entry
+   * children, whose names carry the key/value semantics (see mapEntryNamesMatchDeclared). The two
+   * failure directions stay asymmetric: a false reject merely takes the row-based re-encoding
+   * fallback (slower, still correct, and with the value-domain guards such as DATETIME_OVERFLOW
+   * reinstated), while a false accept corrupts the stream -- so anything not provably congruent
+   * must be rejected.
    */
   def isCompatibleWithDeclaredField(actual: Field, declared: Field): Boolean = {
     actual.getDictionary == null &&
     sameLayoutArrowType(actual.getType, declared.getType) &&
     actual.getChildren.size == declared.getChildren.size &&
+    mapEntryNamesMatchDeclared(actual, declared) &&
     actual.getChildren.asScala.zip(declared.getChildren.asScala).forall { case (a, d) =>
       isCompatibleWithDeclaredField(a, d)
     }
   }
+
+  // An Arrow Map binds its key/value semantics to the entry-struct children by name (the spec
+  // puts the key first and MapVector addresses the children as "key"/"value"), yet Arrow
+  // tolerates vectors whose entry children sit in the opposite order. Such a vector is
+  // positionally indistinguishable from the canonical one when the key and value types agree,
+  // and forwarding its buffers verbatim under the declared header silently swaps keys and
+  // values -- so at Map nodes the entry children must also match the declared names. Field
+  // names remain ignored everywhere else: Spark's semantics are positional there and names
+  // carry no meaning.
+  private def mapEntryNamesMatchDeclared(actual: Field, declared: Field): Boolean =
+    !declared.getType.isInstanceOf[ArrowType.Map] || {
+      val actualNames = actual.getChildren.asScala.flatMap(_.getChildren.asScala).map(_.getName)
+      val declaredNames =
+        declared.getChildren.asScala.flatMap(_.getChildren.asScala).map(_.getName)
+      actualNames == declaredNames
+    }
 
   // Physical-layout type comparison, mirroring ArrowFileReadWrite.checkLayoutMatch: the
   // timestamp timezone label does not affect the layout (values are int64 epoch numbers either

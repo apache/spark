@@ -492,6 +492,47 @@ class ArrowUtilsSuite extends SparkFunSuite {
       declaredMap.getChildren)
     assert(compat(sortedMap, declaredMap))
 
+    // An Arrow Map binds key/value semantics to the entry-struct children by name (the key
+    // comes first and MapVector addresses the children as "key"/"value"), yet Arrow tolerates
+    // vectors whose entry children sit in the opposite order. With int keys and int values the
+    // swapped tree is positionally identical to the canonical one, so only the names reveal the
+    // swap -- forwarding the buffers verbatim under the canonical header would silently decode
+    // {k: v} as {v: k}. Map entry names must therefore match the declared ones, at every
+    // nesting level.
+    def swapEntries(mapField: Field): Field = {
+      val entries = mapField.getChildren.get(0)
+      val swapped = new Field(
+        entries.getName,
+        new FieldType(entries.isNullable, entries.getType, null, entries.getMetadata),
+        entries.getChildren.asScala.reverse.asJava)
+      new Field(
+        mapField.getName,
+        new FieldType(mapField.isNullable, mapField.getType, null, mapField.getMetadata),
+        java.util.Collections.singletonList(swapped))
+    }
+    val intMapSchema = new StructType().add("value", MapType(IntegerType, IntegerType, false))
+    val declaredIntMap = declared(intMapSchema)
+    assert(compat(declaredIntMap, declaredIntMap))
+    assert(!compat(swapEntries(declaredIntMap), declaredIntMap))
+    val nestedMapSchema = new StructType()
+      .add("value", MapType(IntegerType, MapType(IntegerType, IntegerType, false), false))
+    val declaredNestedMap = declared(nestedMapSchema)
+    val nestedEntries = declaredNestedMap.getChildren.get(0)
+    val innerSwappedEntries = new Field(
+      nestedEntries.getName,
+      new FieldType(nestedEntries.isNullable, nestedEntries.getType, null,
+        nestedEntries.getMetadata),
+      java.util.Arrays.asList(
+        nestedEntries.getChildren.get(0),
+        swapEntries(nestedEntries.getChildren.get(1))))
+    val innerSwappedMap = new Field(
+      declaredNestedMap.getName,
+      new FieldType(declaredNestedMap.isNullable, declaredNestedMap.getType, null,
+        declaredNestedMap.getMetadata),
+      java.util.Collections.singletonList(innerSwappedEntries))
+    assert(compat(declaredNestedMap, declaredNestedMap))
+    assert(!compat(innerSwappedMap, declaredNestedMap))
+
     // A view-typed field is incongruent with the declared Utf8.
     val stringSchema = new StructType().add("value", StringType)
     val viewField = new Field(

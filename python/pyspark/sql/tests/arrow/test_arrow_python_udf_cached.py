@@ -130,6 +130,21 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         finally:
             df.unpersist()
 
+    def test_udf_on_cached_map_column(self):
+        # Canonical map vectors from the cache pass the gate (their entry-struct children carry
+        # the canonical "key"/"value" names in order) and ride the columnar path verbatim. The
+        # rejection of a source whose entry children are swapped is pinned at the unit level
+        # (ArrowUtilsSuite), since no in-tree producer can build such a vector.
+        df = self.spark.createDataFrame(
+            [({"a": 1},), ({"b": 2, "c": 3},)], schema="m map<string,long>"
+        ).cache()
+        try:
+            result = df.select(udf(lambda m: len(m), "long")(col("m")))
+            self._assert_columnar_arrow_eval(result, expected_nodes=1)
+            assertDataFrameEqual(result, [Row(1), Row(2)])
+        finally:
+            df.unpersist()
+
     def test_udf_on_timestamps_cached_under_different_time_zone(self):
         # Pins the timestamp pass-through end to end: the plan takes the columnar path and
         # the stored epoch round-trips unchanged across a session-timezone change between
