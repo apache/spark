@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
+import org.apache.spark.sql.execution.{FileSourceScanExec, FileSourceScanLike, FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 
 /**
@@ -119,13 +119,13 @@ object ExtractJoinWithBuckets {
       if (j.buildSide == BuildLeft) hasScanOperation(j.right) else hasScanOperation(j.left)
     case j: BroadcastNestedLoopJoinExec =>
       if (j.buildSide == BuildLeft) hasScanOperation(j.right) else hasScanOperation(j.left)
-    case f: FileSourceScanExec => f.relation.bucketSpec.nonEmpty
+    case f: FileSourceScanLike => f.relation.bucketSpec.nonEmpty
     case _ => false
   }
 
   private def getBucketSpec(plan: SparkPlan): Option[BucketSpec] = {
     plan.collectFirst {
-      case f: FileSourceScanExec if f.relation.bucketSpec.nonEmpty &&
+      case f: FileSourceScanLike if f.relation.bucketSpec.nonEmpty &&
           f.optionalNumCoalescedBuckets.isEmpty =>
         f.relation.bucketSpec.get
     }
