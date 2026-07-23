@@ -165,6 +165,17 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
             "SECOND", "WEEK", "QUARTER").foreach { level =>
             run(N, s"date_trunc $level", s"date_trunc('$level', $timestampExpr)")
           }
+          // date_trunc memoizes the zone offset over the most-recently-used constant-offset window
+          // (SPARK-57737), so its per-row cost depends on how temporally clustered the input is. The
+          // cases above are sequential (best case); these cover timestamps arriving out of order --
+          // shuffled over a bounded ~2-year span (e.g. after a shuffle on a non-time key) and spread
+          // uniformly over ~95 years (the adversarial case, working set far exceeding one window).
+          val shuffled2y = "timestamp_seconds(1600000000 + pmod(id * 2654435761, 63072000))"
+          val spread95y = "timestamp_seconds(pmod(id * 2654435761, 3000000000))"
+          Seq("YEAR", "MONTH", "DAY").foreach { level =>
+            run(N, s"date_trunc $level (shuffled 2y)", s"date_trunc('$level', $shuffled2y)")
+            run(N, s"date_trunc $level (spread 95y)", s"date_trunc('$level', $spread95y)")
+          }
           val dateExpr = "cast(timestamp_seconds(id) as date)"
           Seq("year", "yyyy", "yy", "mon", "month", "mm").foreach { level =>
             run(N, s"trunc $level", s"trunc($dateExpr, '$level')")
