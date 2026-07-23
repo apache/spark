@@ -40,7 +40,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.Streami
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
-import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest, TaskResourceRequests}
+import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeduplicate, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
@@ -3941,15 +3941,7 @@ class SparkConnectPlanner(
         res.getVendor)
     }.toMap
     val treqs = rp.getTaskResourcesMap.asScala.map { case (name, res) =>
-      val req = if (res.getResourceName == ResourceProfile.CPUS) {
-        // Cpus amounts are validated at request entry points, not in the TaskResourceRequest
-        // constructor (which stays lenient to deserialize persisted data); a Connect client
-        // is such an entry point, so route through the validating builder for a proper error.
-        new TaskResourceRequests().cpus(res.getAmount).requests(ResourceProfile.CPUS)
-      } else {
-        new TaskResourceRequest(res.getResourceName, res.getAmount)
-      }
-      name -> req
+      name -> new TaskResourceRequest(res.getResourceName, res.getAmount)
     }.toMap
 
     // Create ResourceProfile add add it to ResourceProfileManager
