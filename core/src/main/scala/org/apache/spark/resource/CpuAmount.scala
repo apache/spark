@@ -61,6 +61,28 @@ private[spark] object CpuAmount {
    */
   def isInRange(v: BigDecimal): Boolean = v >= MIN_AMOUNT && v <= MAX_AMOUNT
 
+  // Generous bound on the length of a parseable cpus string: sign, 10 integer digits, the
+  // point, 9 decimals, and exponent syntax fit well within it.
+  private val MAX_PARSE_LENGTH = 64
+
+  /**
+   * Safely parses a cpus amount from an untrusted string, e.g. a property read back from a
+   * persisted application environment. The length is bounded before parsing (decimal-string
+   * parsing cost grows superlinearly with the significand, so a crafted million-digit value
+   * -- about 1 KB once compressed in an event log -- could burn seconds before any range
+   * check runs), the range is checked on the compact parsed value before normalizing (see
+   * [[isInRange]]), and any malformed value yields None. Every value the live config parser
+   * accepts fits well within the length bound; an absurdly formatted valid value merely
+   * falls back to the caller's default.
+   */
+  def parseUntrusted(v: String): Option[BigDecimal] = {
+    if (v == null || v.length > MAX_PARSE_LENGTH) {
+      None
+    } else {
+      scala.util.Try(BigDecimal(v)).toOption.filter(isInRange).map(normalize)
+    }
+  }
+
   /**
    * The minimal-scale form (trailing zeros removed). Use this for logging/printing (e.g.
    * `0.200000000` renders as `0.2`) and for products that would otherwise blow the normalized

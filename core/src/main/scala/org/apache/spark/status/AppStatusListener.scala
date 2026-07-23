@@ -185,16 +185,15 @@ private[spark] class AppStatusListener(
       details.getOrElse("Classpath Entries", Nil),
       Nil)
 
-    // Parse the raw property string straight into a BigDecimal so the default cpus per task is
-    // exact (spark.task.cpus may be fractional, e.g. 0.2), then normalize to the CPU scale.
-    // The bounds are checked on the compact parsed value BEFORE normalizing: this string comes
-    // from a persisted application environment, and setScale on a crafted or corrupt extreme
-    // exponent (e.g. 1e10000000) would materialize an enormous unscaled value inside the
-    // (shared) history server. A legitimate log always carries a value the live config parser
-    // validated, so malformed values keep the previous default instead of failing the replay.
+    // Parse the raw property string so the default cpus per task is exact (spark.task.cpus
+    // may be fractional, e.g. 0.2). The string comes from a persisted application environment
+    // and is untrusted -- parseUntrusted bounds the length and range before the costly parse
+    // and normalize steps can run inside the (shared) history server. A legitimate log always
+    // carries a value the live config parser validated, so malformed values keep the previous
+    // default instead of failing the replay.
     envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).foreach { v =>
-      Try(BigDecimal(v)).toOption.filter(CpuAmount.isInRange) match {
-        case Some(d) => defaultCpusPerTask = CpuAmount.normalize(d)
+      CpuAmount.parseUntrusted(v) match {
+        case Some(d) => defaultCpusPerTask = d
         case None =>
           logWarning(log"Ignoring invalid ${MDC(LogKeys.CONFIG, CPUS_PER_TASK.key)} value in " +
             log"the application environment; keeping the previous default")
@@ -239,8 +238,13 @@ private[spark] class AppStatusListener(
     val liveRP = liveResourceProfiles.get(rpId)
     // Recover the exact BigDecimal from the Double amount via its string form (see
     // ResourceProfile.getTaskCpus for why this must go through toString), then normalize.
+    // A replayed profile can carry any amount an earlier release accepted (e.g. a negative
+    // cpus): fall back to the default rather than letting the slot math's positivity
+    // assertion abort the replay.
     val cpusPerTask = liveRP.flatMap(_.taskResources.get(CPUS))
-      .map(tr => CpuAmount.normalize(BigDecimal(tr.amount.toString)))
+      .flatMap(tr => Try(BigDecimal(tr.amount.toString)).toOption)
+      .filter(CpuAmount.isInRange)
+      .map(CpuAmount.normalize)
       .getOrElse(defaultCpusPerTask)
     val maxTasksPerExec = liveRP.flatMap(_.maxTasksPerExecutor)
     exec.maxTasks = maxTasksPerExec.getOrElse(

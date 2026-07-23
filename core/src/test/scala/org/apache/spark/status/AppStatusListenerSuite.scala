@@ -29,7 +29,7 @@ import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.metrics.ExecutorMetricType
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{ResourceProfile, TaskResourceRequest}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.ListenerEventsTestHelper._
@@ -134,7 +134,10 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     // rejected. An extreme exponent must not materialize an enormous decimal inside the
     // (shared) history server, and a malformed value must not fail the replay -- both keep
     // the previous default instead.
-    Seq("1e10000000", "abc", "0", "-1").foreach { bad =>
+    // The million-digit value must be rejected by the length bound before it is parsed:
+    // decimal parsing cost grows superlinearly with the significand, and the value
+    // compresses to about a kilobyte inside an event log.
+    Seq("1e10000000", "1".repeat(1000000), "abc", "0", "-1").foreach { bad =>
       listener.onEnvironmentUpdate(SparkListenerEnvironmentUpdate(Map(
         "JVM Information" -> Seq.empty,
         "Spark Properties" -> Seq("spark.task.cpus" -> bad),
@@ -148,6 +151,25 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
 
     check[ExecutorSummaryWrapper]("1") { exec =>
       assert(exec.info.maxTasks === 4)
+    }
+  }
+
+  test("SPARK-58192: replayed profile with a historically accepted cpus amount") {
+    val listener = new AppStatusListener(store, conf, true)
+    // Earlier releases accepted e.g. negative cpus amounts into persisted profiles, and the
+    // lenient TaskResourceRequest constructor keeps them deserializable; computing executor
+    // capacity from such a profile must fall back to the default rather than abort the
+    // replay on the slot math's positivity assertion.
+    val legacyProfile = new ResourceProfile(
+      Map.empty,
+      Map(ResourceProfile.CPUS -> new TaskResourceRequest(ResourceProfile.CPUS, -1.0)))
+    listener.onResourceProfileAdded(SparkListenerResourceProfileAdded(legacyProfile))
+    listener.onExecutorAdded(SparkListenerExecutorAdded(1L, "1",
+      new ExecutorInfo("1.example.com", 2, Map.empty, Map.empty, Map.empty,
+        legacyProfile.id)))
+
+    check[ExecutorSummaryWrapper]("1") { exec =>
+      assert(exec.info.maxTasks === 2)
     }
   }
 
