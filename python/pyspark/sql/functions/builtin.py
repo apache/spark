@@ -15299,7 +15299,7 @@ def from_base32(col: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("MZXW6YTBOI======",)], ["value"])
     >>> df.select(sf.from_base32("value").alias("r")).collect()
-    [Row(r=bytearray(b'foobar'))]
+    [Row(r=b'foobar')]
     """
     return _invoke_function_over_columns("from_base32", col)
 
