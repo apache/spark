@@ -228,6 +228,50 @@ private[sql] object PythonSQLUtils extends Logging {
     reader.asInstanceOf[ClassicDataFrameReader].xml(toStringDataset(df))
   }
 
+  /**
+   * Create a [[org.apache.spark.sql.execution.streaming.runtime.MemoryStream]] of `Row`
+   * values for use by the PySpark `StreamTest` framework. The returned object is opaque
+   * to Python; callers pass it back to [[memoryStreamAddData]] and [[memoryStreamToDF]].
+   *
+   * Test-only: not part of the public Spark API.
+   */
+  def createMemoryStream(sparkSession: SparkSession, schema: StructType): AnyRef = {
+    import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+    implicit val enc: ExpressionEncoder[Row] = ExpressionEncoder(schema)
+    MemoryStream[Row](sparkSession)
+  }
+
+  /**
+   * Append the rows of `dataDF` to a memory stream that was previously returned from
+   * [[createMemoryStream]]. Returns the offset (as a `Long`) after the addition.
+   *
+   * Test-only: not part of the public Spark API.
+   */
+  def memoryStreamAddData(memoryStream: AnyRef, dataDF: DataFrame): Long = {
+    // Narrowed to MemoryStream[Row] (the concrete type returned by
+    // createMemoryStream) so the LongOffset assumption below is well-founded.
+    // Subclasses with non-Long offsets are intentionally not supported here.
+    import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream}
+    val stream = memoryStream.asInstanceOf[MemoryStream[Row]]
+    val rows = dataDF.collect().toSeq
+    stream.addData(rows) match {
+      case LongOffset(v) => v
+      case other => throw new IllegalStateException(
+        s"Unexpected offset type from MemoryStream: ${other.getClass.getName}")
+    }
+  }
+
+  /**
+   * Returns a streaming [[DataFrame]] backed by the memory stream returned from
+   * [[createMemoryStream]].
+   *
+   * Test-only: not part of the public Spark API.
+   */
+  def memoryStreamToDF(memoryStream: AnyRef): DataFrame = {
+    import org.apache.spark.sql.execution.streaming.runtime.MemoryStreamBase
+    memoryStream.asInstanceOf[MemoryStreamBase[Row]].toDF()
+  }
+
   def cleanupPythonWorkerLogs(sessionUUID: String, sparkContext: SparkContext): Unit = {
     if (!sparkContext.isStopped) {
       try {
