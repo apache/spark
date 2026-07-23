@@ -197,8 +197,12 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       conf: SQLConf): RDD[ColumnarBatch] = {
     val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
     val outputSchema = DataTypeUtils.fromAttributes(selectedAttributes)
+    // Use AttributeSeq's cached exprId -> ordinal map so each selected attribute is a
+    // constant-time lookup, instead of rebuilding the exprId list and linear-scanning it
+    // per selected attribute.
+    val cacheAttributeSeq = AttributeSeq(cacheAttributes)
     val columnIndices =
-      selectedAttributes.map(a => cacheAttributes.map(o => o.exprId).indexOf(a.exprId)).toArray
+      selectedAttributes.map(a => cacheAttributeSeq.indexOf(a.exprId)).toArray
 
     def createAndDecompressColumn(cb: CachedBatch): ColumnarBatch = {
       val cachedColumnarBatch = cb.asInstanceOf[DefaultCachedBatch]
@@ -230,10 +234,13 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow] = {
-    // Find the ordinals and data types of the requested columns.
+    // Find the ordinals and data types of the requested columns. Use AttributeSeq's cached
+    // exprId -> ordinal map so each requested column is a constant-time lookup, instead of
+    // rebuilding the exprId list and linear-scanning it per requested column.
+    val cacheAttributeSeq = AttributeSeq(cacheAttributes)
     val (requestedColumnIndices, requestedColumnDataTypes) =
       selectedAttributes.map { a =>
-        cacheAttributes.map(_.exprId).indexOf(a.exprId) -> a.dataType
+        cacheAttributeSeq.indexOf(a.exprId) -> a.dataType
       }.unzip
 
     val columnTypes = requestedColumnDataTypes.map {
