@@ -301,19 +301,49 @@ select luhn_check(6011111111111117);
 select luhn_check(6011111111111118);
 select luhn_check(123.456);
 
---utf8 string validation
-select is_valid_utf8('');
-select is_valid_utf8('abc');
-select is_valid_utf8(x'80');
-select make_valid_utf8('');
-select make_valid_utf8('abc');
-select make_valid_utf8(x'80');
-select validate_utf8('');
-select validate_utf8('abc');
-select validate_utf8(x'80');
-select try_validate_utf8('');
-select try_validate_utf8('abc');
-select try_validate_utf8(x'80');
+-- UTF-8 string validation functions
+-- Section 1: Test with default behavior (validateUtf8=true)
+-- When validation is enabled, implicit cast from binary to string fails for invalid UTF-8,
+-- so the validation functions receive NULL input and return NULL.
+-- This tests the new default behavior.
+-- Related: SPARK-54586
+
+select is_valid_utf8('');           -- true (valid UTF-8 string)
+select is_valid_utf8('abc');        -- true (valid UTF-8 string)
+select is_valid_utf8(x'80');        -- NULL (cast fails, function receives NULL)
+
+select make_valid_utf8('');         -- '' (valid UTF-8 string)
+select make_valid_utf8('abc');      -- 'abc' (valid UTF-8 string)
+select make_valid_utf8(x'80');      -- NULL (cast fails, function receives NULL)
+
+select validate_utf8('');           -- '' (valid UTF-8 string)
+select validate_utf8('abc');        -- 'abc' (valid UTF-8 string)
+select validate_utf8(x'80');        -- NULL (cast fails, function receives NULL)
+
+select try_validate_utf8('');       -- '' (valid UTF-8 string)
+select try_validate_utf8('abc');    -- 'abc' (valid UTF-8 string)
+select try_validate_utf8(x'80');    -- NULL (cast fails, function receives NULL)
+
+-- Section 2: Test with legacy behavior (validateUtf8=false)
+-- When validation is disabled, implicit cast succeeds and the validation functions
+-- can process the invalid UTF-8 bytes themselves. This tests the functions' actual
+-- validation logic on invalid input.
+-- Related: SPARK-54586
+SET spark.sql.castBinaryToString.validateUtf8=false;
+
+select is_valid_utf8(x'80');        -- false (invalid UTF-8 detected by function)
+select is_valid_utf8(x'61C262');    -- false (incomplete multi-byte sequence)
+
+select make_valid_utf8(x'80');      -- '�' (replacement character U+FFFD)
+select make_valid_utf8(x'61C262');  -- 'a�b' (invalid bytes replaced)
+
+-- Note: validate_utf8 throws exception on invalid UTF-8, can't test here
+-- Note: try_validate_utf8 returns NULL on invalid UTF-8
+select try_validate_utf8(x'80');    -- NULL (invalid UTF-8)
+select try_validate_utf8(x'61C262');-- NULL (invalid UTF-8)
+
+-- Re-enable default validation for remaining tests
+SET spark.sql.castBinaryToString.validateUtf8=true;
 
 -- quote
 select quote('Spark');
