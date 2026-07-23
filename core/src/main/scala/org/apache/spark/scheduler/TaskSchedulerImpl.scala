@@ -165,9 +165,9 @@ private[spark] class TaskSchedulerImpl(
    * the stages in `excludeStageIds`. "Outstanding" is the not-yet-completed demand of each task set
    * -- running plus enqueued (`numTasks - tasksSuccessful`) -- not just the tasks actively running,
    * so a neighbor's queued backlog is charged against capacity too. Used by the pipelined-group
-   * slot admission check (see DAGScheduler): it compares the group's demand against the slots free
-   * by everything else in the SAME resource profile, so it excludes the group's own members (whose
-   * tasks would otherwise be charged against the group's own admission).
+   * slot admission check (see DAGScheduler): it compares the group's demand against the slots left
+   * free after accounting for everything else in the SAME resource profile, so it excludes the
+   * group's own members (whose tasks would otherwise be charged against the group's own admission).
    *
    * Computed from the TaskSetManagers so it is resource-profile-scoped, skips zombie (superseded)
    * attempts so a retried stage is not double-counted, and is taken under a single lock so the

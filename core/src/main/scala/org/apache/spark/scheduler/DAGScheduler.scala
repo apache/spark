@@ -1928,8 +1928,9 @@ private[spark] class DAGScheduler(
     // producer/consumer co-scheduling makes speculation unsafe. Reject a pipelined
     // dependency submitted as a map-stage job outright, up front, before any stage is created so no
     // partial scheduler state is left behind. Inert for a regular ShuffleDependency. (The
-    // result-job path, handleJobSubmitted, only rejects the speculation case, since a pipelined
-    // dependency is a legitimate internal edge there.)
+    // result-job path, handleJobSubmitted, rejects the speculation and dynamic-allocation cases via
+    // rejectUnsupportedPipelinedJob, but a pipelined dependency is otherwise a legitimate internal
+    // edge there.)
     if (dependency.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
       logWarning(log"Rejecting map-stage job ${MDC(JOB_ID, jobId)}: a pipelined shuffle dependency " +
         log"cannot be materialized as a map-stage job")
