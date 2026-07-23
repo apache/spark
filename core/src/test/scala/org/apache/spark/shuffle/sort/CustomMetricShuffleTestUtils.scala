@@ -35,10 +35,7 @@ private[spark] case class TestCustomShuffleTaskMetric(metricName: String, metric
 
 /**
  * Wraps a [[ShuffleExecutorComponents]] so every [[ShuffleMapOutputWriter]] it creates reports the
- * given custom metric values from `currentMetricsValues()`, delegating all real writing to the
- * wrapped components. Lets tests assert that the concrete
- * [[org.apache.spark.shuffle.ShuffleWriter]] implementations stash and expose what the map output
- * writer reports.
+ * given custom metric values from `currentMetricsValues()`, delegating all real writing.
  */
 private[spark] class CustomMetricReportingExecutorComponents(
     delegate: ShuffleExecutorComponents,

@@ -22,9 +22,9 @@ import java.util.{Map => JMap}
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.SHUFFLE_IO_PLUGIN_CLASS
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents, ShuffleExecutorComponents, ShuffleMapOutputWriter, ShufflePartitionWriter, SingleSpillShuffleMapOutputWriter}
-import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage
-import org.apache.spark.shuffle.api.metric.{CustomShuffleMetric, CustomShuffleTaskMetric}
+import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents, ShuffleExecutorComponents}
+import org.apache.spark.shuffle.api.metric.CustomShuffleMetric
+import org.apache.spark.shuffle.sort.{CustomMetricReportingExecutorComponents, TestCustomShuffleTaskMetric}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.sql.{LocalSparkSession, SparkSession}
 import org.apache.spark.sql.execution.CollectLimitExec
@@ -35,10 +35,7 @@ import org.apache.spark.util.MetricUtils
 
 /**
  * Integration coverage for the shuffle custom-metrics SPI: a toy [[ShuffleDataIO]] declares a
- * custom metric on its driver components and reports a fixed per-task value from every map output
- * writer, and we assert the value surfaces on the [[ShuffleExchangeExec]] operator node after a
- * real shuffle. This exercises the full path (driver declaration, task reporting, accumulator
- * propagation, and the SQL-side bridge) without a `ThreadLocal` side-channel.
+ * custom metric and reports a fixed per-task value, and we assert it surfaces on the operator node.
  */
 class CustomShuffleMetricsIntegrationSuite
   extends SparkFunSuite with LocalSparkSession with AdaptiveSparkPlanHelper {
@@ -73,7 +70,7 @@ class CustomShuffleMetricsIntegrationSuite
     }
   }
 
-  test("the built-in local-disk plugin declares no custom metrics (regression guard)") {
+  test("no custom shuffle metrics surface when no plugin declares any") {
     withPluginSession(None) { spark =>
       val exchange = runShuffleAndGetExchange(spark)
       assert(!exchange.metrics.contains(TestCustomMetricShuffleDataIO.MetricName))
@@ -121,7 +118,10 @@ class TestCustomMetricShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO 
     new TestCustomMetricDriverComponents(delegate.driver())
 
   override def executor(): ShuffleExecutorComponents =
-    new TestCustomMetricExecutorComponents(delegate.executor())
+    new CustomMetricReportingExecutorComponents(
+      delegate.executor(),
+      Array(TestCustomShuffleTaskMetric(
+        TestCustomMetricShuffleDataIO.MetricName, TestCustomMetricShuffleDataIO.PerTaskValue)))
 }
 
 class TestCustomMetricDriverComponents(delegate: ShuffleDriverComponents)
@@ -136,41 +136,6 @@ class TestCustomMetricDriverComponents(delegate: ShuffleDriverComponents)
       override def name(): String = TestCustomMetricShuffleDataIO.MetricName
       override def description(): String = "test shuffle bytes uploaded"
       override def metricType(): String = MetricUtils.SIZE_METRIC
-    })
-}
-
-class TestCustomMetricExecutorComponents(delegate: ShuffleExecutorComponents)
-  extends ShuffleExecutorComponents {
-
-  override def initializeExecutor(
-      appId: String, execId: String, extraConfigs: JMap[String, String]): Unit =
-    delegate.initializeExecutor(appId, execId, extraConfigs)
-
-  override def createMapOutputWriter(
-      shuffleId: Int, mapTaskId: Long, numPartitions: Int): ShuffleMapOutputWriter =
-    new TestCustomMetricMapOutputWriter(
-      delegate.createMapOutputWriter(shuffleId, mapTaskId, numPartitions))
-
-  override def createSingleFileMapOutputWriter(
-      shuffleId: Int, mapId: Long): java.util.Optional[SingleSpillShuffleMapOutputWriter] =
-    delegate.createSingleFileMapOutputWriter(shuffleId, mapId)
-}
-
-class TestCustomMetricMapOutputWriter(delegate: ShuffleMapOutputWriter)
-  extends ShuffleMapOutputWriter {
-
-  override def getPartitionWriter(reducePartitionId: Int): ShufflePartitionWriter =
-    delegate.getPartitionWriter(reducePartitionId)
-
-  override def commitAllPartitions(checksums: Array[Long]): MapOutputCommitMessage =
-    delegate.commitAllPartitions(checksums)
-
-  override def abort(error: Throwable): Unit = delegate.abort(error)
-
-  override def currentMetricsValues(): Array[CustomShuffleTaskMetric] = Array(
-    new CustomShuffleTaskMetric {
-      override def name(): String = TestCustomMetricShuffleDataIO.MetricName
-      override def value(): Long = TestCustomMetricShuffleDataIO.PerTaskValue
     })
 }
 
