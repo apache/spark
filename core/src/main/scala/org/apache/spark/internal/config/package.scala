@@ -1686,7 +1686,7 @@ package object config {
         "Providers are called directly (without doLogin/doAs) and participate in the " +
         "same renewal and distribution lifecycle as Kerberos delegation token providers. " +
         "Providers that require Kerberos self-gate via delegationTokensRequired.")
-      .version("5.0.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
