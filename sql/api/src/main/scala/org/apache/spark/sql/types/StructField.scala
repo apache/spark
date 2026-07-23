@@ -126,32 +126,31 @@ case class StructField(
     }
   }
 
-  private def writeDataTypeWithoutCollations(
-      dataType: DataType,
-      generator: JsonGenerator): Unit = dataType match {
-    // Only recurse into map and array types as any child struct type will have already been
-    // processed.
-    case ArrayType(elementType, containsNull) =>
-      generator.writeStartObject()
-      generator.writeStringField("type", dataType.typeName)
-      generator.writeFieldName("elementType")
-      writeDataTypeWithoutCollations(elementType, generator)
-      generator.writeBooleanField("containsNull", containsNull)
-      generator.writeEndObject()
-    case MapType(keyType, valueType, valueContainsNull) =>
-      generator.writeStartObject()
-      generator.writeStringField("type", dataType.typeName)
-      generator.writeFieldName("keyType")
-      writeDataTypeWithoutCollations(keyType, generator)
-      generator.writeFieldName("valueType")
-      writeDataTypeWithoutCollations(valueType, generator)
-      generator.writeBooleanField("valueContainsNull", valueContainsNull)
-      generator.writeEndObject()
-    case st: StringType =>
-      StringHelper.removeCollation(st).writeJsonTo(generator)
-    case other =>
-      other.writeJsonTo(generator)
-  }
+  private def writeDataTypeWithoutCollations(dataType: DataType, generator: JsonGenerator): Unit =
+    dataType match {
+      // Only recurse into map and array types as any child struct type will have already been
+      // processed.
+      case ArrayType(elementType, containsNull) =>
+        generator.writeStartObject()
+        generator.writeStringField("type", dataType.typeName)
+        generator.writeFieldName("elementType")
+        writeDataTypeWithoutCollations(elementType, generator)
+        generator.writeBooleanField("containsNull", containsNull)
+        generator.writeEndObject()
+      case MapType(keyType, valueType, valueContainsNull) =>
+        generator.writeStartObject()
+        generator.writeStringField("type", dataType.typeName)
+        generator.writeFieldName("keyType")
+        writeDataTypeWithoutCollations(keyType, generator)
+        generator.writeFieldName("valueType")
+        writeDataTypeWithoutCollations(valueType, generator)
+        generator.writeBooleanField("valueContainsNull", valueContainsNull)
+        generator.writeEndObject()
+      case st: StringType =>
+        StringHelper.removeCollation(st).writeJsonTo(generator)
+      case other =>
+        other.writeJsonTo(generator)
+    }
 
   private def writeMetadataJsonTo(generator: JsonGenerator): Unit = {
     val extraFields = if (collationMetadata.isEmpty) {
