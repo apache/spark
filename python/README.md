@@ -10,19 +10,18 @@ PySpark is the Python distribution of Spark.
 
 Project home page: https://spark.apache.org/
 
-Online documentation: https://spark.apache.org/docs/latest/
+Main documentation: https://spark.apache.org/docs/latest/
 
 PySpark documentation: https://spark.apache.org/docs/latest/api/python/index.html
 
 ## Python vs. "Full" Distribution of Spark
 
-PySpark is not intended to be a complete distribution of Spark. It's suitable for local development or for interacting with an existing cluster (be it Spark standalone, YARN, or Kubernetes), but it is not intended to be used to set up your own standalone Spark cluster. To set up a standalone cluster you need to [use the full version of Spark](https://spark.apache.org/downloads.html).
+PySpark is not intended to be a complete distribution of Spark. It's meant for local development or for interacting with an existing cluster (be it Spark standalone, YARN, or Kubernetes). Using PySpark to set up a new standalone Spark cluster is not supported. To set up a standalone cluster you need to [use the full distribution of Spark](https://spark.apache.org/downloads.html).
 
-**NOTE:** If you are using this with a Spark standalone cluster you must ensure that the version (including minor version) matches or you may experience odd errors.
-
-Using PySpark requires the Spark JARs, which are included in this distribution. If you are building this from source please see [the builder instructions](https://spark.apache.org/docs/latest/building-spark.html).
+When using PySpark with an existing Spark standalone cluster you must ensure that the major and minor version (e.g. `4.3.*`) match or you may experience odd errors.
 
 ## Python Requirements
 
-At its core PySpark depends on Py4J, but some additional sub-packages have their own extra requirements for some features (including numpy, pandas, and pyarrow).
-See also [Dependencies](https://spark.apache.org/docs/latest/api/python/getting_started/install.html#dependencies) for production, and [pyproject.toml](https://github.com/apache/spark/blob/master/pyproject.toml) for development.
+At its core PySpark depends on Py4J, but some additional sub-packages have their own extra requirements for some features. See [Dependencies](https://spark.apache.org/docs/latest/api/python/getting_started/install.html#dependencies) for the full list of production dependencies and [pyproject.toml](https://github.com/apache/spark/blob/master/pyproject.toml) for development dependencies.
+
+PySpark also requires the Spark JARs, which are included in this distribution. If you are building this distribution from source please see [the builder instructions](https://spark.apache.org/docs/latest/building-spark.html).
