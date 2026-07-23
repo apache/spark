@@ -79,6 +79,26 @@ class MapInArrowTestsMixin:
         expected = df.collect()
         self.assertEqual(actual, expected)
 
+    def test_coerce_output_type_to_declared_schema(self):
+        # Regression test: when the user yields a batch whose Arrow type does
+        # not match the declared output schema, the worker should coerce it
+        # rather than letting the JVM fail later with an opaque getInt error
+        # on the wrong ArrowColumnVector accessor.
+        from pyspark.sql.types import IntegerType, StructField, StructType
+
+        def double_x(iter_batches):
+            for batch in iter_batches:
+                # The input column is long (int64); produce int64 output even
+                # though the declared schema is IntegerType (int32).
+                yield pa.RecordBatch.from_arrays(
+                    [pa.array([v * 2 for v in batch.column("x").to_pylist()], type=pa.int64())],
+                    names=["x"],
+                )
+
+        src = self.spark.createDataFrame([(1,), (2,), (3,)], ["x"])
+        out = src.mapInArrow(double_x, schema=StructType([StructField("x", IntegerType())]))
+        self.assertEqual([r.x for r in out.collect()], [2, 4, 6])
+
     def test_large_variable_width_types(self):
         with self.sql_conf({"spark.sql.execution.arrow.useLargeVarTypes": True}):
             data = [("foo", b"foo"), (None, None), ("bar", b"bar")]
@@ -213,16 +233,18 @@ class MapInArrowTestsMixin:
                 MapInArrowTests.test_map_in_arrow(self)
 
     def test_nested_extraneous_field(self):
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.validateSchema.enabled": True}):
+        # The worker now coerces each output batch against the declared output
+        # schema. pyarrow's struct cast silently drops fields that are not in
+        # the target type, so an extraneous nested field no longer reaches the
+        # JVM and the JVM-side validateSchema check has nothing to catch.
+        def func(iterator):
+            for _ in iterator:
+                struct_arr = pa.StructArray.from_arrays([[1, 2], [3, 4]], names=["a", "b"])
+                yield pa.RecordBatch.from_arrays([struct_arr], ["x"])
 
-            def func(iterator):
-                for _ in iterator:
-                    struct_arr = pa.StructArray.from_arrays([[1, 2], [3, 4]], names=["a", "b"])
-                    yield pa.RecordBatch.from_arrays([struct_arr], ["x"])
-
-            df = self.spark.range(1)
-            with self.assertRaisesRegex(Exception, r"ARROW_TYPE_MISMATCH.*SQL_MAP_ARROW_ITER_UDF"):
-                df.mapInArrow(func, "x struct<b:int>").collect()
+        df = self.spark.range(1)
+        rows = df.mapInArrow(func, "x struct<b:int>").collect()
+        self.assertEqual([r.x.b for r in rows], [3, 4])
 
     def test_top_level_wrong_order(self):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.validateSchema.enabled": True}):
