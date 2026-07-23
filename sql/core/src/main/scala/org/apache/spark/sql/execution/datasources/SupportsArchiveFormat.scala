@@ -164,7 +164,6 @@ trait SupportsArchiveFormat extends Logging {
         }
       }
 
-      // advance() exits only when done or current has an element, so !done implies current.hasNext.
       override def hasNext: Boolean = {
         advance()
         !done
