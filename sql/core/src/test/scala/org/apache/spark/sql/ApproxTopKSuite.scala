@@ -595,6 +595,16 @@ class ApproxTopKSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58069: merge an empty approx_top_k_combine buffer") {
+    val initializedBuffer = new CombineInternal[Any](
+      new ApproxTopKAggregateBuffer[Any](new ItemsSketch[Any](128), 0L),
+      StringType,
+      100)
+    initializedBuffer.updateMaxItemsTracked(
+      combineSizeSpecified = false, ApproxTopK.VOID_MAX_ITEMS_TRACKED)
+    assert(initializedBuffer.getMaxItemsTracked == 100)
+  }
+
   test("SPARK-58069: combine sketches with empty shuffle partitions") {
     val sketches = sql(
       "SELECT approx_top_k_accumulate(id) AS sketch FROM range(10) GROUP BY id")
