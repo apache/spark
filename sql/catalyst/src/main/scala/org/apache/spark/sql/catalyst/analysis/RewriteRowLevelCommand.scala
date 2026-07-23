@@ -84,6 +84,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       table: RowLevelOperationTable,
       metadataAttrs: Seq[AttributeReference],
       rowIdAttrs: Seq[AttributeReference] = Nil): DataSourceV2Relation = {
+
     val attrs = dedupAttrs(relation.output ++ rowIdAttrs ++ metadataAttrs)
     relation.copy(table = table, output = attrs)
   }
@@ -254,7 +255,11 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     val rowProjection = if (updateRowAttrs.nonEmpty) {
       val outputsForInsert = filterOutputs(outputs,
         OPERATIONS_WITH_ROW -- Set(UPDATE_OPERATION, COPY_OPERATION))
-      newLazyProjection(plan, outputsForInsert, rowAttrs)
+      if (outputsForInsert.isEmpty) {
+        ProjectingInternalRow(StructType(Nil), Nil)
+      } else {
+        newLazyProjection(plan, outputsForInsert, rowAttrs)
+      }
     } else {
       val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
       newLazyProjection(plan, outputsWithRow, rowAttrs)
@@ -285,7 +290,6 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       updateRowAttrs: Seq[Attribute] = Nil): WriteDeltaProjections = {
     val outputs = extractOutputs(plan)
 
-    // Always produce Some(rowProjection) even for empty rowAttrs (identity-only column updates).
     // When updateRowAttrs is non-empty, the row projection covers INSERT-shaped rows only and a
     // separate updateRowProjection handles UPDATE/COPY/REINSERT-shaped rows.
     val rowProjection = if (updateRowAttrs.nonEmpty) {
@@ -300,7 +304,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       val outputsWithRow = filterOutputs(outputs, OPERATIONS_WITH_ROW)
       Some(newLazyProjection(plan, outputsWithRow, rowAttrs))
     } else {
-      Some(ProjectingInternalRow(StructType(Nil), Nil))
+      None
     }
 
     val updateRowProjection = if (updateRowAttrs.nonEmpty) {

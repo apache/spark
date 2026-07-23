@@ -46,7 +46,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
           checkNoGeneratedColumns(r, UPDATE)
           val updatedCols = assignments.collect {
             case Assignment(key: AttributeReference, value) if !isIdentityAssignment(key, value) =>
-              FieldReference(key.name)
+              FieldReference(Seq(key.name))
           }
           val table = buildOperationTable(tbl, UPDATE, r.options, updatedCols)
           val updateCond = cond.getOrElse(TrueLiteral)
