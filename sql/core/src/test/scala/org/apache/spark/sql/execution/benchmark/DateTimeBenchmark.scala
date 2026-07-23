@@ -172,7 +172,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
           // uniformly over ~95 years (the adversarial case, working set far exceeding one window).
           val shuffled2y = "timestamp_seconds(1600000000 + pmod(id * 2654435761, 63072000))"
           val spread95y = "timestamp_seconds(pmod(id * 2654435761, 3000000000))"
-          Seq("YEAR", "MONTH", "DAY").foreach { level =>
+          Seq("YEAR", "QUARTER", "MONTH", "WEEK", "DAY").foreach { level =>
             run(N, s"date_trunc $level (shuffled 2y)", s"date_trunc('$level', $shuffled2y)")
             run(N, s"date_trunc $level (spread 95y)", s"date_trunc('$level', $spread95y)")
           }
