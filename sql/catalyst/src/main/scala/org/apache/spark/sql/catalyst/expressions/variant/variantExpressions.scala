@@ -1082,6 +1082,11 @@ case class VariantSet(
     }
   }
 
+  override def eval(input: InternalRow): Any = {
+    val _ = foldablePath
+    super.eval(input)
+  }
+
   override protected def nullSafeEval(v: Any, p: Any, valValue: Any, create: Any): Any = {
     val inputVariant = v.asInstanceOf[VariantVal]
     val createIfMissingValue = create.asInstanceOf[Boolean]

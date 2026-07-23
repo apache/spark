@@ -1691,6 +1691,20 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkSetUnrecoverableError("{}", "$.a", Literal(tooBig),
       "VARIANT_SIZE_LIMIT",
       name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
+
+    Seq("variant_set" -> true, "try_variant_set" -> false).foreach {
+      case (name, failOnError) =>
+        checkErrorInExpression[SparkRuntimeException](
+          VariantSet(
+            BoundReference(0, VariantType, nullable = true),
+            Literal.create("$", StringType),
+            Literal(1),
+            Literal(true),
+            failOnError),
+          InternalRow(null),
+          "INVALID_VARIANT_PATH",
+          Map("path" -> "$", "functionName" -> s"`$name`"))
+    }
   }
 
   test("variant_array_append") {
