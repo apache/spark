@@ -587,6 +587,7 @@ JSON Functions
     json_array_length
     json_object_keys
     json_tuple
+    json_typeof
     schema_of_json
     to_json
 

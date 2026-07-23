@@ -77,4 +77,32 @@ public class JsonExpressionUtils {
       return null;
     }
   }
+
+  public static UTF8String jsonTypeof(UTF8String json) {
+    try (JsonParser jsonParser =
+        CreateJacksonParser.utf8String(SharedFactory.jsonFactory(), json)) {
+      JsonToken token = jsonParser.nextToken();
+      if (token == null) {
+        return null;
+      }
+      String type = switch (token) {
+        case START_OBJECT -> "object";
+        case START_ARRAY -> "array";
+        case VALUE_STRING -> "string";
+        case VALUE_NUMBER_INT, VALUE_NUMBER_FLOAT -> "number";
+        case VALUE_TRUE, VALUE_FALSE -> "boolean";
+        case VALUE_NULL -> "null";
+        default -> null;
+      };
+      if (type == null) {
+        return null;
+      }
+      // Consume the value so malformed input surfaces as a parse error and returns null,
+      // matching json_object_keys and json_array_length.
+      jsonParser.skipChildren();
+      return UTF8String.fromString(type);
+    } catch (IOException e) {
+      return null;
+    }
+  }
 }

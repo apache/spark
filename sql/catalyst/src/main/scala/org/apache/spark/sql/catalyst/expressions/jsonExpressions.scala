@@ -709,3 +709,49 @@ case class JsonObjectKeys(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =
     copy(child = newChild)
 }
+
+/**
+ * A function which returns the type of the outermost JSON value as a string.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(json) - Returns the type of the outermost JSON value, or null if invalid.",
+  arguments = """
+    Arguments:
+      * json - A JSON string. Returns the type of the outermost value ('object', 'array',
+          'string', 'number', 'boolean', 'null'), or null for an invalid or empty string.
+        An expression that evaluates to a string.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"a": 1}');
+        object
+      > SELECT _FUNC_('[1, 2, 3]');
+        array
+      > SELECT _FUNC_('123');
+        number
+  """,
+  group = "json_funcs",
+  since = "4.3.0"
+)
+case class JsonTypeof(child: Expression)
+  extends UnaryExpression
+  with ExpectsInputTypes
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  override def nullable: Boolean = true
+  override def prettyName: String = "json_typeof"
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[JsonExpressionUtils],
+    dataType,
+    "jsonTypeof",
+    Seq(child),
+    inputTypes
+  )
+
+  override protected def withNewChildInternal(newChild: Expression): JsonTypeof =
+    copy(child = newChild)
+}
