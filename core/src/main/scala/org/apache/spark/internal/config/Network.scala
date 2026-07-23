@@ -39,6 +39,18 @@ private[spark] object Network {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val NETWORK_RECREATE_WORKER_GROUP_ON_DEAD_EVENT_LOOP =
+    ConfigBuilder("spark.network.recreateWorkerGroupOnDeadEventLoop")
+      .doc("Whether to replace the netty client worker EventLoopGroup when one of its event-loop " +
+        "threads is detected as dead (a connection is rejected with \"event executor " +
+        "terminated\"). A dead event loop is never replaced within a fixed-size group and keeps " +
+        "being handed out by the round-robin chooser, permanently poisoning any channel pinned " +
+        "to it, so a fetch can hang forever. When enabled, such a failure recreates the worker " +
+        "group so subsequent connections bind to live threads and the caller can retry.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val NETWORK_TIMEOUT =
     ConfigBuilder("spark.network.timeout")
       .version("1.3.0")
