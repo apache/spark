@@ -999,7 +999,7 @@ object JdbcDialects {
    * Register an existing dialect for an additional JDBC URL prefix. The registration affects
    * dialect lookup only; Spark still passes the original URL to the JDBC driver. Registering the
    * same prefix again replaces its previous dialect. These registrations are used only when no
-   * registered dialect handles the URL through [[JdbcDialect.canHandle]].
+   * registered dialect handles the URL through [[JdbcDialect#canHandle]].
    *
    * The prefix must start with `jdbc:` and end with `:`. Matching is case-insensitive.
    *
