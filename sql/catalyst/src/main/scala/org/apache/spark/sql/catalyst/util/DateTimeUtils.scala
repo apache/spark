@@ -611,6 +611,13 @@ object DateTimeUtils extends SparkDateTimeUtils {
     val offsetMicros = originalOffsetSec * MICROS_PER_SECOND
     try {
       val local = Math.addExact(micros, offsetMicros)
+      // For date-level truncation keep the truncated local day: `local`'s day equals
+      // `microsToDays(micros, zoneId)` (both use the same `originalOffsetSec`), so on a DST-cross
+      // fallback `daysToMicros(truncatedDays)` reproduces the slow path exactly without re-deriving
+      // the day through a second `ZonedDateTime`.
+      val isDateLevel = level >= MIN_LEVEL_OF_DATE_TRUNC
+      val truncatedDays =
+        if (isDateLevel) truncDate(Math.floorDiv(local, MICROS_PER_DAY).toInt, level) else 0
       val truncatedLocal = level match {
         case TRUNC_TO_MINUTE =>
           Math.subtractExact(local, Math.floorMod(local, MICROS_PER_MINUTE))
@@ -619,15 +626,18 @@ object DateTimeUtils extends SparkDateTimeUtils {
         case TRUNC_TO_DAY =>
           Math.subtractExact(local, Math.floorMod(local, MICROS_PER_DAY))
         case _ => // Date-level truncation: WEEK / MONTH / QUARTER / YEAR.
-          val localDays = Math.floorDiv(local, MICROS_PER_DAY).toInt
-          Math.multiplyExact(truncDate(localDays, level).toLong, MICROS_PER_DAY)
+          Math.multiplyExact(truncatedDays.toLong, MICROS_PER_DAY)
       }
       val candidate = Math.subtractExact(truncatedLocal, offsetMicros)
       if (!cache.isFixedOffset) {
         val candidateSec = Math.floorDiv(candidate, MICROS_PER_SECOND)
         val candidateOffsetSec = cache.offsetSecondsReadOnly(candidateSec)
         if (candidateOffsetSec != originalOffsetSec) {
-          return truncTimestampSlow(micros, level, cache.zoneId)
+          // The truncation boundary crosses a transition. Date levels resolve it by mapping the
+          // already-truncated local day back through the zone; other levels defer to the reference
+          // slow path.
+          return if (isDateLevel) daysToMicros(truncatedDays, cache.zoneId)
+            else truncTimestampSlow(micros, level, cache.zoneId)
         }
       }
       candidate
