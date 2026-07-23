@@ -433,3 +433,51 @@ Aggregate [regr_r2(cast(y#x as double), cast(k#x as double)) AS regr_r2(y, k)#x]
             +- Project [k#x, y#x, x#x]
                +- SubqueryAlias testRegression
                   +- LocalRelation [k#x, y#x, x#x]
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW testCorrConstant AS SELECT * FROM VALUES
+(1, 1), (1, 2), (1, 3) AS t(x, y)
+-- !query analysis
+CreateViewCommand `testCorrConstant`, SELECT * FROM VALUES
+(1, 1), (1, 2), (1, 3) AS t(x, y), false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [x#x, y#x]
+      +- SubqueryAlias t
+         +- LocalRelation [x#x, y#x]
+
+
+-- !query
+SELECT corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)) FROM testCorrConstant
+-- !query analysis
+Aggregate [corr(cast(x#x as double), cast(y#x as double)) AS corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE))#x]
++- SubqueryAlias testcorrconstant
+   +- View (`testCorrConstant`, [x#x, y#x])
+      +- Project [cast(x#x as int) AS x#x, cast(y#x as int) AS y#x]
+         +- Project [x#x, y#x]
+            +- SubqueryAlias t
+               +- LocalRelation [x#x, y#x]
+
+
+-- !query
+DROP VIEW testCorrConstant
+-- !query analysis
+DropTempViewCommand testCorrConstant, false
+
+
+-- !query
+SELECT corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)) FROM VALUES
+(1, 1), (1, 2), (1, 3) AS t(x, y)
+-- !query analysis
+Aggregate [corr(cast(x#x as double), cast(y#x as double)) AS corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE))#x]
++- SubqueryAlias t
+   +- LocalRelation [x#x, y#x]
+
+
+-- !query
+SELECT corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)) FROM VALUES
+(1, 1), (2, 1), (3, 1) AS t(x, y)
+-- !query analysis
+Aggregate [corr(cast(x#x as double), cast(y#x as double)) AS corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE))#x]
++- SubqueryAlias t
+   +- LocalRelation [x#x, y#x]
+
