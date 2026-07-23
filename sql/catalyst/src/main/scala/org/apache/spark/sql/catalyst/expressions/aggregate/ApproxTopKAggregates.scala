@@ -646,7 +646,7 @@ class CombineInternal[T](
   def getMaxItemsTracked: Int = maxItemsTracked
 
   def updateMaxItemsTracked(combineSizeSpecified: Boolean, newMaxItemsTracked: Int): Unit = {
-    if (!combineSizeSpecified) {
+    if (!combineSizeSpecified && newMaxItemsTracked != ApproxTopK.VOID_MAX_ITEMS_TRACKED) {
       // check size
       if (this.maxItemsTracked == ApproxTopK.VOID_MAX_ITEMS_TRACKED) {
         // If buffer's maxItemsTracked VOID_MAX_ITEMS_TRACKED, it means the buffer is a placeholder
