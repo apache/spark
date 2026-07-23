@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
+import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsColumnUpdates, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -364,6 +364,18 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
       operation.requiredMetadataAttributes.toImmutableArraySeq,
       originalTable)
   }
+
+  // Resolves the connector-declared data attributes against the original table.
+  // Symmetric with projectedMetadataAttrs; used to validate the narrow updateRowProjection
+  // when the connector mixes in SupportsColumnUpdates. The write relation stays wide, so
+  // the narrow projection cannot be validated against `table.output` directly.
+  protected def projectedDataAttrs: Seq[Attribute] = operation match {
+    case scu: SupportsColumnUpdates =>
+      V2ExpressionUtils.resolveRefs[AttributeReference](
+        scu.requiredDataAttributes.toImmutableArraySeq,
+        originalTable)
+    case _ => Nil
+  }
 }
 
 /**
@@ -417,7 +429,29 @@ case class ReplaceData(
   // validates row projection output is compatible with table attributes
   private def rowAttrsResolved: Boolean = {
     val inRowAttrs = DataTypeUtils.toAttributes(projections.rowProjection.schema)
-    table.skipSchemaResolution || areCompatible(inRowAttrs, table.output)
+    val inUpdateAttrs = projections.updateRowProjection match {
+      case Some(projection) => DataTypeUtils.toAttributes(projection.schema)
+      case None => Nil
+    }
+    // `rowProjection` (INSERT-tagged rows) validates against `table.output` -- the full table
+    // shape. `updateRowProjection` (UPDATE/COPY-tagged rows) is narrow for column-update
+    // connectors, so it validates against `projectedDataAttrs` (the connector-declared narrow
+    // set) instead. When the connector does not mix in `SupportsColumnUpdates`,
+    // `updateRowProjection` is absent and `updateResolved` is trivially true.
+    val insertResolved = table.skipSchemaResolution || inRowAttrs.isEmpty ||
+      areCompatible(inRowAttrs, table.output)
+    val updateResolved = inUpdateAttrs.isEmpty || dataAttrsResolved(inUpdateAttrs)
+    insertResolved && updateResolved
+  }
+
+  /**
+   * Validates the narrow-write-schema row projection output for a column-update connector.
+   * The write schema must exactly match the columns declared via
+   * `SupportsColumnUpdates.requiredDataAttributes()` (same columns, same order).
+   */
+  private def dataAttrsResolved(inRowAttrs: Seq[Attribute]): Boolean = {
+    operation.isInstanceOf[SupportsColumnUpdates] &&
+      areCompatible(inRowAttrs, projectedDataAttrs)
   }
 
   // validates metadata projection output is compatible with metadata attributes
@@ -509,7 +543,29 @@ case class WriteDelta(
       case Some(projection) => DataTypeUtils.toAttributes(projection.schema)
       case None => Nil
     }
-    table.skipSchemaResolution || areCompatible(inRowAttrs, outRowAttrs)
+    val inUpdateAttrs = projections.updateRowProjection match {
+      case Some(projection) => DataTypeUtils.toAttributes(projection.schema)
+      case None => Nil
+    }
+    // `rowProjection` (INSERT-tagged rows) validates against `outRowAttrs`. For column-update
+    // connectors, `updateRowProjection` (UPDATE/COPY/REINSERT-tagged rows) is narrow and
+    // validates against `projectedDataAttrs` (the connector-declared narrow set) instead.
+    // When the connector does not mix in `SupportsColumnUpdates`, `updateRowProjection` is
+    // absent and `updateResolved` is trivially true.
+    val insertResolved = table.skipSchemaResolution || inRowAttrs.isEmpty ||
+      areCompatible(inRowAttrs, outRowAttrs)
+    val updateResolved = inUpdateAttrs.isEmpty || dataAttrsResolved(inUpdateAttrs)
+    insertResolved && updateResolved
+  }
+
+  /**
+   * Validates the narrow-write-schema row projection output for a column-update connector.
+   * The write schema must exactly match the columns declared via
+   * `SupportsColumnUpdates.requiredDataAttributes()` (same columns, same order).
+   */
+  private def dataAttrsResolved(inRowAttrs: Seq[Attribute]): Boolean = {
+    operation.isInstanceOf[SupportsColumnUpdates] &&
+      areCompatible(inRowAttrs, projectedDataAttrs)
   }
 
   // validates row ID projection output is compatible with row ID attributes

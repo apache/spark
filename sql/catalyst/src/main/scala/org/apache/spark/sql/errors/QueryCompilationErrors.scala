@@ -4525,6 +4525,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("nullableRowIdAttrs" -> nullableRowIdAttrs.mkString(", ")))
   }
 
+  def emptyRequiredDataAttributesError(connectorClass: String): Throwable = {
+    new AnalysisException(
+      errorClass = "EMPTY_REQUIRED_DATA_ATTRIBUTES",
+      messageParameters = Map("connector" -> connectorClass))
+  }
+
+  def requiredDataAttributesMissingUpdatedColumnsError(
+      connectorClass: String,
+      missingColumns: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
+      messageParameters = Map(
+        "connector" -> connectorClass,
+        "missingColumns" -> missingColumns.mkString("[", ", ", "]")))
+  }
+
   def cannotRenameTableAcrossSchemaError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")

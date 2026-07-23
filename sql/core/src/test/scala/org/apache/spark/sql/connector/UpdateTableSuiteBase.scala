@@ -20,9 +20,8 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{sources, AnalysisException, Row}
-import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.write.UpdateSummary
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
@@ -32,20 +31,9 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   protected def deltaUpdate: Boolean = false
 
-  protected def getUpdateSummary(): UpdateSummary = {
-    val t = catalog.loadTable(ident).asInstanceOf[InMemoryTable]
-    t.commits.last.writeSummary.get.asInstanceOf[UpdateSummary]
-  }
-
-  protected def checkUpdateMetrics(
-      numUpdatedRows: Long,
-      numCopiedRows: Long): Unit = {
-    val summary = getUpdateSummary()
-    assert(summary.numUpdatedRows() === numUpdatedRows,
-      s"Expected numUpdatedRows=$numUpdatedRows, got ${summary.numUpdatedRows()}")
-    val expectedCopied = if (deltaUpdate) 0L else numCopiedRows
-    assert(summary.numCopiedRows() === expectedCopied,
-      s"Expected numCopiedRows=$expectedCopied, got ${summary.numCopiedRows()}")
+  // Convenience overload that forwards `deltaUpdate` from the current suite to the base helper.
+  protected def checkUpdateMetrics(numUpdatedRows: Long, numCopiedRows: Long): Unit = {
+    super.checkUpdateMetrics(numUpdatedRows, numCopiedRows, deltaUpdate)
   }
 
   test("update table containing added column with default value") {
