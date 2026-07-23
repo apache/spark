@@ -170,6 +170,12 @@ class RunnerConf(Conf):
         )
 
     @property
+    def arrow_dtype(self) -> bool:
+        return (
+            self.get("spark.sql.execution.pythonUDF.pandas.arrowDtype.enabled", "false") == "true"
+        )
+
+    @property
     def timezone(self) -> Optional[str]:
         return self.get("spark.sql.session.timeZone", None, lower_str=False)
 
@@ -2989,6 +2995,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     ndarray_as_list=True,
                     prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
                     df_for_struct=False,
+                    arrow_dtype=runner_conf.arrow_dtype,
                 )
                 num_rows = len(pandas_columns[0]) if pandas_columns else input_batch.num_rows
                 if not pandas_columns:

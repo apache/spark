@@ -253,6 +253,7 @@ class ArrowBatchTransformer:
         ndarray_as_list: bool = False,
         prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
+        arrow_dtype: bool = False,
     ) -> List[Union["pd.Series", "pd.DataFrame"]]:
         """
         Convert a RecordBatch or Table to a list of pandas Series.
@@ -273,6 +274,11 @@ class ArrowBatchTransformer:
             Whether to convert integers to Pandas ExtensionDType.
         df_for_struct : bool
             If True, convert struct columns to DataFrame instead of Series.
+        arrow_dtype : bool, optional
+            If True, route columns whose Spark type is in
+            :attr:`ArrowArrayToPandasConversion.ARROW_DTYPE_TYPES` to convert_pyarrow
+            (ArrowDtype-backed). Unsupported types fall through to
+            convert_numpy/convert_legacy. Default is False.
 
         Returns
         -------
@@ -297,6 +303,7 @@ class ArrowBatchTransformer:
                 ndarray_as_list=ndarray_as_list,
                 prefer_int_ext_dtype=prefer_int_ext_dtype,
                 df_for_struct=df_for_struct,
+                arrow_dtype=arrow_dtype,
             )
             for i in range(batch.num_columns)
         ]
@@ -1688,6 +1695,29 @@ class ArrowArrayToPandasConversion:
     where Arrow data needs to be converted to pandas for Python UDF processing.
     """
 
+    # Types supported by convert_pyarrow (ArrowDtype-backed pandas Series).
+    # This tuple controls which types are routed to the pyarrow path when
+    # arrow_cast is enabled. Expand as more types are supported.
+    ARROW_DTYPE_TYPES = (
+        NullType,
+        BinaryType,
+        BooleanType,
+        FloatType,
+        DoubleType,
+        ByteType,
+        ShortType,
+        IntegerType,
+        LongType,
+        DecimalType,
+        StringType,
+        DateType,
+        TimeType,
+        TimestampType,
+        TimestampNTZType,
+        DayTimeIntervalType,
+        YearMonthIntervalType,
+    )
+
     @classmethod
     def convert(
         cls,
@@ -1700,6 +1730,7 @@ class ArrowArrayToPandasConversion:
         ndarray_as_list: bool = False,
         prefer_int_ext_dtype: bool = False,
         df_for_struct: bool = False,
+        arrow_dtype: bool = False,
     ) -> Union["pd.Series", "pd.DataFrame"]:
         """
         Convert a PyArrow Array or ChunkedArray to a pandas Series or DataFrame.
@@ -1724,6 +1755,10 @@ class ArrowArrayToPandasConversion:
         df_for_struct : bool, optional
             If True, convert struct columns to a DataFrame with columns corresponding
             to struct fields instead of a Series. Default is False.
+        arrow_dtype : bool, optional
+            If True, route columns whose Spark type is in :attr:`ARROW_DTYPE_TYPES` to
+            convert_pyarrow (ArrowDtype-backed). Unsupported types fall through to
+            convert_numpy/convert_legacy. Default is False.
 
         Returns
         -------
@@ -1731,6 +1766,16 @@ class ArrowArrayToPandasConversion:
             Converted pandas Series. If df_for_struct is True and the type is StructType,
             returns a DataFrame with columns corresponding to struct fields.
         """
+        # df_for_struct produces a DataFrame from a StructType column;
+        # StructType is not in ARROW_DTYPE_TYPES so the arrow_dtype path
+        # is naturally skipped, but make it explicit for clarity.
+        if arrow_dtype and not df_for_struct and isinstance(spark_type, cls.ARROW_DTYPE_TYPES):
+            return cls.convert_pyarrow(
+                arr,
+                spark_type,
+                ser_name=ser_name,
+            )
+
         if cls._prefer_convert_numpy(spark_type, df_for_struct):
             return cls.convert_numpy(
                 arr,
@@ -2005,6 +2050,71 @@ class ArrowArrayToPandasConversion:
         #     ),
         # ):
         # TODO(SPARK-55324): Support complex types
+        else:  # pragma: no cover
+            assert False, f"Need converter for {spark_type} but failed to find one."
+
+        return series.rename(ser_name)
+
+    @classmethod
+    def convert_pyarrow(
+        cls,
+        arr: Union["pa.Array", "pa.ChunkedArray"],
+        spark_type: DataType,
+        *,
+        ser_name: Optional[str] = None,
+    ) -> "pd.Series":
+        """
+        Convert a PyArrow Array or ChunkedArray to a pandas Series backed by ArrowDtype.
+
+        This is similar to :meth:`convert_numpy`, but instead of producing
+        numpy-backed pandas Series, it produces ArrowDtype-backed Series via
+        ``arr.to_pandas(types_mapper=pd.ArrowDtype)``.
+
+        Parameters
+        ----------
+        arr : pa.Array or pa.ChunkedArray
+            The Arrow column to convert.
+        spark_type : DataType
+            The target Spark type for the column to be converted to.
+        ser_name : str, optional
+            The name of returned pd.Series. If not set, will try to get it from arr._name.
+
+        Returns
+        -------
+        pd.Series
+            Converted pandas Series backed by ArrowDtype.
+        """
+        import pyarrow as pa
+        import pandas as pd
+
+        assert isinstance(arr, (pa.Array, pa.ChunkedArray))
+
+        if ser_name is None:
+            ser_name = arr._name
+
+        arr = ArrowArrayConversion.preprocess_time(arr)
+
+        series: pd.Series
+
+        if isinstance(spark_type, cls.ARROW_DTYPE_TYPES):
+            series = arr.to_pandas(types_mapper=pd.ArrowDtype)
+        # elif isinstance(spark_type, UserDefinedType):
+        #     TODO: Support UserDefinedType
+        # elif isinstance(spark_type, VariantType):
+        #     TODO: Support VariantType
+        # elif isinstance(spark_type, GeographyType):
+        #     TODO: Support GeographyType
+        # elif isinstance(spark_type, GeometryType):
+        #     TODO: Support GeometryType
+        # elif isinstance(
+        #     spark_type,
+        #     (
+        #         ArrayType,
+        #         MapType,
+        #         StructType,
+        #     ),
+        # ):
+        #     TODO: Support complex types
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
 
