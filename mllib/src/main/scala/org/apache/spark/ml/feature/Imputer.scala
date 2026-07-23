@@ -29,6 +29,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Params for [[Imputer]] and [[ImputerModel]].
@@ -245,6 +246,11 @@ class ImputerModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", Array.empty, Array.emptyDoubleArray)
+
+  private[spark] override def estimatedSize: Long = {
+    estimateMatadataSize + SizeEstimator.estimate(columnNames) +
+      SizeEstimator.estimate(surrogates)
+  }
 
   @Since("2.2.0")
   def surrogateDF: DataFrame = {
