@@ -11,6 +11,10 @@ select time '16:39:45\t';
 select to_time(null), to_time('01:02:03'), to_time('23-59-59.999999', 'HH-mm-ss.SSSSSS');
 select to_time(time_str, fmt_str) from time_view;
 
+-- SPARK-58296: a NULL format must not change the result type of `to_time` (stays TIME).
+select typeof(to_time('00:12:00', null));
+select typeof(to_time('00:12:00', cast(null as string)));
+
 -- missing fields in `to_time`
 select to_time("11", "HH");
 -- invalid: there is no 13 hours

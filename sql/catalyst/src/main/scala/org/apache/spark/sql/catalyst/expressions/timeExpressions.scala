@@ -98,7 +98,7 @@ case class ToTime(str: Expression, format: Option[Expression])
     case Some(expr) if expr.foldable =>
       Option(expr.eval())
         .map(f => invokeParser(Some(f.toString), Seq(str)))
-        .getOrElse(Literal(null, expr.dataType))
+        .getOrElse(Literal(null, TimeType()))
     case _ => invokeParser()
   }
 
