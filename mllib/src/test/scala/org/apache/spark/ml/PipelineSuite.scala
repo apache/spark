@@ -133,7 +133,7 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val pipeline = new Pipeline().setStages(Array(
       new StringIndexer().setInputCol("input").setOutputCol("indexed")))
     val model = pipeline.fit(dataset)
-    val maxSize = 16384
+    val maxSize = 1024 * 16
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
