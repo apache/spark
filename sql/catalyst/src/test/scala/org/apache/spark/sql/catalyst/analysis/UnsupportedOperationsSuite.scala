@@ -103,7 +103,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       deleteCondition = None,
       sequenceByExpr = attribute,
       includeColumns = None,
-      excludeColumns = None))
+      excludeColumns = None,
+      storedAsScdType = 1,
+      trackHistoryColumns = None,
+      trackHistoryExceptColumns = None))
 
   /*
     =======================================================================================
