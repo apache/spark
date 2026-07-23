@@ -1232,7 +1232,11 @@
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
-        <version>${scala.version}</version>
+        <!-- scala-compiler and scala-reflect are Scala 2 only; there is no 3.x artifact.
+             Track the 2.13 line explicitly rather than ${scala.version}, which the switch
+             points at ${scala3.version}. Identical under Scala 2.13, where scala.version
+             is ${scala213.version}. -->
+        <version>${scala213.version}</version>
         <exclusions>
           <exclusion>
             <groupId>org.scala-lang.modules</groupId>
@@ -1243,7 +1247,7 @@
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-reflect</artifactId>
-        <version>${scala.version}</version>
+        <version>${scala213.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -3611,19 +3615,6 @@
           <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
-            <version>${scala213.version}</version>
-          </dependency>
-          <!-- scala-reflect and scala-compiler are Scala 2 only, so ${scala.version} would
-               resolve to a nonexistent 3.x artifact. Pin them to the 2.13 line to keep the
-               modules that still depend on them resolvable. -->
-          <dependency>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scala-reflect</artifactId>
-            <version>${scala213.version}</version>
-          </dependency>
-          <dependency>
-            <groupId>org.scala-lang</groupId>
-            <artifactId>scala-compiler</artifactId>
             <version>${scala213.version}</version>
           </dependency>
         </dependencies>
