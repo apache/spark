@@ -40,9 +40,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private case class FilterCreationSide(
       key: Expression,
       plan: LogicalPlan,
-      useMaterializedThreshold: Boolean,
-      hasSelectivePredicate: Boolean,
-      materializedRowCount: Option[BigInt] = None)
+      useMaterializedThreshold: Boolean)
 
   private def injectFilter(
       filterApplicationSideKey: Expression,
@@ -96,7 +94,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
       filterCreationSideKey: Expression,
-      allowMaterializedCache: Boolean): Option[FilterCreationSide] = {
+      allowMaterializedCache: Boolean,
+      applicationDistinctCount: => Option[BigInt]): Option[FilterCreationSide] = {
     def extract(
         p: LogicalPlan,
         predicateReference: AttributeSet,
@@ -187,23 +186,22 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             case (trackedKey, _) => isSimpleExpression(trackedKey)
           }
         if (allowMaterializedCache && leaf.statsAvailable && leaf.isOutputRepeatable &&
-            safeLineage && (!hasHitSelectiveFilter ||
-              currentPlan.stats.sizeInBytes <=
-                conf.runtimeFilterMaterializedCreationSideThreshold)) {
-          leaf.stats.rowCount.map { rowCount =>
+            safeLineage && currentPlan.stats.sizeInBytes <=
+              conf.runtimeFilterMaterializedCreationSideThreshold) {
+          leaf.stats.rowCount.filter { rowCount =>
+            hasHitSelectiveFilter || leaf.hasSelectivePredicate ||
+              applicationDistinctCount.exists(_ > rowCount)
+          }.map { rowCount =>
             FilterCreationSide(
               targetKey,
               currentPlan,
-              useMaterializedThreshold = true,
-              hasSelectivePredicate = hasHitSelectiveFilter || leaf.hasSelectivePredicate,
-              materializedRowCount = Some(rowCount))
+              useMaterializedThreshold = true)
           }
         } else if (hasHitSelectiveFilter) {
           Some(FilterCreationSide(
             targetKey,
             currentPlan,
-            useMaterializedThreshold = false,
-            hasSelectivePredicate = true))
+            useMaterializedThreshold = false))
         } else {
           None
         }
@@ -211,8 +209,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         Some(FilterCreationSide(
           targetKey,
           currentPlan,
-          useMaterializedThreshold = false,
-          hasSelectivePredicate = true))
+          useMaterializedThreshold = false))
       case _ => None
     }
 
@@ -287,25 +284,60 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       satisfyByteSizeRequirement(filterApplicationSide)) {
       val allowMaterializedCache = UnsafeRowUtils.isBinaryStable(filterCreationSideKey.dataType) &&
         UnsafeRowUtils.isBinaryStable(filterApplicationSideKey.dataType)
-      extractSelectiveFilterOverScan(
-        filterCreationSide, filterCreationSideKey, allowMaterializedCache).filter {
-        creationSide =>
-          creationSide.hasSelectivePredicate || {
-            def distinctCount(key: Expression, plan: LogicalPlan): Option[BigInt] = {
-              key match {
-                case attribute: Attribute => plan.stats.attributeStats.get(attribute)
-                  .flatMap(_.distinctCount)
-                case _ => None
-              }
-            }
-            val applicationDistinctCount = findExpressionAndTrackLineageDown(
-              filterApplicationSideKey, filterApplicationSide).flatMap {
-              case (trackedKey, origin) => distinctCount(trackedKey, origin)
-            }.orElse(distinctCount(filterApplicationSideKey, filterApplicationSide))
-            creationSide.materializedRowCount.exists { rowCount =>
-              applicationDistinctCount.exists(_ > rowCount)
-            }
+      def distinctCount(key: Expression, plan: LogicalPlan): Option[BigInt] = key match {
+        case attribute: Attribute =>
+          plan.stats.attributeStats.get(attribute).flatMap(_.distinctCount)
+        case _ => None
+      }
+      def hasOnlyJoinKeyNullChecksOverScan(
+          plan: LogicalPlan,
+          targetKey: Expression): Boolean = plan match {
+        case project: Project =>
+          hasOnlyJoinKeyNullChecksOverScan(
+            project.child, replaceAlias(targetKey, getAliasMap(project)))
+        case Filter(condition, child) =>
+          splitConjunctivePredicates(condition).forall {
+            case IsNotNull(expression) => expression.semanticEquals(targetKey)
+            case _ => false
+          } && hasOnlyJoinKeyNullChecksOverScan(child, targetKey)
+        case _: LeafNode => true
+        case _ => false
+      }
+      lazy val currentDistinctCount =
+        distinctCount(filterApplicationSideKey, filterApplicationSide)
+      lazy val lineageDistinctCount = findExpressionAndTrackLineageDown(
+        filterApplicationSideKey, filterApplicationSide).flatMap {
+        case (trackedKey, origin) => distinctCount(trackedKey, origin)
+      }
+      lazy val applicationDistinctCount = {
+        if (hasOnlyJoinKeyNullChecksOverScan(
+            filterApplicationSide, filterApplicationSideKey)) {
+          lineageDistinctCount.orElse(currentDistinctCount)
+        } else {
+          currentDistinctCount
+        }
+      }
+      if (allowMaterializedCache) {
+        val selectiveCreationSide = extractSelectiveFilterOverScan(
+          filterCreationSide,
+          filterCreationSideKey,
+          allowMaterializedCache = false,
+          applicationDistinctCount = None)
+        selectiveCreationSide
+          .filter(_.plan.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold)
+          .orElse {
+            extractSelectiveFilterOverScan(
+              filterCreationSide,
+              filterCreationSideKey,
+              allowMaterializedCache = true,
+              applicationDistinctCount = applicationDistinctCount)
           }
+      } else {
+        extractSelectiveFilterOverScan(
+          filterCreationSide,
+          filterCreationSideKey,
+          allowMaterializedCache = false,
+          applicationDistinctCount = None)
       }
     } else {
       None

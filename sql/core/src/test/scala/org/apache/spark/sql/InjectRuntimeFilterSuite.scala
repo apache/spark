@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.optimizer.MergeSubplans
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
@@ -505,6 +505,173 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
 
                 withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
                   assert(getNumBloomFilters(sql(query).queryExecution.optimizedPlan) == 0)
+                }
+              }
+            }
+          }
+      }
+    }
+  }
+
+  test("SPARK-58272: use filtered application-side distinct counts") {
+    val cacheName = "filtered_application_bloom_keys"
+    val nullFilteredCacheName = "null_filtered_application_bloom_keys"
+
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "1MB",
+        SQLConf.RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD.key -> "1MB",
+        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
+        SQLConf.CBO_ENABLED.key -> "true") {
+      withTempView(cacheName, nullFilteredCacheName) {
+        withCache(cacheName, nullFilteredCacheName) {
+          spark.range(8, 13, 1, numPartitions = 4)
+            .selectExpr("CAST(id AS INT) AS c2")
+            .persist(StorageLevel.MEMORY_AND_DISK)
+            .createOrReplaceTempView(cacheName)
+          assert(spark.table(cacheName).count() == 5)
+
+          val relation = spark.table(cacheName).queryExecution.withCachedData.collectFirst {
+            case cached: InMemoryRelation => cached
+          }.get
+          assert(relation.statsAvailable)
+          assert(!relation.hasSelectivePredicate)
+
+          val filteredFact = spark.table("bf1").where("a1 = 77")
+          val factPlan = filteredFact.queryExecution.optimizedPlan
+          val factKey = factPlan.output.find(_.name == "c1").get
+          assert(factPlan.stats.attributeStats.get(factKey)
+            .flatMap(_.distinctCount).contains(BigInt(1)))
+
+          Seq(
+            s"SELECT * FROM (SELECT * FROM bf1 WHERE a1 = 77) fact " +
+              s"JOIN $cacheName keys ON fact.c1 = keys.c2",
+            s"SELECT * FROM $cacheName keys " +
+              "JOIN (SELECT * FROM bf1 WHERE a1 = 77) fact ON keys.c2 = fact.c1"
+          ).foreach { query =>
+            var expected: Array[Row] = null
+            withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+              expected = sql(query).collect()
+            }
+
+            val actual = sql(query)
+            val plan = actual.queryExecution.optimizedPlan
+            assert(getNumBloomFilters(plan) == 1)
+            val applicationSides = plan.collect {
+              case Filter(condition, child)
+                  if condition.exists(_.isInstanceOf[BloomFilterMightContain]) => child
+            }
+            assert(applicationSides.size == 1)
+            assert(applicationSides.head.exists(_.isInstanceOf[InMemoryRelation]), plan.treeString)
+            checkAnswer(actual, expected)
+          }
+
+          val windowedQuery =
+            "SELECT * FROM (" +
+              "SELECT *, ROW_NUMBER() OVER (PARTITION BY c1 ORDER BY a1) AS rn " +
+              "FROM bf1 WHERE a1 = 77) fact " +
+              s"JOIN $cacheName keys ON fact.c1 = keys.c2"
+          assert(getNumBloomFilters(sql(windowedQuery).queryExecution.optimizedPlan) == 0)
+
+          spark.range(0, 6, 1, numPartitions = 4)
+            .selectExpr(
+              "CAST(CASE id WHEN 0 THEN 0 WHEN 1 THEN 8 WHEN 2 THEN 23 " +
+                "WHEN 3 THEN 58 WHEN 4 THEN 74 ELSE 86 END AS INT) AS c2")
+            .persist(StorageLevel.MEMORY_AND_DISK)
+            .createOrReplaceTempView(nullFilteredCacheName)
+          assert(spark.table(nullFilteredCacheName).count() == 6)
+
+          val nullFilteredFact = spark.table("bf1").where("a1 IS NOT NULL")
+          val nullFilteredPlan = nullFilteredFact.queryExecution.optimizedPlan
+          val nullFilteredKey = nullFilteredPlan.output.find(_.name == "c1").get
+          assert(nullFilteredPlan.stats.attributeStats.get(nullFilteredKey)
+            .flatMap(_.distinctCount).contains(BigInt(6)))
+
+          val query = s"SELECT * FROM (SELECT * FROM bf1 WHERE a1 IS NOT NULL) fact " +
+            s"JOIN $nullFilteredCacheName keys ON fact.c1 = keys.c2"
+          assert(getNumBloomFilters(sql(query).queryExecution.optimizedPlan) == 0)
+        }
+      }
+    }
+  }
+
+  test("SPARK-58272: preserve transitive selective filters past materialized caches") {
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "1MB",
+        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
+        SQLConf.CBO_ENABLED.key -> "true") {
+      val factPlan = spark.table("bf3").queryExecution.optimizedPlan
+      val factKey = factPlan.output.find(_.name == "c3").get
+      val applicationDistinctCount =
+        factPlan.stats.attributeStats.get(factKey).flatMap(_.distinctCount).get
+      assert(applicationDistinctCount > 5 && applicationDistinctCount < 100)
+
+      Seq(
+        ("large_transitive_bloom_keys", 0L, 100L, "1MB", false),
+        ("oversized_transitive_bloom_keys", 8L, 13L, "0", false),
+        ("selective_transitive_bloom_keys", 0L, 1000L, "1MB", true)
+      ).foreach {
+        case (cacheName, start, end, materializedThreshold, hasHiddenSelectivePredicate) =>
+          withTempView(cacheName) {
+            withCache(cacheName) {
+              val keys = spark.range(start, end, 1, numPartitions = 4)
+              val cachedKeys = if (hasHiddenSelectivePredicate) {
+                keys.where("id < 100")
+              } else {
+                keys
+              }
+              cachedKeys
+                .selectExpr("CAST(id AS INT) AS c2")
+                .persist(StorageLevel.MEMORY_AND_DISK)
+                .createOrReplaceTempView(cacheName)
+              val expectedCount = if (hasHiddenSelectivePredicate) 100L else end - start
+              assert(spark.table(cacheName).count() == expectedCount)
+
+              val relation = spark.table(cacheName).queryExecution.withCachedData.collectFirst {
+                case cached: InMemoryRelation => cached
+              }.get
+              assert(relation.statsAvailable)
+              assert(relation.hasSelectivePredicate == hasHiddenSelectivePredicate)
+
+              withSQLConf(
+                  SQLConf.RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD.key ->
+                    materializedThreshold) {
+                Seq(
+                  s"SELECT /*+ BROADCAST(selective) */ keys.c2 FROM $cacheName keys " +
+                    "JOIN (SELECT c2 FROM bf2 WHERE a2 = 5) selective " +
+                    "ON keys.c2 = selective.c2",
+                  s"SELECT /*+ BROADCAST(selective) */ keys.c2 " +
+                    "FROM (SELECT c2 FROM bf2 WHERE a2 = 5) selective " +
+                    s"JOIN $cacheName keys ON selective.c2 = keys.c2"
+                ).foreach { creationSide =>
+                  val query = s"SELECT * FROM bf3 fact JOIN ($creationSide) creation " +
+                    "ON fact.c3 = creation.c2"
+                  var expected: Array[Row] = null
+                  withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+                    expected = sql(query).collect()
+                  }
+
+                  val actual = sql(query)
+                  val plan = actual.queryExecution.optimizedPlan
+                  assert(getNumBloomFilters(plan) == 1)
+                  val applicationSides = plan.collect {
+                    case Filter(condition, child)
+                        if condition.exists(_.isInstanceOf[BloomFilterMightContain]) => child
+                  }
+                  assert(applicationSides.size == 1)
+                  assert(applicationSides.head.output.exists(_.name == "c3"), plan.treeString)
+                  val creationPlans = plan.collect {
+                    case Filter(condition, _) => condition.collect {
+                      case BloomFilterMightContain(subquery: ScalarSubquery, _) => subquery.plan
+                    }
+                  }.flatten
+                  assert(creationPlans.size == 1)
+                  assert(!creationPlans.head.exists(_.isInstanceOf[InMemoryRelation]),
+                    plan.treeString)
+                  checkAnswer(actual, expected)
                 }
               }
             }
