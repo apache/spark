@@ -4499,6 +4499,21 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(results === Map(0 -> 42, 1 -> 42))
   }
 
+  test("SPARK-58192: stage-local resource values are written when job properties are null") {
+    // JobSubmitted and MapStageSubmitted permit null job properties; the per-stage snapshot
+    // must materialize an empty map for them since the concurrency bound below is always
+    // written for the default profile.
+    val rdd = sc.parallelize(1 to 10, 2).map(x => (x, x))
+    submit(rdd, Array(0, 1))
+
+    val taskSetProps = taskSets.head.properties
+    assert(taskSetProps !== null)
+    assert(taskSetProps.getProperty(ResourceProfile.MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY) === "1")
+
+    complete(taskSets.head, Seq((Success, 42), (Success, 42)))
+    assert(results === Map(0 -> 42, 1 -> 42))
+  }
+
   test("SPARK-58192: a full resource profile without pyspark memory inherits the default " +
       "profile's allocation") {
     conf.set(config.EXECUTOR_CORES.key, "4")
@@ -4564,6 +4579,36 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       (Success, makeMapStatus("hostA", 2)), (Success, makeMapStatus("hostB", 2))))
 
     val childProps = taskSets(1).properties
+    assert(childProps.getProperty(ResourceProfile.MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY) === "2")
+
+    complete(taskSets(1), Seq((Success, 42), (Success, 42)))
+    assert(results === Map(0 -> 42, 1 -> 42))
+  }
+
+  test("SPARK-58192: shareable-executor memory shares use ceiling division when task cpus " +
+      "do not evenly divide the cores") {
+    conf.set(config.EXECUTOR_CORES.key, "4")
+    conf.set(config.Python.PYSPARK_EXECUTOR_MEMORY.key, "2g")
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val taskRp = new TaskResourceProfile(new TaskResourceRequests().cpus(3).requests)
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+      .withResources(taskRp)
+    submit(reduceRdd, Array(0, 1), properties = new Properties())
+
+    // A 3-cpu task and a 1-cpu default task fit on one 4-core executor concurrently, so their
+    // memory shares must sum within the 2048 MiB budget: the default stage divides by 4
+    // (512 MiB each) and the task-only stage by ceil(4 / 3) = 2 (1024 MiB), for at most
+    // 1536 MiB. Dividing by floor(4 / 3) = 1 would hand the 3-cpu worker the whole 2048 and
+    // let the pair reach 2560.
+    val parentProps = taskSets(0).properties
+    assert(parentProps.getProperty(ResourceProfile.MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY) === "4")
+
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)), (Success, makeMapStatus("hostB", 2))))
+
+    val childProps = taskSets(1).properties
+    assert(childProps.getProperty(ResourceProfile.PYSPARK_MEMORY_LOCAL_PROPERTY) === "2048")
     assert(childProps.getProperty(ResourceProfile.MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY) === "2")
 
     complete(taskSets(1), Seq((Success, 42), (Success, 42)))

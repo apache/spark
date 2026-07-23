@@ -1676,9 +1676,10 @@ private[spark] class DAGScheduler(
     //   one executor concurrently. A custom-resource limit (e.g. a single gpu) bounds only its
     //   own profile's tasks, not the executor's total worker count, so only the
     //   cpus-proportional cores split keeps the aggregate of all co-scheduled workers within
-    //   the executor-wide budget: shares are budget * taskCpus / cores, and the co-scheduled
-    //   task cpus sum to at most the executor cores. (Floor rounding can overshoot exact
-    //   proportionality when task cpus do not evenly divide the cores.)
+    //   the executor-wide budget: with shares of budget / ceil(cores / taskCpus), each worker
+    //   holds at most budget * taskCpus / cores, and the co-scheduled task cpus sum to at
+    //   most the executor cores. (Ceiling division keeps this true even when task cpus do not
+    //   evenly divide the cores, at the cost of slightly sub-proportional shares there.)
     // - Otherwise executors serve a single profile and the profile's own limiting resource
     //   (across cores and custom resources) is the real concurrency. When the cores limit is
     //   unknown (standalone without an explicit spark.executor.cores, SPARK-30299), a
@@ -1690,15 +1691,10 @@ private[spark] class DAGScheduler(
     // maxTasksPerExecutor() also populates isCoresLimitKnown.
     val maxTasks = rp.maxTasksPerExecutor(sc.conf)
     val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(rp, sc.conf)
-    val coresBasedMaxTasks = {
-      val cores = if (rp.isCoresLimitKnown) {
-        Some(rp.getExecutorCores.getOrElse(sc.conf.get(config.EXECUTOR_CORES)))
-      } else {
-        rp.getExecutorCores
-      }
-      cores.map { c =>
-        ResourceProfile.numTasksBasedOnCores(CpuAmount.normalize(BigDecimal(c)), taskCpus)
-      }
+    val knownCores = if (rp.isCoresLimitKnown) {
+      Some(rp.getExecutorCores.getOrElse(sc.conf.get(config.EXECUTOR_CORES)))
+    } else {
+      rp.getExecutorCores
     }
     val limitedByCustomResource = {
       val limiting = rp.limitingResource(sc.conf)
@@ -1707,10 +1703,15 @@ private[spark] class DAGScheduler(
     val sharedExecutor = !Utils.isDynamicAllocationEnabled(sc.conf) &&
       (rp.id == DEFAULT_RESOURCE_PROFILE_ID || rp.isInstanceOf[TaskResourceProfile])
     val maxTasksToPropagate = if (sharedExecutor) {
-      coresBasedMaxTasks
+      knownCores.map { c =>
+        ResourceProfile.numMemoryShareSlotsCeil(CpuAmount.normalize(BigDecimal(c)), taskCpus)
+      }
     } else if (rp.isCoresLimitKnown) {
       Some(maxTasks)
     } else if (limitedByCustomResource) {
+      val coresBasedMaxTasks = knownCores.map { c =>
+        ResourceProfile.numTasksBasedOnCores(CpuAmount.normalize(BigDecimal(c)), taskCpus)
+      }
       Some(coresBasedMaxTasks.fold(maxTasks)(math.min(maxTasks, _)))
     } else {
       None
@@ -1924,8 +1925,11 @@ private[spark] class DAGScheduler(
     // with this Stage. Clone it per stage so the profile-specific values written by
     // addPySparkConfigsToProperties below don't leak -- through the shared, mutable job
     // Properties instance passed to every task and TaskSet of the job -- into sibling stages
-    // of the same job that use a different resource profile.
-    val properties = Utils.cloneProperties(jobIdToActiveJob(jobId).properties)
+    // of the same job that use a different resource profile. Job properties may be null when
+    // a job is submitted to the scheduler directly (e.g. in tests); materialize an empty map
+    // since the stage-local resource values are always written.
+    val properties = Option(Utils.cloneProperties(jobIdToActiveJob(jobId).properties))
+      .getOrElse(new Properties())
     addPySparkConfigsToProperties(stage, properties)
 
     runningStages += stage

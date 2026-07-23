@@ -17,9 +17,36 @@
 
 package org.apache.spark.api.python
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 
 class BasePythonRunnerSuite extends SparkFunSuite {
+
+  test("SPARK-58192: pipelined writer pool admits more concurrent writers than processors") {
+    // A fractional spark.task.cpus admits more concurrent tasks -- each holding one writer
+    // thread -- than the host has processors. Writers of a barrier stage block until every
+    // task's worker makes progress, so a pool that queues writers beyond a processor-based
+    // cap can deadlock; all writers must be able to start concurrently.
+    val nWriters = Runtime.getRuntime.availableProcessors() + 2
+    val started = new CountDownLatch(nWriters)
+    val release = new CountDownLatch(1)
+    val futures = (1 to nWriters).map { _ =>
+      BasePythonRunner.pipelinedWriterThreadPool.submit(new Runnable {
+        override def run(): Unit = {
+          started.countDown()
+          release.await(1, TimeUnit.MINUTES)
+        }
+      })
+    }
+    try {
+      assert(started.await(1, TimeUnit.MINUTES),
+        s"expected all $nWriters writers to start concurrently")
+    } finally {
+      release.countDown()
+      futures.foreach(_.get(1, TimeUnit.MINUTES))
+    }
+  }
 
   test("SPARK-58192: pyspark memory is split across the executor's concurrent task slots") {
     def workerMemoryMb(maxConcurrentTasks: Int): Option[Long] =

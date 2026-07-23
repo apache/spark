@@ -126,15 +126,15 @@ private[spark] object BasePythonRunner extends Logging {
    * Shared thread pool for pipelined writer tasks. Using a cached thread pool ensures that
    * writer threads are reused across tasks, which keeps JIT-compiled code, branch prediction
    * history, and CPU caches warm.
-   * Bounded by executor cores since each task uses at most one writer thread.
    */
   private[python] lazy val pipelinedWriterThreadPool = {
-    // Each concurrent task uses at most one writer thread. Bound the pool by available
-    // processors, which is the natural upper limit for concurrent tasks on this executor.
-    // Using availableProcessors() instead of EXECUTOR_CORES because the latter defaults
-    // to 1 in local[*] mode even though multiple tasks run concurrently.
-    val maxThreads = Runtime.getRuntime.availableProcessors()
-    ThreadUtils.newDaemonCachedThreadPool("python-udf-pipelined-writer", maxThreads)
+    // Each running task uses at most one writer thread, so the pool size is naturally capped
+    // by the scheduler's task concurrency -- which a fractional spark.task.cpus can push above
+    // the host's processor count. Leave the pool unbounded: a cap below the concurrent task
+    // count would queue writers behind running ones, which can deadlock a barrier stage (the
+    // tasks whose workers already started wait at the barrier while the remaining tasks'
+    // writers never run). Idle threads are still reused and reaped after the keep-alive.
+    ThreadUtils.newDaemonCachedThreadPool("python-udf-pipelined-writer")
   }
 
   private[spark] lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")

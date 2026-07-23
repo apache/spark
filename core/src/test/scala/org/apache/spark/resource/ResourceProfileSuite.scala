@@ -420,16 +420,16 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
   }
 
   test("SPARK-58192: cpus amounts that round to zero at the accounting scale are rejected") {
-    // The rejection must be an Exception, not an Error: the same constructor runs when
-    // JsonProtocol replays event logs, where an Error would escape ReplayListenerBus's
-    // Exception handling and fail the whole application in the history server. A log written
-    // before cpus amounts were validated can carry a cpus amount of 0.
     Seq(0.0, -1.0, 1e-10).foreach { amount =>
       val e = intercept[IllegalArgumentException] {
         new TaskResourceRequests().cpus(amount)
       }
       assert(e.getMessage.contains("must be at least 1e-9"), s"for amount $amount")
     }
+    // The constructor itself stays lenient: it also runs when the history server
+    // deserializes persisted data (event logs, the protobuf KVStore), which can carry
+    // amounts written before cpus values were validated.
+    assert(new TaskResourceRequest(ResourceProfile.CPUS, 0.0).amount === 0.0)
   }
 
   test("SPARK-58192: numTasksBasedOnCores clamps to [0, Int.MaxValue]") {
@@ -442,6 +442,23 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     // 4 / 1e-9 == 4e9 overflows Int; BigDecimal.intValue() would wrap it to a negative value
     assert(numTasks("4", "0.000000001") === Int.MaxValue)
     assert(numTasks("-1", "1") === 0)
+  }
+
+  test("SPARK-58192: numMemoryShareSlotsCeil rounds up and clamps to [0, Int.MaxValue]") {
+    def numSlots(cores: String, cpusPerTask: String): Int = {
+      ResourceProfile.numMemoryShareSlotsCeil(
+        CpuAmount.normalize(BigDecimal(cores)), CpuAmount.normalize(BigDecimal(cpusPerTask)))
+    }
+    // Exact quotients match the floor variant ...
+    assert(numSlots("4", "1") === 4)
+    assert(numSlots("4", "2") === 2)
+    assert(numSlots("1", "0.1") === 10)
+    // ... while non-dividing cpus round up, so a memory budget divided by the result never
+    // exceeds the cpus-proportional share: budget / ceil(4 / 3) is at most budget * 3 / 4.
+    assert(numSlots("4", "3") === 2)
+    assert(numSlots("4", "1.5") === 3)
+    assert(numSlots("4", "0.000000001") === Int.MaxValue)
+    assert(numSlots("-1", "1") === 0)
   }
 
   test("SPARK-45527 fractional TaskResourceRequests in TaskResourceProfile") {

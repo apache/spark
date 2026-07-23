@@ -41,18 +41,12 @@ import org.apache.spark.annotation.{Since, Stable}
 class TaskResourceRequest(val resourceName: String, val amount: Double)
   extends Serializable {
 
-  if (resourceName == ResourceProfile.CPUS) {
-    // A positive amount below half of the internal accounting scale (1e-9) would silently
-    // round to zero cpus downstream; reject it here where the original value is still visible.
-    // The rejection must be an Exception, not an Error: this constructor also runs when
-    // JsonProtocol replays event logs, and a log written before cpus amounts were validated
-    // can carry a cpus amount of 0 -- an Error would escape ReplayListenerBus's Exception
-    // handling and make the history server fail the whole application instead of degrading
-    // gracefully.
-    require(!amount.isNaN && !amount.isInfinity &&
-      CpuAmount.normalize(BigDecimal(amount.toString)).signum > 0,
-      s"The cpus amount ${amount} must be at least 1e-9.")
-  } else {
+  // Cpus amounts are validated in TaskResourceRequests.cpus (and by the spark.task.cpus
+  // config parser), not here: this constructor also runs when the history server
+  // deserializes persisted data (JsonProtocol event logs, the protobuf KVStore), and a log
+  // written before cpus amounts were validated can legally carry e.g. a cpus amount of 0 --
+  // rejecting it here would abort replay of valid historical applications.
+  if (resourceName != ResourceProfile.CPUS) {
     assert(amount <= 1.0 || amount % 1 == 0,
       s"The resource amount ${amount} must be either <= 1.0, or a whole number.")
   }

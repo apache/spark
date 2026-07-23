@@ -502,6 +502,22 @@ object ResourceProfile extends Logging {
   }
 
   /**
+   * Ceiling counterpart of [[numTasksBasedOnCores]], used for sizing per-worker memory shares
+   * on executors that profiles can share: dividing a budget by `ceil(cores / cpusPerTask)`
+   * yields a share of at most `budget * cpusPerTask / cores`, so the shares of any set of
+   * co-scheduled tasks whose cpus sum to at most the executor cores never exceed the budget --
+   * even when `cpusPerTask` does not evenly divide the cores, where floor division would
+   * overshoot (e.g. a 3-cpu task on 4 cores would take the whole budget instead of at most
+   * three quarters of it).
+   */
+  private[spark] def numMemoryShareSlotsCeil(cores: BigDecimal, cpusPerTask: BigDecimal): Int = {
+    assert(cpusPerTask > 0, "cpusPerTask must be > 0")
+    val quotient = BigDecimal(
+      cores.bigDecimal.divide(cpusPerTask.bigDecimal, 0, java.math.RoundingMode.CEILING))
+    quotient.min(Int.MaxValue).max(0).toInt
+  }
+
+  /**
    * Get offHeap memory size from [[ExecutorResourceRequest]]
    * return 0 if MEMORY_OFFHEAP_ENABLED is false.
    */
