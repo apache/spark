@@ -793,7 +793,7 @@ autoCdcColumnsClause
     ;
 
 autoCdcStoredAsClause
-    : STORED AS (SCD_TYPE_1 | SCD_TYPE_2)
+    : STORED AS SCD TYPE type=INTEGER_VALUE
     ;
 
 autoCdcTrackHistoryClause
@@ -2305,10 +2305,9 @@ ansiNonReserved
     | ROLLUP
     | ROW
     | ROWS
+    | SCD
     | SCHEMA
     | SCHEMAS
-    | SCD_TYPE_1
-    | SCD_TYPE_2
     | SECOND
     | SECONDS
     | SECURITY
@@ -2752,10 +2751,9 @@ nonReserved
     | ROLLUP
     | ROW
     | ROWS
+    | SCD
     | SCHEMA
     | SCHEMAS
-    | SCD_TYPE_1
-    | SCD_TYPE_2
     | SECOND
     | SECONDS
     | SECURITY

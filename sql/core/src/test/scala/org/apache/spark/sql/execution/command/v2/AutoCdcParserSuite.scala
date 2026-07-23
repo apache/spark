@@ -320,7 +320,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   }
 
   test("AUTO CDC - STORED AS SCD TYPE 3 is not allowed") {
-    intercept[ParseException] {
+    val ex = intercept[ParseException] {
       parser.parsePlan(
         """CREATE FLOW f AS AUTO CDC INTO target
           |FROM STREAM(source)
@@ -328,6 +328,21 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
           |SEQUENCE BY ts
           |STORED AS SCD TYPE 3""".stripMargin)
     }
+    assert(ex.getMessage.contains("Unsupported SCD type: 3"))
+  }
+
+  test("AUTO CDC - STORED AS SCD TYPE tolerates extra whitespace between words") {
+    // SCD, TYPE and the number are separate tokens, so any whitespace between them is accepted.
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |STORED AS SCD   TYPE
+        |    2""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.storedAsScdType == 2)
   }
 
   // ---------------------------------------------------------------------------

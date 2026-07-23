@@ -333,6 +333,7 @@ ROLLBACK	false
 ROLLUP	false
 ROW	false
 ROWS	false
+SCD	false
 SCHEMA	false
 SCHEMAS	false
 SECOND	false

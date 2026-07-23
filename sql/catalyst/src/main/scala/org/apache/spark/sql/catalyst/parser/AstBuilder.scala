@@ -1433,10 +1433,18 @@ class AstBuilder extends DataTypeAstBuilder
           visitIdentifierSeq(c.exceptCols).map(UnresolvedAttribute.quoted)
       }
 
-      // STORED AS SCD TYPE 1|2. Absent clause defaults to SCD Type 1.
+      // STORED AS SCD TYPE <n>. Absent clause defaults to SCD Type 1. Only 1 and 2 are
+      // supported; reject anything else with a clear error rather than a generic parse failure.
       val storedAsScdType = Option(params.autoCdcStoredAsClause()) match {
-        case Some(c) if c.SCD_TYPE_2() != null => 2
-        case _ => 1
+        case Some(c) =>
+          val scdType = c.`type`.getText.toInt
+          if (scdType != 1 && scdType != 2) {
+            operationNotAllowed(
+              s"Unsupported SCD type: $scdType. AUTO CDC only supports STORED AS SCD TYPE 1 " +
+                "or SCD TYPE 2.", c)
+          }
+          scdType
+        case None => 1
       }
 
       val trackHistoryClause = Option(params.autoCdcTrackHistoryClause())

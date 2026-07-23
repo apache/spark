@@ -742,6 +742,7 @@ Below is a list of all the keywords in Spark SQL.
 |ROLLUP|non-reserved|non-reserved|reserved|
 |ROW|non-reserved|non-reserved|reserved|
 |ROWS|non-reserved|non-reserved|reserved|
+|SCD|non-reserved|non-reserved|non-reserved|
 |SCHEMA|non-reserved|non-reserved|non-reserved|
 |SCHEMAS|non-reserved|non-reserved|non-reserved|
 |SECOND|non-reserved|non-reserved|non-reserved|
