@@ -370,7 +370,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-58272: preserve selective runtime filters over memory-only and cold caches") {
+  test("SPARK-58272: preserve selective runtime filters over all cache states") {
     withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
@@ -379,7 +379,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
       Seq(
         ("memory_only_filtered_bloom_keys", StorageLevel.MEMORY_ONLY, true),
-        ("cold_filtered_bloom_keys", StorageLevel.MEMORY_AND_DISK, false)).foreach {
+        ("cold_filtered_bloom_keys", StorageLevel.MEMORY_AND_DISK, false),
+        ("materialized_filtered_bloom_keys", StorageLevel.MEMORY_AND_DISK, true)).foreach {
         case (cacheName, storageLevel, materialize) =>
           withTempView(cacheName) {
             withCache(cacheName) {
@@ -395,7 +396,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
               val relation = spark.table(cacheName).queryExecution.withCachedData.collectFirst {
                 case cachedRelation: InMemoryRelation => cachedRelation
               }.get
-              assert(!relation.statsAvailable)
+              assert(relation.statsAvailable == (storageLevel.useDisk && materialize))
               assert(relation.isOutputRepeatable == materialize)
 
               val query = s"SELECT * FROM bf1 JOIN " +

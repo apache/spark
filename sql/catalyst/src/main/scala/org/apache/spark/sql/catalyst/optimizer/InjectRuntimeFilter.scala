@@ -187,7 +187,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             case (trackedKey, _) => isSimpleExpression(trackedKey)
           }
         if (allowMaterializedCache && leaf.statsAvailable && leaf.isOutputRepeatable &&
-            safeLineage) {
+            safeLineage && (!hasHitSelectiveFilter ||
+              currentPlan.stats.sizeInBytes <=
+                conf.runtimeFilterMaterializedCreationSideThreshold)) {
           leaf.stats.rowCount.map { rowCount =>
             FilterCreationSide(
               targetKey,
