@@ -667,24 +667,26 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Truncates a nanosecond-precision timestamp to the unit given by `level`. `epochMicros` is
-   * truncated with the same [[truncTimestamp]] used by microsecond timestamps, and the
-   * sub-microsecond `nanosWithinMicro` is always dropped: `date_trunc`'s finest supported unit
-   * is MICROSECOND (see `MIN_LEVEL_OF_TIMESTAMP_TRUNC`), which already discards everything below
-   * a microsecond. NTZ vs. LTZ zone handling is the caller's responsibility via `zoneId`.
+   * Truncates the nanosecond-precision timestamp `value` to `level`. `level` should be generated
+   * using `parseTruncLevel()`, between 0 and 9.
+   *
+   * Convenience variant that resolves the zone offset from a fresh single-use [[ZoneOffsetCache]];
+   * intended for one-shot callers such as interpreted evaluation. The codegen hot path instead
+   * calls the [[ZoneOffsetCache]]-based overload directly with a per-task cache so the offset is
+   * reused across rows. The result is identical to that overload.
    */
   def truncTimestampNanos(
       value: TimestampNanosVal,
       level: Int,
-      zoneId: ZoneId): TimestampNanosVal = {
-    val truncatedMicros = truncTimestamp(value.epochMicros, level, zoneId)
-    TimestampNanosVal.fromParts(truncatedMicros, 0.toShort)
-  }
+      zoneId: ZoneId): TimestampNanosVal =
+    truncTimestampNanos(value, level, new ZoneOffsetCache(zoneId))
 
   /**
-   * Same as [[truncTimestampNanos]] above, but resolving the zone offset through a per-task
-   * [[ZoneOffsetCache]]. Used by the generated code so nanosecond `date_trunc` shares the
-   * microsecond fast path's memoization.
+   * Truncates a nanosecond-precision timestamp to the unit given by `level`. `epochMicros` is
+   * truncated with the same [[truncTimestamp]] used by microsecond timestamps, and the
+   * sub-microsecond `nanosWithinMicro` is always dropped: `date_trunc`'s finest supported unit
+   * is MICROSECOND (see `MIN_LEVEL_OF_TIMESTAMP_TRUNC`), which already discards everything below
+   * a microsecond. NTZ vs. LTZ zone handling is the caller's responsibility via the cache's zone.
    */
   def truncTimestampNanos(
       value: TimestampNanosVal,
