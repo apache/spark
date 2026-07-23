@@ -145,6 +145,14 @@ object TypeCoercion extends TypeCoercionBase {
       => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
     case (TimestampType, st: StringType)
       => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
+    // Mirror the micros TimestampType (LTZ) arms above: nanos TIMESTAMP_LTZ(p) honors
+    // castDatetimeToString. Nanos TIMESTAMP_NTZ(p) intentionally has no arm here and, exactly like
+    // micros TimestampNTZType, falls through to the config-blind canPromoteAsInBinaryComparison
+    // line below -- so the LTZ and NTZ families stay consistent across micros and nanos.
+    case (st: StringType, tsNanos: TimestampLTZNanosType)
+      => if (conf.castDatetimeToString) Some(st) else Some(tsNanos)
+    case (tsNanos: TimestampLTZNanosType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(tsNanos)
     case (st: StringType, NullType) => Some(st)
     case (NullType, st: StringType) => Some(st)
 
