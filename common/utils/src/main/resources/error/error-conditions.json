@@ -4648,6 +4648,11 @@
           "expects a long literal, but got <invalidValue>."
         ]
       },
+      "NORMALIZE_FORM" : {
+        "message" : [
+          "expects one of the normalization forms 'NFC', 'NFD', 'NFKC', 'NFKD', but got <form>."
+        ]
+      },
       "NULL" : {
         "message" : [
           "expects a non-NULL value."

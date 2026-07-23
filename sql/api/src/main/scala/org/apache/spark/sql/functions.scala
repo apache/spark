@@ -7408,6 +7408,32 @@ object functions {
     Column.fn("try_validate_utf8", str)
 
   /**
+   * Returns the Unicode normalization of `str` using the given normalization `form`. Valid forms
+   * are 'NFC', 'NFD', 'NFKC', and 'NFKD'. The form name is case-insensitive.
+   *
+   * @param str
+   *   the input string to normalize.
+   * @param form
+   *   the normalization form: 'NFC', 'NFD', 'NFKC', or 'NFKD'.
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def normalize(str: Column, form: Column): Column =
+    Column.fn("normalize", str, form)
+
+  /**
+   * Returns the Unicode normalization of `str` using the default form 'NFC'. To use a different
+   * form, call the two-argument overload.
+   *
+   * @param str
+   *   the input string to normalize.
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def normalize(str: Column): Column =
+    Column.fn("normalize", str)
+
+  /**
    * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places with
    * HALF_EVEN round mode, and returns the result as a string column.
    *

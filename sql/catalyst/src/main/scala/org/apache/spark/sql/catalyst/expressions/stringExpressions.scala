@@ -962,6 +962,62 @@ case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with Im
 }
 
 /**
+ * A function that returns the Unicode normalization of a string.
+ */
+// scalastyle:off
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str[, form]) - Returns the Unicode normalization of `str` using the normalization `form`.
+      Valid forms are 'NFC' (default), 'NFD', 'NFKC', and 'NFKD'. The form name is case-insensitive.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression to normalize.
+      * form - a string expression giving the normalization form: 'NFC', 'NFD', 'NFKC', or 'NFKD'.
+          If omitted, 'NFC' is used.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('ﬁ', 'NFKC');
+       fi
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+// scalastyle:on
+case class Normalize(input: Expression, form: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with BinaryLike[Expression] {
+  override def nullIntolerant: Boolean = true
+
+  override lazy val replacement: Expression =
+    StaticInvoke(
+      classOf[ExpressionImplUtils],
+      input.dataType,
+      "normalize",
+      Seq(input, form),
+      inputTypes)
+
+  def this(input: Expression) = this(input, Literal("NFC"))
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def nodeName: String = "normalize"
+
+  override def nullable: Boolean = true
+
+  override def left: Expression = input
+
+  override def right: Expression = form
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Normalize = {
+    copy(input = newLeft, form = newRight)
+  }
+
+}
+
+/**
  * Replace all occurrences with string.
  */
 // scalastyle:off line.size.limit

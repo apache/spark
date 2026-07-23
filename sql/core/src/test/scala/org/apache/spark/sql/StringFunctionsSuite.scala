@@ -407,6 +407,16 @@ class StringFunctionsSuite extends SharedSparkSession {
     // scalastyle:on
   }
 
+  test("string normalize") {
+    // scalastyle:off
+    val df = Seq("\uFB01").toDF("s")
+    checkAnswer(df.select(normalize($"s")), Row("\uFB01"))
+    checkAnswer(df.select(normalize($"s", lit("NFKC"))), Row("fi"))
+    checkAnswer(df.selectExpr("normalize(s, 'NFKC')"), Row("fi"))
+    checkAnswer(df.select(normalize(lit(null), lit("NFC"))), Row(null))
+    // scalastyle:on
+  }
+
   test("string translate") {
     val df = Seq(("translate", "")).toDF("a", "b")
     checkAnswer(df.select(translate($"a", "rnlt", "123")), Row("1a2s3ae"))

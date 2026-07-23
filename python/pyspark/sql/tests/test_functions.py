@@ -1022,6 +1022,14 @@ class FunctionsTestsMixin:
         null_result = df.select(F.jaro_winkler_similarity(df.l, F.lit(None))).first()[0]
         self.assertIsNone(null_result)
 
+    def test_normalize_function(self):
+        df = self.spark.createDataFrame([("\ufb01",)], ["s"])
+        result = df.select(F.normalize(df.s, F.lit("NFKC"))).first()[0]
+        self.assertEqual(result, "fi")
+        # Null handling
+        null_result = df.select(F.normalize(F.lit(None), F.lit("NFC"))).first()[0]
+        self.assertIsNone(null_result)
+
     def test_between_function(self):
         df = self.spark.createDataFrame(
             [Row(a=1, b=2, c=3), Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)]
