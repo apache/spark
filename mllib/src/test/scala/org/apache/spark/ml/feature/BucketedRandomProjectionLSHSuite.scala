@@ -48,6 +48,17 @@ class BucketedRandomProjectionLSHSuite extends MLTest with DefaultReadWriteTest 
     ParamsSuite.checkParams(model)
   }
 
+  test("model estimated size") {
+    val model = new BucketedRandomProjectionLSH()
+      .setInputCol("keys")
+      .setOutputCol("values")
+      .setBucketLength(1.0)
+      .fit(dataset)
+    val maxSize = 4096
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("setters") {
     val model = new BucketedRandomProjectionLSHModel("brp", Array(Vectors.dense(0.0, 1.0)))
       .setInputCol("testkeys")

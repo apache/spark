@@ -34,6 +34,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils, VersionUtils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Params for [[Word2Vec]] and [[Word2VecModel]].
@@ -215,6 +216,15 @@ class Word2VecModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", null)
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (wordVectors != null) {
+      size += SizeEstimator.estimate(wordVectors.wordIndex)
+      size += SizeEstimator.estimate(wordVectors.wordVectors)
+    }
+    size
+  }
 
   /**
    * Returns a dataframe with two fields, "word" and "vector", with "word" being a String and
