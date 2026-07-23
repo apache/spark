@@ -394,6 +394,67 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
     }
   }
 
+  test("Session-qualified function is rejected") {
+    checkResolverGuard(
+      "SELECT session.some_func(1)",
+      unsupportedReason = Some("session-qualified user-defined function")
+    )
+  }
+
+  test("Generator functions are unsupported") {
+    Seq(
+      "explode(array(1, 2, 3))",
+      "posexplode(array(1, 2, 3))",
+      "inline(array(struct(1, 'a')))"
+    ).foreach { call =>
+      val name = call.takeWhile(_ != '(')
+      checkResolverGuard(s"SELECT $call", unsupportedReason = Some(s"unsupported function $name"))
+    }
+  }
+
+  test("Higher-order functions are unsupported") {
+    checkResolverGuard(
+      "SELECT transform(array(1, 2), x -> x + 1)",
+      unsupportedReason = Some("unsupported function transform")
+    )
+    checkResolverGuard(
+      "SELECT filter(array(1, 2), x -> x > 1)",
+      unsupportedReason = Some("unsupported function filter")
+    )
+    checkResolverGuard(
+      "SELECT aggregate(array(1, 2), 0, (acc, x) -> acc + x)",
+      unsupportedReason = Some("unsupported function aggregate")
+    )
+  }
+
+  test("Star target with unsupported metadata attribute name") {
+    withTable("t") {
+      sql("CREATE TABLE t (col INT) USING parquet")
+      checkResolverGuard(
+        "SELECT _metadata.* FROM t",
+        unsupportedReason = Some("unsupported attribute name '_metadata'")
+      )
+    }
+  }
+
+  test("prioritizeOrdinalResolutionInSort disabled is unsupported") {
+    withSQLConf("spark.sql.prioritizeOrdinalResolutionInSort.enabled" -> "false") {
+      checkResolverGuard(
+        "SELECT 1",
+        unsupportedReason = Some("configuration: prioritizeOrdinalResolutionInSortDisabled")
+      )
+    }
+  }
+
+  test("persistentCatalogFirst is unsupported") {
+    withSQLConf("spark.sql.legacy.persistentCatalogFirst" -> "true") {
+      checkResolverGuard(
+        "SELECT 1",
+        unsupportedReason = Some("configuration: persistentCatalogFirst")
+      )
+    }
+  }
+
 }
 
 trait ResolverGuardSuiteBase extends SharedSparkSession {

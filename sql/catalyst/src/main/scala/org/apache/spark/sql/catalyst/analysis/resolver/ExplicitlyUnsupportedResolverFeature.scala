@@ -51,6 +51,8 @@ object ExplicitlyUnsupportedResolverFeature {
   val OPERATORS = Set(
     "org.apache.spark.sql.catalyst.streaming.StreamingRelationV2",
     "org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation",
-    "org.apache.spark.sql.execution.streaming.StreamingRelation"
+    "org.apache.spark.sql.execution.streaming.StreamingRelation",
+    "org.apache.spark.sql.metricview.logical.MetricViewPlaceholder",
+    "org.apache.spark.sql.metricview.logical.ResolvedMetricView"
   )
 }

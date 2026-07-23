@@ -111,7 +111,7 @@ SELECT a, (SELECT b FROM VALUES (1, 2) AS innerTestData (all, b) ORDER BY ALL) F
 Project [a#x, scalar-subquery#x [] AS scalarsubquery()#x]
 :  +- Project [b#x]
 :     +- Sort [ALL#x ASC NULLS FIRST], true
-:        +- Project [b#x, ALL#x]
+:        +- Project [b#x, all#x]
 :           +- SubqueryAlias innerTestData
 :              +- LocalRelation [all#x, b#x]
 +- SubqueryAlias testdata
