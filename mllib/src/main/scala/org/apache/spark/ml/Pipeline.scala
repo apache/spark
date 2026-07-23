@@ -35,7 +35,6 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.SizeEstimator
 
 /**
  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
@@ -326,7 +325,9 @@ class PipelineModel private[ml] (
   private[spark] override def estimatedSize: Long = {
     estimateMatadataSize + stages.iterator.map {
       case model: Model[_] => model.estimatedSize
-      case stage => SizeEstimator.estimate(stage)
+      // ML Connect cache accounting only counts models. A non-model transformer may retain
+      // incidental references to objects such as SparkSession, so it has zero size here.
+      case _ => 0L
     }.sum
   }
 
