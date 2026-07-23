@@ -22,6 +22,7 @@ import java.util.{ArrayDeque, ArrayList, HashMap, HashSet, LinkedHashMap}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{
   ExpandStarParameters,
@@ -42,7 +43,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   NamedExpression,
   OuterReference
 }
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CollectMetrics, Project}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
@@ -419,6 +420,25 @@ class NameScope(
       childOperatorOutput = output,
       resolver = nameComparator
     )
+  }
+
+  /**
+   * Checks whether the given [[Star]] can be resolved in this scope without performing the actual
+   * expansion. This is used to decide whether to attempt outer scope expansion: if the star can
+   * be resolved in the current scope, there is no need to probe outer scopes.
+   *
+   * For targeted stars (e.g. `t1.*`), this checks whether the target is resolvable as either a
+   * table qualifier or a struct name. Untargeted stars and other [[Star]] subtypes always resolve
+   * in the current scope (untargeted stars expand to the full output, and other subtypes like
+   * [[UnresolvedRegex]] are handled directly by [[expandStar]]).
+   */
+  def canExpandStarFromCurrentScope(star: Star): Boolean = {
+    star match {
+      case starBase: UnresolvedStarBase if starBase.target.isDefined =>
+        isStarQualifiedByTable(starBase) ||
+          resolveNameInStarExpansion(starBase.target.get, nameComparator).isDefined
+      case _ => true
+    }
   }
 
   /**
@@ -1364,6 +1384,60 @@ class NameScopeStack(
   }
 
   /**
+   * Expand a [[Star]] expression. The resolution strategy is:
+   *   1. If the current scope can resolve the star ([[NameScope.canExpandStarFromCurrentScope]]),
+   *      expand it there.
+   *   2. Otherwise, try to expand from the nearest outer scope ([[expandStarFromOuterScope]]),
+   *      wrapping results in [[OuterReference]].
+   *   3. If neither succeeds, fall back to [[NameScope.expandStar]] on the current scope solely
+   *      to throw the appropriate error with the correct context (e.g. available column names).
+   */
+  def expandStar(star: Star): Seq[NamedExpression] = {
+    if (current.canExpandStarFromCurrentScope(star)) {
+      current.expandStar(star)
+    } else {
+      val fromOuterScope = expandStarFromOuterScope(star)
+      if (fromOuterScope.nonEmpty) {
+        fromOuterScope
+      } else {
+        current.expandStar(star)
+      }
+    }
+  }
+
+  private def expandStarFromOuterScope(star: Star): Seq[NamedExpression] = {
+    (star, subqueryRegistry.currentScope.parentOperator) match {
+      case (starBase: UnresolvedStarBase, Some(_: Project | _: Aggregate | _: CollectMetrics))
+          if starBase.target.isDefined =>
+        outerScopes.headOption match {
+          case Some(outerScope) if outerScope.canExpandStarFromCurrentScope(star) =>
+            outerScope.expandStar(star).map { namedExpression =>
+              val wrapped = wrapCandidateInOuterReference(
+                candidate = namedExpression,
+                outerScope = outerScope,
+                subqueryScope = subqueryRegistry.currentScope,
+                outerScopeLevel = 1
+              )
+
+              wrapped match {
+                case alias: Alias =>
+                  alias
+                case named: NamedExpression =>
+                  Alias(named, toPrettySQL(namedExpression))()
+                case other =>
+                  throw SparkException.internalError(
+                    s"Expected NamedExpression from outer star expansion, got " +
+                    s"${other.getClass.getSimpleName}"
+                  )
+              }
+            }
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
+    }
+  }
+
+  /**
    * If `spark.sql.optimizer.supportNestedCorrelatedSubqueries.enabled` is set to false, find
    * the nearest outer scope and return it if we are in a subquery. Otherwise, returns all outer
    * scopes for the subquery entry point. The first scope is the nearest outer scope and the last
@@ -1405,6 +1479,14 @@ class NameScopeStack(
             outerReference
           case other => other
         }
+      case alias: Alias =>
+        val wrappedChild = wrapCandidateInOuterReference(
+          candidate = alias.child,
+          outerScope = outerScope,
+          subqueryScope = subqueryScope,
+          outerScopeLevel = outerScopeLevel
+        )
+        alias.withNewChildren(Seq(wrappedChild))
       case attribute: Attribute =>
         val outerReference =
           tryReplaceOuterReferenceAttributeWithAlias(attribute, outerScope)

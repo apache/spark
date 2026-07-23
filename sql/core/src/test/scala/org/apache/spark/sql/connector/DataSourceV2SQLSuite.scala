@@ -4566,6 +4566,161 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Selective Overwrite: REPLACE WHERE with column list - maps source columns by position") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq(("d", 4L), ("e", 5L), ("f", 6L))).toDF("data", "id")
+    df2.createOrReplaceTempView("source2")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      spark.sql(s"INSERT INTO $t (data, id) REPLACE WHERE id = 3 SELECT * FROM source2")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - omitted column becomes null") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq(Tuple1(4L), Tuple1(5L))).toDF("id")
+    df2.createOrReplaceTempView("source2_ids")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      spark.sql(s"INSERT INTO $t (id) REPLACE WHERE id = 3 SELECT * FROM source2_ids")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, null), Row(5L, null)))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - too few data columns") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id, data) REPLACE WHERE id = 1 SELECT 1"),
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`testcat`.`tbl`",
+          "tableColumns" -> "`id`, `data`",
+          "dataColumns" -> "`1`"))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - too many data columns") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id) REPLACE WHERE id = 1 SELECT 1, 'a'"),
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`testcat`.`tbl`",
+          "tableColumns" -> "`id`",
+          "dataColumns" -> "`1`, `a`"))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - unknown target column") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id, nonexistent) REPLACE WHERE id = 1 SELECT 1, 'a'"),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
+          "objectName" -> "`nonexistent`",
+          "proposal" -> "`id`, `data`"),
+        context = ExpectedContext(
+          fragment = s"INSERT INTO $t (id, nonexistent) REPLACE WHERE id = 1",
+          start = 0,
+          stop = 50 + t.length))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - duplicate columns") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id, id) REPLACE WHERE id = 1 SELECT 1, 2"),
+        condition = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`id`"))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list passes write options to the write") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      // The in-memory table fails the write only if the option reaches the write path.
+      intercept[IllegalStateException] {
+        spark.sql(
+          s"INSERT INTO $t WITH (`${InMemoryBaseTable.SIMULATE_FAILED_WRITE_OPTION}` = true) " +
+            "(data, id) REPLACE WHERE id = 3 SELECT 'z', 3")
+      }
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list maps struct fields by position") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, info struct<x: int, y: int>) USING foo PARTITIONED BY (id)")
+      spark.sql(
+        s"INSERT INTO $t VALUES (1, named_struct('x', 10, 'y', 20)), " +
+          "(2, named_struct('x', 30, 'y', 40))")
+
+      // Column list reorders top-level columns; struct fields still map by position, so the
+      // source's ('y', 'x') order lands in the target's (x, y).
+      spark.sql(
+        s"INSERT INTO $t (info, id) REPLACE WHERE id = 1 " +
+          "SELECT named_struct('y', 100, 'x', 200), 1")
+      checkAnswer(
+        spark.sql(s"SELECT id, info.x, info.y FROM $t ORDER BY id"),
+        Seq(Row(1L, 100, 200), Row(2L, 30, 40)))
+    }
+  }
+
+  test("Selective Overwrite: WITH SCHEMA EVOLUTION with column list widens the reordered column") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id int, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      // The column list reorders to (data, id) and supplies a BIGINT for id at position 1.
+      // Schema evolution must widen `id` (not `data`) to BIGINT.
+      spark.sql(
+        s"INSERT WITH SCHEMA EVOLUTION INTO $t (data, id) " +
+          "REPLACE WHERE id = 1 SELECT 'a', CAST(100 AS BIGINT)")
+
+      assert(spark.table(t).schema("id").dataType === LongType)
+      checkAnswer(
+        spark.table(t).orderBy("data"),
+        Seq(Row(100L, "a"), Row(2L, "b")))
+    }
+  }
+
   test("Overwrite: REPLACE WHERE without BY NAME - positional matching") {
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")

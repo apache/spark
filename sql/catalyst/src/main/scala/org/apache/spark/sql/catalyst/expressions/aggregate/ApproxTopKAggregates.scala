@@ -28,10 +28,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{ArrayOfCollatedStringsSerDe, ArrayOfDecimalsSerDe, CollatedString, Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ArrayOfCollatedStringsSerDe, ArrayOfDecimalsSerDe, Cast, CollatedString, Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, UnsafeRowUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -169,7 +170,7 @@ case class ApproxTopK(
     buffer.merge(input)
 
   override def eval(buffer: ApproxTopKAggregateBuffer[Any]): GenericArrayData =
-    buffer.eval(kVal, itemDataType)
+    buffer.eval(kVal, itemDataType, itemDataType)
 
   override def serialize(buffer: ApproxTopKAggregateBuffer[Any]): Array[Byte] =
     buffer.serialize(ApproxTopK.genSketchSerDe(itemDataType))
@@ -355,6 +356,14 @@ object ApproxTopK {
       TypeCheckSuccess
     }
   }
+
+  def widenItemValue(item: Any, sketchType: DataType, outputType: DataType): Any =
+    (sketchType, outputType) match {
+      case _ if sketchType == outputType => item
+      case (_: StringType, _: StringType) => item
+      case _ =>
+        Cast(Literal(item, sketchType), outputType, Some(SQLConf.get.sessionLocalTimeZone)).eval()
+    }
 }
 
 /**
@@ -432,7 +441,7 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
    * Evaluate the buffer and return top K items (including null) with their estimated frequency.
    * The result is sorted by frequency in descending order.
    */
-  def eval(k: Int, itemDataType: DataType): GenericArrayData = {
+  def eval(k: Int, sketchItemType: DataType, outputItemType: DataType): GenericArrayData = {
     // frequent items from sketch
     val frequentItems = sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
     // total number of frequent items (including null, if any)
@@ -462,7 +471,7 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
         (null, nullCount.toLong)
       } else {
         // insert frequent item into result
-        val item: Any = itemDataType match {
+        val rawItem: Any = sketchItemType match {
           case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
                _: LongType | _: FloatType | _: DoubleType | _: DecimalType |
                _: DateType | _: TimestampType | _: TimestampNTZType | _: TimeType =>
@@ -475,6 +484,7 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
                 s"Unexpected sketch item type for a string column: ${other.getClass.getName}")
             }
         }
+        val item = ApproxTopK.widenItemValue(rawItem, sketchItemType, outputItemType)
         fiIndex += 1 // move to next frequent item
         (item, itemEstimate)
       }

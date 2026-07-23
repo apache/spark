@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.trees.BinaryLike
  * Logical plan node for an AUTO CDC INTO operation, used by Spark Declarative Pipelines.
  *
  * This represents a CDC (Change Data Capture) operation that applies an ordered change event
- * stream from [[source]] into [[targetTable]] using SCD Type 1 (upsert) semantics.
+ * stream from [[source]] into [[targetTable]] using SCD Type 1 (upsert) or SCD Type 2
+ * (history-tracking) semantics, as selected by [[storedAsScdType]].
  *
  * This node only ever appears as the flow operation of a [[CreateFlowCommand]] (parsed from
  * `CREATE FLOW ... AS AUTO CDC INTO ...`); there is no standalone `AUTO CDC INTO` syntax. It is a
@@ -53,6 +54,16 @@ import org.apache.spark.sql.catalyst.trees.BinaryLike
  * @param excludeColumns Source columns to exclude from the target table (i.e., all columns
  *                       except these). [[None]] when no COLUMNS clause was specified. Mutually
  *                       exclusive with [[includeColumns]].
+ * @param storedAsScdType The SCD type of the target table, from `STORED AS SCD TYPE <n>`. 1 for
+ *                       SCD Type 1 (upsert) and 2 for SCD Type 2 (history-tracking). Defaults to
+ *                       1 when no `STORED AS` clause is specified.
+ * @param trackHistoryColumns SCD2-only. An explicit list of columns whose value change opens a
+ *                       new history record, from `TRACK HISTORY ON (...)`. [[None]] when no TRACK
+ *                       HISTORY clause was specified. Mutually exclusive with
+ *                       [[trackHistoryExceptColumns]].
+ * @param trackHistoryExceptColumns SCD2-only. Columns excluded from history tracking, from
+ *                       `TRACK HISTORY ON * EXCEPT (...)`. [[None]] when no TRACK HISTORY clause
+ *                       was specified. Mutually exclusive with [[trackHistoryColumns]].
  */
 case class AutoCdcInto(
     targetTable: LogicalPlan,
@@ -61,7 +72,10 @@ case class AutoCdcInto(
     deleteCondition: Option[Expression],
     sequenceByExpr: Expression,
     includeColumns: Option[Seq[UnresolvedAttribute]],
-    excludeColumns: Option[Seq[UnresolvedAttribute]]
+    excludeColumns: Option[Seq[UnresolvedAttribute]],
+    storedAsScdType: Int,
+    trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
+    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]]
 ) extends LogicalPlan with BinaryLike[LogicalPlan] {
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = source

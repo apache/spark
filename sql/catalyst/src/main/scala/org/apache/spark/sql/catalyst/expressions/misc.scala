@@ -636,3 +636,56 @@ case class TryAesDecrypt(
     this.copy(replacement = newChild)
 }
 // scalastyle:on line.size.limit
+
+/**
+ * A function that computes a keyed-hash message authentication code (HMAC) of the `message`
+ * using the given `key` and hash `algorithm`. The result is returned as raw MAC bytes, which
+ * can be fed back in as the `key` of a subsequent HMAC to chain derivations, or wrapped with
+ * `hex`/`base64` for a textual representation.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(key, message[, algorithm]) - Returns the keyed-hash message authentication code (HMAC) of `message` using `key` and the hash `algorithm`. The result is returned as raw MAC bytes; wrap it with `hex` or `base64` for a textual value. The default algorithm is 'SHA-256'.
+  """,
+  arguments = """
+    Arguments:
+      * key - The secret key, as a binary value.
+      * message - The message to authenticate, as a binary value.
+      * algorithm - Optional hash algorithm. Valid values: SHA-224, SHA-256, SHA-384, SHA-512, SHA-1, MD5. The default is SHA-256.
+  """,
+  examples = """
+    Examples:
+      > SELECT hex(_FUNC_('key', 'message'));
+       6E9EF29B75FFFC5B7ABAE527D58FDADB2FE42E7219011976917343065F58ED4A
+      > SELECT hex(_FUNC_('key', 'message', 'SHA-512'));
+       E477384D7CA229DD1426E64B63EBF2D36EBD6D7E669A6735424E72EA6C01D3F8B56EB39C36D8232F5427999B8D1A3F9CD1128FC69F4D75B434216810FA367E98
+  """,
+  since = "4.3.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+case class Hmac(key: Expression, message: Expression, algorithm: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    BinaryType,
+    "hmac",
+    Seq(key, message, algorithm),
+    inputTypes)
+
+  def this(key: Expression, message: Expression) =
+    this(key, message, Literal("SHA-256"))
+
+  override def prettyName: String = "hmac"
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(BinaryType, BinaryType, StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def children: Seq[Expression] = Seq(key, message, algorithm)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(newChildren(0), newChildren(1), newChildren(2))
+  }
+}

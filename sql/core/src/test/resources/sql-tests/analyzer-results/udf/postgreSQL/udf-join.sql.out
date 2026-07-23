@@ -545,7 +545,7 @@ SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query analysis
 Project [xxx#x, udf(i)#x, udf(j)#x, udf(t)#x, udf(k)#x]
 +- Sort [cast(udf(cast(cast(udf(cast(i#x as string)) as int) as string)) as int) ASC NULLS FIRST, cast(udf(cast(k#x as string)) as int) ASC NULLS FIRST, cast(udf(cast(t#x as string)) as string) ASC NULLS FIRST], true
-   +- Project [cast(udf(cast(cast(udf(cast( as string)) as string) as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x, i#x, k#x, t#x]
+   +- Project [cast(udf(cast(cast(udf(cast( as string)) as string) as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x, i#x, t#x, k#x]
       +- Project [i#x, j#x, t#x, k#x]
          +- Join LeftOuter, (i#x = i#x)
             :- SubqueryAlias spark_catalog.default.j1_tbl
@@ -561,7 +561,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query analysis
 Project [xxx#x, udf(i)#x, udf(j)#x, udf(t)#x, udf(k)#x]
 +- Sort [cast(udf(cast(i#x as string)) as int) ASC NULLS FIRST, cast(udf(cast(cast(udf(cast(k#x as string)) as int) as string)) as int) ASC NULLS FIRST, cast(udf(cast(t#x as string)) as string) ASC NULLS FIRST], true
-   +- Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x, i#x, k#x, t#x]
+   +- Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(t#x as string)) as string) AS udf(t)#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x, i#x, t#x, k#x]
       +- Project [i#x, j#x, t#x, k#x]
          +- Join LeftOuter, (i#x = i#x)
             :- SubqueryAlias spark_catalog.default.j1_tbl
@@ -603,7 +603,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(udf(t)), udf(k)
 -- !query analysis
 Project [xxx#x, udf(i)#x, udf(j)#x, udf(udf(t))#x, udf(k)#x]
 +- Sort [cast(udf(cast(cast(udf(cast(i#x as string)) as int) as string)) as int) ASC NULLS FIRST, cast(udf(cast(k#x as string)) as int) ASC NULLS FIRST, cast(udf(cast(t#x as string)) as string) ASC NULLS FIRST], true
-   +- Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(cast(udf(cast(t#x as string)) as string) as string)) as string) AS udf(udf(t))#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x, i#x, k#x, t#x]
+   +- Project [cast(udf(cast( as string)) as string) AS xxx#x, cast(udf(cast(i#x as string)) as int) AS udf(i)#x, cast(udf(cast(j#x as string)) as int) AS udf(j)#x, cast(udf(cast(cast(udf(cast(t#x as string)) as string) as string)) as string) AS udf(udf(t))#x, cast(udf(cast(k#x as string)) as int) AS udf(k)#x, i#x, t#x, k#x]
       +- Project [coalesce(i#x, i#x) AS i#x, j#x, t#x, k#x]
          +- Join FullOuter, (i#x = i#x)
             :- SubqueryAlias spark_catalog.default.j1_tbl

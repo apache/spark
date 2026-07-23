@@ -264,8 +264,8 @@ case class Crc32(child: Expression)
  *                             and hash it.
  *  - decimal:                 if it's a small decimal, i.e. precision <= 18, turn it into long
  *                             and hash it. Else, turn it into bytes and hash it.
- *  - calendar interval:       hash `microseconds` first, and use the result as seed
- *                             to hash `months`.
+ *  - calendar interval:       hash `microseconds` first, use the result as seed to hash `days`,
+ *                             then use that result as seed to hash `months`.
  *  - interval day to second:  it store long value of `microseconds`, use murmur3 to hash the long
  *                             input with seed.
  *  - interval year to month:  it store int value of `months`, use murmur3 to hash the int
@@ -441,7 +441,8 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashCalendarInterval(input: String, result: String): String = {
     val microsecondsHash = s"$hasherClassName.hashLong($input.microseconds, $result)"
-    s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
+    val daysHash = s"$hasherClassName.hashInt($input.days, $microsecondsHash)"
+    s"$result = $hasherClassName.hashInt($input.months, $daysHash);"
   }
 
   protected def genHashTimestampNanos(input: String, result: String): String = {
