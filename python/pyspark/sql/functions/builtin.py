@@ -15193,6 +15193,41 @@ def base64(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def to_base32(col: "ColumnOrName") -> Column:
+    """
+    Computes the BASE32 (RFC 4648) encoding of a binary column and returns it as a
+    string column.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to work on.
+        A column that evaluates to a binary.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        BASE32 encoding of the binary value.
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_base32`
+    :meth:`pyspark.sql.functions.base64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(b"foobar",)], ["value"])
+    >>> df.select(sf.to_base32("value").alias("r")).collect()
+    [Row(r='MZXW6YTBOI======')]
+    """
+    return _invoke_function_over_columns("to_base32", col)
+
+
+@_try_remote_functions
 def unbase64(col: "ColumnOrName") -> Column:
     """
     Decodes a BASE64 encoded string column and returns it as a binary column.
@@ -15232,6 +15267,41 @@ def unbase64(col: "ColumnOrName") -> Column:
     +----------------+-------------------------------+
     """
     return _invoke_function_over_columns("unbase64", col)
+
+
+@_try_remote_functions
+def from_base32(col: "ColumnOrName") -> Column:
+    """
+    Decodes a BASE32 (RFC 4648) encoded string column and returns it as a binary
+    column.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to work on.
+        A column that evaluates to a string.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        decoded binary value.
+        Returns a column that evaluates to a binary.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_base32`
+    :meth:`pyspark.sql.functions.unbase64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([("MZXW6YTBOI======",)], ["value"])
+    >>> df.select(sf.from_base32("value").alias("r")).collect()
+    [Row(r=bytearray(b'foobar'))]
+    """
+    return _invoke_function_over_columns("from_base32", col)
 
 
 @_try_remote_functions
