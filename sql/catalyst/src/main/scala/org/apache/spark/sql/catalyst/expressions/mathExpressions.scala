@@ -1971,6 +1971,47 @@ case class BRound(
     newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)
 }
 
+/**
+ * Truncate an expression toward zero to `scale` decimal places.
+ * A negative `scale` truncates digits to the left of the decimal point.
+ * truncate(1234.5678, 2) = 1234.56, truncate(-1234.5678, 2) = -1234.56.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr[, scale]) - Returns `expr` truncated toward zero to `scale` decimal places. `scale` defaults to 0. A negative `scale` truncates digits to the left of the decimal point.",
+  arguments = """
+    Arguments:
+      * expr - The expression to truncate. An expression that evaluates to a numeric.
+      * scale - The number of decimal places to keep. An expression that evaluates to an integer, must be a constant, and defaults to 0. A negative value truncates digits to the left of the decimal point.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1234.5678, 2);
+       1234.56
+      > SELECT _FUNC_(1234.5678, -2);
+       1200
+      > SELECT _FUNC_(-1234.5678, 2);
+       -1234.56
+  """,
+  since = "4.3.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+case class Truncate(
+    child: Expression,
+    scale: Expression,
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.DOWN, "ROUND_DOWN") {
+  def this(child: Expression) = this(child, Literal(0), SQLConf.get.ansiEnabled)
+
+  def this(child: Expression, scale: Expression) = this(child, scale, SQLConf.get.ansiEnabled)
+
+  override def flatArguments: Iterator[Any] = Iterator(child, scale)
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Truncate =
+    copy(child = newLeft, scale = newRight)
+}
+
 object WidthBucket {
   /** Shared by interpreted eval and generated Java code; must stay public for codegen. */
   def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
