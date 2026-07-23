@@ -320,7 +320,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
           numRemovedBlocksFuture.complete(((BlocksRemoved) msgObj).numRemovedBlocks);
         } catch (Throwable t) {
-          logger.warn("Error trying to remove blocks {} via external shuffle service from " +
+          logger.info("Error trying to remove blocks {} via external shuffle service from " +
             "executor: {}", t,
             MDC.of(LogKeys.BLOCK_IDS, Arrays.toString(blockIds)),
             MDC.of(LogKeys.EXECUTOR_ID, execId));
@@ -330,7 +330,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
 
       @Override
       public void onFailure(Throwable e) {
-        logger.warn("Error trying to remove blocks {} via external shuffle service from " +
+        logger.info("Error trying to remove blocks {} via external shuffle service from " +
           "executor: {}", e, MDC.of(LogKeys.BLOCK_IDS, Arrays.toString(blockIds)),
           MDC.of(LogKeys.EXECUTOR_ID, execId));
         numRemovedBlocksFuture.complete(0);
