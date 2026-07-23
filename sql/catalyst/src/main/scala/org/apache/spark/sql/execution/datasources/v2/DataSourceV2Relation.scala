@@ -158,8 +158,17 @@ case class DataSourceV2Relation(
  * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
  *                               rows in the scan across different partitions
  * @param ordering if set, the ordering provided by the scan
- * @param pushedFilters Catalyst expressions for filters that were fully pushed to the data
- *                      source and do not appear as post-scan filters
+ * @param pushedFilters Catalyst expressions for filters that were fully pushed to the data source
+ *                      and do not appear as post-scan filters. These reference the relation's
+ *                      (pre-pruning) output, so they may reference columns pruned out of `output`
+ *                      (e.g. an unselected partition column the source enforces internally). This
+ *                      complete set is what lets [[org.apache.spark.sql.execution.planmerging.
+ *                      PlanMerger]] soundly compare and re-enforce a scan's filters when fusing two
+ *                      scans via [[org.apache.spark.sql.connector.read.SupportsScanMerging]].
+ * @param hasMergeBlockingPushdown whether a pushdown happened that cannot be reproduced by
+ *                      re-running the scan builder (aggregate, join, variant extraction, limit,
+ *                      offset, top-N, or sample). When true, this scan must not be fused with
+ *                      another via [[org.apache.spark.sql.connector.read.SupportsScanMerging]].
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -167,10 +176,13 @@ case class DataSourceV2ScanRelation(
     output: Seq[AttributeReference],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
-    pushedFilters: Seq[Expression] = Seq.empty) extends LeafNode with NamedRelation {
+    pushedFilters: Seq[Expression] = Seq.empty,
+    hasMergeBlockingPushdown: Boolean = false) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
+  // Note: pushedFilters may reference columns pruned out of `output`, so constraint use must first
+  // intersect with `outputSet` (a constraint has to reference the node's output).
   // This changes which filters InferFiltersFromConstraints adds or removes (e.g., it may
   // skip adding IsNotNull when the scan already implies it, or infer new filters across
   // joins), so plan stability testing is needed first.
@@ -188,6 +200,14 @@ case class DataSourceV2ScanRelation(
   }
 
   override def name: String = relation.name
+
+  // A leaf relation references no upstream attributes. `pushedFilters` (and, for that matter,
+  // partitioning/ordering) are scan metadata, not references to resolve, and `pushedFilters` may
+  // reference columns pruned out of `output` (e.g. an unselected partition column). Without this
+  // override those would surface as `missingInput`, which the optimizer's plan-change validation
+  // flags as dangling references. `mapExpressions`/`transformExpressions` still rewrite the
+  // metadata expressions -- they iterate the product directly, independent of `references`.
+  override def references: AttributeSet = AttributeSet.empty
 
   override def simpleString(maxFields: Int): String = {
     val outputString = truncatedString(output, "[", ", ", "]", maxFields)
@@ -220,7 +240,9 @@ case class DataSourceV2ScanRelation(
       ordering = ordering.map(
         _.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
       ),
-      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, output))
+      // pushedFilters may reference columns pruned out of `output` (see the field doc), so they are
+      // normalized against the relation's full output rather than `output`.
+      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
     )
   }
 }
