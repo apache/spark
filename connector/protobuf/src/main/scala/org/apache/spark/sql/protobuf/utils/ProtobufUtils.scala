@@ -299,8 +299,6 @@ private[sql] object ProtobufUtils extends Logging {
     try {
       fileDescriptorCache.get(contentHash(bytes), () => doParseFileDescriptorSet(bytes))
     } catch {
-      // Unwrap Guava's loader wrapper so callers keep their domain exception (e.g.
-      // descriptorParseError). A failed load is not cached.
       case e: UncheckedExecutionException if e.getCause != null => throw e.getCause
       case e: ExecutionException if e.getCause != null => throw e.getCause
       case e: ExecutionError if e.getCause != null => throw e.getCause
