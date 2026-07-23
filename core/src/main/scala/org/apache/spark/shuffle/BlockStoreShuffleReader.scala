@@ -23,7 +23,7 @@ import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.SerializerManager
-import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, ShuffleBlockFetcherIterator}
+import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, FallbackStorage, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
@@ -88,7 +88,8 @@ private[spark] class BlockStoreShuffleReader[K, C](
       SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ENABLED),
       SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM),
       readMetrics,
-      fetchContinuousBlocksInBatch).toCompletionIterator
+      fetchContinuousBlocksInBatch,
+      FallbackStorage.getFallbackStorage(SparkEnv.get.conf)).toCompletionIterator
 
     val serializerInstance = dep.serializer.newInstance()
 
