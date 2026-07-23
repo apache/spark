@@ -415,6 +415,41 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-58272: reject materialized runtime filters for nonbinary collated join keys") {
+    val cacheName = "collated_cached_bloom_filter_keys"
+    withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "0",
+        SQLConf.RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD.key -> "1MB",
+        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
+      withTempView(cacheName) {
+        withCache(cacheName) {
+          spark.range(0, 40, 1, numPartitions = 4)
+            .where("id = 1")
+            .selectExpr("IF(id = 1, 'a', 'z') COLLATE UTF8_LCASE AS k")
+            .persist(StorageLevel.MEMORY_AND_DISK)
+            .createOrReplaceTempView(cacheName)
+          assert(spark.table(cacheName).count() == 1)
+
+          val relation = spark.table(cacheName).queryExecution.withCachedData.collectFirst {
+            case cached: InMemoryRelation => cached
+          }.get
+          assert(relation.statsAvailable)
+          assert(relation.hasSelectivePredicate)
+
+          val actual = sql(
+            s"SELECT fact.k FROM " +
+              "(SELECT (CASE WHEN a1 = 73 THEN 'A' ELSE 'X' END) " +
+              "COLLATE UTF8_LCASE AS k FROM bf1) fact " +
+              s"JOIN $cacheName ON fact.k = $cacheName.k COLLATE UTF8_LCASE")
+          assert(getNumBloomFilters(actual.queryExecution.optimizedPlan) == 0)
+          checkAnswer(actual, Row("A"))
+        }
+      }
+    }
+  }
+
   test("SPARK-58272: use materialized caches without predicates only with pruning statistics") {
     withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",

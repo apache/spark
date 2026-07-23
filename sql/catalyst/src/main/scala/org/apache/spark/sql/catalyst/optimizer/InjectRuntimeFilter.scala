@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -94,7 +95,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    */
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
-      filterCreationSideKey: Expression): Option[FilterCreationSide] = {
+      filterCreationSideKey: Expression,
+      allowMaterializedCache: Boolean): Option[FilterCreationSide] = {
     def extract(
         p: LogicalPlan,
         predicateReference: AttributeSet,
@@ -184,7 +186,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           findExpressionAndTrackLineageDown(targetKey, currentPlan).exists {
             case (trackedKey, _) => isSimpleExpression(trackedKey)
           }
-        if (leaf.statsAvailable && leaf.isOutputRepeatable && safeLineage) {
+        if (allowMaterializedCache && leaf.statsAvailable && leaf.isOutputRepeatable &&
+            safeLineage) {
           leaf.stats.rowCount.map { rowCount =>
             FilterCreationSide(
               targetKey,
@@ -280,7 +283,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     if (findExpressionAndTrackLineageDown(
       filterApplicationSideKey, filterApplicationSide).isDefined &&
       satisfyByteSizeRequirement(filterApplicationSide)) {
-      extractSelectiveFilterOverScan(filterCreationSide, filterCreationSideKey).filter {
+      val allowMaterializedCache = UnsafeRowUtils.isBinaryStable(filterCreationSideKey.dataType) &&
+        UnsafeRowUtils.isBinaryStable(filterApplicationSideKey.dataType)
+      extractSelectiveFilterOverScan(
+        filterCreationSide, filterCreationSideKey, allowMaterializedCache).filter {
         creationSide =>
           creationSide.hasSelectivePredicate || {
             def distinctCount(key: Expression, plan: LogicalPlan): Option[BigInt] = {
