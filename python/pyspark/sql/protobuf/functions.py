@@ -21,6 +21,7 @@ A collections of builtin protobuf functions
 
 from typing import Dict, Optional, TYPE_CHECKING, cast
 
+from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.column import Column
 from pyspark.sql.utils import get_active_spark_context, try_remote_protobuf_functions
 from pyspark.util import _print_missing_jar
@@ -286,9 +287,14 @@ def to_protobuf(
 
 
 def _read_descriptor_set_file(filePath: str) -> bytes:
-    # TODO(SPARK-43847): Throw structured errors like "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND" etc.
-    with open(filePath, "rb") as f:
-        return f.read()
+    try:
+        with open(filePath, "rb") as f:
+            return f.read()
+    except OSError as e:
+        raise PySparkRuntimeError(
+            errorClass="PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
+            messageParameters={"filePath": filePath},
+        ) from e
 
 
 def _test() -> None:
