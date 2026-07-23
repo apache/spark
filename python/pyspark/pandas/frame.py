@@ -43,6 +43,7 @@ from typing import (
     Literal,
     Optional,
     Sequence,
+    Set,
     Tuple,
     Type,
     TypeVar,
@@ -7422,8 +7423,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def select_dtypes(
         self,
-        include: Optional[Union[str, List[str]]] = None,
-        exclude: Optional[Union[str, List[str]]] = None,
+        include: Optional[Union[str, List[Union[str, type]]]] = None,
+        exclude: Optional[Union[str, List[Union[str, type]]]] = None,
     ) -> "DataFrame":
         """
         Return a subset of the DataFrame's columns based on the column dtypes.
@@ -7531,14 +7532,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  1   True  1.0
         5  2  False  2.0
         """
-        include_list: List[str]
+        include_list: List[Union[str, type]]
         if not is_list_like(include):
-            include_list = [cast(str, include)] if include is not None else []
+            include_list = [cast(Union[str, type], include)] if include is not None else []
         else:
             include_list = list(include)
-        exclude_list: List[str]
+        exclude_list: List[Union[str, type]]
         if not is_list_like(exclude):
-            exclude_list = [cast(str, exclude)] if exclude is not None else []
+            exclude_list = [cast(Union[str, type], exclude)] if exclude is not None else []
         else:
             exclude_list = list(exclude)
 
@@ -7556,6 +7557,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # Handle Spark types
         include_spark_type = []
         for inc in include_list:
+            if not isinstance(inc, str):
+                continue
             try:
                 include_spark_type.append(self._internal.spark_frame._session._parse_ddl(inc))
             except BaseException:
@@ -7563,6 +7566,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         exclude_spark_type = []
         for exc in exclude_list:
+            if not isinstance(exc, str):
+                continue
             try:
                 exclude_spark_type.append(self._internal.spark_frame._session._parse_ddl(exc))
             except BaseException:
@@ -9990,8 +9995,136 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             lambda psser: psser.rename(tuple([i + suffix for i in psser._column_label]))
         )
 
-    # TODO(SPARK-46164): include and exclude should be implemented.
-    def describe(self, percentiles: Optional[List[float]] = None) -> "DataFrame":
+    @staticmethod
+    def _describe_top_freq(sdf: PySparkDataFrame, names: List[str]) -> Tuple[List[Any], List[Any]]:
+        # Negating count makes min(struct(neg_count, value)) pick the highest count,
+        # and on ties the lexicographically first value, matching pandas describe().
+        # Group by column name (resolved against `sdf`) rather than the source
+        # expression, since a cast wrapped in a projection rebinds the attribute id.
+        if len(names) == 1:
+            top, freq = sdf.groupby(names[0]).count().sort("count", ascending=False).first()
+            return [str(top)], [str(freq)]
+        rows = (
+            sdf.select(F.posexplode(F.array(*[F.col(n) for n in names])).alias("idx", "str_value"))
+            .groupby("idx", "str_value")
+            .agg(F.negative(F.count("*")).alias("neg_count"))
+            .groupby("idx")
+            .agg(F.min(F.struct("neg_count", "str_value")).alias("s"))
+            .sort("idx")
+            .collect()
+        )
+        return [str(r.s.str_value) for r in rows], [str(-r.s.neg_count) for r in rows]
+
+    def _describe_mixed(
+        self,
+        psser_numeric: List["Series"],
+        psser_timestamp: List["Series"],
+        psser_object: List["Series"],
+        spark_data_types: List[DataType],
+        percentiles: List[float],
+    ) -> "DataFrame":
+        internal = self._internal.resolved_copy
+        numeric_names = [
+            internal.spark_column_name_for(psser._column_label) for psser in psser_numeric
+        ]
+        timestamp_names = [
+            internal.spark_column_name_for(psser._column_label) for psser in psser_timestamp
+        ]
+        object_names = [
+            internal.spark_column_name_for(psser._column_label) for psser in psser_object
+        ]
+        quant_names = numeric_names + timestamp_names
+
+        formatted_perc = ["{:.0%}".format(p) for p in sorted(percentiles)]
+
+        # Job A: every aggregation that fits a single .select() call.
+        agg_exprs: List[PySparkColumn] = []
+        agg_layout: List[Tuple[str, str]] = []  # parallel list of (column, stat)
+
+        def add(name: str, stat: str, expr: PySparkColumn) -> None:
+            agg_exprs.append(expr)
+            agg_layout.append((name, stat))
+
+        for name in quant_names + object_names:
+            add(name, "count", F.count(name))
+        for name in timestamp_names + object_names:
+            add(name, "unique", F.count_distinct(F.col(name)))
+        for name, dt in zip(quant_names, spark_data_types):
+            add(name, "mean", F.mean(name).astype(dt))
+        for name in quant_names:
+            add(name, "min", F.min(name))
+        for percentile, label in zip(sorted(percentiles), formatted_perc):
+            for name in quant_names:
+                add(name, label, F.percentile_approx(name, percentile))
+        for name in quant_names:
+            add(name, "max", F.max(name))
+        for name in numeric_names:
+            add(name, "std", F.stddev(name))
+
+        agg_row = internal.spark_frame.select(*agg_exprs).first()
+        agg_lookup = {key: agg_row[i] for i, key in enumerate(agg_layout)}
+
+        # Job B: top/freq for object and timestamp columns. Cast to string so
+        # posexplode sees a uniform array. Alias each cast back to its source name so
+        # we can resolve it by name in `_describe_top_freq` (the cast through a
+        # projection rebinds the underlying attribute id).
+        top_freq_names = timestamp_names + object_names
+        top_freq_cols = [
+            internal.spark_column_for(psser._column_label).cast(StringType()).alias(name)
+            for psser, name in zip((*psser_timestamp, *psser_object), top_freq_names)
+        ]
+        if top_freq_cols:
+            tops, freqs = self._describe_top_freq(
+                internal.spark_frame.select(*top_freq_cols), top_freq_names
+            )
+            top_lookup = dict(zip(top_freq_names, tops))
+            freq_lookup = dict(zip(top_freq_names, freqs))
+        else:
+            top_lookup = {}
+            freq_lookup = {}
+
+        stats_names = [
+            "count",
+            "unique",
+            "top",
+            "freq",
+            "mean",
+            "min",
+            *formatted_perc,
+            "max",
+            "std",
+        ]
+        numeric_set = set(numeric_names)
+        timestamp_set = set(timestamp_names)
+        per_column_stats: Dict[str, List[Any]] = {}
+        for name in numeric_names + timestamp_names + object_names:
+            row: List[Any] = []
+            for stat in stats_names:
+                if stat == "top":
+                    row.append(np.nan if name in numeric_set else top_lookup.get(name, np.nan))
+                elif stat == "freq":
+                    row.append(np.nan if name in numeric_set else freq_lookup.get(name, np.nan))
+                else:
+                    row.append(agg_lookup.get((name, stat), np.nan))
+            if name in timestamp_set:
+                row = [str(v) if v is not None else None for v in row]
+            per_column_stats[name] = row
+
+        # Reorder columns to match the original DataFrame column order.
+        ordered_names = [
+            internal.spark_column_name_for(label)
+            for label in self._internal.column_labels
+            if internal.spark_column_name_for(label) in per_column_stats
+        ]
+        ordered = {name: per_column_stats[name] for name in ordered_names}
+        return DataFrame(data=ordered, index=stats_names, columns=ordered_names)
+
+    def describe(
+        self,
+        percentiles: Optional[List[float]] = None,
+        include: Optional[Union[str, List[Union[str, type]]]] = None,
+        exclude: Optional[Union[str, List[Union[str, type]]]] = None,
+    ) -> "DataFrame":
         """
         Generate descriptive statistics that summarize the central tendency,
         dispersion and shape of a dataset's distribution, excluding
@@ -10006,6 +10139,29 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         percentiles : list of ``float`` in range [0.0, 1.0], default [0.25, 0.5, 0.75]
             A list of percentiles to be computed.
+        include : 'all', list-like of dtypes or None (default), optional
+            A white list of data types to include in the result. Ignored for Series.
+            Here are the options:
+
+            .. versionadded:: 4.3.0
+
+            - 'all' : All columns of the input will be included in the output.
+            - A list-like of dtypes : Limits the results to the provided data types.
+              To limit the result to numeric types submit ``numpy.number``.
+              To limit it instead to object columns submit the ``numpy.object_`` data type.
+              Strings can also be used in the style of ``select_dtypes``
+              (e.g. ``df.describe(include=['O'])``).
+            - None (default) : The result will include all numeric columns.
+        exclude : list-like of dtypes or None (default), optional
+            A black list of data types to omit from the result. Ignored for Series.
+            Here are the options:
+
+            .. versionadded:: 4.3.0
+
+            - A list-like of dtypes : Excludes the provided data types from the result.
+              To exclude numeric types submit ``numpy.number``.
+              To exclude object columns submit the ``numpy.object_`` data type.
+            - None (default) : The result will exclude nothing.
 
         Returns
         -------
@@ -10121,9 +10277,40 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         max      3.0
         Name: numeric1, dtype: float64
 
+        Using ``include`` to select specific dtypes:
+
+        >>> df = ps.DataFrame({'numeric1': [1, 2, 3],
+        ...                    'numeric2': [4.0, 5.0, 6.0],
+        ...                    'object': ['a', 'b', 'c']
+        ...                   },
+        ...                   columns=['numeric1', 'numeric2', 'object'])
+        >>> df.describe(include=['int64', 'float64'])
+               numeric1  numeric2
+        count       3.0       3.0
+        mean        2.0       5.0
+        std         1.0       1.0
+        min         1.0       4.0
+        25%         1.0       4.0
+        50%         2.0       5.0
+        75%         3.0       6.0
+        max         3.0       6.0
+
+        Using ``exclude`` to remove specific dtypes:
+
+        >>> df.describe(exclude=['int64', 'float64'])
+               object
+        count       3
+        unique      3
+        top         a
+        freq        1
+
         Describing a column from a ``DataFrame`` by accessing it as
         an attribute and selecting custom percentiles.
 
+        >>> df = ps.DataFrame({'numeric1': [1, 2, 3],
+        ...                    'numeric2': [4.0, 5.0, 6.0]
+        ...                   },
+        ...                   columns=['numeric1', 'numeric2'])
         >>> df.numeric1.describe(percentiles = [0.85, 0.15])
         count    3.0
         mean     2.0
@@ -10135,13 +10322,31 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         max      3.0
         Name: numeric1, dtype: float64
         """
+        is_include_all = isinstance(include, str) and include == "all"
+        if is_include_all and exclude is not None:
+            raise ValueError("exclude must be None when include is 'all'")
+
+        if is_include_all:
+            kept_labels: Optional[Set[Label]] = None
+        elif include is not None or exclude is not None:
+            kept_labels = set(
+                self.select_dtypes(include=include, exclude=exclude)._internal.column_labels
+            )
+            if not kept_labels:
+                raise ValueError("Cannot describe a DataFrame without columns")
+        else:
+            kept_labels = None
+
         psser_numeric: List[Series] = []
+        psser_bool: List[Series] = []
         psser_string: List[Series] = []
         psser_timestamp: List[Series] = []
         spark_data_types: List[DataType] = []
-        column_labels: Optional[List[Label]] = []
+        column_labels: List[Label] = []
         column_names: List[str] = []
         for label in self._internal.column_labels:
+            if kept_labels is not None and label not in kept_labels:
+                continue
             psser = self._psser_for(label)
             spark_data_type = psser.spark.data_type
             if isinstance(spark_data_type, NumericType):
@@ -10152,9 +10357,26 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 psser_timestamp.append(psser)
                 column_labels.append(label)
                 spark_data_types.append(spark_data_type)
+            elif isinstance(spark_data_type, BooleanType):
+                psser_bool.append(psser)
             else:
                 psser_string.append(psser)
-                column_names.append(self._internal.spark_column_name_for(label))
+
+        # Default describe() (no include/exclude) follows pandas: when any quantitative
+        # column is present, object/bool columns are dropped; otherwise they are kept so
+        # describe() returns count/unique/top/freq for an all-object frame.
+        if (
+            include is None
+            and exclude is None
+            and (len(psser_numeric) > 0 or len(psser_timestamp) > 0)
+        ):
+            psser_string = []
+            psser_bool = []
+
+        column_names = [
+            self._internal.spark_column_name_for(psser._column_label)
+            for psser in (*psser_string, *psser_bool)
+        ]
 
         if percentiles is not None:
             if any((p < 0.0) or (p > 1.0) for p in percentiles):
@@ -10165,59 +10387,49 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             percentiles = [0.25, 0.5, 0.75]
 
         # Identify the cases
-        is_all_string_type = (
-            len(psser_numeric) == 0 and len(psser_timestamp) == 0 and len(psser_string) > 0
+        psser_object = psser_string + psser_bool
+        has_object_type = len(psser_object) > 0
+        has_quantitative_type = len(psser_numeric) > 0 or len(psser_timestamp) > 0
+        is_mixed_type = has_quantitative_type and has_object_type
+        is_all_object_type = not has_quantitative_type and has_object_type
+        is_all_numeric_type = (
+            len(psser_numeric) > 0 and len(psser_timestamp) == 0 and not has_object_type
         )
-        is_all_numeric_type = len(psser_numeric) > 0 and len(psser_timestamp) == 0
-        has_timestamp_type = len(psser_timestamp) > 0
+        has_timestamp_type = len(psser_timestamp) > 0 and not has_object_type
         has_numeric_type = len(psser_numeric) > 0
 
-        if is_all_string_type:
-            # Handling string type columns
-            # We will retrieve the `count`, `unique`, `top` and `freq`.
+        if is_mixed_type:
+            result = self._describe_mixed(
+                psser_numeric=psser_numeric,
+                psser_timestamp=psser_timestamp,
+                psser_object=psser_object,
+                spark_data_types=spark_data_types,
+                percentiles=percentiles,
+            )
+        elif is_all_object_type:
+            # Handling object-type (string and boolean) columns:
+            # `count`, `unique`, `top`, `freq`. Bool columns are cast to string so
+            # posexplode can build a uniform array. Alias each cast back to its source
+            # name so we can resolve it by name downstream.
             internal = self._internal.resolved_copy
-            exprs_string = [
-                internal.spark_column_for(psser._column_label) for psser in psser_string
+            exprs_object = [
+                internal.spark_column_for(psser._column_label).cast(StringType()).alias(name)
+                for psser, name in zip(psser_object, column_names)
             ]
-            sdf = internal.spark_frame.select(*exprs_string)
+            sdf = internal.spark_frame.select(*exprs_object)
 
-            # Get `count` & `unique` for each column
             counts, uniques = map(lambda x: x[1:], sdf.summary("count", "count_distinct").take(2))
-            # Handling Empty DataFrame
             if len(counts) == 0 or counts[0] == "0":
                 data = dict()
-                for psser in psser_string:
+                for psser in psser_object:
                     data[psser.name] = [0, 0, np.nan, np.nan]
                 return DataFrame(data, index=["count", "unique", "top", "freq"])
 
-            if len(exprs_string) == 1:
-                # Fast path for single column (e.g. Series.describe): avoid unpivot overhead.
-                top, freq = (
-                    sdf.groupby(exprs_string[0]).count().sort("count", ascending=False).first()
-                )
-                tops = [str(top)]
-                freqs = [str(freq)]
-            else:
-                # Get `top` & `freq` for each column in a single pass.
-                # Unpivot all string columns into (idx, str_value) pairs using posexplode,
-                # then find the most frequent value per column via the struct min trick.
-                # The negative count ensures min(struct(neg_count, str_value)) picks the
-                # highest count; among ties, the alphabetically first value (matching pandas).
-                rows = (
-                    sdf.select(F.posexplode(F.array(*exprs_string)).alias("idx", "str_value"))
-                    .groupby("idx", "str_value")
-                    .agg(F.negative(F.count("*")).alias("neg_count"))
-                    .groupby("idx")
-                    .agg(F.min(F.struct("neg_count", "str_value")).alias("s"))
-                    .sort("idx")
-                    .collect()
-                )
-                tops = [str(r.s.str_value) for r in rows]
-                freqs = [str(-r.s.neg_count) for r in rows]
+            tops, freqs = self._describe_top_freq(sdf, column_names)
             stats = [counts, uniques, tops, freqs]
             stats_names = ["count", "unique", "top", "freq"]
 
-            result: DataFrame = DataFrame(
+            result = DataFrame(
                 data=stats,
                 index=stats_names,
                 columns=column_names,
@@ -10321,7 +10533,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                             for value in column_name_stats_kv[key]
                         ]
 
-            result: DataFrame = DataFrame(  # type: ignore[no-redef]
+            result = DataFrame(
                 data=column_name_stats_kv,
                 index=stats_names,
                 columns=column_names,
