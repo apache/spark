@@ -325,8 +325,9 @@ class PipelineModel private[ml] (
   private[spark] override def estimatedSize: Long = {
     estimateMatadataSize + stages.iterator.map {
       case model: Model[_] => model.estimatedSize
-      // ML Connect cache accounting only counts models. A non-model transformer may retain
-      // incidental references to objects such as SparkSession, so it has zero size here.
+      // Non-model transformers are skipped because:
+      // - ML Connect cache accounting counts only models.
+      // - They can retain incidental references, such as SparkSession.
       case _ => 0L
     }.sum
   }
