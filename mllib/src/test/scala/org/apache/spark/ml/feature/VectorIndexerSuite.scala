@@ -113,7 +113,7 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
 
   test("model estimated size") {
     val model = getIndexer.fit(densePoints1)
-    val maxSize = 4096
+    val maxSize = 1024 * 4
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }

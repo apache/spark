@@ -44,7 +44,7 @@ class MinHashLSHSuite extends MLTest with DefaultReadWriteTest {
 
   test("model estimated size") {
     val model = new MinHashLSH().setInputCol("keys").setOutputCol("values").fit(dataset)
-    val maxSize = 4096
+    val maxSize = 1024 * 4
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }

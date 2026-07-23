@@ -35,7 +35,7 @@ class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
   test("model estimated size") {
     val df = Seq(Seq("a", "b"), Seq("a", "c")).toDF("words")
     val model = new CountVectorizer().setInputCol("words").setOutputCol("features").fit(df)
-    val maxSize = 4096
+    val maxSize = 1024 * 4
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should be less than $maxSize")
   }
