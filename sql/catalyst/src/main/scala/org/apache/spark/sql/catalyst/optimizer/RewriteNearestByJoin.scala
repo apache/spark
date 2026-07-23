@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Replaces a logical [[NearestByJoin]] operator with a `Generate(Inline(...))` over an
@@ -72,7 +73,14 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
   private lazy val random = new scala.util.Random()
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
-    case j @ NearestByJoin(left, right, joinType, _, numResults, rankingExpression, direction) =>
+    case j @ NearestByJoin(left, right, joinType, _, numResults, rankingExpression, direction)
+      // The optimizer checks both the config flag AND the broadcast threshold to decide
+      // whether to skip the rewrite. This mixes optimizer/planner concerns but is necessary:
+      // if we only checked the config flag, a NearestByJoin node with right side exceeding
+      // the broadcast threshold would reach the planner unrewritten, and no strategy would
+      // handle it (NearestByJoinSelection returns Nil for large right sides), causing a
+      // planning failure. The alternative (two-pass approach) is deferred to future work.
+      if !NearestByJoin.canBroadcastRight(j, SQLConf.get) =>
       // 1. Tag each left row with a unique id so that rows from the same left row can later be
       //    grouped together after the cross-join with `right`.
       val qidAlias = Alias(Uuid(Some(random.nextLong())), "__qid")()

@@ -50,6 +50,7 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
       WindowGroupLimit ::
       JoinSelection ::
       AsOfJoinSelection ::
+      NearestByJoinSelection ::
       InMemoryScans ::
       SparkScripts ::
       Pipelines ::
