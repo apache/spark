@@ -919,49 +919,70 @@ class JDBCSuite extends SharedSparkSession {
     assert(JdbcDialects.get("test.invalid") === NoopDialect)
   }
 
-  test("JDBC dialect aliases") {
-    assert(JdbcDialects.get("jdbc:aws-wrapper:mysql://127.0.0.1/db") === MySQLDialect())
-    assert(JdbcDialects.get("jdbc:aws-wrapper:postgresql://127.0.0.1/db") ===
-      PostgresDialect())
-
-    val alias = "jdbc:test-wrapper:mysql:"
+  test("Register existing JDBC dialects for additional URL prefixes") {
+    val mysqlPrefix = "jdbc:aws-wrapper:mysql:"
+    val postgresPrefix = "jdbc:aws-wrapper:postgresql:"
+    val mysqlUrl = "jdbc:aws-wrapper:mysql://127.0.0.1/db"
+    val postgresUrl = "jdbc:aws-wrapper:postgresql://127.0.0.1/db"
+    assert(JdbcDialects.get(mysqlUrl) === NoopDialect)
+    assert(JdbcDialects.get(postgresUrl) === NoopDialect)
     try {
-      JdbcDialects.registerDialectAlias(alias, "jdbc:mysql:")
-      assert(JdbcDialects.get("jdbc:test-wrapper:mysql://127.0.0.1/db") === MySQLDialect())
-      assert(JdbcDialects.get("JDBC:TEST-WRAPPER:MYSQL://127.0.0.1/db") === MySQLDialect())
+      JdbcDialects.registerDialectForUrlPrefix(
+        mysqlPrefix, JdbcDialects.get("jdbc:mysql:"))
+      JdbcDialects.registerDialectForUrlPrefix(
+        postgresPrefix, JdbcDialects.get("jdbc:postgresql:"))
+      assert(JdbcDialects.get(mysqlUrl) === MySQLDialect())
+      assert(JdbcDialects.get(postgresUrl) === PostgresDialect())
+      assert(JdbcDialects.get(mysqlUrl.toUpperCase(Locale.ROOT)) === MySQLDialect())
 
-      JdbcDialects.registerDialectAlias(alias, "jdbc:postgresql:")
-      assert(JdbcDialects.get("jdbc:test-wrapper:mysql://127.0.0.1/db") ===
-        PostgresDialect())
+      JdbcDialects.registerDialectForUrlPrefix(
+        mysqlPrefix, JdbcDialects.get("jdbc:postgresql:"))
+      assert(JdbcDialects.get(mysqlUrl) === PostgresDialect())
     } finally {
-      JdbcDialects.unregisterDialectAlias(alias)
+      JdbcDialects.unregisterDialectForUrlPrefix(mysqlPrefix)
+      JdbcDialects.unregisterDialectForUrlPrefix(postgresPrefix)
     }
-    assert(JdbcDialects.get("jdbc:test-wrapper:mysql://127.0.0.1/db") === NoopDialect)
+    assert(JdbcDialects.get(mysqlUrl) === NoopDialect)
+    assert(JdbcDialects.get(postgresUrl) === NoopDialect)
   }
 
-  test("A registered JDBC dialect takes precedence over an alias") {
+  test("A registered JDBC dialect takes precedence over an additional URL prefix") {
+    val prefix = "jdbc:aws-wrapper:mysql:"
     val dialect = new JdbcDialect {
       override def canHandle(url: String): Boolean =
-        url.toLowerCase(Locale.ROOT).startsWith("jdbc:aws-wrapper:mysql:")
+        url.toLowerCase(Locale.ROOT).startsWith(prefix)
     }
+    JdbcDialects.registerDialectForUrlPrefix(prefix, JdbcDialects.get("jdbc:mysql:"))
     JdbcDialects.registerDialect(dialect)
     try {
       assert(JdbcDialects.get("jdbc:aws-wrapper:mysql://127.0.0.1/db") === dialect)
     } finally {
       JdbcDialects.unregisterDialect(dialect)
+      JdbcDialects.unregisterDialectForUrlPrefix(prefix)
     }
   }
 
-  test("JDBC dialect alias validation") {
-    Seq(
-      "mysql:" -> "jdbc:mysql:",
-      "jdbc:mysql" -> "jdbc:mysql:",
-      "jdbc:test-wrapper:" -> "mysql:",
-      "jdbc:test-wrapper:" -> "jdbc:mysql").foreach { case (alias, canonical) =>
+  test("The longest registered JDBC dialect URL prefix takes precedence") {
+    val shortPrefix = "jdbc:test:"
+    val longPrefix = "jdbc:test:mysql:"
+    try {
+      JdbcDialects.registerDialectForUrlPrefix(
+        longPrefix, JdbcDialects.get("jdbc:mysql:"))
+      JdbcDialects.registerDialectForUrlPrefix(
+        shortPrefix, JdbcDialects.get("jdbc:postgresql:"))
+      assert(JdbcDialects.get("jdbc:test:mysql://127.0.0.1/db") === MySQLDialect())
+    } finally {
+      JdbcDialects.unregisterDialectForUrlPrefix(shortPrefix)
+      JdbcDialects.unregisterDialectForUrlPrefix(longPrefix)
+    }
+  }
+
+  test("JDBC dialect URL prefix validation") {
+    Seq("mysql:", "jdbc:mysql").foreach { prefix =>
       val error = intercept[IllegalArgumentException] {
-        JdbcDialects.registerDialectAlias(alias, canonical)
+        JdbcDialects.registerDialectForUrlPrefix(prefix, JdbcDialects.get("jdbc:mysql:"))
       }
-      assert(error.getMessage.contains("must start with 'jdbc:' and end with ':'"))
+      assert(error.getMessage.contains("URL prefixes must start with 'jdbc:' and end with ':'"))
     }
   }
 

@@ -993,50 +993,50 @@ private[sql] trait NoLegacyJDBCError extends JdbcDialect {
 @DeveloperApi
 object JdbcDialects {
 
-  private[this] var aliases = List[(String, String)]()
+  private[this] var dialectsByUrlPrefix = List[(String, JdbcDialect)]()
 
   /**
-   * Register an alias from a JDBC URL prefix to the canonical prefix understood by a dialect.
-   * The alias affects dialect lookup only; Spark still passes the original URL to the JDBC driver.
-   * Registering the same alias again replaces its previous canonical prefix.
-   * Aliases are used only when no registered dialect handles the original URL.
+   * Register an existing dialect for an additional JDBC URL prefix. The registration affects
+   * dialect lookup only; Spark still passes the original URL to the JDBC driver. Registering the
+   * same prefix again replaces its previous dialect. These registrations are used only when no
+   * registered dialect handles the URL through [[JdbcDialect.canHandle]].
    *
-   * Prefixes must start with `jdbc:` and end with `:`. Matching is case-insensitive.
+   * The prefix must start with `jdbc:` and end with `:`. Matching is case-insensitive.
    *
-   * @param aliasPrefix The JDBC URL prefix used by a wrapper driver.
-   * @param canonicalPrefix The corresponding prefix understood by the underlying dialect.
+   * @param urlPrefix The additional JDBC URL prefix.
+   * @param dialect The existing dialect to use for URLs with the prefix.
    */
   @Since("4.3.0")
-  def registerDialectAlias(aliasPrefix: String, canonicalPrefix: String): Unit = {
-    val alias = normalizePrefix(aliasPrefix)
-    val canonical = normalizePrefix(canonicalPrefix)
-    aliases = (alias, canonical) :: aliases.filterNot(_._1 == alias)
+  def registerDialectForUrlPrefix(urlPrefix: String, dialect: JdbcDialect): Unit = {
+    val prefix = normalizePrefix(urlPrefix)
+    dialectsByUrlPrefix = ((prefix, dialect) :: dialectsByUrlPrefix.filterNot(_._1 == prefix))
+      .sortBy { case (registeredPrefix, _) => -registeredPrefix.length }
   }
 
   /**
-   * Unregister a JDBC dialect alias. Does nothing if the alias is not registered.
+   * Unregister the dialect associated with an additional JDBC URL prefix. Does nothing if the
+   * prefix is not registered.
    *
-   * @param aliasPrefix The JDBC URL prefix used by a wrapper driver.
+   * @param urlPrefix The additional JDBC URL prefix.
    */
   @Since("4.3.0")
-  def unregisterDialectAlias(aliasPrefix: String): Unit = {
-    val alias = normalizePrefix(aliasPrefix)
-    aliases = aliases.filterNot(_._1 == alias)
+  def unregisterDialectForUrlPrefix(urlPrefix: String): Unit = {
+    val prefix = normalizePrefix(urlPrefix)
+    dialectsByUrlPrefix = dialectsByUrlPrefix.filterNot(_._1 == prefix)
   }
 
   private def normalizePrefix(prefix: String): String = {
     val normalized = prefix.toLowerCase(Locale.ROOT)
     require(normalized.startsWith("jdbc:") && normalized.endsWith(":"),
-      s"JDBC dialect alias prefixes must start with 'jdbc:' and end with ':': $prefix")
+      s"JDBC URL prefixes must start with 'jdbc:' and end with ':': $prefix")
     normalized
   }
 
-  private def resolveAlias(url: String): String = {
+  private def getDialectForUrlPrefix(url: String): Option[JdbcDialect] = {
     val normalizedUrl = url.toLowerCase(Locale.ROOT)
-    aliases.collectFirst {
-      case (alias, canonical) if normalizedUrl.startsWith(alias) =>
-        canonical + url.substring(alias.length)
-    }.getOrElse(url)
+    dialectsByUrlPrefix.collectFirst {
+      case (prefix, dialect) if normalizedUrl.startsWith(prefix) => dialect
+    }
   }
 
   /**
@@ -1068,15 +1068,13 @@ object JdbcDialects {
     }
   }
   registerDialects()
-  registerDialectAlias("jdbc:aws-wrapper:mysql:", "jdbc:mysql:")
-  registerDialectAlias("jdbc:aws-wrapper:postgresql:", "jdbc:postgresql:")
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
    */
   def get(url: String): JdbcDialect = {
     val matchingDialects = dialects.filter(_.canHandle(url)) match {
-      case Nil => dialects.filter(_.canHandle(resolveAlias(url)))
+      case Nil => getDialectForUrlPrefix(url).toList
       case matches => matches
     }
     matchingDialects.length match {
