@@ -110,8 +110,7 @@ class NumPyCompatTestsMixin:
                 pdf = pd.DataFrame({"a": values})
                 psdf = ps.from_pandas(pdf)
 
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
+                self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
 
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
