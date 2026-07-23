@@ -33,6 +33,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions.{get => fget, printf => fprintf, _}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -326,6 +327,9 @@ class StringIndexerModel (
       map
     }
   }
+
+  private[spark] override def estimatedSize: Long =
+    estimateMatadataSize + SizeEstimator.estimate((labelsArray, labelsToIndexArray))
 
   /** @group setParam */
   @Since("1.6.0")
