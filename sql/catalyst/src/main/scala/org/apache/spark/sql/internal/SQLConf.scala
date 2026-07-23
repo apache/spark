@@ -2079,6 +2079,16 @@ object SQLConf {
       .intConf
       .createOptional
 
+  val HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE =
+    buildConf("spark.sql.hive.showCreateTableAsSerde")
+      .doc("Whether to render the SHOW CREATE TABLE (without `AS SERDE`) statement of Hive table " +
+        "in the Hive DDL format. This is only for display purpose and does not affect how Spark " +
+        "reads or writes Hive tables.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .internal()
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
@@ -8482,6 +8492,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(HIVE_CASE_SENSITIVE_INFERENCE)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
+
+  def hiveTableShowCreateTableAsSerde: Boolean =
+    getConf(HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE)
 
   def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 
