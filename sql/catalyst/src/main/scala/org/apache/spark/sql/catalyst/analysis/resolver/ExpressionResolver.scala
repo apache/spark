@@ -1213,7 +1213,7 @@ class ExpressionResolver(
    *
    * -- GetViewColumnByNameAndOrdinal helps us to disambiguate the column names from different
    * -- tables by matching the same attribute names from those tables by their ordinal in the
-   * -- Project list, which is dependant on the order of tables in the inner join operator from
+   * -- Project list, which is dependent on the order of tables in the inner join operator from
    * -- the view plan:
    * -- getviewcolumnbynameandordinal(`spark_catalog`.`default`.`all_columns`, col1, 0, 2)
    * -- getviewcolumnbynameandordinal(`spark_catalog`.`default`.`all_columns`, col2, 0, 2)
