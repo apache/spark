@@ -2742,12 +2742,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       "(5, 26.0, cast('2023-01-01' as timestamp)), " +
       "(6, 50.0, cast('2023-02-01' as timestamp))")
 
-    withSQLConf(
-      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
-      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
       val df = createJoinTestDF(Seq("arrive_time" -> "time", "id" -> "item_id"))
       val shuffles = collectShuffles(df.queryExecution.executedPlan)
       assert(shuffles.size == 1, "SPJ should be triggered")
