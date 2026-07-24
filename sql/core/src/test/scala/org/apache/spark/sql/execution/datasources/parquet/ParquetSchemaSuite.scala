@@ -218,6 +218,17 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
 }
 
 class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
+  testParquetToCatalyst(
+    "UUID logical type",
+    StructType(Seq(StructField("id", BinaryType, nullable = false))),
+    """
+      |message root {
+      |  required fixed_len_byte_array(16) id (UUID);
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
   testSchemaInference[Tuple1[Long]](
     "timestamp nanos",
     """
