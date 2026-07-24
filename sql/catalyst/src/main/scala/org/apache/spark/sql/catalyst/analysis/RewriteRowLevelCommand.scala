@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ReplaceDataProjectio
   WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -100,29 +100,108 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     }
   }
 
+  protected case class ResolvedRowIdRefs(
+      // row ID attributes used by the write projections
+      rowIdAttrs: Seq[AttributeReference],
+      // aliases that materialize nested row IDs as top-level attributes
+      extractionAliases: Seq[Alias],
+      // scan attributes needed to read or extract the row IDs
+      scanAttrs: Seq[AttributeReference]) {
+
+    lazy val extractionAttrs: Seq[AttributeReference] = extractionAliases.map { alias =>
+      rowIdAttrs.find(_.exprId == alias.exprId).getOrElse {
+        throw SparkException.internalError(s"Cannot find extracted row ID attribute: $alias")
+      }
+    }
+
+    // rebind nested row IDs after Expand or MergeRows generates fresh output attributes
+    // top-level row IDs retain their original attributes for update handling
+    def rebindExtractions(reboundAttrs: Seq[Attribute]): Seq[Attribute] = {
+      if (extractionAttrs.size != reboundAttrs.size) {
+        throw SparkException.internalError(
+          s"Expected ${extractionAttrs.size} extracted row ID attributes, " +
+            s"but found ${reboundAttrs.size}")
+      }
+      val reboundByExprId = extractionAttrs.zip(reboundAttrs).map { case (attr, reboundAttr) =>
+        attr.exprId -> reboundAttr
+      }.toMap
+      rowIdAttrs.map(attr => reboundByExprId.getOrElse(attr.exprId, attr))
+    }
+  }
+
+  protected case class RowDeltaPlan(plan: LogicalPlan, rowIdAttrs: Seq[Attribute])
+
+  // generate fresh output attributes and rebind nested row IDs to the trailing extracted fields
+  protected def buildRowDeltaPlan(
+      baseAttrs: Seq[Attribute],
+      outputs: Seq[Seq[Expression]],
+      rowIdRefs: ResolvedRowIdRefs)(buildPlan: Seq[Attribute] => LogicalPlan): RowDeltaPlan = {
+    val attrs = baseAttrs ++ rowIdRefs.extractionAttrs
+    outputs.find(_.size != attrs.size).foreach { output =>
+      throw SparkException.internalError(
+        s"Expected ${attrs.size} row delta values, but found ${output.size}")
+    }
+    val output = generateExpandOutput(attrs, outputs)
+    // nested row ID attributes are the output suffix
+    val reboundRowIdAttrs = rowIdRefs.rebindExtractions(
+      output.takeRight(rowIdRefs.extractionAttrs.size))
+    RowDeltaPlan(buildPlan(output), reboundRowIdAttrs)
+  }
+
+  private def resolveRefs(
+      relation: DataSourceV2Relation,
+      refs: Seq[NamedReference]): ResolvedRowIdRefs = {
+    val rowIdAttrs = mutable.ArrayBuffer.empty[AttributeReference]
+    val extractionAliases = mutable.ArrayBuffer.empty[Alias]
+    val scanAttrs = mutable.ArrayBuffer.empty[AttributeReference]
+    refs.foreach { ref =>
+      V2ExpressionUtils.resolveRowIdRef(ref, relation) match {
+        case attr: AttributeReference =>
+          rowIdAttrs += attr
+          scanAttrs += attr
+        case alias: Alias =>
+          extractionAliases += alias
+          scanAttrs ++= alias.references.collect { case ref: AttributeReference => ref }
+          alias.toAttribute match {
+            case attr: AttributeReference => rowIdAttrs += attr
+            case other =>
+              throw SparkException.internalError(s"Row ID reference did not resolve: $other")
+          }
+        case other =>
+          throw SparkException.internalError("Unexpected resolved row-level reference: " + other)
+      }
+    }
+    ResolvedRowIdRefs(
+      rowIdAttrs.toSeq, extractionAliases.toSeq, dedupAttrs(scanAttrs.toSeq))
+  }
+
   protected def resolveRequiredMetadataAttrs(
       relation: DataSourceV2Relation,
       operation: RowLevelOperation): Seq[AttributeReference] = {
-
     V2ExpressionUtils.resolveRefs[AttributeReference](
-      operation.requiredMetadataAttributes.toImmutableArraySeq,
-      relation)
+      operation.requiredMetadataAttributes.toImmutableArraySeq, relation)
   }
 
-  protected def resolveRowIdAttrs(
+  protected def resolveRowIdRefs(
       relation: DataSourceV2Relation,
-      operation: SupportsDelta): Seq[AttributeReference] = {
-
-    val rowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
-      operation.rowId.toImmutableArraySeq,
-      relation)
-
-    val nullableRowIdAttrs = rowIdAttrs.filter(_.nullable)
+      operation: SupportsDelta): ResolvedRowIdRefs = {
+    val resolved = resolveRefs(relation, operation.rowId.toImmutableArraySeq)
+    val nullableRowIdAttrs = resolved.rowIdAttrs.filter(_.nullable)
     if (nullableRowIdAttrs.nonEmpty) {
       throw QueryCompilationErrors.nullableRowIdError(nullableRowIdAttrs)
     }
+    resolved
+  }
 
-    rowIdAttrs
+  // materialize nested row IDs as top-level attributes
+  protected def withExtractedRowIds(
+      plan: LogicalPlan,
+      extractionAliases: Seq[Alias]): LogicalPlan = {
+    if (extractionAliases.isEmpty) {
+      plan
+    } else {
+      Project(plan.output ++ extractionAliases, plan)
+    }
   }
 
   protected def resolveAttrRef(name: String, plan: LogicalPlan): AttributeReference = {
@@ -279,7 +358,11 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       outputs: Seq[Seq[Expression]],
       attrs: Seq[Attribute]): ProjectingInternalRow = {
-    val colOrdinals = attrs.map(attr => findColOrdinal(plan, attr.name))
+    val colOrdinals = attrs.map { attr =>
+      val byExprId = findColOrdinalByExprId(plan, attr.exprId)
+      // generated outputs have fresh exprIds, so fall back to the column name
+      if (byExprId != -1) byExprId else findColOrdinal(plan, attr.name)
+    }
     createProjectingInternalRow(outputs, colOrdinals, attrs)
   }
 
@@ -290,8 +373,15 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       outputs: Seq[Seq[Expression]],
       rowIdAttrs: Seq[Attribute]): ProjectingInternalRow = {
     val colOrdinals = rowIdAttrs.map { attr =>
-      val originalValueIndex = findColOrdinal(plan, ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
-      if (originalValueIndex != -1) originalValueIndex else findColOrdinal(plan, attr.name)
+      // prefer exprId to avoid binding nested row IDs to same-named data columns
+      // updated top-level row IDs fall back to their saved original values
+      val byExprId = findColOrdinalByExprId(plan, attr.exprId)
+      if (byExprId != -1) {
+        byExprId
+      } else {
+        val originalValueIndex = findColOrdinal(plan, ORIGINAL_ROW_ID_VALUE_PREFIX + attr.name)
+        if (originalValueIndex != -1) originalValueIndex else findColOrdinal(plan, attr.name)
+      }
     }
     createProjectingInternalRow(outputs, colOrdinals, rowIdAttrs)
   }
@@ -309,6 +399,10 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 
   private def findColOrdinal(plan: LogicalPlan, name: String): Int = {
     plan.output.indexWhere(attr => conf.resolver(attr.name, name))
+  }
+
+  private def findColOrdinalByExprId(plan: LogicalPlan, exprId: ExprId): Int = {
+    plan.output.indexWhere(_.exprId == exprId)
   }
 
   protected def buildOriginalRowIdValues(

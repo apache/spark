@@ -376,12 +376,14 @@ abstract class InMemoryBaseTable(
     dataMap.update(key, Seq(new BufferedRows(key, schema)))
   }
 
-  def withDeletes(data: Array[BufferedRows]): InMemoryBaseTable = {
+  def withDeletes(
+      data: Array[BufferedRows],
+      rowId: InternalRow => Int = _.getInt(0)): InMemoryBaseTable = {
     data.foreach { p =>
       dataMap ++= dataMap.map { case (key, currentSplits) =>
         val newSplits = currentSplits.map { currentRows =>
           val newRows = new BufferedRows(currentRows.key, currentRows.schema)
-          newRows.rows ++= currentRows.rows.filter(r => !p.deletes.contains(r.getInt(0)))
+          newRows.rows ++= currentRows.rows.filter(r => !p.deletes.contains(rowId(r)))
           newRows
         }
         key -> newSplits
