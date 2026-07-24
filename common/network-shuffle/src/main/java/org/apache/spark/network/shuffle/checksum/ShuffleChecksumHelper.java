@@ -79,11 +79,6 @@ public class ShuffleChecksumHelper {
     return getChecksumsByAlgorithm(1, algorithm)[0];
   }
 
-  public static String getChecksumFileName(String blockName, String algorithm) {
-    // append the shuffle checksum algorithm as the file extension
-    return String.format("%s.%s", blockName, algorithm);
-  }
-
   private static long readChecksumByReduceId(File checksumFile, int reduceId) throws IOException {
     try (DataInputStream in = new DataInputStream(new FileInputStream(checksumFile))) {
       in.skipNBytes(reduceId * 8L);
