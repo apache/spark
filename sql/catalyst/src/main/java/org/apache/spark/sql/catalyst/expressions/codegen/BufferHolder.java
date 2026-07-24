@@ -34,8 +34,12 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
  * this class per writing program, so that the memory segment/data buffer can be reused.  Note that
  * for each incoming record, we should call `reset` of BufferHolder instance before write the record
  * and reuse the data buffer.
+ *
+ * Declared {@code public} (previously package-private) because generated code referencing it is
+ * compiled as a separate compilation unit by the JDK codegen backend, which enforces access
+ * control that Janino did not.
  */
-final class BufferHolder {
+public final class BufferHolder {
 
   private static final int ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
 

@@ -626,7 +626,11 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         |}
         |""".stripMargin
 
-    CodeGenerator.compile(new CodeAndComment(code, Map.empty))
+    // Pin the Janino backend: this guards a Janino-specific compiler bug and must keep
+    // exercising Janino whatever spark.sql.codegen.compiler is set to.
+    withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "janino") {
+      CodeGenerator.compile(new CodeAndComment(code, Map.empty))
+    }
   }
 }
 

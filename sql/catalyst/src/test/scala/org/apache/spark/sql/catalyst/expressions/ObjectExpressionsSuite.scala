@@ -245,18 +245,22 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val initializeWithNonexistingMethod = InitializeJavaBean(
       Literal.fromObject(new java.util.LinkedList[Int]),
       Map("nonexistent" -> Literal(1)))
-    checkExceptionInExpression[Exception](initializeWithNonexistingMethod,
-      """A method named "nonexistent" is not declared in any enclosing class """ +
-        "nor any supertype")
+    // Assert on the missing method name rather than a compiler-specific phrasing: under
+    // codegen the message depends on the configured compiler backend (Janino reports
+    // `A method named "nonexistent" is not declared ...`, the JDK compiler reports
+    // `cannot find symbol ... method nonexistent`), while the non-codegen path throws a
+    // Spark error that embeds the method name. The method name is the common token.
+    checkExceptionInExpression[Exception](initializeWithNonexistingMethod, "nonexistent")
 
     val initializeWithWrongParamType = InitializeJavaBean(
       Literal.fromObject(new TestBean),
       Map("setX" -> Literal("1")))
-    intercept[Exception] {
+    // This exercises the interpreted path, so the message is backend-independent.
+    assert(intercept[Exception] {
       evaluateWithoutCodegen(initializeWithWrongParamType, InternalRow.fromSeq(Seq()))
     }.getMessage.contains(
       """A method named "setX" is not declared in any enclosing class """ +
-        "nor any supertype")
+        "nor any supertype"))
   }
 
   test("InitializeJavaBean doesn't call setters if input in null") {

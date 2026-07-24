@@ -89,7 +89,10 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
         FailedCodegenProjection.createObject(input)
       }
     }.getMessage
-    assert(errMsg.contains("Failed to compile: org.codehaus.commons.compiler.CompileException:"))
+    // Assert the backend-independent invariant only: both backends surface source
+    // errors through QueryExecutionErrors.compilerError, whose message starts with
+    // this prefix. The wrapped exception type/text is backend-specific.
+    assert(errMsg.contains("Failed to compile:"))
   }
 
   test("SPARK-25358 Correctly handles NoOp in MutableProjection") {

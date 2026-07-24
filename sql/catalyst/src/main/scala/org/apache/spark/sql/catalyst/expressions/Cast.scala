@@ -1741,7 +1741,7 @@ case class Cast(
             """
           } else {
             code"""
-              scala.Option<Integer> $intOpt = $dateTimeUtilsCls.stringToDate($c);
+              scala.Option $intOpt = $dateTimeUtilsCls.stringToDate($c);
               if ($intOpt.isDefined()) {
                 $evPrim = ((Integer) $intOpt.get()).intValue();
               } else {
@@ -1786,7 +1786,7 @@ case class Cast(
             """
           } else {
             code"""
-              scala.Option<Long> $longOpt = $dateTimeUtilsCls.stringToTime($c);
+              scala.Option $longOpt = $dateTimeUtilsCls.stringToTime($c);
               if ($longOpt.isDefined()) {
                 $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision(
                   ((Long) $longOpt.get()).longValue(), ${to.precision});
@@ -1976,7 +1976,7 @@ case class Cast(
            """
         } else {
           code"""
-            scala.Option<Long> $longOpt = $dateTimeUtilsCls.stringToTimestamp($c, $zid);
+            scala.Option $longOpt = $dateTimeUtilsCls.stringToTimestamp($c, $zid);
             if ($longOpt.isDefined()) {
               $evPrim = ((Long) $longOpt.get()).longValue();
             } else {
@@ -2052,7 +2052,7 @@ case class Cast(
            """
         } else {
           code"""
-            scala.Option<Long> $longOpt = $dateTimeUtilsCls.stringToTimestampWithoutTimeZone($c);
+            scala.Option $longOpt = $dateTimeUtilsCls.stringToTimestampWithoutTimeZone($c);
             if ($longOpt.isDefined()) {
               $evPrim = ((Long) $longOpt.get()).longValue();
             } else {

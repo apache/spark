@@ -26,9 +26,20 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * An Iterator to walk through the InternalRows from a CachedBatch
+ * Walks through the InternalRows from a CachedBatch.
+ *
+ * Intentionally NOT a `scala.collection.Iterator`: the subclass of this type is
+ * produced by runtime codegen, and the JDK compiler (the alternative codegen
+ * backend) cannot compile a subclass of a Scala collection trait - its rich
+ * generic method hierarchy (e.g. `minBy`) produces raw-vs-generic override
+ * clashes that javac rejects (Janino does not). Declaring only the three methods
+ * the generated class implements keeps the javac-visible ancestry rooted at
+ * `Object`. Callers adapt instances to `Iterator[InternalRow]` (see
+ * InMemoryRelation).
  */
-abstract class ColumnarIterator extends Iterator[InternalRow] {
+abstract class ColumnarIterator {
+  def hasNext: Boolean
+  def next(): InternalRow
   def initialize(input: Iterator[DefaultCachedBatch], columnTypes: Array[DataType],
     columnIndexes: Array[Int]): Unit
 }
