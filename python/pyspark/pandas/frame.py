@@ -9340,6 +9340,191 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return DataFrame(internal)
 
+    def compare(
+        self, other: "DataFrame", *, keep_shape: bool = False, keep_equal: bool = False
+    ) -> "DataFrame":
+        """
+        Compare to another DataFrame and show the differences.
+
+        .. versionadded:: 4.2.0
+
+        .. note:: This API is slightly different from pandas when indexes from both
+            DataFrames are not identical and config 'compute.eager_check' is False.
+            pandas raises an exception; however, pandas-on-Spark just proceeds and
+            performs by ignoring mismatches.
+
+        Parameters
+        ----------
+        other : DataFrame
+            Object to compare with.
+        keep_shape : bool, default False
+            If true, all rows and columns are kept.
+            Otherwise, only the ones with different values are kept.
+        keep_equal : bool, default False
+            If true, the result keeps values that are equal.
+            Otherwise, equal values are shown as NaNs.
+
+        Returns
+        -------
+        DataFrame
+            DataFrame that shows the differences stacked side by side.
+            The resulting index will be a MultiIndex with 'self' and 'other'
+            stacked alternately at the inner level.
+
+        Notes
+        -----
+        Matching NaNs will not appear as a difference.
+
+        Examples
+        --------
+        >>> from pyspark.pandas.config import set_option, reset_option
+        >>> set_option("compute.ops_on_diff_frames", True)
+        >>> df1 = ps.DataFrame(
+        ...     {"col1": [1.0, 2.0, 3.0, 4.0, 5.0],
+        ...      "col2": [1.0, 2.0, 3.0, np.nan, 5.0],
+        ...      "col3": [1.0, 2.0, 3.0, 4.0, 5.0]},
+        ...     columns=["col1", "col2", "col3"],
+        ... )
+        >>> df2 = ps.DataFrame(
+        ...     {"col1": [9.0, 2.0, 3.0, 4.0, 5.0],
+        ...      "col2": [1.0, 2.0, 1.0, np.nan, 5.0],
+        ...      "col3": [1.0, 2.0, 3.0, 4.0, 5.0]},
+        ...     columns=["col1", "col2", "col3"],
+        ... )
+
+        Align the differences on columns
+
+        >>> df1.compare(df2).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+          col1       col2
+          self other self other
+        0  1.0   9.0  NaN   NaN
+        2  NaN   NaN  3.0   1.0
+
+        Keep all original rows
+
+        >>> df1.compare(df2, keep_shape=True).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+          col1       col2       col3
+          self other self other self other
+        0  1.0   9.0  NaN   NaN  NaN   NaN
+        1  NaN   NaN  NaN   NaN  NaN   NaN
+        2  NaN   NaN  3.0   1.0  NaN   NaN
+        3  NaN   NaN  NaN   NaN  NaN   NaN
+        4  NaN   NaN  NaN   NaN  NaN   NaN
+
+        Keep all original rows and all original values
+
+        >>> df1.compare(df2, keep_shape=True, keep_equal=True).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+          col1       col2       col3
+          self other self other self other
+        0  1.0   9.0  1.0   1.0  1.0   1.0
+        1  2.0   2.0  2.0   2.0  2.0   2.0
+        2  3.0   3.0  3.0   1.0  3.0   3.0
+        3  4.0   4.0  NaN   NaN  4.0   4.0
+        4  5.0   5.0  5.0   5.0  5.0   5.0
+
+        >>> reset_option("compute.ops_on_diff_frames")
+        """
+        if not isinstance(other, DataFrame):
+            raise TypeError("`compare` only allows `DataFrame` for parameter `other`")
+        if not self.columns.equals(other.columns):
+            raise ValueError("can only compare identically-labeled DataFrame objects")
+
+        if same_anchor(self, other):
+            combined = self
+            this = self
+            that = other
+        else:
+            if get_option("compute.eager_check") and not self.index.equals(other.index):
+                raise ValueError("Can only compare identically-labeled DataFrame objects")
+            combined = combine_frames(self, other)
+            this = combined["this"]
+            that = combined["that"]
+
+        column_labels: List[Tuple] = []
+        data_spark_columns = []
+        data_col_names: List[str] = []
+        diff_conditions: List[Tuple[Tuple, PySparkColumn]] = []
+        index_scols = combined._internal.index_spark_columns
+        sdf = combined._internal.spark_frame
+
+        for column_label in self._internal.column_labels:
+            this_scol = this._internal.spark_column_for(column_label)
+            that_scol = that._internal.spark_column_for(column_label)
+
+            this_col_name = name_like_string(column_label) + "_self"
+            that_col_name = name_like_string(column_label) + "_other"
+            is_equal = this_scol.eqNullSafe(that_scol)
+
+            if not keep_shape:
+                diff_conditions.append((column_label, ~is_equal))
+
+            if keep_equal:
+                data_spark_columns.append(this_scol.alias(this_col_name))
+                data_spark_columns.append(that_scol.alias(that_col_name))
+            else:
+                # Null-mask equal values so differences are visible.
+                this_masked = F.when(is_equal, None).otherwise(this_scol)
+                that_masked = F.when(is_equal, None).otherwise(that_scol)
+                data_spark_columns.append(this_masked.alias(this_col_name))
+                data_spark_columns.append(that_masked.alias(that_col_name))
+
+            data_col_names.extend([this_col_name, that_col_name])
+            column_labels.append(column_label + ("self",))
+            column_labels.append(column_label + ("other",))
+
+        if diff_conditions:
+            # Determine which columns have any difference.  This aggregation
+            # on the full (unfiltered) frame is equivalent to aggregating the
+            # filtered result because every row that has a difference in column
+            # X is retained by the row filter (at least column X differs).
+            # Computing it before the filter lets Spark execute the subsequent
+            # filter+select as a single pass without caching.
+            has_diff = sdf.select(
+                [
+                    F.max(cond.cast("int")).alias(name_like_string(label))
+                    for label, cond in diff_conditions
+                ]
+            ).head()
+            cols_to_keep = set()
+            if has_diff is not None:
+                for (label, _), val in zip(diff_conditions, has_diff):
+                    if val and val > 0:
+                        cols_to_keep.add(label)
+
+            if len(cols_to_keep) < len(diff_conditions):
+                keep_indices = []
+                new_column_labels = []
+                new_data_col_names = []
+                for i, column_label in enumerate(self._internal.column_labels):
+                    if column_label in cols_to_keep:
+                        keep_indices.extend([2 * i, 2 * i + 1])
+                        new_column_labels.extend([column_labels[2 * i], column_labels[2 * i + 1]])
+                        new_data_col_names.extend(
+                            [data_col_names[2 * i], data_col_names[2 * i + 1]]
+                        )
+                data_spark_columns = [data_spark_columns[j] for j in keep_indices]
+                column_labels = new_column_labels
+                data_col_names = new_data_col_names
+
+            # Filter rows where at least one column differs.
+            row_mask = reduce(lambda a, b: a | b, [cond for _, cond in diff_conditions])
+            sdf = sdf.filter(row_mask)
+
+        sdf = sdf.select(*index_scols, *data_spark_columns, NATURAL_ORDER_COLUMN_NAME)
+        internal = InternalFrame(
+            spark_frame=sdf,
+            index_spark_columns=[
+                scol_for(sdf, col) for col in combined._internal.index_spark_column_names
+            ],
+            index_names=combined._internal.index_names,
+            index_fields=combined._internal.index_fields,
+            column_labels=column_labels,
+            data_spark_columns=[scol_for(sdf, name) for name in data_col_names],
+            data_fields=None,
+            column_label_names=self._internal.column_label_names + [None],
+        )
+        return DataFrame(internal)
+
     def update(
         self,
         other: "DataFrame",
