@@ -586,6 +586,17 @@ abstract class TimeFunctionsSuiteBase extends SharedSparkSession {
     )
   }
 
+  test("SPARK-58296: to_time with a foldable null format returns TIME") {
+    val results = Seq(
+      spark.range(1).selectExpr("to_time('00:00:00', NULL)"),
+      spark.range(1).select(to_time(lit("00:00:00"), lit(null))))
+
+    results.foreach { result =>
+      assert(result.schema.fields.head.dataType == TimeType())
+      checkAnswer(result, Row(null))
+    }
+  }
+
   test("SPARK-53929: try_make_timestamp function") {
     // Input data for the function.
     val schema = StructType(Seq(
