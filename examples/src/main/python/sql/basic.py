@@ -68,14 +68,14 @@ def basic_df_example(spark: SparkSession) -> None:
     # +-------+
 
     # Select everybody, but increment the age by 1
-    df.select(df['name'], df['age'] + 1).show()
-    # +-------+---------+
-    # |   name|(age + 1)|
-    # +-------+---------+
-    # |Michael|     null|
-    # |   Andy|       31|
-    # | Justin|       20|
-    # +-------+---------+
+    df.select(df['name'], (df['age'] + 1).alias("age_plus_one")).show()
+    # +-------+------------+
+    # |   name|age_plus_one|
+    # +-------+------------+
+    # |Michael|        null|
+    # |   Andy|          31|
+    # | Justin|          20|
+    # +-------+------------+
 
     # Select people older than 21
     df.filter(df['age'] > 21).show()
