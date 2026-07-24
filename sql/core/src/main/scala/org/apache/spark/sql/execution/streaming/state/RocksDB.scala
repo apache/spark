@@ -1583,6 +1583,18 @@ class RocksDB(
       originalEndKey
     }
 
+    // Count the keys that are about to be deleted (gated on trackTotalNumberOfRows).
+    if (conf.trackTotalNumberOfRows) {
+      val (deletedKeys, deletedInternalKeys) = countKeysInRange(
+        beginKeyWithPrefix,
+        endKeyWithPrefix,
+        cfName,
+        includesPrefix
+      )
+      numKeysOnWritingVersion -= deletedKeys
+      numInternalKeysOnWritingVersion -= deletedInternalKeys
+    }
+
     db.deleteRange(writeOptions, beginKeyWithPrefix, endKeyWithPrefix)
     changelogWriter.foreach { writer =>
       val endKeyForChangelog = if (conf.rowChecksumEnabled) {
@@ -1593,7 +1605,63 @@ class RocksDB(
       }
       writer.deleteRange(beginKeyWithPrefix, endKeyForChangelog)
     }
-    // TODO: Add metrics update for deleteRange operations
+  }
+
+  /** Count the keys currently present in `[beginKeyWithPrefix,
+    * endKeyWithPrefix)`, split into non-internal vs internal column-family
+    * buckets.
+    *
+    * @param beginKeyWithPrefix
+    *   Already-prefixed start key (inclusive)
+    * @param endKeyWithPrefix
+    *   Already-prefixed end key (exclusive); used as the iterator upper bound
+    *   so we never touch keys beyond it.
+    * @param cfName
+    *   Caller-supplied column family. Used when `includesPrefix` is false;
+    * @param includesPrefix
+    *   When true, the keys already carry their cfId prefix.
+    * @return
+    *   (numKeys, numInternalKeys) - the counts to subtract from
+    *   `numKeysOnWritingVersion` and `numInternalKeysOnWritingVersion`
+    *   respectively.
+    */
+  private def countKeysInRange(
+      beginKeyWithPrefix: Array[Byte],
+      endKeyWithPrefix: Array[Byte],
+      cfName: String,
+      includesPrefix: Boolean
+  ): (Long, Long) = {
+    val upperBoundSlice = new Slice(endKeyWithPrefix)
+    val rangeReadOptions = new ReadOptions()
+    rangeReadOptions.setIterateUpperBound(upperBoundSlice)
+    val iter = db.newIterator(rangeReadOptions)
+    try {
+      // Resolve the CF once for the whole range. When the keys carry their cfId prefix, that
+      // on-key prefix is authoritative; otherwise trust the caller-supplied cfName.
+      val cfIsInternal = if (useColumnFamilies) {
+        val resolvedCfName = if (includesPrefix) {
+          decodeStateRowWithPrefix(beginKeyWithPrefix)._2
+        } else {
+          cfName
+        }
+        getColumnFamilyInfo(resolvedCfName).isInternal
+      } else {
+        false
+      }
+
+      iter.seek(beginKeyWithPrefix)
+      var count = 0L
+      while (iter.isValid) {
+        count += 1
+        iter.next()
+      }
+
+      if (cfIsInternal) (0L, count) else (count, 0L)
+    } finally {
+      iter.close()
+      rangeReadOptions.close()
+      upperBoundSlice.close()
+    }
   }
 
   /**
