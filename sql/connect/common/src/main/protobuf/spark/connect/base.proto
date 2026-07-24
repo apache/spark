@@ -429,6 +429,9 @@ message ExecutePlanResponse {
     // register its result with the server.
     PipelineQueryFunctionExecutionSignal pipeline_query_function_execution_signal = 23;
 
+    // (SPARK-51705) Server-assigned handle for a CreateBroadcastCommand.
+    CreateBroadcastResult create_broadcast_result = 24;
+
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
   }
@@ -1174,6 +1177,14 @@ message FetchErrorDetailsResponse {
 message CheckpointCommandResult {
   // (Required) The logical plan checkpointed.
   CachedRemoteRelation relation = 1;
+}
+
+// (SPARK-51705) Server-assigned broadcast handle (mirrors CheckpointCommandResult).
+message CreateBroadcastResult {
+  // (Required) The driver-side broadcast id. The client embeds this id in the pickled
+  // Broadcast closure (Broadcast._from_id), which the executor/worker resolves against its
+  // _broadcastRegistry keyed by the same id.
+  int64 broadcast_id = 1;
 }
 
 message CloneSessionRequest {

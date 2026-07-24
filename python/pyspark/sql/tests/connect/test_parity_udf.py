@@ -44,7 +44,11 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_same_accumulator_in_udfs(self):
         super().test_same_accumulator_in_udfs()
 
-    @unittest.skip("Spark Connect does not support broadcast but the test depends on it.")
+    @unittest.skip(
+        "The test uses SparkContext.broadcast, which Spark Connect does not expose. "
+        "SparkSession.broadcast over Connect (SPARK-51705) is covered by "
+        "pyspark.sql.tests.connect.test_connect_broadcast."
+    )
     def test_broadcast_in_udf(self):
         super().test_broadcast_in_udf()
 

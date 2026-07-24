@@ -47,6 +47,7 @@ See also :class:`SparkSession`.
     SparkSession.addArtifact
     SparkSession.addArtifacts
     SparkSession.addTag
+    SparkSession.broadcast
     SparkSession.catalog
     SparkSession.clearTags
     SparkSession.conf
