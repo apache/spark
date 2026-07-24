@@ -544,6 +544,64 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     )
   }
 
+  test("resolution terminates and resolves all flows when flow count exceeds parallelism") {
+    val session = spark
+    import session.implicits._
+
+    // DataflowGraphTransformer caps in-flight resolutions at `parallelism` (10). With more
+    // independent flows than that, the slots fill and the scheduler blocks on a finished task
+    // (the `take()` branch) once `parallelism` tasks are outstanding - the path the busy-wait
+    // rewrite changes. Small graphs in the other suites never reach this regime. This asserts the
+    // outcome only (all flows resolve and the call returns), so it is deterministic and has no
+    // timing dependence; a regression that deadlocked would hang here until the suite times out.
+    val numFlows = 25
+    class P extends TestGraphRegistrationContext(spark) {
+      (0 until numFlows).foreach { i =>
+        registerPersistedView(s"v$i", query = dfFlowFunc(Seq(i).toDF("x")))
+      }
+    }
+    val p = new P().resolveToDataflowGraph()
+
+    assert(p.resolved, "all flows should resolve when their count exceeds parallelism")
+    (0 until numFlows).foreach { i =>
+      assert(
+        p.resolvedFlow.contains(fullyQualifiedIdentifier(s"v$i")),
+        s"flow v$i was not resolved")
+    }
+  }
+
+  test("resolution re-queues retryable flows under load when consumers exceed parallelism") {
+    val session = spark
+    import session.implicits._
+
+    // A wide fan-out: many consumers reading from one source view, with the consumer count above
+    // `parallelism` (10), so slots fill and the loop blocks on take(). The consumers are
+    // registered (and therefore scheduled) before `src`, so the first batch resolves consumers
+    // whose `src` input is not yet available: each throws TransformNodeRetryableException and is
+    // parked as a dependent of `src`; once `src` resolves they are re-queued onto the deque and
+    // retried, re-driving the loop until every consumer resolves. This deterministically exercises
+    // the retryable re-queue path together with the blocking branch. Asserts only that everything
+    // resolves and the call returns - no timing assertions.
+    val numConsumers = 20
+    class P extends TestGraphRegistrationContext(spark) {
+      (0 until numConsumers).foreach { i =>
+        registerPersistedView(s"c$i", query = sqlFlowFunc(spark, "SELECT x FROM src"))
+      }
+      registerPersistedView("src", query = dfFlowFunc(Seq(1, 2, 3).toDF("x")))
+    }
+    val p = new P().resolveToDataflowGraph()
+
+    assert(p.resolved, "source and all consumers should resolve under load")
+    assert(
+      p.resolvedFlow.contains(fullyQualifiedIdentifier("src")),
+      "source flow was not resolved")
+    (0 until numConsumers).foreach { i =>
+      assert(
+        p.resolvedFlow.contains(fullyQualifiedIdentifier(s"c$i")),
+        s"consumer flow c$i was not resolved")
+    }
+  }
+
   /** Verifies the [[DataflowGraph]] has the specified [[Flow]] with the specified schema. */
   private def verifyFlowSchema(
       pipeline: DataflowGraph,
