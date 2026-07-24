@@ -291,7 +291,7 @@ class CombineAdjacentAggregationSuite extends QueryTest
       // `spark.sql.execution.combineAdjacentAggregation` has its own default and does not fall
       // back to `spark.sql.execution.replaceHashWithSortAgg`, so each can be toggled on its own.
       // Combining is driven solely by `combineAdjacentAggregation` here: the partial and final
-      // aggregate are adjacent (the input is already partitioned by `k`), so enabling it merges
+      // aggregates are adjacent (the input is already partitioned by `k`), so enabling it merges
       // them into one, regardless of `replaceHashWithSortAgg`.
       withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
         assert(numAggregates(query) == 1)

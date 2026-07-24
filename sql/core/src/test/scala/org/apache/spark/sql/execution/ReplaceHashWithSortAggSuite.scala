@@ -140,7 +140,7 @@ abstract class ReplaceHashWithSortAggSuiteBase
             SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true",
             SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
           val df = sql(query)
-          // Both the partial and final hash aggregate are replaced with sort aggregates.
+          // Both the partial and final hash aggregates are replaced with sort aggregates.
           checkNumAggs(df, hashAggCount = 0, sortAggCount = 2)
           checkAnswer(df, expected)
         }
