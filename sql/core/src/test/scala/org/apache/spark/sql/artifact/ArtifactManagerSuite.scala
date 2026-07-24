@@ -682,6 +682,25 @@ class ArtifactManagerSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-53478: SparkFiles.get resolves files added via SparkContext.addFile " +
+    "in local mode") {
+    withTempDir { dir =>
+      val file = new File(dir, "test_file.txt")
+      Files.writeString(file.toPath, "Hello from SparkContext.addFile",
+        StandardCharsets.UTF_8)
+      spark.sparkContext.addFile(file.getAbsolutePath)
+
+      val s = spark
+      import s.implicits._
+      val result = Seq(1).toDF("value").map { _ =>
+        val path = org.apache.spark.SparkFiles.get("test_file.txt")
+        Files.readString(new File(path).toPath, StandardCharsets.UTF_8)
+      }.collect()
+
+      assert(result.head === "Hello from SparkContext.addFile")
+    }
+  }
+
   private def getCodegenCount: Long = CodegenMetrics.METRIC_COMPILATION_TIME.getCount
 
   private def runCodegenTest(msg: String)(addOneArtifact: => Unit): Unit = {
