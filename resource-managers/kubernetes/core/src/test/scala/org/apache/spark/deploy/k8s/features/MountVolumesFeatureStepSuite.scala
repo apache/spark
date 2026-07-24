@@ -18,8 +18,12 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.jdk.CollectionConverters._
 
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim
+
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE
 
 class MountVolumesFeatureStepSuite extends SparkFunSuite {
   test("Mounts hostPath volumes") {
@@ -538,6 +542,48 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(executorPod.pod.getSpec.getVolumes.size() === 1)
     val executorPVC = executorPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
     assert(executorPVC.getClaimName.endsWith("-exec-1-pvc-0"))
+  }
+
+  test("SPARK-55330: OnDemand PVC uses ReadWriteOncePod access mode by default") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      "",
+      false,
+      KubernetesPVCVolumeConf(MountVolumesFeatureStep.PVC_ON_DEMAND,
+        storageClass = Some("fast"),
+        size = Some("1Gi"))
+    )
+    val executorConf = KubernetesTestConf.createExecutorConf(volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(executorConf)
+    step.configurePod(SparkPod.initialPod())
+    val pvcs = step.getAdditionalKubernetesResources().map(_.asInstanceOf[PersistentVolumeClaim])
+    assert(pvcs.size === 1)
+    assert(pvcs.head.getSpec.getAccessModes.asScala === Seq("ReadWriteOncePod"))
+  }
+
+  test("SPARK-55330: OnDemand PVC uses ReadWriteOnce when legacy access mode is enabled") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      "",
+      false,
+      KubernetesPVCVolumeConf(MountVolumesFeatureStep.PVC_ON_DEMAND,
+        storageClass = Some("fast"),
+        size = Some("1Gi"))
+    )
+    val sparkConf = new SparkConf(false)
+      .set(KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE, true)
+    val executorConf = KubernetesTestConf.createExecutorConf(
+      sparkConf = sparkConf,
+      volumes = Seq(volumeConf))
+    val step = new MountVolumesFeatureStep(executorConf)
+    step.configurePod(SparkPod.initialPod())
+    val pvcs = step.getAdditionalKubernetesResources().map(_.asInstanceOf[PersistentVolumeClaim])
+    assert(pvcs.size === 1)
+    assert(pvcs.head.getSpec.getAccessModes.asScala === Seq("ReadWriteOnce"))
   }
 
   test("SPARK-49833: Mount multiple volumes to executor with annotations") {

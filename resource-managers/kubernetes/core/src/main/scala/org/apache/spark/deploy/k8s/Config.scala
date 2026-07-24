@@ -65,10 +65,10 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_USE_LEGACY_PVC_ACCESS_MODE =
     ConfigBuilder("spark.kubernetes.legacy.useReadWriteOnceAccessMode")
-      .internal()
-      .doc("If true, use ReadWriteOnce instead of ReadWriteOncePod as persistence volume " +
-        "access mode.")
-      .version("3.4.3")
+      .doc("If true, use ReadWriteOnce instead of ReadWriteOncePod as the access mode for " +
+        "dynamically created PersistentVolumeClaims. Set this to true when using a storage " +
+        "class or Kubernetes cluster that does not support the ReadWriteOncePod access mode.")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 
