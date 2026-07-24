@@ -919,6 +919,9 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     Seq(firstPartitioning) ++ convertedOtherPartitionings
   }
 
+  // Compares two leaf partitionings for union pass-through equivalence. Callers pass leaf
+  // partitionings only; a `PartitioningCollection` is flattened to its members by
+  // `outputPartitioning` before reaching here.
   private def comparePartitioning(left: Partitioning, right: Partitioning): Boolean = {
     (left, right) match {
       case (SinglePartition, SinglePartition) => true
@@ -937,47 +940,76 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   }
 
   override def outputPartitioning: Partitioning = {
-    if (conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)) {
-      val partitionings = prepareOutputPartitioning()
-      if (partitionings.forall(comparePartitioning(_, partitionings.head))) {
-        val partitioner = partitionings.head
+    if (!conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)) {
+      return super.outputPartitioning
+    }
 
-        // Take the output attributes of this union and map the partitioner to them.
-        val attributeMap = children.head.output.zip(output).toMap
-        partitioner match {
-          case headKp: KeyedPartitioning =>
-            // A `UnionExec` concatenates its children's partitions in order (one child's
-            // partitions after another's), so the merged `KeyedPartitioning` carries the
-            // concatenation of the children's partition keys, one key per physical output
-            // partition. Children usually hold different key sets, so the merged keys often
-            // contain duplicates and `isGrouped` is false; a downstream `GroupPartitionsExec`
-            // regroups partitions that share a key. The children's expressions have already
-            // been remapped to the first child's attributes by `prepareOutputPartitioning`;
-            // here they are remapped to the union's output attributes.
-            val mergedKeys = partitionings.flatMap {
-              case k: KeyedPartitioning => k.partitionKeys
-              case _ => return super.outputPartitioning
-            }
-            val mergedExpressions = headKp.expressions.map(_.transform {
-              case a: Attribute if attributeMap.contains(a) => attributeMap(a)
-            })
-            val isGrouped = mergedKeys.distinct.size == mergedKeys.size
-            val isNarrowed = partitionings.exists {
-              case k: KeyedPartitioning => k.isNarrowed
-              case _ => false
-            }
-            KeyedPartitioning(mergedExpressions, mergedKeys, isGrouped, isNarrowed)
-          case e: Expression =>
-            e.transform {
-              case a: Attribute if attributeMap.contains(a) => attributeMap(a)
-            }.asInstanceOf[Partitioning]
-          case _ => partitioner
-        }
+    // Children's partitionings with attributes remapped to the first child's attributes.
+    val partitionings = prepareOutputPartitioning()
+    // Map from the first child's attributes to this union's own output attributes.
+    val attributeMap = children.head.output.zip(output).toMap
+    def toUnionOutput(p: Partitioning): Partitioning = p match {
+      case e: Expression =>
+        e.transform {
+          case a: Attribute if attributeMap.contains(a) => attributeMap(a)
+        }.asInstanceOf[Partitioning]
+      case _ => p
+    }
+
+    // Case A: every child is a single `KeyedPartitioning`. A `UnionExec` concatenates its
+    // children's partitions in order (one child's partitions after another's), so the merged
+    // `KeyedPartitioning` carries the concatenation of the children's partition keys, one key
+    // per physical output partition. Children usually hold different key sets, so the merged
+    // keys often contain duplicates and `isGrouped` is false; a downstream `GroupPartitionsExec`
+    // regroups partitions that share a key. This concatenation (numPartitions = sum) is a
+    // distinct physical strategy from the co-located pass-through below (numPartitions = N), so
+    // it is kept as a separate case and never folded into a `PartitioningCollection`.
+    if (partitionings.forall(_.isInstanceOf[KeyedPartitioning])) {
+      val kps = partitionings.map(_.asInstanceOf[KeyedPartitioning])
+      val headKp = kps.head
+      // The `KeyedPartitioning`s must agree on the partition expressions to merge.
+      val compatible = kps.forall(comparePartitioning(_, headKp))
+      if (compatible) {
+        val mergedKeys = kps.flatMap(_.partitionKeys)
+        val mergedExpressions = headKp.expressions.map(_.transform {
+          case a: Attribute if attributeMap.contains(a) => attributeMap(a)
+        })
+        val isGrouped = mergedKeys.distinct.size == mergedKeys.size
+        val isNarrowed = kps.exists(_.isNarrowed)
+        return KeyedPartitioning(mergedExpressions, mergedKeys, isGrouped, isNarrowed)
       } else {
-        super.outputPartitioning
+        return super.outputPartitioning
       }
-    } else {
-      super.outputPartitioning
+    }
+
+    // Case B: treat each child's partitioning as a set of candidate partitionings (a
+    // `PartitioningCollection` flattens to its members; a single partitioning is a one-element
+    // set) and pass through the intersection across all children. Only index-co-locatable
+    // partitionings participate; `KeyedPartitioning` is excluded here because its concatenation
+    // semantics (Case A) are incompatible with the co-located union RDD.
+    def flattenPartitioning(p: Partitioning): Seq[Partitioning] = p match {
+      case pc: PartitioningCollection => pc.partitionings.flatMap(flattenPartitioning)
+      case other => Seq(other)
+    }
+    val candidateSets = partitionings.map { p =>
+      flattenPartitioning(p).filter {
+        case _: HashPartitioningLike => true
+        case SinglePartition => true
+        case _ => false
+      }
+    }
+    // Intersect across all children, anchored on the first child's set. Every surviving member
+    // is shared by all children, so their `numPartitions` agree; a `PartitioningCollection`
+    // built from a subset of one child's members therefore keeps its uniform-numPartitions
+    // invariant, and the co-located `doExecute` arm's invariant holds.
+    val head = candidateSets.head
+    val intersection = head.filter { c =>
+      candidateSets.tail.forall(_.exists(comparePartitioning(c, _)))
+    }
+    intersection match {
+      case Seq() => super.outputPartitioning
+      case Seq(p) => toUnionOutput(p)
+      case ps => PartitioningCollection.fromPartitionings(ps.map(toUnionOutput))
     }
   }
 

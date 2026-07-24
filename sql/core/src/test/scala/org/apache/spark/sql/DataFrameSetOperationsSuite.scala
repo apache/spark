@@ -22,7 +22,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
-import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, KeyedPartitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -1654,6 +1654,187 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
           }
 
           checkAnswer(union, correctResult)
+        }
+      }
+    }
+  }
+
+  test("SPARK-58317: union partitioning - PartitioningCollection child intersects to single") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      withTempView("t1", "t2", "t3", "t4") {
+        Seq((1, 2, 4), (1, 3, 5), (2, 2, 3)).toDF("c1", "c2", "c3").createOrReplaceTempView("t1")
+        Seq((1, 9), (2, 9)).toDF("c1", "x").createOrReplaceTempView("t2")
+        Seq((1, 2, 4), (2, 4, 5), (3, 6, 7)).toDF("c1", "c2", "c3").createOrReplaceTempView("t3")
+        Seq((1, 9), (3, 9)).toDF("c1", "y").createOrReplaceTempView("t4")
+
+        // The first branch is an inner shuffled-hash join and selects both join keys (t1.c1 and
+        // t2.c1), so its output partitioning is a PartitioningCollection(Hash(c1), Hash(c1#..))
+        // that a downstream ProjectExec cannot narrow to a single member. The second branch is a
+        // left join, whose output partitioning is a single HashPartitioning(c1). The union should
+        // intersect the two to a single HashPartitioning(c1) and let the group-by skip a shuffle.
+        def unionDF: DataFrame = sql(
+          """SELECT c1, c2, c3, count(*) FROM (
+            |  SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1, t1.c2, t1.c3, t2.c1 AS k
+            |  FROM t1 JOIN t2 ON t1.c1 = t2.c1
+            |  UNION ALL
+            |  SELECT /*+ SHUFFLE_HASH(t4) */ t3.c1, t3.c2, t3.c3, t3.c1 AS k
+            |  FROM t3 LEFT JOIN t4 ON t3.c1 = t4.c1
+            |) GROUP BY c1, c2, c3
+            |""".stripMargin)
+
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          unionDF.collect()
+        }
+
+        val shuffleNums = Seq(true, false).map { enabled =>
+          withSQLConf(
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+              SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+            val union = unionDF
+            val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+            assert(unionExec.size == 1)
+
+            val partitioning = unionExec.head.outputPartitioning
+            if (enabled) {
+              assert(partitioning.isInstanceOf[HashPartitioning],
+                s"expected a HashPartitioning pass-through but got $partitioning")
+            } else {
+              assert(partitioning.isInstanceOf[UnknownPartitioning])
+            }
+
+            checkAnswer(union, correctResult)
+            union.queryExecution.executedPlan.collect {
+              case s: ShuffleExchangeExec => s
+            }.size
+          }
+        }
+        // Enabling the pass-through removes the shuffle before the aggregate.
+        assert(shuffleNums.head + 1 == shuffleNums.last)
+      }
+    }
+  }
+
+  test("SPARK-58317: union partitioning - all PartitioningCollection children pass through") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      withTempView("t1", "t2", "t3", "t4") {
+        Seq((1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t1")
+        Seq((1, 9), (2, 9)).toDF("c1", "x").createOrReplaceTempView("t2")
+        Seq((1, 2), (3, 4)).toDF("c1", "c2").createOrReplaceTempView("t3")
+        Seq((1, 9), (3, 9)).toDF("c1", "y").createOrReplaceTempView("t4")
+
+        // Both branches are inner shuffled-hash joins on a single key and select both sides' join
+        // key (t1.c1 and t2.c1 AS k), so a downstream ProjectExec cannot narrow either child's
+        // PartitioningCollection(Hash(c1), Hash(k)) to a single member. The union should intersect
+        // to a PartitioningCollection carrying both members.
+        def unionDF: DataFrame = sql(
+          """SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1, t2.c1 AS k
+            |FROM t1 JOIN t2 ON t1.c1 = t2.c1
+            |UNION ALL
+            |SELECT /*+ SHUFFLE_HASH(t4) */ t3.c1, t4.c1 AS k
+            |FROM t3 JOIN t4 ON t3.c1 = t4.c1
+            |""".stripMargin)
+
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          unionDF.collect()
+        }
+
+        Seq(true, false).foreach { enabled =>
+          withSQLConf(
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+              SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+            val union = unionDF
+            val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+            assert(unionExec.size == 1)
+
+            val partitioning = unionExec.head.outputPartitioning
+            if (enabled) {
+              assert(partitioning.isInstanceOf[PartitioningCollection],
+                s"expected a PartitioningCollection pass-through but got $partitioning")
+              val members = partitioning.asInstanceOf[PartitioningCollection].partitionings
+              assert(members.forall(_.isInstanceOf[HashPartitioning]))
+              assert(members.size == 2)
+            } else {
+              assert(partitioning.isInstanceOf[UnknownPartitioning])
+            }
+
+            checkAnswer(union, correctResult)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58317: union partitioning - empty intersection falls back") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      withTempView("t1", "t2") {
+        Seq((1, 2, 4), (2, 3, 5)).toDF("c1", "c2", "c3").createOrReplaceTempView("t1")
+        Seq((1, 9), (2, 9)).toDF("c1", "x").createOrReplaceTempView("t2")
+
+        // First branch reports PartitioningCollection(Hash(c1), Hash(c1#..)); the second branch
+        // is repartitioned on a disjoint column, so the intersection is empty.
+        def unionDF: DataFrame = sql(
+          """SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1, t1.c2, t1.c3, t2.c1 AS k
+            |FROM t1 JOIN t2 ON t1.c1 = t2.c1
+            |UNION ALL
+            |SELECT c1, c2, c3, c2 AS k FROM t1 DISTRIBUTE BY c2
+            |""".stripMargin)
+
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          unionDF.collect()
+        }
+
+        Seq(true, false).foreach { enabled =>
+          withSQLConf(
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+              SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+            val union = unionDF
+            val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+            assert(unionExec.size == 1)
+            assert(unionExec.head.outputPartitioning.isInstanceOf[UnknownPartitioning])
+            checkAnswer(union, correctResult)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58317: union partitioning - PartitioningCollection pass-through under AQE") {
+    // AQE is enabled by default in production; the collection pass-through must produce correct
+    // results there too, where the union output flows through the coalesce-compatibility path.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      withTempView("t1", "t2", "t3", "t4") {
+        Seq((1, 2), (2, 3), (1, 4)).toDF("c1", "c2").createOrReplaceTempView("t1")
+        Seq((1, 9), (2, 9)).toDF("c1", "x").createOrReplaceTempView("t2")
+        Seq((1, 2), (3, 4)).toDF("c1", "c2").createOrReplaceTempView("t3")
+        Seq((1, 9), (3, 9)).toDF("c1", "y").createOrReplaceTempView("t4")
+
+        def unionDF: DataFrame = sql(
+          """SELECT c1, count(*) FROM (
+            |  SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1, t2.c1 AS k
+            |  FROM t1 JOIN t2 ON t1.c1 = t2.c1
+            |  UNION ALL
+            |  SELECT /*+ SHUFFLE_HASH(t4) */ t3.c1, t4.c1 AS k
+            |  FROM t3 JOIN t4 ON t3.c1 = t4.c1
+            |) GROUP BY c1
+            |""".stripMargin)
+
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          unionDF.collect()
+        }
+
+        Seq(true, false).foreach { enabled =>
+          withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+            checkAnswer(unionDF, correctResult)
+          }
         }
       }
     }
