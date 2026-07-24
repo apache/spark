@@ -593,15 +593,29 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
                   |) s ON f.normalized_url = s.url
                 """.stripMargin
 
+              val creationSideQuery =
+                s"""
+                  |SELECT /*+ MERGE(f, s) */ f.id, s.url, s.normalized_url
+                  |FROM runtime_bloom_fact f
+                  |JOIN (
+                  |  SELECT url, $pythonUdfName(url) AS normalized_url
+                  |  FROM runtime_bloom_dimension
+                  |  WHERE country = 'NL'
+                  |) s ON f.url = s.url
+                """.stripMargin
+
               var expected: Array[Row] = null
               var applicationSideExpected: Array[Row] = null
+              var creationSideExpected: Array[Row] = null
               withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
                 expected = sql(query).collect()
                 applicationSideExpected = sql(applicationSideQuery).collect()
+                creationSideExpected = sql(creationSideQuery).collect()
               }
 
               assert(expected.length == 10000)
               assert(applicationSideExpected.length == 10000)
+              assert(creationSideExpected.length == 10000)
 
               withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
                 val result = sql(query)
@@ -614,6 +628,10 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
                 val applicationSideResult = sql(applicationSideQuery)
                 assert(getNumBloomFilters(applicationSideResult.queryExecution.optimizedPlan) > 0)
                 checkAnswer(applicationSideResult, applicationSideExpected.toSeq)
+
+                val creationSideResult = sql(creationSideQuery)
+                assert(getNumBloomFilters(creationSideResult.queryExecution.optimizedPlan) > 0)
+                checkAnswer(creationSideResult, creationSideExpected.toSeq)
               }
             }
           }
