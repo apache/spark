@@ -1296,6 +1296,100 @@ class CollectionExpressionsSuite
         Timestamp.valueOf("2018-01-01 00:00:00.000")))
   }
 
+  test("SPARK-57852: Sequence of times") {
+    val timeType = TimeType()
+    def tm(h: Int, m: Int, s: Int, micros: Int = 0): Long =
+      DateTimeTestUtils.localTime(h.toByte, m.toByte, s.toByte, micros)
+
+    // Null in any argument yields null.
+    checkEvaluation(new Sequence(
+      Literal(null, timeType), Literal(tm(10, 0, 0), timeType)), null)
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType), Literal(null, timeType)), null)
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(10, 0, 0), timeType),
+      Literal(null, DayTimeIntervalType())), null)
+
+    // Ascending with an explicit 30-minute step (the ticket's acceptance criterion).
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(10, 0, 0), timeType),
+      Literal(Duration.ofMinutes(30))),
+      Seq(tm(8, 0, 0), tm(8, 30, 0), tm(9, 0, 0), tm(9, 30, 0), tm(10, 0, 0)))
+
+    // Descending with a negative step.
+    checkEvaluation(new Sequence(
+      Literal(tm(10, 0, 0), timeType),
+      Literal(tm(8, 0, 0), timeType),
+      Literal(Duration.ofMinutes(-30))),
+      Seq(tm(10, 0, 0), tm(9, 30, 0), tm(9, 0, 0), tm(8, 30, 0), tm(8, 0, 0)))
+
+    // Stop not exactly reachable by the step: stops at the last value within bounds.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(9, 10, 0), timeType),
+      Literal(Duration.ofMinutes(30))),
+      Seq(tm(8, 0, 0), tm(8, 30, 0), tm(9, 0, 0)))
+
+    // Single element when start equals stop.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(8, 0, 0), timeType),
+      Literal(Duration.ofMinutes(30))),
+      Seq(tm(8, 0, 0)))
+
+    // No step defaults to 1 second.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(8, 0, 3), timeType)),
+      Seq(tm(8, 0, 0), tm(8, 0, 1), tm(8, 0, 2), tm(8, 0, 3)))
+
+    // Sub-second steps preserve the endpoint precision exactly.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0, 0), timeType),
+      Literal(tm(8, 0, 0, 300000), timeType),
+      Literal(Duration.ofMillis(100))),
+      Seq(tm(8, 0, 0, 0), tm(8, 0, 0, 100000), tm(8, 0, 0, 200000), tm(8, 0, 0, 300000)))
+
+    // A non-day-time interval step (year-month) is rejected at analysis time.
+    assert(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(10, 0, 0), timeType),
+      Literal(Period.ofMonths(1))).checkInputDataTypes().isFailure)
+
+    // Only a day-time interval step is accepted: a calendar interval step (here 30 minutes as
+    // microseconds) is rejected at analysis time, just like the year-month interval above.
+    assert(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(10, 0, 0), timeType),
+      Literal(new org.apache.spark.unsafe.types.CalendarInterval(0, 0, 1800000000L)))
+      .checkInputDataTypes().isFailure)
+
+    // No step, descending range: the default step flips to -1 second.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 3), timeType),
+      Literal(tm(8, 0, 0), timeType)),
+      Seq(tm(8, 0, 3), tm(8, 0, 2), tm(8, 0, 1), tm(8, 0, 0)))
+
+    // A step finer than the endpoint precision truncates every element to that precision, so
+    // TIME(3) with a 1-microsecond step yields repeated values rather than distinct sub-ms points.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0, 0), TimeType(3)),
+      Literal(tm(8, 0, 0, 3), TimeType(3)),
+      Literal(Duration.ofNanos(1000))), // 1 microsecond step, finer than TIME(3)
+      Seq(tm(8, 0, 0, 0), tm(8, 0, 0, 0), tm(8, 0, 0, 0), tm(8, 0, 0, 0)))
+
+    // TIME sequences do not wrap around midnight: a positive step from a later start to an
+    // earlier stop is an illegal boundary, not a wrap. (Relevant once SPARK-57853 lands.)
+    checkExceptionInExpression[Exception](
+      new Sequence(
+        Literal(tm(23, 0, 0), timeType),
+        Literal(tm(1, 0, 0), timeType),
+        Literal(Duration.ofHours(1))),
+      EmptyRow, "boundaries")
+  }
+
   test("Sequence on DST boundaries") {
     val timeZone = TimeZone.getTimeZone("Europe/Prague")
 

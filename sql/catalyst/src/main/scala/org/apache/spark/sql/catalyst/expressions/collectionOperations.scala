@@ -3361,12 +3361,14 @@ case class Flatten(child: Expression) extends UnaryExpression
       incrementing by step. The type of the returned elements is the same as the type of argument
       expressions.
 
-      Supported types are: byte, short, integer, long, date, timestamp.
+      Supported types are: byte, short, integer, long, date, timestamp, time.
 
       The start and stop expressions must resolve to the same type.
       If start and stop expressions resolve to the 'date' or 'timestamp' type
       then the step expression must resolve to the 'interval' or 'year-month interval' or
-      'day-time interval' type, otherwise to the same type as the start and stop expressions.
+      'day-time interval' type. If they resolve to the 'time' type then the step expression
+      must resolve to the 'day-time interval' type. Otherwise the step expression must
+      resolve to the same type as the start and stop expressions.
   """,
   arguments = """
     Arguments:
@@ -3376,7 +3378,8 @@ case class Flatten(child: Expression) extends UnaryExpression
         An expression that evaluates to an integral, date, or timestamp.
       * step - an optional expression. The step of the range.
           By default step is 1 if start is less than or equal to stop, otherwise -1.
-          For the temporal sequences it's 1 day and -1 day respectively.
+          For the date and timestamp sequences it's 1 day and -1 day respectively,
+          and for the time sequences it's 1 second and -1 second respectively.
           If start is greater than stop then the step must be negative, and vice versa.
         An expression that evaluates to an integral or interval.
   """,
@@ -3390,6 +3393,8 @@ case class Flatten(child: Expression) extends UnaryExpression
        [2018-01-01,2018-02-01,2018-03-01]
       > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval '0-1' year to month);
        [2018-01-01,2018-02-01,2018-03-01]
+      > SELECT _FUNC_(TIME '08:00:00', TIME '10:00:00', INTERVAL '30' MINUTE);
+       [08:00:00,08:30:00,09:00:00,09:30:00,10:00:00]
   """,
   group = "array_funcs",
   since = "2.4.0"
@@ -3448,6 +3453,9 @@ case class Sequence(
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
               YearMonthIntervalType.acceptsType(stepType) ||
               DayTimeIntervalType.acceptsType(stepType)
+          case _: TimeType =>
+            // TIME lives within a single day, so only a day-time interval step is meaningful.
+            stepOpt.isEmpty || DayTimeIntervalType.acceptsType(stepType)
           case _: IntegralType =>
             stepOpt.isEmpty || DataTypeUtils.sameType(stepType, startType)
           case _ => false
@@ -3460,7 +3468,8 @@ case class Sequence(
         errorSubClass = "SEQUENCE_WRONG_INPUT_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "startType" -> toSQLType(TypeCollection(TimestampType, TimestampNTZType, DateType)),
+          "startType" -> toSQLType(
+            TypeCollection(TimestampType, TimestampNTZType, DateType, AnyTimeType)),
           "stepType" -> toSQLType(
             TypeCollection(CalendarIntervalType, YearMonthIntervalType, DayTimeIntervalType)),
           "otherStartType" -> toSQLType(IntegralType)
@@ -3507,6 +3516,9 @@ case class Sequence(
       } else {
         new DurationSequenceImpl[Int](IntegerType, start.dataType, MICROS_PER_DAY, _.toInt, zoneId)
       }
+
+    case TimeType(precision) =>
+      new TimeSequenceImpl(precision)
   }
 
   override def eval(input: InternalRow): Any = {
@@ -3669,6 +3681,55 @@ object Sequence {
          |while ($i > 0) {
          |  $i--;
          |  $arr[$i] = ($elemType) ($start + $step * $i);
+         |}
+         """.stripMargin
+    }
+  }
+
+  private class TimeSequenceImpl(precision: Int) extends InternalSequence {
+
+    // A sequence over TIME stays within the day domain [0, NANOS_PER_DAY) by construction: every
+    // produced value lies between the in-day start and stop endpoints. So a plain integral walk in
+    // nanoseconds is sufficient - no calendar, DST, or time zone arithmetic is involved.
+    override val defaultStep: DefaultStep = new DefaultStep(
+      PhysicalDataType.ordering(LongType).lteq _,
+      DayTimeIntervalType(),
+      // Default increment when no step is given: 1 second, expressed as the interval's micros.
+      MICROS_PER_SECOND)
+
+    override def eval(input1: Any, input2: Any, input3: Any): Array[Long] = {
+      val start = input1.asInstanceOf[Long]
+      val stop = input2.asInstanceOf[Long]
+      // TIME is stored as nanos-of-day, while a day-time interval is stored as microseconds.
+      val stepNanos = Math.multiplyExact(input3.asInstanceOf[Long], NANOS_PER_MICROS)
+
+      var i: Int = getSequenceLength(start, stop, stepNanos, stepNanos)
+      val arr = new Array[Long](i)
+      while (i > 0) {
+        i -= 1
+        arr(i) = truncateTimeToPrecision(start + stepNanos * i, precision)
+      }
+      arr
+    }
+
+    private val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+
+    override def genCode(
+        ctx: CodegenContext,
+        start: String,
+        stop: String,
+        step: String,
+        arr: String,
+        elemType: String): String = {
+      val i = ctx.freshName("i")
+      val stepNanos = ctx.freshName("stepNanos")
+      s"""
+         |final long $stepNanos = Math.multiplyExact($step, ${NANOS_PER_MICROS}L);
+         |${genSequenceLengthCode(ctx, start, stop, stepNanos, stepNanos, i)}
+         |$arr = new $elemType[$i];
+         |while ($i > 0) {
+         |  $i--;
+         |  $arr[$i] = $dtu.truncateTimeToPrecision($start + $stepNanos * $i, $precision);
          |}
          """.stripMargin
     }
