@@ -27,7 +27,8 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException, SparkThrowable,
+  SparkUnsupportedOperationException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -1002,10 +1003,12 @@ object JdbcDialects {
    * registered dialect handles the URL through [[JdbcDialect#canHandle]].
    *
    * The prefix must start with `jdbc:` and end with `:`. Matching is case-insensitive.
-   * For example, a MySQL-compatible wrapper can reuse [[MYSQL]]:
+   * For example, a MySQL-compatible wrapper can reuse the built-in MySQL dialect:
    *
    * {{{
-   * JdbcDialects.registerDialectForUrlPrefix("jdbc:aws-wrapper:mysql:", JdbcDialects.MYSQL)
+   * JdbcDialects.registerDialectForUrlPrefix(
+   *   "jdbc:aws-wrapper:mysql:",
+   *   JdbcDialects.getBuiltInDialect("mysql"))
    * }}}
    *
    * @param urlPrefix The additional JDBC URL prefix.
@@ -1074,17 +1077,36 @@ object JdbcDialects {
   }
   registerDialects()
 
-  /** The built-in MySQL dialect. */
-  @Since("4.3.0")
-  val MYSQL: JdbcDialect = dialects.collectFirst {
-    case dialect: MySQLDialect => dialect
-  }.get
+  private val builtInDialects: Map[String, JdbcDialect] = dialects.collect {
+    case dialect: MySQLDialect => "mysql" -> dialect
+    case dialect: PostgresDialect => "postgresql" -> dialect
+    case dialect: DB2Dialect => "db2" -> dialect
+    case dialect: MsSqlServerDialect => "sqlserver" -> dialect
+    case dialect: DerbyDialect => "derby" -> dialect
+    case dialect: OracleDialect => "oracle" -> dialect
+    case dialect: TeradataDialect => "teradata" -> dialect
+    case dialect: H2Dialect => "h2" -> dialect
+    case dialect: SnowflakeDialect => "snowflake" -> dialect
+    case dialect: DatabricksDialect => "databricks" -> dialect
+  }.toMap
 
-  /** The built-in PostgreSQL dialect. */
+  /**
+   * Return a built-in JDBC dialect by name. The lookup is case-insensitive. Supported names are
+   * `mysql`, `postgresql`, `db2`, `sqlserver`, `derby`, `oracle`, `teradata`, `h2`, `snowflake`,
+   * and `databricks`.
+   *
+   * @param name The name of the built-in JDBC dialect.
+   */
   @Since("4.3.0")
-  val POSTGRESQL: JdbcDialect = dialects.collectFirst {
-    case dialect: PostgresDialect => dialect
-  }.get
+  def getBuiltInDialect(name: String): JdbcDialect = {
+    Option(name).flatMap(name => builtInDialects.get(name.toLowerCase(Locale.ROOT))).getOrElse {
+      throw new SparkIllegalArgumentException(
+        errorClass = "UNSUPPORTED_BUILT_IN_JDBC_DIALECT",
+        messageParameters = Map(
+          "name" -> String.valueOf(name),
+          "supportedNames" -> builtInDialects.keys.toSeq.sorted.mkString(", ")))
+    }
+  }
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.

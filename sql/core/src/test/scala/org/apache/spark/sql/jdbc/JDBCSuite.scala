@@ -911,12 +911,41 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("Default jdbc dialect registration") {
-    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") eq JdbcDialects.MYSQL)
-    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") eq JdbcDialects.POSTGRESQL)
+    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") === MySQLDialect())
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") === PostgresDialect())
     assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") === DB2Dialect())
     assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") === MsSqlServerDialect())
     assert(JdbcDialects.get("jdbc:derby:db") === DerbyDialect())
     assert(JdbcDialects.get("test.invalid") === NoopDialect)
+  }
+
+  test("Get built-in JDBC dialects by name") {
+    Seq(
+      "mysql" -> "jdbc:mysql:",
+      "postgresql" -> "jdbc:postgresql:",
+      "db2" -> "jdbc:db2:",
+      "sqlserver" -> "jdbc:sqlserver:",
+      "derby" -> "jdbc:derby:",
+      "oracle" -> "jdbc:oracle:",
+      "teradata" -> "jdbc:teradata:",
+      "h2" -> "jdbc:h2:",
+      "snowflake" -> "jdbc:snowflake:",
+      "databricks" -> "jdbc:databricks:"
+    ).foreach { case (name, url) =>
+      val dialect = JdbcDialects.getBuiltInDialect(name)
+      assert(dialect eq JdbcDialects.get(url))
+      assert(dialect eq JdbcDialects.getBuiltInDialect(name.toUpperCase(Locale.ROOT)))
+    }
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        JdbcDialects.getBuiltInDialect("unknown")
+      },
+      condition = "UNSUPPORTED_BUILT_IN_JDBC_DIALECT",
+      parameters = Map(
+        "name" -> "unknown",
+        "supportedNames" ->
+          "databricks, db2, derby, h2, mysql, oracle, postgresql, snowflake, sqlserver, teradata"))
   }
 
   test("Register existing JDBC dialects for additional URL prefixes") {
@@ -927,13 +956,16 @@ class JDBCSuite extends SharedSparkSession {
     assert(JdbcDialects.get(mysqlUrl) === NoopDialect)
     assert(JdbcDialects.get(postgresUrl) === NoopDialect)
     try {
-      JdbcDialects.registerDialectForUrlPrefix(mysqlPrefix, JdbcDialects.MYSQL)
-      JdbcDialects.registerDialectForUrlPrefix(postgresPrefix, JdbcDialects.POSTGRESQL)
+      JdbcDialects.registerDialectForUrlPrefix(
+        mysqlPrefix, JdbcDialects.getBuiltInDialect("mysql"))
+      JdbcDialects.registerDialectForUrlPrefix(
+        postgresPrefix, JdbcDialects.getBuiltInDialect("postgresql"))
       assert(JdbcDialects.get(mysqlUrl) === MySQLDialect())
       assert(JdbcDialects.get(postgresUrl) === PostgresDialect())
       assert(JdbcDialects.get(mysqlUrl.toUpperCase(Locale.ROOT)) === MySQLDialect())
 
-      JdbcDialects.registerDialectForUrlPrefix(mysqlPrefix, JdbcDialects.POSTGRESQL)
+      JdbcDialects.registerDialectForUrlPrefix(
+        mysqlPrefix, JdbcDialects.getBuiltInDialect("postgresql"))
       assert(JdbcDialects.get(mysqlUrl) === PostgresDialect())
     } finally {
       JdbcDialects.unregisterDialectForUrlPrefix(mysqlPrefix)
@@ -949,7 +981,8 @@ class JDBCSuite extends SharedSparkSession {
       override def canHandle(url: String): Boolean =
         url.toLowerCase(Locale.ROOT).startsWith(prefix)
     }
-    JdbcDialects.registerDialectForUrlPrefix(prefix, JdbcDialects.MYSQL)
+    JdbcDialects.registerDialectForUrlPrefix(
+      prefix, JdbcDialects.getBuiltInDialect("mysql"))
     JdbcDialects.registerDialect(dialect)
     try {
       assert(JdbcDialects.get("jdbc:aws-wrapper:mysql://127.0.0.1/db") === dialect)
@@ -963,8 +996,10 @@ class JDBCSuite extends SharedSparkSession {
     val shortPrefix = "jdbc:test:"
     val longPrefix = "jdbc:test:mysql:"
     try {
-      JdbcDialects.registerDialectForUrlPrefix(longPrefix, JdbcDialects.MYSQL)
-      JdbcDialects.registerDialectForUrlPrefix(shortPrefix, JdbcDialects.POSTGRESQL)
+      JdbcDialects.registerDialectForUrlPrefix(
+        longPrefix, JdbcDialects.getBuiltInDialect("mysql"))
+      JdbcDialects.registerDialectForUrlPrefix(
+        shortPrefix, JdbcDialects.getBuiltInDialect("postgresql"))
       assert(JdbcDialects.get("jdbc:test:mysql://127.0.0.1/db") === MySQLDialect())
     } finally {
       JdbcDialects.unregisterDialectForUrlPrefix(shortPrefix)
@@ -975,7 +1010,8 @@ class JDBCSuite extends SharedSparkSession {
   test("JDBC dialect URL prefix validation") {
     Seq("mysql:", "jdbc:mysql").foreach { prefix =>
       val error = intercept[IllegalArgumentException] {
-        JdbcDialects.registerDialectForUrlPrefix(prefix, JdbcDialects.MYSQL)
+        JdbcDialects.registerDialectForUrlPrefix(
+          prefix, JdbcDialects.getBuiltInDialect("mysql"))
       }
       assert(error.getMessage.contains("URL prefixes must start with 'jdbc:' and end with ':'"))
     }
