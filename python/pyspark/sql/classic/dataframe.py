@@ -976,7 +976,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         **kwargs: Any,
     ) -> ParentDataFrame:
         _cols = self._preapare_cols_for_sort(F.col, cols, kwargs)
-        jdf = self._jdf.sort(self._jseq(_cols, _to_java_column))
+        jdf = self._jdf.sort(self._jseq(_cols, converter=_to_java_column))
         return DataFrame(jdf, self.sparkSession)
 
     orderBy = sort

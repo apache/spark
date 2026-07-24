@@ -64,6 +64,9 @@ from pyspark.testing.utils import (
 
 
 class DataFrameTestsMixin:
+    def test_noop(self):
+        pass
+
     def test_range(self):
         self.assertEqual(self.spark.range(1, 1).count(), 0)
         self.assertEqual(self.spark.range(1, 0, -1).count(), 1)
