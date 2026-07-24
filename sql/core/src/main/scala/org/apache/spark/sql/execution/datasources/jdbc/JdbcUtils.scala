@@ -530,7 +530,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case _: TimeType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         val localTime = row.getAs[java.time.LocalTime](pos)
-        stmt.setObject(pos + 1, localTime)
+        stmt.setObject(pos + 1, localTime, java.sql.Types.TIME)
 
     case t: DecimalType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
