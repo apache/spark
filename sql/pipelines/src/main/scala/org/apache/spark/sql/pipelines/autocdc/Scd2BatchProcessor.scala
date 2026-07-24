@@ -1362,7 +1362,7 @@ object Scd2BatchProcessor {
    * idempotency, should a microbatch fail between a MERGE executed against the auxiliary
    * table and the MERGE executed against the target table.
    */
-  private[autocdc] val deletedByBatchIdColName: String =
+  private[pipelines] val deletedByBatchIdColName: String =
     s"${AutoCdcReservedNames.prefix}deleted_by_batch_id"
 
   /**
