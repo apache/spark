@@ -41,6 +41,7 @@ from pyspark.sql.types import (
     NumericType,
     StringType,
     StructType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     UserDefinedType,
@@ -267,6 +268,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         from pyspark.pandas.data_type_ops.complex_ops import ArrayOps, MapOps, StructOps
         from pyspark.pandas.data_type_ops.date_ops import DateOps
         from pyspark.pandas.data_type_ops.datetime_ops import DatetimeOps, DatetimeNTZOps
+        from pyspark.pandas.data_type_ops.time_ops import TimeOps
         from pyspark.pandas.data_type_ops.null_ops import NullOps
         from pyspark.pandas.data_type_ops.num_ops import (
             DecimalOps,
@@ -317,6 +319,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return object.__new__(DatetimeNTZOps)
         elif isinstance(spark_type, DateType):
             return object.__new__(DateOps)
+        elif isinstance(spark_type, TimeType):
+            return object.__new__(TimeOps)
         elif isinstance(spark_type, DayTimeIntervalType):
             return object.__new__(TimedeltaOps)
         elif isinstance(spark_type, BinaryType):
