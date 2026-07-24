@@ -2221,6 +2221,18 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.storage.blockManagerMaster.virtualThread.enabled</code></td>
+  <td>false</td>
+  <td>
+    If true and running on Java 21+, the <code>BlockManagerMasterEndpoint</code> uses virtual threads for
+    its ask thread pool. This can reduce latency of fan-out operations such as <code>removeRdd</code>,
+    <code>removeShuffle</code>, and replication on clusters with many executors, where the default
+    platform-thread pool (capped at 100) serializes the <code>Future.sequence</code> fan-out.
+    Has no effect on Java versions earlier than 21.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
   <td><code>spark.cleaner.periodicGC.interval</code></td>
   <td>30min</td>
   <td>
