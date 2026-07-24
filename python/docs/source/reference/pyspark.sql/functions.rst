@@ -177,6 +177,7 @@ String Functions
     find_in_set
     format_number
     format_string
+    from_base32
     initcap
     instr
     is_valid_utf8
@@ -216,6 +217,7 @@ String Functions
     substr
     substring
     substring_index
+    to_base32
     to_binary
     to_char
     to_number

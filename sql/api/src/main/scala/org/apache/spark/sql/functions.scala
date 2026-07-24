@@ -7284,6 +7284,19 @@ object functions {
   def base64(e: Column): Column = Column.fn("base64", e)
 
   /**
+   * Computes the BASE32 (RFC 4648) encoding of a binary column and returns it as a string column.
+   * This is the reverse of from_base32.
+   *
+   * @param e
+   *   The target column to work on. A column that evaluates to a binary.
+   * @group string_funcs
+   * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a string.
+   */
+  def to_base32(e: Column): Column = Column.fn("to_base32", e)
+
+  /**
    * Calculates the bit length for the specified string column.
    *
    * @param e
@@ -8106,6 +8119,19 @@ object functions {
    *   Returns a column that evaluates to a binary.
    */
   def unbase64(e: Column): Column = Column.fn("unbase64", e)
+
+  /**
+   * Decodes a BASE32 (RFC 4648) encoded string column and returns it as a binary column. This is
+   * the reverse of to_base32.
+   *
+   * @param e
+   *   target column to work on. A column that evaluates to a string.
+   * @group string_funcs
+   * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a binary.
+   */
+  def from_base32(e: Column): Column = Column.fn("from_base32", e)
 
   /**
    * Right-pad the string column with pad to a length of len. If the string column is longer than

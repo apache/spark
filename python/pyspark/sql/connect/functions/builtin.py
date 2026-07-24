@@ -2594,11 +2594,25 @@ def base64(col: "ColumnOrName") -> Column:
 base64.__doc__ = pysparkfuncs.base64.__doc__
 
 
+def to_base32(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("to_base32", col)
+
+
+to_base32.__doc__ = pysparkfuncs.to_base32.__doc__
+
+
 def unbase64(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unbase64", col)
 
 
 unbase64.__doc__ = pysparkfuncs.unbase64.__doc__
+
+
+def from_base32(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("from_base32", col)
+
+
+from_base32.__doc__ = pysparkfuncs.from_base32.__doc__
 
 
 def ltrim(col: "ColumnOrName", trim: Optional["ColumnOrName"] = None) -> Column:
