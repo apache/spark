@@ -121,6 +121,10 @@ case class BroadcastHashJoinExec private(
             e +: streamedKeyToBuildKeyMapping(e.canonicalized)
         }.asInstanceOf[LazyList[Partitioning]]
           .take(conf.broadcastHashJoinOutputPartitioningExpandLimit)
+          // Materialize the bounded expansion into a strict collection so the returned
+          // `PartitioningCollection` does not hold an unforced `LazyList` (which, chained across
+          // nodes, can overflow the stack when serialized or deeply traversed).
+          .toList
       case other => Seq(other)
     }
   }
