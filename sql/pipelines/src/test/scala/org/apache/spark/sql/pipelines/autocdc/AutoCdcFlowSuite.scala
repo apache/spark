@@ -315,14 +315,17 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     assert(resolvedFlow.schema == expected)
   }
 
-  test("AutoCdcMergeFlow.schema applies a columnSelection before the SCD2 framework columns") {
-    // The column selection narrows only the user-data portion; the framework columns are always
-    // appended and cannot be deselected.
+  test("AutoCdcMergeFlow.schema applies an IncludeColumns selection before the SCD2 " +
+    "framework columns") {
+    // An IncludeColumns selection narrows only the user-data portion; the framework columns are
+    // always appended and cannot be selected away.
     val resolvedFlow = newAutoCdcMergeFlow(
       sourceDf = threeColumnSourceDf(),
       storedAsScdType = ScdType.Type2,
       columnSelection = Some(
-        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name")))
+        ColumnSelection.IncludeColumns(
+          Seq(UnqualifiedColumnName("id"), UnqualifiedColumnName("seq"))
+        )
       )
     )
 
@@ -336,6 +339,35 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         AutoCdcReservedNames.cdcMetadataColName
       )
     )
+  }
+
+  test("AutoCdcMergeFlow.schema appends the SCD2 framework columns even when a selection " +
+    "excludes a user column") {
+    // The framework columns are appended after the user selection is applied to the source
+    // schema, so no ExcludeColumns selection over the user data can strip them: they always
+    // appear in the output. (The framework column names cannot themselves be named in a
+    // selection -- they are not present in the source schema -- so this asserts the closest
+    // observable behavior: excluding a real data column still yields all framework columns.)
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2,
+      columnSelection = Some(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name")))
+      )
+    )
+
+    // The excluded user column is gone, but every framework column is still present.
+    assert(!resolvedFlow.schema.fieldNames.contains("name"))
+    Seq(
+      Scd2BatchProcessor.startAtColName,
+      Scd2BatchProcessor.endAtColName,
+      AutoCdcReservedNames.cdcMetadataColName
+    ).foreach { frameworkCol =>
+      assert(
+        resolvedFlow.schema.fieldNames.contains(frameworkCol),
+        s"expected framework column $frameworkCol in ${resolvedFlow.schema.fieldNames.toSeq}"
+      )
+    }
   }
 
   test("AutoCdcMergeFlow.schema's SCD2 framework columns use the resolved sequencing type") {
@@ -352,6 +384,33 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     assert(
       resolvedFlow.schema(AutoCdcReservedNames.cdcMetadataColName).dataType ==
       Scd2BatchProcessor.cdcMetadataColSchema(IntegerType)
+    )
+  }
+
+  test("AutoCdcMergeFlow.schema supports a multi-column (struct) sequencing expression") {
+    // A multi-column sequence is expressed as a struct over the ordering columns; its resolved
+    // type is the corresponding StructType, which must flow into __START_AT / __END_AT and the
+    // metadata struct's record-start-at field unchanged.
+    val session = spark
+    import session.implicits._
+    val sourceDf =
+      MemoryStream[(Int, String, Int, Long)].toDS().toDF("id", "name", "seq1", "seq2")
+
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = sourceDf,
+      sequencing = F.struct(F.col("seq1"), F.col("seq2")),
+      storedAsScdType = ScdType.Type2
+    )
+
+    // The struct's fields are non-nullable because they wrap concrete non-null source columns.
+    val expectedSeqType = new StructType()
+      .add("seq1", IntegerType, nullable = false)
+      .add("seq2", LongType, nullable = false)
+    assert(resolvedFlow.schema(Scd2BatchProcessor.startAtColName).dataType == expectedSeqType)
+    assert(resolvedFlow.schema(Scd2BatchProcessor.endAtColName).dataType == expectedSeqType)
+    assert(
+      resolvedFlow.schema(AutoCdcReservedNames.cdcMetadataColName).dataType ==
+      Scd2BatchProcessor.cdcMetadataColSchema(expectedSeqType)
     )
   }
 
