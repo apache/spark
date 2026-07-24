@@ -276,7 +276,15 @@ private[sql] class RocksDBStateStoreProvider
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val encodedKeys = keys.map(kvEncoder._1.encodeKey)
       val encodedValues = rocksDB.multiGet(encodedKeys, colFamilyName)
-      encodedValues.map(kvEncoder._2.decodeValue)
+      encodedValues.zipWithIndex.map { case (encoded, idx) =>
+        val value = kvEncoder._2.decodeValue(encoded)
+        if (!isValidated && value != null && !useColumnFamilies) {
+          StateStoreProvider.validateStateRowFormat(
+            keys(idx), keySchema, value, valueSchema, stateStoreId, storeConf)
+          isValidated = true
+        }
+        value
+      }
     }
 
     override def keyExists(key: UnsafeRow, colFamilyName: String): Boolean = {
