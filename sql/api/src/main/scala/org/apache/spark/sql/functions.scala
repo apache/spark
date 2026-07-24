@@ -14662,6 +14662,19 @@ object functions {
    */
   def json_object_keys(e: Column): Column = Column.fn("json_object_keys", e)
 
+  /**
+   * Returns the type of the outermost JSON value as a string: one of 'object', 'array', 'string',
+   * 'number', 'boolean', or 'null'. Returns null for invalid or empty input.
+   *
+   * @param e
+   *   the JSON string column. A column that evaluates to a string.
+   * @group json_funcs
+   * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a string.
+   */
+  def json_typeof(e: Column): Column = Column.fn("json_typeof", e)
+
   // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` or a `MapType` into
