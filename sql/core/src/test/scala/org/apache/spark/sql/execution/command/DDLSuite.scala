@@ -196,7 +196,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("CREATE TABLE t LIKE s USING org.apache.spark.sql.hive.orc")
         },
-        condition = "_LEGACY_ERROR_TEMP_1138",
+        condition = "ORC_DATA_SOURCE_REQUIRES_HIVE_SUPPORT",
         parameters = Map.empty
       )
     }

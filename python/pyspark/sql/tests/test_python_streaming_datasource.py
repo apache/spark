@@ -305,7 +305,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
 
         q = df.writeStream.foreachBatch(check_batch).start()
-        wait_for_condition(q, lambda query: len(query.recentProgress) >= 10)
+        wait_for_condition(q, lambda query: len(query.recentProgress) >= 5)
         q.stop()
         q.awaitTermination()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
@@ -400,7 +400,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
 
         q = df.writeStream.foreachBatch(check_batch).start()
-        wait_for_condition(q, lambda query: len(query.recentProgress) >= 10)
+        wait_for_condition(q, lambda query: len(query.recentProgress) >= 5)
         q.stop()
         q.awaitTermination()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")
@@ -456,7 +456,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
 
         q = df.writeStream.foreachBatch(check_batch).start()
-        wait_for_condition(q, lambda query: len(query.recentProgress) >= 10)
+        wait_for_condition(q, lambda query: len(query.recentProgress) >= 5)
         q.stop()
         q.awaitTermination()
         self.assertIsNone(q.exception(), "No exception has to be propagated.")

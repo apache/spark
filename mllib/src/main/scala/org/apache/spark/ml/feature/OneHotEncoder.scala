@@ -34,6 +34,7 @@ import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{col, lit, udf}
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 /** Private trait for params and common methods for OneHotEncoder and OneHotEncoderModel */
 private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
@@ -238,6 +239,9 @@ class OneHotEncoderModel private[ml] (
 
   // For ml connect only
   private[ml] def this() = this("", Array.emptyIntArray)
+
+  private[spark] override def estimatedSize: Long =
+    estimateMatadataSize + SizeEstimator.estimate(categorySizes)
 
   // Returns the category size for each index with `dropLast` and `handleInvalid`
   // taken into account.

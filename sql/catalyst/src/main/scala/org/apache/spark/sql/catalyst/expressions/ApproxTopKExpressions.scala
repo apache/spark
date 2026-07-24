@@ -108,10 +108,13 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
     val kVal = kEval.asInstanceOf[Int]
     ApproxTopK.checkK(kVal)
     ApproxTopK.checkMaxItemsTracked(maxItemsTrackedVal, kVal)
+    val sketchItemType = ApproxTopK.withCollationOf(
+      ApproxTopK.DDLToDataType(stateEval.asInstanceOf[InternalRow].getUTF8String(3).toString),
+      itemDataType)
     val approxTopKAggregateBuffer = ApproxTopKAggregateBuffer.deserialize(
       dataSketchBytes,
-      ApproxTopK.genSketchSerDe(itemDataType))
-    approxTopKAggregateBuffer.eval(kVal, itemDataType)
+      ApproxTopK.genSketchSerDe(sketchItemType))
+    approxTopKAggregateBuffer.eval(kVal, sketchItemType, itemDataType)
   }
 
   override protected def withNewChildrenInternal(newState: Expression, newK: Expression)

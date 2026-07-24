@@ -221,6 +221,12 @@
     ],
     "sqlState" : "42613"
   },
+  "AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST" : {
+    "message" : [
+      "AutoCDC flow specifies both `track_history_column_list` and `track_history_except_column_list`; at most one may be provided."
+    ],
+    "sqlState" : "42613"
+  },
   "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
       "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
@@ -343,12 +349,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "AUTOCDC_TRACK_HISTORY_REQUIRES_SCD2" : {
+    "message" : [
+      "AutoCDC flow specifies `track_history_column_list` or `track_history_except_column_list` but is not stored as SCD Type 2; history-tracking columns are only supported for SCD Type 2 target tables."
+    ],
+    "sqlState" : "42613"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
       "To allow null value for this field, specify its avro schema as a union type with \"null\" using `avroSchema` option."
     ],
     "sqlState" : "22004"
+  },
+  "AVRO_DATA_SOURCE_NOT_ENABLED" : {
+    "message" : [
+      "Failed to find data source: <provider>. Avro is built-in but external data source module since Spark 2.4. Please deploy the application as per the deployment section of Apache Avro Data Source Guide."
+    ],
+    "sqlState" : "42K02"
   },
   "AVRO_INCOMPATIBLE_READ_TYPE" : {
     "message" : [
@@ -5415,6 +5433,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "KAFKA_DATA_SOURCE_NOT_ENABLED" : {
+    "message" : [
+      "Failed to find data source: <provider>. Please deploy the application as per the deployment section of Structured Streaming + Kafka Integration Guide."
+    ],
+    "sqlState" : "42K02"
+  },
   "KLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)."
@@ -5706,6 +5730,12 @@
       "Flow with multipart name '<flowName>' is not supported."
     ],
     "sqlState" : "0A000"
+  },
+  "MULTIPLE_DATA_SOURCES" : {
+    "message" : [
+      "Multiple sources found for <provider> (<sourceNames>), please specify the fully qualified class name."
+    ],
+    "sqlState" : "42710"
   },
   "MULTIPLE_EVENT_TIME_COLUMNS" : {
     "message" : [
@@ -6178,6 +6208,12 @@
       "The value of <paramName> cannot be more than one character, but got <actualValue>."
     ],
     "sqlState" : "22023"
+  },
+  "ORC_DATA_SOURCE_REQUIRES_HIVE_SUPPORT" : {
+    "message" : [
+      "Hive built-in ORC data source must be used with Hive support enabled. Please use the native ORC data source by setting 'spark.sql.orc.impl' to 'native'."
+    ],
+    "sqlState" : "0A000"
   },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
@@ -9827,26 +9863,6 @@
   "_LEGACY_ERROR_TEMP_1137" : {
     "message" : [
       "Unable to resolve <name> given [<outputStr>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1138" : {
-    "message" : [
-      "Hive built-in ORC data source must be used with Hive support enabled. Please use the native ORC data source by setting 'spark.sql.orc.impl' to 'native'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1139" : {
-    "message" : [
-      "Failed to find data source: <provider>. Avro is built-in but external data source module since Spark 2.4. Please deploy the application as per the deployment section of Apache Avro Data Source Guide."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1140" : {
-    "message" : [
-      "Failed to find data source: <provider>. Please deploy the application as per the deployment section of Structured Streaming + Kafka Integration Guide."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1141" : {
-    "message" : [
-      "Multiple sources found for <provider> (<sourceNames>), please specify the fully qualified class name."
     ]
   },
   "_LEGACY_ERROR_TEMP_1143" : {

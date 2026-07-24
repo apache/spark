@@ -641,61 +641,50 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
 
     args_offsets, kwargs_offsets = udf_info.args, udf_info.kwargs
 
-    # the last returnType will be the return type of UDF
-    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
+    # The last returnType will be the return type of UDF. Eval types are grouped below by the
+    # shape of the value they return.
+
+    # Scalar, aggregation and window UDFs: (func, args_offsets, kwargs_offsets, return_type).
+    if eval_type in (
+        PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+    ):
         return func, args_offsets, kwargs_offsets, return_type
-    elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_UDF:
-        return func, args_offsets, kwargs_offsets, return_type
-    elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
-        return func, args_offsets, kwargs_offsets, return_type
-    elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
-        return func, args_offsets, kwargs_offsets, return_type
-    elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
-        return func, args_offsets, kwargs_offsets, return_type
+    # Grouped-map and cogrouped-map UDFs: (func, args_offsets, return_type, num_udf_args).
+    elif eval_type in (
+        PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
+        PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+    ):
+        # signature was lost when wrapping it
+        num_udf_args = len(inspect.getfullargspec(chained_func).args)
+        return func, args_offsets, return_type, num_udf_args
+    # Grouped-map-with-state and transform-with-state UDFs: (func, args_offsets, return_type).
+    elif eval_type in (
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+    ):
+        return func, args_offsets, return_type
+    # Map iterator UDFs take no offsets.
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         return func, None, None, return_type
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
         return func, None, None, None
-    elif eval_type in (
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
-    ):
-        num_udf_args = len(inspect.getfullargspec(chained_func).args)
-        return func, args_offsets, return_type, num_udf_args
-    elif eval_type in (
-        PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
-    ):
-        num_udf_args = len(inspect.getfullargspec(chained_func).args)
-        return func, args_offsets, return_type, num_udf_args
-    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-        return func, args_offsets, return_type
-    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
-        return func, args_offsets, return_type
-    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
-        return func, args_offsets, return_type
-    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
-        return func, args_offsets, return_type
-    elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF:
-        return func, args_offsets, return_type
-    elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-        argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
-        return func, args_offsets, return_type, len(argspec.args)
-    elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
-        argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
-        return func, args_offsets, return_type, len(argspec.args)
-    elif eval_type in (
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
-    ):
-        return func, args_offsets, kwargs_offsets, return_type
-    elif eval_type in (
-        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
-    ):
-        return func, args_offsets, kwargs_offsets, return_type
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         return wrap_udf(func, args_offsets, kwargs_offsets, return_type)
     else:
@@ -707,14 +696,15 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
 # ensure the UDTF is valid. This function also prepares a mapper function for applying
 # the UDTF logic to input rows.
 def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
-    if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
+    if eval_type in (
         # Pure Arrow stream I/O for both the legacy pandas conversion path and the
         # non-legacy path; the pandas (de)serialization for the legacy path and the
         # output struct wrapping are both handled in the func below.
-        ser = ArrowStreamSerializer(write_start_stream=True)
-    elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
+        PythonEvalType.SQL_ARROW_TABLE_UDF,
         # Pure Arrow stream I/O; table-arg flattening and output coercion
         # are handled in the func below.
+        PythonEvalType.SQL_ARROW_UDTF,
+    ):
         ser = ArrowStreamSerializer(write_start_stream=True)
     else:
         # Each row is a group so do not batch but send one by one.
@@ -1874,24 +1864,22 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
     ):
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         if eval_type in (
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
-            PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
-            PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
-            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
-        ):
-            ser = ArrowStreamGroupSerializer(write_start_stream=True)
-        elif eval_type in (
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
             ser = ArrowStreamGroupSerializer(write_start_stream=True)
-        elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
-            ser = ArrowStreamCoGroupSerializer(write_start_stream=True)
-        elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
+        elif eval_type in (
+            PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
+            PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+        ):
             ser = ArrowStreamCoGroupSerializer(write_start_stream=True)
         else:
             ser = ArrowStreamSerializer(write_start_stream=True)

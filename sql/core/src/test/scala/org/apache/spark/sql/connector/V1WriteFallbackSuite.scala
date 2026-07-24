@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.execution.datasources.v2.{AppendDataExecV1, OverwriteByExpressionExecV1}
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.SQLConf.{OPTIMIZER_MAX_ITERATIONS, V2_SESSION_CATALOG_IMPLEMENTATION}
+import org.apache.spark.sql.internal.SQLConf.{ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER, OPTIMIZER_MAX_ITERATIONS, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -144,6 +144,8 @@ class V1WriteFallbackSuite extends SharedSparkSession with BeforeAndAfter {
         .master("local[1]")
         .withExtensions(_.injectPostHocResolutionRule(_ => OnlyOnceRule))
         .withExtensions(_.injectOptimizerRule(_ => OnlyOnceOptimizerRule))
+        // Dual-running Analyzers would lead to rule being invoked twice
+        .config(ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
         .config(OPTIMIZER_MAX_ITERATIONS.key, "1")
         .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
         .getOrCreate()

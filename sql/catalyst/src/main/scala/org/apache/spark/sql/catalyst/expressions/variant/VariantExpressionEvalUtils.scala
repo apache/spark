@@ -183,7 +183,9 @@ object VariantExpressionEvalUtils {
    * Set `input` at `javaSegments` to `value`. `path` is the source string used in error messages.
    * The cast and set share one try, so any size overflow maps to `VARIANT_SIZE_LIMIT` and a type
    * mismatch maps to `VARIANT_PATH_TYPE_MISMATCH`. When `createIfMissing` is false, a missing
-   * key/index leaves the variant unchanged.
+   * key/index leaves the variant unchanged. When `failOnError` is false (the `try_variant_set`
+   * mode), a path type mismatch returns null instead of throwing; a size overflow (and a malformed
+   * path, rejected earlier during parsing) is still raised.
    */
   def setAtPath(
       input: VariantVal,
@@ -192,7 +194,8 @@ object VariantExpressionEvalUtils {
       value: Any,
       valueDataType: DataType,
       createIfMissing: Boolean,
-      functionName: String): VariantVal = {
+      functionName: String,
+      failOnError: Boolean): VariantVal = {
     val v = new Variant(input.getValue, input.getMetadata)
     try {
       val valVal = castToVariant(value, valueDataType)
@@ -200,6 +203,7 @@ object VariantExpressionEvalUtils {
       val out = VariantBuilder.setAtPath(v, javaSegments, valVariant, createIfMissing)
       new VariantVal(out.getValue, out.getMetadata)
     } catch {
+      case _: VariantPathTypeMismatchException if !failOnError => null
       case e: VariantPathTypeMismatchException =>
         throw QueryExecutionErrors.variantPathTypeMismatch(
           path, renderVariantPath(javaSegments.take(e.depth)), functionName)
@@ -214,10 +218,12 @@ object VariantExpressionEvalUtils {
       value: Any,
       valueDataType: DataType,
       createIfMissing: Boolean,
-      functionName: String): VariantVal = {
+      functionName: String,
+      failOnError: Boolean): VariantVal = {
     val pathStr = path.toString
     val javaSegments = toJavaSegments(parseVariantPath(pathStr, functionName))
-    setAtPath(input, javaSegments, pathStr, value, valueDataType, createIfMissing, functionName)
+    setAtPath(input, javaSegments, pathStr, value, valueDataType, createIfMissing, functionName,
+      failOnError)
   }
 
   /**

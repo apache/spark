@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSeq, BindReferences, Expression, InterpretedMutableProjection, InterpretedUnsafeProjection, JoinedRow, MutableProjection, NamedExpression, Projection, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate, ImperativeAggregate, NoOp, TypedImperativeAggregate}
@@ -30,7 +30,7 @@ import org.apache.spark.util.AccumulatorV2
 /**
  * Accumulator that computes a global aggregate.
  */
-class AggregatingAccumulator private(
+class AggregatingAccumulator protected(
     bufferSchema: Seq[DataType],
     initialValues: Seq[Expression],
     updateExpressions: Seq[Expression],
@@ -49,7 +49,7 @@ class AggregatingAccumulator private(
   @transient
   private var joinedRow: JoinedRow = _
 
-  private var buffer: SpecificInternalRow = _
+  protected var buffer: SpecificInternalRow = _
 
   private def createBuffer(): SpecificInternalRow = {
     val buffer = new SpecificInternalRow(bufferSchema)
@@ -156,31 +156,34 @@ class AggregatingAccumulator private(
     if (!other.isZero) {
       other match {
         case agg: AggregatingAccumulator =>
-          val buffer = getOrCreateBuffer()
-          val otherBuffer = agg.buffer
-          mergeProjection.target(buffer)(joinedRow.withRight(otherBuffer))
-          var i = 0
-          while (i < imperatives.length) {
-            imperatives(i).merge(buffer, otherBuffer)
-            i += 1
-          }
-          i = 0
-          if (isAtDriverSide) {
-            while (i < typedImperatives.length) {
-              // The input buffer stores serialized data
-              typedImperatives(i).merge(buffer, otherBuffer)
-              i += 1
-            }
-          } else {
-            while (i < typedImperatives.length) {
-              // The input buffer stores deserialized object
-              typedImperatives(i).mergeBuffersObjects(buffer, otherBuffer)
-              i += 1
-            }
-          }
+          mergeBuffer(agg.buffer)
         case _ =>
           throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
             this.getClass.getName, other.getClass.getName)
+      }
+    }
+  }
+
+  protected def mergeBuffer(otherBuffer: InternalRow): Unit = withSQLConf(true, ()) {
+    val buffer = getOrCreateBuffer()
+    mergeProjection.target(buffer)(joinedRow.withRight(otherBuffer))
+    var i = 0
+    while (i < imperatives.length) {
+      imperatives(i).merge(buffer, otherBuffer)
+      i += 1
+    }
+    i = 0
+    if (isAtDriverSide) {
+      while (i < typedImperatives.length) {
+        // The input buffer stores serialized data
+        typedImperatives(i).merge(buffer, otherBuffer)
+        i += 1
+      }
+    } else {
+      while (i < typedImperatives.length) {
+        // The input buffer stores a deserialized object
+        typedImperatives(i).mergeBuffersObjects(buffer, otherBuffer)
+        i += 1
       }
     }
   }
@@ -234,11 +237,24 @@ class AggregatingAccumulator private(
   }
 }
 
+private case class AggregatingAccumulatorArgs(
+    bufferSchema: Seq[DataType],
+    initialValues: Seq[Expression],
+    updateExpressions: Seq[Expression],
+    mergeExpressions: Seq[Expression],
+    resultExpressions: Seq[Expression],
+    imperatives: Array[ImperativeAggregate],
+    typedImperatives: Array[TypedImperativeAggregate[_]],
+    conf: SQLConf)
+
 object AggregatingAccumulator {
   /**
-   * Create an aggregating accumulator for the given functions and input schema.
+   * Build the bound expressions and aggregate buffers shared by every flavor of aggregating
+   * accumulator created for the given functions and input schema.
    */
-  def apply(functions: Seq[Expression], inputAttributes: Seq[Attribute]): AggregatingAccumulator = {
+  private def buildAccumulatorArgs(
+      functions: Seq[Expression],
+      inputAttributes: Seq[Attribute]): AggregatingAccumulatorArgs = {
     // There are a couple of things happening here:
     // - Collect the schema's of the aggregate and input aggregate buffers. These are needed to bind
     //   the expressions which will be done when we create the accumulator.
@@ -288,8 +304,7 @@ object AggregatingAccumulator {
     val mergeAttrSeq: AttributeSeq = (aggBufferAttributes ++ inputAggBufferAttributes).toSeq
     val aggBufferAttributesSeq: AttributeSeq = aggBufferAttributes.toSeq
 
-    // Create the accumulator.
-    new AggregatingAccumulator(
+    AggregatingAccumulatorArgs(
       aggBufferAttributes.map(_.dataType).toSeq,
       initialValues.toSeq,
       updateExpressions.map(BindReferences.bindReference(_, updateAttrSeq)).toSeq,
@@ -299,4 +314,69 @@ object AggregatingAccumulator {
       typedImperatives.toArray,
       SQLConf.get)
   }
+
+  /**
+   * Create an aggregating accumulator for the given functions and input schema.
+   */
+  def apply(functions: Seq[Expression], inputAttributes: Seq[Attribute]): AggregatingAccumulator = {
+    val c = buildAccumulatorArgs(functions, inputAttributes)
+    new AggregatingAccumulator(
+      c.bufferSchema,
+      c.initialValues,
+      c.updateExpressions,
+      c.mergeExpressions,
+      c.resultExpressions,
+      c.imperatives,
+      c.typedImperatives,
+      c.conf)
+  }
+
+  /**
+   * Create an aggregating accumulator for the given functions and input schema, and register it
+   * with the given SparkContext under `name`.
+   */
+  def apply(
+      sc: SparkContext,
+      name: String,
+      functions: Seq[Expression],
+      inputAttributes: Seq[Attribute]): AggregatingAccumulator = {
+    val acc = apply(functions, inputAttributes)
+    acc.register(sc, Option(name))
+    acc
+  }
+
+  /**
+   * Create a last-attempt aggregating accumulator for the given functions and input schema.
+   */
+  def lastAttempt(
+      functions: Seq[Expression],
+      inputAttributes: Seq[Attribute]): LastAttemptAggregatingAccumulator = {
+    val c = buildAccumulatorArgs(functions, inputAttributes)
+    new LastAttemptAggregatingAccumulator(
+      c.bufferSchema,
+      c.initialValues,
+      c.updateExpressions,
+      c.mergeExpressions,
+      c.resultExpressions,
+      c.imperatives,
+      c.typedImperatives,
+      c.conf)
+  }
+
+  /**
+   * Create a last-attempt aggregating accumulator for the given functions and input schema,
+   * register it with the given SparkContext under `name`, and initialize its last-attempt
+   * tracking state.
+   */
+  def lastAttempt(
+      sc: SparkContext,
+      name: String,
+      functions: Seq[Expression],
+      inputAttributes: Seq[Attribute]): LastAttemptAggregatingAccumulator = {
+    val acc = lastAttempt(functions, inputAttributes)
+    acc.register(sc, Option(name))
+    acc.initializeLastAttemptAccumulator()
+    acc
+  }
+
 }

@@ -2547,7 +2547,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       rpcEnv.setupEndpoint("blockmanager-ess",
         new BlockManagerMasterEndpoint(rpcEnv, isLocal = true, conf, liveListenerBus,
           Some(mock(classOf[ExternalBlockStoreClient])), essBlockManagerInfo, mapOutputTracker,
-          shuffleManager, isDriver = true)),
+          isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat-ess",
         new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, essBlockManagerInfo)),
       conf, true)

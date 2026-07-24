@@ -410,7 +410,8 @@ object SQLConf {
       )
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(
+        sys.env.get("SPARK_SINGLE_PASS_ANALYZER_ENABLED_TENTATIVELY").contains("true"))
 
   val ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER =
     buildConf("spark.sql.analyzer.singlePassResolver.dualRunWithLegacy")
@@ -422,7 +423,7 @@ object SQLConf {
       )
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(Utils.isTesting)
 
   val ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT =
     buildConf("spark.sql.analyzer.singlePassResolver.returnSinglePassResultInDualRun")
@@ -434,7 +435,7 @@ object SQLConf {
       )
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(Utils.isTesting)
+      .createWithDefault(false)
 
   val ANALYZER_DUAL_RUN_SAMPLE_RATE =
     buildConf("spark.sql.analyzer.singlePassResolver.dualRunSampleRate")
@@ -447,7 +448,7 @@ object SQLConf {
       )
       .version("4.1.0")
       .doubleConf
-      .createWithDefault(if (Utils.isTesting) 1.0 else 0.001)
+      .createWithDefault(if (Utils.isTesting) 1.0 else 0.1)
 
   val ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE =
     buildConf("spark.sql.analyzer.singlePassResolver.exposeResolverGuardFailure")
@@ -2078,6 +2079,16 @@ object SQLConf {
       .version("3.2.0")
       .intConf
       .createOptional
+
+  val HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE =
+    buildConf("spark.sql.hive.showCreateTableAsSerde")
+      .doc("Whether to render the SHOW CREATE TABLE (without `AS SERDE`) statement of Hive table " +
+        "in the Hive DDL format. This is only for display purpose and does not affect how Spark " +
+        "reads or writes Hive tables.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .internal()
@@ -6211,6 +6222,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_OBSERVE_METRICS_AGGREGATE_ALL_ATTEMPTS =
+    buildConf("spark.sql.legacy.observeMetricsAggregateAllAttempts")
+      .internal()
+      .doc("When true, metrics produced by `Dataset.observe` aggregate values from all task " +
+        "attempts. When false, only values from the last successful task attempts are used.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val MAX_TO_STRING_FIELDS = buildConf("spark.sql.debug.maxToStringFields")
     .doc("Maximum number of fields of sequence-like entries can be converted to strings " +
       "in debug output. Any elements beyond the limit will be dropped and replaced by a " +
@@ -8482,6 +8503,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(HIVE_CASE_SENSITIVE_INFERENCE)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
+
+  def hiveTableShowCreateTableAsSerde: Boolean =
+    getConf(HIVE_TABLE_SHOW_CREATE_TABLE_AS_SERDE)
 
   def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 
