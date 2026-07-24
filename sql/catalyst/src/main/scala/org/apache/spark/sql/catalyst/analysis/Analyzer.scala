@@ -3930,11 +3930,11 @@ class Analyzer(
         val defaultValueFillMode =
           if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
           else FILL
-        // Only let TableOutputResolver see generation expression metadata if the catalog
+        // Only let TableOutputResolver see generation expression metadata if the table
         // supports auto-filling generated columns on write.
         val expected = v2Write.table match {
           case r: DataSourceV2Relation
-            if !GeneratedColumn.supportsGeneratedColumnsOnWrite(r.catalog) =>
+            if !GeneratedColumn.supportsGeneratedColumnsOnWrite(r.table) =>
             r.output.map(GeneratedColumn.removeGenerationExpressionMetadata)
           case _ => v2Write.table.output
         }

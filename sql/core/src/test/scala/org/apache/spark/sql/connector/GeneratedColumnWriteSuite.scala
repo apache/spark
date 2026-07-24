@@ -21,8 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
-import org.apache.spark.sql.connector.catalog.{InMemoryCatalog, InMemoryRowLevelOperationTableCatalog,
-  TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 
@@ -40,16 +39,10 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  // A catalog that supports creating generated columns but does NOT declare
-  // SUPPORT_GENERATED_COLUMN_ON_WRITE, so Spark must not auto-fill or enforce them.
-  private val noWriteCapCat = "nowritecapcat"
-
-  private def withNoWriteCapCatalog(f: => Unit): Unit = {
-    withSQLConf(s"spark.sql.catalog.$noWriteCapCat" ->
-      classOf[InMemoryNoGenColWriteCatalog].getName) {
-      f
-    }
-  }
+  // A table property that makes the in-memory test table omit the
+  // GENERATE_COLUMN_VALUES_ON_WRITE capability, so Spark must not auto-fill or enforce
+  // generated columns for it.
+  private val noWriteCapProp = "generate-column-values-on-write"
 
   private def hasCheckInvariant(sqlText: String): Boolean = {
     val parsed = spark.sessionState.sqlParser.parsePlan(sqlText)
@@ -1154,44 +1147,29 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("catalog without write capability does not auto-fill or enforce generated columns") {
-    withNoWriteCapCatalog {
-      val tblName = "my_tab"
-      withTable(s"$noWriteCapCat.$tblName") {
-        sql(s"""CREATE TABLE $noWriteCapCat.$tblName(
-               |  a INT,
-               |  b INT GENERATED ALWAYS AS (a + 1)
-               |) USING foo""".stripMargin)
+  test("table without write capability does not auto-fill or enforce generated columns") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (a + 1)
+             |) USING foo TBLPROPERTIES ('$noWriteCapProp' = 'false')""".stripMargin)
 
-        // A user-provided value that does NOT match the generation expression is written
-        // as-is: no constraint is enforced because the catalog does not opt in.
-        sql(s"INSERT INTO $noWriteCapCat.$tblName(a, b) VALUES (5, 999)")
-        checkAnswer(spark.table(s"$noWriteCapCat.$tblName"), Row(5, 999))
+      // A user-provided value that does NOT match the generation expression is written
+      // as-is: no constraint is enforced because the table does not opt in.
+      sql(s"INSERT INTO testcat.$tblName(a, b) VALUES (5, 999)")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(5, 999))
 
-        // Omitting the generated column does not auto-fill; it is treated as a regular
-        // nullable column and filled with null.
-        sql(s"INSERT INTO $noWriteCapCat.$tblName(a) VALUES (7)")
-        checkAnswer(
-          spark.table(s"$noWriteCapCat.$tblName"),
-          Row(5, 999) :: Row(7, null) :: Nil)
+      // Omitting the generated column does not auto-fill; it is treated as a regular
+      // nullable column and filled with null.
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES (7)")
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Row(5, 999) :: Row(7, null) :: Nil)
 
-        // No CheckInvariant is added to the plan for the generated column.
-        assert(!hasCheckInvariant(s"INSERT INTO $noWriteCapCat.$tblName(a, b) VALUES (5, 6)"),
-          "No CheckInvariant should be added when the catalog lacks the write capability")
-      }
+      // No CheckInvariant is added to the plan for the generated column.
+      assert(!hasCheckInvariant(s"INSERT INTO testcat.$tblName(a, b) VALUES (5, 6)"),
+        "No CheckInvariant should be added when the table lacks the write capability")
     }
-  }
-}
-
-/**
- * A catalog that supports creating tables with generated columns but does NOT declare
- * [[TableCatalogCapability.SUPPORT_GENERATED_COLUMN_ON_WRITE]], so Spark leaves generated
- * column handling to the connector (no auto-fill, no constraint enforcement on write).
- */
-class InMemoryNoGenColWriteCatalog extends InMemoryCatalog {
-  override def capabilities: java.util.Set[TableCatalogCapability] = {
-    val caps = new java.util.HashSet[TableCatalogCapability](super.capabilities)
-    caps.remove(TableCatalogCapability.SUPPORT_GENERATED_COLUMN_ON_WRITE)
-    caps
   }
 }

@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Column, Identifier, TableCatalog,
-  TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, Table, TableCapability,
+  TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField, StructType}
 
@@ -92,28 +92,24 @@ object GeneratedColumn {
   }
 
   /**
-   * Whether the table catalog supports Spark auto-filling generated column values and enforcing
-   * generated column constraints during writes (the
-   * [[TableCatalogCapability.SUPPORT_GENERATED_COLUMN_ON_WRITE]] capability). Without it, the
-   * connector is responsible for handling generated column values.
+   * Whether the table wants Spark to auto-fill generated column values and enforce generated
+   * column constraints during writes (the
+   * [[TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE]] capability). Without it, the connector is
+   * responsible for handling generated column values.
    */
-  def supportsGeneratedColumnsOnWrite(catalog: Option[CatalogPlugin]): Boolean = {
-    catalog.exists {
-      case tc: TableCatalog =>
-        tc.capabilities().contains(TableCatalogCapability.SUPPORT_GENERATED_COLUMN_ON_WRITE)
-      case _ => false
-    }
+  def supportsGeneratedColumnsOnWrite(table: Table): Boolean = {
+    table.capabilities().contains(TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE)
   }
 
   /**
-   * Whether the catalog supports generated columns on write (see
+   * Whether the table supports generated columns on write (see
    * [[supportsGeneratedColumnsOnWrite]]) and the given columns include at least one generated
    * column.
    */
   def supportsGeneratedColumnsOnWrite(
-      catalog: Option[CatalogPlugin],
+      table: Table,
       columns: Array[Column]): Boolean = {
-    supportsGeneratedColumnsOnWrite(catalog) &&
+    supportsGeneratedColumnsOnWrite(table) &&
       columns.exists(_.columnGenerationExpression() != null)
   }
 
