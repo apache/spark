@@ -113,7 +113,7 @@
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
-      <artifactId>scala-library</artifactId>
+      <artifactId>${scala.library.artifact}</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>

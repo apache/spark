@@ -136,6 +136,7 @@ jobs:
             ui=true
             docs=true
             java25=true
+            scala3=true
           else
             pyspark_install=false
             pyspark_connect_old_client=false
@@ -149,6 +150,7 @@ jobs:
             ui=false
             docs=false
             java25=false
+            scala3=false
           fi
           build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
           build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,network-common,network-shuffle,sketch,variant,launcher"`
@@ -165,6 +167,7 @@ jobs:
               \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
               \"java25\" : \"$java25\",
+              \"scala3\" : \"$scala3\",
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
               \"k8s-integration-tests\" : \"$kubernetes\",
@@ -1122,6 +1125,187 @@ jobs:
         export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl clean install
+
+  # SPARK-58200: Scala 3 cross-build. Only the modules listed below compile under Scala 3
+  # today; the rest of the reactor still needs source migration (SPARK-54150). This job
+  # guards the two things the scala-3 profile promises: that the version switch is
+  # reversible, and that the modules that do build keep building.
+  #
+  # Scope, deliberately narrow: main sources only. Test sources are not migrated yet and
+  # do not compile, so SBT builds `compile` and Maven runs with -Dmaven.test.skip=true.
+  # Both build tools are covered because the two paths diverge: the scala-3 profile's
+  # compiler arguments and scaladoc settings apply only to Maven, and SBT resolves the
+  # module graph itself rather than through the reactor.
+  scala3:
+    needs: [precondition]
+    if: fromJson(needs.precondition.outputs.required).scala3 == 'true'
+    name: Scala 3 build (${{ matrix.build-tool }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        build-tool:
+          - sbt
+          - maven
+    env:
+      # Modules whose main sources compile under Scala 3, given as directories.
+      # Extend as SPARK-54150 subtasks land; this is the only list to update. Maven
+      # takes these directly, and the SBT project names are read out of each POM
+      # below, since SBT addresses projects by <sbt.project.name> rather than by path
+      # and the two cannot be derived from one another by rule.
+      SCALA3_MODULES: >-
+        common/tags
+        common/utils
+        common/utils-java
+        common/unsafe
+        common/kvstore
+        common/variant
+        common/sketch
+        launcher
+        common/network-common
+        common/network-shuffle
+        sql/connect/shims
+        udf/worker/proto
+        udf/worker/core
+        udf/worker/grpc
+      # Modules above that publish a test-jar the others depend on. Maven resolves
+      # test-scope dependencies even when it is not compiling tests, so these have to
+      # be packaged before the main-sources-only pass, and -Dmaven.test.skip suppresses
+      # test-jar packaging along with test compilation. Their test sources are Java
+      # only, so this pass never invokes the Scala 3 compiler.
+      SCALA3_TEST_JAR_MODULES: >-
+        common/tags
+        common/network-common
+        common/utils-java
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ inputs.branch }}
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      run: |
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    - name: Cache SBT and Maven
+      uses: actions/cache@v5
+      with:
+        path: |
+          build/apache-maven-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-${{ runner.os }}-
+    # Own keys: this is the only Scala 3 build, so the shared caches hold none of the
+    # Scala 3 artifacts and cross-restoring would just save a copy of the 2.13 closure
+    # under these keys.
+    - name: Cache Coursier local repository
+      if: matrix.build-tool == 'sbt'
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/coursier
+        key: coursier-scala3-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          coursier-scala3-${{ runner.os }}-
+    - name: Cache Maven local repository
+      if: matrix.build-tool == 'maven'
+      uses: actions/cache@v5
+      with:
+        path: ~/.m2/repository
+        key: maven-scala3-${{ runner.os }}-java${{ inputs.java }}-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          maven-scala3-${{ runner.os }}-java${{ inputs.java }}-
+    - name: Install Java ${{ inputs.java }}
+      uses: actions/setup-java@v5
+      with:
+        distribution: zulu
+        java-version: ${{ inputs.java }}
+    - name: Check that the Scala version switch is reversible
+      run: |
+        ./dev/change-scala-version.sh 3
+        ./dev/change-scala-version.sh 2.13
+        # Switching to Scala 3 and back must be a no-op. If this fails, a POM was
+        # rewritten in one direction but not the other.
+        git diff --exit-code
+    - name: Build with SBT
+      if: matrix.build-tool == 'sbt'
+      run: |
+        ./dev/change-scala-version.sh 3
+        # Read the SBT project name out of each module POM. Falling back to the
+        # artifactId when the property is missing would silently build the wrong
+        # project, or nothing at all, so treat that as an error instead.
+        sbt_commands=""
+        for module in $SCALA3_MODULES; do
+          name=$(grep -o '<sbt.project.name>[^<]*' "$module/pom.xml" | head -1 | cut -d'>' -f2)
+          if [ -z "$name" ]; then
+            echo "ERROR: $module/pom.xml declares no <sbt.project.name>, so the SBT"
+            echo "       project name cannot be derived. Add the property to that POM."
+            exit 1
+          fi
+          sbt_commands="$sbt_commands $name/compile"
+        done
+        echo "SBT commands:$sbt_commands"
+        ./build/sbt -Pscala-3 $sbt_commands
+    - name: Build with Maven
+      if: matrix.build-tool == 'maven'
+      run: |
+        ./dev/change-scala-version.sh 3
+        export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+        export MVN="./build/mvn --no-transfer-progress -Pscala-3"
+        # Package the test-jars the module set depends on. -DskipTests, not
+        # -Dmaven.test.skip, because the jars have to be built; only their execution is
+        # skipped. These modules have Java test sources only.
+        $MVN -DskipTests \
+          -pl "$(echo $SCALA3_TEST_JAR_MODULES | tr ' ' ',')" -am install
+        # Then build main sources only, matching what the SBT leg compiles. Test sources
+        # are not migrated to Scala 3 yet, so -Dmaven.test.skip keeps them out; the
+        # test-jars they would otherwise have produced came from the pass above.
+        # -DskipTests as well because scalatest-maven-plugin reads that rather than
+        # maven.test.skip, and would otherwise run whatever test classes it finds.
+        # -am pulls in the parent POM.
+        $MVN -Dmaven.test.skip=true -DskipTests \
+          -pl "$(echo $SCALA3_MODULES | tr ' ' ',')" -am install
+    - name: Check that the Scala 3 compiler actually ran
+      run: |
+        # Only dotty emits .tasty files, so their presence rules out a silent
+        # fallback to the Scala 2 compiler. The set of modules to check is derived
+        # from what was built rather than hand-listed, so it cannot drift from
+        # SCALA3_MODULES.
+        if [ '${{ matrix.build-tool }}' = 'sbt' ]; then
+          # SBT writes to target/scala-<full compiler version>. Pinning to the exact
+          # version stops leftovers from a previous scala3.version satisfying the check.
+          version=$(./build/mvn -q help:evaluate -Dexpression=scala3.version -DforceStdout -N)
+        else
+          # Maven's outputDirectory follows scala.binary.version, which is just "3".
+          version=3
+        fi
+        echo "Checking target/scala-$version output directories"
+        checked=0
+        for classes in $(find . -type d -path "*/target/scala-$version/classes" | sort); do
+          module=${classes%%/target/*}
+          # Java-only modules legitimately produce no .tasty files.
+          if [ -z "$(find "$module/src/main" -name '*.scala' 2>/dev/null | head -1)" ]; then
+            continue
+          fi
+          count=$(find "$classes" -name '*.tasty' | wc -l)
+          echo "$module: $count .tasty file(s)"
+          if [ "$count" -eq 0 ]; then
+            echo "ERROR: $module has Scala sources but emitted no .tasty files;"
+            echo "       the Scala 3 compiler did not run for it."
+            exit 1
+          fi
+          checked=$((checked + 1))
+        done
+        if [ "$checked" -eq 0 ]; then
+          echo "ERROR: no module with Scala sources was verified; the build produced nothing."
+          exit 1
+        fi
+        echo "Verified $checked module(s) compiled by the Scala 3 compiler."
 
   # Documentation build
   docs:

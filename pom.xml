@@ -173,8 +173,24 @@
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
     <commons.math3.version>3.6.1</commons.math3.version>
     <commons.collections4.version>4.5.0</commons.collections4.version>
-    <scala.version>2.13.18</scala.version>
+    <!-- Canonical full version per binary version; the switch flips scala.version below. -->
+    <scala213.version>2.13.18</scala213.version>
+    <scala3.version>3.3.8</scala3.version>
+    <scala.version>${scala213.version}</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
+    <!-- Stdlib coordinate differs by version (scala-library vs scala3-library_3); indirect
+         it so the scala-3 profile swaps it without editing every module POM. -->
+    <scala.library.artifact>scala-library</scala.library.artifact>
+    <!-- Build-time plugin, only published for 2.13; own property so it is not rewritten _3. -->
+    <scalafmt.plugin.scala.binary.version>2.13</scalafmt.plugin.scala.binary.version>
+    <!-- SPARK-55152: chill has no Scala 3 build. Scala 3 consumes the 2.13 jar safely, since
+         scala3-library_3 sits on the 2.13 stdlib and the serialized classes are the same, so
+         pin the coordinate here instead of following scala.binary.version. -->
+    <chill.scala.binary.version>2.13</chill.scala.binary.version>
+    <!-- Same as chill: no Scala 3 build published, so pin rather than follow
+         scala.binary.version. -->
+    <kafka.scala.binary.version>2.13</kafka.scala.binary.version>
+    <classutil.scala.binary.version>2.13</classutil.scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.9.10</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
@@ -488,7 +504,7 @@
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
-        <artifactId>chill_${scala.binary.version}</artifactId>
+        <artifactId>chill_${chill.scala.binary.version}</artifactId>
         <version>${chill.version}</version>
         <exclusions>
           <exclusion>
@@ -1216,7 +1232,11 @@
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
-        <version>${scala.version}</version>
+        <!-- scala-compiler and scala-reflect are Scala 2 only; there is no 3.x artifact.
+             Track the 2.13 line explicitly rather than ${scala.version}, which the switch
+             points at ${scala3.version}. Identical under Scala 2.13, where scala.version
+             is ${scala213.version}. -->
+        <version>${scala213.version}</version>
         <exclusions>
           <exclusion>
             <groupId>org.scala-lang.modules</groupId>
@@ -1227,11 +1247,11 @@
       <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-reflect</artifactId>
-        <version>${scala.version}</version>
+        <version>${scala213.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
-        <artifactId>scala-library</artifactId>
+        <artifactId>${scala.library.artifact}</artifactId>
         <version>${scala.version}</version>
       </dependency>
       <dependency>
@@ -3345,7 +3365,7 @@
       </plugin>
       <plugin>
         <groupId>org.antipathy</groupId>
-        <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
+        <artifactId>mvn-scalafmt_${scalafmt.plugin.scala.binary.version}</artifactId>
         <version>1.1.1713302731.c3d0074</version>
         <configuration>
           <validateOnly>${scalafmt.validateOnly}</validateOnly> <!-- (Optional) skip formatting -->
@@ -3559,6 +3579,57 @@
       </build>
     </profile>
     -->
+
+    <!-- SPARK-58200 Scala 3 cross-build target. Activate with -Pscala-3, normally via
+         ./dev/change-scala-version.sh 3. Not yet expected to build the whole reactor. -->
+    <profile>
+      <id>scala-3</id>
+      <properties>
+        <scala.version>${scala3.version}</scala.version>
+        <scala.binary.version>3</scala.binary.version>
+        <scala.library.artifact>scala3-library_3</scala.library.artifact>
+        <!-- scala-maven-plugin passes -doc-format:html and -doc-title to the doc-jar goal
+             by default. Scala 3's scaladoc rejects both, and since -doc-title is dropped
+             its argument is then read as a source file, failing the build. Skip scaladoc
+             until the plugin configuration is made version-aware. -->
+        <maven.scaladoc.skip>true</maven.scaladoc.skip>
+      </properties>
+      <dependencyManagement>
+        <dependencies>
+          <!-- scala3-library_3 is managed above, leaving scala-library unmanaged; pin it so
+               a transitive 2.13 stdlib cannot downgrade the one under scala3-library_3. -->
+          <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>${scala213.version}</version>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>net.alchim31.maven</groupId>
+              <artifactId>scala-maven-plugin</artifactId>
+              <configuration>
+                <!-- override, not append: the default <args> are largely Scala 2 only
+                     (-explaintypes, the -Wconf rules) and dotty rejects them. Fatal warnings
+                     are intentionally dropped while -source:3.3-migration is on. -->
+                <args combine.self="override">
+                  <arg>-unchecked</arg>
+                  <arg>-deprecation</arg>
+                  <arg>-feature</arg>
+                  <arg>-release</arg>
+                  <arg>17</arg>
+                  <arg>-Wunused:imports</arg>
+                  <arg>-source:3.3-migration</arg>
+                </args>
+              </configuration>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
+    </profile>
 
     <!--
      This is a profile to enable the use of the ASF snapshot and staging repositories

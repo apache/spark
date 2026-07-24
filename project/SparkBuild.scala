@@ -171,10 +171,31 @@ object SparkBuild extends PomBuild {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val SbtCompile = config("sbt") extend(Compile)
 
+  // genjavadoc is a Scala 2 compiler plugin with no Scala 3 build. Under Scala 3 it is
+  // disabled (below); regenerating the Java API docs there is deferred (SPARK-54150).
   lazy val sparkGenjavadocSettings: Seq[sbt.Def.Setting[_]] = GenJavadocPlugin.projectSettings ++ Seq(
     scalacOptions ++= Seq(
       "-P:genjavadoc:strictVisibility=true" // hide package private types
-    )
+    ),
+    // Disable genjavadoc under Scala 3 (no _3 build). Both the plugin jar and its
+    // -P:genjavadoc options must go: dropping only the jar leaves the options, and the
+    // Scala 3 compiler then rejects them with "bad option".
+    libraryDependencies := {
+      val deps = libraryDependencies.value
+      if (scalaBinaryVersion.value.startsWith("3")) {
+        deps.filterNot(_.name.startsWith("genjavadoc"))
+      } else {
+        deps
+      }
+    },
+    scalacOptions := {
+      val opts = scalacOptions.value
+      if (scalaBinaryVersion.value.startsWith("3")) {
+        opts.filterNot(_.startsWith("-P:genjavadoc"))
+      } else {
+        opts
+      }
+    }
   )
 
   lazy val scalaStyleRules = Project("scalaStyleRules", file("scalastyle"))
