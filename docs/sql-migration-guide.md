@@ -34,6 +34,7 @@ license: |
 - Since Spark 4.3, non-deterministic filters (for example predicates involving `rand()`) are no longer pushed down to DataSource V2 sources that implement `SupportsPushDownV2Filters`; they are evaluated by Spark after the scan instead. This prevents a source from evaluating such a predicate a different number of times than Spark, or using it for pruning while also returning it for post-scan re-evaluation.
 - Since Spark 4.3, the new `COMMENT ON COLUMN ... IS NULL` syntax removes a column comment by passing a `null` comment to `TableChange.updateColumnComment(String[], String)`, so a `UpdateColumnComment` table change may now carry a `null` `newComment()`. Previously `newComment()` was always non-null. DataSource V2 catalogs that handle `UpdateColumnComment` should null-check `newComment()` and treat `null` as "remove the column comment" (mirroring how `UpdateColumnDefaultValue` already carries a `null` value to drop a default).
 - Since Spark 4.3, `hash()` and `xxhash64()` include the `days` field of `CalendarInterval` when computing the hash, so their output for interval values differs from earlier releases. Previously the codegen path dropped `days`, disagreeing with interpreted evaluation.
+- Since Spark 4.3, when overflowing during casting numeric types (double, float) to timestamp under non-ansi mode, Spark will return null instead of an incorrect value caused by numeric overflow.
 
 ## Upgrading from Spark SQL 4.1 to 4.2
 

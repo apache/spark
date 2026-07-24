@@ -129,7 +129,7 @@ In the table above, all the `CAST`s with new syntax are marked as red <span styl
 * CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
 * CAST(String AS (Numeric/Date/Timestamp/Timestamp_NTZ/Interval/Boolean)): raise a runtime exception if the value can't be parsed as the target data type.
 * CAST(Timestamp AS Numeric): raise an overflow exception if the number of seconds since epoch is out of the target data type's range.
-* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type.
+* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type. In non-ANSI mode, overflow returns NULL instead.
 * CAST(Array AS Array): raise an exception if there is any on the conversion of the elements.
 * CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.
 * CAST(Struct AS Struct): raise an exception if there is any on the conversion of the struct fields.
