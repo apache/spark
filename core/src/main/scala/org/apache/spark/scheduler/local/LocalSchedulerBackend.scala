@@ -27,6 +27,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.internal.{config, Logging, LogKeys}
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
@@ -127,6 +128,10 @@ private[spark] class LocalSchedulerBackend(
 
   override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
     Some(new HadoopDelegationTokenManager(conf, scheduler.sc.hadoopConfiguration, localEndpoint))
+  }
+
+  override protected def tokenManagerRequired(): Boolean = {
+    super.tokenManagerRequired() || conf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED)
   }
 
   override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
