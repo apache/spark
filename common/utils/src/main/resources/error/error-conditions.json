@@ -1957,6 +1957,16 @@
           "Null typed values cannot be used as arguments of <functionName>."
         ]
       },
+      "OVERLAPS_MIXED_TYPES" : {
+        "message" : [
+          "All endpoints in OVERLAPS must be the same datetime type, but got [<types>]."
+        ]
+      },
+      "OVERLAPS_UNSUPPORTED_TYPE" : {
+        "message" : [
+          "OVERLAPS requires datetime endpoints (TIME, DATE, TIMESTAMP, or TIMESTAMP_NTZ), but got <dataType>."
+        ]
+      },
       "PARAMETER_CONSTRAINT_VIOLATION" : {
         "message" : [
           "The <leftExprName>(<leftExprValue>) must be <constraint> the <rightExprName>(<rightExprValue>)."

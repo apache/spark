@@ -3626,6 +3626,23 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Create an OVERLAPS predicate expression. This tests whether two datetime periods overlap.
+   * Syntax:
+   *   (start1, end1) OVERLAPS (start2, end2)
+   *   (start1, interval1) OVERLAPS (start2, interval2)
+   *
+   * For the interval form, the endpoint is computed as start + interval.
+   * The type resolution happens during analysis when the types are known.
+   */
+  override def visitOverlaps(ctx: OverlapsContext): Expression = withOrigin(ctx) {
+    val s1 = expression(ctx.start1)
+    val e1 = expression(ctx.end1)
+    val s2 = expression(ctx.start2)
+    val e2 = expression(ctx.end2)
+    Overlaps(s1, e1, s2, e2)
+  }
+
+  /**
    * Create a comparison expression. This compares two expressions. The following comparison
    * operators are supported:
    * - Equal: '=' or '=='
