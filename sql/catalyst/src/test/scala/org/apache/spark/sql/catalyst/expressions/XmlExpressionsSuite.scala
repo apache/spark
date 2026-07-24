@@ -522,4 +522,17 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("XmlToStructs and StructsToXml are stateful and produce fresh copies") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+
+    val xmlToStructs = XmlToStructs(schema, Map.empty, Literal("<a>1</a>"), UTC_OPT)
+    assert(xmlToStructs.stateful)
+    assert(xmlToStructs.freshCopyIfContainsStatefulExpression() ne xmlToStructs)
+
+    val struct = Literal.create(InternalRow(1), schema)
+    val structsToXml = StructsToXml(Map.empty, struct, UTC_OPT)
+    assert(structsToXml.stateful)
+    assert(structsToXml.freshCopyIfContainsStatefulExpression() ne structsToXml)
+  }
+
 }

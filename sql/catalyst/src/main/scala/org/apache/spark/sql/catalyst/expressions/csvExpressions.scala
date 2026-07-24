@@ -102,6 +102,7 @@ case class CsvToStructs(
   @transient
   private lazy val evaluator: CsvToStructsEvaluator = CsvToStructsEvaluator(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, requiredSchema)
+  override def stateful: Boolean = true
 
   override def nullSafeEval(input: Any): Any = {
     evaluator.evaluate(input.asInstanceOf[UTF8String])
@@ -275,6 +276,7 @@ case class StructsToCsv(
   lazy val converter: Any => UTF8String = {
     (row: Any) => UTF8String.fromString(gen.writeToString(row.asInstanceOf[InternalRow]))
   }
+  override def stateful: Boolean = true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
