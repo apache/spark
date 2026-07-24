@@ -1676,7 +1676,7 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       exception = intercept[AnalysisException] {
         sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
       },
-      condition = "_LEGACY_ERROR_TEMP_1138"
+      condition = "ORC_DATA_SOURCE_REQUIRES_HIVE_SUPPORT"
     )
 
     e = intercept[AnalysisException] {
