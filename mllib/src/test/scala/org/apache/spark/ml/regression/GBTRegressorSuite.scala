@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.regression
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -28,8 +30,10 @@ import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => 
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -67,6 +71,49 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     linearRegressionData = sc.parallelize(LinearDataGenerator.generateLinearInput(
       intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
       xVariance = Array(0.7, 1.2), nPoints = 1000, seed, eps = 0.5), 2).map(_.asML).toDF()
+  }
+
+  test("SPARK-57870: intermediateStorageLevel param") {
+    val gbt = new GBTRegressor()
+    assert(gbt.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    gbt.setIntermediateStorageLevel("MEMORY_ONLY")
+    assert(gbt.getIntermediateStorageLevel === "MEMORY_ONLY")
+    intercept[IllegalArgumentException] {
+      new GBTRegressor().setIntermediateStorageLevel("NONE")
+    }
+    intercept[IllegalArgumentException] {
+      new GBTRegressor().setIntermediateStorageLevel("no_such_a_level")
+    }
+  }
+
+  test("SPARK-57870: intermediateStorageLevel is applied to intermediate datasets") {
+    val df = trainData.toDF()
+    val gbt = new GBTRegressor()
+      .setMaxIter(2)
+      .setMaxDepth(2)
+      .setIntermediateStorageLevel("DISK_ONLY")
+
+    val capturedLevels = mutable.ArrayBuffer.empty[StorageLevel]
+    val listener = new SparkListener {
+      override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+        capturedLevels ++= stageCompleted.stageInfo.rddInfos
+          .filter { info =>
+            info.name == "binned tree points" ||
+              info.name.startsWith("firstCounts at iter=") ||
+              info.name.startsWith("labelWithCounts at iter=")
+          }
+          .map(_.storageLevel)
+      }
+    }
+    sc.addSparkListener(listener)
+    try {
+      gbt.fit(df)
+      sc.listenerBus.waitUntilEmpty()
+    } finally {
+      sc.removeSparkListener(listener)
+    }
+    assert(capturedLevels.nonEmpty)
+    capturedLevels.foreach(level => assert(level === StorageLevel.DISK_ONLY))
   }
 
   test("Regression with continuous features") {

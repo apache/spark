@@ -82,6 +82,19 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(model)
   }
 
+  test("SPARK-57870: intermediateStorageLevel param") {
+    val gbt = new GBTClassifier()
+    assert(gbt.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    gbt.setIntermediateStorageLevel("MEMORY_ONLY")
+    assert(gbt.getIntermediateStorageLevel === "MEMORY_ONLY")
+    intercept[IllegalArgumentException] {
+      new GBTClassifier().setIntermediateStorageLevel("NONE")
+    }
+    intercept[IllegalArgumentException] {
+      new GBTClassifier().setIntermediateStorageLevel("no_such_a_level")
+    }
+  }
+
   test("GBTClassifier: default params") {
     val gbt = new GBTClassifier
     assert(gbt.getLabelCol === "label")

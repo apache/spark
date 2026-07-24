@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite.generateSVMInput
 import org.apache.spark.ml.feature.LabeledPoint
@@ -30,8 +32,10 @@ import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -81,6 +85,45 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     val model = new RandomForestClassificationModel("rfc",
       Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 1, 2)), 2, 2)
     ParamsSuite.checkParams(model)
+  }
+
+  test("SPARK-57870: intermediateStorageLevel param") {
+    val rf = new RandomForestClassifier()
+    assert(rf.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    rf.setIntermediateStorageLevel("MEMORY_ONLY")
+    assert(rf.getIntermediateStorageLevel === "MEMORY_ONLY")
+    intercept[IllegalArgumentException] {
+      new RandomForestClassifier().setIntermediateStorageLevel("NONE")
+    }
+    intercept[IllegalArgumentException] {
+      new RandomForestClassifier().setIntermediateStorageLevel("no_such_a_level")
+    }
+  }
+
+  test("SPARK-57870: intermediateStorageLevel is applied to intermediate datasets") {
+    val df = TreeTests.setMetadata(orderedLabeledPoints5_20, Map.empty[Int, Int], 2)
+    val rf = new RandomForestClassifier()
+      .setNumTrees(2)
+      .setMaxDepth(2)
+      .setIntermediateStorageLevel("DISK_ONLY")
+
+    val capturedLevels = mutable.ArrayBuffer.empty[StorageLevel]
+    val listener = new SparkListener {
+      override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+        capturedLevels ++= stageCompleted.stageInfo.rddInfos
+          .filter(_.name == "bagged tree points")
+          .map(_.storageLevel)
+      }
+    }
+    sc.addSparkListener(listener)
+    try {
+      rf.fit(df)
+      sc.listenerBus.waitUntilEmpty()
+    } finally {
+      sc.removeSparkListener(listener)
+    }
+    assert(capturedLevels.nonEmpty)
+    capturedLevels.foreach(level => assert(level === StorageLevel.DISK_ONLY))
   }
 
   test("RandomForestClassifier validate input dataset") {
