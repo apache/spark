@@ -6715,6 +6715,29 @@
     ],
     "sqlState" : "42K05"
   },
+  "SKETCH_INPUT_MISMATCH" : {
+    "message" : [
+      "Invalid call to <function>;"
+    ],
+    "subClass" : {
+      "COLLATION" : {
+        "message" : [
+          "the input sketches were built under different collations (<left> and <right>), so combining them may produce incorrect results. Rebuild the sketches under a single collation, or set `spark.sql.sketch.allowVersionMismatch` to true to proceed anyway."
+        ]
+      },
+      "ICU_VERSION" : {
+        "message" : [
+          "the input sketches were built under different ICU library versions (<left> and <right>), so combining them may produce incorrect results. Rebuild the sketches under a single runtime, or set `spark.sql.sketch.allowVersionMismatch` to true to proceed anyway."
+        ]
+      },
+      "KEY_ENCODING" : {
+        "message" : [
+          "the input sketches encoded their keys differently (<left> and <right>), so combining them may produce incorrect results. Rebuild the sketches under a single runtime, or set `spark.sql.sketch.allowVersionMismatch` to true to proceed anyway."
+        ]
+      }
+    },
+    "sqlState" : "22546"
+  },
   "SKETCH_INVALID_LG_NOM_ENTRIES" : {
     "message" : [
       "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."

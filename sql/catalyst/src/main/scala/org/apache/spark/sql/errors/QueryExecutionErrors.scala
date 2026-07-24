@@ -2984,6 +2984,33 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function)))
   }
 
+  def sketchKeyEncodingMismatch(function: String, left: String, right: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "SKETCH_INPUT_MISMATCH.KEY_ENCODING",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "left" -> left,
+        "right" -> right))
+  }
+
+  def sketchCollationMismatch(function: String, left: Int, right: Int): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "SKETCH_INPUT_MISMATCH.COLLATION",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "left" -> toSQLValue(left, IntegerType),
+        "right" -> toSQLValue(right, IntegerType)))
+  }
+
+  def sketchIcuVersionMismatch(function: String, left: String, right: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "SKETCH_INPUT_MISMATCH.ICU_VERSION",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "left" -> (if (left == null) "unknown" else left),
+        "right" -> (if (right == null) "unknown" else right)))
+  }
+
   def approxTopKNonPositiveValue(argName: String, argValue: Int): Throwable = {
     new SparkRuntimeException(
       errorClass = "APPROX_TOP_K_NON_POSITIVE_ARG",
