@@ -325,6 +325,47 @@ class VectorIndexerModel private[ml] (
       .toDF("featureIndex", "originalValue", "categoryIndex")
   }
 
+  /**
+   * Computes feature attributes with some missing information.
+   * In transform(), set attribute name and other information, if available.
+   */
+  private def partialFeatureAttributes: Array[Attribute] = {
+    val attrs = new Array[Attribute](numFeatures)
+    var categoricalFeatureCount = 0 // validity check for numFeatures, categoryMaps
+    var featureIndex = 0
+    while (featureIndex < numFeatures) {
+      if (categoryMaps.contains(featureIndex)) {
+        // categorical feature
+        val rawFeatureValues: Array[String] =
+          categoryMaps(featureIndex).toArray.sortBy(_._1).map(_._1).map(_.toString)
+
+        val featureValues = if (getHandleInvalid == VectorIndexer.KEEP_INVALID) {
+          (rawFeatureValues.toList :+ "__unknown").toArray
+        } else {
+          rawFeatureValues
+        }
+        if (featureValues.length == 2 && getHandleInvalid != VectorIndexer.KEEP_INVALID) {
+          attrs(featureIndex) = new BinaryAttribute(index = Some(featureIndex),
+            values = Some(featureValues))
+        } else {
+          attrs(featureIndex) = new NominalAttribute(index = Some(featureIndex),
+            isOrdinal = Some(false), values = Some(featureValues))
+        }
+        categoricalFeatureCount += 1
+      } else {
+        // continuous feature
+        attrs(featureIndex) = new NumericAttribute(index = Some(featureIndex))
+      }
+      featureIndex += 1
+    }
+    require(
+      categoricalFeatureCount == categoryMaps.size,
+      "VectorIndexerModel given categoryMaps" +
+        s" with keys outside expected range [0,...,numFeatures), " +
+        s"where numFeatures=$numFeatures")
+    attrs
+  }
+
   // TODO: Check more carefully about whether this whole class will be included in a closure.
 
   /** Per-vector transform function */
@@ -451,44 +492,6 @@ class VectorIndexerModel private[ml] (
    * @return  Output column field.  This field does not contain non-ML metadata.
    */
   private def prepOutputField(schema: StructType): StructField = {
-    // Pre-compute feature attributes, with some missing info.
-    // Set attribute name and other info below, if available.
-    val partialFeatureAttributes = {
-      val attrs = new Array[Attribute](numFeatures)
-      var categoricalFeatureCount = 0 // validity check for numFeatures, categoryMaps
-      var featureIndex = 0
-      while (featureIndex < numFeatures) {
-        if (categoryMaps.contains(featureIndex)) {
-          // categorical feature
-          val rawFeatureValues: Array[String] =
-            categoryMaps(featureIndex).toArray.sortBy(_._1).map(_._1).map(_.toString)
-
-          val featureValues = if (getHandleInvalid == VectorIndexer.KEEP_INVALID) {
-            (rawFeatureValues.toList :+ "__unknown").toArray
-          } else {
-            rawFeatureValues
-          }
-          if (featureValues.length == 2 && getHandleInvalid != VectorIndexer.KEEP_INVALID) {
-            attrs(featureIndex) = new BinaryAttribute(index = Some(featureIndex),
-              values = Some(featureValues))
-          } else {
-            attrs(featureIndex) = new NominalAttribute(index = Some(featureIndex),
-              isOrdinal = Some(false), values = Some(featureValues))
-          }
-          categoricalFeatureCount += 1
-        } else {
-          // continuous feature
-          attrs(featureIndex) = new NumericAttribute(index = Some(featureIndex))
-        }
-        featureIndex += 1
-      }
-      require(
-        categoricalFeatureCount == categoryMaps.size,
-        "VectorIndexerModel given categoryMaps" +
-          s" with keys outside expected range [0,...,numFeatures), " +
-          s"where numFeatures=$numFeatures")
-      attrs
-    }
     val origAttrGroup = AttributeGroup.fromStructField(
       SchemaUtils.getSchemaField(schema, $(inputCol))
     )
