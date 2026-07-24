@@ -28,6 +28,7 @@ import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.EXECUTOR_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED
 import org.apache.spark.internal.config.SPARK_EXECUTOR_PREFIX
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceInformation
@@ -132,6 +133,13 @@ private[deploy] class ExecutorRunner(
     }
   }
 
+  private[worker] def activeProcessorCountOpts(): Seq[String] =
+    if (conf.get(EXECUTOR_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED)) {
+      Seq(s"-XX:ActiveProcessorCount=$cores")
+    } else {
+      Seq.empty
+    }
+
   /** Replace variables such as {{EXECUTOR_ID}} and {{CORES}} in a command argument passed to us */
   private[worker] def substituteVariables(argument: String): String = argument match {
     case "{{WORKER_URL}}" => workerUrl
@@ -152,7 +160,7 @@ private[deploy] class ExecutorRunner(
       // Launch the process
       val arguments = appDesc.command.arguments ++ resourceFileOpt.map(f =>
         Seq("--resourcesFile", f.getAbsolutePath)).getOrElse(Seq.empty)
-      val subsOpts = appDesc.command.javaOpts.map {
+      val subsOpts = activeProcessorCountOpts() ++ appDesc.command.javaOpts.map {
         Utils.substituteAppNExecIds(_, appId, execId.toString)
       }
       val subsCommand = appDesc.command.copy(arguments = arguments, javaOpts = subsOpts)

@@ -32,7 +32,8 @@ import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.{DRIVER_RESOURCES_FILE, SPARK_DRIVER_PREFIX}
+import org.apache.spark.internal.config.{DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED,
+  DRIVER_RESOURCES_FILE, SPARK_DRIVER_PREFIX}
 import org.apache.spark.internal.config.UI.UI_REVERSE_PROXY
 import org.apache.spark.internal.config.Worker.WORKER_DRIVER_TERMINATE_TIMEOUT
 import org.apache.spark.resource.ResourceInformation
@@ -175,6 +176,13 @@ private[deploy] class DriverRunner(
     localJarFile.getAbsolutePath
   }
 
+  private[worker] def activeProcessorCountOpts(): Seq[String] =
+    if (conf.get(DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED)) {
+      Seq(s"-XX:ActiveProcessorCount=${driverDesc.cores}")
+    } else {
+      Seq.empty
+    }
+
   private[worker] def prepareAndRunDriver(): Int = {
     val driverDir = createWorkingDirectory()
     val localJarFilename = downloadUserJar(driverDir)
@@ -187,8 +195,9 @@ private[deploy] class DriverRunner(
     }
 
     // config resource file for driver, which would be used to load resources when driver starts up
-    val javaOpts = driverDesc.command.javaOpts ++ resourceFileOpt.map(f =>
-      Seq(s"-D${DRIVER_RESOURCES_FILE.key}=${f.getAbsolutePath}")).getOrElse(Seq.empty)
+    val javaOpts = activeProcessorCountOpts() ++
+      driverDesc.command.javaOpts ++ resourceFileOpt.map(f =>
+        Seq(s"-D${DRIVER_RESOURCES_FILE.key}=${f.getAbsolutePath}")).getOrElse(Seq.empty)
     // TODO: If we add ability to submit multiple jars they should also be added here
     val builder = CommandUtils.buildProcessBuilder(driverDesc.command.copy(javaOpts = javaOpts),
       securityManager, driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)

@@ -3153,7 +3153,7 @@ package object config {
   private[spark] val DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
     ConfigBuilder("spark.driver.limitActiveProcessorCount.enabled")
       .doc("Whether to add -XX:ActiveProcessorCount=<spark.driver.cores> to the driver JVM " +
-        "options. Currently, this only takes effect in YARN cluster mode.")
+        "options. Currently, this takes effect in YARN cluster mode and standalone cluster mode.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -3162,7 +3162,7 @@ package object config {
   private[spark] val EXECUTOR_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
     ConfigBuilder("spark.executor.limitActiveProcessorCount.enabled")
       .doc("Whether to add -XX:ActiveProcessorCount=<spark.executor.cores> to executor JVM " +
-        "options. Currently, this only takes effect in YARN mode.")
+        "options. Currently, this takes effect in YARN mode and standalone mode.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
