@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.io.File
 import java.util
+import java.util.Optional
 import java.util.OptionalLong
 
 import scala.jdk.CollectionConverters._
@@ -26,22 +27,26 @@ import scala.jdk.CollectionConverters._
 import test.org.apache.spark.sql.connector._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
   AttributeReference, Expression => CatalystExpression, GreaterThan => CatalystGreaterThan,
-  Literal => CatalystLiteral, ScalarSubquery}
+  LessThan => CatalystLessThan, Literal => CatalystLiteral, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter => LogicalFilter, Project}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
+import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering}
+import org.apache.spark.sql.execution.datasources.v2.{
+  BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation, PushedDownOperators,
+  V1ScanWrapper, V2ScanPartitioningAndOrdering}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -49,7 +54,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
-import org.apache.spark.sql.sources.{Filter, GreaterThan}
+import org.apache.spark.sql.sources.{BaseRelation, Filter, GreaterThan, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -387,16 +392,30 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     Seq(classOf[ReportStatisticsDataSource], classOf[JavaReportStatisticsDataSource]).foreach {
       cls =>
         withClue(cls.getName) {
-          val df = spark.read.format(cls.getName).load()
-          val logical = df.queryExecution.optimizedPlan.collect {
-            case d: DataSourceV2ScanRelation => d
-          }.head
+          def scanStats = {
+            val df = spark.read.format(cls.getName).load()
+            df.queryExecution.optimizedPlan.collect {
+              case d: DataSourceV2ScanRelation => d
+            }.head.computeStats()
+          }
 
-          val statics = logical.computeStats()
-          assert(statics.rowCount.isDefined && statics.rowCount.get === 10,
-            "Row count statics should be reported by data source")
-          assert(statics.sizeInBytes === 80,
-            "Size in bytes statics should be reported by data source")
+          withSQLConf(
+              SQLConf.CBO_ENABLED.key -> "false",
+              SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+            val statics = scanStats
+            assert(statics.rowCount.isEmpty,
+              "Row count statics should not be reported when Spark only needs size")
+            assert(statics.sizeInBytes === 80,
+              "Size in bytes statics should be reported by data source")
+          }
+
+          withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+            val statics = scanStats
+            assert(statics.rowCount.isDefined && statics.rowCount.get === 10,
+              "Row count statics should be reported by data source")
+            assert(statics.sizeInBytes === 80,
+              "Size in bytes statics should be reported by data source")
+          }
         }
     }
   }
@@ -1168,6 +1187,225 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }.head
   }
 
+  private def hasIGt3(condition: CatalystExpression): Boolean = {
+    condition.exists {
+      case CatalystGreaterThan(attr: AttributeReference, CatalystLiteral(value: Int, _)) =>
+        attr.name == "i" && value == 3
+      case _ => false
+    }
+  }
+
+  private def hasJLtNeg5(condition: CatalystExpression): Boolean = {
+    condition.exists {
+      case CatalystLessThan(attr: AttributeReference, CatalystLiteral(value: Int, _)) =>
+        attr.name == "j" && value == -5
+      case _ => false
+    }
+  }
+
+  test("Spark post-pushdown adjustments re-add fully pushed predicates") {
+    val df = spark.read.format(
+      classOf[AdvancedDataSourceV2WithSparkPostPushdownAdjustments].getName).load()
+    val q = df.filter($"i" > 3)
+    checkAnswer(q, (4 until 10).map(i => Row(i, -i)))
+
+    val plan = q.queryExecution.optimizedPlan
+    assert(plan.collect { case f: LogicalFilter => f }.exists(f => hasIGt3(f.condition)),
+      s"Expected i > 3 in a post-scan Filter when Spark owns post-pushdown adjustments:\n$plan")
+    val scan = getScanRelation(q)
+    assert(scan.pushedFilters.exists(hasIGt3),
+      "scan.pushedFilters should still record the pushed predicate")
+  }
+
+  test("Spark post-pushdown adjustments use delegated stats end-to-end") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val df = spark.read.format(
+        classOf[AdvancedDataSourceV2WithSparkPostPushdownAdjustments].getName).load()
+      val q = df.filter($"i" > 3)
+      checkAnswer(q, (4 until 10).map(i => Row(i, -i)))
+
+      val scan = getScanRelation(q)
+      val stats = scan.stats
+      val expectedSize = EstimationUtils.getOutputSize(
+        scan.output, BigInt(10), stats.attributeStats)
+      assert(stats.rowCount.contains(BigInt(10)),
+        "fake connector should delegate numRows through scan stats")
+      assert(stats.sizeInBytes === expectedSize,
+        "fake connector should use Spark's projection-aware scan-delegated stats size")
+      assert(q.queryExecution.optimizedPlan.stats.rowCount.contains(BigInt(7)),
+        "re-added pushed predicate should adjust plan row count from the scan's pre-filter stats")
+    }
+  }
+
+  test("scan stats alone do not imply Spark post-pushdown adjustments") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val df = spark.read.format(classOf[AdvancedDataSourceV2WithScanStats].getName).load()
+      val q = df.filter($"i" > 3)
+      checkAnswer(q, (4 until 10).map(i => Row(i, -i)))
+
+      val plan = q.queryExecution.optimizedPlan
+      assert(!plan.collect { case f: LogicalFilter => f }.exists(f => hasIGt3(f.condition)),
+        s"i > 3 should be stripped from the post-scan Filter by default:\n$plan")
+
+      val scan = getScanRelation(q)
+      val stats = scan.stats
+      assert(scan.scan.asInstanceOf[SupportsReportStatistics].reflectsFullyPushedDownFilters(),
+        "this fake connector reports scan stats as post-pushdown by default")
+      assert(stats.rowCount.contains(BigInt(2)),
+        "connector should use scan rowCount")
+      assert(stats.sizeInBytes === BigInt(32),
+        "connector should use scan sizeInBytes")
+    }
+  }
+
+  test("V1ScanWrapper delegates optional reported statistics") {
+    val v1Scan = new V1Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = TestingV2Source.schema
+      override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T =
+        throw new UnsupportedOperationException("not used")
+      override def estimateStatistics(): Statistics = new Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.of(128L)
+        override def numRows(): OptionalLong = OptionalLong.of(8L)
+      }
+      override def estimateSizeInBytes(): OptionalLong = OptionalLong.of(64L)
+      override def reflectsFullyPushedDownFilters(): Boolean = false
+    }
+
+    val wrapper = V1ScanWrapper(v1Scan, Nil,
+      PushedDownOperators(None, None, None, None, Nil, Nil, Nil, None))
+
+    val stats = wrapper.estimateStatistics()
+    assert(stats.sizeInBytes().getAsLong === 128L)
+    assert(stats.numRows().getAsLong === 8L)
+    assert(wrapper.estimateSizeInBytes().getAsLong === 64L)
+    assert(!wrapper.reflectsFullyPushedDownFilters())
+  }
+
+  test("V1ScanWrapper uses empty/default statistics when V1 scan does not report them") {
+    val v1Scan = new V1Scan {
+      override def readSchema(): StructType = TestingV2Source.schema
+      override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T =
+        throw new UnsupportedOperationException("not used")
+    }
+
+    val wrapper = V1ScanWrapper(v1Scan, Nil,
+      PushedDownOperators(None, None, None, None, Nil, Nil, Nil, None))
+
+    val stats = wrapper.estimateStatistics()
+    assert(!stats.sizeInBytes().isPresent)
+    assert(!stats.numRows().isPresent)
+    assert(!wrapper.estimateSizeInBytes().isPresent)
+    assert(wrapper.reflectsFullyPushedDownFilters())
+  }
+
+  test("Spark post-pushdown adjustments are not added for scans without reported stats") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+      val q = df.filter($"i" > 3)
+      checkAnswer(q, (4 until 10).map(i => Row(i, -i)))
+
+      val plan = q.queryExecution.optimizedPlan
+      assert(!plan.collect { case f: LogicalFilter => f }.exists(f => hasIGt3(f.condition)),
+        s"i > 3 should not be re-added without SupportsReportStatistics opt-in:\n$plan")
+
+      val scan = getScanRelation(q)
+      assert(scan.pushedFilters.exists(hasIGt3),
+        "scan.pushedFilters should still record the pushed predicate")
+    }
+  }
+
+  test("Spark post-pushdown adjustments merge pushed and unpushed predicates") {
+    val df = spark.read.format(
+      classOf[AdvancedDataSourceV2WithSparkPostPushdownAdjustments].getName).load()
+    val q = df.filter($"i" > 3 && $"j" < -5)
+    checkAnswer(q, (6 until 10).map(i => Row(i, -i)))
+
+    val optimizedPlan = q.queryExecution.optimizedPlan
+    val directScanFilters = optimizedPlan.collect {
+      case LogicalFilter(condition, _: DataSourceV2ScanRelation) => condition
+    }
+    assert(directScanFilters.length == 1,
+      s"pushed and unpushed predicates should be merged into one Filter above the scan:\n" +
+        optimizedPlan)
+    assert(hasIGt3(directScanFilters.head))
+    assert(hasJLtNeg5(directScanFilters.head))
+  }
+
+  test("Spark post-pushdown adjustments preserve projection when re-adding predicates") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val df = spark.read.format(
+        classOf[AdvancedDataSourceV2WithSparkPostPushdownAdjustments].getName).load()
+      val q = df.filter($"i" > 3).select($"j")
+      checkAnswer(q, (4 until 10).map(i => Row(-i)))
+
+      val optimizedPlan = q.queryExecution.optimizedPlan
+      val directScanFilters = optimizedPlan.collect {
+        case LogicalFilter(condition, _: DataSourceV2ScanRelation) => condition
+      }
+      assert(directScanFilters.length == 1,
+        s"pushed predicate should be re-added directly above the scan before projection:\n" +
+          optimizedPlan)
+      assert(hasIGt3(directScanFilters.head))
+      assert(optimizedPlan.output.map(_.name) == Seq("j"))
+
+      val scan = getScanRelation(q)
+      assert(scan.output.exists(_.name == "i"),
+        "scan output should retain the pushed-filter column needed for the re-added predicate")
+      assert(scan.output.exists(_.name == "j"),
+        "scan output should retain the projected column")
+    }
+  }
+
+  test("Spark post-pushdown adjustments skip pushed predicates pruned from scan output") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val df = spark.read.format(
+        classOf[AdvancedDataSourceV2WithBestEffortSparkPostPushdownAdjustments].getName).load()
+      val q = df.filter($"i" > 3).select($"j")
+      checkAnswer(q, (4 until 10).map(i => Row(-i)))
+
+      val scan = getScanRelation(q)
+      assert(!scan.output.exists(_.name == "i"),
+        "column i should be pruned from the scan output")
+      assert(!scan.scan.asInstanceOf[SupportsReportStatistics].reflectsFullyPushedDownFilters(),
+        "fake connector should request Spark post-pushdown adjustments")
+      assert(scan.pushedFilters.isEmpty,
+        "pushedFilters should drop filters whose references were pruned")
+
+      val optimizedPlan = q.queryExecution.optimizedPlan
+      assert(!optimizedPlan.collect { case f: LogicalFilter => f }.exists(f =>
+        hasIGt3(f.condition)),
+        s"pruned pushed predicate should not be re-added above the scan:\n$optimizedPlan")
+    }
+  }
+
+  test("Spark post-pushdown adjustments re-add pushed predicates below stacked residual filters") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      // Non-deterministic, always-true residual filters: they cannot be pushed down and cannot be
+      // combined with each other, so two Filter nodes stay stacked above the scan. This forces
+      // addToScan to recurse through the outer Filter to re-add the fully pushed i > 3.
+      val alwaysTrue = udf((_: Int) => true).asNondeterministic()
+      val df = spark.read.format(
+        classOf[AdvancedDataSourceV2WithSparkPostPushdownAdjustments].getName).load()
+      val q = df.filter($"i" > 3).filter(alwaysTrue($"i")).filter(alwaysTrue($"j"))
+      checkAnswer(q, (4 until 10).map(i => Row(i, -i)))
+
+      val optimizedPlan = q.queryExecution.optimizedPlan
+      val filters = optimizedPlan.collect { case f: LogicalFilter => f }
+      assert(filters.length == 2,
+        s"the two non-deterministic residual filters should stay stacked above the scan:\n" +
+          optimizedPlan)
+      val directScanFilters = optimizedPlan.collect {
+        case LogicalFilter(condition, _: DataSourceV2ScanRelation) => condition
+      }
+      assert(directScanFilters.length == 1,
+        s"pushed predicate should be re-added into the filter directly above the scan:\n" +
+          optimizedPlan)
+      assert(hasIGt3(directScanFilters.head),
+        s"addToScan should recurse through the outer residual filter to re-add i > 3:\n" +
+          optimizedPlan)
+    }
+  }
+
   test("pushedFilters are set for fully pushed filters") {
     val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
     // AdvancedDataSourceV2 only supports pushing GreaterThan on column "i".
@@ -1607,6 +1845,89 @@ class AdvancedBatch(val filters: Array[Filter], val requiredSchema: StructType) 
 
   override def createReaderFactory(): PartitionReaderFactory = {
     new AdvancedReaderFactory(requiredSchema)
+  }
+}
+
+class AdvancedDataSourceV2WithSparkPostPushdownAdjustments extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new AdvancedScanBuilderWithSparkPostPushdownAdjustments()
+    }
+  }
+}
+
+class AdvancedScanBuilderWithSparkPostPushdownAdjustments
+  extends AdvancedScanBuilder with SupportsReportStatistics {
+
+  override def reflectsFullyPushedDownFilters(): Boolean = false
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = schemaWithPushedFilterColumns(requiredSchema)
+  }
+
+  override def estimateStatistics(): Statistics = new Statistics {
+    override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+    override def numRows(): OptionalLong = OptionalLong.of(10L)
+    override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
+      val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
+      stats.put(FieldReference.column("i"), new ColumnStatistics {
+        override def distinctCount(): OptionalLong = OptionalLong.of(10L)
+        override def min(): Optional[AnyRef] = Optional.of(Int.box(0))
+        override def max(): Optional[AnyRef] = Optional.of(Int.box(9))
+      })
+      stats
+    }
+  }
+
+  private def schemaWithPushedFilterColumns(prunedSchema: StructType): StructType = {
+    val existingFields = prunedSchema.fieldNames.toSet
+    val pushedFilterFields = filters.collect {
+      case GreaterThan(columnName: String, _) => columnName
+    }.distinct
+      .filterNot(existingFields.contains)
+      .flatMap { columnName =>
+        TestingV2Source.schema.fields.find(_.name == columnName)
+      }
+    StructType(prunedSchema.fields ++ pushedFilterFields)
+  }
+}
+
+class AdvancedDataSourceV2WithBestEffortSparkPostPushdownAdjustments extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new AdvancedScanBuilderWithBestEffortSparkPostPushdownAdjustments()
+    }
+  }
+}
+
+class AdvancedScanBuilderWithBestEffortSparkPostPushdownAdjustments
+  extends AdvancedScanBuilder with SupportsReportStatistics {
+
+  override def reflectsFullyPushedDownFilters(): Boolean = false
+
+  override def estimateStatistics(): Statistics = new Statistics {
+    override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+    override def numRows(): OptionalLong = OptionalLong.of(10L)
+  }
+}
+
+class AdvancedDataSourceV2WithScanStats extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new AdvancedScanBuilderWithReportedStatistics()
+    }
+  }
+}
+
+class AdvancedScanBuilderWithReportedStatistics
+  extends AdvancedScanBuilder with SupportsReportStatistics {
+
+  override def estimateStatistics(): Statistics = new Statistics {
+    override def sizeInBytes(): OptionalLong = OptionalLong.of(32L)
+    override def numRows(): OptionalLong = OptionalLong.of(2L)
   }
 }
 

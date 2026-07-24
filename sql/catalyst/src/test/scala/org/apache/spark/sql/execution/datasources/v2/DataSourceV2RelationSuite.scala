@@ -18,18 +18,25 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
+import java.util.OptionalLong
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Histogram, HistogramBin}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.INTERNAL_METADATA_KEYS
 import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.colstats.ColumnStatistics
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class DataSourceV2RelationSuite extends SparkFunSuite {
+class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
 
   test("DataSourceV2Relation.v1StatsToV2Stats") {
     val schema = StructType(Seq(
@@ -114,6 +121,293 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     assert(!idV2NoHist.histogram().isPresent)
   }
 
+  private def scanRel(
+      output: Seq[AttributeReference],
+      scan: Scan,
+      table: Table = new FakeTableWithSchema()): DataSourceV2ScanRelation = {
+    DataSourceV2ScanRelation(
+      DataSourceV2Relation(table, output, None, None, CaseInsensitiveStringMap.empty()),
+      scan,
+      output)
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses non-empty scan stats with CBO") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.of(42L)
+        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
+          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
+          stats.put(FieldReference.column("id"), new ColumnStatistics {
+            override def distinctCount(): OptionalLong = OptionalLong.of(40L)
+            override def avgLen(): OptionalLong = OptionalLong.of(4L)
+          })
+          stats
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.rowCount.contains(BigInt(42)))
+      assert(stats.attributeStats.size === 1)
+      assert(stats.attributeStats(idAttr).distinctCount.contains(BigInt(40)))
+      assert(stats.attributeStats(idAttr).avgLen.contains(4L))
+      assert(stats.sizeInBytes ===
+        EstimationUtils.getOutputSize(output, BigInt(42), stats.attributeStats))
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats derives size 1 for a zero-row scan with CBO") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.of(0L)
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.rowCount.contains(BigInt(0)))
+      assert(stats.sizeInBytes === BigInt(1))
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses full stats with plan stats enabled") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateSizeInBytes(): OptionalLong = OptionalLong.of(50L)
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.of(1000L)
+        override def numRows(): OptionalLong = OptionalLong.of(7L)
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "true") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(1000))
+      assert(stats.rowCount.contains(BigInt(7)))
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats treats column-only scan stats as non-empty") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.empty()
+        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = {
+          val stats = new java.util.HashMap[NamedReference, ColumnStatistics]()
+          stats.put(FieldReference.column("id"), new ColumnStatistics {
+            override def distinctCount(): OptionalLong = OptionalLong.of(7L)
+          })
+          stats
+        }
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(12345))
+      assert(stats.rowCount.isEmpty)
+      assert(stats.attributeStats.size === 1)
+      assert(stats.attributeStats(idAttr).distinctCount.contains(BigInt(7)))
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses size-only estimates without CBO") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateSizeInBytes(): OptionalLong = OptionalLong.of(50L)
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.of(1000L)
+        override def numRows(): OptionalLong = OptionalLong.of(5L)
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(50))
+      assert(stats.rowCount.isEmpty)
+      assert(stats.attributeStats.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses default estimateSizeInBytes without CBO") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.of(64L)
+        override def numRows(): OptionalLong = OptionalLong.of(5L)
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(64))
+      assert(stats.rowCount.isEmpty)
+      assert(stats.attributeStats.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats infers size-only estimates from row count") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.of(5L)
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === EstimationUtils.getSizePerRow(output) * BigInt(5))
+      assert(stats.rowCount.isEmpty)
+      assert(stats.attributeStats.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses default size without CBO for empty stats") {
+    val output = Seq(AttributeReference("id", IntegerType)())
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.empty()
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(12345))
+      assert(stats.rowCount.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses default size without reported stats") {
+    val output = Seq(AttributeReference("id", IntegerType)())
+    val scan = new Scan {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(12345))
+      assert(stats.rowCount.isEmpty)
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(12345))
+      assert(stats.rowCount.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses default size for empty scan stats") {
+    val output = Seq(AttributeReference("id", IntegerType)())
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.empty()
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === BigInt(12345))
+      assert(stats.rowCount.isEmpty)
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats uses default size for null scan stats") {
+    val output = Seq(AttributeReference("id", IntegerType)())
+    val nullStatsScan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = null
+    }
+    val nullColumnStatsScan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.empty()
+        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = null
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      Seq(nullStatsScan, nullColumnStatsScan).foreach { scan =>
+        val stats = scanRel(output, scan).computeStats()
+
+        assert(stats.sizeInBytes === BigInt(12345))
+        assert(stats.rowCount.isEmpty)
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> "12345") {
+      Seq(nullStatsScan, nullColumnStatsScan).foreach { scan =>
+        val stats = scanRel(output, scan).computeStats()
+
+        assert(stats.sizeInBytes === BigInt(12345))
+        assert(stats.rowCount.isEmpty)
+      }
+    }
+  }
+
   test("create strips leaked internal metadata but preserves column IDs") {
     // A column carrying both a column ID (surfaced on purpose) and every internal metadata key
     // (listed in INTERNAL_METADATA_KEYS), simulating a v2 source that leaks internal metadata.
@@ -146,4 +440,13 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     assert(field.id.contains("1"))
     assert(field.metadata.contains(FIELD_ID_METADATA_KEY))
   }
+}
+
+private class FakeTableWithSchema(
+    tableSchema: StructType = StructType(Seq(StructField("id", IntegerType))))
+    extends Table {
+
+  override def name(): String = "fake"
+  override def schema(): StructType = tableSchema
+  override def capabilities(): java.util.Set[TableCapability] = java.util.Collections.emptySet()
 }
