@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
-import org.apache.spark.internal.config.SCHEDULER_ALLOCATION_FILE
+import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE, SCHEDULER_ROOT_POOL_ALGORITHM_CLASS}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.Utils
@@ -300,6 +300,69 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-58126: a custom SchedulingAlgorithm injected into a Pool overrides the ordering") {
+    sc = new SparkContext(LOCAL, APP_NAME)
+    val taskScheduler = new TaskSchedulerImpl(sc)
+
+    // The root pool would order its children by ascending name in FAIR mode; the injected
+    // algorithm orders them by descending name instead.
+    val rootPool = new Pool("", FAIR, 0, 0, new DescendingNameSchedulingAlgorithm)
+    val pool1 = new Pool("1", FIFO, 0, 1)
+    val pool2 = new Pool("2", FIFO, 0, 1)
+    rootPool.addSchedulable(pool1)
+    rootPool.addSchedulable(pool2)
+
+    pool1.addSchedulable(createTaskSetManager(1, 1, taskScheduler))
+    pool2.addSchedulable(createTaskSetManager(2, 1, taskScheduler))
+
+    // Descending name ordering schedules pool "2" (stageId 2) before pool "1" (stageId 1).
+    scheduleTaskAndVerifyId(0, rootPool, 2)
+    scheduleTaskAndVerifyId(1, rootPool, 1)
+  }
+
+  test("SPARK-58126: spark.scheduler.rootPool.algorithm.class overrides the root pool ordering") {
+    val conf = new SparkConf()
+      .set(SCHEDULER_MODE.key, "FAIR")
+      .set(SCHEDULER_ROOT_POOL_ALGORITHM_CLASS.key,
+        classOf[DescendingNameSchedulingAlgorithm].getName)
+    sc = new SparkContext(LOCAL, APP_NAME, conf)
+    val taskScheduler = new TaskSchedulerImpl(sc)
+
+    // The root pool is created by TaskSchedulerImpl using the configured algorithm.
+    val rootPool = taskScheduler.rootPool
+    val pool1 = new Pool("1", FIFO, 0, 1)
+    val pool2 = new Pool("2", FIFO, 0, 1)
+    rootPool.addSchedulable(pool1)
+    rootPool.addSchedulable(pool2)
+
+    pool1.addSchedulable(createTaskSetManager(1, 1, taskScheduler))
+    pool2.addSchedulable(createTaskSetManager(2, 1, taskScheduler))
+
+    scheduleTaskAndVerifyId(0, rootPool, 2)
+    scheduleTaskAndVerifyId(1, rootPool, 1)
+  }
+
+  test("SPARK-58126: root pool algorithm class is applied in FIFO mode as well") {
+    val conf = new SparkConf()
+      .set(SCHEDULER_MODE.key, "FIFO")
+      .set(SCHEDULER_ROOT_POOL_ALGORITHM_CLASS.key,
+        classOf[DescendingNameSchedulingAlgorithm].getName)
+    sc = new SparkContext(LOCAL, APP_NAME, conf)
+    val taskScheduler = new TaskSchedulerImpl(sc)
+
+    val rootPool = taskScheduler.rootPool
+    val pool1 = new Pool("1", FIFO, 0, 1)
+    val pool2 = new Pool("2", FIFO, 0, 1)
+    rootPool.addSchedulable(pool1)
+    rootPool.addSchedulable(pool2)
+
+    pool1.addSchedulable(createTaskSetManager(1, 1, taskScheduler))
+    pool2.addSchedulable(createTaskSetManager(2, 1, taskScheduler))
+
+    scheduleTaskAndVerifyId(0, rootPool, 2)
+    scheduleTaskAndVerifyId(1, rootPool, 1)
+  }
+
   test("Fair Scheduler should build fair scheduler when " +
     "valid spark.scheduler.allocation.file property is set") {
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler-with-valid-data.xml").getFile()
@@ -415,4 +478,14 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     assert(selectedPool.weight === expectedInitWeight)
     assert(selectedPool.schedulingMode === expectedSchedulingMode)
   }
+}
+
+/**
+ * A [[SchedulingAlgorithm]] that orders schedulables by descending name. It is deliberately the
+ * opposite of the built-in ordering (which breaks ties by ascending name), so tests can
+ * unambiguously detect that a custom algorithm was installed. It is a top-level class with a
+ * no-argument constructor so it can be instantiated reflectively from configuration.
+ */
+class DescendingNameSchedulingAlgorithm extends SchedulingAlgorithm {
+  override def comparator(s1: Schedulable, s2: Schedulable): Boolean = s1.name > s2.name
 }

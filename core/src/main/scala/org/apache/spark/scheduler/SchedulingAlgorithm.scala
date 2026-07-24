@@ -17,12 +17,21 @@
 
 package org.apache.spark.scheduler
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
- * An interface for sort algorithm
+ * :: DeveloperApi ::
+ * An interface for the sort algorithm used to order schedulable entities (pools or task sets).
  * FIFO: FIFO algorithm between TaskSetManagers
  * FS: FS algorithm between Pools, and FIFO or FS within Pools
+ *
+ * `comparator` follows `sortWith` semantics: it returns `true` if `s1` should be scheduled before
+ * `s2`. A custom implementation can be installed on the root pool via the configuration
+ * `spark.scheduler.rootPool.algorithm.class`; the implementing class must have a no-argument
+ * constructor.
  */
-private[spark] trait SchedulingAlgorithm {
+@DeveloperApi
+trait SchedulingAlgorithm {
   def comparator(s1: Schedulable, s2: Schedulable): Boolean
 }
 
