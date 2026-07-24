@@ -431,8 +431,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
         //                          +- Relation [a, b]
         val domain = Aggregate(groupingExprs, aggregateExprs, outerPlan)
         newChild match {
-          // A special optimization for OneRowRelation.
-          // TODO: add a more general rule to optimize join with OneRowRelation.
+          // Inner Join with OneRowRelation collapses to the domain itself.
           case _: OneRowRelation => domain
           // Construct a domain join.
           // Join joinType condition
