@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.optimizer.MergeSubplans
@@ -517,7 +519,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-58310: preserve Python UDFs in runtime bloom-filter scalar subqueries") {
+  test("SPARK-58310: skip runtime bloom filter when pruned creation side contains Python UDF") {
     import IntegratedUDFTestUtils._
 
     assume(shouldTestPythonUDFs)
@@ -530,8 +532,8 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
 
     withTempPath { dir =>
-      val factPath = new java.io.File(dir, "fact").getCanonicalPath
-      val dimensionPath = new java.io.File(dir, "dimension").getCanonicalPath
+      val factPath = new File(dir, "fact").getCanonicalPath
+      val dimensionPath = new File(dir, "dimension").getCanonicalPath
 
       spark.range(20000)
         .selectExpr("cast(id as int) as id", "concat('url-', cast(id % 20 as string)) as url")
