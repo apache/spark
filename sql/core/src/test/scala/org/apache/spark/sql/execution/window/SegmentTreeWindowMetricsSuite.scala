@@ -35,6 +35,11 @@ class SegmentTreeWindowMetricsSuite
 
   import testImplicits._
 
+  override def withSQLConf[T](confs: (String, String)*)(f: => T): T = {
+    val extraConfs = confs :+ (SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false")
+    super.withSQLConf(extraConfs: _*)(f)
+  }
+
   /**
    * Run `df` and return the first Window node's seg-tree counter values as
    * Long. (Other metrics like `spillSize` are UI-pretty-printed strings and

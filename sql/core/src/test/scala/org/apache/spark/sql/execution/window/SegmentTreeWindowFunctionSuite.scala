@@ -36,6 +36,11 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
 
   import testImplicits._
 
+  override def withSQLConf[T](confs: (String, String)*)(f: => T): T = {
+    val extraConfs = confs :+ (SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false")
+    super.withSQLConf(extraConfs: _*)(f)
+  }
+
   // Force seg-tree path regardless of partition size (fallback exercised explicitly).
   private val enableSegTree: Map[String, String] = Map(
     SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
