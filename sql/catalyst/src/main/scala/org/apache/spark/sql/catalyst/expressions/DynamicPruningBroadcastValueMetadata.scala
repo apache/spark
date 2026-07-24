@@ -1,0 +1,63 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.expressions
+
+import org.apache.spark.sql.catalyst.trees.{TreeNode, TreeNodeTag}
+
+/**
+ * Carries an optional value projection without changing the case-class shape, canonicalization,
+ * or plan identity of existing nodes. If a rewrite drops the tag, pruning safely falls back to
+ * the existing behavior instead of relying on an incomplete projection.
+ *
+ * The actual projection is transient: a serialized plan must not retain its source logical plan.
+ */
+private[sql] object DynamicPruningBroadcastValueMetadata {
+  private final class ProjectionMetadata(
+      @transient val projection: BroadcastValueProjection) extends Serializable
+
+  private val projectionTag =
+    TreeNodeTag[ProjectionMetadata](
+      "org.apache.spark.sql.catalyst.expressions.DynamicPruningSubquery.broadcastValueProjection")
+
+  def get(node: TreeNode[_]): Option[BroadcastValueProjection] =
+    node.getTagValue(projectionTag).flatMap(metadata => Option(metadata.projection))
+
+  def updated(
+      node: DynamicPruningSubquery,
+      projection: Option[BroadcastValueProjection]): DynamicPruningSubquery = {
+    val result = copy(node, node.copy())
+    set(result, projection)
+  }
+
+  def set[T <: TreeNode[_]](
+      node: T,
+      projection: Option[BroadcastValueProjection]): T = {
+    projection match {
+      case Some(value) => node.setTagValue(projectionTag, new ProjectionMetadata(value))
+      case None => node.unsetTagValue(projectionTag)
+    }
+    node
+  }
+
+  def copy(
+      from: DynamicPruningSubquery,
+      to: DynamicPruningSubquery): DynamicPruningSubquery = {
+    to.copyTagsFrom(from)
+    set(to, get(from))
+  }
+}

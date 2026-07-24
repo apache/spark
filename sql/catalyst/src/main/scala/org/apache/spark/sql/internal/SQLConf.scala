@@ -755,6 +755,53 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.enabled")
+      .internal()
+      .doc("When true, dynamic partition pruning may project a bounded value domain from the " +
+        "full rows of an existing ancestor broadcast. When false, Spark uses its existing " +
+        "broadcast-key reuse and subquery fallback behavior.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_ROWS =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.maxRows")
+      .internal()
+      .doc("Maximum number of broadcast value rows visited when projecting a dynamic partition " +
+        "pruning domain. If the limit is exceeded, the projection fails open rather than " +
+        "using a partial domain.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "The maximum number of DPP broadcast rows must be nonnegative.")
+      .createWithDefault(10000)
+
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_BYTES =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.maxBytes")
+      .internal()
+      .doc("Maximum cumulative size of distinct values projected from a broadcast for dynamic " +
+        "partition pruning. If the limit is exceeded, the projection fails open rather than " +
+        "using a partial domain.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "The maximum size of DPP broadcast values must be nonnegative.")
+      .createWithDefaultString("8MB")
+
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_SOURCE_BYTES =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.maxSourceBytes")
+      .internal()
+      .doc("Maximum materialized broadcast size that may be rehydrated on the driver when " +
+        "projecting dynamic partition pruning values. If runtime statistics are unavailable " +
+        "or exceed the limit, the projection fails open.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "The maximum DPP source broadcast size must be nonnegative.")
+      .createWithDefaultString("128MB")
+
   val RUNTIME_FILTER_NUMBER_THRESHOLD =
     buildConf("spark.sql.optimizer.runtimeFilter.number.threshold")
       .doc("The total number of injected runtime filters (non-DPP) for a single " +
@@ -8200,6 +8247,18 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
+
+  def dynamicPartitionPruningBroadcastProjectionEnabled: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED)
+
+  def dynamicPartitionPruningBroadcastProjectionMaxRows: Int =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_ROWS)
+
+  def dynamicPartitionPruningBroadcastProjectionMaxBytes: Long =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_BYTES)
+
+  def dynamicPartitionPruningBroadcastProjectionMaxSourceBytes: Long =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_SOURCE_BYTES)
 
   def runtimeFilterBloomFilterEnabled: Boolean =
     getConf(RUNTIME_BLOOM_FILTER_ENABLED)
