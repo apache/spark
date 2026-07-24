@@ -598,6 +598,18 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-57784: TimeType column stats round-trip preserves sub-second precision") {
+    // 12:00:00.123456 as nanoseconds since midnight
+    val nanos = java.time.LocalTime.of(12, 0, 0, 123456000).toNanoOfDay
+    val timeType = TimeType()
+    val serialized = CatalogColumnStat.toExternalString(nanos, "t", timeType)
+    val deserialized = CatalogColumnStat.fromExternalString(
+      serialized, "t", timeType, CatalogColumnStat.VERSION)
+    assert(deserialized === nanos,
+      s"Round-trip failed: input nanos=$nanos, serialized='$serialized', " +
+        s"deserialized=$deserialized")
+  }
+
   private def getStatAttrNames(tableName: String): Set[String] = {
     val queryStats = spark.table(tableName).queryExecution.optimizedPlan.stats.attributeStats
     queryStats.map(_._1.name).toSet
