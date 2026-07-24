@@ -79,7 +79,7 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     input = rows
     lowerIterator = input.generateIterator()
     lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
-    deques.foreach(_.deque.clear())
+    deques.foreach(_.clear())
     lowerBound = 0
 
     if (ubound.isEmpty) {
@@ -147,21 +147,89 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
 
   override def currentUpperBound(): Int = upperBound
 
-  private class ValueWithIndex(val value: Any, val index: Int)
-
   private class MinMaxDeque(
       val isMin: Boolean,
       val boundChild: Expression,
       val dataType: DataType,
       val ordering: Ordering[Any],
       val bufferIndex: Int) {
-    val deque = new java.util.ArrayDeque[ValueWithIndex]()
+
+    private var capacity = 16
+    private var values = new Array[Any](capacity)
+    private var indices = new Array[Int](capacity)
+    private var head = 0
+    private var tail = 0
+    private var size = 0
+
     private val tempRow = new SpecificInternalRow(Seq(dataType))
     private val isPrimitive = dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
            DateType | TimestampType | TimestampNTZType | _: YearMonthIntervalType |
            _: DayTimeIntervalType => true
       case _ => false
+    }
+
+    def clear(): Unit = {
+      var i = 0
+      while (i < size) {
+        values((head + i) % capacity) = null
+        i += 1
+      }
+      head = 0
+      tail = 0
+      size = 0
+    }
+
+    private def expand(): Unit = {
+      val newCapacity = capacity * 2
+      val newValues = new Array[Any](newCapacity)
+      val newIndices = new Array[Int](newCapacity)
+      
+      var i = 0
+      while (i < size) {
+        val idx = (head + i) % capacity
+        newValues(i) = values(idx)
+        newIndices(i) = indices(idx)
+        i += 1
+      }
+      
+      values = newValues
+      indices = newIndices
+      head = 0
+      tail = size
+      capacity = newCapacity
+    }
+
+    private def isEmpty: Boolean = size == 0
+
+    private def peekLastValue(): Any = {
+      values((tail - 1 + capacity) % capacity)
+    }
+
+    private def pollLast(): Unit = {
+      tail = (tail - 1 + capacity) % capacity
+      values(tail) = null
+      size -= 1
+    }
+
+    private def peekFirstIndex(): Int = {
+      indices(head)
+    }
+
+    private def pollFirst(): Unit = {
+      values(head) = null
+      head = (head + 1) % capacity
+      size -= 1
+    }
+
+    private def offerLast(value: Any, index: Int): Unit = {
+      if (size == capacity) {
+        expand()
+      }
+      values(tail) = value
+      indices(tail) = index
+      tail = (tail + 1) % capacity
+      size += 1
     }
 
     private def evaluateAndCopy(row: InternalRow): Any = {
@@ -181,29 +249,29 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
       val value = evaluateAndCopy(row)
       if (value != null) {
         if (isMin) {
-          while (!deque.isEmpty && ordering.compare(deque.peekLast().value, value) >= 0) {
-            deque.pollLast()
+          while (!isEmpty && ordering.compare(peekLastValue(), value) >= 0) {
+            pollLast()
           }
         } else {
-          while (!deque.isEmpty && ordering.compare(deque.peekLast().value, value) <= 0) {
-            deque.pollLast()
+          while (!isEmpty && ordering.compare(peekLastValue(), value) <= 0) {
+            pollLast()
           }
         }
-        deque.offerLast(new ValueWithIndex(value, index))
+        offerLast(value, index)
       }
     }
 
     def dropBefore(boundary: Int): Unit = {
-      while (!deque.isEmpty && deque.peekFirst().index < boundary) {
-        deque.pollFirst()
+      while (!isEmpty && peekFirstIndex() < boundary) {
+        pollFirst()
       }
     }
 
     def currentValue(): Any = {
-      if (deque.isEmpty) {
+      if (isEmpty) {
         null
       } else {
-        deque.peekFirst().value
+        values(head)
       }
     }
   }
