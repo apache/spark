@@ -12967,7 +12967,8 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns null if the array is null, true if the array contains `value`, and false otherwise.
+   * Returns true if the array contains `value`, false if not. Returns null if the array or
+   * `value` is null, or if `value` is not found and the array contains a null element.
    * @param column
    *   the target column containing the arrays. A column that evaluates to an array.
    * @param value
