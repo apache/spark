@@ -22500,6 +22500,75 @@ def to_variant_object(
 
 
 @_try_remote_functions
+def variant_from_arrays(keys: "ColumnOrName", values: "ColumnOrName") -> Column:
+    """
+    Creates a variant object from the given arrays of keys and values. The keys must be non-null
+    strings and the two arrays must have the same length.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    keys : :class:`~pyspark.sql.Column` or column name
+        an array of string keys.
+    values : :class:`~pyspark.sql.Column` or column name
+        an array of values.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.variant_from_entries`
+    :meth:`pyspark.sql.functions.to_variant_object`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT array('a', 'b') AS keys, array(1, 2) AS values")
+    >>> df.select(sf.variant_from_arrays("keys", "values").cast("string").alias("r")).collect()
+    [Row(r='{"a":1,"b":2}')]
+    """
+    return _invoke_function_over_columns("variant_from_arrays", keys, values)
+
+
+@_try_remote_functions
+def variant_from_entries(entries: "ColumnOrName") -> Column:
+    """
+    Creates a variant object from an array of key/value struct entries. The keys must be non-null
+    strings.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    entries : :class:`~pyspark.sql.Column` or column name
+        an array of key/value structs, where the first field is a string key and the second field
+        is the value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.variant_from_arrays`
+    :meth:`pyspark.sql.functions.to_variant_object`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT array(struct('a', 1), struct('b', 2)) AS entries")
+    >>> df.select(sf.variant_from_entries("entries").cast("string").alias("r")).collect()
+    [Row(r='{"a":1,"b":2}')]
+    """
+    return _invoke_function_over_columns("variant_from_entries", entries)
+
+
+@_try_remote_functions
 def parse_json(
     col: "ColumnOrName",
 ) -> Column:

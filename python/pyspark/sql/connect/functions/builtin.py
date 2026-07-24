@@ -2185,6 +2185,20 @@ def to_variant_object(col: "ColumnOrName") -> Column:
 to_variant_object.__doc__ = pysparkfuncs.to_variant_object.__doc__
 
 
+def variant_from_arrays(keys: "ColumnOrName", values: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("variant_from_arrays", keys, values)
+
+
+variant_from_arrays.__doc__ = pysparkfuncs.variant_from_arrays.__doc__
+
+
+def variant_from_entries(entries: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("variant_from_entries", entries)
+
+
+variant_from_entries.__doc__ = pysparkfuncs.variant_from_entries.__doc__
+
+
 def parse_json(col: "ColumnOrName") -> Column:
     return _invoke_function("parse_json", _to_col(col))
 
