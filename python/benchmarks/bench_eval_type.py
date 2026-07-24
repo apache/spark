@@ -2162,7 +2162,7 @@ class TransformWithStatePandasInitStateUDFPeakmemBench(
 # Stateful streaming with plain PySpark Rows. UDF signature is
 # ``(api_client, mode, key, rows)`` and returns ``Iterator[Row]``. The input
 # wire stream is a single plain Arrow stream pre-sorted by the grouping key
-# column at offset 0; ``TransformWithStateInPySparkRowSerializer`` walks the
+# column at offset 0; the worker walks the
 # batch row by row, materializing each into a ``Row`` (all columns, including
 # the key) via ``.as_py()``, groups consecutive rows by key, and yields one
 # ``(mode, key, rows)`` tuple per group, then a phantom ``PROCESS_TIMER`` and
@@ -2181,7 +2181,7 @@ class _TransformWithStateRowBenchMixin:
     Each scenario emits one plain Arrow stream pre-sorted by the leading int
     key column. Unlike the Pandas variant, the key column is NOT projected out:
     UDFs receive an iterator of ``Row`` objects carrying every column (key
-    included), mirroring ``TransformWithStateInPySparkRowSerializer``. Row-by-row
+    included), mirroring the worker's row handling. Row-by-row
     materialization and re-encoding is ~10x slower than the columnar Pandas
     path, so row counts are scaled down accordingly to stay under ASV's 60s
     per-sample timeout.
