@@ -30,6 +30,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
   ChangeArgs,
   ColumnSelection,
   Scd1BatchProcessor,
+  Scd2BatchProcessor,
   ScdType
 }
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -266,6 +267,9 @@ class AutoCdcMergeFlow(
     // AutoCDC flows require all key columns to be present in the user-selected source schema,
     // so that they survive into the target table where SCD reconciliation needs them.
     requireKeysPresentInSelectedSchema(selectedSchema)
+    // SCD2 flows may specify history-tracking columns; validate they resolve to eligible columns
+    // of the selected schema at construction time, rather than failing mid-stream on first batch.
+    requireTrackHistoryColumnsResolvableInSelectedSchema(selectedSchema)
     selectedSchema
   }
 
@@ -394,5 +398,27 @@ class AutoCdcMergeFlow(
           )
         )
       }
+  }
+
+  /**
+   * Validate that this flow's [[ChangeArgs.trackHistorySelection]] (SCD2 `TRACK HISTORY ON ...`)
+   * resolves against the user-selected source schema at construction time. Without this, an
+   * unresolvable or ineligible (key/framework) tracking column would only surface when the first
+   * microbatch runs reconciliation, deep inside the SCD2 batch processor (SPARK-58313).
+   *
+   * Delegates to [[Scd2BatchProcessor.computeTrackedHistoryColumns]] -- the same resolution used at
+   * runtime -- so the two can never diverge; it throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` on an
+   * unresolvable selection. `trackHistorySelection` is `None` for SCD1 (enforced by [[ChangeArgs]])
+   * and for SCD2 flows that do not restrict tracking, in which case resolution is a no-op.
+   */
+  private def requireTrackHistoryColumnsResolvableInSelectedSchema(
+      selectedSchema: StructType): Unit = {
+    if (changeArgs.trackHistorySelection.isDefined) {
+      Scd2BatchProcessor.computeTrackedHistoryColumns(
+        schema = selectedSchema,
+        changeArgs = changeArgs,
+        caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
+      )
+    }
   }
 }

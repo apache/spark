@@ -20,6 +20,7 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
@@ -920,28 +921,12 @@ case class Scd2BatchProcessor(
    * the eligible user-data columns (those not in [[ChangeArgs.keys]] or the framework
    * reserved set) filtered through [[ChangeArgs.trackHistorySelection]].
    */
-  private def computeTrackedHistoryColumns(df: DataFrame): Seq[String] = {
-    val conf = df.sparkSession.sessionState.conf
-    val resolver = conf.resolver
-
-    val keyColNames = changeArgs.keys.map(_.name)
-    val reservedColNames = Scd2BatchProcessor.reservedFrameworkColNames
-
-    val eligibleSchema = StructType(df.schema.fields.filterNot { field =>
-      reservedColNames.exists(resolver(_, field.name)) ||
-        keyColNames.exists(resolver(_, field.name))
-    })
-
-    ColumnSelection
-      .applyToSchema(
-        schemaName = "trackHistorySelection",
-        schema = eligibleSchema,
-        columnSelection = changeArgs.trackHistorySelection,
-        caseSensitive = conf.caseSensitiveAnalysis
-      )
-      .fieldNames
-      .toImmutableArraySeq
-  }
+  private def computeTrackedHistoryColumns(df: DataFrame): Seq[String] =
+    Scd2BatchProcessor.computeTrackedHistoryColumns(
+      schema = df.schema,
+      changeArgs = changeArgs,
+      caseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    )
 }
 
 /**
@@ -1098,6 +1083,44 @@ object Scd2BatchProcessor {
     endAtColName,
     AutoCdcReservedNames.cdcMetadataColName
   )
+
+  /**
+   * Resolve [[ChangeArgs.trackHistorySelection]] against `schema` and return the field names of
+   * the history-tracking columns: the eligible user-data columns (those that are neither
+   * [[ChangeArgs.keys]] nor framework reserved columns) filtered through the selection.
+   *
+   * This is the single source of truth for which columns define an SCD2 run. It is called both
+   * per-microbatch (against the reconciled dataframe's schema) and at
+   * [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction time (against the
+   * user-selected source schema), so an unresolvable or ineligible selection fails fast with a
+   * user-actionable [[org.apache.spark.sql.AnalysisException]] instead of surfacing mid-stream
+   * (SPARK-58313).
+   *
+   * Throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` if the selection references a column that is not
+   * an eligible history-tracking column in `schema` (i.e. absent, or a key/framework column).
+   */
+  private[pipelines] def computeTrackedHistoryColumns(
+      schema: StructType,
+      changeArgs: ChangeArgs,
+      caseSensitive: Boolean): Seq[String] = {
+    val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+    val keyColNames = changeArgs.keys.map(_.name)
+
+    val eligibleSchema = StructType(schema.fields.filterNot { field =>
+      reservedFrameworkColNames.exists(resolver(_, field.name)) ||
+        keyColNames.exists(resolver(_, field.name))
+    })
+
+    ColumnSelection
+      .applyToSchema(
+        schemaName = "trackHistorySelection",
+        schema = eligibleSchema,
+        columnSelection = changeArgs.trackHistorySelection,
+        caseSensitive = caseSensitive
+      )
+      .fieldNames
+      .toImmutableArraySeq
+  }
 
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per
