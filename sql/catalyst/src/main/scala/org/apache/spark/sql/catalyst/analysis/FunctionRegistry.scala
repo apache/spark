@@ -473,6 +473,7 @@ object FunctionRegistry {
     expression[ToRadians]("radians"),
     expression[Rint]("rint"),
     expression[Round]("round"),
+    expression[Truncate]("truncate"),
     expression[ShiftLeft]("shiftleft"),
     expression[ShiftRight]("shiftright"),
     expression[ShiftRightUnsigned]("shiftrightunsigned"),

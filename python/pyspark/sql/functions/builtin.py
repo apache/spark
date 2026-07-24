@@ -8244,6 +8244,58 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
 
 @_try_remote_functions
+def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
+    """
+    Truncate the given value toward zero to `scale` decimal places when `scale` >= 0,
+    or to the left of the decimal point when `scale` < 0. `scale` defaults to 0.
+
+    Unlike :func:`round`, the result is always rounded toward zero, and unlike :func:`floor`
+    negative values are not rounded toward negative infinity.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target column or column name to truncate.
+        A column that evaluates to a numeric.
+    scale : :class:`~pyspark.sql.Column` or int, optional
+        An optional parameter to control the number of decimal places to keep.
+        A column that evaluates to an integer. Must be a constant. Defaults to 0.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column for the truncated value.
+        Returns a column of the same type as the input.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.round`
+
+    Examples
+    --------
+    Example 1: Truncate toward zero to a given number of decimal places
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(15.79), sf.lit(1)).alias("r")).collect()
+    [Row(r=15.7)]
+
+    Example 2: Truncation rounds toward zero for negative values
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(-2.99), sf.lit(0)).alias("r")).collect()
+    [Row(r=-2.0)]
+    """
+    if scale is None:
+        return _invoke_function_over_columns("truncate", col)
+    else:
+        scale = _enum_to_value(scale)
+        scale = lit(scale) if isinstance(scale, int) else scale
+        return _invoke_function_over_columns("truncate", col, scale)
+
+
+@_try_remote_functions
 def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Column:
     """
     Round the given value to `scale` decimal places using HALF_EVEN rounding mode if `scale` >= 0
