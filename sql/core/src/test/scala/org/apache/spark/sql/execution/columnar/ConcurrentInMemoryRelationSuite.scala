@@ -29,6 +29,7 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSui
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.functions.{lit, when}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -63,11 +64,14 @@ class ConcurrentInMemoryRelationSuite extends SparkFunSuite with LocalSparkConte
     relations.head.cacheBuilder
   }
 
-  private def withSession(numExecutors: Int = 4)(
+  private def withSession(
+      numExecutors: Int = 4,
+      extraConfs: Map[String, String] = Map.empty)(
       f: SparkSession => Unit): Unit = {
     val conf = new SparkConf()
       .setMaster(s"local-cluster[$numExecutors,1,1024]")
       .setAppName("ConcurrentInMemoryRelationSuite")
+      .setAll(extraConfs)
     sc = new SparkContext(conf)
     try {
       // Wait for all executors to register so tasks spread one-per-executor as the tests assume.
@@ -320,6 +324,30 @@ class ConcurrentInMemoryRelationSuite extends SparkFunSuite with LocalSparkConte
       val (rowCount, expected) = runDuplicateComputeStats(spark)
       assert(rowCount == expected,
         s"partition-keyed accumulator should report exact row count $expected, got $rowCount")
+    }
+  }
+
+  test("SPARK-58272: a partial cache attempt cannot overwrite complete partition statistics") {
+    withSession(
+        numExecutors = 1,
+        extraConfs = Map("spark.storage.unrollMemoryThreshold" -> (1L << 40).toString)) { spark =>
+      val cached = spark.range(0, 10, 1, numPartitions = 1).persist(StorageLevel.MEMORY_ONLY)
+      try {
+        val builder = cacheBuilderOf(cached)
+        val buffers = builder.cachedColumnBuffers
+        buffers.count()
+        val expectedStats = (builder.materializedRowCount, builder.materializedSizeInBytes)
+        assert(expectedStats._1 == 10L)
+        assert(expectedStats._2 > 0L)
+
+        // The successful task does not consume its cache iterator. It must not replace the
+        // completed partition's statistics with (0, 0).
+        buffers.mapPartitions(_ => Iterator.empty).count()
+        assert((builder.materializedRowCount, builder.materializedSizeInBytes) == expectedStats)
+        assert(builder.loadedMaterializedStats.contains(expectedStats))
+      } finally {
+        cached.unpersist(blocking = true)
+      }
     }
   }
 }

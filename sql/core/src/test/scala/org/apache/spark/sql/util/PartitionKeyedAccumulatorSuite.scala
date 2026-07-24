@@ -104,4 +104,26 @@ class PartitionKeyedAccumulatorSuite extends SparkFunSuite {
     assert(acc.accumulatedNumPartitions == 2)
     assert(acc.foldValues("")((s, v) => s + v).length == 2) // "c" + "b" (each partition once)
   }
+
+  test("SPARK-58272: fold returns an atomic snapshot only after every partition completes") {
+    val accumulator = new PartitionKeyedAccumulator[Stats]
+    accumulator.add((0, (10L, 100L)))
+
+    assert(accumulator.foldValuesIfComplete(2, (0L, 0L)) {
+      case ((rows, bytes), (partitionRows, partitionBytes)) =>
+        (rows + partitionRows, bytes + partitionBytes)
+    }.isEmpty)
+
+    accumulator.add((1, (5L, 50L)))
+    assert(accumulator.foldValuesIfComplete(2, (0L, 0L)) {
+      case ((rows, bytes), (partitionRows, partitionBytes)) =>
+        (rows + partitionRows, bytes + partitionBytes)
+    }.contains((15L, 150L)))
+
+    accumulator.add((1, (7L, 70L)))
+    assert(accumulator.foldValuesIfComplete(2, (0L, 0L)) {
+      case ((rows, bytes), (partitionRows, partitionBytes)) =>
+        (rows + partitionRows, bytes + partitionBytes)
+    }.contains((17L, 170L)))
+  }
 }
