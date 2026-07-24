@@ -65,13 +65,15 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
     withTempDir { tempDir =>
       runLargeDataStreamingAggregationQuery(tempDir.getAbsolutePath)
 
-      val offsetLog = new OffsetSeqLog(spark,
-        new File(tempDir.getAbsolutePath, "offsets").getAbsolutePath)
-      val commitLog = new CommitLog(spark,
-        new File(tempDir.getAbsolutePath, "commits").getAbsolutePath)
-
-      offsetLog.purgeAfter(0)
-      commitLog.purgeAfter(-1)
+      // Purge logs to create the error condition. This writes to checkpoint files.
+      withWritableCheckpoint {
+        val offsetLog = new OffsetSeqLog(spark,
+          new File(tempDir.getAbsolutePath, "offsets").getAbsolutePath)
+        val commitLog = new CommitLog(spark,
+          new File(tempDir.getAbsolutePath, "commits").getAbsolutePath)
+        offsetLog.purgeAfter(0)
+        commitLog.purgeAfter(-1)
+      }
 
       intercept[StataDataSourceCommittedBatchUnavailable] {
         spark.read.format("statestore").load(tempDir.getAbsolutePath)
@@ -477,6 +479,63 @@ class HDFSBackedStateDataSourceReadSuite extends StateDataSourceReadSuite {
     testSnapshotOnJoinState("hdfs", 1)
     testSnapshotOnJoinState("hdfs", 2)
   }
+
+  test("read-only checkpoint: HDFS-backed join snapshot replay honors readOnly") {
+    // Use the pre-generated golden join1 state so this test does not race the maintenance
+    // thread. Copy it into a withTempDir (auto-protected) so any unintended write on the
+    // read path is caught by WriteProtectedLocalFileSystem.
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-4.0.0/hdfs/join1/").toURI
+    withTempDir { tempDir =>
+      withWritableCheckpoint {
+        Utils.copyDirectory(new File(resourceUri), tempDir)
+      }
+      val df = spark.read
+        .format("statestore")
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+        .option(StateSourceOptions.JOIN_SIDE, "left")
+        .option(StateSourceOptions.SNAPSHOT_START_BATCH_ID, 1)
+        .option(StateSourceOptions.SNAPSHOT_PARTITION_ID, 2)
+        .load()
+      assert(df.collect().nonEmpty)
+    }
+  }
+
+  // HDFSBackedStateStoreProvider.init() defers baseDir mkdirs to the first write
+  // (createBaseDirIfNotExists). Pin this behavior: deleting a per-store baseDir under a
+  // partition lets partition discovery and schema discovery succeed (PARTITION_ID_TO_CHECK_SCHEMA=0
+  // is intact, all partition dirs still exist) but exposes the task-side init() in a way
+  // that previously would have triggered mkdirs -- and now must NOT.
+  test("read-only checkpoint: HDFS provider does not mkdirs baseDir on read path") {
+    withTempDir { tempDir =>
+      runStreamStreamJoinQuery(tempDir.getAbsolutePath)
+
+      val namedStoreDir = new java.io.File(tempDir, "state/0/2/left-keyToNumValues")
+      assert(namedStoreDir.exists(),
+        "Expected state/0/2/left-keyToNumValues to exist after running the join query")
+      Utils.deleteRecursively(namedStoreDir)
+      assert(!namedStoreDir.exists())
+
+      val exc = intercept[SparkException] {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.JOIN_SIDE, "left")
+          .load()
+          .collect()
+      }
+      // Read fails with a data-load error from the missing state files -- NOT by
+      // attempting to (re)create the directory.
+      checkError(
+        exception = exc,
+        condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+        sqlState = Some("58030"),
+        parameters = Map(
+          "clazz" -> ("HDFSStateStoreProvider\\[.*storeName=left-keyToNumValues.*\\]"),
+          "fileToRead" -> ".*state/0/2/left-keyToNumValues/1\\.delta"),
+        matchPVals = true)
+    }
+  }
 }
 
 class RocksDBStateDataSourceReadSuite extends StateDataSourceReadSuite {
@@ -716,6 +775,19 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
   protected val keySchema: StructType = StateStoreTestsHelper.keySchema
   protected val valueSchema: StructType = StateStoreTestsHelper.valueSchema
+
+  test("framework sanity: write to protected path inside withTempDir is rejected") {
+    val e = intercept[Exception] {
+      withTempDir { tempDir =>
+        // No withWritableCheckpoint / testStream: tempDir is protected.
+        val out = new java.io.File(tempDir, "forbidden.txt")
+        val fs = new org.apache.hadoop.fs.Path(out.getAbsolutePath)
+          .getFileSystem(spark.sessionState.newHadoopConf())
+        fs.create(new org.apache.hadoop.fs.Path(out.getAbsolutePath)).close()
+      }
+    }
+    assertWriteProtectionFailure(e)
+  }
 
   protected def newStateStoreProvider(): StateStoreProvider
 
@@ -1164,15 +1236,12 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
         .groupBy("value")
         .count()
 
-      stream.addData(1 to 10000: _*)
-
-      val query = df.writeStream.format("noop")
-        .option("checkpointLocation", tempDir.getAbsolutePath)
-        .outputMode(OutputMode.Update())
-        .start()
-
-      query.processAllAvailable()
-      query.stop()
+      testStream(df, OutputMode.Update())(
+        StartStream(checkpointLocation = tempDir.getAbsolutePath),
+        AddData(stream, 1 to 10000: _*),
+        ProcessAllAvailable(),
+        StopStream
+      )
 
       val stateReadDf = spark.read
         .format("statestore")
@@ -1267,12 +1336,15 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
 
   protected def testSnapshotNotFound(): Unit = {
     withTempDir { tempDir =>
-      val provider = getNewStateStoreProvider(tempDir.getAbsolutePath)
-      for (i <- 1 to 4) {
-        val store = provider.getStore(i - 1)
-        put(store, "a", i, i)
-        store.commit()
-        provider.doMaintenance() // create a snapshot every other delta file
+      val provider = withWritableCheckpoint {
+        val p = getNewStateStoreProvider(tempDir.getAbsolutePath)
+        for (i <- 1 to 4) {
+          val store = p.getStore(i - 1)
+          put(store, "a", i, i)
+          store.commit()
+          p.doMaintenance() // create a snapshot every other delta file
+        }
+        p
       }
 
       val exc = intercept[SparkException] {
@@ -1286,16 +1358,19 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
   protected def testGetReadStoreWithStartVersion(): Unit = {
     withTempDir { tempDir =>
       val versionToCkptId = scala.collection.mutable.Map[Long, Option[String]]()
-      val provider = getNewStateStoreProvider(tempDir.getAbsolutePath)
-      for (i <- 1 to 4) {
-        val store = provider.getStore(i - 1, versionToCkptId.getOrElse(i - 1, None))
-        put(store, "a", i, i)
-        store.commit()
+      val provider = withWritableCheckpoint {
+        val p = getNewStateStoreProvider(tempDir.getAbsolutePath)
+        for (i <- 1 to 4) {
+          val store = p.getStore(i - 1, versionToCkptId.getOrElse(i - 1, None))
+          put(store, "a", i, i)
+          store.commit()
 
-        val ssInfo = store.getStateStoreCheckpointInfo()
-        versionToCkptId(ssInfo.batchVersion) = ssInfo.stateStoreCkptId
+          val ssInfo = store.getStateStoreCheckpointInfo()
+          versionToCkptId(ssInfo.batchVersion) = ssInfo.stateStoreCkptId
 
-        provider.doMaintenance()
+          p.doMaintenance()
+        }
+        p
       }
 
       val result =
