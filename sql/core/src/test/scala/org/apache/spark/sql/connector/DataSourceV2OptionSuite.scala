@@ -121,6 +121,44 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-58330: dynamic options are not lost when INSERT selects from the same table") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      // The target and the source are the same table, so they share one per-query relation-cache
+      // entry. Each reference must keep its own options: the target's write options must not be
+      // dropped by the source reference, and the source's read options must not leak to the target.
+      val df = sql(s"INSERT INTO $t1 WITH (`write.split-size` = 10) " +
+        s"SELECT id, data FROM $t1 WITH (`split-size` = 5)")
+
+      val appendData = df.queryExecution.optimizedPlan.collectFirst {
+        case CommandResult(_, a: AppendData, _, _) => a
+      }.getOrElse(fail("expected an AppendData in the optimized plan"))
+
+      // target: the write relation keeps its own option and does not pick up the source's
+      val targetOptions = appendData.table.asInstanceOf[DataSourceV2Relation].options
+      assert(targetOptions.get("write.split-size") === "10", "target write option")
+      assert(!targetOptions.containsKey("split-size"), "target must not see source option")
+
+      // source: the read relation under the query keeps its own option and does not pick up
+      // the target's
+      val sourceOptions = appendData.query.collect {
+        case r: DataSourceV2Relation => r.options
+        case s: DataSourceV2ScanRelation => s.relation.options
+      }.filter(_.containsKey("split-size"))
+      assert(sourceOptions.nonEmpty, "source relation carrying the option was not found")
+      sourceOptions.foreach { opts =>
+        assert(opts.get("split-size") === "5", "source read option")
+        assert(!opts.containsKey("write.split-size"), "source must not see target option")
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $t1"),
+        Seq(Row(1, "a"), Row(2, "b"), Row(1, "a"), Row(2, "b")))
+    }
+  }
+
   test("SPARK-50286: Propagate options for DataFrameWriter Append") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {

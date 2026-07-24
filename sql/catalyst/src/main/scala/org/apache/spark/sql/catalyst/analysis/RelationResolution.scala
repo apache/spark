@@ -239,6 +239,7 @@ class RelationResolution(
         val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
         val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
         val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+        val finalOptions = u.clearWritePrivileges.options
         // A reference that requires write privileges is never served from the per-query relation
         // cache. The catalog authorizes the write in `loadTable(ident, writePrivileges)` below, and
         // a cache hit would skip that call entirely. The hit happens whenever the write target is
@@ -247,9 +248,14 @@ class RelationResolution(
         // for `INSERT INTO t SELECT * FROM t`.
         val cached = if (writePrivileges == null) relationCache.get(key) else None
         cached
+          // The per-query relation cache is not keyed by options. When the same table is referenced
+          // more than once in a single statement with different dynamic options (e.g. a self-join,
+          // or a second reference sharing the target's cache entry), a cache hit would otherwise
+          // reuse the first reference's options and silently drop this reference's. Re-apply this
+          // reference's options to the cached relation so each reference honors its own bag.
+          .map(applyOptions(_, finalOptions))
           .map(adaptCachedRelation(_, planId))
           .orElse {
-            val finalOptions = u.clearWritePrivileges.options
             // For a `RelationCatalog` with no time-travel / write privileges, the single-RPC
             // `loadRelation` answers both "is there a table?" and "is there a view?" in one
             // call. Time-travel and write privileges apply to tables only, so for those the
@@ -362,6 +368,12 @@ class RelationResolution(
       ident: Identifier,
       table: Table): Option[DataSourceV2Relation] = {
     CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, conf)
+  }
+
+  private def applyOptions(
+      cached: LogicalPlan,
+      options: CaseInsensitiveStringMap): LogicalPlan = cached transform {
+    case r: DataSourceV2Relation => r.copy(options = options)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
