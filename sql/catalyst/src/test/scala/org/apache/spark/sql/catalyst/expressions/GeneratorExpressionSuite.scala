@@ -18,12 +18,28 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.types._
 
 class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
+  test("SPARK-58209: user-defined generators are copied before evaluation") {
+    val function = (_: Row) => Nil
+    val expression = UserDefinedGenerator(
+      StructType(Seq(StructField("value", IntegerType))),
+      function,
+      Seq(Literal(1)))
+
+    assert(expression.stateful)
+    val freshCopy = expression.freshCopyIfContainsStatefulExpression()
+      .asInstanceOf[UserDefinedGenerator]
+    assert(freshCopy ne expression)
+    assert(freshCopy.elementSchema == expression.elementSchema)
+    assert(freshCopy.function eq expression.function)
+    assert(freshCopy.children == expression.children)
+  }
+
   private def checkTuple(actual: Expression, expected: Seq[InternalRow]): Unit = {
     assert(actual.eval(null).asInstanceOf[IterableOnce[InternalRow]].iterator.to(Seq) === expected)
   }
