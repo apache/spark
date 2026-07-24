@@ -3559,6 +3559,19 @@ class FunctionsTestsMixin:
             df.select(F.to_json(F.variant_set(v, df.newpath, F.lit(9)))),
             ['{"a":1,"z":9}', '{"b":2,"z":9}'],
         )
+        check(
+            df.select(F.to_json(F.try_variant_set(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(
+            df.select(F.to_json(F.try_variant_set(v, "$.z", F.lit(9), False))),
+            ['{"a":1}', '{"b":2}'],
+        )
+        check(df.select(F.to_json(F.try_variant_set(v, "$[0]", F.lit(9)))), [None, None])
+        check(
+            df.select(F.to_json(F.try_variant_set(v, df.newpath, F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
         arr = F.parse_json(df.arr)
         check(
             df.select(F.to_json(F.variant_array_append(arr, "$", F.lit(9)))),

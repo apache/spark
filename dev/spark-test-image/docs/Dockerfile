@@ -91,7 +91,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # See 'ipython_genutils' in SPARK-38517
 # See 'docutils<0.18.0' in SPARK-39421
-RUN python3.12 -m pip install 'sphinx==8.2.3' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe \
+RUN python3.12 -m pip install 'sphinx==8.2.3' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc markupsafe \
   ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.23.2' 'pyarrow>=23.0.0' 'pandas==2.3.3' 'plotly>=4.8' 'docutils' \
   'mypy==1.19.1' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'ruff==0.14.8' \
   'pandas-stubs==1.2.0.53' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
