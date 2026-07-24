@@ -116,10 +116,11 @@ private[sql] object DataSourceV2Utils extends Logging {
       optionsWithPath.originalMap
     val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
     val (table, catalog, ident, timeTravelSpec) = provider match {
-      case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
+      case c: SupportsCatalogOptions
+          if c.useCatalogResolution(dsOptions) && userSpecifiedSchema.nonEmpty =>
         throw new IllegalArgumentException(
           s"$source does not support user specified schema. Please don't specify the schema.")
-      case hasCatalog: SupportsCatalogOptions =>
+      case hasCatalog: SupportsCatalogOptions if hasCatalog.useCatalogResolution(dsOptions) =>
         val ident = hasCatalog.extractIdentifier(dsOptions)
         val catalog = CatalogV2Util.getTableProviderCatalog(
           hasCatalog,
