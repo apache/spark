@@ -31,13 +31,14 @@ import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.VariantExtractionImpl
+import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystFilters, VariantExtractionImpl}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.SchemaUtils._
@@ -96,8 +97,30 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
       val partitionPredicateFields = PushDownUtils.getPartitionPredicateSchema(sHolder.relation)
-      val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
-        sHolder.builder, normalizedFiltersWithoutSubquery, partitionPredicateFields)
+
+      // Derive additional partition filters from filters on the base columns of generated
+      // partition columns, and push them down so the data source can prune partitions. Each
+      // derived filter is implied by an original data filter, so query results are unchanged.
+      // Only done when the scan builder opts in, since the derived filters are pushed as Catalyst
+      // expressions the source must be able to consume.
+      val derivedPartitionFilters = sHolder.builder match {
+        case b: SupportsPushDownCatalystFilters if b.inferGeneratedColumnPartitionFilters =>
+          val existing = ExpressionSet(normalizedFiltersWithoutSubquery)
+          GeneratedColumnPartitionFilters
+            .generatePartitionFilters(
+              SparkSession.active, sHolder.relation, normalizedFiltersWithoutSubquery)
+            .filterNot(existing.contains)
+        case _ => Nil
+      }
+      val derivedFilterSet = ExpressionSet(derivedPartitionFilters)
+
+      val (pushedFilters, postScanFiltersWithDerived) = PushDownUtils.pushFilters(
+        sHolder.builder, normalizedFiltersWithoutSubquery ++ derivedPartitionFilters,
+        partitionPredicateFields)
+      // Derived filters are only used to help the data source prune data; drop any that the
+      // source returns as post-scan filters to avoid evaluating redundant filters post-scan.
+      val postScanFiltersWithoutSubquery =
+        postScanFiltersWithDerived.filterNot(derivedFilterSet.contains)
       val pushedFiltersStr = if (pushedFilters.isLeft) {
         pushedFilters.swap
           .getOrElse(throw new NoSuchElementException("The left node doesn't have pushedFilters"))
