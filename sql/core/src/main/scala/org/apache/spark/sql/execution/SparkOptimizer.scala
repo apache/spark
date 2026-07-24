@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.datasources.{MarkSingleTaskExecution, PruneFileSourcePartitions, PushVariantIntoScan, SchemaPruning, V1Writes}
+import org.apache.spark.sql.execution.datasources.{MarkSingleTaskExecution, PruneFileSourcePartitions, PullOutVariantExtractions, PushVariantIntoScan, SchemaPruning, V1Writes}
 import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
@@ -37,6 +37,10 @@ class SparkOptimizer(
   override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
     // TODO: move SchemaPruning into catalyst
     Seq(
+      // Hoist variant extractions out of operators that variant-into-scan pushdown cannot see
+      // through (aggregate function arguments, etc.) into a Project above the scan, so the
+      // extractions below become visible to V2ScanRelationPushDown and PushVariantIntoScan.
+      PullOutVariantExtractions,
       SchemaPruning,
       GroupBasedRowLevelOperationScanPlanning,
       V1Writes,
