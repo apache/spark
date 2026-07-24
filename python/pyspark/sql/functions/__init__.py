@@ -516,6 +516,7 @@ __all__ = [  # noqa: F405
     "bitmap_bit_position",
     "bitmap_bucket_number",
     "bitmap_count",
+    "bitmap_contains",
     "current_catalog",
     "current_database",
     "current_path",

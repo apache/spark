@@ -7226,6 +7226,15 @@ object functions {
   def bitmap_count(col: Column): Column = Column.fn("bitmap_count", col)
 
   /**
+   * Returns true if the bit at the given position is set in the bitmap.
+   *
+   * @group misc_funcs
+   * @since 4.3.0
+   */
+  def bitmap_contains(bitmap: Column, bitPosition: Column): Column =
+    Column.fn("bitmap_contains", bitmap, bitPosition)
+
+  /**
    * Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column. The
    * input column should be bitmaps created from bitmap_construct_agg().
    *
