@@ -108,6 +108,9 @@ public class TransportClientFactory implements Closeable {
     new CopyOnWriteArrayList<>();
   // Whether to recreate the worker group on a dead event loop (SPARK-58292); on by default.
   private final boolean recreateWorkerGroupOnDeadEventLoop;
+  // How many times the worker group has been recreated after a dead event loop. Used only to make
+  // each recreated group's thread names distinct; mutated under the recreateWorkerGroup lock.
+  private int workerGroupRecreationCount;
   private final PooledByteBufAllocator pooledAllocator;
   private final NettyMemoryMetrics metrics;
   private final int fastFailTimeWindow;
@@ -430,8 +433,14 @@ public class TransportClientFactory implements Closeable {
     if (workerGroup != connectGroup) {
       return;
     }
-    workerGroup = NettyUtils.createEventLoop(
-        ioMode, conf.clientThreads(), conf.getModuleName() + "-client");
+    // Use a distinct thread-name prefix so the recreated group is self-identifying in thread
+    // dumps and logs. Netty's DefaultThreadFactory also appends an incrementing pool id, so the
+    // names would not collide even with the same prefix, but tagging it "-recreated-<n>" makes the
+    // dead-event-loop recovery obvious to anyone inspecting the process, and the <n> distinguishes
+    // successive recreations if a loop dies more than once.
+    workerGroupRecreationCount++;
+    workerGroup = NettyUtils.createEventLoop(ioMode, conf.clientThreads(),
+        conf.getModuleName() + "-client-recreated-" + workerGroupRecreationCount);
     deprecatedWorkerGroups.add(new WeakReference<>(connectGroup));
     logger.warn("Detected a dead netty client event loop; replaced the worker group. The " +
       "previous group is retained until its open channels drain (SPARK-58292).");
