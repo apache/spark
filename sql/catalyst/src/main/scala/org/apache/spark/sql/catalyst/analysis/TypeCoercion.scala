@@ -220,6 +220,9 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: NumericType, target: NumericType) => target
 
       // Implicit cast between date time types
+      case (_: TimeType, AnyTimestampType) => null
+      case (_: TimeType, d: DatetimeType) if !d.isInstanceOf[TimeType] => null
+      case (d: DatetimeType, _: TimeType) if !d.isInstanceOf[TimeType] => null
       case (_: DatetimeType, d: DatetimeType) => d
       case (_: DatetimeType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
 
