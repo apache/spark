@@ -107,6 +107,7 @@ pandas_on_spark_extra = [
     "plotly<6.0.0",
     "matplotlib",
     "mlflow>=2.3.1",
+    "jinja2",
 ]
 
 ml = [
@@ -179,7 +180,6 @@ _docs = [
     "ipython",
     "nbsphinx",
     "numpydoc",
-    "jinja2",
     "mkdocs",
 ]
 
