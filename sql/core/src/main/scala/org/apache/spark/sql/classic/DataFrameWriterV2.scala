@@ -132,7 +132,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   @scala.annotation.varargs
   override def clusterBy(colName: String, colNames: String*): this.type = {
     this.clustering =
-      Some(ClusterByTransform((colName +: colNames).map(col => FieldReference(col))))
+      Some(ClusterByTransform.ofColumns((colName +: colNames).map(col => FieldReference(col))))
     validatePartitioning()
     this
   }

@@ -5261,12 +5261,30 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create a [[ClusterBySpec]].
+   * Create a [[ClusterBySpec]] by reusing the `transform` grammar rule.
+   * Each entry is converted to an IdentityTransform (plain column) or ApplyTransform
+   * (function call). For CLUSTER BY, we require at least one column reference in each
+   * ApplyTransform.
    */
   override def visitClusterBySpec(ctx: ClusterBySpecContext): ClusterBySpec = withOrigin(ctx) {
-    val columnNames = ctx.multipartIdentifierList.multipartIdentifier.asScala
-      .map(typedVisit[Seq[String]]).map(FieldReference(_)).toSeq
-    ClusterBySpec(columnNames)
+    val entries = ctx.transform.asScala.map { transformCtx =>
+      transformCtx match {
+        case identityCtx: IdentityTransformContext =>
+          IdentityTransform(FieldReference(
+            typedVisit[Seq[String]](identityCtx.qualifiedName))): Transform
+        case applyCtx: ApplyTransformContext =>
+          val funcName = applyCtx.identifier.getText
+          val arguments = applyCtx.argument.asScala.map(visitTransformArgument).toSeq
+          val refs = arguments.collect { case ref: FieldReference => ref }
+          if (refs.isEmpty) {
+            throw new AnalysisException(
+              errorClass = "CLUSTER_BY_EXPRESSION_INCORRECT_COLUMN_REFERENCE",
+              messageParameters = Map("expressionType" -> funcName))
+          }
+          ApplyTransform(funcName, arguments): Transform
+      }
+    }.toSeq
+    new ClusterBySpec(entries)
   }
 
   /**

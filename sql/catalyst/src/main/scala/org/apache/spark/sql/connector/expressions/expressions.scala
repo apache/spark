@@ -57,7 +57,10 @@ private[sql] object LogicalExpressions {
       references.toImmutableArraySeq, sortedCols.toImmutableArraySeq)
 
   def clusterBy(references: Array[NamedReference]): ClusterByTransform =
-    ClusterByTransform(references.toImmutableArraySeq)
+    ClusterByTransform.ofColumns(references.toImmutableArraySeq)
+
+  def clusterBy(entries: Seq[Transform]): ClusterByTransform =
+    new ClusterByTransform(entries)
 
   def identity(reference: NamedReference): IdentityTransform = IdentityTransform(reference)
 
@@ -160,31 +163,70 @@ private[sql] object BucketTransform {
 /**
  * This class represents a transform for `ClusterBySpec`. This is used to bundle
  * ClusterBySpec in CreateTable's partitioning transforms to pass it down to analyzer.
+ *
+ * Each entry is either an `IdentityTransform` (plain column) or an `ApplyTransform`
+ * (function call like `upper(col)`).
  */
-final case class ClusterByTransform(
-    columnNames: Seq[NamedReference]) extends RewritableTransform {
+private[sql] final case class ClusterByTransform(
+    entries: Seq[Transform]) extends RewritableTransform {
 
   override val name: String = "cluster_by"
 
-  override def references: Array[NamedReference] = columnNames.toArray
+  def columnNames: Seq[NamedReference] = entries.map {
+    case IdentityTransform(ref) => ref
+    case t => t.references.head
+  }
 
-  override def arguments: Array[Expression] = columnNames.toArray
+  override def references: Array[NamedReference] = entries.flatMap(_.references).toArray
 
-  override def toString: String = s"$name(${arguments.map(_.describe).mkString(", ")})"
+  override def arguments: Array[Expression] = entries.toArray
+
+  override def describe: String = s"cluster_by(${entries.map(_.describe).mkString(", ")})"
+
+  override def toString: String = describe
 
   override def withReferences(newReferences: Seq[NamedReference]): Transform = {
-    this.copy(columnNames = newReferences)
+    var refIdx = 0
+    val newEntries = entries.map {
+      case _: IdentityTransform =>
+        val e = IdentityTransform(newReferences(refIdx))
+        refIdx += 1
+        e
+      case a: ApplyTransform =>
+        val newArgs = a.args.map {
+          case _: NamedReference =>
+            val r = newReferences(refIdx)
+            refIdx += 1
+            r
+          case other => other
+        }
+        ApplyTransform(a.name, newArgs)
+      case other =>
+        refIdx += other.references.length
+        other
+    }
+    this.copy(entries = newEntries)
   }
 }
 
 /**
- * Convenience extractor for ClusterByTransform.
+ * Companion object for ClusterByTransform with extractor.
  */
 object ClusterByTransform {
-  def unapply(transform: Transform): Option[Seq[NamedReference]] =
+  /** Factory that wraps plain column references as IdentityTransforms. */
+  def ofColumns(columnNames: Seq[NamedReference]): ClusterByTransform =
+    new ClusterByTransform(columnNames.map(IdentityTransform(_)))
+
+  def unapply(transform: Transform): Option[Seq[Transform]] =
     transform match {
+      case ct: ClusterByTransform => Some(ct.entries)
       case NamedTransform("cluster_by", arguments) =>
-        Some(arguments.map(_.asInstanceOf[NamedReference]))
+        Some(arguments.map {
+          case ref: NamedReference => IdentityTransform(ref)
+          case t: Transform => t
+          case other => throw new IllegalArgumentException(
+            s"Unexpected argument type in cluster_by: ${other.getClass}")
+        })
       case _ =>
         None
     }
@@ -387,7 +429,7 @@ private[sql] object HoursTransform {
   }
 }
 
-private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
+final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
   override def toString: String = dataType match {
     case StringType => s"'${s"$value".replace("'", "''")}'"
     case BinaryType =>

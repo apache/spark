@@ -559,7 +559,7 @@ replaceTableHeader
     ;
 
 clusterBySpec
-    : CLUSTER BY LEFT_PAREN multipartIdentifierList RIGHT_PAREN
+    : CLUSTER BY LEFT_PAREN transform (COMMA transform)* RIGHT_PAREN
     ;
 
 bucketSpec

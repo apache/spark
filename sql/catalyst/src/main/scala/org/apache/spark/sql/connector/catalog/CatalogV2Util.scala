@@ -179,7 +179,7 @@ private[sql] object CatalogV2Util {
         val clusterByProp =
           ClusterBySpec.toProperty(
             schema,
-            ClusterBySpec(clusterBy.clusteringColumns.toIndexedSeq),
+            clusterBySpecFromChange(clusterBy),
             conf.resolver)
         newProperties.put(clusterByProp._1, clusterByProp._2)
 
@@ -205,12 +205,17 @@ private[sql] object CatalogV2Util {
     clusterByOpt.foreach { clusterBy =>
       newPartitioning = partitioning.map {
         case _: ClusterByTransform => ClusterBySpec.extractClusterByTransform(
-          schema, ClusterBySpec(clusterBy.clusteringColumns.toIndexedSeq), conf.resolver)
+          schema, clusterBySpecFromChange(clusterBy), conf.resolver)
         case other => other
       }
     }
 
     newPartitioning
+  }
+
+  /** Construct a [[ClusterBySpec]] from a [[ClusterBy]] table change. */
+  private def clusterBySpecFromChange(clusterBy: ClusterBy): ClusterBySpec = {
+    new ClusterBySpec(clusterBy.entries().toIndexedSeq)
   }
 
   /**

@@ -892,7 +892,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           .add("x3", StringType)
       )
     )
-    val expectedClusterTransform = ClusterByTransform(
+    val expectedClusterTransform = ClusterByTransform.ofColumns(
       Seq(FieldReference("x1"), FieldReference("x3")).toSeq
     )
     assert(table.partitioning().contains(expectedClusterTransform))
@@ -914,7 +914,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
     val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "t10")
     val table = catalog.loadTable(identifier)
-    val expectedClusterTransform = ClusterByTransform(
+    val expectedClusterTransform = ClusterByTransform.ofColumns(
       Seq(FieldReference("x"), FieldReference("z")).toSeq
     )
     assert(table.partitioning().contains(expectedClusterTransform))
@@ -985,7 +985,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     assert(ex.cause.asInstanceOf[SparkThrowable].getCondition == "CANNOT_UPDATE_PARTITION_COLUMNS")
 
     val table = catalog.loadTable(identifier)
-    val expectedClusterTransform = ClusterByTransform(Seq(FieldReference("x")).toSeq)
+    val expectedClusterTransform = ClusterByTransform.ofColumns(Seq(FieldReference("x")).toSeq)
     assert(table.partitioning().contains(expectedClusterTransform))
   }
 
@@ -1020,7 +1020,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     )
 
     val transforms = table.partitioning()
-    val expectedClusterTransform = ClusterByTransform(
+    val expectedClusterTransform = ClusterByTransform.ofColumns(
       Seq(FieldReference("x1"), FieldReference("x3")).toSeq
     )
     assert(transforms.contains(expectedClusterTransform))
@@ -1049,7 +1049,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           .add("x3", StringType)
       )
     )
-    val expectedClusterTransform = ClusterByTransform(
+    val expectedClusterTransform = ClusterByTransform.ofColumns(
       Seq(FieldReference("x1"), FieldReference("x2")).toSeq
     )
     assert(table.partitioning().contains(expectedClusterTransform))

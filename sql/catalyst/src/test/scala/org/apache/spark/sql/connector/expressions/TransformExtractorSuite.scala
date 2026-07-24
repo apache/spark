@@ -222,9 +222,13 @@ class TransformExtractorSuite extends SparkFunSuite {
     }
 
     clusterByTransform match {
-      case ClusterByTransform(columnNames) =>
-        assert(columnNames.size === 1)
-        assert(columnNames(0).fieldNames === Seq("a", "b"))
+      case ClusterByTransform(entries) =>
+        assert(entries.size === 1)
+        entries(0) match {
+          case IdentityTransform(ref) =>
+            assert(ref.fieldNames === Seq("a", "b"))
+          case _ => fail("Expected IdentityTransform")
+        }
       case _ =>
         fail("Did not match ClusterByTransform extractor")
     }
@@ -245,10 +249,10 @@ class TransformExtractorSuite extends SparkFunSuite {
     assert(reference.length == 2)
     assert(reference(0).fieldNames() === Seq("a a", "b"))
     assert(reference(1).fieldNames() === Seq("ts"))
-    val arguments = clusterByTransform.arguments
-    assert(arguments.length == 2)
-    assert(arguments(0).asInstanceOf[NamedReference].fieldNames() === Seq("a a", "b"))
-    assert(arguments(1).asInstanceOf[NamedReference].fieldNames() === Seq("ts"))
+    assert(clusterByTransform.entries.length == 2)
+    assert(clusterByTransform.columnNames.length == 2)
+    assert(clusterByTransform.columnNames(0).fieldNames() === Seq("a a", "b"))
+    assert(clusterByTransform.columnNames(1).fieldNames() === Seq("ts"))
     val copied = clusterByTransform.withReferences(reference.toImmutableArraySeq)
     assert(copied.equals(clusterByTransform))
   }
