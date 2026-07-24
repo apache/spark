@@ -1109,6 +1109,17 @@ class QueryCompilationErrorsSuite
       )
     }
   }
+
+  test("INVALID_FILE_FORMAT_FOR_STORED_AS: CREATE TABLE STORED AS an unknown file format") {
+    withTable("t") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE TABLE t (c1 INT) STORED AS UNKNOWN_FORMAT")
+        },
+        condition = "INVALID_FILE_FORMAT_FOR_STORED_AS",
+        parameters = Map("serdeInfo" -> "UNKNOWN_FORMAT"))
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
