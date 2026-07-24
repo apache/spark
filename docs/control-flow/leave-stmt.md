@@ -19,14 +19,14 @@ license: |
   limitations under the License.
 ---
 
-Terminates the execution of an iteration of a looping statement and continues with the next iteration if the looping condition is met.
+Exits a labeled looping statement or compound statement, transferring control to the statement that follows it.
 
 This statement may only be used within a [compound statement](compound-stmt.html).
 
 ## Syntax
 
 ```
-ITERATE label
+LEAVE label
 ```
 
 ## Parameters
@@ -65,7 +65,7 @@ ITERATE label
 - [Compound Statement](../control-flow/compound-stmt.html)
 - [FOR Statement](../control-flow/for-stmt.html)
 - [LOOP Statement](../control-flow/loop-stmt.html)
+- [REPEAT Statement](../control-flow/repeat-stmt.html)
 - [WHILE Statement](../control-flow/while-stmt.html)
 - [IF Statement](../control-flow/if-stmt.html)
 - [ITERATE Statement](../control-flow/iterate-stmt.html)
-
