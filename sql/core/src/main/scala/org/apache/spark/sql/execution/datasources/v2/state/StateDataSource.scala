@@ -25,7 +25,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -45,7 +46,7 @@ import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvid
 import org.apache.spark.sql.execution.streaming.state.OfflineStateRepartitionErrors
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -54,12 +55,21 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * An implementation of [[TableProvider]] with [[DataSourceRegister]] for State Store data source.
  */
-class StateDataSource extends TableProvider with DataSourceRegister with Logging {
+class StateDataSource extends TableProvider with DataSourceRegister
+    with CreatableRelationProvider with Logging {
   private lazy val session: SparkSession = SparkSession.active
 
   private lazy val hadoopConf: Configuration = session.sessionState.newHadoopConf()
 
   override def shortName(): String = "statestore"
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    throw StateDataSourceErrors.writeUnsupported("statestore")
+  }
 
   override def getTable(
       schema: StructType,
