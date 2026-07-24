@@ -116,4 +116,16 @@ class HistoryServerPageSuite extends SparkFunSuite with BeforeAndAfter {
       stopHistoryServer()
     }
   }
+
+  test("SPARK-57786: History Server log is inaccessible by default") {
+    startHistoryServer(logDirs.head)
+
+    val (_, htmlOpt, _) = HistoryServerSuite.getContentAndCode(
+      new URI(s"http://$localhost:$port/").toURL)
+    assert(htmlOpt.isDefined && !htmlOpt.get.contains("Show server log"))
+
+    val handlerPaths = server.get.getHandlers.map(_.getContextPath)
+    assert(!handlerPaths.contains("/logPage"))
+    assert(!handlerPaths.contains("/log"))
+  }
 }
