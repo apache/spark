@@ -22,6 +22,7 @@ import java.sql.{Connection, Date, DriverManager, ResultSet, SQLException, State
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.time.format.DateTimeFormatter
 import java.util.{Calendar, GregorianCalendar, Locale, Properties, TimeZone}
+import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 
 import scala.jdk.CollectionConverters._
 import scala.util.Random
@@ -1004,6 +1005,33 @@ class JDBCSuite extends SharedSparkSession {
     } finally {
       JdbcDialects.unregisterDialectForUrlPrefix(shortPrefix)
       JdbcDialects.unregisterDialectForUrlPrefix(longPrefix)
+    }
+  }
+
+  test("Register JDBC dialect URL prefixes concurrently") {
+    val numPrefixes = 16
+    val prefixes = (0 until numPrefixes).map(i => s"jdbc:concurrent-$i:")
+    val pool = Executors.newFixedThreadPool(numPrefixes)
+    val startLatch = new CountDownLatch(1)
+    try {
+      val registrations = prefixes.map { prefix =>
+        pool.submit(new Runnable {
+          override def run(): Unit = {
+            startLatch.await()
+            JdbcDialects.registerDialectForUrlPrefix(
+              prefix, JdbcDialects.getBuiltInDialect("mysql"))
+          }
+        })
+      }
+      startLatch.countDown()
+      registrations.foreach(_.get(30, TimeUnit.SECONDS))
+
+      prefixes.foreach { prefix =>
+        assert(JdbcDialects.get(s"${prefix}//127.0.0.1/db") === MySQLDialect())
+      }
+    } finally {
+      prefixes.foreach(JdbcDialects.unregisterDialectForUrlPrefix)
+      pool.shutdownNow()
     }
   }
 
