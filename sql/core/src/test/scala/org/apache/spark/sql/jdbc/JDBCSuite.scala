@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Connection, Date, DriverManager, ResultSet, Statement, Timestamp}
+import java.sql.{Connection, Date, DriverManager, ResultSet, SQLException, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.time.format.DateTimeFormatter
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
@@ -912,9 +912,7 @@ class JDBCSuite extends SharedSparkSession {
 
   test("Default jdbc dialect registration") {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") === MySQLDialect())
-    assert(JdbcDialects.get("jdbc:aws-wrapper:mysql://127.0.0.1/db") === MySQLDialect())
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") === PostgresDialect())
-    assert(JdbcDialects.get("jdbc:aws-wrapper:postgresql://127.0.0.1/db") === PostgresDialect())
     assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") === DB2Dialect())
     assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") === MsSqlServerDialect())
     assert(JdbcDialects.get("jdbc:derby:db") === DerbyDialect())
@@ -2606,6 +2604,13 @@ class JDBCSuite extends SharedSparkSession {
       .getJDBCType(StringType).map(_.databaseTypeDefinition).get == "STRING")
     assert(databricksDialect
       .getJDBCType(BinaryType).map(_.databaseTypeDefinition).get == "BINARY")
+  }
+
+  test("SPARK-58193: DatabricksDialect syntax error detection") {
+    val dialect = DatabricksDialect()
+    assert(dialect.isSyntaxErrorBestEffort(
+      new SQLException("[parse_syntax_error] Syntax error at or near 'SQL'", "07000")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("Connection reset", "08001")))
   }
 
   test("SPARK-45425: Mapped TINYINT to ShortType for MsSqlServerDialect") {

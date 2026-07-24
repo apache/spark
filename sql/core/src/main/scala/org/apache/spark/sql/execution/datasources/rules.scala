@@ -468,8 +468,12 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
       throw QueryCompilationErrors.unsupportedInsertWithSchemaEvolution()
     }
 
-    if (insert.replaceCriteriaOpt.isDefined) {
-      throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(tblName)
+    insert.replaceCriteriaOpt match {
+      case Some(_: InsertReplaceWhere) =>
+        throw QueryCompilationErrors.unsupportedInsertReplaceWhere(tblName)
+      case Some(_) =>
+        throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(tblName)
+      case None =>
     }
 
     val normalizedPartSpec = normalizePartitionSpec(

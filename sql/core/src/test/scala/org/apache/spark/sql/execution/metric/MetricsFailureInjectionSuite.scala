@@ -16,15 +16,20 @@
  */
 package org.apache.spark.sql.execution.metric
 
+import java.util.concurrent.atomic.AtomicBoolean
+
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.config
-import org.apache.spark.sql.{Column, Dataset}
+import org.apache.spark.sql.{Column, Dataset, Observation, Row}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.adaptive.{AQETestHelper, DisableAdaptiveExecutionSuite}
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.{approx_count_distinct, collect_list, collect_set, count, lit, max, min, size, sort_array, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.util.QueryExecutionListener
 
 class MetricsFailureInjectionSuite
   extends SharedSparkSession
@@ -296,6 +301,80 @@ class MetricsFailureInjectionSuite
 
       assert(stage1SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
       assert(stage2SLAMetric.lastAttemptValueForDataset(finalDf) === Some(5))
+    }
+  }
+
+  test("Observation metrics select attempts according to legacy config") {
+    withTable("test_table") {
+      setUpTestTable("test_table")
+      withSparkContextConf(
+          config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+        Seq(false, true).foreach { aggregateAllAttempts =>
+          withSQLConf(
+              SQLConf.LEGACY_OBSERVE_METRICS_AGGREGATE_ALL_ATTEMPTS.key ->
+                aggregateAllAttempts.toString) {
+            val observation = Observation("stage1")
+            val observed = spark.read.table("test_table")
+              .observe(observation, count(lit(1)).as("rows"))
+            val finalDf = observed.groupBy("low_cardinality_col").count().as[(Int, Long)]
+            val result = finalDf.collect()
+
+            assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
+            if (aggregateAllAttempts) {
+              assert(observation.get("rows").asInstanceOf[Long] > 300L)
+            } else {
+              assert(observation.get === Map("rows" -> 300L))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("Observation metrics reset last-attempt state after failure injection") {
+    val includeRows = new AtomicBoolean(true)
+    val includeRow = udf { _: Long => includeRows.get() }
+    val metricMaps = ArrayBuffer.empty[Map[String, Row]]
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        if (qe.observedMetrics.nonEmpty) {
+          metricMaps += qe.observedMetrics
+        }
+      }
+
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        // No-op
+      }
+    }
+
+    withTable("test_table") {
+      setUpTestTable("test_table")
+      withSparkContextConf(
+          config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+        val observed = spark.read.table("test_table")
+          .filter(includeRow($"id"))
+          .observe(name = "stage1", count(lit(1)).as("rows"))
+        val finalDf = observed.groupBy("low_cardinality_col").count().as[(Int, Long)]
+
+        spark.listenerManager.register(listener)
+        try {
+          val result = finalDf.collect()
+          sparkContext.listenerBus.waitUntilEmpty()
+          assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
+          assert(metricMaps.size === 1)
+          assert(metricMaps.head("stage1") === Row(300L))
+          metricMaps.clear()
+
+          // Reuse the same Dataset while making the second execution produce no rows.
+          includeRows.set(false)
+          assert(finalDf.collect().isEmpty)
+          sparkContext.listenerBus.waitUntilEmpty()
+          assert(metricMaps.size === 1)
+          assert(metricMaps.head("stage1") === Row(0L))
+        } finally {
+          spark.listenerManager.unregister(listener)
+        }
+      }
     }
   }
 
@@ -683,6 +762,197 @@ class MetricsFailureInjectionSuite
           assert(ex.getMessage.contains("indeterminate"),
             s"expected an 'indeterminate'-stage abort, got: ${ex.getMessage}")
         }
+      }
+    }
+  }
+
+  // Observed metrics are computed by the last-attempt aggregating accumulator. This exercises
+  // every aggregate-buffer flavor when a shuffle-fetch failure forces the observed (leaf) stage
+  // to recompute:
+  //  - declarative aggregates (count / sum / min / max),
+  //  - imperative, non-typed aggregate (approx_count_distinct -> HyperLogLogPlusPlus),
+  //  - typed imperative aggregates (collect_set and collect_list).
+  // Regardless of the recompute, the observed values must equal the single-attempt values,
+  // proving the last-attempt accumulator's partial-merge and buffer snapshotting are correct for
+  // imperative and typed-imperative buffers, not just simple long counters.
+  // collect_list is the strongest guard here: unlike collect_set / approx_count_distinct (which
+  // are idempotent under re-merge, so merging a superseded attempt would still yield the right
+  // set/estimate), a collect_list would double in length if a superseded attempt were not
+  // discarded, so size(collect_list) == 300 deterministically proves last-attempt selection for a
+  // typed-imperative buffer.
+  for {
+    injectFailure <- BOOLEAN_DOMAIN
+  } test(s"Observation metrics with all aggregate buffer types survive failure injection - " +
+      s"injectFailure=$injectFailure") {
+    val observation = Observation("mixed_aggregate_buffers")
+
+    withTable("test_table") {
+      setUpTestTable("test_table")
+      withSparkContextConf(
+          config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> injectFailure.toString) {
+        val observed = spark.read.table("test_table")
+          .observe(
+            observation,
+            count(lit(1)).as("rows"),
+            sum($"low_cardinality_col").as("sum_lcc"),
+            min($"id").as("min_id"),
+            max($"id").as("max_id"),
+            approx_count_distinct($"low_cardinality_col").as("approx_distinct_lcc"),
+            sort_array(collect_set($"low_cardinality_col")).as("distinct_lcc"),
+            size(collect_list($"low_cardinality_col")).as("list_size_lcc"))
+        val finalDf = observed.groupBy("low_cardinality_col").count().as[(Int, Long)]
+        val result = finalDf.collect()
+
+        assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
+
+        // low_cardinality_col = id % 5 over ids 0..299: each residue in {0,1,2,3,4} appears 60
+        // times, so sum = 60 * (0+1+2+3+4) = 600, and the distinct set is {0,1,2,3,4}.
+        val metrics = observation.get
+        assert(metrics("rows") === 300L)
+        assert(metrics("sum_lcc") === 600L)
+        assert(metrics("min_id") === 0L)
+        assert(metrics("max_id") === 299L)
+        assert(metrics("approx_distinct_lcc") === 5L)
+        assert(metrics("distinct_lcc") === Seq(0, 1, 2, 3, 4))
+        // 300 rows total; would be 600 if a superseded attempt's collect_list were not discarded.
+        assert(metrics("list_size_lcc") === 300)
+      }
+    }
+  }
+
+  // Observed metrics are produced by the last-attempt aggregating accumulator. A forced AQE
+  // cancellation re-runs the map stage feeding the shuffle, creating a new RDD for the replanned
+  // stage - the canonical case the last-attempt tracking is designed for. Regardless of the
+  // replan, the observed values must reflect only the last attempt, for every aggregate-buffer
+  // flavor (declarative / imperative / typed-imperative). AQE must be enabled for the forced
+  // cancellation to take effect (it is a no-op otherwise), so this scenario is AQE-only.
+  test("Observation metrics AQE cancellation injection") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val stage1Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 1 counter")
+
+      def runQueryWithObservation(triggerMetrics: SQLMetric*): Unit = {
+        assert(stage1Metric.value === 0)
+        val observation = Observation("aqe_obs")
+        withTable("test_table") {
+          setUpTestTable("test_table")
+          AQETestHelper.withForcedCancellation(triggerMetrics: _*) {
+            val stage1MetricsExpr = incrementMetrics(Seq(stage1Metric))
+            val stage1 = spark.read.table("test_table")
+              .observe(
+                observation,
+                count(lit(1)).as("rows"),
+                sum($"low_cardinality_col").as("sum_lcc"),
+                approx_count_distinct($"low_cardinality_col").as("approx_distinct_lcc"),
+                sort_array(collect_set($"low_cardinality_col")).as("distinct_lcc"))
+              .filter(Column(stage1MetricsExpr))
+            val finalDf = stage1.groupBy("low_cardinality_col").count().as[(Int, Long)]
+            val result = finalDf.collect()
+            assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
+
+            // low_cardinality_col = id % 5 over ids 0..299: each residue appears 60 times, so
+            // sum = 60 * (0+1+2+3+4) = 600 and the distinct set is {0,1,2,3,4}.
+            val metrics = observation.get
+            assert(metrics("rows") === 300L)
+            assert(metrics("sum_lcc") === 600L)
+            assert(metrics("approx_distinct_lcc") === 5L)
+            assert(metrics("distinct_lcc") === Seq(0, 1, 2, 3, 4))
+            stage1Metric.reset()
+          }
+        }
+      }
+
+      // Case 1: No forced replanning (single-attempt baseline).
+      runQueryWithObservation()
+      // Case 2: Replan on stage1Metric, so the map stage feeding the shuffle re-runs with a new
+      // RDD; the observed metrics must still reflect only the last attempt.
+      runQueryWithObservation(stage1Metric)
+    }
+  }
+
+  // The other observation failure tests all observe the leaf scan, so only a *downstream* stage
+  // recomputes while the observed operator itself runs once. Here the observation sits on a
+  // non-leaf operator (the output of a join that feeds a shuffle), so the observed operator's own
+  // RDD is the one re-run when the downstream fetch failure fires. This exercises per-RDD
+  // last-attempt selection for the aggregate buffer on a recomputed non-leaf stage, across every
+  // aggregate-buffer flavor, rather than only on a leaf scan.
+  test("Observation metrics on a non-leaf stage survive failure injection") {
+    val observation = Observation("non_leaf_obs")
+
+    withTable("primary_table", "secondary_table") {
+      setUpTestTable("primary_table")
+      setUpTestTable("secondary_table")
+      withSparkContextConf(
+          config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+        val joined = spark.read.table("primary_table")
+          .join(
+            spark.read.table("secondary_table"),
+            usingColumn = "id",
+            joinType = "fullOuter")
+          .observe(
+            observation,
+            count(lit(1)).as("rows"),
+            sum("primary_table.low_cardinality_col").as("sum_lcc"),
+            approx_count_distinct("primary_table.low_cardinality_col").as("approx_distinct_lcc"),
+            sort_array(collect_set("primary_table.low_cardinality_col")).as("distinct_lcc"))
+        val finalDf = joined.groupBy("primary_table.low_cardinality_col").count().as[(Int, Long)]
+        val result = finalDf.collect()
+        assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
+
+        // A full-outer join of the two identical 300-row tables on the unique `id` yields 300
+        // rows, so the observed values match the single-attempt leaf values: each residue in
+        // {0,1,2,3,4} appears 60 times, so sum = 60 * (0+1+2+3+4) = 600.
+        val metrics = observation.get
+        assert(metrics("rows") === 300L)
+        assert(metrics("sum_lcc") === 600L)
+        assert(metrics("approx_distinct_lcc") === 5L)
+        assert(metrics("distinct_lcc") === Seq(0, 1, 2, 3, 4))
+      }
+    }
+  }
+
+  // The failure suite otherwise has a single observe per query, and DataFrameCallbackSuite has
+  // multi-observe queries but no retries. This combines them: two observation nodes at different
+  // stages (a leaf scan and a non-leaf join output), both of which recompute under fetch-failure
+  // injection. Each observation is backed by its own CollectMetricsExec / last-attempt
+  // accumulator, so this checks that they independently report their own correct last-attempt
+  // value rather than leaking into one another.
+  test("Multiple observation points survive failure injection") {
+    val leafObs = Observation("leaf_obs")
+    val nonLeafObs = Observation("non_leaf_obs")
+
+    withTable("primary_table", "secondary_table") {
+      setUpTestTable("primary_table")
+      setUpTestTable("secondary_table")
+      withSparkContextConf(
+          config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+        val leaf = spark.read.table("primary_table")
+          .observe(
+            leafObs,
+            count(lit(1)).as("rows"),
+            sort_array(collect_set("low_cardinality_col")).as("distinct_lcc"))
+        val joined = leaf
+          .join(
+            spark.read.table("secondary_table"),
+            usingColumn = "id",
+            joinType = "fullOuter")
+          .observe(
+            nonLeafObs,
+            count(lit(1)).as("rows"),
+            sum("primary_table.low_cardinality_col").as("sum_lcc"))
+        val finalDf = joined.groupBy("primary_table.low_cardinality_col").count().as[(Int, Long)]
+        val result = finalDf.collect()
+        assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
+
+        // The leaf scan and the join output each recompute, but every observation reports only its
+        // last successful attempt: 300 rows on both, distinct {0,1,2,3,4} on the leaf, and
+        // sum = 60 * (0+1+2+3+4) = 600 on the join output.
+        val leafMetrics = leafObs.get
+        assert(leafMetrics("rows") === 300L)
+        assert(leafMetrics("distinct_lcc") === Seq(0, 1, 2, 3, 4))
+
+        val nonLeafMetrics = nonLeafObs.get
+        assert(nonLeafMetrics("rows") === 300L)
+        assert(nonLeafMetrics("sum_lcc") === 600L)
       }
     }
   }

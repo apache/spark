@@ -939,11 +939,10 @@ class AstBuilder extends DataTypeAstBuilder
       query: LogicalPlan,
       queryAliasCtx: TableAliasContext): LogicalPlan = withOrigin(ctx) {
     ctx match {
-      // For all `InsertIntoStatement` / `OverwriteByExpression`-producing branches, build the
-      // `table` slot directly via `buildWriteTableSlot` so that any
-      // `PlanWithUnresolvedIdentifier` lives *inside* the command's identifier slot. This
-      // preserves the `CTEInChildren` shape and lets `CTESubstitution` place `WithCTE` on the
-      // command's children correctly (SPARK-46625).
+      // For all `InsertIntoStatement`-producing branches, build the `table` slot directly via
+      // `buildWriteTableSlot` so that any `PlanWithUnresolvedIdentifier` lives *inside* the
+      // command's identifier slot. This preserves the `CTEInChildren` shape and lets
+      // `CTESubstitution` place `WithCTE` on the command's children correctly (SPARK-46625).
       case table: InsertIntoTableContext =>
         val insertParams = visitInsertIntoTable(table)
         val privileges = Set(TableWritePrivilege.INSERT)
@@ -973,36 +972,15 @@ class AstBuilder extends DataTypeAstBuilder
         // while REPLACE WHERE still can.
         val isInsertReplaceWhere = ctx.WHERE() != null
         if (isInsertReplaceWhere) {
-          // The unified grammar rule for REPLACE WHERE | ON accepts a table alias for
-          // symmetry with REPLACE ON (whose condition can reference the target via the
-          // alias, e.g. `t.col`). The REPLACE WHERE branch has no use for the alias
-          // because the WHERE condition is evaluated against the target table directly.
-          // Reject explicitly so users get a clear parse error instead of a confusing
-          // column-not-found at analysis time.
-          if (ctx.tableAlias() != null && ctx.tableAlias().strictIdentifier() != null) {
-            throw QueryParsingErrors.insertReplaceWhereTableAliasNotAllowed(ctx.tableAlias())
-          }
-          val options = Option(ctx.optionsClause())
+          val insertParams = visitInsertIntoReplaceWhere(ctx)
           val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
-          // `PlanWithUnresolvedIdentifier` is a `NamedRelation`, so it can occupy
-          // `OverwriteByExpression.table` directly; the materialization happens in
-          // `ResolveIdentifierClause` via its `OverwriteByExpression` special-case.
-          val table = buildWriteTableSlot(ctx.identifierReference, options, privileges)
-          val deleteExpr = expression(ctx.replaceCondition)
-          val isByName = ctx.NAME() != null
-          if (isByName) {
-            OverwriteByExpression.byName(
-              table,
-              df = query,
-              deleteExpr,
-              withSchemaEvolution = ctx.EVOLUTION() != null)
-          } else {
-            OverwriteByExpression.byPosition(
-              table,
-              query = query,
-              deleteExpr,
-              withSchemaEvolution = ctx.EVOLUTION() != null)
-          }
+          createInsertIntoStatement(
+            insertParams = insertParams,
+            tableSlot = buildWriteTableSlot(
+              insertParams.relationCtx, insertParams.options, privileges),
+            query = query,
+            overwrite = true,
+            withSchemaEvolution = ctx.EVOLUTION() != null)
         } else {
           val insertParams = visitInsertIntoReplaceOn(ctx)
           val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
@@ -1109,9 +1087,10 @@ class AstBuilder extends DataTypeAstBuilder
     }
     val replaceUsingCols = visitIdentifierList(ctx.identifierList())
 
-    createInsertIntoReplaceOnOrUsingParams(
+    createInsertIntoReplaceParams(
       relationCtx = ctx.identifierReference(),
       optionsCtx = ctx.optionsClause(),
+      userSpecifiedCols = Seq.empty,
       byName = byName,
       replaceCriteriaOpt = Some(InsertReplaceUsing(replaceUsingCols))
     )
@@ -1129,27 +1108,62 @@ class AstBuilder extends DataTypeAstBuilder
     if (byName && !SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED)) {
       throw QueryParsingErrors.insertReplaceOnByNameNotEnabled(ctx)
     }
+    // Only REPLACE WHERE supports a column list, but the grammar rule is shared with REPLACE ON,
+    // so reject the column list here.
+    if (ctx.identifierList() != null) {
+      throw QueryParsingErrors.insertReplaceOnColumnListNotAllowed(ctx.identifierList())
+    }
     val replaceOnCond = expression(ctx.replaceCondition)
     val tableAliasOpt =
       getTableAliasWithoutColumnAlias(ctx.tableAlias(), "INSERT REPLACE ON")
 
-    createInsertIntoReplaceOnOrUsingParams(
+    createInsertIntoReplaceParams(
       relationCtx = ctx.identifierReference(),
       optionsCtx = ctx.optionsClause(),
+      userSpecifiedCols = Seq.empty,
       byName = byName,
       replaceCriteriaOpt = Some(InsertReplaceOn(replaceOnCond, tableAliasOpt))
     )
   }
 
-  private def createInsertIntoReplaceOnOrUsingParams(
+  /**
+   * Add an INSERT INTO REPLACE WHERE operation to the logical plan.
+   */
+  def visitInsertIntoReplaceWhere(
+      ctx: InsertIntoReplaceBooleanCondContext): InsertTableParams = withOrigin(ctx) {
+    // The grammar rule shared with REPLACE ON accepts a table alias, but REPLACE WHERE has no
+    // use for it. Reject it explicitly for a clear parse error.
+    if (ctx.tableAlias() != null && ctx.tableAlias().strictIdentifier() != null) {
+      throw QueryParsingErrors.insertReplaceWhereTableAliasNotAllowed(ctx.tableAlias())
+    }
+    // BY NAME and a column list are mutually exclusive in the grammar.
+    val userSpecifiedCols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
+    if (userSpecifiedCols.nonEmpty &&
+        !SQLConf.get.getConf(SQLConf.INSERT_INTO_REPLACE_WHERE_COLUMN_LIST_ENABLED)) {
+      throw QueryParsingErrors.insertReplaceWhereColumnListNotEnabled(ctx.identifierList())
+    }
+
+    val deleteExpr = expression(ctx.replaceCondition)
+
+    createInsertIntoReplaceParams(
+      relationCtx = ctx.identifierReference(),
+      optionsCtx = ctx.optionsClause(),
+      userSpecifiedCols = userSpecifiedCols,
+      byName = ctx.NAME() != null,
+      replaceCriteriaOpt = Some(InsertReplaceWhere(deleteExpr))
+    )
+  }
+
+  private def createInsertIntoReplaceParams(
       relationCtx: IdentifierReferenceContext,
       optionsCtx: OptionsClauseContext,
+      userSpecifiedCols: Seq[String],
       byName: Boolean,
       replaceCriteriaOpt: Option[InsertReplaceCriteria]): InsertTableParams = {
     InsertTableParams(
       relationCtx = relationCtx,
       options = Option(optionsCtx),
-      userSpecifiedCols = Seq.empty,
+      userSpecifiedCols = userSpecifiedCols,
       partitionSpec = Map[String, Option[String]](),
       ifPartitionNotExists = false,
       byName = byName,
@@ -1181,9 +1195,9 @@ class AstBuilder extends DataTypeAstBuilder
    * Build the `table` slot of a write command. If the identifier reference is a constant string,
    * returns an [[UnresolvedRelation]] directly; otherwise returns a
    * [[PlanWithUnresolvedIdentifier]] that materializes into an [[UnresolvedRelation]] once the
-   * identifier expression is resolved. Both branches produce a [[NamedRelation]], so the result
-   * fits `NamedRelation`-typed slots (e.g. `OverwriteByExpression.table`) as well as the more
-   * general `LogicalPlan` slot of `InsertIntoStatement.table`.
+   * identifier expression is resolved. Both branches produce a [[NamedRelation]], which occupies
+   * the `InsertIntoStatement.table` slot (a general `LogicalPlan` slot, since `NamedRelation`
+   * extends `LogicalPlan`).
    *
    * Placing the placeholder in the identifier slot (rather than wrapping the entire write command)
    * preserves the `CTEInChildren` shape at parse time, so `CTESubstitution` places `WithCTE` on the
@@ -1268,8 +1282,13 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitMergeIntoTable(ctx: MergeIntoTableContext): LogicalPlan = withOrigin(ctx) {
     val withSchemaEvolution = ctx.EVOLUTION() != null
 
+    // The target and source may each carry their own dynamic table options via `WITH (...)`.
+    // Known limitation: if the same table is used as both the target and the source
+    // (e.g. `MERGE INTO t WITH (a) USING t WITH (b) s`), the analyzer's relation cache is keyed
+    // without options and reuses the first resolved relation, so the target's options win and the
+    // source's are silently dropped.
     val sourceTableOrQuery = if (ctx.source != null) {
-      createUnresolvedRelation(ctx.source)
+      createUnresolvedRelation(ctx.source, Option(ctx.sourceOptions))
     } else if (ctx.sourceQuery != null) {
       visitQuery(ctx.sourceQuery)
     } else {
@@ -1355,6 +1374,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     val targetTable = createUnresolvedRelation(
       ctx.target,
+      Option(ctx.targetOptions),
       writePrivileges = MergeIntoTable.getWritePrivileges(
         matchedActions, notMatchedActions, notMatchedBySourceActions))
     val targetTableAlias = getTableAliasWithoutColumnAlias(ctx.targetAlias, "MERGE")
@@ -1380,7 +1400,10 @@ class AstBuilder extends DataTypeAstBuilder
         deleteCondition = params.deleteCondition,
         sequenceByExpr = params.sequencing,
         includeColumns = params.includeColumns,
-        excludeColumns = params.excludeColumns)
+        excludeColumns = params.excludeColumns,
+        storedAsScdType = params.storedAsScdType,
+        trackHistoryColumns = params.trackHistoryColumns,
+        trackHistoryExceptColumns = params.trackHistoryExceptColumns)
     }
 
   protected def parseAutoCdcParams(params: AutoCdcParametersContext): AutoCdcParams =
@@ -1410,13 +1433,43 @@ class AstBuilder extends DataTypeAstBuilder
           visitIdentifierSeq(c.exceptCols).map(UnresolvedAttribute.quoted)
       }
 
+      // STORED AS SCD TYPE <n>. Absent clause defaults to SCD Type 1. Only 1 and 2 are
+      // supported; reject anything else (including oversized numeric literals) with a clear
+      // error rather than a generic parse failure or NumberFormatException. Match on the token
+      // text rather than parsing to Int so an overflowing literal cannot throw.
+      val storedAsScdType = Option(params.autoCdcStoredAsClause()) match {
+        case Some(c) =>
+          c.scdType.getText match {
+            case "1" => 1
+            case "2" => 2
+            case other =>
+              operationNotAllowed(
+                s"Unsupported SCD type: $other. AUTO CDC only supports STORED AS SCD TYPE 1 " +
+                  "or SCD TYPE 2.", c)
+          }
+        case None => 1
+      }
+
+      val trackHistoryClause = Option(params.autoCdcTrackHistoryClause())
+      val trackHistoryColumns = trackHistoryClause.collect {
+        case c if c.trackCols != null =>
+          visitIdentifierSeq(c.trackCols).map(UnresolvedAttribute.quoted)
+      }
+      val trackHistoryExceptColumns = trackHistoryClause.collect {
+        case c if c.nonTrackCols != null =>
+          visitIdentifierSeq(c.nonTrackCols).map(UnresolvedAttribute.quoted)
+      }
+
       AutoCdcParams(
         source = source,
         keys = keys,
         deleteCondition = deleteCondition,
         sequencing = sequencing,
         includeColumns = includeColumns,
-        excludeColumns = excludeColumns)
+        excludeColumns = excludeColumns,
+        storedAsScdType = storedAsScdType,
+        trackHistoryColumns = trackHistoryColumns,
+        trackHistoryExceptColumns = trackHistoryExceptColumns)
     }
 
   /**
@@ -2562,15 +2615,72 @@ class AstBuilder extends DataTypeAstBuilder
       case LessThan(left, right) => (left, LessThanOp, right)
       case _ =>
         throw QueryParsingErrors.sqlAsOfJoinMatchConditionInvalidOperator(
-          asOfMatchConditionInvalidOperatorText(expr), ctx)
+          asOfMatchConditionInvalidOperatorText(expr, ctx), ctx)
     }
   }
 
-  private def asOfMatchConditionInvalidOperatorText(expr: Expression): String = expr match {
-    case EqualTo(_, _) => "="
-    case And(_, _) => "AND"
-    case Or(_, _) => "OR"
-    case _ => expr.prettyName
+  /**
+   * Map a rejected MATCH_CONDITION expression back to the SQL operator the user wrote.
+   *
+   * Catalyst has no `NotEqualTo` class: both `<>` and `!=` parse to `Not(EqualTo(...))`, and
+   * both `<=>` and `IS NOT DISTINCT FROM` parse to `EqualNullSafe(...)`. Walk the match
+   * expression parse tree (not `prettyName`) to recover the token the user wrote.
+   */
+  private def asOfMatchConditionInvalidOperatorText(
+      expr: Expression,
+      ctx: ParserRuleContext): String = {
+    expr match {
+      case And(_, _) => "AND"
+      case Or(_, _) => "OR"
+      case _ =>
+        findFirstComparisonContext(ctx)
+          .map(comparisonOperatorText)
+          .orElse(findPredicatedContext(ctx).flatMap(distinctFromOperatorText))
+          .getOrElse(getOriginalText(ctx).trim)
+    }
+  }
+
+  private def findFirstComparisonContext(ctx: ParserRuleContext): Option[ComparisonContext] = {
+    ctx match {
+      case comparison: ComparisonContext => Some(comparison)
+      case _ =>
+        Option(ctx.children).iterator.flatMap(_.asScala).collectFirst {
+          case child: ParserRuleContext => findFirstComparisonContext(child)
+        }.flatten
+    }
+  }
+
+  private def findPredicatedContext(ctx: ParserRuleContext): Option[PredicatedContext] = {
+    ctx match {
+      case predicated: PredicatedContext => Some(predicated)
+      case _ =>
+        Option(ctx.children).iterator.flatMap(_.asScala).collectFirst {
+          case child: ParserRuleContext => findPredicatedContext(child)
+        }.flatten
+    }
+  }
+
+  private def comparisonOperatorText(ctx: ComparisonContext): String = {
+    val operator = ctx.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
+    operator.getSymbol.getType match {
+      case SqlBaseParser.EQ => "="
+      case SqlBaseParser.NSEQ => "<=>"
+      case SqlBaseParser.NEQ => "<>"
+      case SqlBaseParser.NEQJ => "!="
+      case SqlBaseParser.LT => "<"
+      case SqlBaseParser.LTE => "<="
+      case SqlBaseParser.GT => ">"
+      case SqlBaseParser.GTE => ">="
+      case _ => source(ctx.comparisonOperator())
+    }
+  }
+
+  private def distinctFromOperatorText(predicated: PredicatedContext): Option[String] = {
+    Option(predicated.predicate).flatMap { predicate =>
+      Option(predicate.kind).filter(_.getType == SqlBaseParser.DISTINCT).map { _ =>
+        if (predicate.errorCapturingNot != null) "IS NOT DISTINCT FROM" else "IS DISTINCT FROM"
+      }
+    }
   }
 
   /**
@@ -2581,7 +2691,7 @@ class AstBuilder extends DataTypeAstBuilder
       base: LogicalPlan,
       criteria: AsofJoinCriteriaContext): AsOfJoin = {
     if (!conf.sqlAsOfJoinEnabled) {
-      throw QueryParsingErrors.sqlAsofJoinDisabled(SQLConf.SQL_ASOF_JOIN_ENABLED.key, ctx)
+      throw QueryParsingErrors.sqlAsOfJoinDisabled(SQLConf.SQL_ASOF_JOIN_ENABLED.key, ctx)
     }
     val joinType = Option(ctx.asofJoinType) match {
       case None => Inner
@@ -7286,6 +7396,54 @@ class AstBuilder extends DataTypeAstBuilder
     CommentOnTable(createUnresolvedTable(ctx.identifierReference, "COMMENT ON TABLE"), comment)
   }
 
+  override def visitCommentColumn(ctx: CommentColumnContext): LogicalPlan = withOrigin(ctx) {
+    // Each column comment is either a new comment value, or `IS NULL` which removes the existing
+    // comment. `IS NULL` and `IS ''` are distinguished here: the former yields None (removal), the
+    // latter Some("") (an empty comment). The `comment` grammar rule is `stringLit | NULL`, so a
+    // missing `stringLit()` means `IS NULL`.
+    def commentOf(c: CommentContext): Option[String] =
+      Option(c.stringLit()).map(s => string(visitStringLit(s)))
+
+    def alterColumnSpec(column: Seq[String], comment: Option[String]): AlterColumnSpec =
+      AlterColumnSpec(
+        UnresolvedFieldName(column),
+        newDataType = None,
+        newNullability = None,
+        newComment = comment,
+        newPosition = None,
+        newDefaultExpression = None,
+        dropComment = comment.isEmpty)
+
+    // Only tables are supported: downstream rules (ResolveFieldNameAndPosition, CheckAnalysis,
+    // DataSourceV2Strategy) all expect a ResolvedTable, so a view target must be rejected during
+    // resolution. UnresolvedTable resolves only to a table and reports EXPECT_TABLE_NOT_VIEW
+    // otherwise, matching COMMENT ON TABLE and ALTER TABLE ... ALTER COLUMN.
+    if (ctx.columnComment != null) {
+      // COMMENT ON COLUMN table.column IS 'comment'
+      val identifiers = visitMultipartIdentifier(ctx.columnComment.column)
+      if (identifiers.size < 2) {
+        throw new ParseException("INVALID_SQL_SYNTAX.COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER", ctx)
+      }
+      val tableId = identifiers.dropRight(1)
+      val columnId = identifiers.takeRight(1)
+      val spec = alterColumnSpec(columnId, commentOf(ctx.columnComment.comment))
+      AlterColumns(
+        UnresolvedTable(tableId, "COMMENT ON COLUMN"), Seq(spec), fromCommentOn = true)
+    } else {
+      // COMMENT ON TABLE table COLUMN (column1 IS 'comment1', column2 IS 'comment2', ...)
+      // The table target is an identifierReference, so it also supports IDENTIFIER(...) clauses.
+      val specs = ctx.columns.columnComment.asScala.map { c =>
+        alterColumnSpec(visitMultipartIdentifier(c.column), commentOf(c.comment))
+      }.toSeq
+      withIdentClause(
+        ctx.identifierReference,
+        tableId =>
+          AlterColumns(
+            UnresolvedTable(tableId, "COMMENT ON TABLE ... COLUMN"), specs,
+            fromCommentOn = true))
+    }
+  }
+
   override def visitComment (ctx: CommentContext): String = {
     Option(ctx.stringLit()).map(s => string(visitStringLit(s))).getOrElse("")
   }
@@ -7808,9 +7966,12 @@ class AstBuilder extends DataTypeAstBuilder
             // grouping and aggregate expressions, respectively. This will let the
             // [[ResolveOrdinalInOrderByAndGroupBy]] rule detect the ordinal in the aggregate list
             // and replace it with the corresponding attribute from the child operator.
-            case UnresolvedOrdinal(v: Int) =>
+            case ordinal @ UnresolvedOrdinal(v: Int) =>
               newGroupingExpressions += UnresolvedOrdinal(newAggregateExpressions.length + 1)
-              newAggregateExpressions += UnresolvedPipeAggregateOrdinal(v)
+              // Preserve the ordinal's origin so an out-of-range error points at the position
+              // itself, not the whole pipe statement (matching regular GROUP BY).
+              newAggregateExpressions +=
+                CurrentOrigin.withOrigin(ordinal.origin) { UnresolvedPipeAggregateOrdinal(v) }
             case e: Expression =>
               newGroupingExpressions += e
               newAggregateExpressions += UnresolvedAlias(e, None)
@@ -7910,4 +8071,7 @@ case class AutoCdcParams(
     deleteCondition: Option[Expression],
     sequencing: Expression,
     includeColumns: Option[Seq[UnresolvedAttribute]],
-    excludeColumns: Option[Seq[UnresolvedAttribute]])
+    excludeColumns: Option[Seq[UnresolvedAttribute]],
+    storedAsScdType: Int,
+    trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
+    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]])

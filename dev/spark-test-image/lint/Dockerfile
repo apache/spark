@@ -82,7 +82,6 @@ RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN python3.12 -m pip install \
-    'flake8==3.9.0' \
     'ruff==0.14.8' \
     'googleapis-common-protos-stubs==2.2.0' \
     'grpc-stubs==1.24.11' \
@@ -91,7 +90,6 @@ RUN python3.12 -m pip install \
     'zstandard==0.25.0' \
     'ipython' \
     'ipython_genutils' \
-    'jinja2' \
     'matplotlib' \
     'mypy==1.19.1' \
     'numpy==2.4.1' \

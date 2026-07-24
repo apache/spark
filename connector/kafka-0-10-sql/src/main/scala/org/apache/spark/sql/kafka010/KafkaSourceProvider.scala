@@ -274,6 +274,15 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       if (p <= 0) throw new IllegalArgumentException("minPartitions must be positive")
     }
 
+    if (params.contains(PARTITION_METADATA_CACHE_TTL_MS)) {
+      val v = params(PARTITION_METADATA_CACHE_TTL_MS).toLong
+      if (v != -1 && v <= 0) {
+        throw new IllegalArgumentException(
+          "Option 'partition.metadata.cache.ttl.ms' must be a positive number of milliseconds, " +
+          "or -1 to disable caching")
+      }
+    }
+
     if (params.contains(MAX_RECORDS_PER_PARTITION_OPTION_KEY)) {
       val p = params(MAX_RECORDS_PER_PARTITION_OPTION_KEY).toLong
       if (p <= 0) {
@@ -577,6 +586,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private[kafka010] val DEFAULT_MAX_TRIGGER_DELAY = "15m"
   private[kafka010] val FETCH_OFFSET_NUM_RETRY = "fetchoffset.numretries"
   private[kafka010] val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchoffset.retryintervalms"
+  private[kafka010] val PARTITION_METADATA_CACHE_TTL_MS = "partition.metadata.cache.ttl.ms"
   private[kafka010] val CONSUMER_POLL_TIMEOUT = "kafkaconsumer.polltimeoutms"
   private[kafka010] val STARTING_OFFSETS_BY_TIMESTAMP_STRATEGY_KEY =
     "startingoffsetsbytimestampstrategy"

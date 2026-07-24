@@ -32,6 +32,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 /**
  * Params for [[VarianceThresholdSelector]] and [[VarianceThresholdSelectorModel]].
@@ -130,6 +131,11 @@ class VarianceThresholdSelectorModel private[ml](
 
   // For ml connect only
   private[ml] def this() = this("", Array.emptyIntArray)
+
+  private[spark] override def estimatedSize: Long = {
+    // selectedFeatures: Array[Int]
+    estimateMatadataSize + SizeEstimator.estimate(selectedFeatures)
+  }
 
   if (selectedFeatures.length >= 2) {
     require(selectedFeatures.sliding(2).forall(l => l(0) < l(1)),

@@ -589,6 +589,59 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Row(null, null, null, null, null))
   }
 
+  test("SPARK-58291: empty-buffer merge must not overflow to NaN for statistical aggregates") {
+    // A single-partition group with two equal, very large finite values has zero variance, so
+    // var_pop / covar_pop / regr_sxy must be 0.0. Previously, when adjacent Partial/Final
+    // aggregates were NOT combined (the old default), the Final merge of the non-empty Partial
+    // buffer into the empty Final buffer computed `delta * deltaN * n1 * n2` where `n1 == 0`;
+    // `delta * deltaN` overflowed to Infinity and `Infinity * 0 = NaN`, corrupting the moments.
+    // CombineAdjacentAggregation (Complete mode) sidesteps the merge and returned 0.0, so the two
+    // configurations disagreed. The merge fix makes both paths return 0.0.
+    // This must hold with and without AQE, and with combining on and off.
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val df = Seq(1e155, 1e155).toDF("a").repartition(1)
+        Seq(true, false).foreach { combine =>
+          withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString) {
+            checkAnswer(
+              df.selectExpr("var_pop(a)", "covar_pop(a, a)", "regr_sxy(a, a)"),
+              Row(0.0, 0.0, 0.0))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58291: empty-buffer merge must not overflow to NaN for Pearson correlation") {
+    // Two finite points are perfectly linearly correlated, so corr / regr_r2 are finite. The
+    // Pearson merge computes `dx * dxN * n1 * n2` (and the dy variant) for xMk / yMk. When one
+    // side is an empty buffer (n1 == 0 or n2 == 0) and the other has a large average, `dx * dxN`
+    // overflows to Infinity before being multiplied by the zero count, and `Infinity * 0 = NaN`
+    // corrupts the merged moments. The old default (no combining) hit this Final-merge path and
+    // returned NaN, while CombineAdjacentAggregation (Complete mode) sidestepped the merge, so the
+    // two configurations disagreed. The merge fix makes both paths return the same finite result.
+    // This must hold with and without AQE, and with combining on and off.
+    val data = Seq((1.0e155, 1.0e-150), (1.000000000000001e155, 2.0e-150))
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val df = data.toDF("x", "y").repartition(1)
+        // Reference result from the combined (Complete-mode) path, which never runs the merge.
+        val expected = withSQLConf(
+            SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+          df.selectExpr("corr(x, y)", "regr_r2(y, x)").collect()
+        }
+        expected.head.toSeq.foreach { v =>
+          assert(!v.asInstanceOf[Double].isNaN, "corr / regr_r2 must be finite, not NaN")
+        }
+        Seq(true, false).foreach { combine =>
+          withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString) {
+            checkAnswer(df.selectExpr("corr(x, y)", "regr_r2(y, x)"), expected.toSeq)
+          }
+        }
+      }
+    }
+  }
+
   test("collect functions") {
     val df = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
     checkAnswer(

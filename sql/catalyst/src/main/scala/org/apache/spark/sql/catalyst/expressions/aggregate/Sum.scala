@@ -30,6 +30,11 @@ import org.apache.spark.sql.types._
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the sum calculated from values of a group.",
+  arguments = """
+    Arguments:
+      * expr - The expression to sum over the group.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (5), (10), (15) AS tab(col);
@@ -201,6 +206,11 @@ case class Sum(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the sum calculated from values of a group and the result is null on overflow.",
+  arguments = """
+    Arguments:
+      * expr - The expression to sum over the group.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (5), (10), (15) AS tab(col);

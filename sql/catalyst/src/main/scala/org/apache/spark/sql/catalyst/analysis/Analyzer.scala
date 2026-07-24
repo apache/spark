@@ -253,6 +253,7 @@ object AnalysisContext {
       referredTempFunctionNames = mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
       referredTempVariableNames = viewDesc.viewReferredTempVariableNames,
       collation = viewDesc.collation)
+    context.setSinglePassResolverBridgeState(originContext.getSinglePassResolverBridgeState)
     set(context)
     try f finally { set(originContext) }
   }
@@ -1155,6 +1156,8 @@ class Analyzer(
         // Thus, we need to look at the raw plan if `relation` is a temporary view.
         // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
         unwrapRelationPlan(relation) match {
+          case v: View if i.replaceCriteriaOpt.exists(_.isReplaceWhere) =>
+            throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.desc.identifier, i)
           case v: View =>
             throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
           case other => i.copy(table = other)
@@ -1346,14 +1349,14 @@ class Analyzer(
       case i: InsertIntoStatement
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
-            i.replaceCriteriaOpt.isDefined =>
+            i.replaceCriteriaOpt.exists(_.isReplaceOnOrUsing) =>
         throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
           i.table.asInstanceOf[DataSourceV2Relation].table.name())
 
       case i: InsertIntoStatement
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
-            i.replaceCriteriaOpt.isEmpty =>
+            (i.replaceCriteriaOpt.isEmpty || i.replaceCriteriaOpt.exists(_.isReplaceWhere)) =>
         val r = i.table.asInstanceOf[DataSourceV2Relation]
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
@@ -1387,7 +1390,11 @@ class Analyzer(
               query,
               withSchemaEvolution = i.withSchemaEvolution)
           }
-        } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
+        // Dynamic partition overwrite applies only to plain INSERT OVERWRITE. REPLACE WHERE always
+        // deletes by its condition, so it falls through to the OverwriteByExpression branch below
+        // even when the session is in DYNAMIC partition-overwrite mode.
+        } else if (i.replaceCriteriaOpt.isEmpty &&
+            conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           if (isByName) {
             OverwritePartitionsDynamic.byName(
               r,
@@ -1400,17 +1407,29 @@ class Analyzer(
               withSchemaEvolution = i.withSchemaEvolution)
           }
         } else {
+          val deleteExpr = i.replaceCriteriaOpt match {
+            case Some(InsertReplaceWhere(condition)) =>
+              if (staticPartitions.nonEmpty) {
+                throw SparkException.internalError(
+                  s"REPLACE WHERE must not carry static partitions, but got: $staticPartitions")
+              }
+              condition
+            case Some(other) => throw SparkException.internalError(
+              s"Replace criteria ${other.getClass.getSimpleName} must not reach " +
+                "ResolveInsertInto; REPLACE ON/USING are rejected earlier.")
+            case None => staticDeleteExpression(r, staticPartitions)
+          }
           if (isByName) {
             OverwriteByExpression.byName(
               table = r,
               df = query,
-              deleteExpr = staticDeleteExpression(r, staticPartitions),
+              deleteExpr = deleteExpr,
               withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwriteByExpression.byPosition(
               table = r,
               query = query,
-              deleteExpr = staticDeleteExpression(r, staticPartitions),
+              deleteExpr = deleteExpr,
               withSchemaEvolution = i.withSchemaEvolution)
           }
         }
@@ -1753,7 +1772,8 @@ class Analyzer(
         // Lateral column alias has higher priority than outer reference.
         val resolvedWithLCA = resolveLateralColumnAlias(resolvedBasic)
         val resolvedFinal = resolvedWithLCA.map(resolveColsLastResort)
-        p.copy(projectList = resolvedFinal.map(_.asInstanceOf[NamedExpression]))
+        p.copy(projectList =
+          resolvedFinal.map(e => aliasIfOuterReference(e.asInstanceOf[NamedExpression])))
 
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
@@ -2041,19 +2061,6 @@ class Analyzer(
     }
 
     /**
-     * Wrap an outer-scope star expansion result in [[Alias]] so that the [[OuterReference]]
-     * attribute gets a fresh ExprId in the subquery's scope. This prevents the outer ExprId from
-     * leaking through [[Project.output]] when the expansion goes through a derived table.
-     * Struct star expansion already produces [[Alias]] nodes, so those are left unchanged.
-     */
-    private def aliasIfOuterReference(e: NamedExpression): NamedExpression = e match {
-      case _: Alias => e
-      case outerReference: OuterReference =>
-        Alias(outerReference, toPrettySQL(outerReference.e))()
-      case _ => e
-    }
-
-    /**
      * Returns true if `exprs` contains a [[Star]].
      */
     def containsStar(exprs: Seq[Expression]): Boolean =
@@ -2241,11 +2248,18 @@ class Analyzer(
   private def resolvePipeAggregateExpressionOrdinal(
       expr: NamedExpression,
       inputs: Seq[Attribute]): NamedExpression = expr match {
-    case UnresolvedPipeAggregateOrdinal(index) =>
+    case ordinal @ UnresolvedPipeAggregateOrdinal(index) =>
       // In this case, the user applied the SQL pipe aggregate operator ("|> AGGREGATE") and used
       // ordinals in its GROUP BY clause. This expression then refers to the i-th attribute of the
-      // child operator (one-based). Here we resolve the ordinal to the corresponding attribute.
-      inputs(index - 1)
+      // child operator (one-based). Here we resolve the ordinal to the corresponding attribute, or
+      // throw GROUP_BY_POS_OUT_OF_RANGE if it is outside the range of the child's attributes.
+      withPosition(ordinal) {
+        if (index > 0 && index <= inputs.size) {
+          inputs(index - 1)
+        } else {
+          throw QueryCompilationErrors.groupByPositionRangeError(index, inputs.size)
+        }
+      }
     case other =>
       other
   }
@@ -2644,6 +2658,8 @@ class Analyzer(
       case r: RelationTimeTravel =>
         resolveSubQueries(r, r)
       case j: Join if j.childrenResolved && j.duplicateResolved =>
+        resolveSubQueries(j, j)
+      case j: AsOfJoin if j.childrenResolved && j.duplicateResolved =>
         resolveSubQueries(j, j)
       case tvf: UnresolvedTableValuedFunction =>
         resolveSubQueries(tvf, tvf)
@@ -4203,10 +4219,10 @@ class Analyzer(
         resolved.copyTagsFrom(a)
         resolved
 
-      case a @ AlterColumns(table: ResolvedTable, specs) =>
+      case a @ AlterColumns(table: ResolvedTable, specs, _) =>
         val resolvedSpecs = specs.map {
           case s @ AlterColumnSpec(
-              ResolvedFieldName(path, field), dataType, _, _, position, _, _) =>
+              ResolvedFieldName(path, field), dataType, _, _, position, _, _, _) =>
             val newDataType = dataType.flatMap { dt =>
               // Hive style syntax provides the column type, even if it may not have changed.
               val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)

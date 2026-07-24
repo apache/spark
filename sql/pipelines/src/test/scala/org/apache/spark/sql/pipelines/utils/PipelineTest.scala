@@ -32,6 +32,7 @@ import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, TypedColumn}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, SqlGraphRegistrationContext}
 import org.apache.spark.sql.pipelines.utils.PipelineTest.cleanupMetastore
 
@@ -113,6 +114,8 @@ abstract class PipelineTest
 
   protected override def beforeEach(): Unit = {
     super.beforeEach()
+    spark.sessionState.conf.setConf(
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER, false)
     cleanupMetastore(spark)
     (catalogInPipelineSpec, databaseInPipelineSpec) match {
       case (Some(catalog), Some(schema)) =>
@@ -124,6 +127,7 @@ abstract class PipelineTest
 
   protected override def afterEach(): Unit = {
     cleanupMetastore(spark)
+    spark.sessionState.conf.unsetConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER)
     super.afterEach()
   }
 

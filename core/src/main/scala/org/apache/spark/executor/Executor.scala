@@ -571,10 +571,18 @@ private[spark] class Executor(
         try {
           logError(log"Executor launch task ${MDC(TASK_NAME, taskDescription.name)} failed," +
             log" reason: ${MDC(REASON, t.getMessage)}")
+          // SPARK-57465: If the thread pool rejected the task because the executor is shutting
+          // down, report a non-counting failure so the task can be rescheduled elsewhere.
+          val reason: TaskFailedReason = t match {
+            case _: RejectedExecutionException if executorShutdown.get() =>
+              ExecutorShutdownFailure(executorId)
+            case _ =>
+              new ExceptionFailure(t, Seq.empty)
+          }
           context.statusUpdate(
             taskDescription.taskId,
             TaskState.FAILED,
-            env.closureSerializer.newInstance().serialize(new ExceptionFailure(t, Seq.empty)))
+            env.closureSerializer.newInstance().serialize(reason))
         } catch {
           case NonFatal(e) if env.isStopped =>
             logError(

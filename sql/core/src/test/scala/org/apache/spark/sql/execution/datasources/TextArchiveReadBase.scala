@@ -189,3 +189,18 @@ trait TextArchiveReadBase extends QueryTest with SharedSparkSession {
     }
   }
 }
+
+class TextTarArchiveReadSuite extends TextArchiveReadBase with TarArchiveTestUtils {
+
+  override protected def corruptArchiveExtension: String = "tar.gz"
+}
+
+class TextZipArchiveReadSuite extends TextArchiveReadBase with ZipArchiveTestUtils {
+
+  override protected def corruptArchiveExtension: String = "zip"
+}
+
+class TextSevenZArchiveReadSuite extends TextArchiveReadBase with SevenZArchiveTestUtils {
+
+  override protected def corruptArchiveExtension: String = "7z"
+}

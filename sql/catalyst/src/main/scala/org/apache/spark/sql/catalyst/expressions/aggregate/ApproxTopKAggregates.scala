@@ -28,10 +28,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{ArrayOfCollatedStringsSerDe, ArrayOfDecimalsSerDe, CollatedString, Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ArrayOfCollatedStringsSerDe, ArrayOfDecimalsSerDe, Cast, CollatedString, Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, UnsafeRowUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -59,6 +60,15 @@ import org.apache.spark.unsafe.types.UTF8String
     _FUNC_(expr, k, maxItemsTracked) - Returns top k items with their frequency.
       `k` An optional INTEGER literal greater than 0. If k is not specified, it defaults to 5.
       `maxItemsTracked` An optional INTEGER literal greater than or equal to k and has upper limit of 1000000. If maxItemsTracked is not specified, it defaults to 10000.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the top k most frequent items of.
+        An expression that evaluates to a boolean, numeric, date, timestamp, or string.
+      * k - The number of top items to return.
+        An expression that evaluates to an integer. Must be a constant.
+      * maxItemsTracked - The maximum number of items to track in the sketch.
+        An expression that evaluates to an integer. Must be a constant.
   """,
   examples = """
     Examples:
@@ -160,7 +170,7 @@ case class ApproxTopK(
     buffer.merge(input)
 
   override def eval(buffer: ApproxTopKAggregateBuffer[Any]): GenericArrayData =
-    buffer.eval(kVal, itemDataType)
+    buffer.eval(kVal, itemDataType, itemDataType)
 
   override def serialize(buffer: ApproxTopKAggregateBuffer[Any]): Array[Byte] =
     buffer.serialize(ApproxTopK.genSketchSerDe(itemDataType))
@@ -234,7 +244,8 @@ object ApproxTopK {
     itemType match {
       case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
            _: LongType | _: FloatType | _: DoubleType | _: DateType |
-           _: TimestampType | _: TimestampNTZType | _: StringType | _: DecimalType => true
+           _: TimestampType | _: TimestampNTZType | _: StringType |
+           _: DecimalType | _: TimeType => true
       // BinaryType is not supported now, as ItemsSketch seems cannot count the frequency correctly
       case _ => false
     }
@@ -255,7 +266,7 @@ object ApproxTopK {
         new ItemsSketch[Boolean](maxMapSize).asInstanceOf[ItemsSketch[Any]]
       case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
         new ItemsSketch[Number](maxMapSize).asInstanceOf[ItemsSketch[Any]]
-      case _: LongType | _: TimestampType | _: TimestampNTZType =>
+      case _: LongType | _: TimestampType | _: TimestampNTZType | _: TimeType =>
         new ItemsSketch[Long](maxMapSize).asInstanceOf[ItemsSketch[Any]]
       case _: DoubleType =>
         new ItemsSketch[Double](maxMapSize).asInstanceOf[ItemsSketch[Any]]
@@ -275,7 +286,7 @@ object ApproxTopK {
       case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
       case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
         new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-      case _: LongType | _: TimestampType | _: TimestampNTZType =>
+      case _: LongType | _: TimestampType | _: TimestampNTZType | _: TimeType =>
         new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
       case _: DoubleType =>
         new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
@@ -345,6 +356,14 @@ object ApproxTopK {
       TypeCheckSuccess
     }
   }
+
+  def widenItemValue(item: Any, sketchType: DataType, outputType: DataType): Any =
+    (sketchType, outputType) match {
+      case _ if sketchType == outputType => item
+      case (_: StringType, _: StringType) => item
+      case _ =>
+        Cast(Literal(item, sketchType), outputType, Some(SQLConf.get.sessionLocalTimeZone)).eval()
+    }
 }
 
 /**
@@ -377,6 +396,8 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
         case _: TimestampType =>
           sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
         case _: TimestampNTZType =>
+          sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
+        case _: TimeType =>
           sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
         case st: StringType =>
           val orig = v.asInstanceOf[UTF8String]
@@ -420,7 +441,7 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
    * Evaluate the buffer and return top K items (including null) with their estimated frequency.
    * The result is sorted by frequency in descending order.
    */
-  def eval(k: Int, itemDataType: DataType): GenericArrayData = {
+  def eval(k: Int, sketchItemType: DataType, outputItemType: DataType): GenericArrayData = {
     // frequent items from sketch
     val frequentItems = sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES)
     // total number of frequent items (including null, if any)
@@ -450,10 +471,10 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
         (null, nullCount.toLong)
       } else {
         // insert frequent item into result
-        val item: Any = itemDataType match {
+        val rawItem: Any = sketchItemType match {
           case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
                _: LongType | _: FloatType | _: DoubleType | _: DecimalType |
-               _: DateType | _: TimestampType | _: TimestampNTZType =>
+               _: DateType | _: TimestampType | _: TimestampNTZType | _: TimeType =>
             curFrequentItem.getItem
           case _: StringType =>
             curFrequentItem.getItem match {
@@ -463,6 +484,7 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
                 s"Unexpected sketch item type for a string column: ${other.getClass.getName}")
             }
         }
+        val item = ApproxTopK.widenItemValue(rawItem, sketchItemType, outputItemType)
         fiIndex += 1 // move to next frequent item
         (item, itemEstimate)
       }
@@ -519,6 +541,13 @@ object ApproxTopKAggregateBuffer {
   usage = """
     _FUNC_(expr, maxItemsTracked) - Accumulates items into a sketch.
       `maxItemsTracked` An optional positive INTEGER literal with upper limit of 1000000. If maxItemsTracked is not specified, it defaults to 10000.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression whose values are accumulated into the sketch.
+        An expression that evaluates to a boolean, numeric, date, timestamp, or string.
+      * maxItemsTracked - The maximum number of items to track in the sketch.
+        An expression that evaluates to an integer. Must be a constant.
   """,
   examples = """
     Examples:

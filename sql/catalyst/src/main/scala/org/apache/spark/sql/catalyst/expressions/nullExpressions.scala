@@ -188,6 +188,13 @@ private case class TypedNullLiteral(child: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
+  arguments = """
+    Arguments:
+      * expr1 - The value returned when it is not equal to the other expression.
+        An expression of any orderable type.
+      * expr2 - The value compared against the first expression.
+        An expression of any orderable type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(2, 2);
@@ -219,6 +226,11 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns null if `expr` is equal to zero, or `expr` otherwise.",
+  arguments = """
+    Arguments:
+      * expr - The expression that returns null when equal to zero.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -313,6 +325,11 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, replace
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if `expr` is NaN, or false otherwise.",
+  arguments = """
+    Arguments:
+      * expr - The expression to test for NaN.
+        An expression that evaluates to a double or float.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(cast('NaN' as double));
@@ -361,6 +378,13 @@ case class IsNaN(child: Expression) extends UnaryExpression
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr1` if it's not NaN, or `expr2` otherwise.",
+  arguments = """
+    Arguments:
+      * expr1 - The value returned when it is not NaN.
+        An expression that evaluates to a double or float.
+      * expr2 - The value returned when the first expression is NaN.
+        An expression that evaluates to a double or float.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(cast('NaN' as double), 123);

@@ -43,9 +43,9 @@ object TableOutputResolver extends SQLConfHelper with Logging {
   /**
    * Modes for filling in default or null values for missing columns.
    * If FILL, fill missing top-level columns with their default values (by-name reorder path).
-   * If RECURSE, fill missing top-level columns (including trailing columns on the by-position
-   * path for INSERT with schema evolution when enabled) and recurse into nested structs,
-   * arrays, and maps to fill missing struct fields with null or defaults.
+   * If RECURSE, fill missing top-level columns (including trailing non-generated columns on the
+   * by-position path for INSERT with schema evolution when enabled) and recurse into nested
+   * structs, arrays, and maps to fill missing struct fields with null or defaults.
    * If NONE, do not fill any missing columns.
    */
   object DefaultValueFillMode extends Enumeration {
@@ -541,6 +541,12 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
 
     val trailingCols = actualExpectedCols.drop(inputCols.size)
+    if (colPath.isEmpty &&
+        trailingCols.exists(col => GeneratedColumn.isGeneratedColumn(col.metadata))) {
+      throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
+        tableName, actualExpectedCols.map(_.name), inputCols.map(_.toAttribute))
+    }
+
     val defaults = if (fillDefaultValue || trailingCols.nonEmpty) {
       trailingCols.map { expectedCol =>
         // Check for generated column expression first, before falling back to defaults.

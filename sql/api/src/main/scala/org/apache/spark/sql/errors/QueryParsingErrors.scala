@@ -58,6 +58,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def insertReplaceOnColumnListNotAllowed(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_ON_COLUMN_LIST_NOT_ALLOWED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def insertReplaceUsingNotEnabled(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INSERT_REPLACE_USING_NOT_ENABLED",
@@ -68,6 +75,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   def insertReplaceUsingByNameNotEnabled(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def insertReplaceWhereColumnListNotEnabled(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_WHERE_COLUMN_LIST_NOT_ENABLED",
       messageParameters = Map.empty,
       ctx)
   }
@@ -237,7 +251,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def sqlAsofJoinDisabled(configKey: String, ctx: ParserRuleContext): Throwable = {
+  def sqlAsOfJoinDisabled(configKey: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE.ASOF_JOIN",
       messageParameters = Map("config" -> toSQLConf(configKey)),
@@ -1050,13 +1064,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   /**
-   * Throws an exception when a cursor reference has more than one qualifier. Valid: cursor or
-   * label.cursor Invalid: a.b.cursor
+   * Returns an exception for a cursor reference that has more than one qualifier. Valid: cursor
+   * or label.cursor Invalid: a.b.cursor
    *
    * @param cursorName
    *   The fully qualified cursor name with multiple qualifiers
-   * @throws ParseException
-   *   Always throws this exception
+   * @return
+   *   A ParseException to be thrown by the caller
    */
   def cursorInvalidQualifierError(cursorName: String): Throwable = {
     new ParseException(
