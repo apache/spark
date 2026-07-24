@@ -59,6 +59,7 @@ import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
+import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric;
 import org.apache.spark.shuffle.checksum.RowBasedChecksum;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
@@ -93,6 +94,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Nullable private MapStatus mapStatus;
   @Nullable private ShuffleExternalSorter sorter;
   @Nullable private long[] partitionLengths;
+  private CustomShuffleTaskMetric[] customMetricsValues = new CustomShuffleTaskMetric[0];
   private long peakMemoryUsedBytes = 0;
 
   private ExposedBufferByteArrayOutputStream serBuffer;
@@ -288,8 +290,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     if (spills.length == 0) {
       final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
           .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());
-      return mapWriter.commitAllPartitions(
-        ShuffleChecksumHelper.EMPTY_CHECKSUM_VALUE).getPartitionLengths();
+      long[] emptyPartitionLengths =
+        mapWriter.commitAllPartitions(ShuffleChecksumHelper.EMPTY_CHECKSUM_VALUE)
+          .getPartitionLengths();
+      customMetricsValues = mapWriter.currentMetricsValues();
+      return emptyPartitionLengths;
     } else if (spills.length == 1) {
       Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
           shuffleExecutorComponents.createSingleFileMapOutputWriter(shuffleId, mapId);
@@ -299,8 +304,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         partitionLengths = spills[0].partitionLengths;
         logger.debug("Merge shuffle spills for mapId {} with length {}", mapId,
             partitionLengths.length);
-        maybeSingleFileWriter.get()
-          .transferMapSpillFile(spills[0].file, partitionLengths, sorter.getChecksums());
+        SingleSpillShuffleMapOutputWriter singleFileWriter = maybeSingleFileWriter.get();
+        singleFileWriter.transferMapSpillFile(spills[0].file, partitionLengths,
+            sorter.getChecksums());
+        customMetricsValues = singleFileWriter.currentMetricsValues();
       } else {
         partitionLengths = mergeSpillsUsingStandardWriter(spills);
       }
@@ -348,6 +355,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         mergeSpillsWithFileStream(spills, mapWriter, compressionCodec);
       }
       partitionLengths = mapWriter.commitAllPartitions(sorter.getChecksums()).getPartitionLengths();
+      customMetricsValues = mapWriter.currentMetricsValues();
     } catch (Exception e) {
       try {
         mapWriter.abort(e);
@@ -564,5 +572,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Override
   public long[] getPartitionLengths() {
     return partitionLengths;
+  }
+
+  @Override
+  public CustomShuffleTaskMetric[] currentMetricsValues() {
+    return customMetricsValues;
   }
 }

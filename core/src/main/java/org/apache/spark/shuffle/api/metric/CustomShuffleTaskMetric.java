@@ -15,33 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.api;
-
-import java.io.File;
-import java.io.IOException;
+package org.apache.spark.shuffle.api.metric;
 
 import org.apache.spark.annotation.Private;
-import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric;
 
 /**
- * Optional extension for partition writing that is optimized for transferring a single
- * file to the backing store.
+ * :: Private ::
+ * A per-task value for a {@link CustomShuffleMetric}.
+ *
+ * @since 4.3.0
  */
 @Private
-public interface SingleSpillShuffleMapOutputWriter {
+public interface CustomShuffleTaskMetric {
 
   /**
-   * Transfer a file that contains the bytes of all the partitions written by this map task.
+   * The name of this metric. Must match the name of the declaring {@link CustomShuffleMetric}.
    */
-  void transferMapSpillFile(
-      File mapOutputFile,
-      long[] partitionLengths,
-      long[] checksums) throws IOException;
+  String name();
 
   /**
-   * The values of the custom shuffle metrics for this map task.
+   * Returns the long value of custom shuffle task metric.
    */
-  default CustomShuffleTaskMetric[] currentMetricsValues() {
-    return new CustomShuffleTaskMetric[0];
-  }
+  long value();
 }

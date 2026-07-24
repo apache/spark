@@ -15,33 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.api;
-
-import java.io.File;
-import java.io.IOException;
+package org.apache.spark.shuffle.api.metric;
 
 import org.apache.spark.annotation.Private;
-import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric;
 
 /**
- * Optional extension for partition writing that is optimized for transferring a single
- * file to the backing store.
+ * :: Private ::
+ * A custom shuffle metric.
+ *
+ * @since 4.3.0
  */
 @Private
-public interface SingleSpillShuffleMapOutputWriter {
+public interface CustomShuffleMetric {
 
   /**
-   * Transfer a file that contains the bytes of all the partitions written by this map task.
+   * The name of this metric. Must match the name reported by the corresponding
+   * {@link CustomShuffleTaskMetric} so per-task values can be matched to this declaration.
    */
-  void transferMapSpillFile(
-      File mapOutputFile,
-      long[] partitionLengths,
-      long[] checksums) throws IOException;
+  String name();
 
   /**
-   * The values of the custom shuffle metrics for this map task.
+   * A human-readable description of this metric.
    */
-  default CustomShuffleTaskMetric[] currentMetricsValues() {
-    return new CustomShuffleTaskMetric[0];
-  }
+  String description();
+
+  /**
+   * Defines how the per-task values are represented as a string in the UI. Per-task values are
+   * always aggregated as a plain sum across tasks. Must be one of:
+   * {@code "sum"} (raw count), {@code "size"} (bytes), {@code "timing"} (milliseconds), or
+   * {@code "nsTiming"} (nanoseconds). Any other value is rejected.
+   */
+  String metricType();
 }
