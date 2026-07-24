@@ -672,7 +672,7 @@ class CombineInternal[T](
   def getMaxItemsTracked: Int = maxItemsTracked
 
   def updateMaxItemsTracked(combineSizeSpecified: Boolean, newMaxItemsTracked: Int): Unit = {
-    if (!combineSizeSpecified) {
+    if (!combineSizeSpecified && newMaxItemsTracked != ApproxTopK.VOID_MAX_ITEMS_TRACKED) {
       // check size
       if (this.maxItemsTracked == ApproxTopK.VOID_MAX_ITEMS_TRACKED) {
         // If buffer's maxItemsTracked VOID_MAX_ITEMS_TRACKED, it means the buffer is a placeholder
@@ -905,10 +905,25 @@ case class ApproxTopKCombine(
     buffer
   }
 
+  private def resolveEmptyBufferItemDataType(buffer: CombineInternal[Any]): Unit = {
+    if (buffer.getItemDataType == null) {
+      buffer.updateItemDataType(uncheckedItemDataType)
+    }
+  }
+
   override def eval(buffer: CombineInternal[Any]): Any = {
+    resolveEmptyBufferItemDataType(buffer)
     val sketchBytes = buffer.getSketchWithNullCount
       .serialize(ApproxTopK.genSketchSerDe(buffer.getItemDataType))
-    val maxItemsTracked = buffer.getMaxItemsTracked
+    // A buffer that saw no input (e.g. a size-unspecified combine over empty input) still carries
+    // the VOID sentinel here. eval must emit a concrete size: the downstream estimate rejects any
+    // non-positive maxItemsTracked, so fall back to DEFAULT_MAX_ITEMS_TRACKED. This differs from
+    // serialize, which keeps VOID so an empty partial stays neutral for the final merge's size
+    // check.
+    val maxItemsTracked = buffer.getMaxItemsTracked match {
+      case ApproxTopK.VOID_MAX_ITEMS_TRACKED => ApproxTopK.DEFAULT_MAX_ITEMS_TRACKED
+      case other => other
+    }
     val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(buffer.getItemDataType)
     InternalRow.apply(
       sketchBytes,
@@ -918,6 +933,7 @@ case class ApproxTopKCombine(
   }
 
   override def serialize(buffer: CombineInternal[Any]): Array[Byte] = {
+    resolveEmptyBufferItemDataType(buffer)
     buffer.serialize()
   }
 
