@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Locale, OptionalLong}
+import java.util.{Locale, Optional, OptionalLong}
 
 import org.apache.hadoop.fs.Path
 
@@ -25,10 +25,11 @@ import org.apache.spark.internal.LogKeys.{PATH, REASON}
 import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, ExpressionSet, Or}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.PartitionedFileUtil
@@ -37,12 +38,14 @@ import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 trait FileScan extends Scan
   with Batch
   with SupportsReportStatistics
   with SupportsMetadata
+  with SupportsScanMerging
   with SQLConfHelper
   with Logging {
   /**
@@ -55,6 +58,9 @@ trait FileScan extends Scan
   def sparkSession: SparkSession
 
   def fileIndex: PartitioningAwareFileIndex
+
+  /** The scan options, used to obtain a fresh [[ScanBuilder]] when merging. */
+  def options: CaseInsensitiveStringMap
 
   def dataSchema: StructType
 
@@ -89,7 +95,7 @@ trait FileScan extends Scan
 
   protected def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
-  private lazy val (normalizedPartitionFilters, normalizedDataFilters) = {
+  protected lazy val (normalizedPartitionFilters, normalizedDataFilters) = {
     val partitionFilterAttributes = AttributeSet(partitionFilters).map(a => a.name -> a).toMap
     val normalizedPartitionFilters = ExpressionSet(partitionFilters.map(
       QueryPlan.normalizeExpressions(_, toAttributes(fileIndex.partitionSchema)
@@ -209,6 +215,81 @@ trait FileScan extends Scan
   // Returns whether the two given arrays of [[Filter]]s are equivalent.
   protected def equivalentFilters(a: Array[Filter], b: Array[Filter]): Boolean = {
     a.sortBy(_.hashCode()).sameElements(b.sortBy(_.hashCode()))
+  }
+
+  // ===== SupportsScanMerging =================================================
+  //
+  // Two file scans of the same table can be fused into one when they read the same data and
+  // differ only in projected columns and/or pushed data filters. This brings V2 file sources to
+  // parity with V1, where MergeSubplans already merges such subplans (V1 keeps the Filter/Project
+  // nodes in the logical plan, so the relation leaves are identical). The logic here is
+  // format-agnostic; format-specific state is handled via the hooks below.
+
+  /**
+   * Format-specific scan state (beyond fileIndex / schema / options / partition filters / data
+   * filters / projected columns) that must match for two scans to be mergeable. The default
+   * requires no extra state. Overridden e.g. by ParquetScan to require equal variant extractions.
+   * `other` is guaranteed to be the same concrete class as `this`.
+   */
+  protected def canMergeScanStateWith(other: FileScan): Boolean = true
+
+  /**
+   * Whether this scan has pushed-down aggregation. When true, the scan emits aggregated rows with
+   * no post-scan Filter to reconcile per-side predicates, so merging is declined. Overridden by
+   * ParquetScan / OrcScan which support aggregate pushdown.
+   */
+  protected def hasAggregatePushedDown: Boolean = false
+
+  private def mergeEligible(o: FileScan): Boolean =
+    getClass == o.getClass &&
+      fileIndex == o.fileIndex &&
+      dataSchema == o.dataSchema &&
+      options == o.options &&
+      normalizedPartitionFilters == o.normalizedPartitionFilters &&
+      !hasAggregatePushedDown && !o.hasAggregatePushedDown &&
+      canMergeScanStateWith(o)
+
+  override def mergeWith(
+      other: SupportsScanMerging,
+      table: SupportsRead): Optional[SupportsScanMerging] = other match {
+    case o: FileScan if mergeEligible(o) =>
+      // Strict when the two scans already agree on pushed data filters: rebuild with the union of
+      // read schemas, rows unchanged. Otherwise (relaxed) widen the best-effort pushed filter to
+      // OR(f1, f2) so the merged scan reads a superset; the exact per-side predicate is reapplied
+      // by the post-scan Filter node (split into aggregate FILTER clauses by PlanMerger). The
+      // relaxed path is gated by `spark.sql.files.scanMerge.ignorePushedDataFilters`.
+      val strict = normalizedDataFilters == o.normalizedDataFilters
+      if (!strict && !conf.fileScanMergeIgnorePushedDataFilters) {
+        Optional.empty()
+      } else {
+        table.newScanBuilder(options) match {
+          case builder: FileScanBuilder =>
+            // Partition filters are guaranteed equal (see `mergeEligible`), so push them as-is --
+            // never widen, which would needlessly produce OR(pf, pf) and obscure partition
+            // pruning. Only data filters use the strict/relaxed distinction.
+            builder.pushFilters(mergedDataFilters(o, strict) ++ partitionFilters)
+            builder.pruneColumns(readSchema().merge(o.readSchema()))
+            builder.build() match {
+              case merged: SupportsScanMerging => Optional.of(merged)
+              case _ => Optional.empty()
+            }
+          case _ => Optional.empty()
+        }
+      }
+    case _ => Optional.empty()
+  }
+
+  // Strict: the two data-filter lists are equivalent, so push this scan's. Relaxed: widen to
+  // OR(AND(df1), AND(df2)) so the merged scan reads a superset; an empty list on either side
+  // means that side reads everything, so the union also reads everything (no data filter).
+  private def mergedDataFilters(o: FileScan, strict: Boolean): Seq[Expression] = {
+    if (strict) {
+      dataFilters
+    } else if (dataFilters.nonEmpty && o.dataFilters.nonEmpty) {
+      Seq(Or(dataFilters.reduce(And), o.dataFilters.reduce(And)))
+    } else {
+      Seq.empty
+    }
   }
 
   private val isCaseSensitive = conf.caseSensitiveAnalysis

@@ -104,4 +104,7 @@ case class OrcScan(
       Map("PushedAggregation" -> pushedAggregationsStr) ++
       Map("PushedGroupBy" -> pushedGroupByStr)
   }
+
+  // ORC supports aggregate pushdown, which disables scan merging (see FileScan).
+  override protected def hasAggregatePushedDown: Boolean = pushedAggregate.nonEmpty
 }
