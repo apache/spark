@@ -31,6 +31,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.features.DriverUIServiceFeatureStep
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.LogKeys.{COUNT, TOTAL}
@@ -119,6 +120,27 @@ private[spark] class KubernetesClusterSchedulerBackend(
     pollEvents.start(applicationId())
     if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
       setUpExecutorConfigMap(podAllocator.driverPod)
+    }
+    maybePatchDriverUIServiceTargetPort()
+  }
+
+  /**
+   * Patch the dedicated UI Service's `targetPort` to match the actual bound port of the driver's
+   * Jetty server. Only applies when the UI service feature is enabled. Requires `patch services`
+   * RBAC on the driver's ServiceAccount.
+   */
+  private def maybePatchDriverUIServiceTargetPort(): Unit = {
+    if (!conf.get(KUBERNETES_DRIVER_UI_SERVICE_ENABLED)) return
+    for {
+      svcName <- conf.getOption(
+        DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL)
+      actualPort <- sc.ui.map(_.boundPort)
+    } {
+      K8sDriverUIServicePatcher.patchTargetPort(
+        kubernetesClient,
+        conf.get(KUBERNETES_NAMESPACE),
+        svcName,
+        actualPort)
     }
   }
 

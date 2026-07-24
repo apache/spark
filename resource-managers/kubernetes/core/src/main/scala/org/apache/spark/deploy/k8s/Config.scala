@@ -74,7 +74,8 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY =
     ConfigBuilder("spark.kubernetes.driver.service.ipFamilyPolicy")
-      .doc("K8s IP Family Policy for Driver Service")
+      .doc("K8s IP Family Policy for Driver Service. The driver UI Service reuses this " +
+        "setting to keep the same IP family.")
       .version("3.4.0")
       .stringConf
       .checkValues(Set("SingleStack", "PreferDualStack", "RequireDualStack"))
@@ -82,7 +83,8 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_DRIVER_SERVICE_IP_FAMILIES =
     ConfigBuilder("spark.kubernetes.driver.service.ipFamilies")
-      .doc("A list of IP families for K8s Driver Service")
+      .doc("A list of IP families for K8s Driver Service. The driver UI Service reuses this " +
+        "setting to keep the same IP family.")
       .version("3.4.0")
       .stringConf
       .checkValues(Set("IPv4", "IPv6", "IPv4,IPv6", "IPv6,IPv4"))
@@ -99,6 +101,36 @@ private[spark] object Config extends Logging {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_UI_SERVICE_ENABLED =
+    ConfigBuilder("spark.kubernetes.driver.ui.service.enabled")
+      .doc("If true, Spark will create a dedicated Kubernetes Service for the Spark driver " +
+        "Web UI (separate from the headless driver service). When enabled, after the driver " +
+        "Web UI starts, Spark will patch the Service's targetPort to match the actual bound " +
+        "UI port, which allows using `spark.ui.port=0` (random port). Requires the driver's " +
+        "ServiceAccount to have `get` and `patch` verbs on `services`.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_UI_SERVICE_TYPE =
+    ConfigBuilder("spark.kubernetes.driver.ui.service.type")
+      .doc("K8s Service type for the dedicated Spark driver Web UI Service " +
+        s"(only applies when ${KUBERNETES_DRIVER_UI_SERVICE_ENABLED.key}=true). " +
+        "Supported values: ClusterIP, NodePort, LoadBalancer.")
+      .version("4.3.0")
+      .stringConf
+      .checkValues(Set("ClusterIP", "NodePort", "LoadBalancer"))
+      .createWithDefault("ClusterIP")
+
+  val KUBERNETES_DRIVER_UI_SERVICE_NAME =
+    ConfigBuilder("spark.kubernetes.driver.ui.service.name")
+      .doc("Optional override for the dedicated Spark driver Web UI Service name " +
+        s"(only applies when ${KUBERNETES_DRIVER_UI_SERVICE_ENABLED.key}=true). " +
+        "If unset, Spark derives the name as `<resourceNamePrefix>-ui-svc`.")
+      .version("4.3.0")
+      .stringConf
+      .createOptional
 
   val KUBERNETES_DRIVER_OWN_PVC =
     ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")

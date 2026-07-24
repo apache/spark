@@ -117,6 +117,19 @@ class KubernetesDriverConf(
     }
   }
 
+  lazy val driverUIServiceName: String = {
+    val preferredServiceName = s"$resourceNamePrefix$DRIVER_UI_SVC_POSTFIX"
+    if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
+      preferredServiceName
+    } else {
+      val randomServiceId = KubernetesUtils.uniqueID(clock)
+      val shorterServiceName = s"spark-$randomServiceId$DRIVER_UI_SVC_POSTFIX"
+      logWarning(s"Preferred UI service name '$preferredServiceName' exceeds Kubernetes DNS " +
+        s"label limit ($MAX_SERVICE_NAME_LENGTH); using '$shorterServiceName' instead.")
+      shorterServiceName
+    }
+  }
+
   override val resourceNamePrefix: String = {
     val custom = if (Utils.isTesting) get(KUBERNETES_DRIVER_POD_NAME_PREFIX) else None
     custom.getOrElse(KubernetesConf.getResourceNamePrefix(appName))
