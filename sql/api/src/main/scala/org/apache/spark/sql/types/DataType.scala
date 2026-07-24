@@ -67,7 +67,7 @@ abstract class DataType extends AbstractDataType {
   private[sql] def jsonValue: JValue = typeName
 
   /** The compact JSON representation of this data type. */
-  def json: String = compact(render(jsonValue))
+  def json: String = DataTypeJsonStreaming.json(this)
 
   /** The pretty (i.e. indented) JSON representation of this data type. */
   def prettyJson: String = pretty(render(jsonValue))

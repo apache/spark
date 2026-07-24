@@ -1322,6 +1322,62 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
       }
   }
 
+  test("DataTypeJsonStreaming.json is byte-identical to DataType.json") {
+    val withMetadata = StructField(
+      "withMeta",
+      StringType,
+      nullable = false,
+      new MetadataBuilder().putString("comment", "hi").putLong("k", 3L).build())
+
+    val wideStruct = StructType(
+      (0 until 200).map(i => StructField(s"f$i", IntegerType, nullable = i % 2 == 0)))
+
+    val deepNested = StructType(StructField("a",
+      StructType(StructField("b",
+        StructType(StructField("c", StringType(UTF8_LCASE_COLLATION_ID)) :: Nil)) :: Nil)) :: Nil)
+
+    // Collation-free struct nested under array/map: the field streams through the recursive path.
+    val arrayAndMapOfStruct = StructType(
+      StructField("arr", ArrayType(
+        StructType(StructField("s", StringType) :: StructField("n", LongType) :: Nil))) ::
+        StructField("m", MapType(StringType,
+          StructType(StructField("v", IntegerType) :: Nil))) :: Nil)
+
+    // Collation directly on an array element / map value is relocated onto the enclosing field's
+    // metadata, so these must fall back to the whole-field render, not stream.
+    val collationUnderArrayMap = StructType(
+      StructField("arr", ArrayType(StringType(UTF8_LCASE_COLLATION_ID))) ::
+        StructField("m", MapType(StringType(UTF8_LCASE_COLLATION_ID), IntegerType)) :: Nil)
+
+    val mixedCollated = StructType(
+      StructField("c1", VarcharType(12, UNICODE_COLLATION_ID)) ::
+        StructField("c2", StringType(UNICODE_COLLATION_ID)) ::
+        StructField("c3", ArrayType(
+          StructType(StructField("s", StringType(UTF8_LCASE_COLLATION_ID)) :: Nil))) ::
+        StructField("c4", MapType(
+          StructType(StructField("k", CharType(10, UTF8_LCASE_COLLATION_ID)) :: Nil),
+          CharType(8, UTF8_LCASE_COLLATION_ID))) :: Nil)
+
+    val cases: Seq[DataType] = Seq(
+      IntegerType,
+      StringType,
+      StringType(UTF8_LCASE_COLLATION_ID),
+      ArrayType(IntegerType),
+      MapType(StringType, ArrayType(LongType)),
+      StructType(Nil),
+      StructType(withMetadata :: StructField("plain", DoubleType) :: Nil),
+      wideStruct,
+      deepNested,
+      arrayAndMapOfStruct,
+      collationUnderArrayMap,
+      mixedCollated)
+
+    cases.foreach { dt =>
+      assert(DataTypeJsonStreaming.json(dt) === dt.json, s"mismatch for $dt")
+      assert(DataType.fromJson(DataTypeJsonStreaming.json(dt)) === dt, s"round-trip for $dt")
+    }
+  }
+
   test("non string field has collation metadata") {
     val json =
       s"""
