@@ -345,9 +345,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     "excludes a user column") {
     // The framework columns are appended after the user selection is applied to the source
     // schema, so no ExcludeColumns selection over the user data can strip them: they always
-    // appear in the output. (The framework column names cannot themselves be named in a
-    // selection -- they are not present in the source schema -- so this asserts the closest
-    // observable behavior: excluding a real data column still yields all framework columns.)
+    // appear in the output.
     val resolvedFlow = newAutoCdcMergeFlow(
       sourceDf = threeColumnSourceDf(),
       storedAsScdType = ScdType.Type2,
@@ -368,6 +366,60 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         s"expected framework column $frameworkCol in ${resolvedFlow.schema.fieldNames.toSeq}"
       )
     }
+  }
+
+  test("AutoCdcMergeFlow.schema lets a selection exclude a source column that collides with " +
+    "a non-prefixed framework column, re-adding it from the framework") {
+    // __START_AT / __END_AT do not carry the reserved AutoCDC prefix, so a source change feed
+    // may legitimately contain columns with those names. The user excludes them via the column
+    // selection; they are dropped from the user-data portion and the engine's own framework
+    // columns are appended in their place, so each still appears exactly once in the output with
+    // the framework's type (the sequencing type), not the source column's type.
+    val session = spark
+    import session.implicits._
+    // Source carries String-typed __START_AT / __END_AT columns alongside the data columns.
+    val sourceDf = MemoryStream[(Int, String, Option[Long], String, String)]
+      .toDS()
+      .toDF(
+        "id",
+        "name",
+        "seq",
+        Scd2BatchProcessor.startAtColName,
+        Scd2BatchProcessor.endAtColName)
+
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = sourceDf,
+      storedAsScdType = ScdType.Type2,
+      columnSelection = Some(
+        ColumnSelection.ExcludeColumns(
+          Seq(
+            UnqualifiedColumnName(Scd2BatchProcessor.startAtColName),
+            UnqualifiedColumnName(Scd2BatchProcessor.endAtColName))
+        )
+      )
+    )
+
+    // Each framework column appears exactly once (the source copy was excluded, the framework
+    // copy appended) ...
+    assert(
+      resolvedFlow.schema.fieldNames.count(_ == Scd2BatchProcessor.startAtColName) == 1)
+    assert(
+      resolvedFlow.schema.fieldNames.count(_ == Scd2BatchProcessor.endAtColName) == 1)
+    // ... and carries the framework (sequencing) type, not the source String type.
+    assert(resolvedFlow.schema(Scd2BatchProcessor.startAtColName).dataType == LongType)
+    assert(resolvedFlow.schema(Scd2BatchProcessor.endAtColName).dataType == LongType)
+    // Full expected shape: the retained data columns followed by the framework columns.
+    assert(
+      resolvedFlow.schema.fieldNames.toSeq ==
+      Seq(
+        "id",
+        "name",
+        "seq",
+        Scd2BatchProcessor.startAtColName,
+        Scd2BatchProcessor.endAtColName,
+        AutoCdcReservedNames.cdcMetadataColName
+      )
+    )
   }
 
   test("AutoCdcMergeFlow.schema's SCD2 framework columns use the resolved sequencing type") {
