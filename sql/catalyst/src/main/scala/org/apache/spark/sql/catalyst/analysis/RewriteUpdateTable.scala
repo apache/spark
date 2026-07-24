@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, ReplaceData, Union, UpdateTable, WriteDelta}
@@ -69,10 +70,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
 
     // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+    val readPlan = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
 
     // build a plan with updated and copied over records
-    val query = buildReplaceDataUpdateProjection(readRelation, assignments, cond)
+    val query = buildReplaceDataUpdateProjection(readPlan, assignments, cond)
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
@@ -95,16 +96,16 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // construct a read relation and include all required metadata columns
     // the same read relation will be used to read records that must be updated and copied over
     // the analyzer will take care of duplicated attr IDs
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+    val readPlan = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
 
     // build a plan for updated records that match the condition
-    val matchedRowsPlan = Filter(cond, readRelation)
+    val matchedRowsPlan = Filter(cond, readPlan)
     val updatedRowsPlan = buildReplaceDataUpdateProjection(matchedRowsPlan, assignments)
 
     // build a plan that contains unmatched rows in matched groups that must be copied over
     val remainingRowFilter = Not(EqualNullSafe(cond, Literal.TrueLiteral))
     val remainingRowsPlan = addOperationColumn(COPY_OPERATION,
-      Filter(remainingRowFilter, readRelation))
+      Filter(remainingRowFilter, readPlan))
 
     // the new state is a union of updated and copied over records
     val query = Union(updatedRowsPlan, remainingRowsPlan)
@@ -157,40 +158,50 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // resolve all needed attrs (e.g. row ID and any required metadata attrs)
     val rowAttrs = relation.output
-    val rowIdAttrs = resolveRowIdAttrs(relation, operation)
+    val rowIdRefs = resolveRowIdRefs(relation, operation)
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
+    val rowIdAttrs = rowIdRefs.rowIdAttrs
 
-    // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs, rowIdAttrs)
+    // construct a read plan with all required row ID and metadata columns
+    val readRelation = buildRelationWithAttrs(
+      relation, operationTable, metadataAttrs, rowIdRefs.scanAttrs)
+    val readPlan = withExtractedRowIds(readRelation, rowIdRefs.extractionAliases)
 
     // build a plan for updated records that match the condition
-    val matchedRowsPlan = Filter(cond, readRelation)
-    val rowDeltaPlan = if (operation.representUpdateAsDeleteAndInsert) {
-      buildDeletesAndInserts(matchedRowsPlan, assignments, rowIdAttrs)
+    val matchedRowsPlan = Filter(cond, readPlan)
+    val rowDelta = if (operation.representUpdateAsDeleteAndInsert) {
+      buildDeletesAndInserts(matchedRowsPlan, assignments, rowIdRefs)
     } else {
-      buildWriteDeltaUpdateProjection(matchedRowsPlan, assignments, rowIdAttrs)
+      val updatePlan = buildWriteDeltaUpdateProjection(
+        matchedRowsPlan, assignments, rowIdAttrs, rowIdRefs.extractionAttrs)
+      RowDeltaPlan(updatePlan, rowIdAttrs)
     }
 
     // build a plan to write the row delta to the table
     val writeRelation = relation.copy(table = operationTable)
-    val projections = buildWriteDeltaProjections(rowDeltaPlan, rowAttrs, rowIdAttrs, metadataAttrs)
+    val projections = buildWriteDeltaProjections(
+      rowDelta.plan, rowAttrs, rowDelta.rowIdAttrs, metadataAttrs)
     val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
-    WriteDelta(writeRelation, cond, rowDeltaPlan, relation, projections, groupFilterCond)
+    WriteDelta(writeRelation, cond, rowDelta.plan, relation, projections, groupFilterCond)
   }
 
   // this method assumes the assignments have been already aligned before
   private def buildWriteDeltaUpdateProjection(
       plan: LogicalPlan,
       assignments: Seq[Assignment],
-      rowIdAttrs: Seq[Attribute]): LogicalPlan = {
+      rowIdAttrs: Seq[Attribute],
+      rowIdExtractionAttrs: Seq[Attribute]): LogicalPlan = {
 
-    // the plan output may include immutable metadata columns at the end
-    // that's why the number of assignments may not match the number of plan output columns
+    // the plan output may include immutable metadata columns and extracted row IDs at the end
     val assignedValues = assignments.map(_.value)
+    val extractionExprIds = rowIdExtractionAttrs.map(_.exprId).toSet
     val updatedValues = plan.output.zipWithIndex.map { case (attr, index) =>
       if (index < assignments.size) {
         val assignedExpr = assignedValues(index)
         Alias(assignedExpr, attr.name)()
+      } else if (extractionExprIds.contains(attr.exprId)) {
+        // preserve the original nested row ID for update encoding
+        attr
       } else {
         assert(MetadataAttribute.isValid(attr.metadata))
         if (MetadataAttribute.isPreservedOnUpdate(attr)) {
@@ -213,17 +224,31 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   private def buildDeletesAndInserts(
       matchedRowsPlan: LogicalPlan,
       assignments: Seq[Assignment],
-      rowIdAttrs: Seq[Attribute]): Expand = {
+      rowIdRefs: ResolvedRowIdRefs): RowDeltaPlan = {
 
-    val (metadataAttrs, rowAttrs) = matchedRowsPlan.output.partition { attr =>
+    val extractionExprIds = rowIdRefs.extractionAttrs.map(_.exprId).toSet
+    val (extractionAttrs, nonExtractionAttrs) = matchedRowsPlan.output.partition { attr =>
+      extractionExprIds.contains(attr.exprId)
+    }
+    val (metadataAttrs, rowAttrs) = nonExtractionAttrs.partition { attr =>
       MetadataAttribute.isValid(attr.metadata)
     }
-    val deleteOutput = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs)
-    val insertOutput = deltaReinsertOutput(assignments, metadataAttrs)
+    // buildRowDeltaPlan rebinds extracted row IDs by position
+    if (extractionAttrs.map(_.exprId) != rowIdRefs.extractionAttrs.map(_.exprId)) {
+      throw SparkException.internalError(
+        "Extracted row ID attributes are missing or out of order")
+    }
+
+    // only the delete half needs the old row ID
+    val deleteOutput =
+      deltaDeleteOutput(rowAttrs, rowIdRefs.rowIdAttrs, metadataAttrs) ++ extractionAttrs
+    val insertOutput = deltaReinsertOutput(assignments, metadataAttrs) ++
+      extractionAttrs.map(attr => Literal(null, attr.dataType))
     val outputs = Seq(deleteOutput, insertOutput)
     val operationTypeAttr = AttributeReference(OPERATION_COLUMN, IntegerType, nullable = false)()
-    val attrs = operationTypeAttr +: matchedRowsPlan.output
-    val expandOutput = generateExpandOutput(attrs, outputs)
-    Expand(outputs, expandOutput, matchedRowsPlan)
+    val baseAttrs = operationTypeAttr +: (rowAttrs ++ metadataAttrs)
+    buildRowDeltaPlan(baseAttrs, outputs, rowIdRefs) { output =>
+      Expand(outputs, output, matchedRowsPlan)
+    }
   }
 }
