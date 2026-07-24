@@ -1144,6 +1144,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT" : {
+    "message" : [
+      "Cannot run the pipelined stage group: it needs <numTasks> concurrent task slots to run all its stages together, but only <numSlots> are currently free. The stages of a pipelined group must run concurrently, so the cluster must have enough free slots for all of them at once. Provision more executors, or reduce the parallelism of the query."
+    ],
+    "sqlState" : "53000"
+  },
   "CONCURRENT_STREAM_LOG_UPDATE" : {
     "message" : [
       "Concurrent update to the log. Multiple streaming jobs detected for <batchId>.",
@@ -6348,6 +6354,18 @@
       "Path does not exist: <path>."
     ],
     "sqlState" : "42K03"
+  },
+  "PIPELINED_SHUFFLE_CROSS_JOB_REUSE" : {
+    "message" : [
+      "The pipelined shuffle <shuffleId> is being reused across jobs. A pipelined (incrementally-readable) shuffle is transient and has no retained output for another job to read, so its producer stage cannot be shared across jobs."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPELINED_SHUFFLE_UNSUPPORTED" : {
+    "message" : [
+      "A pipelined shuffle stage group cannot be scheduled because it uses an unsupported feature: <reason>. Pipelined (incrementally-readable) shuffles run their producer and consumer stages concurrently over a transient, once-through stream, which is incompatible with this feature in this version."
+    ],
+    "sqlState" : "0A000"
   },
   "PIPELINE_DATASET_WITHOUT_FLOW" : {
     "message" : [

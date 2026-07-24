@@ -3046,6 +3046,204 @@ class TaskSetManagerSuite
       "ExceptionFailure must count towards task failures (contrast)")
   }
 
+  // ==========================================================================================
+  // Pipelined-group member: group-atomic failure via job-abort
+  // ==========================================================================================
+
+  /** A single-task TaskSet marked as a pipelined-group member. */
+  private def pipelinedTaskSet(): TaskSet = {
+    val tasks = Array.tabulate[Task[_]](1)(i => new FakeTask(0, i, Nil))
+    new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None, isPipelined = true)
+  }
+
+  test("pipelined task set aborts after a single task failure (maxTaskFailures capped at 1)") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = pipelinedTaskSet()
+    val clock = new ManualClock
+    clock.advance(1)
+    // Even though MAX_TASK_FAILURES (4) is passed, a pipelined task set caps attempts at 1.
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    val offerResult = manager.resourceOffer("exec1", "host1", ANY)._1
+    assert(offerResult.isDefined)
+    // A single ordinary task failure must abort the whole task set (group -> job), no retry.
+    manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
+    assert(sched.taskSetsFailed.contains(taskSet.id),
+      "a pipelined task set must abort after the first task failure")
+  }
+
+  test("pipelined task set counts an executor-loss failure that would normally be uncounted") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = pipelinedTaskSet()
+    val clock = new ManualClock
+    clock.advance(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    val offerResult = manager.resourceOffer("exec1", "host1", ANY)._1
+    assert(offerResult.isDefined)
+    // ExecutorLostFailure with exitCausedByApp=false is normally NOT counted toward task failures,
+    // so a non-pipelined task set would not abort. For a pipelined task set it counts, so the
+    // single failure aborts the group.
+    manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED,
+      ExecutorLostFailure("exec1", exitCausedByApp = false, reason = None))
+    assert(sched.taskSetsFailed.contains(taskSet.id),
+      "a pipelined task set must count executor loss and abort")
+  }
+
+  test("pipelined task set does NOT abort on a benign TaskKilled (losing duplicate attempt)") {
+    // A pipelined set with 2 tasks. One task gets a duplicate attempt; when one wins, the loser is
+    // killed with TaskKilled. That benign kill must NOT count as a failure and must NOT abort the
+    // group (the task actually succeeded). Regression for the speculative-loser abort bug.
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val tasks = Array.tabulate[Task[_]](2)(i => new FakeTask(0, i, Nil))
+    val taskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None, isPipelined = true)
+    val clock = new ManualClock
+    clock.advance(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    // Launch task index 0 and fail it with a benign TaskKilled (as if a duplicate attempt won).
+    val offer = manager.resourceOffer("exec1", "host1", ANY)._1
+    assert(offer.isDefined && offer.get.index === 0)
+    manager.handleFailedTask(offer.get.taskId, TaskState.KILLED,
+      TaskKilled("another attempt succeeded"))
+    // The group must NOT be aborted: TaskKilled is benign even for a pipelined set.
+    assert(!sched.taskSetsFailed.contains(taskSet.id),
+      "a benign TaskKilled must not abort a pipelined group")
+  }
+
+  test("pipelined task set does NOT abort on TaskCommitDenied (speculation commit race)") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val tasks = Array.tabulate[Task[_]](2)(i => new FakeTask(0, i, Nil))
+    val taskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None, isPipelined = true)
+    val clock = new ManualClock
+    clock.advance(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    val offer = manager.resourceOffer("exec1", "host1", ANY)._1
+    assert(offer.isDefined)
+    manager.handleFailedTask(offer.get.taskId, TaskState.FINISHED,
+      TaskCommitDenied(jobID = 0, partitionID = 0, attemptNumber = 0))
+    assert(!sched.taskSetsFailed.contains(taskSet.id),
+      "TaskCommitDenied must not abort a pipelined group")
+  }
+
+  test("pipelined task set does NOT single-resubmit a completed map task on executor " +
+      "decommission") {
+    // The TaskSetManager.executorLost "Resubmitted" loop re-enqueues an already-successful
+    // ShuffleMapTask when its executor is lost and the map output looks gone -- for a decommission,
+    // it looks gone whenever MapOutputTracker.getMapOutputLocation returns None. A pipelined
+    // shuffle is NEVER registered in the MapOutputTracker, so getMapOutputLocation is always None
+    // and this loop would resubmit the lone producer task -- the exact streaming-writer hang. This
+    // loop bypasses handleFailedTask, so the group-atomic abort would never see it. The guard
+    // (!taskSet.isPipelined on maybeShuffleMapOutputLoss) must keep a pipelined set out of the
+    // loop.
+    //
+    // Scenario: a 2-task pipelined producer, one task succeeds on the to-be-lost executor while the
+    // other is still running (so the set is NOT a zombie and the loop is entered for a
+    // non-pipelined set). Decommission that executor. Assert NO Resubmitted is emitted for the
+    // completed task.
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
+    sched.initialize(new FakeSchedulerBackend())
+
+    var resubmittedTasks = 0
+    val dagScheduler = new FakeDAGScheduler(sc, sched) {
+      override def taskEnded(
+          task: Task[_],
+          reason: TaskEndReason,
+          result: Any,
+          accumUpdates: Seq[AccumulatorV2[_, _]],
+          metricPeaks: Array[Long],
+          taskInfo: TaskInfo): Unit = {
+        super.taskEnded(task, reason, result, accumUpdates, metricPeaks, taskInfo)
+        reason match {
+          case Resubmitted => resubmittedTasks += 1
+          case _ =>
+        }
+      }
+    }
+    sched.dagScheduler.stop()
+    sched.setDAGScheduler(dagScheduler)
+
+    // Two real ShuffleMapTasks (so isShuffleMapTasks = true), marked as a pipelined-group member.
+    // Give each task a distinct preferred location so one lands on execA and the other on execB.
+    val prefs = Array(
+      Seq[TaskLocation](TaskLocation("host1", "execA")),
+      Seq[TaskLocation](TaskLocation("host2", "execB")))
+    val tasks = Array.tabulate[Task[_]](2) { i =>
+      new ShuffleMapTask(0, 0, null, new Partition { override def index: Int = i }, 1,
+        prefs(i), JobArtifactSet.getActiveOrDefault(sc), new Properties, null)
+    }
+    val taskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Some(0), isPipelined = true)
+    // A pipelined shuffle is deliberately NOT registered in the MapOutputTracker, so a decommission
+    // lookup of its output returns None (looks lost) -- the trigger for channel 3.
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    // Launch task 0 on execA (PROCESS_LOCAL) and task 1 on execB; complete task 0 so the set is not
+    // yet a zombie (task 1 still running).
+    val t0 = manager.resourceOffer("execA", "host1", TaskLocality.PROCESS_LOCAL)._1.get
+    val t1 = manager.resourceOffer("execB", "host2", TaskLocality.PROCESS_LOCAL)._1.get
+    assert(manager.runningTasks === 2)
+    assert(t0.index === 0 && t1.index === 1, "each task should land on its preferred executor")
+    val result0 = new DirectTaskResult[String]() {
+      override def value(resultSer: SerializerInstance): String = ""
+    }
+    manager.handleSuccessfulTask(t0.taskId, result0)
+    assert(!manager.isZombie, "the set must not be a zombie (task 1 still running)")
+    assert(manager.successful(t0.index))
+    assert(resubmittedTasks === 0)
+
+    // Decommission execA (which ran the completed task 0) and lose it. For a NON-pipelined set this
+    // would re-enqueue task 0 via Resubmitted (its output looks lost); for a pipelined set the
+    // guard must prevent that.
+    manager.executorDecommission("execA")
+    manager.executorLost("execA", "host1", ExecutorDecommission())
+
+    assert(resubmittedTasks === 0,
+      "a pipelined producer's completed task must NOT be single-resubmitted on decommission")
+    assert(manager.successful(t0.index),
+      "the completed task must remain successful (no Resubmitted re-enqueue)")
+  }
+
+  test("non-pipelined task set is unaffected: executor loss is not counted, retries still apply") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1) // isPipelined defaults to false
+    val clock = new ManualClock
+    clock.advance(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    // An uncounted executor-loss failure must NOT abort a normal task set.
+    val offer1 = manager.resourceOffer("exec1", "host1", ANY)._1
+    assert(offer1.isDefined)
+    manager.handleFailedTask(offer1.get.taskId, TaskState.FINISHED,
+      ExecutorLostFailure("exec1", exitCausedByApp = false, reason = None))
+    assert(!sched.taskSetsFailed.contains(taskSet.id),
+      "a normal task set must not count uncaused executor loss")
+
+    // And a normal task set still retries a counted failure up to MAX_TASK_FAILURES before abort.
+    (1 to MAX_TASK_FAILURES).foreach { index =>
+      val offer = manager.resourceOffer("exec1", "host1", ANY)._1
+      assert(offer.isDefined, s"expected an offer on iteration $index")
+      manager.handleFailedTask(offer.get.taskId, TaskState.FINISHED, TaskResultLost)
+      if (index < MAX_TASK_FAILURES) {
+        assert(!sched.taskSetsFailed.contains(taskSet.id),
+          s"must not abort before $MAX_TASK_FAILURES failures (iteration $index)")
+      } else {
+        assert(sched.taskSetsFailed.contains(taskSet.id),
+          "must abort after MAX_TASK_FAILURES counted failures")
+      }
+    }
+  }
+
 }
 
 class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, partitionId) {

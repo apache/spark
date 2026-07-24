@@ -63,4 +63,26 @@ private[spark] class ActiveJob(
   val finished = Array.fill[Boolean](numPartitions)(false)
 
   var numFinished = 0
+
+  /**
+   * Whether this job's RDD graph uses a `PipelinedShuffleDependency` (set once at job submission).
+   * Every pipelined-group scheduling path -- co-scheduling, deferral, and the per-submit
+   * `TaskSet.isPipelined` tagging -- is inert for a job without one, so this flag lets those paths
+   * short-circuit the group-membership graph walk for the common regular job at no cost.
+   */
+  var hasPipelinedDependency: Boolean = false
+
+  /**
+   * True once this job's pipelined group has passed up-front gang admission in
+   * `handleJobSubmitted` (or the slot check was disabled by config). This is a distinct fact from
+   * `hasPipelinedDependency` (which only says the job uses pipelining): the co-schedule path in
+   * `DAGScheduler.submitStage` gang-schedules a group's members with NO slot check, and checks this
+   * flag so that trust in up-front admission is enforced rather than merely commented.
+   *
+   * The whole job is a single pipelined group, so admission is a job-level fact. If a future change
+   * allows multiple groups per job, this job-level flag must be replaced by per-group admission
+   * state, and the check in `submitStage` replaced by that per-group gate -- NOT simply deleted, or
+   * an unadmitted group could be gang-scheduled and deadlock.
+   */
+  var pipelinedGroupAdmitted: Boolean = false
 }

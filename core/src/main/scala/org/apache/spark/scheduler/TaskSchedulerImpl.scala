@@ -160,6 +160,37 @@ private[spark] class TaskSchedulerImpl(
     executorIdToRunningTaskIds.toMap.transform((_, v) => v.size)
   }
 
+  /**
+   * The number of outstanding tasks for the given resource profile that belong to work OTHER than
+   * the stages in `excludeStageIds`. "Outstanding" is the not-yet-completed demand of each task set
+   * -- running plus enqueued (`numTasks - tasksSuccessful`) -- not just the tasks actively running,
+   * so a neighbor's queued backlog is charged against capacity too. Used by the pipelined-group
+   * slot admission check (see DAGScheduler): it compares the group's demand against the slots left
+   * free after accounting for everything else in the SAME resource profile, so it excludes the
+   * group's own members (whose tasks would otherwise be charged against the group's own admission).
+   *
+   * Computed from the TaskSetManagers so it is resource-profile-scoped, skips zombie (superseded)
+   * attempts so a retried stage is not double-counted, and is taken under a single lock so the
+   * count is one consistent snapshot (both the per-profile total and the excluded members are read
+   * together).
+   */
+  private[scheduler] def outstandingTasksForOtherWorkInProfile(
+      resourceProfileId: Int, excludeStageIds: Set[Int]): Int = synchronized {
+    taskSetsByStageIdAndAttempt.iterator.flatMap { case (stageId, attempts) =>
+      if (excludeStageIds.contains(stageId)) {
+        Iterator.empty
+      } else {
+        attempts.valuesIterator
+          // Skip zombie attempts (superseded by a retry/kill): a stage can have both a zombie and a
+          // live attempt in this map at once, and the live attempt already re-runs the zombie's
+          // outstanding tasks -- counting both would double-count that stage's demand. Matches the
+          // !isZombie filtering used elsewhere on this map.
+          .filter(tsm => !tsm.isZombie && tsm.taskSet.resourceProfileId == resourceProfileId)
+          .map(tsm => math.max(0, tsm.numTasks - tsm.tasksSuccessful))
+      }
+    }.sum
+  }
+
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
   protected val hostToExecutors = new HashMap[String, HashSet[String]]
