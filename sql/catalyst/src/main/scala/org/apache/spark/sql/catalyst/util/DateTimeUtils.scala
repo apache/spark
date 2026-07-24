@@ -1247,8 +1247,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param intervalEndField The rightmost field which the interval comprises of.
    *                         Valid values: 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND).
    * @param targetPrecision The number of digits of the fraction part of the resulting time.
-   * @return A time value in nanoseconds or throw an arithmetic overflow
-   *         if the result out of valid time range [00:00, 24:00).
+   * @return A time value in nanoseconds, wrapped modulo 24 hours per ANSI SQL semantics
+   *         (TIME arithmetic that crosses midnight wraps around).
    */
   def timeAddInterval(
       time: Long,
@@ -1256,13 +1256,14 @@ object DateTimeUtils extends SparkDateTimeUtils {
       interval: Long,
       intervalEndField: Byte,
       targetPrecision: Int): Long = {
-    val result = MathUtils.addExact(time, MathUtils.multiplyExact(interval, NANOS_PER_MICROS))
-    if (0 <= result && result < NANOS_PER_DAY) {
-      truncateTimeToPrecision(result, targetPrecision)
-    } else {
-      throw QueryExecutionErrors.timeAddIntervalOverflowError(
-        time, timePrecision, interval, intervalEndField)
-    }
+    // ANSI SQL modulo-24 semantics: TIME + INTERVAL wraps around midnight.
+    // Reduce the interval modulo one day in microseconds first to prevent Long overflow
+    // when converting to nanos (interval can be up to Long.MaxValue micros).
+    // Then use floorMod to keep the result in [0, NANOS_PER_DAY) for both positive
+    // and negative overflow (e.g., 23:00 + 2h = 01:00, 01:00 - 3h = 22:00).
+    val reducedMicros = Math.floorMod(interval, MICROS_PER_DAY)
+    val result = Math.floorMod(time + reducedMicros * NANOS_PER_MICROS, NANOS_PER_DAY)
+    truncateTimeToPrecision(result, targetPrecision)
   }
 
   /**

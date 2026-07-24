@@ -1673,6 +1673,54 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT TIME'23:00' + INTERVAL '2' HOUR
+-- !query schema
+struct<TIME '23:00:00' + INTERVAL '02' HOUR:time(6)>
+-- !query output
+01:00:00
+
+
+-- !query
+SELECT TIME'01:00' - INTERVAL '3' HOUR
+-- !query schema
+struct<TIME '01:00:00' - INTERVAL '03' HOUR:time(6)>
+-- !query output
+22:00:00
+
+
+-- !query
+SELECT TIME'00:00' - INTERVAL '0.000001' SECOND
+-- !query schema
+struct<TIME '00:00:00' - INTERVAL '00.000001' SECOND:time(6)>
+-- !query output
+23:59:59.999999
+
+
+-- !query
+SELECT TIME'12:00' + INTERVAL '24' HOUR
+-- !query schema
+struct<TIME '12:00:00' + INTERVAL '24' HOUR:time(6)>
+-- !query output
+12:00:00
+
+
+-- !query
+SELECT TIME'06:30' + INTERVAL '48' HOUR
+-- !query schema
+struct<TIME '06:30:00' + INTERVAL '48' HOUR:time(6)>
+-- !query output
+06:30:00
+
+
+-- !query
+SELECT TIME'12:00:00' + INTERVAL '106751991' DAY
+-- !query schema
+struct<TIME '12:00:00' + INTERVAL '106751991' DAY:time(6)>
+-- !query output
+12:00:00
+
+
+-- !query
 SELECT time_diff('HOUR', time'00:00:00', time'12:34:56')
 -- !query schema
 struct<time_diff(HOUR, TIME '00:00:00', TIME '12:34:56'):bigint>
