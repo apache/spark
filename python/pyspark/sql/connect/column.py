@@ -419,6 +419,10 @@ class Column(ParentColumn):
 
     name = alias
 
+    @property
+    def col_name(self) -> str:
+        return repr(self._expr)
+
     def asc(self) -> ParentColumn:
         return self.asc_nulls_first()
 

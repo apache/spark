@@ -36,6 +36,7 @@ Column
     Column.bitwiseOR
     Column.bitwiseXOR
     Column.cast
+    Column.col_name
     Column.contains
     Column.desc
     Column.desc_nulls_first

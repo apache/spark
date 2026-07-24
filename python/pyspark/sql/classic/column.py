@@ -558,6 +558,10 @@ class Column(ParentColumn):
     def name(self, *alias: str, **kwargs: Any) -> ParentColumn:
         return self.alias(*alias, **kwargs)
 
+    @property
+    def col_name(self) -> str:
+        return self._jc.toString()
+
     def cast(self, dataType: Union[DataType, str]) -> ParentColumn:
         if isinstance(dataType, str):
             jc = self._jc.cast(dataType)
