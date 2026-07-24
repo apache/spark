@@ -19,6 +19,7 @@ package org.apache.spark.network.client;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -26,6 +27,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.codahale.metrics.MetricSet;
@@ -91,7 +94,23 @@ public class TransportClientFactory implements Closeable {
   private final int numConnectionsPerPeer;
 
   private final Class<? extends Channel> socketChannelClass;
-  private EventLoopGroup workerGroup;
+  private final IOMode ioMode;
+  // The client worker EventLoopGroup. A netty event-loop thread that dies (e.g. an uncaught error)
+  // is never replaced within a fixed-size group, permanently poisoning any channel pinned to it
+  // (SPARK-58292). When createClient sees a connection fail because the loop is dead, it replaces
+  // this group with a fresh one so subsequent connections bind to live threads; volatile so the
+  // swap is visible to concurrent createClient callers.
+  private volatile EventLoopGroup workerGroup;
+  // Superseded worker groups are not shut down eagerly: their still-live threads may be serving
+  // channels that are already open. We keep weak references and shut them down best-effort at
+  // close(); their threads are daemon, so a not-yet-collected group cannot block JVM shutdown.
+  private final List<WeakReference<EventLoopGroup>> deprecatedWorkerGroups =
+    new CopyOnWriteArrayList<>();
+  // Whether to recreate the worker group on a dead event loop (SPARK-58292); on by default.
+  private final boolean recreateWorkerGroupOnDeadEventLoop;
+  // How many times the worker group has been recreated after a dead event loop. Used only to make
+  // each recreated group's thread names distinct; mutated under the recreateWorkerGroup lock.
+  private int workerGroupRecreationCount;
   private final PooledByteBufAllocator pooledAllocator;
   private final NettyMemoryMetrics metrics;
   private final int fastFailTimeWindow;
@@ -106,7 +125,7 @@ public class TransportClientFactory implements Closeable {
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
 
-    IOMode ioMode = IOMode.valueOf(conf.ioMode());
+    this.ioMode = IOMode.valueOf(conf.ioMode());
     this.socketChannelClass = NettyUtils.getClientChannelClass(ioMode);
     this.workerGroup = NettyUtils.createEventLoop(
         ioMode,
@@ -121,11 +140,17 @@ public class TransportClientFactory implements Closeable {
     }
     this.metrics = new NettyMemoryMetrics(
       this.pooledAllocator, conf.getModuleName() + "-client", conf);
+    this.recreateWorkerGroupOnDeadEventLoop = conf.recreateWorkerGroupOnDeadEventLoop();
     fastFailTimeWindow = (int)(conf.ioRetryWaitTimeMs() * 0.95);
   }
 
   public MetricSet getAllMetrics() {
     return metrics;
+  }
+
+  @VisibleForTesting
+  EventLoopGroup getWorkerGroup() {
+    return workerGroup;
   }
 
   /**
@@ -256,7 +281,10 @@ public class TransportClientFactory implements Closeable {
 
     Bootstrap bootstrap = new Bootstrap();
     int connCreateTimeout = conf.connectionCreationTimeoutMs();
-    bootstrap.group(workerGroup)
+    // Capture the group this connection uses, so that on a dead-event-loop failure we replace
+    // exactly this group (and not one a concurrent caller already swapped in).
+    final EventLoopGroup connectGroup = workerGroup;
+    bootstrap.group(connectGroup)
       .channel(socketChannelClass)
       // Disable Nagle's Algorithm since we don't want packets to wait
       .option(ChannelOption.TCP_NODELAY, true)
@@ -288,20 +316,30 @@ public class TransportClientFactory implements Closeable {
     long preConnect = System.nanoTime();
     ChannelFuture cf = bootstrap.connect(address);
 
-    if (connCreateTimeout <= 0) {
-      cf.await();
-      assert cf.isDone();
-      if (cf.isCancelled()) {
-        throw new IOException(String.format("Connecting to %s cancelled", address));
-      } else if (!cf.isSuccess()) {
+    try {
+      if (connCreateTimeout <= 0) {
+        cf.await();
+        assert cf.isDone();
+        if (cf.isCancelled()) {
+          throw new IOException(String.format("Connecting to %s cancelled", address));
+        } else if (!cf.isSuccess()) {
+          throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
+        }
+      } else if (!cf.await(connCreateTimeout)) {
+        throw new IOException(
+          String.format("Connecting to %s timed out (%s ms)",
+            address, connCreateTimeout));
+      } else if (cf.cause() != null) {
         throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
       }
-    } else if (!cf.await(connCreateTimeout)) {
-      throw new IOException(
-        String.format("Connecting to %s timed out (%s ms)",
-          address, connCreateTimeout));
-    } else if (cf.cause() != null) {
-      throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
+    } catch (IOException e) {
+      // If the connection failed because the channel could not be registered on its netty event
+      // loop (the loop's thread has died and netty rejects new tasks with "event executor
+      // terminated"), the worker group is permanently degraded: that dead loop is never replaced
+      // and keeps being handed out by the round-robin chooser. Replace the group so retries bind
+      // to fresh live threads, then rethrow so the caller (e.g. RetryingBlockTransferor) retries.
+      recreateWorkerGroupIfEventLoopDead(connectGroup, cf.cause());
+      throw e;
     }
     if (context.sslEncryptionEnabled()) {
       final SslHandler sslHandler = cf.channel().pipeline().get(SslHandler.class);
@@ -354,6 +392,60 @@ public class TransportClientFactory implements Closeable {
     return client;
   }
 
+  /**
+   * If the given connection-failure cause was a rejection by a dead netty event loop (its worker
+   * thread terminated and netty rejects new registrations with a
+   * {@link RejectedExecutionException}), replace the worker group so subsequent connections bind to
+   * fresh, live threads. A dead loop is never replaced within a fixed-size group and keeps being
+   * selected by the round-robin chooser, so without this the degradation is permanent. See
+   * SPARK-58292.
+   */
+  private void recreateWorkerGroupIfEventLoopDead(EventLoopGroup connectGroup, Throwable cause) {
+    if (!recreateWorkerGroupOnDeadEventLoop) {
+      return;
+    }
+    boolean eventLoopDead = false;
+    for (Throwable t = cause; t != null; t = t.getCause()) {
+      // Match ONLY the terminated-loop rejection, not a transient task-queue-full rejection.
+      // netty's SingleThreadEventExecutor.reject() throws exactly this message when isShutdown();
+      // the queue-full handler path throws a RejectedExecutionException with no message.
+      if (t instanceof RejectedExecutionException
+          && "event executor terminated".equals(t.getMessage())) {
+        eventLoopDead = true;
+        break;
+      }
+    }
+    if (eventLoopDead) {
+      recreateWorkerGroup(connectGroup);
+    }
+  }
+
+  /**
+   * Replace the worker group with a fresh one, if it is still the group the failed connection used
+   * ({@code connectGroup}). The superseded group is not shut down here: its still-live threads may
+   * be serving channels that are already open. We keep a weak reference and shut it down
+   * best-effort at {@link #close()}; its threads are daemon, so a not-yet-collected group cannot
+   * block JVM shutdown. Synchronized and identity-guarded so concurrent callers that all hit the
+   * same dead group replace it exactly once rather than spawning many groups.
+   */
+  private synchronized void recreateWorkerGroup(EventLoopGroup connectGroup) {
+    // A concurrent caller that hit the same dead group already swapped it out; nothing to do.
+    if (workerGroup != connectGroup) {
+      return;
+    }
+    // Use a distinct thread-name prefix so the recreated group is self-identifying in thread
+    // dumps and logs. Netty's DefaultThreadFactory also appends an incrementing pool id, so the
+    // names would not collide even with the same prefix, but tagging it "-recreated-<n>" makes the
+    // dead-event-loop recovery obvious to anyone inspecting the process, and the <n> distinguishes
+    // successive recreations if a loop dies more than once.
+    workerGroupRecreationCount++;
+    workerGroup = NettyUtils.createEventLoop(ioMode, conf.clientThreads(),
+        conf.getModuleName() + "-client-recreated-" + workerGroupRecreationCount);
+    deprecatedWorkerGroups.add(new WeakReference<>(connectGroup));
+    logger.warn("Detected a dead netty client event loop; replaced the worker group. The " +
+      "previous group is retained until its open channels drain (SPARK-58292).");
+  }
+
   /** Close all connections in the connection pool, and shutdown the worker thread pool. */
   @Override
   public void close() {
@@ -372,5 +464,14 @@ public class TransportClientFactory implements Closeable {
     if (workerGroup != null && !workerGroup.isShuttingDown()) {
       workerGroup.shutdownGracefully();
     }
+
+    // Shut down any worker groups superseded after a dead-event-loop recreation, if not yet GC'd.
+    for (WeakReference<EventLoopGroup> ref : deprecatedWorkerGroups) {
+      EventLoopGroup group = ref.get();
+      if (group != null && !group.isShuttingDown()) {
+        group.shutdownGracefully();
+      }
+    }
+    deprecatedWorkerGroups.clear();
   }
 }
