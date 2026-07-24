@@ -169,9 +169,15 @@ class AggregateResolver(
       scopes.popScope()
     }
 
+    val groupingModifier = if (operatorResolutionContextStack.current.hasGroupingAnalytics) {
+      GroupingModifier.GroupingAnalytics(resolvedAggregate.groupingAttributeIds)
+    } else {
+      GroupingModifier.GroupBy(resolvedAggregate.groupingAttributeIds)
+    }
+
     scopes.overwriteOutputAndExtendHiddenOutput(
       output = resolvedAggregate.outputList.map(_.toAttribute),
-      groupingAttributeIds = Some(resolvedAggregate.groupingAttributeIds),
+      groupingModifier = groupingModifier,
       aggregateListAliases = resolvedAggregate.aggregateListAliases,
       baseAggregate = Some(resolvedAggregate.baseAggregate)
     )
