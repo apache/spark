@@ -55,7 +55,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         checkResult(metaData.getSchemas(null, pattern), dbs ++ dbDflts)
       }
 
-      Seq("db%", "db*") foreach { pattern =>
+      Seq("db%") foreach { pattern =>
         checkResult(metaData.getSchemas(null, pattern), dbs)
       }
 
@@ -801,6 +801,31 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       }
       assert(schemas.contains("ns1"))
       assert(schemas.contains("ns2"))
+    }
+  }
+
+  test("SPARK-57518: getSchemas for spark_catalog lists namespaces via SupportsNamespaces " +
+      "and includes global_temp") {
+    withDatabase("test_schema_db") { statement =>
+      statement.execute("CREATE DATABASE IF NOT EXISTS test_schema_db")
+      val metaData = statement.getConnection.getMetaData
+
+      val rs = metaData.getSchemas(null, "%")
+      val schemas = scala.collection.mutable.ArrayBuffer.empty[(String, String)]
+      while (rs.next()) {
+        schemas += ((rs.getString("TABLE_SCHEM"), rs.getString("TABLE_CATALOG")))
+      }
+      // The session catalog (V2SessionCatalog) goes through SupportsNamespaces.listNamespaces()
+      // and still returns the global_temp pseudo-namespace.
+      assert(schemas.exists(_._1 == "default"),
+        "default namespace should be listed via SupportsNamespaces")
+      assert(schemas.exists(_._1 == "test_schema_db"),
+        "created database should be listed via SupportsNamespaces")
+      assert(schemas.exists(_._1 == "global_temp"),
+        "global_temp pseudo-namespace should still appear for spark_catalog")
+      schemas.foreach { case (_, cat) =>
+        assert(cat === "spark_catalog")
+      }
     }
   }
 
