@@ -165,6 +165,9 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
       sqlConf.parquetReaderRespectUnknownTypeAnnotation)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key,
+      sqlConf.parquetTimeTypeAllowIsAdjustedToUtcRead)
   }
 
   /**
@@ -491,7 +494,8 @@ object ParquetFileFormat extends Logging {
       nanosAsLong = sqlConf.legacyParquetNanosAsLong,
       timestampNanosTypesEnabled = sqlConf.timestampNanosTypesEnabled,
       respectUnknownTypeAnnotation =
-        sqlConf.parquetReaderRespectUnknownTypeAnnotation)
+        sqlConf.parquetReaderRespectUnknownTypeAnnotation,
+      timeIsAdjustedToUTC = sqlConf.parquetTimeTypeAllowIsAdjustedToUtcRead)
 
     val seen = mutable.HashSet[String]()
     val finalSchemas: Seq[StructType] = footers.flatMap { footer =>
@@ -642,6 +646,7 @@ object ParquetFileFormat extends Logging {
     val timestampNanosTypesEnabled = sqlConf.timestampNanosTypesEnabled
     val respectUnknownTypeAnnotation =
       sqlConf.parquetReaderRespectUnknownTypeAnnotation
+    val timeIsAdjustedToUTC = sqlConf.parquetTimeTypeAllowIsAdjustedToUtcRead
 
     val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
         ignoreMissingFiles: Boolean) => {
@@ -652,7 +657,8 @@ object ParquetFileFormat extends Logging {
         inferTimestampNTZ = inferTimestampNTZ,
         nanosAsLong = nanosAsLong,
         timestampNanosTypesEnabled = timestampNanosTypesEnabled,
-        respectUnknownTypeAnnotation = respectUnknownTypeAnnotation)
+        respectUnknownTypeAnnotation = respectUnknownTypeAnnotation,
+        timeIsAdjustedToUTC = timeIsAdjustedToUTC)
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles, ignoreMissingFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))
