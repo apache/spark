@@ -48,6 +48,7 @@ private[spark] object Network {
         "to it, so a fetch can hang forever. When enabled, such a failure recreates the worker " +
         "group so subsequent connections bind to live threads and the caller can retry.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
