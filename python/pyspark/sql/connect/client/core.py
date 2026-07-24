@@ -1413,8 +1413,6 @@ class SparkConnectClient(object):
             # when not at debug log level.
             logger.debug(f"Execute command for command {self._proto_to_string(command, True)}")
         req = self._execute_plan_request_with_metadata()
-        if self._user_id:
-            req.user_context.user_id = self._user_id
         self._set_command_in_plan(req.plan, command)
         data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
             req, observations or {}
@@ -1439,8 +1437,6 @@ class SparkConnectClient(object):
                 f"Execute command as iterator for command {self._proto_to_string(command, True)}"
             )
         req = self._execute_plan_request_with_metadata()
-        if self._user_id:
-            req.user_context.user_id = self._user_id
         self._set_command_in_plan(req.plan, command)
         for response in self._execute_and_fetch_as_iterator(req, observations or {}):
             if isinstance(response, dict):
