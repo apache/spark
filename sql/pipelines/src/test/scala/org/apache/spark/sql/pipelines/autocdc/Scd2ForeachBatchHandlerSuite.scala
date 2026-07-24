@@ -430,7 +430,7 @@ class Scd2ForeachBatchHandlerSuite
       targetRow(1, "d", 20L, null, 20L)
     )
 
-    // Late x at seq=7 bisects [5,10); late y at seq=15 bisects [10,20) — both in the same batch.
+    // Late x at seq=7 bisects [5,10); late y at seq=15 bisects [10,20) -- both in the same batch.
     runBatch(5L)(upsert(1, "x", 7L), upsert(1, "y", 15L))
 
     checkAnswer(
