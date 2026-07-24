@@ -69,6 +69,10 @@ abstract class DataFrameStatFunctions {
    *   null and NaN values will be removed from the numerical column before calculation. If the
    *   dataframe is empty or the column only contains null or NaN, an empty array is returned.
    *
+   * @note
+   *   TIME columns are also supported. Their quantiles are returned as seconds since midnight
+   *   (with a fractional part preserving full nanosecond-of-day precision), not as TIME values.
+   *
    * @since 2.0.0
    */
   def approxQuantile(
@@ -98,6 +102,10 @@ abstract class DataFrameStatFunctions {
    * @note
    *   null and NaN values will be ignored in numerical columns before calculation. For columns
    *   only containing null or NaN values, an empty array is returned.
+   *
+   * @note
+   *   TIME columns are also supported. Their quantiles are returned as seconds since midnight
+   *   (with a fractional part preserving full nanosecond-of-day precision), not as TIME values.
    *
    * @since 2.2.0
    */
