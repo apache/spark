@@ -33,9 +33,18 @@ def print_header(text)
   puts banner_bar
 end
 
+def print_skip_flags
+  print_header "Skip flags enabled"
+  skip_flags = ENV.select { |name, value| name.start_with?('SKIP_') && value == '1' }.sort
+  if skip_flags.empty?
+    puts "None"
+  else
+    skip_flags.each { |name, value| puts "#{name}" }
+  end
+end
+
 def build_spark_if_necessary
-  # If spark has already been compiled on the host, skip here.
-  if ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1'
+  if ENV['SKIP_SPARK_BUILD'] == '1'
     return
   end
 
@@ -43,7 +52,7 @@ def build_spark_if_necessary
     return
   end
 
-  print_header "Building Spark."
+  print_header "Building Spark"
   cd(SPARK_PROJECT_ROOT)
   command = "NO_PROVIDED_SPARK_JARS=0 build/sbt -Phive -Pkinesis-asl clean package"
   puts "Running '#{command}'; this may take a few minutes..."
@@ -82,7 +91,7 @@ def copy_and_update_java_docs(source, dest, scala_source)
   puts "Updating JavaDoc files for badge post-processing"
   js_script_start = '<script defer="defer" type="text/javascript" src="'
   js_script_end = '.js"></script>'
-  
+
   javadoc_files = Dir["./" + dest + "/**/*.html"]
   javadoc_files.each do |javadoc_file|
     # Determine file depths to reference js files
@@ -123,12 +132,7 @@ def copy_and_update_java_docs(source, dest, scala_source)
   File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
 end
 
-def build_spark_scala_and_java_docs_if_necessary
-  # If spark's docs has already been compiled on the host, skip here.
-  if ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1'
-    return
-  end
-
+def build_unidoc
   command = "build/sbt -Pkinesis-asl unidoc"
   puts "Running '#{command}'..."
 
@@ -277,10 +281,12 @@ end
 def build_scala_and_java_docs
   build_spark_if_necessary
 
-  print_header "Building Scala and Java API docs."
+  print_header "Building Scala and Java API docs"
   cd(SPARK_PROJECT_ROOT)
 
-  build_spark_scala_and_java_docs_if_necessary
+  if not (ENV['SKIP_UNIDOC'] == '1')
+    build_unidoc
+  end
 
   puts "Moving back into docs dir."
   cd("docs")
@@ -299,7 +305,7 @@ end
 def build_python_docs
   build_spark_if_necessary
 
-  print_header "Building Python API docs."
+  print_header "Building Python API docs"
   cd("#{SPARK_PROJECT_ROOT}/python/docs")
   system("make html") || raise("Python doc generation failed")
 
@@ -314,7 +320,7 @@ def build_python_docs
 end
 
 def build_r_docs
-  print_header "Building R API docs."
+  print_header "Building R API docs"
   cd("#{SPARK_PROJECT_ROOT}/R")
   system("./create-docs.sh") || raise("R doc generation failed")
 
@@ -331,7 +337,7 @@ end
 def build_sql_docs
   build_spark_if_necessary
 
-  print_header "Building SQL API docs."
+  print_header "Building SQL API docs"
   cd("#{SPARK_PROJECT_ROOT}/sql")
   system("./create-docs.sh") || raise("SQL doc generation failed")
 
@@ -346,15 +352,17 @@ def build_sql_docs
 end
 
 def build_error_docs
-  print_header "Building error docs."
+  print_header "Building error docs"
 
-  if !system("which python3 >/dev/null 2>&1")
-    raise("Missing python3 in your path, stopping error doc generation")
-  end
+  python_version = %x{python3 --version}.strip
+  raise("`python3` is not on your PATH") unless $?.success?
+  puts "Using #{python_version}."
 
   system("python3 '#{SPARK_PROJECT_ROOT}/docs/_plugins/build-error-docs.py'") \
   || raise("Error doc generation failed")
 end
+
+print_skip_flags
 
 if not (ENV['SKIP_ERRORDOC'] == '1')
   build_error_docs

@@ -1214,12 +1214,6 @@ jobs:
         fi
         export PYSPARK_DRIVER_PYTHON=python3.12
         export PYSPARK_PYTHON=python3.12
-        # Print the values of environment variables `SKIP_ERRORDOC`, `SKIP_SCALADOC`, `SKIP_PYTHONDOC`, `SKIP_RDOC` and `SKIP_SQLDOC`
-        echo "SKIP_ERRORDOC: $SKIP_ERRORDOC"
-        echo "SKIP_SCALADOC: $SKIP_SCALADOC"
-        echo "SKIP_PYTHONDOC: $SKIP_PYTHONDOC"
-        echo "SKIP_RDOC: $SKIP_RDOC"
-        echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
