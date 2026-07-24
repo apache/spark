@@ -30,6 +30,8 @@ import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.annotation.Private;
 
 /**
@@ -222,9 +224,37 @@ public final class CredentialProviderLoader {
   }
 
   /**
+   * Discovers all URI schemes supported by providers on the classpath.
+   * <p>
+   * This method queries all discovered {@link CredentialProvider} instances and collects
+   * their {@link CredentialProvider#supportedSchemes()} into a single set. Unlike
+   * {@link #providerFor(String, Map)}, this does not initialize providers or apply
+   * explicit selection rules -- it only reports what schemes are potentially available.
+   * <p>
+   * Intended for use by {@code UserCredentialManager} when no explicit scheme configuration
+   * (e.g., {@code spark.security.credentials.provider.<scheme>}) is provided.
+   *
+   * @return a set of all supported scheme names (lowercased), possibly empty
+   */
+  public static Set<String> discoverAllSchemes() {
+    List<CredentialProvider> providers = getProviders();
+    Set<String> schemes = new java.util.HashSet<>();
+    for (CredentialProvider provider : providers) {
+      Set<String> providerSchemes = provider.supportedSchemes();
+      if (providerSchemes != null) {
+        for (String s : providerSchemes) {
+          schemes.add(s.toLowerCase(Locale.ROOT));
+        }
+      }
+    }
+    return schemes;
+  }
+
+  /**
    * Resets the cached provider list and initialization tracking. Intended for testing only.
    */
-  static void resetForTesting() {
+  @VisibleForTesting
+  public static void resetForTesting() {
     synchronized (CredentialProviderLoader.class) {
       cachedProviders = null;
       initializedProviders.clear();
