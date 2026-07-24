@@ -29,7 +29,6 @@ import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 
 /**
  * An implementation of the Parquet DELTA_BYTE_ARRAY decoder that supports the vectorized
@@ -41,19 +40,24 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   private final VectorizedDeltaBinaryPackedReader prefixLengthReader;
   private final VectorizedDeltaLengthByteArrayReader suffixReader;
   private WritableColumnVector prefixLengthVector;
-  private ByteBuffer previous;
+
+  /**
+   * Reusable buffer holding the most recently decoded value. On each iteration the
+   * prefix bytes (shared with the previous value) are already in place at the start
+   * of this buffer, so only the suffix needs to be copied in. This eliminates the
+   * per-value allocation that the old {@code ByteBuffer}-based approach required.
+   */
+  private byte[] prevBuf = new byte[64];
+  private int prevLen = 0;
   private int currentRow = 0;
 
-  // Temporary variable used by readBinary
+  // Temporary variable used by readBinary(int)
   private final WritableColumnVector binaryValVector;
-  // Temporary variable used by skipBinary
-  private final WritableColumnVector tempBinaryValVector;
 
   VectorizedDeltaByteArrayReader() {
     this.prefixLengthReader = new VectorizedDeltaBinaryPackedReader();
     this.suffixReader = new VectorizedDeltaLengthByteArrayReader();
     binaryValVector = new OnHeapColumnVector(1, BinaryType);
-    tempBinaryValVector = new OnHeapColumnVector(1, BinaryType);
   }
 
   @Override
@@ -79,20 +83,25 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       // value of the page should have an empty prefix, it may not
       // because of PARQUET-246.
       int prefixLength = prefixLengthVector.getInt(currentRow);
-      ByteBuffer suffix = suffixReader.getBytes(currentRow);
-      byte[] suffixArray = suffix.array();
-      int suffixLength = suffix.limit() - suffix.position();
+      int suffixLength = suffixReader.getSuffixLength(currentRow);
       int length = prefixLength + suffixLength;
 
-      // We have to do this to materialize the output
+      // Grow prevBuf if needed, preserving the prefix bytes already in place.
+      if (length > prevBuf.length) {
+        byte[] newBuf = new byte[Math.max(length, prevBuf.length * 2)];
+        System.arraycopy(prevBuf, 0, newBuf, 0, prefixLength);
+        prevBuf = newBuf;
+      }
+      // The prefix bytes (prevBuf[0..prefixLength-1]) are already in place from
+      // the previous iteration. Read the suffix directly after them.
+      suffixReader.getSuffixInto(currentRow, prevBuf, prefixLength);
+      prevLen = length;
+
+      // Write the full assembled value to the output column vector.
       WritableColumnVector arrayData = c.arrayData();
       int offset = arrayData.getElementsAppended();
-      if (prefixLength != 0) {
-        arrayData.appendBytes(prefixLength, previous.array(), previous.position());
-      }
-      arrayData.appendBytes(suffixLength, suffixArray, suffix.position());
+      arrayData.appendBytes(length, prevBuf, 0);
       c.putArray(rowId + i, offset, length);
-      previous = arrayData.getByteBuffer(offset, length);
       currentRow++;
     }
   }
@@ -120,15 +129,14 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
      WKBConverterStrategy converter) {
     for (int i = 0; i < total; i++) {
       int prefixLength = prefixLengthVector.getInt(currentRow);
-      ByteBuffer suffix = suffixReader.getBytes(currentRow);
-      int suffixLength = suffix.limit() - suffix.position();
+      int suffixLength = suffixReader.getSuffixLength(currentRow);
       int length = prefixLength + suffixLength;
 
       byte[] wkb = new byte[length];
       if (prefixLength > 0) {
-        previous.get(wkb, 0, prefixLength);
+        System.arraycopy(prevBuf, 0, wkb, 0, prefixLength);
       }
-      suffix.get(wkb, prefixLength, suffixLength);
+      suffixReader.getSuffixInto(currentRow, wkb, prefixLength);
 
       // Converts WKB into a physical representation of geometry/geography.
       byte[] physicalValue = converter.convert(wkb, srid);
@@ -138,7 +146,11 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       arrayData.appendBytes(physicalValue.length, physicalValue, 0);
 
       c.putArray(rowId + i, offset, physicalValue.length);
-      previous = ByteBuffer.wrap(wkb);
+
+      // Take ownership of wkb as prevBuf -- it is freshly allocated and
+      // exactly the right size for the next value's prefix.
+      prevBuf = wkb;
+      prevLen = length;
 
       currentRow++;
     }
@@ -154,34 +166,33 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   @Override
   public void setPreviousReader(ValuesReader reader) {
     if (reader != null) {
-      this.previous = ((VectorizedDeltaByteArrayReader) reader).previous;
+      VectorizedDeltaByteArrayReader prev = (VectorizedDeltaByteArrayReader) reader;
+      if (prev.prevLen > prevBuf.length) {
+        prevBuf = new byte[prev.prevLen];
+      }
+      System.arraycopy(prev.prevBuf, 0, prevBuf, 0, prev.prevLen);
+      prevLen = prev.prevLen;
     }
   }
 
   @Override
   public void skipBinary(int total) {
-    WritableColumnVector c1 = tempBinaryValVector;
-    WritableColumnVector c2 = binaryValVector;
-
     for (int i = 0; i < total; i++) {
       int prefixLength = prefixLengthVector.getInt(currentRow);
-      ByteBuffer suffix = suffixReader.getBytes(currentRow);
-      byte[] suffixArray = suffix.array();
-      int suffixLength = suffix.limit() - suffix.position();
+      int suffixLength = suffixReader.getSuffixLength(currentRow);
       int length = prefixLength + suffixLength;
 
-      WritableColumnVector arrayData = c1.arrayData();
-      c1.reset();
-      if (prefixLength != 0) {
-        arrayData.appendBytes(prefixLength, previous.array(), previous.position());
+      // Grow prevBuf if needed, preserving the prefix bytes already in place.
+      if (length > prevBuf.length) {
+        byte[] newBuf = new byte[Math.max(length, prevBuf.length * 2)];
+        System.arraycopy(prevBuf, 0, newBuf, 0, prefixLength);
+        prevBuf = newBuf;
       }
-      arrayData.appendBytes(suffixLength, suffixArray, suffix.position());
-      previous = arrayData.getByteBuffer(0, length);
+      // Read the suffix directly after the prefix -- keeps prevBuf up-to-date
+      // for the next value (or the next page via setPreviousReader).
+      suffixReader.getSuffixInto(currentRow, prevBuf, prefixLength);
+      prevLen = length;
       currentRow++;
-
-      WritableColumnVector tmp = c1;
-      c1 = c2;
-      c2 = tmp;
     }
   }
 
