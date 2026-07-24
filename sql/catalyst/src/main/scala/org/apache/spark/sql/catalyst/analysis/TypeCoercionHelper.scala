@@ -619,12 +619,9 @@ abstract class TypeCoercionHelper {
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
         // general implicit casting.
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
-          case (in, expected) =>
-            if (in.dataType == NullType && !expected.acceptsType(NullType)) {
-              Literal.create(null, expected.defaultConcreteType)
-            } else {
-              in
-            }
+          case (in, expected) if in.dataType == NullType && !expected.acceptsType(NullType) =>
+            TypeCoercionHelper.castExpr(in, expected.defaultConcreteType)
+          case (in, _) => in
         }
         e.withNewChildren(children)
 
@@ -777,6 +774,22 @@ abstract class TypeCoercionHelper {
         s.copy(left = newLeft, right = newRight)
 
       case other => other
+    }
+  }
+}
+
+object TypeCoercionHelper {
+
+  /**
+   * Casts an expression to the target type. If the expression is a null literal of NullType,
+   * returns a null literal of the target type directly instead of wrapping it in a Cast.
+   * If the expression already has the target type, it is returned unchanged.
+   */
+  private[analysis] def castExpr(expr: Expression, targetType: DataType): Expression = {
+    expr match {
+      case Literal(null, NullType) => Literal(null, targetType)
+      case l if l.dataType != targetType => Cast(expr, targetType)
+      case _ => expr
     }
   }
 }

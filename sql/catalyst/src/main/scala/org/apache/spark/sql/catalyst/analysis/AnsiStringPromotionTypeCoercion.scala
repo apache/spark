@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   DateAdd,
   DateSub,
   Expression,
-  Literal,
   SubtractDates,
   SubtractTimestamps,
   TimestampAddInterval,
@@ -57,7 +56,9 @@ object AnsiStringPromotionTypeCoercion {
     case b @ BinaryOperator(left, right)
         if findWiderTypeForString(left.dataType, right.dataType).isDefined =>
       val promoteType = findWiderTypeForString(left.dataType, right.dataType).get
-      b.withNewChildren(Seq(castExpr(left, promoteType), castExpr(right, promoteType)))
+      b.withNewChildren(Seq(
+        TypeCoercionHelper.castExpr(left, promoteType),
+        TypeCoercionHelper.castExpr(right, promoteType)))
 
     case Abs(e @ StringTypeExpression(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
     case m @ UnaryMinus(e @ StringTypeExpression(), _) =>
@@ -108,11 +109,4 @@ object AnsiStringPromotionTypeCoercion {
     }
   }
 
-  private def castExpr(expr: Expression, targetType: DataType): Expression = {
-    expr.dataType match {
-      case NullType => Literal.create(null, targetType)
-      case l if l != targetType => Cast(expr, targetType)
-      case _ => expr
-    }
-  }
 }
