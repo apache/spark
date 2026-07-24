@@ -32,8 +32,6 @@ import org.apache.spark.deploy.k8s.KubernetesUtils.buildPodWithServiceAccount
 
 private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
-  // TODO clean up this class, and credentials in general. See also SparkKubernetesClientFactory.
-  // We should use a struct to hold all creds-related fields. A lot of the code is very repetitive.
 
   private val maybeMountedOAuthTokenFile = kubernetesConf.getOption(
     s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$OAUTH_TOKEN_FILE_CONF_SUFFIX")
@@ -61,7 +59,6 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
     s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX",
     "Driver client cert file")
 
-  // TODO decide whether or not to apply this step entirely in the caller, i.e. the builder.
   private val shouldMountSecret = oauthTokenBase64.isDefined ||
     caCertDataBase64.isDefined ||
     clientKeyDataBase64.isDefined ||
