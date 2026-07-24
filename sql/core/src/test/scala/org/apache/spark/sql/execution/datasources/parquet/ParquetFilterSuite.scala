@@ -22,7 +22,7 @@ import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period, ZoneId}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period, ZoneId}
 import java.util.HashSet
 
 import scala.reflect.ClassTag
@@ -2273,6 +2273,115 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
             Seq(Row(resultFun(secs(2))), Row(resultFun(secs(3))), Row(resultFun(secs(4)))))
         }
       }
+    }
+  }
+
+  test("SPARK-57822: filter pushdown - nanosecond timestamps") {
+    // The value that reaches `ParquetFilters.createFilter` for a nanosecond timestamp column is
+    // the externalized Java time value (Instant for LTZ, LocalDateTime for NTZ), NOT a
+    // TimestampNanosVal. Both convert to the signed INT64 epoch-nanoseconds that
+    // `TimestampNanosParquetOps` writes, so every operator must produce a `long`-column filter.
+    // Threshold 1 so a 2-element `In` exceeds it and exercises the `makeInPredicate` nanos arm
+    // (below the threshold, `In` expands to an `Or` of `Eq`, which is covered by the `Eq` arm).
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "1") {
+      Seq(7, 8, 9).foreach { p =>
+        // NTZ column: filter values are LocalDateTime. Use a sub-microsecond fraction so the
+        // epoch-nanos encoding (not truncated micros) is exercised.
+        val ntzSchema = new SparkToParquetSchemaConverter(conf)
+          .convert(new StructType().add("c", TimestampNTZNanosType(p)))
+        val ntzFilters = createParquetFilters(ntzSchema)
+        val ntz = LocalDateTime.parse("2020-01-01T12:34:56.000000123")
+        val ntzHi = LocalDateTime.parse("2020-01-01T12:34:57.000000123")
+        assert(ntzFilters.createFilter(sources.IsNull("c")).exists(_.isInstanceOf[Eq[_]]))
+        assert(ntzFilters.createFilter(sources.IsNotNull("c")).exists(_.isInstanceOf[NotEq[_]]))
+        assert(ntzFilters.createFilter(sources.EqualTo("c", ntz)).exists(_.isInstanceOf[Eq[_]]))
+        assert(ntzFilters.createFilter(sources.EqualNullSafe("c", ntz))
+          .exists(_.isInstanceOf[Eq[_]]))
+        assert(ntzFilters.createFilter(sources.Not(sources.EqualTo("c", ntz)))
+          .exists(_.isInstanceOf[NotEq[_]]))
+        assert(ntzFilters.createFilter(sources.LessThan("c", ntz)).exists(_.isInstanceOf[Lt[_]]))
+        assert(ntzFilters.createFilter(sources.LessThanOrEqual("c", ntz))
+          .exists(_.isInstanceOf[LtEq[_]]))
+        assert(ntzFilters.createFilter(sources.GreaterThan("c", ntz)).exists(_.isInstanceOf[Gt[_]]))
+        assert(ntzFilters.createFilter(sources.GreaterThanOrEqual("c", ntz))
+          .exists(_.isInstanceOf[GtEq[_]]))
+        assert(ntzFilters.createFilter(sources.In("c", Array[Any](ntz, ntzHi)))
+          .exists(_.isInstanceOf[FilterIn[_]]))
+
+        // LTZ column: filter values are Instant.
+        val ltzSchema = new SparkToParquetSchemaConverter(conf)
+          .convert(new StructType().add("c", TimestampLTZNanosType(p)))
+        val ltzFilters = createParquetFilters(ltzSchema)
+        val ltz = Instant.parse("2020-01-01T12:34:56.000000123Z")
+        val ltzHi = Instant.parse("2020-01-01T12:34:57.000000123Z")
+        assert(ltzFilters.createFilter(sources.IsNull("c")).exists(_.isInstanceOf[Eq[_]]))
+        assert(ltzFilters.createFilter(sources.IsNotNull("c")).exists(_.isInstanceOf[NotEq[_]]))
+        assert(ltzFilters.createFilter(sources.EqualTo("c", ltz)).exists(_.isInstanceOf[Eq[_]]))
+        assert(ltzFilters.createFilter(sources.EqualNullSafe("c", ltz))
+          .exists(_.isInstanceOf[Eq[_]]))
+        assert(ltzFilters.createFilter(sources.Not(sources.EqualTo("c", ltz)))
+          .exists(_.isInstanceOf[NotEq[_]]))
+        assert(ltzFilters.createFilter(sources.LessThan("c", ltz)).exists(_.isInstanceOf[Lt[_]]))
+        assert(ltzFilters.createFilter(sources.LessThanOrEqual("c", ltz))
+          .exists(_.isInstanceOf[LtEq[_]]))
+        assert(ltzFilters.createFilter(sources.GreaterThan("c", ltz)).exists(_.isInstanceOf[Gt[_]]))
+        assert(ltzFilters.createFilter(sources.GreaterThanOrEqual("c", ltz))
+          .exists(_.isInstanceOf[GtEq[_]]))
+        assert(ltzFilters.createFilter(sources.In("c", Array[Any](ltz, ltzHi)))
+          .exists(_.isInstanceOf[FilterIn[_]]))
+      }
+    }
+  }
+
+  test("SPARK-57822: don't push down nanosecond timestamp filters that would overflow int64") {
+    // Values outside the int64 epoch-nanoseconds range (~1677-09-21 .. 2262-04-11) must NOT be
+    // pushed down: encoding them would throw, and a truncated encoding could silently mis-skip a
+    // row group. Falling back to a full scan is always correct (SPARK-46092 rationale).
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val ntzSchema = new SparkToParquetSchemaConverter(conf)
+        .convert(new StructType().add("c", TimestampNTZNanosType(9)))
+      val ntzFilters = createParquetFilters(ntzSchema)
+      val ltzSchema = new SparkToParquetSchemaConverter(conf)
+        .convert(new StructType().add("c", TimestampLTZNanosType(9)))
+      val ltzFilters = createParquetFilters(ltzSchema)
+
+      // Out of range: must not push down.
+      val ntzOverflow = LocalDateTime.parse("2300-01-01T00:00:00")
+      val ltzOverflow = Instant.parse("2300-01-01T00:00:00Z")
+      Seq(
+        sources.LessThan("c", ntzOverflow),
+        sources.LessThanOrEqual("c", ntzOverflow),
+        sources.GreaterThan("c", ntzOverflow),
+        sources.GreaterThanOrEqual("c", ntzOverflow),
+        sources.EqualTo("c", ntzOverflow),
+        sources.EqualNullSafe("c", ntzOverflow),
+        sources.Not(sources.EqualTo("c", ntzOverflow)),
+        sources.In("c", Array[Any](ntzOverflow))
+      ).foreach { filter =>
+        assert(ntzFilters.createFilter(filter).isEmpty,
+          s"Row group filter $filter shouldn't be pushed down.")
+      }
+      Seq(
+        sources.LessThan("c", ltzOverflow),
+        sources.LessThanOrEqual("c", ltzOverflow),
+        sources.GreaterThan("c", ltzOverflow),
+        sources.GreaterThanOrEqual("c", ltzOverflow),
+        sources.EqualTo("c", ltzOverflow),
+        sources.EqualNullSafe("c", ltzOverflow),
+        sources.Not(sources.EqualTo("c", ltzOverflow)),
+        sources.In("c", Array[Any](ltzOverflow))
+      ).foreach { filter =>
+        assert(ltzFilters.createFilter(filter).isEmpty,
+          s"Row group filter $filter shouldn't be pushed down.")
+      }
+
+      // In range: must push down.
+      assert(ntzFilters.createFilter(
+        sources.LessThan("c", LocalDateTime.parse("2020-01-01T00:00:00"))).isDefined)
+      assert(ltzFilters.createFilter(
+        sources.LessThan("c", Instant.parse("2020-01-01T00:00:00Z"))).isDefined)
     }
   }
 }

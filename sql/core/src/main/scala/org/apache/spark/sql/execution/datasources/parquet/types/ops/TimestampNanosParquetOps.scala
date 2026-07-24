@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
+import java.lang.{Long => JLong}
+import java.time.{Instant, LocalDateTime}
+
 import org.apache.parquet.column.{ColumnDescriptor, Dictionary}
 import org.apache.parquet.io.api.{Converter, RecordConsumer}
 import org.apache.parquet.schema.{LogicalTypeAnnotation, Type, Types}
@@ -185,6 +188,62 @@ private[ops] object TimestampNanosParquetOps {
         case ts: TimestampLogicalTypeAnnotation => ts.getUnit == TimeUnit.NANOS
         case _ => false
       })
+
+  // Repacks an externalized nanos filter value into the signed INT64 epoch-nanoseconds the write
+  // path produces. Conversion is at precision 9 (a lossless repack): the literal has already been
+  // floored to the column precision upstream, so no sub-microsecond digits are dropped here. The
+  // single-arg `timestampNanosToEpochNanos` throws `ArithmeticException` outside the int64 range;
+  // callers reach it only after `acceptsValue` has cleared the value (see [[epochNanosInRange]]).
+  private def instantToEpochNanos(v: Instant): JLong =
+    DateTimeUtils.timestampNanosToEpochNanos(
+      DateTimeUtils.instantToTimestampNanos(v, TimestampLTZNanosType.NANOS_PRECISION))
+
+  private def localDateTimeToEpochNanos(v: LocalDateTime): JLong =
+    DateTimeUtils.timestampNanosToEpochNanos(
+      DateTimeUtils.localDateTimeToTimestampNanos(v, TimestampNTZNanosType.NANOS_PRECISION))
+
+  // SPARK-46092-style guard: only push down when the value is representable as int64
+  // epoch-nanoseconds. An out-of-range value would throw in the encoder, and -- worse -- a
+  // wrapped/truncated encoding could silently mis-skip row groups; rejecting it falls back to a
+  // full scan, which is always correct.
+  private def epochNanosInRange(encode: => JLong): Boolean =
+    try { encode; true } catch { case _: ArithmeticException => false }
+
+  /**
+   * Parquet filter-pushdown ops for the nanosecond timestamp types, registered in
+   * [[ParquetTypeOps.filterOpsList]]. Filter dispatch is keyed on the file's on-disk encoding, so
+   * each type gets its own ops: both are stored as INT64 TIMESTAMP(NANOS) and differ only in the
+   * `isAdjustedToUTC` flag (LTZ = true, NTZ = false), which also fixes the externalized filter
+   * value (`java.time.Instant` for LTZ, `java.time.LocalDateTime` for NTZ). Values are encoded to
+   * the same signed INT64 epoch-nanoseconds `TimestampNanosParquetOps` writes, never truncated to
+   * micros. This replaces the inline nanos arms once carried in `ParquetFilters`, matching how
+   * TimeType routes its pushdown through [[TimeTypeParquetOps.filterOps]].
+   */
+  private[ops] val ltzFilterOps: ParquetFilterOps = new LongParquetFilterOps {
+    override val logicalTypeAnnotation: LogicalTypeAnnotation =
+      LogicalTypeAnnotation.timestampType(true, TimeUnit.NANOS)
+
+    override def acceptsValue(value: Any): Boolean = value match {
+      case i: Instant => epochNanosInRange(instantToEpochNanos(i))
+      case _ => false
+    }
+
+    override protected def toLong(value: Any): JLong =
+      instantToEpochNanos(value.asInstanceOf[Instant])
+  }
+
+  private[ops] val ntzFilterOps: ParquetFilterOps = new LongParquetFilterOps {
+    override val logicalTypeAnnotation: LogicalTypeAnnotation =
+      LogicalTypeAnnotation.timestampType(false, TimeUnit.NANOS)
+
+    override def acceptsValue(value: Any): Boolean = value match {
+      case ldt: LocalDateTime => epochNanosInRange(localDateTimeToEpochNanos(ldt))
+      case _ => false
+    }
+
+    override protected def toLong(value: Any): JLong =
+      localDateTimeToEpochNanos(value.asInstanceOf[LocalDateTime])
+  }
 }
 
 /**
