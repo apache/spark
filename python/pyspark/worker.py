@@ -301,6 +301,8 @@ def verify_result_row_count(result_length: int, expected: int) -> None:
                 "output_length": str(result_length),
                 "input_length": str(expected),
             },
+            message=f"The number of output rows ({result_length}) must match the number of input rows ({expected}). "
+            f"Result vector from pandas_udf was not the required length: expected {expected}, got {result_length}.",
         )
 
 
@@ -326,14 +328,14 @@ def verify_scalar_result(result: Any, num_rows: int) -> Any:
             },
         )
     if result_length != num_rows:
-        # TODO: change error class to RESULT_ROWS_MISMATCH
         raise PySparkRuntimeError(
-            errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+            errorClass="RESULT_ROWS_MISMATCH",
             messageParameters={
-                "udf_type": "arrow_udf",
-                "expected": str(num_rows),
-                "actual": str(result_length),
+                "output_length": str(result_length),
+                "input_length": str(num_rows),
             },
+            message=f"The number of output rows ({result_length}) must match the number of input rows ({num_rows}). "
+            f"Result vector from pandas_udf was not the required length: expected {num_rows}, got {result_length}.",
         )
     return result
 
@@ -375,13 +377,24 @@ def verify_output_row_count(
 
     expected = expected_rows() if callable(expected_rows) else expected_rows
     if actual_rows != expected:
-        raise PySparkRuntimeError(
-            errorClass=error_class,
-            messageParameters={
-                "output_length": str(actual_rows),
-                "input_length": str(expected),
-            },
-        )
+        if error_class == "RESULT_ROWS_MISMATCH":
+            raise PySparkRuntimeError(
+                errorClass=error_class,
+                messageParameters={
+                    "output_length": str(actual_rows),
+                    "input_length": str(expected),
+                },
+                message=f"The number of output rows ({actual_rows}) must match the number of input rows ({expected}). "
+                f"Result vector from pandas_udf was not the required length: expected {expected}, got {actual_rows}.",
+            )
+        else:
+            raise PySparkRuntimeError(
+                errorClass=error_class,
+                messageParameters={
+                    "output_length": str(actual_rows),
+                    "input_length": str(expected),
+                },
+            )
 
 
 def wrap_udf(f, args_offsets, kwargs_offsets, return_type):
@@ -3059,12 +3072,13 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         )
                     if len(result) != num_rows:
                         raise PySparkRuntimeError(
-                            errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+                            errorClass="RESULT_ROWS_MISMATCH",
                             messageParameters={
-                                "udf_type": "pandas_udf",
-                                "expected": str(num_rows),
-                                "actual": str(len(result)),
+                                "output_length": str(len(result)),
+                                "input_length": str(num_rows),
                             },
+                            message=f"The number of output rows ({len(result)}) must match the number of input rows ({num_rows}). "
+                            f"Result vector from pandas_udf was not the required length: expected {num_rows}, got {len(result)}.",
                         )
                     # struct_in_pandas="dict": UDF must return DataFrame for struct types
                     if isinstance(udf_return_type, StructType) and not isinstance(
