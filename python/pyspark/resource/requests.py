@@ -499,9 +499,9 @@ class TaskResourceRequests:
         Parameters
         ----------
         amount : float
-            Number of cpus to allocate per Task. Any positive value is valid, including
-            fractional ones: below 1 (e.g. 0.5) to let multiple tasks share a CPU core,
-            or above 1 (e.g. 1.5).
+            Number of cpus to allocate per Task, valid from 1e-9 to 2147483647 after
+            rounding. Fractional values are supported: below 1 (e.g. 0.5) to let multiple
+            tasks share a CPU core, or above 1 (e.g. 1.5).
 
         Returns
         -------
