@@ -33,12 +33,15 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.st._
 import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, PythonWorkerLogs, Range}
+import org.apache.spark.sql.catalyst.plans.logical.ShowPartitions
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -1325,6 +1328,49 @@ object TableFunctionRegistry {
     (name, (info, newBuilder))
   }
 
+  private def partitions: (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val name = "partitions"
+    val info = new ExpressionInfo(
+      null,
+      null,
+      name,
+      "_FUNC_(table_name) - Returns the partition names of a partitioned table.",
+      "",
+      """
+        Examples:
+          > SELECT * FROM _FUNC_('db.sales');
+            year=2015/month=1
+      """,
+      "",
+      "table_funcs",
+      "",
+      "",
+      "built-in")
+    val builder = (expressions: Seq[Expression]) => {
+      if (expressions.length != 1) {
+        throw QueryCompilationErrors.wrongNumArgsError(name, Seq(1), expressions.length)
+      }
+
+      val tableNameExpr = expressions.head
+      if (tableNameExpr.dataType != StringType) {
+        throw QueryCompilationErrors.unexpectedInputDataTypeError(
+          name, 1, StringType, tableNameExpr)
+      }
+
+      val tableName = tableNameExpr.eval() match {
+        case value: UTF8String => value.toString
+        case null =>
+          throw QueryCompilationErrors.unexpectedInputDataTypeError(
+            name, 1, StringType, tableNameExpr)
+      }
+
+      ShowPartitions(
+        UnresolvedTable(CatalystSqlParser.parseMultipartIdentifier(tableName), "SHOW PARTITIONS"),
+        None)
+    }
+    (name, (info, builder))
+  }
+
   val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(
     logicalPlan[Range]("range"),
     generatorBuilder("explode", ExplodeGeneratorBuilder),
@@ -1339,7 +1385,8 @@ object TableFunctionRegistry {
     generator[SQLKeywords]("sql_keywords"),
     generatorBuilder("variant_explode", VariantExplodeGeneratorBuilder),
     generatorBuilder("variant_explode_outer", VariantExplodeOuterGeneratorBuilder),
-    PythonWorkerLogs.functionBuilder
+    PythonWorkerLogs.functionBuilder,
+    partitions
   )
 
   // BuiltinRegistryMixin normalizes any name to the builtin 3-part key (system.builtin.name).
