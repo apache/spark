@@ -78,6 +78,94 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
     }
   }
 
+  test("SPARK-57379: Temporary variable in check constraint -- alter table") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (i INT) $defaultUsing")
+      withSessionVariable("my_var") {
+        sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+        Seq(
+          s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (i > my_var)",
+          s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (i > CAST(my_var AS BIGINT))"
+        ).foreach { query =>
+          val error = intercept[AnalysisException] {
+            sql(query)
+          }
+          checkError(
+            exception = error,
+            condition = "INVALID_TEMP_OBJ_REFERENCE",
+            sqlState = "42K0F",
+            parameters = Map(
+              "obj" -> "CHECK CONSTRAINT",
+              "objName" -> "`c1`",
+              "tempObj" -> "VARIABLE",
+              "tempObjName" -> "`my_var`"),
+            context = ExpectedContext(fragment = "my_var")
+          )
+        }
+      }
+    }
+  }
+
+  test("SPARK-57379: Temporary variable in check constraint -- create table") {
+    withSessionVariable("my_var") {
+      sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+      Seq(
+        ("CREATE TABLE t(i INT CHECK (i > my_var))", "``"),
+        ("CREATE TABLE t(i INT, CONSTRAINT c1 CHECK (i > my_var))", "`c1`"),
+        ("REPLACE TABLE t(i INT CHECK (i > my_var))", "``"),
+        ("REPLACE TABLE t(i INT, CONSTRAINT c1 CHECK (i > my_var))", "`c1`"),
+        ("CREATE TABLE t(i INT CHECK (i > CAST(my_var AS BIGINT)))", "``")
+      ).foreach { case (query, expectedObjName) =>
+        withTable("t") {
+          val error = intercept[AnalysisException] {
+            sql(query)
+          }
+          checkError(
+            exception = error,
+            condition = "INVALID_TEMP_OBJ_REFERENCE",
+            sqlState = "42K0F",
+            parameters = Map(
+              "obj" -> "CHECK CONSTRAINT",
+              "objName" -> expectedObjName,
+              "tempObj" -> "VARIABLE",
+              "tempObjName" -> "`my_var`"),
+            context = ExpectedContext(fragment = "my_var")
+          )
+        }
+      }
+    }
+  }
+
+  test("SPARK-57379: Temporary variable in check constraint -- qualified variable name") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (i INT) $defaultUsing")
+      withSessionVariable("my_var") {
+        sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+        val error = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (i > session.my_var)")
+        }
+        checkError(
+          exception = error,
+          condition = "INVALID_TEMP_OBJ_REFERENCE",
+          sqlState = "42K0F",
+          parameters = Map(
+            "obj" -> "CHECK CONSTRAINT",
+            "objName" -> "`c1`",
+            "tempObj" -> "VARIABLE",
+            "tempObjName" -> "`session`.`my_var`"),
+          context = ExpectedContext(fragment = "session.my_var")
+        )
+      }
+    }
+  }
+
+  test("SPARK-57379: Temporary variable in check constraint -- happy path without variable") {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (i INT, CONSTRAINT c1 CHECK (i > 0)) $defaultUsing")
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c2 CHECK (i > -1)")
+    }
+  }
+
   test("Expression referring a column of another table -- alter table") {
     withNamespaceAndTable("ns", "tbl_1", nonPartitionCatalog) { t1 =>
       withNamespaceAndTable("ns", "tbl_2", nonPartitionCatalog) { t2 =>
