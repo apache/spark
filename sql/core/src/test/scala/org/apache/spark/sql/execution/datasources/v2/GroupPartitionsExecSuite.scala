@@ -48,6 +48,22 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(gpe.outputOrdering === childOrdering)
   }
 
+  test("SPARK-58324: k-way merge ordering drops sameOrderExpressions") {
+    // The child ordering carries sameOrderExpressions (planner metadata). The k-way merge
+    // comparator only needs the sort key, so kWayMergeOrdering keeps child/direction/nullOrdering
+    // but drops sameOrderExpressions, so LazyCodeGenOrdering does not serialize them with the RDD.
+    val childOrdering = Seq(SortOrder(exprA, Ascending, Seq(exprB, exprC)))
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), Seq(row(1), row(2), row(1))),
+      outputOrdering = childOrdering)
+    val gpe = GroupPartitionsExec(child)
+
+    assert(child.outputOrdering.head.sameOrderExpressions.nonEmpty, "test setup")
+    val merged = gpe.kWayMergeOrdering
+    assert(merged.map(so => (so.child, so.direction)) === Seq((exprA, Ascending)))
+    assert(merged.forall(_.sameOrderExpressions.isEmpty))
+  }
+
   test("SPARK-56241: coalescing without reducers keeps key-expression orders from child") {
     // Key 1 appears on partitions 0 and 2, causing coalescing.
     val partitionKeys = Seq(row(1), row(2), row(1))
