@@ -67,6 +67,7 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
+    import numpy as np
     import pyarrow as pa
     import pandas as pd
 
@@ -1851,6 +1852,118 @@ class ArrowArrayToPandasConversion:
         )
         return converter(ser)
 
+    @staticmethod
+    def _ndarray_to_list(v: "np.ndarray") -> list:
+        """Recursively convert numpy ndarrays to Python lists."""
+        import numpy as np
+
+        return [
+            ArrowArrayToPandasConversion._ndarray_to_list(x) if isinstance(x, np.ndarray) else x
+            for x in v
+        ]
+
+    @staticmethod
+    def _wrap_elements(items: list, element_is_array: bool) -> "np.ndarray":
+        """Wrap converted array elements into an object ndarray.
+
+        For nested arrays (``element_is_array=True``) each sub-array is kept as a
+        distinct element via an explicit object ndarray. This avoids
+        ``np.asarray(..., dtype=object)`` collapsing equal-length sub-arrays into a 2-D
+        array, so the nested shape is consistent regardless of whether the inner arrays
+        happen to be the same length (where ``np.asarray`` would otherwise yield a 2-D
+        result for rectangular data and a 1-D array of lists for ragged data).
+
+        For leaf elements, ``np.asarray`` is used to match convert_legacy's
+        representation.
+        """
+        import numpy as np
+
+        if element_is_array:
+            out = np.empty(len(items), dtype=object)
+            for i, item in enumerate(items):
+                out[i] = item
+            return out
+        return np.asarray(items, dtype=object)
+
+    @staticmethod
+    def _create_element_converter(
+        element_type: DataType,
+        ndarray_as_list: bool = False,
+    ) -> Optional[Callable]:
+        """
+        Create a converter function for elements inside arrays that need post-processing.
+
+        Returns None if no conversion is needed (i.e., to_pandas() output is already correct).
+
+        ``ndarray_as_list`` mirrors :meth:`convert_numpy`: when True, nested arrays are
+        emitted as Python lists; when False, as object ndarrays (see ``_wrap_elements``).
+        """
+        if isinstance(element_type, UserDefinedType):
+            udt: UserDefinedType = element_type
+
+            def convert_udt(v: Any) -> Any:
+                if v is None:
+                    return None
+                return v if hasattr(v, "__UDT__") else udt.deserialize(v)
+
+            return convert_udt
+        elif isinstance(element_type, VariantType):
+
+            def convert_variant(v: Any) -> Any:
+                if v is None:
+                    return None
+                if not isinstance(v, dict) or "value" not in v or "metadata" not in v:
+                    raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
+                return VariantVal(v["value"], v["metadata"])
+
+            return convert_variant
+        elif isinstance(element_type, GeographyType):
+
+            def convert_geography(v: Any) -> Any:
+                if v is None:
+                    return None
+                if not isinstance(v, dict) or "wkb" not in v or "srid" not in v:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOGRAPHY", messageParameters={})
+                return Geography.fromWKB(v["wkb"], v["srid"])
+
+            return convert_geography
+        elif isinstance(element_type, GeometryType):
+
+            def convert_geometry(v: Any) -> Any:
+                if v is None:
+                    return None
+                if not isinstance(v, dict) or "wkb" not in v or "srid" not in v:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOMETRY", messageParameters={})
+                return Geometry.fromWKB(v["wkb"], v["srid"])
+
+            return convert_geometry
+        elif isinstance(element_type, ArrayType):
+            inner_conv = ArrowArrayToPandasConversion._create_element_converter(
+                element_type.elementType, ndarray_as_list=ndarray_as_list
+            )
+            if inner_conv is None:
+                return None
+
+            if ndarray_as_list:
+
+                def convert_array(v: Any) -> Any:
+                    if v is None:
+                        return None
+                    return [inner_conv(e) for e in v]
+
+            else:
+                inner_is_array = isinstance(element_type.elementType, ArrayType)
+
+                def convert_array(v: Any) -> Any:
+                    if v is None:
+                        return None
+                    return ArrowArrayToPandasConversion._wrap_elements(
+                        [inner_conv(e) for e in v], inner_is_array
+                    )
+
+            return convert_array
+        return None
+
     @classmethod
     def _prefer_convert_numpy(
         cls,
@@ -1878,8 +1991,22 @@ class ArrowArrayToPandasConversion:
         )
         if df_for_struct and isinstance(spark_type, StructType):
             return all(isinstance(f.dataType, supported_types) for f in spark_type.fields)
+        elif isinstance(spark_type, supported_types):
+            return True
+        elif isinstance(spark_type, ArrayType):
+            # Array[E] is preferred only when its element type E is itself preferred: nested
+            # arrays recurse, otherwise E must be in supported_types. Element types not in
+            # supported_types (StringType, DecimalType, the interval types) and MapType/
+            # StructType stay on the legacy path -- matching the scalar routing -- until their
+            # parity with convert_legacy is confirmed and they are added to supported_types.
+            element_type = spark_type.elementType
+            if isinstance(element_type, ArrayType):
+                return cls._prefer_convert_numpy(element_type, df_for_struct=False)
+            return isinstance(element_type, supported_types)
+        # elif isinstance(spark_type, (MapType, StructType)):
+        #     TODO: Support MapType, StructType
         else:
-            return isinstance(spark_type, supported_types)
+            return False
 
     @classmethod
     def convert_numpy(
@@ -1974,37 +2101,44 @@ class ArrowArrayToPandasConversion:
         ):
             series = arr.to_pandas()
         elif isinstance(spark_type, UserDefinedType):
-            udt: UserDefinedType = spark_type
+            # _create_element_converter always returns non-None for UDT
+            conv = cls._create_element_converter(spark_type)
+            assert conv is not None  # for mypy
             series = arr.to_pandas()
-            series = series.apply(
-                lambda v: (
-                    v if hasattr(v, "__UDT__") else udt.deserialize(v) if v is not None else None
-                )
-            )
-        elif isinstance(spark_type, VariantType):
+            series = series.apply(conv)
+        elif isinstance(spark_type, (VariantType, GeographyType, GeometryType)):
+            # _create_element_converter always returns non-None for these types
+            conv = cls._create_element_converter(spark_type)
+            assert conv is not None  # for mypy
             series = arr.to_pandas()
-            series = series.map(
-                lambda v: VariantVal(v["value"], v["metadata"]) if v is not None else None
+            series = series.map(conv)
+        elif isinstance(spark_type, ArrayType):
+            element_conv = cls._create_element_converter(
+                spark_type.elementType, ndarray_as_list=ndarray_as_list
             )
-        elif isinstance(spark_type, GeographyType):
-            series = arr.to_pandas()
-            series = series.map(
-                lambda v: Geography.fromWKB(v["wkb"], v["srid"]) if v is not None else None
-            )
-        elif isinstance(spark_type, GeometryType):
-            series = arr.to_pandas()
-            series = series.map(
-                lambda v: Geometry.fromWKB(v["wkb"], v["srid"]) if v is not None else None
-            )
-        # elif isinstance(
-        #     spark_type,
-        #     (
-        #         ArrayType,
-        #         MapType,
-        #         StructType,
-        #     ),
-        # ):
-        # TODO(SPARK-55324): Support complex types
+            if element_conv is not None:
+                if ndarray_as_list:
+                    series = arr.to_pandas(integer_object_nulls=True)
+                    series = series.map(
+                        lambda x: ([element_conv(e) for e in x] if x is not None else None)
+                    )
+                else:
+                    element_is_array = isinstance(spark_type.elementType, ArrayType)
+                    series = arr.to_pandas()
+                    series = series.map(
+                        lambda x: (
+                            cls._wrap_elements([element_conv(e) for e in x], element_is_array)
+                            if x is not None
+                            else None
+                        )
+                    )
+            elif ndarray_as_list:
+                series = arr.to_pandas(integer_object_nulls=True)
+                series = series.map(lambda x: cls._ndarray_to_list(x) if x is not None else None)
+            else:
+                series = arr.to_pandas()
+        # elif isinstance(spark_type, (MapType, StructType)):
+        #     TODO: Support MapType, StructType
         else:  # pragma: no cover
             assert False, f"Need converter for {spark_type} but failed to find one."
 

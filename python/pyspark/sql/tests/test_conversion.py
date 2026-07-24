@@ -32,6 +32,9 @@ from pyspark.sql.conversion import (
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
+    BooleanType,
+    DateType,
+    DayTimeIntervalType,
     DecimalType,
     DoubleType,
     Geography,
@@ -46,6 +49,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampNTZType,
     TimestampType,
     UserDefinedType,
     VariantType,
@@ -844,6 +848,558 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
             pa.array([], type=geometry_type), GeometryType(0)
         )
         self.assertEqual(len(result), 0)
+
+    def test_array_convert_numpy(self):
+        import pyarrow as pa
+        import numpy as np
+
+        arr = pa.array([[1, 2, 3], [4, 5]], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(IntegerType()))
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(list(result.iloc[0]), [1, 2, 3])
+        self.assertEqual(list(result.iloc[1]), [4, 5])
+
+        # empty inner arrays
+        arr = pa.array([[], [1, 2], []], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(IntegerType()))
+        self.assertEqual(len(result.iloc[0]), 0)
+        self.assertEqual(list(result.iloc[1]), [1, 2])
+
+        # nulls: inner nulls become NaN (float64) to preserve numeric ndarray dtype
+        arr = pa.array([[1, None, 3], None, [4, 5]], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(IntegerType()))
+        self.assertTrue(np.isnan(result.iloc[0][1]))
+        self.assertIsNone(result.iloc[1])
+
+        # nested arrays
+        arr = pa.array([[[1, 2], [3]], [[4, 5]]], type=pa.list_(pa.list_(pa.int64())))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(ArrayType(IntegerType()))
+        )
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(list(result.iloc[0][0]), [1, 2])
+        self.assertEqual(list(result.iloc[0][1]), [3])
+
+    def test_array_with_timestamps(self):
+        import pyarrow as pa
+        import numpy as np
+
+        # tz-aware timestamps: preprocess_time strips tz and coerces to ns
+        ts1 = datetime.datetime(2024, 1, 1, 12, 0, tzinfo=ZoneInfo("UTC"))
+        ts2 = datetime.datetime(2024, 6, 15, 8, 30, tzinfo=ZoneInfo("UTC"))
+        arr = pa.array([[ts1, ts2]], type=pa.list_(pa.timestamp("us", tz="UTC")))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(TimestampType()))
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(result.iloc[0][0], np.datetime64("2024-01-01T12:00:00", "ns"))
+        self.assertEqual(result.iloc[0][1], np.datetime64("2024-06-15T08:30:00", "ns"))
+
+        # tz-naive timestamps
+        arr = pa.array(
+            [[datetime.datetime(2024, 1, 1), datetime.datetime(2024, 6, 15)]],
+            type=pa.list_(pa.timestamp("us")),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, ArrayType(TimestampNTZType()))
+        self.assertEqual(result.iloc[0][0], np.datetime64("2024-01-01T00:00:00", "ns"))
+
+    def test_array_ndarray_as_list(self):
+        import pyarrow as pa
+
+        arr = pa.array([[1, 2, 3], [4, 5]], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(IntegerType()), ndarray_as_list=True
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertEqual(result.iloc[0], [1, 2, 3])
+
+        # nulls preserved as None (not NaN)
+        arr = pa.array([[1, None, 3], None], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(IntegerType()), ndarray_as_list=True
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsNone(result.iloc[0][1])
+        self.assertIsNone(result.iloc[1])
+
+        # nested arrays recursively converted to lists
+        arr = pa.array([[[1, 2], [3]]], type=pa.list_(pa.list_(pa.int64())))
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(ArrayType(IntegerType())), ndarray_as_list=True
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsInstance(result.iloc[0][0], list)
+        self.assertEqual(result.iloc[0][0], [1, 2])
+
+    def test_array_of_complex_ndarray_as_list(self):
+        import numpy as np
+        import pyarrow as pa
+
+        variant_type = pa.struct(
+            [
+                pa.field("value", pa.binary(), nullable=False),
+                pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+            ]
+        )
+
+        # ndarray_as_list=True with element_conv: exercises to_pandas(integer_object_nulls=True)
+        arr = pa.array(
+            [[{"value": b"\x01", "metadata": b"\x02"}, None], None],
+            type=pa.list_(variant_type),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(VariantType()), ndarray_as_list=True
+        )
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsInstance(result.iloc[0][0], VariantVal)
+        self.assertIsNone(result.iloc[0][1])
+        self.assertIsNone(result.iloc[1])
+
+        # nested ArrayType with element_conv: exercises the recursive branch in
+        # _create_element_converter where inner_conv is not None
+        arr = pa.array(
+            [[[{"value": b"\x01", "metadata": b"\x02"}], None]],
+            type=pa.list_(pa.list_(variant_type)),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(ArrayType(VariantType()))
+        )
+        # ndarray_as_list=False (default): nested arrays are object ndarrays at every
+        # level (consistent regardless of inner length; ragged/None-containing inners
+        # stay distinct rather than collapsing into a 2-D array).
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertIsInstance(result.iloc[0][0], np.ndarray)
+        self.assertIsInstance(result.iloc[0][0][0], VariantVal)
+        self.assertIsNone(result.iloc[0][1])
+
+    def test_array_of_variant(self):
+        import numpy as np
+        import pyarrow as pa
+
+        variant_type = pa.struct(
+            [
+                pa.field("value", pa.binary(), nullable=False),
+                pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+            ]
+        )
+
+        arr = pa.array(
+            [
+                [{"value": b"\x01", "metadata": b"\x02"}, {"value": b"\x03", "metadata": b"\x04"}],
+                [None],
+                None,
+            ],
+            type=pa.list_(variant_type),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(VariantType()), ser_name="v"
+        )
+        # ndarray_as_list=False (default): preserves ndarray container
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertIsInstance(result.iloc[0][0], VariantVal)
+        self.assertEqual(result.iloc[0][0].value, b"\x01")
+        self.assertEqual(result.iloc[0][1].value, b"\x03")
+        self.assertIsNone(result.iloc[1][0])
+        self.assertIsNone(result.iloc[2])
+
+    def test_array_of_udt(self):
+        import numpy as np
+        import pyarrow as pa
+
+        arr = pa.array(
+            [[[1.0, 2.0], [3.0, 4.0]], [None], None],
+            type=pa.list_(pa.list_(pa.float64())),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(ExamplePointUDT()), ser_name="p"
+        )
+        # ndarray_as_list=False (default): preserves ndarray container
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(result.iloc[0][0], ExamplePoint(1.0, 2.0))
+        self.assertEqual(result.iloc[0][1], ExamplePoint(3.0, 4.0))
+        self.assertIsNone(result.iloc[1][0])
+        self.assertIsNone(result.iloc[2])
+
+    def test_array_of_geography(self):
+        import numpy as np
+        import pyarrow as pa
+
+        geography_type = pa.struct(
+            [
+                pa.field("srid", pa.int32(), nullable=False),
+                pa.field(
+                    "wkb",
+                    pa.binary(),
+                    nullable=False,
+                    metadata={b"geography": b"true", b"srid": b"4326"},
+                ),
+            ]
+        )
+
+        wkb1 = bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        wkb2 = bytes.fromhex("010100000000000000000031400000000000001c40")
+        arr = pa.array(
+            [
+                [{"srid": 4326, "wkb": wkb1}, {"srid": 4326, "wkb": wkb2}],
+                [None],
+                None,
+            ],
+            type=pa.list_(geography_type),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(GeographyType(4326)), ser_name="g"
+        )
+        # ndarray_as_list=False (default): preserves ndarray container
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(result.iloc[0][0], Geography(wkb1, 4326))
+        self.assertEqual(result.iloc[0][1], Geography(wkb2, 4326))
+        self.assertIsNone(result.iloc[1][0])
+        self.assertIsNone(result.iloc[2])
+
+    def test_array_of_geometry(self):
+        import numpy as np
+        import pyarrow as pa
+
+        geometry_type = pa.struct(
+            [
+                pa.field("srid", pa.int32(), nullable=False),
+                pa.field(
+                    "wkb",
+                    pa.binary(),
+                    nullable=False,
+                    metadata={b"geometry": b"true", b"srid": b"0"},
+                ),
+            ]
+        )
+
+        wkb1 = bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        wkb2 = bytes.fromhex("010100000000000000000031400000000000001c40")
+        arr = pa.array(
+            [
+                [{"srid": 0, "wkb": wkb1}, {"srid": 0, "wkb": wkb2}],
+                [None],
+                None,
+            ],
+            type=pa.list_(geometry_type),
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            arr, ArrayType(GeometryType(0)), ser_name="g"
+        )
+        # ndarray_as_list=False (default): preserves ndarray container
+        self.assertIsInstance(result.iloc[0], np.ndarray)
+        self.assertEqual(result.iloc[0][0], Geometry(wkb1, 0))
+        self.assertEqual(result.iloc[0][1], Geometry(wkb2, 0))
+        self.assertIsNone(result.iloc[1][0])
+        self.assertIsNone(result.iloc[2])
+
+    def test_array_of_variant_matches_legacy(self):
+        """Verify convert_numpy matches convert_legacy for ArrayType(VariantType()).
+
+        TODO: Remove when convert_legacy is removed.
+        """
+        import pyarrow as pa
+
+        variant_type = pa.struct(
+            [
+                pa.field("value", pa.binary(), nullable=False),
+                pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+            ]
+        )
+        arr = pa.array(
+            [
+                [{"value": b"\x01", "metadata": b"\x02"}, {"value": b"\x03", "metadata": b"\x04"}],
+                [None],
+                None,
+            ],
+            type=pa.list_(variant_type),
+        )
+        spark_type = ArrayType(VariantType())
+
+        result_legacy = ArrowArrayToPandasConversion.convert_legacy(arr, spark_type)
+        result_new = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
+        # VariantVal lacks __eq__, so compare element attributes directly
+        self.assertEqual(len(result_legacy), len(result_new))
+        for i in range(len(result_legacy)):
+            l, n = result_legacy.iloc[i], result_new.iloc[i]
+            if l is None:
+                self.assertIsNone(n)
+            else:
+                self.assertEqual(len(l), len(n))
+                for j in range(len(l)):
+                    if l[j] is None:
+                        self.assertIsNone(n[j])
+                    else:
+                        self.assertEqual(l[j].value, n[j].value)
+                        self.assertEqual(l[j].metadata, n[j].metadata)
+
+    def test_array_of_udt_matches_legacy(self):
+        """Verify convert_numpy matches convert_legacy for ArrayType(ExamplePointUDT()).
+
+        TODO: Remove when convert_legacy is removed.
+        """
+        import pandas as pd
+        import pyarrow as pa
+
+        arr = pa.array(
+            [[[1.0, 2.0], [3.0, 4.0]], [None], None],
+            type=pa.list_(pa.list_(pa.float64())),
+        )
+        spark_type = ArrayType(ExamplePointUDT())
+
+        result_legacy = ArrowArrayToPandasConversion.convert_legacy(arr, spark_type)
+        result_new = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
+        pd.testing.assert_series_equal(result_legacy, result_new)
+
+    def test_nested_complex_array_shape_consistent(self):
+        """Regression: ArrayType(ArrayType(complex)) inner shape must be a consistent
+        object ndarray regardless of inner-array lengths.
+
+        np.asarray(..., dtype=object) collapses equal-length inner arrays into a 2-D
+        array but leaves ragged/None-containing inners as Python lists, so the inner
+        container type used to depend on the data. It must now always be an ndarray.
+        (Note: convert_legacy raises ValueError on the ragged/None cases, so there is no
+        legacy behavior to match there.)
+        """
+        import numpy as np
+        import pyarrow as pa
+
+        variant_type = pa.struct(
+            [
+                pa.field("value", pa.binary(), nullable=False),
+                pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+            ]
+        )
+
+        def v(b):
+            return {"value": bytes([b]), "metadata": bytes([b])}
+
+        spark_type = ArrayType(ArrayType(VariantType()))
+        for label, row in [
+            ("rectangular", [[v(1)], [v(2)]]),
+            ("ragged", [[v(1), v(2)], [v(3)]]),
+            ("with-None", [[v(1)], None]),
+        ]:
+            with self.subTest(case=label):
+                arr = pa.array([row], type=pa.list_(pa.list_(variant_type)))
+                result = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
+                outer = result.iloc[0]
+                self.assertIsInstance(outer, np.ndarray)
+                for inner in outer:
+                    if inner is not None:
+                        self.assertIsInstance(inner, np.ndarray)
+                        for elem in inner:
+                            self.assertIsInstance(elem, VariantVal)
+
+        # ndarray_as_list=True remains lists all the way down
+        arr = pa.array([[[v(1), v(2)], [v(3)]]], type=pa.list_(pa.list_(variant_type)))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type, ndarray_as_list=True)
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsInstance(result.iloc[0][0], list)
+        self.assertIsInstance(result.iloc[0][0][0], VariantVal)
+
+    def test_array_value_parity_with_legacy(self):
+        """For array element types that are routed to convert_numpy (i.e. in
+        _prefer_convert_numpy's supported_types), convert_numpy matches convert_legacy
+        exactly (same values and same representation).
+
+        This pins parity for the element types that the dispatcher actually routes to
+        convert_numpy, so a future change that breaks parity for one of them is caught here.
+
+        TODO: Remove when convert_legacy is removed.
+        """
+        import datetime
+        import pandas as pd
+        import pyarrow as pa
+
+        cases = [
+            (ArrayType(DoubleType()), pa.list_(pa.float64()), [[1.5, None], None]),
+            (ArrayType(BooleanType()), pa.list_(pa.bool_()), [[True, None, False]]),
+            (ArrayType(BinaryType()), pa.list_(pa.binary()), [[b"a", None]]),
+            (ArrayType(DateType()), pa.list_(pa.date32()), [[datetime.date(2020, 1, 1), None]]),
+        ]
+        for spark_type, pa_type, values in cases:
+            with self.subTest(spark_type=spark_type):
+                # element type is in supported_types, so the dispatcher uses convert_numpy
+                self.assertTrue(
+                    ArrowArrayToPandasConversion._prefer_convert_numpy(spark_type, False)
+                )
+                arr = pa.array(values, type=pa_type)
+                legacy = ArrowArrayToPandasConversion.convert_legacy(arr, spark_type)
+                numpy = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
+                pd.testing.assert_series_equal(legacy, numpy)
+
+    def test_array_int_with_null_differs_from_legacy(self):
+        """Accepted difference: integer arrays with nulls.
+
+        convert_numpy widens to float64 (null -> NaN), matching its own scalar-integer
+        behavior, while convert_legacy keeps object dtype with Python ints and None.
+        """
+        import numpy as np
+        import pyarrow as pa
+
+        for spark_type, pa_type in [
+            (ArrayType(IntegerType()), pa.list_(pa.int32())),
+            (ArrayType(LongType()), pa.list_(pa.int64())),
+        ]:
+            with self.subTest(spark_type=spark_type):
+                arr = pa.array([[1, None, 3]], type=pa_type)
+                legacy = ArrowArrayToPandasConversion.convert_legacy(arr, spark_type).iloc[0]
+                numpy = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type).iloc[0]
+                self.assertEqual(legacy.dtype, object)
+                self.assertEqual(legacy.tolist(), [1, None, 3])
+                self.assertEqual(numpy.dtype, np.float64)
+                self.assertEqual(numpy[0], 1.0)
+                self.assertTrue(np.isnan(numpy[1]))
+                self.assertEqual(numpy[2], 3.0)
+
+    def test_array_timestamp_repr_differs_from_legacy(self):
+        """Accepted difference: timestamp arrays carry identical instants but
+        different element representation.
+
+        convert_legacy boxes elements into an object ndarray of pd.Timestamp/NaT,
+        while convert_numpy keeps a native datetime64[ns] ndarray.
+        """
+        import numpy as np
+        import pandas as pd
+        import pyarrow as pa
+
+        utc = datetime.timezone.utc
+        for spark_type, pa_type, values in [
+            (
+                ArrayType(TimestampType()),
+                pa.list_(pa.timestamp("us", tz="UTC")),
+                [[datetime.datetime(2020, 1, 1, tzinfo=utc), None]],
+            ),
+            (
+                ArrayType(TimestampNTZType()),
+                pa.list_(pa.timestamp("us")),
+                [[datetime.datetime(2020, 1, 1), None]],
+            ),
+        ]:
+            with self.subTest(spark_type=spark_type):
+                arr = pa.array(values, type=pa_type)
+                legacy = ArrowArrayToPandasConversion.convert_legacy(
+                    arr, spark_type, timezone="UTC"
+                ).iloc[0]
+                numpy = ArrowArrayToPandasConversion.convert_numpy(
+                    arr, spark_type, timezone="UTC"
+                ).iloc[0]
+                self.assertEqual(legacy.dtype, object)
+                self.assertIsInstance(legacy[0], pd.Timestamp)
+                self.assertEqual(numpy.dtype, np.dtype("datetime64[ns]"))
+                self.assertEqual(pd.Timestamp(legacy[0]).value, pd.Timestamp(numpy[0]).value)
+                self.assertTrue(pd.isna(legacy[1]))
+                self.assertTrue(pd.isna(numpy[1]))
+
+    def test_array_unsupported_element_falls_back_to_legacy(self):
+        """Array[E] is routed to convert_numpy only when E is in supported_types. Element
+        types not in supported_types -- StringType, DecimalType, the interval types -- and
+        MapType/StructType stay on the legacy path, consistent with their scalar routing, so
+        an unconfirmed element type cannot silently change its toPandas() representation.
+        Pin both the routing (False) and that the dispatcher still produces correct output.
+        """
+        import decimal
+        import pyarrow as pa
+
+        prefer = ArrowArrayToPandasConversion._prefer_convert_numpy
+        # element types not in supported_types -> legacy
+        for spark_type in [
+            ArrayType(StringType()),
+            ArrayType(DecimalType(10, 2)),
+            ArrayType(DayTimeIntervalType()),
+            ArrayType(StructType([StructField("a", IntegerType())])),
+            ArrayType(MapType(StringType(), IntegerType())),
+            ArrayType(ArrayType(StringType())),
+        ]:
+            self.assertFalse(prefer(spark_type, False), msg=str(spark_type))
+
+        # common Array[String] still converts correctly via the dispatcher (convert_legacy)
+        st = ArrayType(StringType())
+        arr = pa.array([["a", None, "c"], None], type=pa.list_(pa.string()))
+        result = ArrowArrayToPandasConversion.convert(arr, st, timezone="UTC")
+        self.assertEqual(list(result.iloc[0]), ["a", None, "c"])
+        self.assertIsNone(result.iloc[1])
+
+        # Array[Decimal]
+        st = ArrayType(DecimalType(10, 2))
+        arr = pa.array([[decimal.Decimal("1.50"), None]], type=pa.list_(pa.decimal128(10, 2)))
+        result = ArrowArrayToPandasConversion.convert(arr, st, timezone="UTC")
+        self.assertEqual(result.iloc[0][0], decimal.Decimal("1.50"))
+
+        # Array[Struct]
+        st = ArrayType(StructType([StructField("a", IntegerType())]))
+        arr = pa.array([[{"a": 1}, None], None], type=pa.list_(pa.struct([("a", pa.int32())])))
+        result = ArrowArrayToPandasConversion.convert(
+            arr, st, timezone="UTC", struct_in_pandas="dict"
+        )
+        self.assertEqual(result.iloc[0][0], {"a": 1})
+        self.assertIsNone(result.iloc[1])
+
+        # Array[Map]
+        st = ArrayType(MapType(StringType(), IntegerType()))
+        arr = pa.array([[[("k", 1)], None]], type=pa.list_(pa.map_(pa.string(), pa.int32())))
+        result = ArrowArrayToPandasConversion.convert(
+            arr, st, timezone="UTC", struct_in_pandas="dict"
+        )
+        self.assertEqual(result.iloc[0][0], {"k": 1})
+        self.assertIsNone(result.iloc[0][1])
+
+    def test_array_of_malformed_data(self):
+        """Malformed data raises PySparkValueError for Variant/Geography/Geometry."""
+        import pyarrow as pa
+
+        bad_type = pa.struct([pa.field("bad_key", pa.binary(), nullable=False)])
+        arr = pa.array([[{"bad_key": b"\x01"}]], type=pa.list_(bad_type))
+
+        for spark_type, error_class in [
+            (ArrayType(VariantType()), "MALFORMED_VARIANT"),
+            (ArrayType(GeographyType(4326)), "MALFORMED_GEOGRAPHY"),
+            (ArrayType(GeometryType(0)), "MALFORMED_GEOMETRY"),
+        ]:
+            with self.assertRaises(PySparkValueError) as ctx:
+                ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
+            self.assertIn(error_class, ctx.exception.getCondition())
+
+
+class ConvertNumpyVsLegacyTests(unittest.TestCase):
+    """Tests documenting known behavioral differences between convert_numpy and convert_legacy.
+
+    These differences are unreachable in practice (convert_numpy only receives raw Arrow data
+    from arr.to_pandas(), never already-deserialized Python objects), but are documented here
+    for completeness.
+
+    TODO: Remove this test class when convert_legacy is removed.
+    """
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_already_converted_variant_guard(self):
+        """Legacy _create_converter_to_pandas has an isinstance(value, VariantVal) guard
+        that returns already-converted values as-is. convert_numpy's _create_element_converter
+        does not have this guard, since it only processes raw Arrow output (dicts), never
+        already-deserialized VariantVal objects.
+
+        This difference is unreachable in practice: convert_numpy always receives data from
+        arr.to_pandas() which returns raw dicts from Arrow structs, not VariantVal objects.
+        """
+        import pandas as pd
+
+        from pyspark.sql.pandas.types import _create_converter_to_pandas
+
+        # Simulate a Series containing an already-converted VariantVal
+        series = pd.Series([[VariantVal(b"\x01", b"\x02")]])
+
+        # legacy: isinstance(value, VariantVal) guard returns as-is
+        converter = _create_converter_to_pandas(
+            ArrayType(VariantType()), nullable=True, ndarray_as_list=True
+        )
+        result_legacy = converter(series)
+        self.assertIsInstance(result_legacy.iloc[0][0], VariantVal)
+
+        # convert_numpy: no guard, treats input as raw dict and raises PySparkValueError
+        element_conv = ArrowArrayToPandasConversion._create_element_converter(VariantType())
+        with self.assertRaises(PySparkValueError):
+            element_conv(VariantVal(b"\x01", b"\x02"))
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
