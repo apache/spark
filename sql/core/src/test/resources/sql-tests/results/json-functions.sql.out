@@ -826,6 +826,135 @@ NULL
 
 
 -- !query
+select json_valid(null)
+-- !query schema
+struct<json_valid(NULL):boolean>
+-- !query output
+NULL
+
+
+-- !query
+select json_valid()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`json_valid`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "json_valid()"
+  } ]
+}
+
+
+-- !query
+select json_valid('')
+-- !query schema
+struct<json_valid():boolean>
+-- !query output
+false
+
+
+-- !query
+select json_valid('   ')
+-- !query schema
+struct<json_valid(   ):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_valid('{"a": 1}')
+-- !query schema
+struct<json_valid({"a": 1}):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_valid('[1, 2, 3]')
+-- !query schema
+struct<json_valid([1, 2, 3]):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_valid('"a string"')
+-- !query schema
+struct<json_valid("a string"):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_valid('123')
+-- !query schema
+struct<json_valid(123):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_valid('true')
+-- !query schema
+struct<json_valid(true):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_valid('null')
+-- !query schema
+struct<json_valid(null):boolean>
+-- !query output
+true
+
+
+-- !query
+select json_valid('invalid')
+-- !query schema
+struct<json_valid(invalid):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_valid('{"a":1} garbage')
+-- !query schema
+struct<json_valid({"a":1} garbage):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_valid('[1, 2, 3')
+-- !query schema
+struct<json_valid([1, 2, 3):boolean>
+-- !query output
+false
+
+
+-- !query
+select json_valid('{"a": }')
+-- !query schema
+struct<json_valid({"a": }):boolean>
+-- !query output
+false
+
+
+-- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query schema
 struct<>

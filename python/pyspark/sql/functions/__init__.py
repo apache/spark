@@ -470,6 +470,7 @@ __all__ = [  # noqa: F405
     "get_json_object",
     "json_array_length",
     "json_object_keys",
+    "json_valid",
     "json_tuple",
     "schema_of_json",
     "to_json",
