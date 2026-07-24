@@ -449,11 +449,13 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   test("AutoCdcMergeFlow.schema supports a multi-column (struct) sequencing expression") {
     // A multi-column sequence is expressed as a struct over the ordering columns; its resolved
     // type is the corresponding StructType, which must flow into __START_AT / __END_AT and the
-    // metadata struct's record-start-at field unchanged.
+    // metadata struct's record-start-at field unchanged, including each field's own nullability.
     val session = spark
     import session.implicits._
+    // seq1 is a non-null Int; seq2 is a nullable Long (Option[Long]), so the struct carries
+    // mixed per-field nullability.
     val sourceDf =
-      MemoryStream[(Int, String, Int, Long)].toDS().toDF("id", "name", "seq1", "seq2")
+      MemoryStream[(Int, String, Int, Option[Long])].toDS().toDF("id", "name", "seq1", "seq2")
 
     val resolvedFlow = newAutoCdcMergeFlow(
       sourceDf = sourceDf,
@@ -463,19 +465,19 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
 
     // Top-level nullability and inner-field nullability are independent. The __START_AT /
     // __END_AT columns must themselves stay nullable -- an open/unset interval bound is
-    // represented as NULL, which reconciliation relies on -- even when the sequencing type is a
-    // struct whose fields happen to be non-nullable (here seq1 / seq2 wrap concrete non-null
-    // source columns). A struct column is free to be NULL at the top level regardless of its
-    // fields' nullability.
+    // represented as NULL, which reconciliation relies on -- regardless of the sequencing
+    // struct's field nullability. A struct column is free to be NULL at the top level
+    // regardless of its fields' nullability.
     val startAtField = resolvedFlow.schema(Scd2BatchProcessor.startAtColName)
     val endAtField = resolvedFlow.schema(Scd2BatchProcessor.endAtColName)
     assert(startAtField.nullable, "__START_AT must be nullable")
     assert(endAtField.nullable, "__END_AT must be nullable")
 
-    // The struct data type flows through unchanged, including its (non-nullable) inner fields.
+    // The struct data type flows through unchanged, preserving each field's own nullability:
+    // seq1 stays non-null, seq2 stays nullable.
     val expectedSeqType = new StructType()
       .add("seq1", IntegerType, nullable = false)
-      .add("seq2", LongType, nullable = false)
+      .add("seq2", LongType, nullable = true)
     assert(startAtField.dataType == expectedSeqType)
     assert(endAtField.dataType == expectedSeqType)
     assert(
