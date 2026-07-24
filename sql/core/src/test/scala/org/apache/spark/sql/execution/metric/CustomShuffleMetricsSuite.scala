@@ -36,13 +36,20 @@ class CustomShuffleMetricsSuite extends SparkFunSuite with SharedSparkContext {
     assert(metrics("s3FirstByteLatency").metricType === MetricUtils.TIMING_METRIC)
   }
 
-  test("createMetrics rejects an unsupported metric type") {
-    val e = intercept[IllegalArgumentException] {
-      CustomShuffleMetrics.createMetrics(sc, Array(
+  test("createMetrics drops a metric with an unsupported type instead of failing") {
+    val logAppender = new LogAppender("unsupported custom shuffle metric type")
+    var metrics: Map[String, SQLMetric] = Map.empty
+    withLogAppender(logAppender) {
+      metrics = CustomShuffleMetrics.createMetrics(sc, Array(
+        shuffleMetric("s3BytesUploaded", "s3 bytes uploaded", MetricUtils.SIZE_METRIC),
         shuffleMetric("s3Avg", "s3 avg", MetricUtils.AVERAGE_METRIC)))
     }
-    assert(e.getMessage.contains("s3Avg"))
-    assert(e.getMessage.contains(MetricUtils.AVERAGE_METRIC))
+
+    assert(metrics.keySet === Set("s3BytesUploaded"))
+    assert(logAppender.loggingEvents.exists { event =>
+      val message = event.getMessage.getFormattedMessage
+      message.contains("s3Avg") && message.contains(MetricUtils.AVERAGE_METRIC)
+    })
   }
 
   test("updateMetrics folds reported values into the matching SQLMetrics by name") {
