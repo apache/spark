@@ -994,7 +994,7 @@ private[sql] trait NoLegacyJDBCError extends JdbcDialect {
 @DeveloperApi
 object JdbcDialects {
 
-  private[this] var dialectsByUrlPrefix = List[(String, JdbcDialect)]()
+  @volatile private[this] var dialectsByUrlPrefix = List[(String, JdbcDialect)]()
 
   /**
    * Register an existing dialect for an additional JDBC URL prefix. The registration affects
@@ -1015,7 +1015,7 @@ object JdbcDialects {
    * @param dialect The existing dialect to use for URLs with the prefix.
    */
   @Since("4.3.0")
-  def registerDialectForUrlPrefix(urlPrefix: String, dialect: JdbcDialect): Unit = {
+  def registerDialectForUrlPrefix(urlPrefix: String, dialect: JdbcDialect): Unit = synchronized {
     val prefix = normalizePrefix(urlPrefix)
     dialectsByUrlPrefix = ((prefix, dialect) :: dialectsByUrlPrefix.filterNot(_._1 == prefix))
       .sortBy { case (registeredPrefix, _) => -registeredPrefix.length }
@@ -1028,7 +1028,7 @@ object JdbcDialects {
    * @param urlPrefix The additional JDBC URL prefix.
    */
   @Since("4.3.0")
-  def unregisterDialectForUrlPrefix(urlPrefix: String): Unit = {
+  def unregisterDialectForUrlPrefix(urlPrefix: String): Unit = synchronized {
     val prefix = normalizePrefix(urlPrefix)
     dialectsByUrlPrefix = dialectsByUrlPrefix.filterNot(_._1 == prefix)
   }
