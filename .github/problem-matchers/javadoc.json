@@ -1,0 +1,17 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "javadoc-doclint",
+      "severity": "error",
+      "pattern": [
+        {
+          "regexp": "\\]\\s+\\S*/spark/spark/((?!(?:[^:]*/)?target/)[^:\\s]+):(\\d+):(\\d+):\\s+error:\\s+(.+)",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
+        }
+      ]
+    }
+  ]
+}

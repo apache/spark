@@ -1,0 +1,138 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# Relay workflow: runs on the upstream repo after a fork's workflow completes.
+# Downloads pre-extracted annotation commands and replays them so they appear
+# as inline annotations on the upstream PR's diff.
+#
+# This is necessary because annotations from fork workflows (on: push) don't
+# appear inline on the upstream PR. This lightweight relay runs in the
+# upstream repo's context with checks:write permission, so its annotations
+# do appear inline.
+#
+# To add annotations from a new workflow:
+# 1. In the source workflow, capture the build log with tee and upload it
+#    as an artifact matching the pattern "*-build-log".
+# 2. Upload $GITHUB_WORKSPACE as an artifact matching "*-workspace-root"
+#    so the relay can strip the runner's absolute path prefix from log entries.
+# 3. Add problem matcher JSON files to .github/problem-matchers/.
+# 4. Add the source workflow's name to the list below.
+
+name: Report annotations
+
+on:
+  workflow_run:
+    workflows:
+      # These must match the `name:` field of the top-level (caller) workflow
+      # exactly. build_and_test.yml is a reusable workflow (workflow_call only)
+      # so it never appears as a standalone run; the caller is what fires here.
+      - "Build"
+      # Add other callers here as needed, e.g.:
+      # - "Build and test using Maven"
+    types:
+      - completed
+
+jobs:
+  annotate:
+    name: Post annotations
+    if: >
+      !contains(fromJson('["skipped", "cancelled"]'), github.event.workflow_run.conclusion)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: write
+    steps:
+      - name: Checkout Spark
+        uses: actions/checkout@v6
+
+      - name: Download build logs
+        id: download-logs
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: "*-build-log"
+          merge-multiple: true
+
+      - name: Download workspace roots
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: "*-workspace-root"
+          merge-multiple: true
+
+      - name: Print workspace info
+        run: |
+          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+          echo "Downloaded files:"
+          ls -la
+          echo "workspace-root.txt contents:"
+          cat workspace-root.txt 2>/dev/null || echo "(not found)"
+
+      - name: Replay logs through problem matchers (raw, no path stripping)
+        if: steps.download-logs.outcome == 'success'
+        run: |
+          # Debug replay: emit lines exactly as-is so we can see what the
+          # problem matcher receives before any path rewriting is applied.
+          for matcher in .github/problem-matchers/*.json; do
+            echo "::add-matcher::$matcher"
+          done
+
+          for log in *.log; do
+            [ -f "$log" ] || continue
+            echo "--- Replaying (raw) $log ---"
+            cat "$log"
+          done
+
+      - name: Replay logs through problem matchers
+        if: steps.download-logs.outcome == 'success'
+        run: |
+          # Read the fork's workspace root and strip it from paths so GitHub
+          # can map annotations to repo-relative files in the PR diff.
+          # (Absolute paths vary by runner: /home/runner/work/..., /__w/..., etc.)
+          ws_root=""
+          if [ -f workspace-root.txt ]; then
+            ws_root=$(tr -d '\n' < workspace-root.txt)
+            echo "Stripping workspace root: $ws_root"
+          fi
+
+          # Register all available problem matchers.
+          for matcher in .github/problem-matchers/*.json; do
+            echo "::add-matcher::$matcher"
+          done
+
+          # Replay each build log with absolute paths stripped to repo-relative.
+          for log in *.log; do
+            [ -f "$log" ] || continue
+            echo "--- Replaying $log ---"
+            if [ -n "$ws_root" ]; then
+              sed "s|${ws_root}/||g" "$log"
+            else
+              cat "$log"
+            fi
+          done
+
+          # Clean up matchers.
+          for matcher in .github/problem-matchers/*.json; do
+            owner=$(python3 -c "import json; print(json.load(open('$matcher'))['problemMatcher'][0]['owner'])")
+            echo "::remove-matcher owner=$owner::"
+          done

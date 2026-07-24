@@ -1150,11 +1150,28 @@ jobs:
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
+      env:
+        # needed so that gh api is not rate limited
+        GH_TOKEN: ${{ github.token }}
       run: |
         echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        BRANCH="${GITHUB_REF#refs/heads/}"
+        PR_NUMBER=$(curl -s \
+          -H "Authorization: Bearer ${GH_TOKEN}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          "https://api.github.com/repos/apache/spark/pulls?state=open&head=${{ github.repository_owner }}:${BRANCH}&per_page=1" \
+          | python3 -c "import json,sys; prs=json.load(sys.stdin); print(prs[0]['number'] if prs else '')" \
+          2>/dev/null || true)
+        if [ -n "$PR_NUMBER" ]; then
+          echo "Found PR #${PR_NUMBER}; using exact merge ref refs/pull/${PR_NUMBER}/merge"
+          git fetch https://github.com/apache/spark.git "refs/pull/${PR_NUMBER}/merge"
+          git checkout FETCH_HEAD
+        else
+          echo "No open PR found against apache/spark; falling back to squash merge"
+          git fetch https://github.com/$GITHUB_REPOSITORY.git "${BRANCH}"
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        fi
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -1199,7 +1216,20 @@ jobs:
         gem install bundler -v 2.4.22
         cd docs
         bundle install --retry=100
+    - run: echo "$GITHUB_WORKSPACE"
+    - name: Fix remote URL for problem matcher (fork runs only)
+      # The checkout above always uses repository: apache/spark, so .git/config
+      # contains url = https://github.com/apache/spark. When running from a fork,
+      # GITHUB_REPOSITORY is e.g. nchammas/spark, but the runner verifies file
+      # annotations by looking for GITHUB_REPOSITORY in .git/config -- it won't
+      # find it and silently drops every file path from annotations. Re-pointing
+      # origin to the fork URL fixes the mismatch without changing the working tree.
+      if: github.repository != 'apache/spark'
+      run: git remote set-url origin https://github.com/${{ github.repository }}
+    - name: Register javadoc problem matcher
+      run: echo "::add-matcher::.github/problem-matchers/javadoc.json"
     - name: Run documentation build
+      shell: bash
       run: |
         # We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
         ln -s "$(which python3.12)" "/usr/local/bin/python3"
@@ -1221,7 +1251,29 @@ jobs:
         echo "SKIP_RDOC: $SKIP_RDOC"
         echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
-        bundle exec jekyll build
+        set -o pipefail
+        bundle exec jekyll build 2>&1 \
+          | tee "$GITHUB_WORKSPACE/docs-build.log"
+    - name: Remove javadoc problem matcher
+      if: always()
+      run: echo "::remove-matcher owner=javadoc-doclint::"
+    - name: Upload build log
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: docs-build-log
+        path: ${{ github.workspace }}/docs-build.log
+        retention-days: 3
+    - name: Upload workspace root
+      if: always()
+      run: echo "$GITHUB_WORKSPACE" > "$GITHUB_WORKSPACE/workspace-root.txt"
+    - name: Upload workspace root artifact
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: docs-workspace-root
+        path: ${{ github.workspace }}/workspace-root.txt
+        retention-days: 3
     - name: Tar documentation
       if: github.repository != 'apache/spark'
       run: tar cjf site.tar.bz2 docs/_site
