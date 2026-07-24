@@ -170,23 +170,22 @@ private[client] class GrpcExceptionConverter(
     }
 
     // If no ErrorInfo is found, create a SparkException based on the StatusRuntimeException.
-    val (message, cause) = if (ex.getStatus.getCode == Status.Code.DEADLINE_EXCEEDED) {
-      val msg = s"${ex.toString}: RPC deadline exceeded. Deadlines can be configured via " +
+    val message = if (ex.getStatus.getCode == Status.Code.DEADLINE_EXCEEDED) {
+      s"${ex.toString}: RPC deadline exceeded. Deadlines can be configured via " +
         "SparkConnectClient.Builder.rpcDeadlines(). To disable all deadlines: " +
         "SparkConnectClient.builder().rpcDeadlines(RpcDeadlines.disabled).build()"
-      // For DEADLINE_EXCEEDED, we pass `ex` itself as the cause rather than `ex.getCause`.
-      // StatusRuntimeException.getCause() returns status.getCause(), which is always null for
-      // client-side deadline fires (gRPC constructs the status without a wrapped cause). Using
-      // ex.getCause would produce a SparkException with cause = null, losing the gRPC status
-      // code and description from the exception chain. Passing ex preserves full context and
-      // allows callers to programmatically inspect the status code via getCause().getStatus().
-      (msg, ex)
     } else {
-      (ex.toString, ex.getCause)
+      ex.toString
     }
+    // Pass `ex` itself as the cause rather than `ex.getCause`. StatusRuntimeException.getCause()
+    // returns status.getCause(), which is often null (e.g. always for client-side deadline
+    // fires, since gRPC constructs the status without a wrapped cause). Using ex.getCause
+    // would produce a SparkException with cause = null, losing the gRPC status code and
+    // description from the exception chain. Passing ex preserves full context and allows
+    // callers to programmatically inspect the status code via getCause().getStatus().
     new SparkException(
       message = message,
-      cause = cause,
+      cause = ex,
       errorClass = Some("CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE"),
       messageParameters = Map("message" -> message),
       context = Array.empty)
