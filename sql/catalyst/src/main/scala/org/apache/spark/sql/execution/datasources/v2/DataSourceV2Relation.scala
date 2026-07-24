@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatisti
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
@@ -34,6 +35,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
+import org.apache.spark.sql.internal.connector.V2StatisticsUtils
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -95,7 +97,7 @@ abstract class DataSourceV2RelationBase(
       table.asReadable.newScanBuilder(options).build() match {
         case r: SupportsReportStatistics =>
           val statistics = r.estimateStatistics()
-          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
+          DataSourceV2Relation.transformV2Stats(statistics, conf.defaultSizeInBytes, output)
         case _ =>
           Statistics(sizeInBytes = conf.defaultSizeInBytes)
       }
@@ -199,13 +201,30 @@ case class DataSourceV2ScanRelation(
   }
 
   override def computeStats(): Statistics = {
-    scan match {
-      case r: SupportsReportStatistics =>
-        val statistics = r.estimateStatistics()
-        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
-      case _ =>
-        Statistics(sizeInBytes = conf.defaultSizeInBytes)
+    if (conf.cboEnabled || conf.planStatsEnabled) {
+      computeFullStats()
+    } else {
+      computeSizeOnlyStats()
     }
+  }
+
+  private def computeFullStats(): Statistics = {
+    V2StatisticsUtils.computeStats(scan) match {
+      case Some(v2Stats) =>
+        DataSourceV2Relation.transformV2Stats(v2Stats, conf.defaultSizeInBytes, output)
+      case _ => defaultSizeOnlyStats
+    }
+  }
+
+  private def computeSizeOnlyStats(): Statistics = {
+    V2StatisticsUtils.computeSizeInBytes(scan, EstimationUtils.getSizePerRow(output)) match {
+      case Some(sizeInBytes) => Statistics(sizeInBytes = sizeInBytes)
+      case _ => defaultSizeOnlyStats
+    }
+  }
+
+  private def defaultSizeOnlyStats: Statistics = {
+    Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
 
   override def doCanonicalize(): DataSourceV2ScanRelation = {
@@ -276,7 +295,7 @@ case class StreamingDataSourceV2ScanRelation(
   override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
       val statistics = r.estimateStatistics()
-      DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
+      DataSourceV2Relation.transformV2Stats(statistics, conf.defaultSizeInBytes, output)
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
@@ -419,13 +438,12 @@ object DataSourceV2Relation {
    */
   def transformV2Stats(
       v2Statistics: V2Statistics,
-      defaultRowCount: Option[BigInt],
       defaultSizeInBytes: Long,
       output: Seq[Attribute] = Seq.empty): Statistics = {
     val numRows: Option[BigInt] = if (v2Statistics.numRows().isPresent) {
       Some(v2Statistics.numRows().getAsLong)
     } else {
-      defaultRowCount
+      None
     }
 
     var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
@@ -463,9 +481,20 @@ object DataSourceV2Relation {
         })
       })
     }
+    val attributeStats = AttributeMap(colStats)
+    // Prefer the source-reported size. Otherwise infer a projection-aware size from the row count
+    // (numRows * outputRowSize via getOutputSize). Fall back to the default size when neither is
+    // available.
+    val sizeInBytes = if (v2Statistics.sizeInBytes().isPresent) {
+      BigInt(v2Statistics.sizeInBytes().getAsLong)
+    } else if (numRows.isDefined) {
+      EstimationUtils.getOutputSize(output, numRows.get, attributeStats)
+    } else {
+      BigInt(defaultSizeInBytes)
+    }
     Statistics(
-      sizeInBytes = v2Statistics.sizeInBytes().orElse(defaultSizeInBytes),
+      sizeInBytes = sizeInBytes,
       rowCount = numRows,
-      attributeStats = AttributeMap(colStats))
+      attributeStats = attributeStats)
   }
 }
