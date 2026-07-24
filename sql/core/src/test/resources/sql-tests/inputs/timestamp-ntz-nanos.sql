@@ -199,6 +199,31 @@ SELECT unix_nanos(TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001');
 -- NULL nanosecond timestamp.
 SELECT unix_nanos(NULL :: timestamp_ntz(9));
 
+-- SPARK-57819: months_between over nanosecond-precision TIMESTAMP_NTZ. A nanos operand is
+-- reduced to its epochMicros, so the result always matches the microsecond-only result and the
+-- nanosWithinMicro remainder never affects it. NTZ is zone-independent.
+SELECT months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00', TIMESTAMP_NTZ '1996-10-30 00:00:00');
+SELECT months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00',
+    TIMESTAMP_NTZ '1996-10-30 00:00:00', false);
+SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9), false);
+-- Same pair, with a non-zero nanosWithinMicro remainder on one side: the result is unchanged
+-- from the remainder=0 case above.
+SELECT months_between('1997-02-28 10:30:00.000000500' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9), false);
+SELECT months_between('1997-02-28 10:30:00.000000500' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9));
+-- A nanos operand paired with a plain (microsecond) timestamp operand of a family that does not
+-- need an implicit cast (TIMESTAMP_LTZ with an explicit zone, so it is session-zone-independent).
+-- Pairing with a bare TIMESTAMP_NTZ instead would implicit-cast that side to TIMESTAMP_LTZ using
+-- the session zone, and then both sides would be read back with a single zone derived from the
+-- nanos side (matching the existing SubtractTimestamps/TimestampDiff convention), which does not
+-- round-trip that cast; this pairing avoids the ambiguity.
+SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC');
+-- NULL nanosecond timestamp.
+SELECT months_between(CAST(NULL AS timestamp_ntz(9)), TIMESTAMP_NTZ '1996-10-30 00:00:00');
+
 -- SPARK-57454: implicit type coercion / widening over nanosecond TIMESTAMP_NTZ(p). The resolved
 -- common type itself is unit-tested in TypeCoercionSuite / AnsiTypeCoercionSuite, and the operator
 -- wiring (schema and boolean outcomes for UNION/coalesce/CASE/IN/comparison) in

@@ -239,6 +239,27 @@ SELECT timestamp_nanos(1.0D);
 -- NULL input.
 SELECT timestamp_nanos(CAST(NULL AS BIGINT));
 
+-- SPARK-57819: months_between over nanosecond-precision TIMESTAMP_LTZ. A nanos operand is
+-- reduced to its epochMicros, so the result always matches the microsecond-only result and the
+-- nanosWithinMicro remainder never affects it.
+SELECT months_between(TIMESTAMP_LTZ '1997-02-28 10:30:00 UTC',
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC');
+SELECT months_between(TIMESTAMP_LTZ '1997-02-28 10:30:00 UTC',
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC', false);
+SELECT months_between('1997-02-28 10:30:00.000000000 UTC' :: timestamp_ltz(9),
+    '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9), false);
+-- Same pair, with a non-zero nanosWithinMicro remainder on one side: the result is unchanged
+-- from the remainder=0 case above.
+SELECT months_between('1997-02-28 10:30:00.000000500 UTC' :: timestamp_ltz(9),
+    '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9), false);
+SELECT months_between('1997-02-28 10:30:00.000000500 UTC' :: timestamp_ltz(9),
+    '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9));
+-- A nanos operand paired with a plain (microsecond) TIMESTAMP_LTZ operand.
+SELECT months_between('1997-02-28 10:30:00.000000000 UTC' :: timestamp_ltz(9),
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC');
+-- NULL nanosecond timestamp.
+SELECT months_between(CAST(NULL AS timestamp_ltz(9)), TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC');
+
 -- SPARK-57454: implicit type coercion / widening over nanosecond TIMESTAMP_LTZ(p). The resolved
 -- common type itself is unit-tested in TypeCoercionSuite / AnsiTypeCoercionSuite, and the operator
 -- wiring (schema and boolean outcomes for UNION/coalesce/CASE/IN/comparison) in

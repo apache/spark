@@ -836,6 +836,57 @@ Project [timestamp_nanos(cast(null as bigint)) AS timestamp_nanos(CAST(NULL AS B
 
 
 -- !query
+SELECT months_between(TIMESTAMP_LTZ '1997-02-28 10:30:00 UTC',
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT months_between(TIMESTAMP_LTZ '1997-02-28 10:30:00 UTC',
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC', false)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000000 UTC' :: timestamp_ltz(9),
+    '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9), false)
+-- !query analysis
+Project [months_between(cast(1997-02-28 10:30:00.000000000 UTC as timestamp_ltz(9)), cast(1996-10-30 00:00:00.000000000 UTC as timestamp_ltz(9)), false, Some(America/Los_Angeles)) AS months_between(CAST(1997-02-28 10:30:00.000000000 UTC AS TIMESTAMP_LTZ(9)), CAST(1996-10-30 00:00:00.000000000 UTC AS TIMESTAMP_LTZ(9)), false)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000500 UTC' :: timestamp_ltz(9),
+    '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9), false)
+-- !query analysis
+Project [months_between(cast(1997-02-28 10:30:00.000000500 UTC as timestamp_ltz(9)), cast(1996-10-30 00:00:00.000000000 UTC as timestamp_ltz(9)), false, Some(America/Los_Angeles)) AS months_between(CAST(1997-02-28 10:30:00.000000500 UTC AS TIMESTAMP_LTZ(9)), CAST(1996-10-30 00:00:00.000000000 UTC AS TIMESTAMP_LTZ(9)), false)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000500 UTC' :: timestamp_ltz(9),
+    '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9))
+-- !query analysis
+Project [months_between(cast(1997-02-28 10:30:00.000000500 UTC as timestamp_ltz(9)), cast(1996-10-30 00:00:00.000000000 UTC as timestamp_ltz(9)), true, Some(America/Los_Angeles)) AS months_between(CAST(1997-02-28 10:30:00.000000500 UTC AS TIMESTAMP_LTZ(9)), CAST(1996-10-30 00:00:00.000000000 UTC AS TIMESTAMP_LTZ(9)), true)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000000 UTC' :: timestamp_ltz(9),
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT months_between(CAST(NULL AS timestamp_ltz(9)), TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SELECT typeof(c), c FROM (
     SELECT TIMESTAMP_LTZ '0001-01-01 00:00:00' AS c
     UNION ALL SELECT TIMESTAMP_LTZ '9999-12-31 23:59:59.999999999') ORDER BY c

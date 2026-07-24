@@ -2827,23 +2827,40 @@ case class MonthsBetween(
   override def second: Expression = date2
   override def third: Expression = roundOff
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType, BooleanType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    TypeCollection(TimestampType, AnyTimestampNanoType),
+    TypeCollection(TimestampType, AnyTimestampNanoType),
+    BooleanType)
 
   override def dataType: DataType = DoubleType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  private def date1IsNanos: Boolean = date1.dataType.isInstanceOf[AnyTimestampNanoType]
+  private def date2IsNanos: Boolean = date2.dataType.isInstanceOf[AnyTimestampNanoType]
+
+  // The nanosWithinMicro remainder cannot move the result at the whole-day / whole-second
+  // granularity this computation already operates at, so a nanos operand only needs its
+  // epochMicros; TIMESTAMP_NTZ(p) carries wall-clock fields (evaluated in UTC), mirroring the
+  // zone derivation other multi-timestamp-argument expressions use (e.g. SubtractTimestamps).
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(date1.dataType)
+
   override def nullSafeEval(t1: Any, t2: Any, roundOff: Any): Any = {
-    DateTimeUtils.monthsBetween(
-      t1.asInstanceOf[Long], t2.asInstanceOf[Long], roundOff.asInstanceOf[Boolean], zoneId)
+    val micros1 =
+      if (date1IsNanos) t1.asInstanceOf[TimestampNanosVal].epochMicros else t1.asInstanceOf[Long]
+    val micros2 =
+      if (date2IsNanos) t2.asInstanceOf[TimestampNanosVal].epochMicros else t2.asInstanceOf[Long]
+    DateTimeUtils.monthsBetween(micros1, micros2, roundOff.asInstanceOf[Boolean], zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (d1, d2, roundOff) => {
-      s"""$dtu.monthsBetween($d1, $d2, $roundOff, $zid)"""
+      val d1Expr = if (date1IsNanos) s"$d1.epochMicros" else d1
+      val d2Expr = if (date2IsNanos) s"$d2.epochMicros" else d2
+      s"""$dtu.monthsBetween($d1Expr, $d2Expr, $roundOff, $zid)"""
     })
   }
 

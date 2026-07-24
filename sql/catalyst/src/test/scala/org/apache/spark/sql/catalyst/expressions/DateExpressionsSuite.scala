@@ -774,6 +774,89 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57819: months_between over nanosecond-precision timestamps") {
+    val ntzType = TimestampNTZNanosType(9)
+    val ltzType = TimestampLTZNanosType(9)
+
+    // A nanos operand is reduced to its epochMicros, so the result must match the
+    // microsecond-only result exactly, regardless of the nanosWithinMicro remainder.
+    val ntz1 = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("1997-02-28T10:30:00"), 9)
+    val ntz2 = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("1996-10-30T00:00:00"), 9)
+    checkEvaluation(
+      MonthsBetween(Literal.create(ntz1, ntzType), Literal.create(ntz2, ntzType),
+        Literal.TrueLiteral, Some("UTC")),
+      3.94959677)
+    checkEvaluation(
+      MonthsBetween(Literal.create(ntz1, ntzType), Literal.create(ntz2, ntzType),
+        Literal.FalseLiteral, Some("UTC")),
+      3.9495967741935485)
+
+    val ltz1 = DateTimeUtils.instantToTimestampNanos(Instant.parse("1997-02-28T10:30:00Z"), 9)
+    val ltz2 = DateTimeUtils.instantToTimestampNanos(Instant.parse("1996-10-30T00:00:00Z"), 9)
+    checkEvaluation(
+      MonthsBetween(Literal.create(ltz1, ltzType), Literal.create(ltz2, ltzType),
+        Literal.TrueLiteral, Some("UTC")),
+      3.94959677)
+    checkEvaluation(
+      MonthsBetween(Literal.create(ltz1, ltzType), Literal.create(ltz2, ltzType),
+        Literal.FalseLiteral, Some("UTC")),
+      3.9495967741935485)
+
+    // A non-zero nanosWithinMicro remainder must not perturb the result: only epochMicros
+    // reaches the computation, at both the coarse (whole-day) and fine (whole-second) branches.
+    val ntz1WithNanos = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("1997-02-28T10:30:00.000000999"), 9)
+    assert(ntz1WithNanos.epochMicros == ntz1.epochMicros)
+    assert(ntz1WithNanos.nanosWithinMicro == 999)
+    checkEvaluation(
+      MonthsBetween(Literal.create(ntz1WithNanos, ntzType), Literal.create(ntz2, ntzType),
+        Literal.FalseLiteral, Some("UTC")),
+      3.9495967741935485)
+    val sameDayNtz1 = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2015-01-30T11:52:00.000000999"), 9)
+    val sameDayNtz2 = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2015-01-30T11:50:00"), 9)
+    checkEvaluation(
+      MonthsBetween(Literal.create(sameDayNtz1, ntzType), Literal.create(sameDayNtz2, ntzType),
+        Literal.TrueLiteral, Some("UTC")),
+      0.0)
+
+    // A nanos operand paired with a plain (microsecond) timestamp operand must produce the same
+    // result as the all-nanos case above.
+    checkEvaluation(
+      MonthsBetween(Literal.create(ntz1, ntzType),
+        Literal(Instant.parse("1996-10-30T00:00:00Z")), Literal.FalseLiteral, Some("UTC")),
+      3.9495967741935485)
+    checkEvaluation(
+      MonthsBetween(Literal(Instant.parse("1997-02-28T10:30:00Z")),
+        Literal.create(ltz2, ltzType), Literal.FalseLiteral, Some("UTC")),
+      3.9495967741935485)
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (time1: Expression, time2: Expression, roundOff: Expression) =>
+        MonthsBetween(time1, time2, roundOff, Some("UTC")),
+      ntzType, ntzType, BooleanType)
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (time1: Expression, time2: Expression, roundOff: Expression) =>
+        MonthsBetween(time1, time2, roundOff, Some("UTC")),
+      ltzType, ltzType, BooleanType)
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (time1: Expression, time2: Expression, roundOff: Expression) =>
+        MonthsBetween(time1, time2, roundOff, Some("UTC")),
+      ntzType, TimestampType, BooleanType)
+
+    checkEvaluation(
+      MonthsBetween(Literal.create(null, ntzType), Literal.create(ntz2, ntzType),
+        Literal.TrueLiteral, Some("UTC")),
+      null)
+    checkEvaluation(
+      MonthsBetween(Literal.create(ntz1, ntzType), Literal.create(null, ntzType),
+        Literal.TrueLiteral, Some("UTC")),
+      null)
+  }
+
   test("last_day") {
     checkEvaluation(LastDay(Literal(Date.valueOf("2015-02-28"))), Date.valueOf("2015-02-28"))
     checkEvaluation(LastDay(Literal(Date.valueOf("2015-03-27"))), Date.valueOf("2015-03-31"))
