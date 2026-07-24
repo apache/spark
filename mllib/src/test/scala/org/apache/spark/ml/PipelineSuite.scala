@@ -26,7 +26,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline.SharedReadWrite
-import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler, StringIndexer}
+import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler, StringIndexer, Tokenizer}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util._
@@ -131,7 +131,7 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   test("PipelineModel estimated size") {
     val dataset = Seq("a", "b", "c").toDF("input")
     val pipeline = new Pipeline().setStages(Array(
-      new HashingTF().setInputCol("input").setOutputCol("features"),
+      new Tokenizer().setInputCol("input").setOutputCol("tokens"),
       new StringIndexer().setInputCol("input").setOutputCol("indexed")))
     val model = pipeline.fit(dataset)
     val minSize = 1024
