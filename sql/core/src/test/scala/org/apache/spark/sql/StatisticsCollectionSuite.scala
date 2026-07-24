@@ -38,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.Utils
 
 
@@ -202,6 +203,84 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         val roundtrip = CatalogColumnStat.fromMap("t", k, v.toMap(k))
         assert(roundtrip == Some(v))
       }
+    }
+  }
+
+  test("SPARK-57839: nanosecond-precision timestamp column stats lossless round trip") {
+    // Use a sub-microsecond value (nanosWithinMicro != 0) to prove nanos survive serialization.
+    val ntzNanosType = TimestampNTZNanosType(9)
+    val ltzNanosType = TimestampLTZNanosType(9)
+    val subMicroVal = TimestampNanosVal.fromParts(1640995201123456L, 789.toShort)
+
+    // NTZ nanos round-trip
+    val ntzStr = CatalogColumnStat.toExternalString(subMicroVal, "col", ntzNanosType)
+    val ntzParsed = CatalogColumnStat.fromExternalString(ntzStr, "col", ntzNanosType, 2)
+    assert(ntzParsed === subMicroVal,
+      s"NTZ nanos round-trip failed: formatted='$ntzStr', parsed=$ntzParsed, expected=$subMicroVal")
+
+    // LTZ nanos round-trip
+    val ltzStr = CatalogColumnStat.toExternalString(subMicroVal, "col", ltzNanosType)
+    val ltzParsed = CatalogColumnStat.fromExternalString(ltzStr, "col", ltzNanosType, 2)
+    assert(ltzParsed === subMicroVal,
+      s"LTZ nanos round-trip failed: formatted='$ltzStr', parsed=$ltzParsed, expected=$subMicroVal")
+
+    // Full CatalogColumnStat map round-trip
+    val catalogStat = CatalogColumnStat(
+      distinctCount = Some(1),
+      min = Some(ntzStr),
+      max = Some(ntzStr),
+      nullCount = Some(0),
+      avgLen = Some(10),
+      maxLen = Some(10))
+    val map = catalogStat.toMap("ctsnanos")
+    val roundtrip = CatalogColumnStat.fromMap("t", "ctsnanos", map)
+    assert(roundtrip === Some(catalogStat))
+
+    // Pre-1970 (negative epochMicros) round-trip exercises floorDiv/floorMod in fromDouble.
+    // 1969-06-15T00:00:00.123456789 => epochMicros ~ -16070400000000L, nanosWithinMicro = 789
+    val pre1970Val = TimestampNanosVal.fromParts(-16070400000000L, 789.toShort)
+    val pre1970NtzStr = CatalogColumnStat.toExternalString(pre1970Val, "col", ntzNanosType)
+    val pre1970NtzParsed =
+      CatalogColumnStat.fromExternalString(pre1970NtzStr, "col", ntzNanosType, 2)
+    assert(pre1970NtzParsed === pre1970Val,
+      s"Pre-1970 NTZ nanos round-trip failed: formatted='$pre1970NtzStr', " +
+        s"parsed=$pre1970NtzParsed, expected=$pre1970Val")
+
+    val pre1970LtzStr = CatalogColumnStat.toExternalString(pre1970Val, "col", ltzNanosType)
+    val pre1970LtzParsed =
+      CatalogColumnStat.fromExternalString(pre1970LtzStr, "col", ltzNanosType, 2)
+    assert(pre1970LtzParsed === pre1970Val,
+      s"Pre-1970 LTZ nanos round-trip failed: formatted='$pre1970LtzStr', " +
+        s"parsed=$pre1970LtzParsed, expected=$pre1970Val")
+  }
+
+  test("SPARK-57839: ANALYZE TABLE FOR COLUMNS on nanosecond timestamp collects basic stats") {
+    // Nanosecond timestamp columns should collect basic stats (min/max/ndv) but skip histogram,
+    // since ApproximatePercentile and ApproxCountDistinctForIntervals do not accept nanos types.
+    val table = "nanos_analyze_test"
+    withTable(table) {
+      sql(
+        s"""CREATE TABLE $table (id INT, ts_ntz TIMESTAMP_NTZ(9), ts_ltz TIMESTAMP_LTZ(9))
+           |USING PARQUET""".stripMargin)
+      sql(s"INSERT INTO $table VALUES (1, TIMESTAMP_NTZ'2024-01-01 00:00:00.123456789', " +
+        "TIMESTAMP_LTZ'2024-01-01 00:00:00.123456789')")
+      sql(s"INSERT INTO $table VALUES (2, TIMESTAMP_NTZ'2024-06-15 12:30:00.987654321', " +
+        "TIMESTAMP_LTZ'2024-06-15 12:30:00.987654321')")
+
+      // Should succeed with histograms enabled - nanos cols get basic stats, no histogram error
+      withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true") {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS ts_ntz, ts_ltz")
+      }
+
+      val stats = getCatalogTable(table).stats
+      assert(stats.isDefined)
+      assert(stats.get.colStats.contains("ts_ntz"))
+      assert(stats.get.colStats.contains("ts_ltz"))
+      // Verify basic stats collected (no histogram field for nanos columns)
+      val ntzStats = stats.get.colStats("ts_ntz")
+      assert(ntzStats.distinctCount.contains(2))
+      assert(ntzStats.nullCount.contains(0))
+      assert(ntzStats.histogram.isEmpty, "Nanos columns should not have histograms")
     }
   }
 

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DateType, TimestampType, _}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 
 class JoinEstimationSuite extends StatsEstimationTestBase {
@@ -506,7 +507,12 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
           nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
         AttributeReference("ctimestamp", TimestampType)() -> ColumnStat(distinctCount = Some(1),
           min = Some(timestamp), max = Some(timestamp),
-          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8))
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8)),
+        AttributeReference("ctsnanos", TimestampNTZNanosType(9))() -> ColumnStat(
+          distinctCount = Some(1),
+          min = Some(TimestampNanosVal.fromParts(timestamp, 123.toShort)),
+          max = Some(TimestampNanosVal.fromParts(timestamp, 123.toShort)),
+          nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
       )
     }
 
