@@ -331,6 +331,12 @@
     ],
     "sqlState" : "22023"
   },
+  "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT" : {
+    "message" : [
+      "The column `<columnName>` in the <schemaName> schema collides with a reserved AutoCDC <scdType> column name (using <caseSensitivity> column name comparison). The following column names are reserved by AutoCDC and cannot appear in the source: <reservedColumnNames>. Rename or remove the column."
+    ],
+    "sqlState" : "42710"
+  },
   "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
     "message" : [
       "The column `<columnName>` in the <schemaName> schema collides with the reserved AutoCDC column name prefix `<reservedColumnNamePrefix>` (using <caseSensitivity> column name comparison). Rename or remove the column."
