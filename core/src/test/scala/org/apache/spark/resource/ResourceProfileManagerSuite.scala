@@ -53,6 +53,69 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
       s"Executor resources should have 4 cores")
   }
 
+  test("SPARK-58192: malformed profiles are rejected before entering the registry") {
+    val conf = new SparkConf().set(EXECUTOR_CORES, 4)
+    val rpmanager = new ResourceProfileManager(conf, listenerBus)
+
+    // A raw-constructed profile with a NaN cpus amount: the TaskResourceRequest constructor
+    // stays lenient (deserialization of persisted data), so registration is the enforcement
+    // point and must reject it before it becomes visible to the application.
+    val nanProfile = new ResourceProfile(
+      Map.empty,
+      Map(ResourceProfile.CPUS -> new TaskResourceRequest(ResourceProfile.CPUS, Double.NaN)))
+    val e1 = intercept[IllegalArgumentException] {
+      rpmanager.addResourceProfile(nanProfile)
+    }
+    assert(e1.getMessage.contains("must be at least 1e-9"))
+    intercept[SparkException] {
+      rpmanager.resourceProfileFromId(nanProfile.id)
+    }
+
+    // The cpus amount is validated under the map key -- the identity scheduling uses -- so a
+    // sub-scale amount smuggled under the cpus key with a different embedded resource name is
+    // rejected the same way.
+    val mismatchCpus = new TaskResourceProfile(
+      Map(ResourceProfile.CPUS -> new TaskResourceRequest("gpu", 1e-10)))
+    val e2 = intercept[IllegalArgumentException] {
+      rpmanager.addResourceProfile(mismatchCpus)
+    }
+    assert(e2.getMessage.contains("must be at least 1e-9"))
+    intercept[SparkException] {
+      rpmanager.resourceProfileFromId(mismatchCpus.id)
+    }
+
+    // An amount above any possible executor's core count could never be scheduled.
+    val oversized = new TaskResourceProfile(
+      Map(ResourceProfile.CPUS ->
+        new TaskResourceRequest(ResourceProfile.CPUS, 2147483647.5)))
+    val e3 = intercept[IllegalArgumentException] {
+      rpmanager.addResourceProfile(oversized)
+    }
+    assert(e3.getMessage.contains("at most"))
+    intercept[SparkException] {
+      rpmanager.resourceProfileFromId(oversized.id)
+    }
+
+    // The inverse mismatch -- a cpus-named request under a custom key -- fails the forced
+    // limiting-resource computation (no matching executor resource) before insertion.
+    val mismatchCustom = new TaskResourceProfile(
+      Map("gpu" -> new TaskResourceRequest(ResourceProfile.CPUS, 1.5)))
+    intercept[SparkException] {
+      rpmanager.addResourceProfile(mismatchCustom)
+    }
+    intercept[SparkException] {
+      rpmanager.resourceProfileFromId(mismatchCustom.id)
+    }
+
+    // A valid profile built through the public builder still registers.
+    val valid = new ResourceProfileBuilder()
+      .require(new ExecutorResourceRequests().cores(4))
+      .require(new TaskResourceRequests().cpus(0.5))
+      .build()
+    rpmanager.addResourceProfile(valid)
+    assert(rpmanager.resourceProfileFromId(valid.id) === valid)
+  }
+
   test("isSupported yarn no dynamic allocation") {
     val conf = new SparkConf().setMaster("yarn").set(EXECUTOR_CORES, 4)
     conf.set(RESOURCE_PROFILE_MANAGER_TESTING.key, "true")

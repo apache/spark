@@ -156,6 +156,33 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
   }
 
+  test("SPARK-58192: warn when recovery mode cannot isolate a single task") {
+    val confWithFractionalCpus = conf.clone.set(CPUS_PER_TASK, BigDecimal(0.5))
+    val allocator = new ExecutorPodsAllocator(confWithFractionalCpus, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    val logAppender = new LogAppender("recovery mode fractional cpus")
+    withLogAppender(logAppender) {
+      allocator.setRecoveryMode()
+      // the warning is logged at most once
+      allocator.setRecoveryMode()
+    }
+    val warnings = logAppender.loggingEvents
+      .map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("instead of only one"))
+    assert(warnings.size === 1)
+    assert(warnings.head.contains("2 concurrent tasks"))
+
+    // no warning when a recovery-mode executor's single announced core fits exactly one task
+    val allocator2 = new ExecutorPodsAllocator(conf.clone, secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    val logAppender2 = new LogAppender("recovery mode whole cpus")
+    withLogAppender(logAppender2) {
+      allocator2.setRecoveryMode()
+    }
+    assert(!logAppender2.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("instead of only one")))
+  }
+
   test("SPARK-49447: Prevent small values less than 100 for batch delay") {
     val m = intercept[IllegalArgumentException] {
       val conf = new SparkConf().set(KUBERNETES_ALLOCATION_BATCH_DELAY.key, "1")

@@ -238,7 +238,7 @@ class BarrierTaskContext private[spark] (
     taskContext.getMetricsSources(sourceName)
   }
 
-  override def cpus(): Int = taskContext.cpus()
+  override def cpuAmount(): BigDecimal = taskContext.cpuAmount()
 
   override def resources(): Map[String, ResourceInformation] = taskContext.resources()
 

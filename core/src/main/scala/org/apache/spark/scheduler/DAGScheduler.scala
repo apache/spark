@@ -46,8 +46,8 @@ import org.apache.spark.network.shuffle.protocol.MergeStatuses
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
-import org.apache.spark.resource.{ResourceProfile, TaskResourceProfile}
-import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
+import org.apache.spark.resource.{CpuAmount, ResourceProfile, TaskResourceProfile}
+import org.apache.spark.resource.ResourceProfile.{CPUS, DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.rpc.RpcTimeoutException
 import org.apache.spark.storage._
@@ -1649,7 +1649,14 @@ private[spark] class DAGScheduler(
    */
   private def addPySparkConfigsToProperties(stage: Stage, properties: Properties): Unit = {
     val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
+    // A profile that does not override pyspark memory runs its tasks on executors that were
+    // provisioned with the default profile's allocation: a task-only profile declares no
+    // executor resources at all, and getResourcesForClusterManager starts a full profile's
+    // executor request from the default allocation, overriding only what the profile
+    // specifies. Inherit the default value so the worker memory limit matches what the
+    // executor was sized with. An explicit pysparkMemory(0) still disables the limit.
     val pysparkMem = rp.getPySparkMemory
+      .orElse(sc.resourceProfileManager.defaultResourceProfile.getPySparkMemory)
     // use the getOption on EXECUTOR_CORES.key instead of using the EXECUTOR_CORES config reader
     // because the default for this config isn't correct for standalone mode. Here we want
     // to know if it was explicitly set or not. The default profile always has it set to either
@@ -1662,6 +1669,56 @@ private[spark] class DAGScheduler(
     }
     pysparkMem.map(mem => properties.setProperty(PYSPARK_MEMORY_LOCAL_PROPERTY, mem.toString))
     execCores.map(cores => properties.setProperty(EXECUTOR_CORES_LOCAL_PROPERTY, cores))
+    // Pass the executor's max concurrent tasks so PySpark splits worker memory by real
+    // concurrency rather than cpu slots alone. Which bound is safe depends on who can share
+    // the executor:
+    // - With dynamic allocation off, default-profile and task-only-profile tasks can run on
+    //   one executor concurrently. A custom-resource limit (e.g. a single gpu) bounds only its
+    //   own profile's tasks, not the executor's total worker count, so only the
+    //   cpus-proportional cores split keeps the aggregate of all co-scheduled workers within
+    //   the executor-wide budget: with shares of budget / ceil(cores / taskCpus), each worker
+    //   holds at most budget * taskCpus / cores, and the co-scheduled task cpus sum to at
+    //   most the executor cores. (Ceiling division keeps this true even when task cpus do not
+    //   evenly divide the cores, at the cost of slightly sub-proportional shares there.)
+    // - Otherwise executors serve a single profile and the profile's own limiting resource
+    //   (across cores and custom resources) is the real concurrency. When the cores limit is
+    //   unknown (standalone without an explicit spark.executor.cores, SPARK-30299), a
+    //   custom-resource limit is still a valid upper bound on concurrency, capped by the cores
+    //   bound derived from the profile's explicit executor cores when available: an uncapped
+    //   overestimate would shrink -- or zero out, tripping the unsatisfiable-share fail-fast --
+    //   every worker's memory share. Dividing by an upper bound under-allocates but never
+    //   overcommits.
+    // maxTasksPerExecutor() also populates isCoresLimitKnown.
+    val maxTasks = rp.maxTasksPerExecutor(sc.conf)
+    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(rp, sc.conf)
+    val knownCores = if (rp.isCoresLimitKnown) {
+      Some(rp.getExecutorCores.getOrElse(sc.conf.get(config.EXECUTOR_CORES)))
+    } else {
+      rp.getExecutorCores
+    }
+    val limitedByCustomResource = {
+      val limiting = rp.limitingResource(sc.conf)
+      limiting.nonEmpty && limiting != CPUS
+    }
+    val sharedExecutor = !Utils.isDynamicAllocationEnabled(sc.conf) &&
+      (rp.id == DEFAULT_RESOURCE_PROFILE_ID || rp.isInstanceOf[TaskResourceProfile])
+    val maxTasksToPropagate = if (sharedExecutor) {
+      knownCores.map { c =>
+        ResourceProfile.numMemoryShareSlotsCeil(CpuAmount.normalize(BigDecimal(c)), taskCpus)
+      }
+    } else if (rp.isCoresLimitKnown) {
+      Some(maxTasks)
+    } else if (limitedByCustomResource) {
+      val coresBasedMaxTasks = knownCores.map { c =>
+        ResourceProfile.numTasksBasedOnCores(CpuAmount.normalize(BigDecimal(c)), taskCpus)
+      }
+      Some(coresBasedMaxTasks.fold(maxTasks)(math.min(maxTasks, _)))
+    } else {
+      None
+    }
+    maxTasksToPropagate.foreach { n =>
+      properties.setProperty(MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY, n.toString)
+    }
   }
 
   /**
@@ -1865,8 +1922,14 @@ private[spark] class DAGScheduler(
     val partitionsToCompute: Seq[Int] = stage.findMissingPartitions()
 
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
-    // with this Stage
-    val properties = jobIdToActiveJob(jobId).properties
+    // with this Stage. Clone it per stage so the profile-specific values written by
+    // addPySparkConfigsToProperties below don't leak -- through the shared, mutable job
+    // Properties instance passed to every task and TaskSet of the job -- into sibling stages
+    // of the same job that use a different resource profile. Job properties may be null when
+    // a job is submitted to the scheduler directly (e.g. in tests); materialize an empty map
+    // since the stage-local resource values are always written.
+    val properties = Option(Utils.cloneProperties(jobIdToActiveJob(jobId).properties))
+      .getOrElse(new Properties())
     addPySparkConfigsToProperties(stage, properties)
 
     runningStages += stage

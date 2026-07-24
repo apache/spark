@@ -3132,9 +3132,11 @@ Apart from these, the following properties are also available, and may be useful
     slots on a single executor and the task is taking longer time than the threshold. This config
     helps speculate stage with very few tasks. Regular speculation configs may also apply if the
     executor slots are large enough. E.g. tasks might be re-launched if there are enough successful
-    runs even though the threshold hasn't been reached. The number of slots is computed based on
-    the conf values of spark.executor.cores and spark.task.cpus minimum 1.
-    Default unit is bytes, unless otherwise specified.
+    runs even though the threshold hasn't been reached. The number of slots is the maximum
+    number of concurrent tasks per executor for the stage's resource profile, computed from
+    the executor cores and the task cpus amount (which may be fractional), or 1 when the
+    executor cores are not known.
+    Default unit is milliseconds, unless otherwise specified.
   </td>
   <td>3.0.0</td>
 </tr>
@@ -3177,7 +3179,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.cpus</code></td>
   <td>1</td>
   <td>
-    Number of cores to allocate for each task.
+    Number of cores to allocate for each task. This can also be set to a fractional value,
+    either below 1 (e.g. <code>0.2</code>) to allow multiple tasks to share a CPU core, or
+    above 1 (e.g. <code>1.5</code>). In either case the number of tasks that can run
+    concurrently on an executor is <code>floor(executor cores / spark.task.cpus)</code>.
   </td>
   <td>0.5.0</td>
 </tr>

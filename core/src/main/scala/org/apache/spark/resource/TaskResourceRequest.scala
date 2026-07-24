@@ -28,17 +28,29 @@ import org.apache.spark.annotation.{Since, Stable}
  *
  * @param resourceName Resource name
  * @param amount Amount requesting as a Double to support fractional resource requests.
- *               Valid values are less than or equal to 1.0 or whole numbers. This essentially
- *               lets you configure X number of tasks to run on a single resource,
- *               ie amount equals 0.5 translates into 2 tasks per resource address.
+ *               For custom resources, valid values are less than or equal to 1.0 or whole
+ *               numbers, since a task's amount must map onto discrete resource addresses -
+ *               ie amount equals 0.5 translates into 2 tasks per resource address. CPUs
+ *               (resource name "cpus") are a plain quantity drawn from the executor's core
+ *               pool rather than an addressable resource, so any amount of at least 1e-9 is
+ *               valid, e.g. 1.5; the cpus amount is rounded to the nearest 1e-9, so precision
+ *               beyond 9 decimal places is not preserved.
  */
 @Stable
 @Since("3.1.0")
 class TaskResourceRequest(val resourceName: String, val amount: Double)
   extends Serializable {
 
-  assert(amount <= 1.0 || amount % 1 == 0,
-    s"The resource amount ${amount} must be either <= 1.0, or a whole number.")
+  // Cpus amounts are validated at the request entry points (TaskResourceRequests and the
+  // spark.task.cpus config parser), never here: this constructor also runs when the history
+  // server deserializes persisted data (JsonProtocol event logs, the protobuf KVStore), which
+  // can carry any cpus amount an earlier release accepted -- including 0 and even
+  // -Infinity (the pre-4.3 check was `amount <= 1.0 || whole`, and protobuf round-trips
+  // non-finite doubles) -- and must keep deserializing after an upgrade.
+  if (resourceName != ResourceProfile.CPUS) {
+    assert(amount <= 1.0 || amount % 1 == 0,
+      s"The resource amount ${amount} must be either <= 1.0, or a whole number.")
+  }
 
   override def equals(obj: Any): Boolean = {
     obj match {

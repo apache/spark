@@ -78,7 +78,7 @@ class StreamingShuffleSuite
       taskMemoryManager = taskMemoryManager,
       localProperties = properties,
       metricsSystem = metricsSystem,
-      cpus = 1
+      cpuAmount = 1
     )
   }
 

@@ -407,11 +407,14 @@ private[spark] object ResourceUtils extends Logging {
       s"${resourceRequest.id.resourceName}")
   }
 
-  def validateTaskCpusLargeEnough(sparkConf: SparkConf, execCores: Int, taskCpus: Int): Boolean = {
-    // Number of cores per executor must meet at least one task requirement.
-    if (execCores < taskCpus) {
+  def validateTaskCpusLargeEnough(
+      sparkConf: SparkConf, execCores: Int, taskCpus: BigDecimal): Boolean = {
+    // Number of cores per executor must meet at least one task requirement. taskCpus is in the
+    // normalized BigDecimal representation; compare against the executor cores in the same form.
+    val execCpusInternal = CpuAmount.normalize(BigDecimal(execCores))
+    if (execCpusInternal < taskCpus) {
       throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
-        s"the number of cpus per task = $taskCpus.")
+        s"the number of cpus per task = ${CpuAmount.toDisplayString(taskCpus)}.")
     }
     true
   }
@@ -438,10 +441,12 @@ private[spark] object ResourceUtils extends Logging {
       // can't calculate cores limit
       return
     }
+    // normalized BigDecimal representation of the executor cores (whole number).
+    val coresInternal = CpuAmount.normalize(BigDecimal(cores))
     // when executor cores config isn't set, we can't calculate the real limiting resource
     // and number of tasks per executor ahead of time, so calculate it now.
     if (!coresKnown) {
-      val numTasksPerExecCores = cores / taskCpus
+      val numTasksPerExecCores = ResourceProfile.numTasksBasedOnCores(coresInternal, taskCpus)
       val numTasksPerExecCustomResource = rp.maxTasksPerExecutor(sparkConf)
       if (limitingResource.isEmpty ||
         (limitingResource.nonEmpty && numTasksPerExecCores < numTasksPerExecCustomResource)) {
@@ -453,10 +458,11 @@ private[spark] object ResourceUtils extends Logging {
     val execReq = rp.getCustomExecutorResources()
 
     if (limitingResource.nonEmpty && !limitingResource.equals(ResourceProfile.CPUS)) {
-      if ((taskCpus * maxTaskPerExec) < cores) {
-        val resourceNumSlots = Math.floor(cores/taskCpus).toInt
+      if ((taskCpus * maxTaskPerExec) < coresInternal) {
+        val resourceNumSlots = ResourceProfile.numTasksBasedOnCores(coresInternal, taskCpus)
+        val taskCpusDisplay = CpuAmount.toDisplayString(taskCpus)
         val message = log"The configuration of cores (exec = ${MDC(NUM_CORES, cores)} " +
-          log"task = ${MDC(NUM_TASK_CPUS, taskCpus)}, runnable tasks = " +
+          log"task = ${MDC(NUM_TASK_CPUS, taskCpusDisplay)}, runnable tasks = " +
           log"${MDC(NUM_RESOURCE_SLOTS, resourceNumSlots)}) will " +
           log"result in wasted resources due to resource ${MDC(RESOURCE, limitingResource)} " +
           log"limiting the number of runnable tasks per executor to: " +

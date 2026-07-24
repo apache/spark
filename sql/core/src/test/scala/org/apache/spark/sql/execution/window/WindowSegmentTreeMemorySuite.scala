@@ -81,7 +81,7 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
       localProperties = new Properties,
       metricsSystem = null.asInstanceOf[MetricsSystem],
       taskMetrics = TaskMetrics.empty,
-      cpus = 1)
+      cpuAmount = 1)
     TaskContext.setTaskContext(tc)
     try body(tmm, mm)
     finally {
