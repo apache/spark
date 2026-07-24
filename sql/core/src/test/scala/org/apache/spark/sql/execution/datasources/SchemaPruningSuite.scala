@@ -908,7 +908,6 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("select nested field in Expand") {
     import org.apache.spark.sql.catalyst.dsl.expressions._
-    import testImplicits.castToImpl
 
     val query1 = Expand(
       Seq(
