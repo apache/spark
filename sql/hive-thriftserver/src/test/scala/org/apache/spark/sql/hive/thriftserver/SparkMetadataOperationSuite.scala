@@ -24,6 +24,7 @@ import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.connector.catalog.DelegatingCatalogExtension
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -55,6 +56,9 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         checkResult(metaData.getSchemas(null, pattern), dbs ++ dbDflts)
       }
 
+      // Note: "db*" was removed because `*` is not a valid JDBC wildcard character
+      // (only `%` and `_` are); on the DSv2 SupportsNamespaces path it is treated as a
+      // literal and matches nothing.
       Seq("db%") foreach { pattern =>
         checkResult(metaData.getSchemas(null, pattern), dbs)
       }
@@ -937,5 +941,67 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       // Switch back so withJdbcStatement's DROP TABLE cleanup targets spark_catalog.
       statement.execute("USE spark_catalog")
     }
+  }
+
+  test("SPARK-57518: getSchemas with custom spark_catalog override lists via " +
+      "SupportsNamespaces, not V1 SessionCatalog") {
+    // Regression test: override spark_catalog with a CatalogExtension whose
+    // listNamespaces() returns namespaces DIFFERENT from what SessionCatalog.listDatabases
+    // would return. This proves the code lists via the current catalog's SupportsNamespaces
+    // interface, not the V1 SessionCatalog. If the old special-case (SessionCatalog.listDatabases)
+    // were restored, this test would FAIL because the custom namespaces would not appear.
+    withJdbcStatement() { statement =>
+      // Set the custom catalog BEFORE any operation that would trigger catalog resolution.
+      statement.execute(
+        "SET spark.sql.catalog.spark_catalog=" +
+          "org.apache.spark.sql.hive.thriftserver.CustomNamespaceCatalog")
+
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getSchemas(null, "%")
+      val schemas = scala.collection.mutable.ArrayBuffer.empty[String]
+      while (rs.next()) {
+        schemas += rs.getString("TABLE_SCHEM")
+        assert(rs.getString("TABLE_CATALOG") === "spark_catalog")
+      }
+      // The custom catalog returns exactly ["custom_ns1", "custom_ns2", "global_temp"].
+      // "global_temp" is included in listNamespaces() so the dedup logic should NOT add
+      // a second one.
+      assert(schemas.contains("custom_ns1"),
+        "custom_ns1 from custom catalog's listNamespaces() must appear")
+      assert(schemas.contains("custom_ns2"),
+        "custom_ns2 from custom catalog's listNamespaces() must appear")
+      assert(schemas.contains("global_temp"),
+        "global_temp from custom catalog's listNamespaces() must appear")
+      assert(schemas.count(_ == "global_temp") == 1,
+        "global_temp must appear exactly once (dedup)")
+      // "default" should NOT appear because the custom catalog does not list it --
+      // proving we're NOT falling through to SessionCatalog.listDatabases.
+      assert(!schemas.contains("default"),
+        "default must NOT appear -- proves listing comes from the custom catalog, " +
+        "not V1 SessionCatalog")
+    }
+  }
+}
+
+/**
+ * A custom CatalogExtension for testing that overrides listNamespaces() to return
+ * a fixed set of namespaces different from what SessionCatalog.listDatabases returns.
+ * This is used by the regression test to prove that getSchemas lists namespaces via
+ * the catalog's SupportsNamespaces interface, not the V1 SessionCatalog.
+ */
+class CustomNamespaceCatalog extends DelegatingCatalogExtension {
+  override def listNamespaces(): Array[Array[String]] = {
+    // Return custom namespaces that do NOT include "default" -- this is the key
+    // differentiator from what SessionCatalog.listDatabases would return.
+    // Include "global_temp" to verify the dedup logic.
+    Array(
+      Array("custom_ns1"),
+      Array("custom_ns2"),
+      Array("global_temp")
+    )
+  }
+
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
+    Array.empty
   }
 }

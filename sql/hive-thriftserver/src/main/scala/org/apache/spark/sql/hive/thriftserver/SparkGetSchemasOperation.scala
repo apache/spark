@@ -78,19 +78,19 @@ private[hive] class SparkGetSchemasOperation(
         // filtering deferred).
         val resolvedCatalog = catalogManager.currentCatalog
         val catalogNameValue = resolvedCatalog.name()
+        val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
         // Use SupportsNamespaces uniformly for all catalogs including the session
         // catalog (V2SessionCatalog implements SupportsNamespaces). This avoids
         // assuming that a spark_catalog override delegates to the built-in session
         // catalog.
-        resolvedCatalog match {
+        val listedNamespaces = resolvedCatalog match {
           case nsCatalog: SupportsNamespaces =>
             // NOTE: The DSv2 SupportsNamespaces.listNamespaces() API does not accept a
             // pattern argument, so filtering is applied client-side. This is a potential
             // performance consideration for catalogs with a very large number of
             // namespaces.
-            val databasePattern = Pattern.compile(
-              CLIServiceUtils.patternToRegex(schemaName))
-            nsCatalog.listNamespaces().foreach { ns =>
+            val namespaces = nsCatalog.listNamespaces()
+            namespaces.foreach { ns =>
               // Only top-level namespaces (depth=1) are exposed as JDBC schemas.
               val nsName = ns.head
               if (schemaName == null || schemaName.isEmpty ||
@@ -98,16 +98,20 @@ private[hive] class SparkGetSchemasOperation(
                 rowSet.addRow(Array[AnyRef](nsName, catalogNameValue))
               }
             }
+            namespaces.map(_.head).toSet
           case _ =>
-            // Catalog doesn't support namespaces -- return empty
+            logWarning(log"Catalog ${MDC(CATALOG_NAME, catalogNameValue)} does not support " +
+              log"namespace listing; no schemas will be returned.")
+            Set.empty[String]
         }
         // The global temp view database is a Spark pseudo-namespace that only exists
-        // for the session catalog; it is not a real catalog namespace.
+        // for the session catalog; it is not a real catalog namespace. Add it only if
+        // listNamespaces() did not already include it (dedup).
         if (catalogNameValue == CatalogManager.SESSION_CATALOG_NAME) {
           val globalTempViewDb = catalog.globalTempDatabase
-          val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
-          if (schemaName == null || schemaName.isEmpty ||
-              databasePattern.matcher(globalTempViewDb).matches()) {
+          if (!listedNamespaces.contains(globalTempViewDb) &&
+              (schemaName == null || schemaName.isEmpty ||
+              databasePattern.matcher(globalTempViewDb).matches())) {
             rowSet.addRow(Array[AnyRef](globalTempViewDb, catalogNameValue))
           }
         }
