@@ -1258,9 +1258,11 @@ class Analyzer(
     private def lookupTableOrView(
         identifier: Seq[String],
         viewOnly: Boolean = false): Option[LogicalPlan] = {
-      relationResolution.lookupTempView(identifier).map { tempView =>
-        ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
-      }.orElse {
+      def tempViewCandidate: Option[LogicalPlan] =
+        relationResolution.lookupTempView(identifier).map { tempView =>
+          ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
+        }
+      def persistentCandidate: Option[LogicalPlan] = {
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
             if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog) &&
@@ -1319,6 +1321,20 @@ class Analyzer(
             }
           case _ => None
         }
+      }
+      // Three-part `system.session.<name>` denotes a local temp view `name` only; it must never
+      // consult the persistent schema `session`, regardless of `PERSISTENT_CATALOG_FIRST`.
+      if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
+        tempViewCandidate
+      } else if (identifier.length == 2 &&
+          identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) &&
+          !conf.prioritizeSystemCatalog) {
+        // Two-part `session.<name>`: the name can denote either a local temp view `name` or a
+        // persistent relation `name` in schema `session`. Order follows
+        // `SQLConf.prioritizeSystemCatalog`.
+        persistentCandidate.orElse(tempViewCandidate)
+      } else {
+        tempViewCandidate.orElse(persistentCandidate)
       }
     }
 
