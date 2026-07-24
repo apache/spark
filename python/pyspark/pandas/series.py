@@ -1410,6 +1410,58 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return first_series(psdf)
 
+    def set_axis(
+        self,
+        labels: Any,
+        axis: Axis = 0,
+    ) -> "Series":
+        """
+        Assign desired index to given axis.
+
+        Indexes for row labels can be changed by assigning a list-like or
+        Index.
+
+        Parameters
+        ----------
+        labels : list-like, Index
+            The values for the new index.
+        axis : {0 or 'index'}, default 0
+            The axis to update. The value 0 or 'index' identifies the row axis.
+
+        Returns
+        -------
+        Series
+            An object of same type as caller.
+
+        See Also
+        --------
+        Series.rename_axis : Alter the name of the index or columns.
+
+        Examples
+        --------
+        >>> s = ps.Series([1, 2, 3])
+        >>> s.set_axis(['a', 'b', 'c'])
+        a    1
+        b    2
+        c    3
+        dtype: int64
+        """
+        from pyspark.pandas.utils import validate_axis
+
+        axis = validate_axis(axis)
+        if axis != 0:
+            raise ValueError("No axis named %s for object type Series" % axis)
+        if not isinstance(labels, pd.Index):
+            labels = pd.Index(labels)
+        if len(labels) != len(self):
+            raise ValueError(
+                "Length mismatch: Expected axis has %d elements, "
+                "new values have %d elements" % (len(self), len(labels))
+            )
+        psdf = self.to_frame()
+        psdf.index = labels
+        return first_series(psdf)
+
     @property
     def index(self) -> "ps.Index":
         """The index (axis labels) Column of the Series.
