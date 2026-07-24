@@ -30,7 +30,7 @@ import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.python.{PythonWorker, PythonWorkerFactory}
+import org.apache.spark.api.python.{PythonWorker, PythonWorkerFactory, PythonWorkerHandle}
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorBackend
 import org.apache.spark.internal.{config, Logging}
@@ -312,7 +312,7 @@ class SparkEnv (
       workerModule: String,
       daemonModule: String,
       envVars: Map[String, String],
-      useDaemon: Boolean): (PythonWorker, Option[ProcessHandle]) = {
+      useDaemon: Boolean): (PythonWorker, Option[PythonWorkerHandle]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       val workerFactory = pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
@@ -331,7 +331,7 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       envVars: Map[String, String],
-      useDaemon: Boolean): (PythonWorker, Option[ProcessHandle]) = {
+      useDaemon: Boolean): (PythonWorker, Option[PythonWorkerHandle]) = {
     createPythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, useDaemon)
   }
@@ -340,7 +340,7 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       daemonModule: String,
-      envVars: Map[String, String]): (PythonWorker, Option[ProcessHandle]) = {
+      envVars: Map[String, String]): (PythonWorker, Option[PythonWorkerHandle]) = {
     val useDaemon = conf.get(Python.PYTHON_USE_DAEMON)
     createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars, useDaemon)
