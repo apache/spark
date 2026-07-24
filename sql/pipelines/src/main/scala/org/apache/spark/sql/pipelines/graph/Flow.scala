@@ -30,6 +30,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
   ChangeArgs,
   ColumnSelection,
   Scd1BatchProcessor,
+  Scd2BatchProcessor,
   ScdType
 }
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -294,9 +295,21 @@ class AutoCdcMergeFlow(
         )
       )
     case ScdType.Type2 =>
-      throw new AnalysisException(
-        errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
-        messageParameters = Map.empty
+      // SCD2 produces a target table with all the user-selected output columns followed by the
+      // SCD2 framework columns (in this exact order and nullability, matching what
+      // Scd2BatchProcessor.preprocessMicrobatch projects and the merges persist): the visible
+      // interval bounds __START_AT / __END_AT typed as the sequencing type, then the operational
+      // CDC metadata column.
+      StructType(
+        userSelectedSchema.fields ++ Seq(
+          StructField(Scd2BatchProcessor.startAtColName, sequencingType, nullable = true),
+          StructField(Scd2BatchProcessor.endAtColName, sequencingType, nullable = true),
+          StructField(
+            AutoCdcReservedNames.cdcMetadataColName,
+            Scd2BatchProcessor.cdcMetadataColSchema(sequencingType),
+            nullable = false
+          )
+        )
       )
   }
 
@@ -338,10 +351,19 @@ class AutoCdcMergeFlow(
 
         df.select(userSelectedCols :+ emptyCdcMetadataCol: _*)
       case ScdType.Type2 =>
-        throw new AnalysisException(
-          errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
-          messageParameters = Map.empty
-        )
+        val userSelectedCols: Seq[Column] = userSelectedSchema.fieldNames.toSeq.map(F.col)
+        // Mirror the SCD2 augmented schema: null interval bounds (cast to the sequencing type)
+        // and an empty CDC metadata struct, matching AutoCdcMergeFlow.schema's Type2 branch.
+        val emptyStartAtCol: Column =
+          F.lit(null).cast(sequencingType).as(Scd2BatchProcessor.startAtColName)
+        val emptyEndAtCol: Column =
+          F.lit(null).cast(sequencingType).as(Scd2BatchProcessor.endAtColName)
+        val emptyCdcMetadataCol: Column = Scd2BatchProcessor.constructCdcMetadataCol(
+          recordStartAt = F.lit(null),
+          sequencingType = sequencingType
+        ).as(AutoCdcReservedNames.cdcMetadataColName)
+
+        df.select(userSelectedCols ++ Seq(emptyStartAtCol, emptyEndAtCol, emptyCdcMetadataCol): _*)
     }
   }
 
