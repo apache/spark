@@ -19,11 +19,17 @@ package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.METRIC_NAME
+import org.apache.spark.internal.LogKeys.{METRIC_NAME, METRIC_TYPE}
 import org.apache.spark.shuffle.api.metric.{CustomShuffleMetric, CustomShuffleTaskMetric}
 import org.apache.spark.util.MetricUtils
 
 object CustomShuffleMetrics extends Logging {
+
+  private val SupportedMetricTypes = Seq(
+    MetricUtils.SUM_METRIC,
+    MetricUtils.SIZE_METRIC,
+    MetricUtils.TIMING_METRIC,
+    MetricUtils.NS_TIMING_METRIC).mkString(", ")
 
   /**
    * Creates collision-filtered custom shuffle metric [[SQLMetric]]s for an operator that already
@@ -47,25 +53,26 @@ object CustomShuffleMetrics extends Logging {
 
   /**
    * Creates [[SQLMetric]]s for the given declared custom shuffle metrics, keyed by metric name.
+   * A metric with an unsupported [[CustomShuffleMetric.metricType]] is dropped with a warning.
    */
   def createMetrics(
       sc: SparkContext,
       metrics: Array[CustomShuffleMetric]): Map[String, SQLMetric] = {
-    metrics.map { metric =>
+    metrics.flatMap { metric =>
       val label = metric.description()
-      // AVERAGE_METRIC is intentionally unsupported: its per-task values must be stored pre-scaled
-      // via SQLMetric.set(Double), whereas custom task metrics report a plain Long.
       val acc = metric.metricType() match {
-        case MetricUtils.SUM_METRIC => SQLMetrics.createMetric(sc, label)
-        case MetricUtils.SIZE_METRIC => SQLMetrics.createSizeMetric(sc, label)
-        case MetricUtils.TIMING_METRIC => SQLMetrics.createTimingMetric(sc, label)
-        case MetricUtils.NS_TIMING_METRIC => SQLMetrics.createNanoTimingMetric(sc, label)
-        case other => throw new IllegalArgumentException(
-          s"Unsupported custom shuffle metric type '$other' for metric '${metric.name()}'. " +
-          s"Supported types: ${MetricUtils.SUM_METRIC}, ${MetricUtils.SIZE_METRIC}, " +
-          s"${MetricUtils.TIMING_METRIC}, ${MetricUtils.NS_TIMING_METRIC}.")
+        case MetricUtils.SUM_METRIC => Some(SQLMetrics.createMetric(sc, label))
+        case MetricUtils.SIZE_METRIC => Some(SQLMetrics.createSizeMetric(sc, label))
+        case MetricUtils.TIMING_METRIC => Some(SQLMetrics.createTimingMetric(sc, label))
+        case MetricUtils.NS_TIMING_METRIC => Some(SQLMetrics.createNanoTimingMetric(sc, label))
+        case other =>
+          logWarning(log"Ignoring custom shuffle metric " +
+            log"${MDC(METRIC_NAME, metric.name())} with unsupported type " +
+            log"${MDC(METRIC_TYPE, other)}. Supported types: " +
+            log"${MDC(METRIC_TYPE, SupportedMetricTypes)}.")
+          None
       }
-      metric.name() -> acc
+      acc.map(metric.name() -> _)
     }.toMap
   }
 
