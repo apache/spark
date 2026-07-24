@@ -214,30 +214,6 @@ class ArrowStreamCoGroupSerializer(ArrowStreamSerializer):
                 )
 
 
-class ArrowStreamUDFSerializer(ArrowStreamSerializer):
-    """
-    Same as :class:`ArrowStreamSerializer` but it flattens the struct to Arrow record batch
-    for applying each function with the raw record arrow batch. See also `DataFrame.mapInArrow`.
-    """
-
-    def load_stream(self, stream):
-        """
-        Flatten the struct into Arrow's record batches.
-        """
-        batches = super().load_stream(stream)
-        flattened = map(ArrowBatchTransformer.flatten_struct, batches)
-        return map(lambda b: [b], flattened)
-
-    def dump_stream(self, iterator, stream):
-        """
-        Override because Pandas UDFs require a START_ARROW_STREAM before the Arrow stream is sent.
-        """
-        batches = self._write_stream_start(
-            (ArrowBatchTransformer.wrap_struct(x[0]) for x in iterator), stream
-        )
-        return super().dump_stream(batches, stream)
-
-
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
     Serializes pandas.Series as Arrow data with Arrow streaming format.
