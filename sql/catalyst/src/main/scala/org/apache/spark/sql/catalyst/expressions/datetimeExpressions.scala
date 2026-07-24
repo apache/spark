@@ -995,24 +995,35 @@ abstract class TimestampToLongBase extends UnaryExpression
 
   protected def scaleFactor: Long
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(AnyTimestampType, AnyTimestampNanoType))
 
   override def dataType: DataType = LongType
 
   override def nullSafeEval(input: Any): Any = {
-    Math.floorDiv(input.asInstanceOf[Number].longValue(), scaleFactor)
+    val micros = input match {
+      case v: TimestampNanosVal => v.epochMicros
+      case n: Number => n.longValue()
+    }
+    Math.floorDiv(micros, scaleFactor)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // For the nanosecond carrier the child value is a TimestampNanosVal object, so read its
+    // epochMicros field; for the microsecond timestamp types it is already a primitive long.
+    val toMicros: String => String = child.dataType match {
+      case _: AnyTimestampNanoType => c => s"$c.epochMicros"
+      case _ => c => c
+    }
     if (scaleFactor == 1) {
-      defineCodeGen(ctx, ev, c => c)
+      defineCodeGen(ctx, ev, c => toMicros(c))
     } else {
-      defineCodeGen(ctx, ev, c => s"java.lang.Math.floorDiv($c, ${scaleFactor}L)")
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.floorDiv(${toMicros(c)}, ${scaleFactor}L)")
     }
   }
 }
 
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the number of seconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
   arguments = """
@@ -1024,10 +1035,14 @@ abstract class TimestampToLongBase extends UnaryExpression
     Examples:
       > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
        1
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_(TIMESTAMP_NTZ '2008-12-25 15:30:00.123456789');
+       1230219000
   """,
   group = "datetime_funcs",
   since = "3.1.0")
-// scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
 case class UnixSeconds(child: Expression) extends TimestampToLongBase {
   override def scaleFactor: Long = MICROS_PER_SECOND
 
@@ -1050,7 +1065,7 @@ case class CastTimestampNTZToLong(child: Expression) extends TimestampToLongBase
     copy(child = newChild)
 }
 
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
   arguments = """
@@ -1062,10 +1077,14 @@ case class CastTimestampNTZToLong(child: Expression) extends TimestampToLongBase
     Examples:
       > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
        1000
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_(TIMESTAMP_NTZ '2008-12-25 15:30:00.123456789');
+       1230219000123
   """,
   group = "datetime_funcs",
   since = "3.1.0")
-// scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
 case class UnixMillis(child: Expression) extends TimestampToLongBase {
   override def scaleFactor: Long = MICROS_PER_MILLIS
 
@@ -1075,9 +1094,9 @@ case class UnixMillis(child: Expression) extends TimestampToLongBase {
     copy(child = newChild)
 }
 
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp) - Returns the number of microseconds since 1970-01-01 00:00:00 UTC.",
+  usage = "_FUNC_(timestamp) - Returns the number of microseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
   arguments = """
     Arguments:
       * timestamp - The timestamp to convert to microseconds since the epoch.
@@ -1087,10 +1106,14 @@ case class UnixMillis(child: Expression) extends TimestampToLongBase {
     Examples:
       > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
        1000000
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_(TIMESTAMP_NTZ '2008-12-25 15:30:00.123456789');
+       1230219000123456
   """,
   group = "datetime_funcs",
   since = "3.1.0")
-// scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
 case class UnixMicros(child: Expression) extends TimestampToLongBase {
   override def scaleFactor: Long = 1L
 
