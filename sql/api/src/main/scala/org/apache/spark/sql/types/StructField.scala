@@ -19,6 +19,7 @@ package org.apache.spark.sql.types
 
 import scala.collection.mutable
 
+import com.fasterxml.jackson.core.JsonGenerator
 import org.json4s.{JObject, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
@@ -104,6 +105,60 @@ case class StructField(
 
       case _ => metadataJsonValue
     }
+  }
+
+  private[sql] def writeJsonTo(generator: JsonGenerator): Unit = {
+    generator.writeStartObject()
+    generator.writeStringField("name", name)
+    generator.writeFieldName("type")
+    writeDataTypeJsonTo(generator)
+    generator.writeBooleanField("nullable", nullable)
+    generator.writeFieldName("metadata")
+    writeMetadataJsonTo(generator)
+    generator.writeEndObject()
+  }
+
+  private def writeDataTypeJsonTo(generator: JsonGenerator): Unit = {
+    if (collationMetadata.isEmpty) {
+      dataType.writeJsonTo(generator)
+    } else {
+      writeDataTypeWithoutCollations(dataType, generator)
+    }
+  }
+
+  private def writeDataTypeWithoutCollations(dataType: DataType, generator: JsonGenerator): Unit =
+    dataType match {
+      // Only recurse into map and array types as any child struct type will have already been
+      // processed.
+      case ArrayType(elementType, containsNull) =>
+        generator.writeStartObject()
+        generator.writeStringField("type", dataType.typeName)
+        generator.writeFieldName("elementType")
+        writeDataTypeWithoutCollations(elementType, generator)
+        generator.writeBooleanField("containsNull", containsNull)
+        generator.writeEndObject()
+      case MapType(keyType, valueType, valueContainsNull) =>
+        generator.writeStartObject()
+        generator.writeStringField("type", dataType.typeName)
+        generator.writeFieldName("keyType")
+        writeDataTypeWithoutCollations(keyType, generator)
+        generator.writeFieldName("valueType")
+        writeDataTypeWithoutCollations(valueType, generator)
+        generator.writeBooleanField("valueContainsNull", valueContainsNull)
+        generator.writeEndObject()
+      case st: StringType =>
+        StringHelper.removeCollation(st).writeJsonTo(generator)
+      case other =>
+        other.writeJsonTo(generator)
+    }
+
+  private def writeMetadataJsonTo(generator: JsonGenerator): Unit = {
+    val extraFields = if (collationMetadata.isEmpty) {
+      Nil
+    } else {
+      Seq(DataType.COLLATIONS_METADATA_KEY -> collationMetadata)
+    }
+    metadata.writeJsonObjectTo(generator, extraFields)
   }
 
   /** Map of field path to collation name. */

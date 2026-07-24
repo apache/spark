@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonParseException
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFunSuite}
@@ -28,9 +29,10 @@ import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSe
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, UninitializedPhysicalType}
-import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
+import org.apache.spark.sql.catalyst.util.{CollationFactory, DataTypeJsonUtils, StringConcat}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
+import org.apache.spark.sql.types.DataTypeTestUtils.{
+  atomicTypes, dayTimeIntervalTypes, yearMonthIntervalTypes}
 
 class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
@@ -205,6 +207,82 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(DataType.fromJson("\"timestamp_ltz\"") == TimestampType)
     val expectedStructType = StructType(Seq(StructField("ts", TimestampType)))
     assert(DataType.fromDDL("ts timestamp_ltz") == expectedStructType)
+  }
+
+  test("SPARK-58277: streaming DataType JSON matches json4s output") {
+    val nestedMetadata = new MetadataBuilder()
+      .putString("note", "nested")
+      .putBoolean("valid", true)
+      .build()
+    val metadata = new MetadataBuilder()
+      .putString("comment", "field metadata")
+      .putDouble("score", 1.5)
+      // Integral-valued double: the canonical spot where JSON number formatting can diverge
+      // between renderers (1.0 vs 1). Pins the byte-for-byte guarantee for this case.
+      .putDouble("whole", 1.0)
+      .putBooleanArray("flags", Array(true, false))
+      .putDoubleArray("weights", Array(2.5, 3.5))
+      .putLongArray("ids", Array(1L, 2L))
+      .putMetadata("nested", nestedMetadata)
+      .putMetadataArray("children", Array(nestedMetadata))
+      .build()
+    // Large schemas exercise the PR's core goal: streaming bounds peak memory for schemas whose
+    // node count is large. A wide struct (many fields), a deeply nested struct, and structs under
+    // array/map all stream field-by-field, so they must stay byte-identical to the json4s path.
+    val wideStruct = StructType((1 to 200).map { i =>
+      StructField(s"f$i", if (i % 2 == 0) LongType else StringType, nullable = i % 3 == 0)
+    })
+    val deepStruct = (1 to 50).foldLeft[DataType](LongType) { (inner, i) =>
+      StructType(Seq(StructField(s"level$i", inner, nullable = i % 2 == 0)))
+    }
+    val structUnderArrayAndMap = StructType(Seq(
+      StructField("arr", ArrayType(wideStruct, containsNull = false)),
+      StructField("map",
+        MapType(StringType(UTF8_LCASE_COLLATION_ID), wideStruct, valueContainsNull = false)),
+      StructField("deep", deepStruct)))
+    val objectTypes = Seq(
+      DecimalType(10, 2),
+      CharType(5),
+      VarcharType(10),
+      StringType(UTF8_LCASE_COLLATION_ID),
+      CharType(5, UTF8_LCASE_COLLATION_ID),
+      VarcharType(10, UTF8_LCASE_COLLATION_ID),
+      ArrayType(MapType(StringType, LongType, valueContainsNull = false)),
+      new ExampleBaseTypeUDT(),
+      // Python UDT: exercises PythonUserDefinedType.writeJsonTo, whose field layout differs
+      // from the Scala UDT path (it omits `class` and adds `serializedClass`). This case has
+      // a non-null pyClass and a non-null serializedClass.
+      new PythonUserDefinedType(
+        StructType(Seq(StructField("intfield", IntegerType, nullable = false))),
+        "pyspark.testing.ExamplePythonUDT",
+        "serialized-python-class-payload"),
+      // Python UDT with a null serializedClass: verifies the streaming path renders a null
+      // string field identically to json4s on this distinct code path.
+      new PythonUserDefinedType(
+        StructType(Seq(StructField("v", DoubleType))),
+        "pyspark.testing.NoSerializedClassUDT",
+        null),
+      GeometryType(4326),
+      GeographyType(4326),
+      StructType(Seq(
+        StructField("id", LongType, nullable = false, metadata),
+        StructField("names",
+          ArrayType(StringType(UNICODE_COLLATION_ID), containsNull = false),
+          nullable = true),
+        StructField("lookup",
+          MapType(StringType(UTF8_LCASE_COLLATION_ID), StringType(UNICODE_COLLATION_ID)),
+          nullable = false))),
+      wideStruct,
+      deepStruct,
+      structUnderArrayAndMap)
+    val mapper = new ObjectMapper()
+    val dataTypes = (atomicTypes.toSeq ++ objectTypes).distinct
+
+    dataTypes.foreach { dataType =>
+      val expected = JsonMethods.compact(JsonMethods.render(dataType.jsonValue))
+      assert(DataTypeJsonUtils.toJson(dataType) === expected)
+      assert(mapper.writeValueAsString(dataType) === expected)
+    }
   }
 
   test("loading a UDT class from a schema string is enabled by default") {
