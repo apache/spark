@@ -557,14 +557,28 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Truncates the timestamp `micros` to `level` in `zoneId`. `level` should be generated using
+   * `parseTruncLevel()`, between 0 and 9.
+   *
+   * Convenience variant that resolves the zone offset from a fresh single-use [[ZoneOffsetCache]];
+   * intended for one-shot callers such as interpreted evaluation and constant folding. The codegen
+   * hot path instead calls the [[ZoneOffsetCache]]-based overload directly with a per-task cache so
+   * the offset is reused across rows. The result is identical to that overload.
+   */
+  def truncTimestamp(micros: Long, level: Int, zoneId: ZoneId): Long =
+    truncTimestamp(micros, level, new ZoneOffsetCache(zoneId))
+
+  /**
    * Returns the trunc date time from original date time and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 9.
    *
-   * Uses an offset-arithmetic fast path: the zone offset at `micros` is resolved once,
-   * truncation runs in the shifted-local frame, and the result is shifted back to UTC
-   * micros. Falls back to [[truncTimestampSlow]] when the offset at the candidate
-   * truncated instant differs from the offset at `micros` (DST/historical transition
-   * spans the candidate; SPARK-30766/30857) or on arithmetic overflow.
+   * Uses an offset-arithmetic fast path: the zone offset at `micros` is resolved once through
+   * `cache`, which memoizes it over the constant-offset interval around the last lookup, so for
+   * temporally clustered data the per-row transition-array binary search collapses to two
+   * comparisons. Truncation then runs in the shifted-local frame, and the result is shifted back
+   * to UTC micros. Falls back to [[truncTimestampSlow]] when the offset at the candidate truncated
+   * instant differs from the offset at `micros` (DST/historical transition spans the candidate;
+   * SPARK-30766/30857) or on arithmetic overflow.
    *
    * Sub-minute LMT offsets (e.g. America/Los_Angeles -07:52:58 pre-1883, see
    * SPARK-33404) and 30/45-minute offsets (Asia/Kolkata +05:30, Asia/Kathmandu +05:45)
@@ -582,7 +596,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    *   - WEEK/MONTH/QUARTER/YEAR: convert local micros to local epoch-day, run
    *     [[truncDate]] in the local-day frame, multiply back to local micros.
    */
-  def truncTimestamp(micros: Long, level: Int, zoneId: ZoneId): Long = {
+  def truncTimestamp(micros: Long, level: Int, cache: ZoneOffsetCache): Long = {
     // MICROSECOND / MILLISECOND / SECOND don't need zone information.
     level match {
       case TRUNC_TO_MICROSECOND => return micros
@@ -592,13 +606,18 @@ object DateTimeUtils extends SparkDateTimeUtils {
         return Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_SECOND))
       case _ =>
     }
-    val rules = zoneId.getRules
     val originalSec = Math.floorDiv(micros, MICROS_PER_SECOND)
-    val originalOffsetSec =
-      rules.getOffset(Instant.ofEpochSecond(originalSec)).getTotalSeconds.toLong
+    val originalOffsetSec = cache.offsetSeconds(originalSec)
     val offsetMicros = originalOffsetSec * MICROS_PER_SECOND
     try {
       val local = Math.addExact(micros, offsetMicros)
+      // For date-level truncation keep the truncated local day: `local`'s day equals
+      // `microsToDays(micros, zoneId)` (both use the same `originalOffsetSec`), so on a DST-cross
+      // fallback `daysToMicros(truncatedDays)` reproduces the slow path exactly without re-deriving
+      // the day through a second `ZonedDateTime`.
+      val isDateLevel = level >= MIN_LEVEL_OF_DATE_TRUNC
+      val truncatedDays =
+        if (isDateLevel) truncDate(Math.floorDiv(local, MICROS_PER_DAY).toInt, level) else 0
       val truncatedLocal = level match {
         case TRUNC_TO_MINUTE =>
           Math.subtractExact(local, Math.floorMod(local, MICROS_PER_MINUTE))
@@ -607,21 +626,23 @@ object DateTimeUtils extends SparkDateTimeUtils {
         case TRUNC_TO_DAY =>
           Math.subtractExact(local, Math.floorMod(local, MICROS_PER_DAY))
         case _ => // Date-level truncation: WEEK / MONTH / QUARTER / YEAR.
-          val localDays = Math.floorDiv(local, MICROS_PER_DAY).toInt
-          Math.multiplyExact(truncDate(localDays, level).toLong, MICROS_PER_DAY)
+          Math.multiplyExact(truncatedDays.toLong, MICROS_PER_DAY)
       }
       val candidate = Math.subtractExact(truncatedLocal, offsetMicros)
-      if (!rules.isFixedOffset) {
+      if (!cache.isFixedOffset) {
         val candidateSec = Math.floorDiv(candidate, MICROS_PER_SECOND)
-        val candidateOffsetSec =
-          rules.getOffset(Instant.ofEpochSecond(candidateSec)).getTotalSeconds.toLong
+        val candidateOffsetSec = cache.offsetSecondsReadOnly(candidateSec)
         if (candidateOffsetSec != originalOffsetSec) {
-          return truncTimestampSlow(micros, level, zoneId)
+          // The truncation boundary crosses a transition. Date levels resolve it by mapping the
+          // already-truncated local day back through the zone; other levels defer to the reference
+          // slow path.
+          return if (isDateLevel) daysToMicros(truncatedDays, cache.zoneId)
+            else truncTimestampSlow(micros, level, cache.zoneId)
         }
       }
       candidate
     } catch {
-      case _: ArithmeticException => truncTimestampSlow(micros, level, zoneId)
+      case _: ArithmeticException => truncTimestampSlow(micros, level, cache.zoneId)
     }
   }
 
@@ -646,17 +667,32 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Truncates a nanosecond-precision timestamp to the unit given by `level`. `epochMicros` is
-   * truncated with the same [[truncTimestamp]] used by microsecond timestamps, and the
-   * sub-microsecond `nanosWithinMicro` is always dropped: `date_trunc`'s finest supported unit
-   * is MICROSECOND (see `MIN_LEVEL_OF_TIMESTAMP_TRUNC`), which already discards everything below
-   * a microsecond. NTZ vs. LTZ zone handling is the caller's responsibility via `zoneId`.
+   * Truncates the nanosecond-precision timestamp `value` to `level`. `level` should be generated
+   * using `parseTruncLevel()`, between 0 and 9.
+   *
+   * Convenience variant that resolves the zone offset from a fresh single-use [[ZoneOffsetCache]];
+   * intended for one-shot callers such as interpreted evaluation. The codegen hot path instead
+   * calls the [[ZoneOffsetCache]]-based overload directly with a per-task cache so the offset is
+   * reused across rows. The result is identical to that overload.
    */
   def truncTimestampNanos(
       value: TimestampNanosVal,
       level: Int,
-      zoneId: ZoneId): TimestampNanosVal = {
-    val truncatedMicros = truncTimestamp(value.epochMicros, level, zoneId)
+      zoneId: ZoneId): TimestampNanosVal =
+    truncTimestampNanos(value, level, new ZoneOffsetCache(zoneId))
+
+  /**
+   * Truncates a nanosecond-precision timestamp to the unit given by `level`. `epochMicros` is
+   * truncated with the same [[truncTimestamp]] used by microsecond timestamps, and the
+   * sub-microsecond `nanosWithinMicro` is always dropped: `date_trunc`'s finest supported unit
+   * is MICROSECOND (see `MIN_LEVEL_OF_TIMESTAMP_TRUNC`), which already discards everything below
+   * a microsecond. NTZ vs. LTZ zone handling is the caller's responsibility via the cache's zone.
+   */
+  def truncTimestampNanos(
+      value: TimestampNanosVal,
+      level: Int,
+      cache: ZoneOffsetCache): TimestampNanosVal = {
+    val truncatedMicros = truncTimestamp(value.epochMicros, level, cache)
     TimestampNanosVal.fromParts(truncatedMicros, 0.toShort)
   }
 
@@ -1379,5 +1415,174 @@ object DateTimeUtils extends SparkDateTimeUtils {
       c = candidate(k)
     }
     c
+  }
+}
+
+/**
+ * A zone's transition schedule as primitive arrays: the sorted epoch-second transition instants
+ * (`transSec`) and the UTC offset (in seconds) in effect on each window `[transSec(i),
+ * transSec(i + 1))` (`offAfter(i)`); `offBefore0` is the offset before the first transition. Built
+ * once per zone from the historical transitions plus rule-generated ones up to `horizonSec` (beyond
+ * that the rules are consulted directly). Immutable and shared read-only across tasks via
+ * [[ZoneOffsetCache.tableFor]].
+ */
+private[util] final class ZoneTransitionTable(
+    val transSec: Array[Long],
+    val offAfter: Array[Int],
+    val offBefore0: Int,
+    val horizonSec: Long) {
+
+  /** Largest `i` with `transSec(i) <= epochSec`, or -1 when before the first transition. */
+  def floorIndex(epochSec: Long): Int = {
+    var lo = 0
+    var hi = transSec.length - 1
+    var res = -1
+    while (lo <= hi) {
+      val mid = (lo + hi) >>> 1
+      if (transSec(mid) <= epochSec) {
+        res = mid
+        lo = mid + 1
+      } else {
+        hi = mid - 1
+      }
+    }
+    res
+  }
+}
+
+object ZoneOffsetCache {
+  // The transition table is the same for every task using a given zone, so build it once per JVM.
+  private val tables = new java.util.concurrent.ConcurrentHashMap[ZoneId, ZoneTransitionTable]()
+  private val tableStart = Instant.parse("1600-01-01T00:00:00Z")
+  private val tableHorizon = Instant.parse("2200-01-01T00:00:00Z")
+
+  private[util] def tableFor(zoneId: ZoneId): ZoneTransitionTable =
+    tables.computeIfAbsent(zoneId, z => buildTable(z))
+
+  private def buildTable(zoneId: ZoneId): ZoneTransitionTable = {
+    val rules = zoneId.getRules
+    val secs = scala.collection.mutable.ArrayBuffer.empty[Long]
+    val offs = scala.collection.mutable.ArrayBuffer.empty[Int]
+    var before0 = 0
+    var seen = false
+    var cur = tableStart
+    var t = rules.nextTransition(cur)
+    while (t != null && t.getInstant.isBefore(tableHorizon)) {
+      if (!seen) {
+        before0 = t.getOffsetBefore.getTotalSeconds
+        seen = true
+      }
+      secs += t.toEpochSecond
+      offs += t.getOffsetAfter.getTotalSeconds
+      // `plusNanos(1)` guarantees progress; transitions are >= 1s apart so none is skipped.
+      cur = t.getInstant.plusNanos(1)
+      t = rules.nextTransition(cur)
+    }
+    if (!seen) {
+      before0 = rules.getOffset(tableStart).getTotalSeconds
+    }
+    new ZoneTransitionTable(secs.toArray, offs.toArray, before0, tableHorizon.getEpochSecond)
+  }
+}
+
+/**
+ * Per-task memoization of a zone's UTC offset, used by the [[DateTimeUtils.truncTimestamp]] hot
+ * path. The session zone is constant for a query and the offset is piecewise-constant between DST
+ * transitions, so a lookup reduces to a range check against a cached constant-offset window
+ * `[lo, hi)`.
+ *
+ * The most-recently-used window is held in plain fields, a branch-only fast path that temporally
+ * clustered rows -- the common case -- keep hitting. A miss resolves the enclosing window
+ * with a single binary search over the shared [[ZoneTransitionTable]] (no allocation), which is
+ * itself cheaper than a bare `getOffset`, so even miss-heavy inputs (e.g. instants scattered over
+ * many decades in random order) stay close to the uncached path.
+ *
+ * Not thread-safe by design: a fresh instance is created per task (codegen mutable state) and used
+ * single-threaded, mirroring how stateful per-row helpers are scoped in generated code.
+ */
+class ZoneOffsetCache(val zoneId: ZoneId) {
+  private val rules = zoneId.getRules
+  val isFixedOffset: Boolean = rules.isFixedOffset
+  private val table = if (isFixedOffset) null else ZoneOffsetCache.tableFor(zoneId)
+  private val fixedOffsetSec =
+    if (isFixedOffset) rules.getOffset(Instant.EPOCH).getTotalSeconds.toLong else 0L
+
+  // Most-recently-used window [mruLo, mruHi) -> mruOff, in fields for a branch-only fast path.
+  private var mruLo = Long.MaxValue
+  private var mruHi = Long.MinValue
+  private var mruOff = 0L
+
+  /**
+   * Offset in seconds at `epochSec`, equal to
+   * `rules.getOffset(Instant.ofEpochSecond(epochSec)).getTotalSeconds`, memoized over the
+   * most-recently-used constant-offset window.
+   */
+  def offsetSeconds(epochSec: Long): Long = {
+    if (epochSec >= mruLo && epochSec < mruHi) {
+      return mruOff
+    }
+    resolveAndInstall(epochSec)
+  }
+
+  /**
+   * Offset in seconds at `epochSec`, served from the MRU window when it falls in one but, unlike
+   * [[offsetSeconds]], NOT installing the resolved window as the MRU one. Used for the DST-equality
+   * guard's candidate lookup so it does not evict the source window mid-row. The returned value is
+   * identical to `offsetSeconds(epochSec)`.
+   */
+  def offsetSecondsReadOnly(epochSec: Long): Long = {
+    if (epochSec >= mruLo && epochSec < mruHi) {
+      return mruOff
+    }
+    if (isFixedOffset) {
+      fixedOffsetSec
+    } else if (epochSec >= table.horizonSec || table.transSec.length == 0) {
+      rules.getOffset(Instant.ofEpochSecond(epochSec)).getTotalSeconds.toLong
+    } else {
+      val idx = table.floorIndex(epochSec)
+      (if (idx < 0) table.offBefore0 else table.offAfter(idx)).toLong
+    }
+  }
+
+  /**
+   * Resolve the constant-offset window containing `epochSec` (a single binary search over the
+   * shared transition table, no allocation), install it as the MRU window, and return the offset.
+   */
+  private def resolveAndInstall(epochSec: Long): Long = {
+    var lo = 0L
+    var hi = 0L
+    val o = if (isFixedOffset) {
+      lo = Long.MinValue
+      hi = Long.MaxValue
+      fixedOffsetSec
+    } else if (epochSec >= table.horizonSec || table.transSec.length == 0) {
+      // Beyond the materialized range (or a zone with no transitions): resolve via the rules.
+      val instant = Instant.ofEpochSecond(epochSec)
+      val nextT = rules.nextTransition(instant)
+      if (nextT == null) {
+        lo = epochSec
+        hi = Long.MaxValue
+        rules.getOffset(instant).getTotalSeconds.toLong
+      } else {
+        hi = nextT.toEpochSecond
+        val prevT = rules.previousTransition(Instant.ofEpochSecond(hi - 1))
+        lo = if (prevT == null) Long.MinValue else prevT.toEpochSecond
+        nextT.getOffsetBefore.getTotalSeconds.toLong
+      }
+    } else {
+      // In range: one binary search gives the enclosing window's start, end, and offset.
+      val idx = table.floorIndex(epochSec)
+      if (idx < 0) {
+        lo = Long.MinValue
+        hi = table.transSec(0)
+        table.offBefore0.toLong
+      } else {
+        lo = table.transSec(idx)
+        hi = if (idx + 1 < table.transSec.length) table.transSec(idx + 1) else table.horizonSec
+        table.offAfter(idx).toLong
+      }
+    }
+    mruLo = lo; mruHi = hi; mruOff = o
+    o
   }
 }
