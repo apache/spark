@@ -345,7 +345,9 @@ try:
             "pyspark.sbin": [
                 "spark-config.sh",
                 "spark-daemon.sh",
+                "start-connect-server.sh",
                 "start-history-server.sh",
+                "stop-connect-server.sh",
                 "stop-history-server.sh",
             ],
             "pyspark.python.lib": ["*.zip"],

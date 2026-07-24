@@ -546,6 +546,11 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "LOCAL_CONNECT_SERVER_START_FAILED": {
+    "message": [
+      "Failed to start a persistent local Spark Connect server: <reason>."
+    ]
+  },
   "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED": {
     "message": [
       "Local relation size (<actualSize> bytes) exceeds the limit (<sizeLimit> bytes)."
