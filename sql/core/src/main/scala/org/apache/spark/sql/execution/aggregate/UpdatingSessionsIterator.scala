@@ -161,16 +161,32 @@ class UpdatingSessionsIterator(
     rowsForCurrentSession.add(currentRow.asInstanceOf[UnsafeRow])
   }
 
+  // Detect whether the session struct uses nanosecond-precision timestamps.
+  private[this] val sessionIsNanos: Boolean =
+    SessionNanosHelper.isSessionNanos(sessionExpression)
+
   private def getSessionStart(sessionStruct: UnsafeRow): Long = {
-    sessionStruct.getLong(0)
+    if (sessionIsNanos) {
+      SessionNanosHelper.getSessionStartNanos(sessionStruct)
+    } else {
+      sessionStruct.getLong(0)
+    }
   }
 
   private def getSessionEnd(sessionStruct: UnsafeRow): Long = {
-    sessionStruct.getLong(1)
+    if (sessionIsNanos) {
+      SessionNanosHelper.getSessionEndNanos(sessionStruct)
+    } else {
+      sessionStruct.getLong(1)
+    }
   }
 
   def updateSessionEnd(sessionStruct: UnsafeRow, sessionEnd: Long): Unit = {
-    sessionStruct.setLong(1, sessionEnd)
+    if (sessionIsNanos) {
+      SessionNanosHelper.setSessionEnd(sessionStruct, sessionEnd, sessionExpression)
+    } else {
+      sessionStruct.setLong(1, sessionEnd)
+    }
   }
 
   private def expandEndOfCurrentSession(sessionEnd: Long): Unit = {

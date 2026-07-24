@@ -651,8 +651,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {
               case s: StructType
-                if s.find(_.name == "end").map(_.dataType) == Some(TimestampType) =>
+                if s.find(_.name == "end").map(_.dataType).exists(dt =>
+                  dt == TimestampType || dt.isInstanceOf[AnyTimestampNanoType]) =>
               case _: TimestampType =>
+              case _: AnyTimestampNanoType =>
               case _ =>
                 etw.failAnalysis(
                   errorClass = "EVENT_TIME_IS_NOT_ON_TIMESTAMP_TYPE",

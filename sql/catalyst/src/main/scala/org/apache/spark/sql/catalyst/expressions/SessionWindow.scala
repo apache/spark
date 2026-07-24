@@ -70,14 +70,21 @@ case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extend
   private def inputTypeOnTimeColumn: AbstractDataType = {
     TypeCollection(
       AnyTimestampType,
-      // Below two types cover both time window & session window, since they produce the same type
+      AnyTimestampNanoType,
+      // Below types cover both time window & session window, since they produce the same type
       // of output as window column.
       new StructType()
         .add(StructField("start", TimestampType))
         .add(StructField("end", TimestampType)),
       new StructType()
         .add(StructField("start", TimestampNTZType))
-        .add(StructField("end", TimestampNTZType))
+        .add(StructField("end", TimestampNTZType)),
+      new StructType()
+        .add(StructField("start", TimestampNTZNanosType()))
+        .add(StructField("end", TimestampNTZNanosType())),
+      new StructType()
+        .add(StructField("start", TimestampLTZNanosType()))
+        .add(StructField("end", TimestampLTZNanosType()))
     )
   }
 

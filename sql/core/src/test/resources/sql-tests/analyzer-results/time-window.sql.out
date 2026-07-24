@@ -878,7 +878,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"x\"",
     "inputType" : "\"INT\"",
     "paramIndex" : "first",
-    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"STRUCT<start: TIMESTAMP, end: TIMESTAMP>\" or \"STRUCT<start: TIMESTAMP_NTZ, end: TIMESTAMP_NTZ>\")",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\" or \"STRUCT<start: TIMESTAMP, end: TIMESTAMP>\" or \"STRUCT<start: TIMESTAMP_NTZ, end: TIMESTAMP_NTZ>\" or \"STRUCT<start: TIMESTAMP_NTZ(9), end: TIMESTAMP_NTZ(9)>\" or \"STRUCT<start: TIMESTAMP_LTZ(9), end: TIMESTAMP_LTZ(9)>\")",
     "sqlExpr" : "\"window(x, 300000000, 300000000, 0)\""
   },
   "queryContext" : [ {
