@@ -106,5 +106,23 @@ public enum TableCapability {
    * write modes, like {@link #TRUNCATE}, and {@link #OVERWRITE_BY_FILTER}, but cannot support
    * {@link #OVERWRITE_DYNAMIC}.
    */
-  V1_BATCH_WRITE
+  V1_BATCH_WRITE,
+
+  /**
+   * Signals that the table wants Spark to auto-fill generated column values and enforce generated
+   * column constraints during writes.
+   * <p>
+   * When this capability is present, Spark will:
+   * <ul>
+   *   <li>Auto-compute missing generated column values using the generation expression.</li>
+   *   <li>Validate explicitly-provided generated column values against the generation
+   *       expression.</li>
+   * </ul>
+   * <p>
+   * Without this capability, the connector is responsible for handling generated column values
+   * during writes.
+   *
+   * @since 4.3.0
+   */
+  GENERATE_COLUMN_VALUES_ON_WRITE
 }
