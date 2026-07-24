@@ -200,9 +200,13 @@ class FrameDescribeMixin:
             pdf_result = pdf[pdf.a != pdf.a].describe()
             pdf_result = pdf_result.where(pdf_result.notnull(), None).astype(str)
         else:
-            # In pandas 3.0.0+, empty timestamp stats become missing values after astype(str),
-            # and pandas API on Spark handles timestamp type as string type accordingly.
+            # In pandas 3.0.0+, the empty timestamp stats stay as missing values; after
+            # astype(str) they render as "NaT" (or NaN), whereas pandas API on Spark uses
+            # None for missing values in an object (string) column. Normalize accordingly.
             pdf_result = pdf[pdf.a != pdf.a].describe().astype(str)
+            pdf_result = pdf_result.where(
+                pdf_result.notnull() & ~pdf_result.isin(["NaT", "nan"]), None
+            )
         self.assert_eq(psdf[psdf.a != psdf.a].describe(), pdf_result)
 
         # Explicit empty DataFrame numeric & timestamp
@@ -216,6 +220,9 @@ class FrameDescribeMixin:
         else:
             pdf_result = pdf[pdf.a != pdf.a].describe()
             pdf_result.b = pdf_result.b.astype(str)
+            pdf_result.b = pdf_result.b.where(
+                pdf_result.b.notnull() & ~pdf_result.b.isin(["NaT", "nan"]), None
+            )
         self.assert_eq(psdf[psdf.a != psdf.a].describe(), pdf_result)
 
         # Explicit empty DataFrame numeric & string
@@ -237,6 +244,9 @@ class FrameDescribeMixin:
         else:
             pdf_result = pdf[pdf.a != pdf.a].describe()
             pdf_result.b = pdf_result.b.astype(str)
+            pdf_result.b = pdf_result.b.where(
+                pdf_result.b.notnull() & ~pdf_result.b.isin(["NaT", "nan"]), None
+            )
         self.assert_eq(psdf[psdf.a != psdf.a].describe(), pdf_result)
 
 

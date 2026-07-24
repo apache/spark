@@ -905,7 +905,10 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
         else:
             return np.dtype("timedelta64[us]")
     elif isinstance(dt, StringType):
-        if LooseVersion(pd.__version__) < "3.0.0":
+        # Under pandas 3 the default string dtype is the new ``str`` extension type (PDEP-14), so
+        # correct ``StringType`` to it. Respect ``future.infer_string``: when a user (or the test
+        # harness) has turned it off, keep the pandas < 3 ``object`` behavior.
+        if LooseVersion(pd.__version__) < "3.0.0" or not pd.get_option("future.infer_string"):
             return None
         else:
             return pd.StringDtype(na_value=np.nan)

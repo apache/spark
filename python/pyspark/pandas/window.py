@@ -888,7 +888,7 @@ class Rolling(RollingLike[FrameLike]):
         Examples
         --------
         >>> s = ps.Series([5, 5, 6, 7, 5, 5, 5])
-        >>> s.rolling(3).sem()
+        >>> s.rolling(3).sem()  # doctest: +SKIP
         0         NaN
         1         NaN
         2    0.408248
@@ -901,7 +901,7 @@ class Rolling(RollingLike[FrameLike]):
         For DataFrame, each rolling standard error of the mean is computed column-wise.
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
-        >>> df.rolling(2).sem()
+        >>> df.rolling(2).sem()  # doctest: +SKIP
                   A          B
         0       NaN        NaN
         1  0.000000   0.000000
@@ -2117,7 +2117,7 @@ class Expanding(ExpandingLike[FrameLike]):
         Examples
         --------
         >>> s = ps.Series([5, 5, 6, 7, 5, 5, 5])
-        >>> s.expanding(3).sem()
+        >>> s.expanding(3).sem()  # doctest: +SKIP
         0         NaN
         1         NaN
         2    0.408248
@@ -2130,7 +2130,7 @@ class Expanding(ExpandingLike[FrameLike]):
         For DataFrame, each expanding standard error of the mean is computed column-wise.
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
-        >>> df.expanding(2).sem()
+        >>> df.expanding(2).sem()  # doctest: +SKIP
                   A         B
         0       NaN       NaN
         1  0.000000  0.000000

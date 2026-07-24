@@ -289,7 +289,7 @@ def spark_type_to_pandas_dtype(
             elif isinstance(spark_type, types.DoubleType):
                 return Float64Dtype()
 
-    if LooseVersion(pd.__version__) >= "3.0.0":
+    if LooseVersion(pd.__version__) >= "3.0.0" and pd.get_option("future.infer_string"):
         if extension_object_dtypes_available and isinstance(spark_type, types.StringType):
             return StringDtype(na_value=np.nan)
 
@@ -380,10 +380,10 @@ def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.Dat
     StringType()
     >>> pandas_on_spark_type(datetime.date)
     (dtype('O'), DateType())
-    >>> pandas_on_spark_type(datetime.datetime)
-    (dtype('<M8[ns]'), TimestampType())
-    >>> pandas_on_spark_type(datetime.timedelta)
-    (dtype('<m8[ns]'), DayTimeIntervalType(0, 3))
+    >>> pandas_on_spark_type(datetime.datetime)  # doctest: +ELLIPSIS
+    (dtype('<M8[...]'), TimestampType())
+    >>> pandas_on_spark_type(datetime.timedelta)  # doctest: +ELLIPSIS
+    (dtype('<m8[...]'), DayTimeIntervalType(0, 3))
     >>> pandas_on_spark_type(List[bool])
     (dtype('O'), ArrayType(BooleanType(), True))
     """

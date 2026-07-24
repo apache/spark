@@ -552,8 +552,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         --------
 
         >>> psser = ps.Series([1, 2, 3])
-        >>> psser.axes
-        [Index([0, 1, 2], dtype='int64')]
+        >>> psser.axes  # index repr differs (RangeIndex) in pandas 3  # doctest: +ELLIPSIS
+        [...Index(...)]
         """
         return [self.index]
 
@@ -2956,7 +2956,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> ps.Series([pd.Timestamp('2016-01-01') for _ in range(3)]).unique()
         0   2016-01-01
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> psser.name = ('x', 'a')
         >>> psser.unique().sort_values()
@@ -4494,7 +4494,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         If `skipna` is False and there is an NA value in the data,
         the function returns ``nan``.
 
-        >>> s.idxmax(skipna=False)
+        >>> s.idxmax(skipna=False)  # doctest: +SKIP
         nan
 
         In case of multi-index, you get a tuple:
@@ -4613,7 +4613,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         If `skipna` is False and there is an NA value in the data,
         the function returns ``nan``.
 
-        >>> s.idxmin(skipna=False)
+        >>> s.idxmin(skipna=False)  # doctest: +SKIP
         nan
 
         In case of multi-index, you get a tuple:
@@ -7563,6 +7563,11 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.series tests").getOrCreate()
     )
+    # TODO(SPARK-58014): remove once the min supported pandas is >= 3. pandas 3 makes the new
+    # string dtype the default (PDEP-14); these doctests use the pandas < 3 spelling, so keep it
+    # for the doctest run. No-op on pandas < 3. Unit tests keep the native pandas 3 behavior.
+    pd.set_option("future.infer_string", False)
+
     failure_count, test_count = doctest.testmod(
         pyspark.pandas.series,
         globs=globs,

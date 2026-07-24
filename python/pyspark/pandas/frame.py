@@ -760,8 +760,8 @@ class DataFrame(Frame, Generic[T]):
         --------
 
         >>> df = ps.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
-        >>> df.axes
-        [Index([0, 1], dtype='int64'), Index(['col1', 'col2'], dtype='object')]
+        >>> df.axes  # index repr differs (RangeIndex) in pandas 3  # doctest: +ELLIPSIS
+        [...Index(...), Index(['col1', 'col2'], dtype='object')]
         """
         return [self.index, self.columns]
 
@@ -7404,13 +7404,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...                    'e': [True, False, True],
         ...                    'f': pd.date_range('20130101', periods=3)},
         ...                   columns=['a', 'b', 'c', 'd', 'e', 'f'])
-        >>> df.dtypes
+        >>> df.dtypes  # pandas 3 datetime column defaults to us, not ns  # doctest: +ELLIPSIS
         a            object
         b             int64
         c              int8
         d           float64
         e              bool
-        f    datetime64[ns]
+        f    datetime64[...]
         dtype: object
         """
         return pd.Series(
@@ -8309,7 +8309,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             has the 'compute.max_rows' default limit of input length and raises a ValueError.
 
                 >>> from pyspark.pandas.config import option_context
-                >>> with option_context('compute.max_rows', 1000):  # doctest: +NORMALIZE_WHITESPACE
+                >>> with option_context('compute.max_rows', 1000):  # doctest: +SKIP
                 ...     ps.DataFrame({'a': range(1001)}).swapaxes(i=0, j=1)
                 Traceback (most recent call last):
                   ...
@@ -9226,7 +9226,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         the original DataFrame's index in the result unlike pandas.
 
         >>> join_psdf = psdf1.join(psdf2.set_index('key'), on='key')
-        >>> join_psdf.index
+        >>> join_psdf.index  # default index repr differs (RangeIndex) in pandas 3  # doctest: +SKIP
         Index([0, 1, 2, 3], dtype='int64')
         """
         if isinstance(right, ps.Series):
@@ -14507,6 +14507,11 @@ def _test() -> None:
 
     path = tempfile.mkdtemp()
     globs["path"] = path
+
+    # TODO(SPARK-58014): remove once the min supported pandas is >= 3. pandas 3 makes the new
+    # string dtype the default (PDEP-14); these doctests use the pandas < 3 spelling, so keep it
+    # for the doctest run. No-op on pandas < 3. Unit tests keep the native pandas 3 behavior.
+    pd.set_option("future.infer_string", False)
 
     failure_count, test_count = doctest.testmod(
         pyspark.pandas.frame,

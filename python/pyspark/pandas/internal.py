@@ -1179,11 +1179,24 @@ class InternalFrame:
             append = True
         pdf = pdf[data_columns]
 
-        # pandas can optimize sequential integer values into RangeIndex here, which drops the
-        # original narrower dtype such as int8 or int32 carried in the index metadata.
+        # pandas can optimize sequential integer values into RangeIndex here. This is
+        # undesirable for two reasons:
+        #   1. It drops the original narrower dtype such as int8 or int32 carried in the
+        #      index metadata.
+        #   2. Since pandas 3 the collapse also happens for int64 (``set_index`` returns a
+        #      RangeIndex for any contiguous integer column), so an explicitly materialized
+        #      index such as ``ps.Index([1, 2, 3])`` would round-trip to
+        #      ``RangeIndex(start=1, stop=4, step=1)`` whereas plain pandas keeps it as
+        #      ``Index([1, 2, 3])``. A genuine default index is always ``RangeIndex`` with
+        #      ``start == 0`` and ``step == 1``; anything else came from real index values
+        #      and should be restored as a materialized Index to match pandas.
         if len(index_columns) == 1 and isinstance(pdf.index, pd.RangeIndex):
             internal_field = fields[0]
-            if is_integer_dtype(internal_field.dtype) and internal_field.dtype != np.dtype("int64"):
+            is_narrower_int = is_integer_dtype(
+                internal_field.dtype
+            ) and internal_field.dtype != np.dtype("int64")
+            is_non_default_range = pdf.index.start != 0 or pdf.index.step != 1
+            if is_narrower_int or is_non_default_range:
                 pdf.index = pd.Index(
                     original_index_values,
                     dtype=internal_field.dtype,
@@ -1568,7 +1581,7 @@ class InternalFrame:
         ...     InternalFrame.prepare_pandas_frame(pdf, prefer_timestamp_ntz=True)
         ... )
         >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
-        [InternalField(dtype=datetime64[ns],
+        [InternalField(dtype=datetime64[...],
             struct_field=StructField('dt', TimestampNTZType(), False)),
          InternalField(dtype=object,
             struct_field=StructField('dt_obj', TimestampNTZType(), False))]
@@ -1581,7 +1594,7 @@ class InternalFrame:
         ...     InternalFrame.prepare_pandas_frame(pdf)
         ... )
         >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
-        [InternalField(dtype=timedelta64[ns],
+        [InternalField(dtype=timedelta64[...],
             struct_field=StructField('td', DayTimeIntervalType(0, 3), False)),
          InternalField(dtype=object,
             struct_field=StructField('td_obj', DayTimeIntervalType(0, 3), False))]
@@ -1645,6 +1658,11 @@ def _test() -> None:
         .appName("pyspark.pandas.internal tests")
         .getOrCreate()
     )
+    # TODO(SPARK-58014): remove once the min supported pandas is >= 3. pandas 3 makes the new
+    # string dtype the default (PDEP-14); these doctests use the pandas < 3 spelling, so keep it
+    # for the doctest run. No-op on pandas < 3. Unit tests keep the native pandas 3 behavior.
+    pd.set_option("future.infer_string", False)
+
     failure_count, test_count = doctest.testmod(
         pyspark.pandas.internal,
         globs=globs,
