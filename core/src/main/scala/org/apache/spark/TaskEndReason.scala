@@ -109,6 +109,28 @@ case class FetchFailed(
 
 /**
  * :: DeveloperApi ::
+ * Task failed to fetch shuffle metadata from a remote node. This failure is expected to recover
+ * by simply repeating the task. This does not count towards task failures, so the stage will never
+ * fail due to this failure.
+ */
+@DeveloperApi
+case class MetadataFetchFailed(
+    shuffleId: Int,
+    reduceId: Int,
+    message: String)
+  extends TaskFailedReason {
+  override def toErrorString: String = {
+    s"MetadataFetchFailed(shuffleId=$shuffleId, reduceId=$reduceId, message=\n$message\n)"
+  }
+
+  /**
+   * Metadata fetch failures do not count toward task failures.
+   */
+  override def countTowardsTaskFailures: Boolean = false
+}
+
+/**
+ * :: DeveloperApi ::
  * Task failed due to a runtime exception. This is the most common failure case and also captures
  * user program exceptions.
  *
