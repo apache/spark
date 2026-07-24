@@ -67,7 +67,6 @@ jobs:
       required: ${{ steps.set-outputs.outputs.required }}
       # Pinned so every downstream job checks out the same snapshot, even if `master` advances mid-run.
       head_sha: ${{ steps.resolve-sha.outputs.head_sha }}
-      image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
       image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
       image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
       image_lint_url: ${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}
@@ -204,14 +203,6 @@ jobs:
             exit 1
           fi
         fi
-    - name: Generate infra image URL
-      id: infra-image-outputs
-      run: |
-        # Convert to lowercase to meet Docker repo name requirement
-        REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
-        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
-        echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Generate infra image URL (Documentation)
       id: infra-image-docs-outputs
       run: |
