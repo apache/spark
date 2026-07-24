@@ -282,26 +282,34 @@ class CombineAdjacentAggregationSuite extends QueryTest
     }
   }
 
-  test("Default value falls back to spark.sql.execution.replaceHashWithSortAgg") {
+  test("combineAdjacentAggregation is independent of replaceHashWithSortAgg") {
     withTempView("t") {
       spark.range(20).selectExpr("id % 3 as k", "id % 7 as v")
         .createOrReplaceTempView("t")
       val query = "SELECT k, count(*) FROM (SELECT /*+ repartition(k) */ * FROM t) GROUP BY k"
 
-      // `spark.sql.execution.combineAdjacentAggregation` is unset here, so it falls back to
-      // `spark.sql.execution.replaceHashWithSortAgg`.
-      withSQLConf(SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false") {
-        assert(numAggregates(query) == 2)
-      }
-      withSQLConf(SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true") {
+      // `spark.sql.execution.combineAdjacentAggregation` has its own default and does not fall
+      // back to `spark.sql.execution.replaceHashWithSortAgg`, so each can be toggled on its own.
+      // Combining is driven solely by `combineAdjacentAggregation` here: the partial and final
+      // aggregate are adjacent (the input is already partitioned by `k`), so enabling it merges
+      // them into one, regardless of `replaceHashWithSortAgg`.
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
         assert(numAggregates(query) == 1)
       }
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        assert(numAggregates(query) == 2)
+      }
 
-      // An explicit value overrides the fallback.
+      // `replaceHashWithSortAgg` alone does not affect the aggregate count of this query.
       withSQLConf(
           SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true",
           SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
         assert(numAggregates(query) == 2)
+      }
+      withSQLConf(
+          SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false",
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        assert(numAggregates(query) == 1)
       }
     }
   }

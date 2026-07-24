@@ -2,8 +2,8 @@
 * HashAggregate (57)
 +- Exchange (56)
    +- * HashAggregate (55)
-      +- * HashAggregate (54)
-         +- * HashAggregate (53)
+      +- * SortAggregate (54)
+         +- * SortAggregate (53)
             +- * Project (52)
                +- * BroadcastHashJoin Inner BuildRight (51)
                   :- * Project (45)
@@ -291,14 +291,14 @@ Join condition: None
 Output [3]: [ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
 Input [5]: [ws_ship_date_sk#1, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, d_date_sk#26]
 
-(53) HashAggregate [codegen id : 20]
+(53) SortAggregate [codegen id : 20]
 Input [3]: [ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
 Keys [1]: [ws_order_number#4]
 Functions [2]: [partial_sum(UnscaledValue(ws_ext_ship_cost#5)), partial_sum(UnscaledValue(ws_net_profit#6))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#5))#28, sum(UnscaledValue(ws_net_profit#6))#29]
 Results [3]: [ws_order_number#4, sum#30, sum#31]
 
-(54) HashAggregate [codegen id : 20]
+(54) SortAggregate [codegen id : 20]
 Input [3]: [ws_order_number#4, sum#30, sum#31]
 Keys [1]: [ws_order_number#4]
 Functions [2]: [merge_sum(UnscaledValue(ws_ext_ship_cost#5)), merge_sum(UnscaledValue(ws_net_profit#6))]
