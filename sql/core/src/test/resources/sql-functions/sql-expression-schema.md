@@ -259,6 +259,7 @@
 | org.apache.spark.sql.catalyst.expressions.NaNvl | nanvl | SELECT nanvl(cast('NaN' as double), 123) | struct<nanvl(CAST(NaN AS DOUBLE), 123):double> |
 | org.apache.spark.sql.catalyst.expressions.NanosToTimestamp | timestamp_nanos | SELECT timestamp_nanos(1230219000123456789) | struct<timestamp_nanos(1230219000123456789):timestamp_ltz(9)> |
 | org.apache.spark.sql.catalyst.expressions.NextDay | next_day | SELECT next_day('2015-01-14', 'TU') | struct<next_day(2015-01-14, TU):date> |
+| org.apache.spark.sql.catalyst.expressions.Normalize | normalize | SELECT normalize('ﬁ', 'NFKC') | struct<normalize(ﬁ, NFKC):string> |
 | org.apache.spark.sql.catalyst.expressions.Not | ! | SELECT ! true | struct<(NOT true):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Not | not | SELECT not true | struct<(NOT true):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Now | now | SELECT now() | struct<now():timestamp> |
