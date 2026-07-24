@@ -54,6 +54,12 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideKey: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
+    // Runtime filters are introduced after subquery optimization, so Python UDFs in a new
+    // creation-side subquery cannot be extracted into a Python evaluation operator.
+    if (filterCreationSidePlan.containsPattern(PYTHON_UDF)) {
+      return filterApplicationSidePlan
+    }
+
     // Skip if the filter creation side is too big
     if (filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
       return filterApplicationSidePlan

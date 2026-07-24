@@ -517,6 +517,111 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-58310: preserve Python UDFs in runtime bloom-filter scalar subqueries") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+    registerTestUDF(TestPythonUDF("normalize_runtime_bloom_url"), spark)
+    val pythonUdfNames = if (shouldTestPandasUDFs) {
+      registerTestUDF(TestScalarPandasUDF("normalize_runtime_bloom_pandas_url"), spark)
+      Seq("normalize_runtime_bloom_url", "normalize_runtime_bloom_pandas_url")
+    } else {
+      Seq("normalize_runtime_bloom_url")
+    }
+
+    withTempPath { dir =>
+      val factPath = new java.io.File(dir, "fact").getCanonicalPath
+      val dimensionPath = new java.io.File(dir, "dimension").getCanonicalPath
+
+      spark.range(20000)
+        .selectExpr("cast(id as int) as id", "concat('url-', cast(id % 20 as string)) as url")
+        .write.parquet(factPath)
+      spark.range(20)
+        .selectExpr(
+          "concat('url-', cast(id as string)) as url",
+          "case when id < 10 then 'NL' else 'US' end as country")
+        .write.parquet(dimensionPath)
+
+      withTempView("runtime_bloom_fact", "runtime_bloom_dimension") {
+        spark.read.parquet(factPath).createOrReplaceTempView("runtime_bloom_fact")
+        spark.read.parquet(dimensionPath).createOrReplaceTempView("runtime_bloom_dimension")
+
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
+          SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+          SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "100MB",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          pythonUdfNames.foreach { pythonUdfName =>
+            withClue(s"$pythonUdfName: ") {
+              val query =
+                s"""
+                  |WITH coverage AS (
+                  |  SELECT url, $pythonUdfName(url) AS normalized_url
+                  |  FROM runtime_bloom_dimension
+                  |  WHERE country = 'NL'
+                  |),
+                  |grader_keys AS (
+                  |  SELECT DISTINCT normalized_url
+                  |  FROM coverage
+                  |  WHERE normalized_url IS NOT NULL
+                  |),
+                  |matched_url_status AS (
+                  |  SELECT /*+ BROADCAST(k) */ s.url
+                  |  FROM runtime_bloom_fact s
+                  |  JOIN grader_keys k ON s.url = k.normalized_url
+                  |),
+                  |url_status_snapshot AS (
+                  |  SELECT max(url) AS snapshot_url FROM runtime_bloom_fact
+                  |)
+                  |SELECT /*+ BROADCAST(m), BROADCAST(snapshot) */
+                  |  c.url, c.normalized_url, m.url AS matched_url, snapshot.snapshot_url
+                  |FROM coverage c
+                  |LEFT JOIN matched_url_status m ON c.normalized_url = m.url
+                  |CROSS JOIN url_status_snapshot snapshot
+                """.stripMargin
+
+              val applicationSideQuery =
+                s"""
+                  |SELECT /*+ MERGE(f, s) */ f.id, f.url
+                  |FROM (
+                  |  SELECT id, url, $pythonUdfName(url) AS normalized_url
+                  |  FROM runtime_bloom_fact
+                  |) f
+                  |JOIN (
+                  |  SELECT url FROM runtime_bloom_dimension WHERE country = 'NL'
+                  |) s ON f.normalized_url = s.url
+                """.stripMargin
+
+              var expected: Array[Row] = null
+              var applicationSideExpected: Array[Row] = null
+              withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
+                expected = sql(query).collect()
+                applicationSideExpected = sql(applicationSideQuery).collect()
+              }
+
+              assert(expected.length == 10000)
+              assert(applicationSideExpected.length == 10000)
+
+              withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true") {
+                val result = sql(query)
+                checkAnswer(result, expected.toSeq)
+
+                val outputPath = new java.io.File(dir, pythonUdfName).getCanonicalPath
+                result.write.parquet(outputPath)
+                checkAnswer(spark.read.parquet(outputPath), expected.toSeq)
+
+                val applicationSideResult = sql(applicationSideQuery)
+                assert(getNumBloomFilters(applicationSideResult.queryExecution.optimizedPlan) > 0)
+                checkAnswer(applicationSideResult, applicationSideExpected.toSeq)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("Support Left Semi join in row level runtime filters") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "32") {
