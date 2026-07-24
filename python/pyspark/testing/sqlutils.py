@@ -21,10 +21,12 @@ import os
 import shutil
 import tempfile
 from contextlib import contextmanager
+from time import monotonic
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import Row
 from pyspark.testing.utils import (
+    log_session_timing,
     ReusedPySparkTestCase,
     PySparkErrorTestUtils,
 )
@@ -322,7 +324,9 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUti
         super().setUpClass()
 
         cls._legacy_sc = cls.sc
+        start_time = monotonic()
         cls.spark = SparkSession(cls.sc)
+        log_session_timing(cls.__name__, "classic_session_setup", monotonic() - start_time)
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
@@ -330,10 +334,12 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def tearDownClass(cls):
+        start_time = monotonic()
         try:
             cls.spark.stop()
             shutil.rmtree(cls.tempdir.name, ignore_errors=True)
         finally:
+            log_session_timing(cls.__name__, "classic_session_teardown", monotonic() - start_time)
             super().tearDownClass()
 
     def tearDown(self):

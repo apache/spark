@@ -316,6 +316,12 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     retcode = None
     try:
         retcode = TestRunner(test_name, cmd, env, per_test_output, timeout).run()
+        if retcode == 0:
+            per_test_output.seek(0)
+            for line in per_test_output:
+                decoded_line = line.decode("utf-8", "replace")
+                if decoded_line.startswith("PYSPARK_SESSION_TIMING "):
+                    LOGGER.info(decoded_line.rstrip())
         if not keep_test_output:
             # There exists a race condition in Python and it causes flakiness in MacOS
             # https://github.com/python/cpython/issues/73885
