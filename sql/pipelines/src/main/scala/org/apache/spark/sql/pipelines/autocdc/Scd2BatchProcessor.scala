@@ -1379,7 +1379,7 @@ object Scd2BatchProcessor {
    * The invariant in both tables is: startAtColName <= recordStartAtFieldName. If an event was
    * generated at time X, it is active by time X, or earlier if it is not a run head.
    */
-  private[autocdc] val startAtColName: String = "__START_AT"
+  private[pipelines] val startAtColName: String = "__START_AT"
 
   /**
    * What this column represents depends on which AutoCDC artifact table it is read from.
@@ -1393,7 +1393,7 @@ object Scd2BatchProcessor {
    *    Else this row is a coalesced no-op row that is part of an upsert run, and by
    *    convention the value will always be null.
    */
-  private[autocdc] val endAtColName: String = "__END_AT"
+  private[pipelines] val endAtColName: String = "__END_AT"
 
   /**
    * Column names reserved by AutoCDC that will be projected onto the microbatch and
@@ -1519,7 +1519,7 @@ object Scd2BatchProcessor {
    * Construct the CDC metadata struct column for SCD2 rows, following the exact schema and
    * field ordering defined by [[cdcMetadataColSchema]].
    */
-  private def constructCdcMetadataCol(
+  private[pipelines] def constructCdcMetadataCol(
       recordStartAt: Column,
       sequencingType: DataType
   ): Column = {

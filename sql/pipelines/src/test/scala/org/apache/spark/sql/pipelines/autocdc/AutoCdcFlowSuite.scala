@@ -288,21 +288,201 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     assert(first eq second, "schema should be cached as a val and return the same instance")
   }
 
-  test("AutoCdcMergeFlow rejects SCD2 at construction with AUTOCDC_SCD2_NOT_SUPPORTED") {
-    // Constructing the flow forces the resolved schema, which is unsupported for SCD2 today.
-    // Failing eagerly (rather than deferring to the first downstream `schema` read) is the
-    // intended UX -- pipeline graph analysis should not be able to register an SCD2 AutoCDC
-    // flow at all.
-    checkError(
-      exception = intercept[AnalysisException] {
-        newAutoCdcMergeFlow(
-          sourceDf = threeColumnSourceDf(),
-          storedAsScdType = ScdType.Type2
+  test(
+    "AutoCdcMergeFlow.schema appends the SCD2 framework columns when no columnSelection is set"
+  ) {
+    // SCD2 appends __START_AT / __END_AT (typed as the sequencing type, nullable) followed by the
+    // SCD2 _cdc_metadata struct (non-null), in this exact order -- matching the canonical target
+    // schema that Scd2BatchProcessor.preprocessMicrobatch projects and the merges persist.
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2
+    )
+
+    val expected = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("name", StringType)
+      .add("seq", LongType)
+      .add(Scd2BatchProcessor.startAtColName, LongType, nullable = true)
+      .add(Scd2BatchProcessor.endAtColName, LongType, nullable = true)
+      .add(
+        StructField(
+          AutoCdcReservedNames.cdcMetadataColName,
+          Scd2BatchProcessor.cdcMetadataColSchema(LongType),
+          nullable = false
         )
-      },
-      condition = "AUTOCDC_SCD2_NOT_SUPPORTED",
-      sqlState = "0A000",
-      parameters = Map.empty
+      )
+    assert(resolvedFlow.schema == expected)
+  }
+
+  test("AutoCdcMergeFlow.schema applies an IncludeColumns selection before the SCD2 " +
+    "framework columns") {
+    // An IncludeColumns selection narrows only the user-data portion; the framework columns are
+    // always appended and cannot be selected away.
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2,
+      columnSelection = Some(
+        ColumnSelection.IncludeColumns(
+          Seq(UnqualifiedColumnName("id"), UnqualifiedColumnName("seq"))
+        )
+      )
+    )
+
+    assert(
+      resolvedFlow.schema.fieldNames.toSeq ==
+      Seq(
+        "id",
+        "seq",
+        Scd2BatchProcessor.startAtColName,
+        Scd2BatchProcessor.endAtColName,
+        AutoCdcReservedNames.cdcMetadataColName
+      )
+    )
+  }
+
+  test("AutoCdcMergeFlow.schema appends the SCD2 framework columns even when a selection " +
+    "excludes a user column") {
+    // The framework columns are appended after the user selection is applied to the source
+    // schema, so no ExcludeColumns selection over the user data can strip them: they always
+    // appear in the output.
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2,
+      columnSelection = Some(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name")))
+      )
+    )
+
+    // The excluded user column is gone, but every framework column is still present.
+    assert(!resolvedFlow.schema.fieldNames.contains("name"))
+    Seq(
+      Scd2BatchProcessor.startAtColName,
+      Scd2BatchProcessor.endAtColName,
+      AutoCdcReservedNames.cdcMetadataColName
+    ).foreach { frameworkCol =>
+      assert(
+        resolvedFlow.schema.fieldNames.contains(frameworkCol),
+        s"expected framework column $frameworkCol in ${resolvedFlow.schema.fieldNames.toSeq}"
+      )
+    }
+  }
+
+  test("AutoCdcMergeFlow.schema lets a selection exclude a source column that collides with " +
+    "a non-prefixed framework column, re-adding it from the framework") {
+    // Two of the three SCD2 framework columns -- __START_AT and __END_AT -- do not carry the
+    // reserved AutoCDC prefix, so a source change feed may legitimately contain columns with
+    // those names. The user excludes them via the column selection; they are dropped from the
+    // user-data portion and the engine's own framework columns are appended in their place, so
+    // each still appears exactly once in the output with the framework's type (the sequencing
+    // type), not the source column's type.
+    //
+    // The third framework column, _cdc_metadata, DOES carry the reserved prefix, so a source
+    // that contains it is rejected outright at flow construction -- it can never reach column
+    // selection and so is deliberately out of scope here. That rejection is covered separately by
+    // "AutoCdcMergeFlow rejects a source df column whose name equals the reserved CDC metadata
+    // column".
+    val session = spark
+    import session.implicits._
+    // Source carries String-typed __START_AT / __END_AT columns alongside the data columns.
+    val sourceDf = MemoryStream[(Int, String, Option[Long], String, String)]
+      .toDS()
+      .toDF(
+        "id",
+        "name",
+        "seq",
+        Scd2BatchProcessor.startAtColName,
+        Scd2BatchProcessor.endAtColName)
+
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = sourceDf,
+      storedAsScdType = ScdType.Type2,
+      columnSelection = Some(
+        ColumnSelection.ExcludeColumns(
+          Seq(
+            UnqualifiedColumnName(Scd2BatchProcessor.startAtColName),
+            UnqualifiedColumnName(Scd2BatchProcessor.endAtColName))
+        )
+      )
+    )
+
+    // Each framework column appears exactly once (the source copy was excluded, the framework
+    // copy appended) ...
+    assert(
+      resolvedFlow.schema.fieldNames.count(_ == Scd2BatchProcessor.startAtColName) == 1)
+    assert(
+      resolvedFlow.schema.fieldNames.count(_ == Scd2BatchProcessor.endAtColName) == 1)
+    // ... and carries the framework (sequencing) type, not the source String type.
+    assert(resolvedFlow.schema(Scd2BatchProcessor.startAtColName).dataType == LongType)
+    assert(resolvedFlow.schema(Scd2BatchProcessor.endAtColName).dataType == LongType)
+    // Full expected shape: the retained data columns followed by the framework columns.
+    assert(
+      resolvedFlow.schema.fieldNames.toSeq ==
+      Seq(
+        "id",
+        "name",
+        "seq",
+        Scd2BatchProcessor.startAtColName,
+        Scd2BatchProcessor.endAtColName,
+        AutoCdcReservedNames.cdcMetadataColName
+      )
+    )
+  }
+
+  test("AutoCdcMergeFlow.schema's SCD2 framework columns use the resolved sequencing type") {
+    // A non-Long sequencing expression must flow through to __START_AT / __END_AT and the
+    // metadata struct's record-start-at field.
+    val session = spark
+    import session.implicits._
+    val sourceDf = MemoryStream[(Int, String, Int)].toDS().toDF("id", "name", "seq")
+
+    val resolvedFlow = newAutoCdcMergeFlow(sourceDf, storedAsScdType = ScdType.Type2)
+
+    assert(resolvedFlow.schema(Scd2BatchProcessor.startAtColName).dataType == IntegerType)
+    assert(resolvedFlow.schema(Scd2BatchProcessor.endAtColName).dataType == IntegerType)
+    assert(
+      resolvedFlow.schema(AutoCdcReservedNames.cdcMetadataColName).dataType ==
+      Scd2BatchProcessor.cdcMetadataColSchema(IntegerType)
+    )
+  }
+
+  test("AutoCdcMergeFlow.schema supports a multi-column (struct) sequencing expression") {
+    // A multi-column sequence is expressed as a struct over the ordering columns; its resolved
+    // type is the corresponding StructType, which must flow into __START_AT / __END_AT and the
+    // metadata struct's record-start-at field unchanged, including each field's own nullability.
+    val session = spark
+    import session.implicits._
+    // seq1 is a non-null Int; seq2 is a nullable Long (Option[Long]), so the struct carries
+    // mixed per-field nullability.
+    val sourceDf =
+      MemoryStream[(Int, String, Int, Option[Long])].toDS().toDF("id", "name", "seq1", "seq2")
+
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = sourceDf,
+      sequencing = F.struct(F.col("seq1"), F.col("seq2")),
+      storedAsScdType = ScdType.Type2
+    )
+
+    // Top-level nullability and inner-field nullability are independent. The __START_AT /
+    // __END_AT columns must themselves stay nullable -- an open/unset interval bound is
+    // represented as NULL, which reconciliation relies on -- regardless of the sequencing
+    // struct's field nullability. A struct column is free to be NULL at the top level
+    // regardless of its fields' nullability.
+    val startAtField = resolvedFlow.schema(Scd2BatchProcessor.startAtColName)
+    val endAtField = resolvedFlow.schema(Scd2BatchProcessor.endAtColName)
+    assert(startAtField.nullable, "__START_AT must be nullable")
+    assert(endAtField.nullable, "__END_AT must be nullable")
+
+    // The struct data type flows through unchanged, preserving each field's own nullability:
+    // seq1 stays non-null, seq2 stays nullable.
+    val expectedSeqType = new StructType()
+      .add("seq1", IntegerType, nullable = false)
+      .add("seq2", LongType, nullable = true)
+    assert(startAtField.dataType == expectedSeqType)
+    assert(endAtField.dataType == expectedSeqType)
+    assert(
+      resolvedFlow.schema(AutoCdcReservedNames.cdcMetadataColName).dataType ==
+      Scd2BatchProcessor.cdcMetadataColSchema(expectedSeqType)
     )
   }
 
@@ -346,6 +526,28 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     assert(
       loadedDf.schema.fieldNames.toSeq ==
       Seq("id", "seq", AutoCdcReservedNames.cdcMetadataColName)
+    )
+  }
+
+  test("AutoCdcMergeFlow.load() schema matches AutoCdcMergeFlow.schema for SCD2") {
+    // The empty-df load path must reproduce the SCD2 augmented schema exactly, including the
+    // trailing framework columns.
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2
+    )
+    val loadedDf = resolvedFlow.load(asStreaming = true)
+    assert(loadedDf.schema == resolvedFlow.schema)
+    assert(
+      loadedDf.schema.fieldNames.toSeq ==
+      Seq(
+        "id",
+        "name",
+        "seq",
+        Scd2BatchProcessor.startAtColName,
+        Scd2BatchProcessor.endAtColName,
+        AutoCdcReservedNames.cdcMetadataColName
+      )
     )
   }
 
