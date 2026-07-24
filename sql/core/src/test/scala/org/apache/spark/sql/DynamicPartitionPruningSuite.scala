@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.lang.reflect.Modifier
 import java.sql.Date
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -26,7 +27,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.GivenWhenThen
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, DynamicPruningSubquery, Expression}
+import org.apache.spark.sql.catalyst.expressions.{BroadcastValueProjection,
+  DynamicPruningExpression, DynamicPruningSubquery, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti}
@@ -2566,7 +2568,7 @@ class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
           source,
           Seq(source.output.head),
           Seq(0),
-          onlyInBroadcast = true)
+          onlyInBroadcast = true)()
         val plan = FilterExec(DynamicPruningExpression(pruning), existingJoin)
         val rewritten = PlanDynamicPruningFilters(spark).apply(plan)
         val directFilters = rewritten.expressions.flatMap(_.collect {
@@ -2583,6 +2585,37 @@ class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
 
 class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
   with EnableAdaptiveExecutionSuite {
+
+  test("adaptive broadcast value projection survives Catalyst copies") {
+    val source = spark.table("product").queryExecution.optimizedPlan
+    val key = source.output.head
+    val child = QueryExecution.createSparkPlan(spark.sessionState.planner, source)
+    val projection = BroadcastValueProjection(source, Seq(key), key)
+    val adaptive = SubqueryAdaptiveBroadcastExec(
+      "dynamicpruning", Seq(0), true, source, Seq(key), child)(Some(projection))
+
+    assert(adaptive.productArity === 6)
+    assert(SubqueryAdaptiveBroadcastExec.unapply(adaptive).exists(_.productArity == 6))
+    assert(Modifier.isTransient(
+      classOf[SubqueryAdaptiveBroadcastExec].getDeclaredField("broadcastValueProjection")
+        .getModifiers))
+
+    Seq(
+      adaptive.copy()(adaptive.broadcastValueProjection),
+      adaptive.withNewChildren(Seq(ProjectExec(child.output, child)))
+        .asInstanceOf[SubqueryAdaptiveBroadcastExec],
+      adaptive.makeCopy(adaptive.productIterator.map(_.asInstanceOf[AnyRef]).toArray)
+        .asInstanceOf[SubqueryAdaptiveBroadcastExec]
+    ).foreach { rewritten =>
+      assert(rewritten.broadcastValueProjection.contains(projection))
+    }
+
+    val unprojected = adaptive.copy()(None)
+    assert(adaptive === unprojected)
+    assert(adaptive.canonicalized.asInstanceOf[SubqueryAdaptiveBroadcastExec]
+      .broadcastValueProjection.isEmpty)
+    assert(adaptive.canonicalized === unprojected.canonicalized)
+  }
 
   test("SPARK-39447: Avoid AssertionError in AdaptiveSparkPlanExec.doExecuteBroadcast") {
     val df = sql(

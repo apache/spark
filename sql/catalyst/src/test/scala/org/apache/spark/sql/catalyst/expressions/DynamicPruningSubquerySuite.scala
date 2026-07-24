@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.reflect.Modifier
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.optimizer.ReusableBroadcastValueProjection
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -33,59 +35,59 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
     buildKeys = Seq(pruningKeyExpression),
     broadcastKeyIndices = Seq(0),
     onlyInBroadcast = false
-  )
+  )()
 
   test("pruningKey data type matches single buildKey") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
-      .copy(buildKeys = Seq(Literal(2023)))
+      .copy(buildKeys = Seq(Literal(2023)))(None)
     assert(dynamicPruningSubquery.resolved == true)
   }
 
   test("pruningKey data type is a Struct and matches with Struct buildKey") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
       .copy(pruningKey = CreateStruct(Seq(Literal(1), Literal.FalseLiteral)),
-        buildKeys = Seq(CreateStruct(Seq(Literal(2), Literal.TrueLiteral))))
+        buildKeys = Seq(CreateStruct(Seq(Literal(2), Literal.TrueLiteral))))(None)
     assert(dynamicPruningSubquery.resolved == true)
   }
 
   test("multiple buildKeys but only one broadcastKeyIndex") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
       .copy(buildKeys = Seq(Literal(0), Literal(2), Literal(0), Literal(9)),
-        broadcastKeyIndices = Seq(1))
+        broadcastKeyIndices = Seq(1))(None)
     assert(dynamicPruningSubquery.resolved == true)
   }
 
   test("pruningKey data type does not match the single buildKey") {
     val dynamicPruningSubquery = validDynamicPruningSubquery.copy(
       pruningKey = Literal.TrueLiteral,
-      buildKeys = Seq(Literal(2013)))
+      buildKeys = Seq(Literal(2013)))(None)
     assert(dynamicPruningSubquery.resolved == false)
   }
 
   test("pruningKey data type is a Struct but mismatch with Struct buildKey") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
       .copy(pruningKey = CreateStruct(Seq(Literal(1), Literal.FalseLiteral)),
-        buildKeys = Seq(CreateStruct(Seq(Literal.TrueLiteral, Literal(2)))))
+        buildKeys = Seq(CreateStruct(Seq(Literal.TrueLiteral, Literal(2)))))(None)
     assert(dynamicPruningSubquery.resolved == false)
   }
 
   test("DynamicPruningSubquery should only have a single broadcasting key") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
       .copy(buildKeys = Seq(Literal(2025), Literal(2), Literal(1809)),
-        broadcastKeyIndices = Seq(0, 2))
+        broadcastKeyIndices = Seq(0, 2))(None)
     assert(dynamicPruningSubquery.resolved == false)
   }
 
   test("duplicates in broadcastKeyIndices, and also should not be allowed") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
       .copy(buildKeys = Seq(Literal(2)),
-        broadcastKeyIndices = Seq(0, 0))
+        broadcastKeyIndices = Seq(0, 0))(None)
     assert(dynamicPruningSubquery.resolved == false)
   }
 
   test("broadcastKeyIndex out of bounds") {
     val dynamicPruningSubquery = validDynamicPruningSubquery
-      .copy(broadcastKeyIndices = Seq(1))
+      .copy(broadcastKeyIndices = Seq(1))(None)
     assert(dynamicPruningSubquery.resolved == false)
   }
 
@@ -100,49 +102,54 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
       buildQuery = LocalRelation(attr1),
       buildKeys = Seq(attr1),
       broadcastKeyIndices = Seq(0),
-      onlyInBroadcast = false)
+      onlyInBroadcast = false)()
 
     val dpq2 = DynamicPruningSubquery(
       pruningKey = Literal(1),
       buildQuery = LocalRelation(attr2),
       buildKeys = Seq(attr2),
       broadcastKeyIndices = Seq(0),
-      onlyInBroadcast = false)
+      onlyInBroadcast = false)()
 
     assert(dpq1.canonicalized == dpq2.canonicalized,
       "DynamicPruningSubquery with identical build queries but different ExprIds " +
       "must produce identical canonicalized forms so PlanMerger can deduplicate them")
   }
 
-  test("broadcast value metadata survives logical rewrites without changing DPP identity") {
+  test("transient broadcast value projection survives Catalyst copies without changing identity") {
     val key = AttributeReference("key", IntegerType)()
     val source = LocalRelation(key)
     val projection = BroadcastValueProjection(source, Seq(key), key)
     val pruning = DynamicPruningSubquery(
-      key, source, Seq(key), Seq(0), onlyInBroadcast = true)
-      .withBroadcastValueProjection(Some(projection))
+      key, source, Seq(key), Seq(0), onlyInBroadcast = true)(Some(projection))
 
     assert(pruning.resolved)
     assert(pruning.productArity === 7)
     assert(DynamicPruningSubquery.unapply(pruning).exists(_.productArity == 7))
+    assert(Modifier.isTransient(
+      classOf[DynamicPruningSubquery].getDeclaredField("broadcastValueProjection").getModifiers))
 
     Seq(
+      pruning.copy()(pruning.broadcastValueProjection),
       pruning.withNewPlan(source),
       pruning.withNewOuterAttrs(Seq(key)),
       pruning.withNewHint(None).asInstanceOf[DynamicPruningSubquery],
-      pruning.withNewChildren(Seq(key)).asInstanceOf[DynamicPruningSubquery]
+      pruning.withNewChildren(Seq(key)).asInstanceOf[DynamicPruningSubquery],
+      pruning.makeCopy(pruning.productIterator.map(_.asInstanceOf[AnyRef]).toArray)
+        .asInstanceOf[DynamicPruningSubquery]
     ).foreach { rewritten =>
       assert(rewritten.broadcastValueProjection.contains(projection))
     }
 
-    assert(pruning.canonicalized ===
-      pruning.withBroadcastValueProjection(None).canonicalized)
+    val unprojected = pruning.copy()(None)
+    assert(pruning === unprojected)
+    assert(pruning.canonicalized.asInstanceOf[DynamicPruningSubquery]
+      .broadcastValueProjection.isEmpty)
+    assert(pruning.canonicalized === unprojected.canonicalized)
 
     val missing = AttributeReference("missing", IntegerType)()
-    assert(!pruning.withBroadcastValueProjection(
-      Some(projection.copy(sourceHashKeys = Seq(missing)))).resolved)
-    assert(!pruning.withBroadcastValueProjection(
-      Some(projection.copy(valueExpression = missing))).resolved)
+    assert(!pruning.copy()(Some(projection.copy(sourceHashKeys = Seq(missing)))).resolved)
+    assert(!pruning.copy()(Some(projection.copy(valueExpression = missing))).resolved)
   }
 
   test("extract broadcast hash keys without rejecting residual join predicates") {

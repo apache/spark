@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningBroadcastValueMetadata, DynamicPruningExpression, ListQuery, Literal}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningExpression, ListQuery, Literal}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY}
 import org.apache.spark.sql.execution
@@ -49,10 +49,13 @@ case class PlanAdaptiveSubqueries(
       case pruning @ expressions.DynamicPruningSubquery(value, buildPlan,
           buildKeys, broadcastKeyIndices, onlyInBroadcast, exprId, _) =>
         val name = s"dynamicpruning#${exprId.id}"
-        val subquery = DynamicPruningBroadcastValueMetadata.set(
-          SubqueryAdaptiveBroadcastExec(name, broadcastKeyIndices, onlyInBroadcast,
-            buildPlan, buildKeys, subqueryMap(exprId.id)),
-          pruning.broadcastValueProjection)
+        val subquery = SubqueryAdaptiveBroadcastExec(
+          name,
+          broadcastKeyIndices,
+          onlyInBroadcast,
+          buildPlan,
+          buildKeys,
+          subqueryMap(exprId.id))(pruning.broadcastValueProjection)
         DynamicPruningExpression(InSubqueryExec(value, subquery, exprId))
     }
   }

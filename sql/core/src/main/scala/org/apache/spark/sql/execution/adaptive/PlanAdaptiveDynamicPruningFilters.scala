@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, BroadcastValueProjection, DynamicPruningBroadcastValueMetadata, DynamicPruningExpression, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, BroadcastValueProjection, DynamicPruningExpression, Expression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -105,7 +105,7 @@ case class PlanAdaptiveDynamicPruningFilters(
           name, indices, buildKeys, None, adaptivePlan)
         val reusedBroadcast = directBroadcast.orElse {
           if (onlyInBroadcast) {
-            DynamicPruningBroadcastValueMetadata.get(subquery)
+            subquery.broadcastValueProjection
               .flatMap(projectedBroadcast(name, _, adaptivePlan.context))
           } else {
             None

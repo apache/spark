@@ -125,8 +125,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           filteringPlan,
           joinKeys,
           indices,
-          conf.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit)
-          .withBroadcastValueProjection(broadcastValueProjection),
+          conf.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit)(broadcastValueProjection),
         pruningPlan)
     } else {
       // abort dynamic partition pruning
