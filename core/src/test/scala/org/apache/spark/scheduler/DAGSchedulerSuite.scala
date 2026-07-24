@@ -7644,7 +7644,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("regular job on a non-default resource profile is NOT rejected (RP check is pipelined-only)") {
+  test("regular job on a non-default resource profile is NOT rejected (RP check is pipelined)") {
     // The resource-profile rejection is not keyed on a pipelined dependency, so it must run ONLY
     // for a job that has one (handleJobSubmitted gates checkPipelinedGroupsSupportedInRDDGraph on
     // hasPipelined). A perfectly ordinary job that merely attaches a non-default profile via
