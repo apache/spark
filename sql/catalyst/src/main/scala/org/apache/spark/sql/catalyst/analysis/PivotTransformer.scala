@@ -22,8 +22,10 @@ import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   AliasHelper,
   Attribute,
+  AttributeReference,
   AttributeSet,
   Cast,
+  Coalesce,
   EmptyRow,
   EqualNullSafe,
   Expression,
@@ -43,6 +45,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -138,12 +141,25 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
           firstAgg
         )
       val pivotAggregatesAttributes = pivotAggregates.map(_.toAttribute)
+      // When the flag is disabled, supply no empty-input defaults: empty buckets stay NULL and no
+      // Coalesce is added, so the pivoted columns stay nullable.
+      val aggregateEmptyInputDefaults: Seq[Option[Expression]] =
+        if (conf.getConf(SQLConf.PIVOT_EMPTY_BUCKET_RETURNS_AGGREGATE_DEFAULT)) {
+          aggregates.map(aggregateEmptyInputDefault)
+        } else {
+          Seq.fill(aggregates.size)(None)
+        }
       val pivotOutputs = pivotValues.zipWithIndex.flatMap {
         case (value, i) =>
-          aggregates.zip(pivotAggregatesAttributes).map {
-            case (aggregate, pivotAtt) =>
+          aggregates.zip(pivotAggregatesAttributes).zip(aggregateEmptyInputDefaults).map {
+            case ((aggregate, pivotAtt), emptyInputDefault) =>
+              val extractedValue = ExtractValue(pivotAtt, Literal(i), conf.resolver)
+              val withEmptyInputDefault = emptyInputDefault match {
+                case Some(default) => Coalesce(Seq(extractedValue, default))
+                case None => extractedValue
+              }
               newAlias(
-                ExtractValue(pivotAtt, Literal(i), conf.resolver),
+                withEmptyInputDefault,
                 Some(outputName(value, aggregate, isSingleAggregate = aggregates.size == 1))
               )
           }
@@ -182,6 +198,42 @@ object PivotTransformer extends AliasHelper with SQLConfHelper {
         }
       }
       Aggregate(groupByExpressions, groupByExpressions ++ pivotAggregates, child)
+    }
+  }
+
+  /**
+   * Empty-input default for a pivot aggregate to coalesce into its extracted value, or `None` to
+   * leave the value unchanged. The fast path's [[PivotFirst]] leaves an unmatched pivot category's
+   * slot unset, so the caller wraps the result in a [[Coalesce]] to recover the value the slow path
+   * produces on an empty bucket (`count` -> 0; `sum`/`avg`/`min`/`max` -> NULL).
+   *
+   * Returned unevaluated so later constant folding defers a default that throws under ANSI (e.g.
+   * `count(v1) / count(v2)` -> `0 / 0`) to runtime, where [[Coalesce]] only evaluates it for
+   * actually-empty buckets -- matching the slow path. Mirrors
+   * `RewriteCorrelatedScalarSubquery.evalAggExprOnZeroTups`.
+   */
+  private def aggregateEmptyInputDefault(aggregate: Expression): Option[Expression] = {
+    trimAliases(aggregate) match {
+      // Bare aggregate: use its published default result (count -> 0, sum/avg/min/max -> None).
+      case AggregateExpression(aggregateFunction, _, _, _, _) =>
+        aggregateFunction.defaultResult
+      // Composite over aggregate(s): substitute each aggregate/attribute with its empty-input
+      // value. Return None for a non-foldable default or a literal NULL (nothing to coalesce in). A
+      // default that only folds to NULL (e.g. sum(x) + 1) is still returned; its Coalesce evaluates
+      // to NULL on an empty bucket, which is the correct result.
+      case other =>
+        val default = other.transform {
+          case AggregateExpression(aggregateFunction, _, _, _, _) =>
+            aggregateFunction.defaultResult.getOrElse(
+              Literal.create(null, aggregateFunction.dataType))
+          case attribute: AttributeReference =>
+            Literal.create(null, attribute.dataType)
+        }
+        default match {
+          case _ if !trimAliases(default).foldable => None
+          case Literal(null, _) => None
+          case _ => Some(default)
+        }
     }
   }
 

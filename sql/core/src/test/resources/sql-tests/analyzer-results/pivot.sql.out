@@ -374,7 +374,7 @@ PIVOT (
 )
 -- !query analysis
 Project [year#x, dotNET_CEIL(sum(earnings))#xL, dotNET_a1#x, Java_CEIL(sum(earnings))#xL, Java_a1#x]
-+- Project [year#x, __pivot_CEIL(sum(__auto_generated_subquery_name.earnings)) AS `CEIL(sum(__auto_generated_subquery_name.earnings))`#x[0] AS dotNET_CEIL(sum(earnings))#xL, __pivot_(avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1 AS `(avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1`#x[0] AS dotNET_a1#x, __pivot_CEIL(sum(__auto_generated_subquery_name.earnings)) AS `CEIL(sum(__auto_generated_subquery_name.earnings))`#x[1] AS Java_CEIL(sum(earnings))#xL, __pivot_(avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1 AS `(avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1`#x[1] AS Java_a1#x]
++- Project [year#x, coalesce(__pivot_CEIL(sum(__auto_generated_subquery_name.earnings)) AS `CEIL(sum(__auto_generated_subquery_name.earnings))`#x[0], CEIL(null)) AS dotNET_CEIL(sum(earnings))#xL, coalesce(__pivot_(avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1 AS `(avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1`#x[0], (null + cast(1 as double))) AS dotNET_a1#x, coalesce(__pivot_CEIL(sum(__auto_generated_subquery_name.earnings)) AS `CEIL(sum(__auto_generated_subquery_name.earnings))`#x[1], CEIL(null)) AS Java_CEIL(sum(earnings))#xL, coalesce(__pivot_(avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1 AS `(avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1`#x[1], (null + cast(1 as double))) AS Java_a1#x]
    +- Aggregate [year#x], [year#x, pivotfirst(course#x, CEIL(sum(__auto_generated_subquery_name.earnings))#xL, dotNET, Java, 0, 0) AS __pivot_CEIL(sum(__auto_generated_subquery_name.earnings)) AS `CEIL(sum(__auto_generated_subquery_name.earnings))`#x, pivotfirst(course#x, (avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1#x, dotNET, Java, 0, 0) AS __pivot_(avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1 AS `(avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1`#x]
       +- Aggregate [year#x, course#x], [year#x, course#x, CEIL(sum(earnings#x)) AS CEIL(sum(__auto_generated_subquery_name.earnings))#xL, (avg(earnings#x) + cast(1 as double)) AS (avg(__auto_generated_subquery_name.earnings) + CAST(1 AS DOUBLE)) AS a1#x]
          +- SubqueryAlias __auto_generated_subquery_name
@@ -848,3 +848,268 @@ Project [year#x, dotNET#xL, s#x]
                +- Project [y#x, s#x]
                   +- SubqueryAlias years
                      +- LocalRelation [y#x, s#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query analysis
+Project [year#x, dotNET#xL, Java#xL, Scala#xL]
++- Project [year#x, coalesce(__pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x[0], 0) AS dotNET#xL, coalesce(__pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x[1], 0) AS Java#xL, coalesce(__pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x[2], 0) AS Scala#xL]
+   +- Aggregate [year#x], [year#x, pivotfirst(course#x, count(__auto_generated_subquery_name.earnings)#xL, dotNET, Java, Scala, 0, 0) AS __pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x]
+      +- Aggregate [year#x, course#x], [year#x, course#x, count(earnings#x) AS count(__auto_generated_subquery_name.earnings)#xL]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x, earnings#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course FROM courseSales
+)
+PIVOT (
+  count(*)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query analysis
+Project [year#x, dotNET#xL, Java#xL, Scala#xL]
++- Project [year#x, coalesce(__pivot_count(1) AS `count(1)`#x[0], 0) AS dotNET#xL, coalesce(__pivot_count(1) AS `count(1)`#x[1], 0) AS Java#xL, coalesce(__pivot_count(1) AS `count(1)`#x[2], 0) AS Scala#xL]
+   +- Aggregate [year#x], [year#x, pivotfirst(course#x, count(1)#xL, dotNET, Java, Scala, 0, 0) AS __pivot_count(1) AS `count(1)`#x]
+      +- Aggregate [year#x, course#x], [year#x, course#x, count(1) AS count(1)#xL]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings), sum(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query analysis
+Project [year#x, dotNET_count(earnings)#xL, dotNET_sum(earnings)#xL, Java_count(earnings)#xL, Java_sum(earnings)#xL, Scala_count(earnings)#xL, Scala_sum(earnings)#xL]
++- Project [year#x, coalesce(__pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x[0], 0) AS dotNET_count(earnings)#xL, __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x[0] AS dotNET_sum(earnings)#xL, coalesce(__pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x[1], 0) AS Java_count(earnings)#xL, __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x[1] AS Java_sum(earnings)#xL, coalesce(__pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x[2], 0) AS Scala_count(earnings)#xL, __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x[2] AS Scala_sum(earnings)#xL]
+   +- Aggregate [year#x], [year#x, pivotfirst(course#x, count(__auto_generated_subquery_name.earnings)#xL, dotNET, Java, Scala, 0, 0) AS __pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x, pivotfirst(course#x, sum(__auto_generated_subquery_name.earnings)#xL, dotNET, Java, Scala, 0, 0) AS __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x]
+      +- Aggregate [year#x, course#x], [year#x, course#x, count(earnings#x) AS count(__auto_generated_subquery_name.earnings)#xL, sum(earnings#x) AS sum(__auto_generated_subquery_name.earnings)#xL]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x, earnings#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings), avg(earnings), min(earnings), max(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query analysis
+Project [year#x, dotNET_sum(earnings)#xL, dotNET_avg(earnings)#x, dotNET_min(earnings)#x, dotNET_max(earnings)#x, Java_sum(earnings)#xL, Java_avg(earnings)#x, Java_min(earnings)#x, Java_max(earnings)#x, Scala_sum(earnings)#xL, Scala_avg(earnings)#x, Scala_min(earnings)#x, Scala_max(earnings)#x]
++- Project [year#x, __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x[0] AS dotNET_sum(earnings)#xL, __pivot_avg(__auto_generated_subquery_name.earnings) AS `avg(__auto_generated_subquery_name.earnings)`#x[0] AS dotNET_avg(earnings)#x, __pivot_min(__auto_generated_subquery_name.earnings) AS `min(__auto_generated_subquery_name.earnings)`#x[0] AS dotNET_min(earnings)#x, __pivot_max(__auto_generated_subquery_name.earnings) AS `max(__auto_generated_subquery_name.earnings)`#x[0] AS dotNET_max(earnings)#x, __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x[1] AS Java_sum(earnings)#xL, __pivot_avg(__auto_generated_subquery_name.earnings) AS `avg(__auto_generated_subquery_name.earnings)`#x[1] AS Java_avg(earnings)#x, __pivot_min(__auto_generated_subquery_name.earnings) AS `min(__auto_generated_subquery_name.earnings)`#x[1] AS Java_min(earnings)#x, __pivot_max(__auto_generated_subquery_name.earnings) AS `max(__auto_generated_subquery_name.earnings)`#x[1] AS Java_max(earnings)#x, __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x[2] AS Scala_sum(earnings)#xL, __pivot_avg(__auto_generated_subquery_name.earnings) AS `avg(__auto_generated_subquery_name.earnings)`#x[2] AS Scala_avg(earnings)#x, __pivot_min(__auto_generated_subquery_name.earnings) AS `min(__auto_generated_subquery_name.earnings)`#x[2] AS Scala_min(earnings)#x, __pivot_max(__auto_generated_subquery_name.earnings) AS `max(__auto_generated_subquery_name.earnings)`#x[2] AS Scala_max(earnings)#x]
+   +- Aggregate [year#x], [year#x, pivotfirst(course#x, sum(__auto_generated_subquery_name.earnings)#xL, dotNET, Java, Scala, 0, 0) AS __pivot_sum(__auto_generated_subquery_name.earnings) AS `sum(__auto_generated_subquery_name.earnings)`#x, pivotfirst(course#x, avg(__auto_generated_subquery_name.earnings)#x, dotNET, Java, Scala, 0, 0) AS __pivot_avg(__auto_generated_subquery_name.earnings) AS `avg(__auto_generated_subquery_name.earnings)`#x, pivotfirst(course#x, min(__auto_generated_subquery_name.earnings)#x, dotNET, Java, Scala, 0, 0) AS __pivot_min(__auto_generated_subquery_name.earnings) AS `min(__auto_generated_subquery_name.earnings)`#x, pivotfirst(course#x, max(__auto_generated_subquery_name.earnings)#x, dotNET, Java, Scala, 0, 0) AS __pivot_max(__auto_generated_subquery_name.earnings) AS `max(__auto_generated_subquery_name.earnings)`#x]
+      +- Aggregate [year#x, course#x], [year#x, course#x, sum(earnings#x) AS sum(__auto_generated_subquery_name.earnings)#xL, avg(earnings#x) AS avg(__auto_generated_subquery_name.earnings)#x, min(earnings#x) AS min(__auto_generated_subquery_name.earnings)#x, max(earnings#x) AS max(__auto_generated_subquery_name.earnings)#x]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x, earnings#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  approx_count_distinct(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query analysis
+Project [year#x, dotNET#xL, Java#xL, Scala#xL]
++- Project [year#x, coalesce(__pivot_approx_count_distinct(__auto_generated_subquery_name.earnings) AS `approx_count_distinct(__auto_generated_subquery_name.earnings)`#x[0], 0) AS dotNET#xL, coalesce(__pivot_approx_count_distinct(__auto_generated_subquery_name.earnings) AS `approx_count_distinct(__auto_generated_subquery_name.earnings)`#x[1], 0) AS Java#xL, coalesce(__pivot_approx_count_distinct(__auto_generated_subquery_name.earnings) AS `approx_count_distinct(__auto_generated_subquery_name.earnings)`#x[2], 0) AS Scala#xL]
+   +- Aggregate [year#x], [year#x, pivotfirst(course#x, approx_count_distinct(__auto_generated_subquery_name.earnings)#xL, dotNET, Java, Scala, 0, 0) AS __pivot_approx_count_distinct(__auto_generated_subquery_name.earnings) AS `approx_count_distinct(__auto_generated_subquery_name.earnings)`#x]
+      +- Aggregate [year#x, course#x], [year#x, course#x, approx_count_distinct(earnings#x, 0.05, 0, 0) AS approx_count_distinct(__auto_generated_subquery_name.earnings)#xL]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x, earnings#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(DISTINCT earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query analysis
+Project [year#x, dotNET#xL, Java#xL, Scala#xL]
++- Project [year#x, coalesce(__pivot_count(DISTINCT __auto_generated_subquery_name.earnings) AS `count(DISTINCT __auto_generated_subquery_name.earnings)`#x[0], 0) AS dotNET#xL, coalesce(__pivot_count(DISTINCT __auto_generated_subquery_name.earnings) AS `count(DISTINCT __auto_generated_subquery_name.earnings)`#x[1], 0) AS Java#xL, coalesce(__pivot_count(DISTINCT __auto_generated_subquery_name.earnings) AS `count(DISTINCT __auto_generated_subquery_name.earnings)`#x[2], 0) AS Scala#xL]
+   +- Aggregate [year#x], [year#x, pivotfirst(course#x, count(DISTINCT __auto_generated_subquery_name.earnings)#xL, dotNET, Java, Scala, 0, 0) AS __pivot_count(DISTINCT __auto_generated_subquery_name.earnings) AS `count(DISTINCT __auto_generated_subquery_name.earnings)`#x]
+      +- Aggregate [year#x, course#x], [year#x, course#x, count(distinct earnings#x) AS count(DISTINCT __auto_generated_subquery_name.earnings)#xL]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x, earnings#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  CAST(count(earnings) AS DOUBLE), count(earnings) + 1
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query analysis
+Project [year#x, dotNET_CAST(count(earnings) AS DOUBLE)#x, dotNET_(count(earnings) + 1)#xL, Java_CAST(count(earnings) AS DOUBLE)#x, Java_(count(earnings) + 1)#xL, Scala_CAST(count(earnings) AS DOUBLE)#x, Scala_(count(earnings) + 1)#xL]
++- Project [year#x, coalesce(__pivot_CAST(count(__auto_generated_subquery_name.earnings) AS DOUBLE) AS `CAST(count(__auto_generated_subquery_name.earnings) AS DOUBLE)`#x[0], cast(0 as double)) AS dotNET_CAST(count(earnings) AS DOUBLE)#x, coalesce(__pivot_(count(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT)) AS `(count(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))`#x[0], (0 + cast(1 as bigint))) AS dotNET_(count(earnings) + 1)#xL, coalesce(__pivot_CAST(count(__auto_generated_subquery_name.earnings) AS DOUBLE) AS `CAST(count(__auto_generated_subquery_name.earnings) AS DOUBLE)`#x[1], cast(0 as double)) AS Java_CAST(count(earnings) AS DOUBLE)#x, coalesce(__pivot_(count(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT)) AS `(count(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))`#x[1], (0 + cast(1 as bigint))) AS Java_(count(earnings) + 1)#xL, coalesce(__pivot_CAST(count(__auto_generated_subquery_name.earnings) AS DOUBLE) AS `CAST(count(__auto_generated_subquery_name.earnings) AS DOUBLE)`#x[2], cast(0 as double)) AS Scala_CAST(count(earnings) AS DOUBLE)#x, coalesce(__pivot_(count(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT)) AS `(count(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))`#x[2], (0 + cast(1 as bigint))) AS Scala_(count(earnings) + 1)#xL]
+   +- Aggregate [year#x], [year#x, pivotfirst(course#x, CAST(count(__auto_generated_subquery_name.earnings) AS DOUBLE)#x, dotNET, Java, Scala, 0, 0) AS __pivot_CAST(count(__auto_generated_subquery_name.earnings) AS DOUBLE) AS `CAST(count(__auto_generated_subquery_name.earnings) AS DOUBLE)`#x, pivotfirst(course#x, (count(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))#xL, dotNET, Java, Scala, 0, 0) AS __pivot_(count(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT)) AS `(count(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))`#x]
+      +- Aggregate [year#x, course#x], [year#x, course#x, cast(count(earnings#x) as double) AS CAST(count(__auto_generated_subquery_name.earnings) AS DOUBLE)#x, (count(earnings#x) + cast(1 as bigint)) AS (count(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))#xL]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x, earnings#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings) + 1
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query analysis
+Project [year#x, dotNET#xL, Java#xL, Scala#xL]
++- Project [year#x, coalesce(__pivot_(sum(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT)) AS `(sum(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))`#x[0], (null + cast(1 as bigint))) AS dotNET#xL, coalesce(__pivot_(sum(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT)) AS `(sum(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))`#x[1], (null + cast(1 as bigint))) AS Java#xL, coalesce(__pivot_(sum(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT)) AS `(sum(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))`#x[2], (null + cast(1 as bigint))) AS Scala#xL]
+   +- Aggregate [year#x], [year#x, pivotfirst(course#x, (sum(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))#xL, dotNET, Java, Scala, 0, 0) AS __pivot_(sum(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT)) AS `(sum(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))`#x]
+      +- Aggregate [year#x, course#x], [year#x, course#x, (sum(earnings#x) + cast(1 as bigint)) AS (sum(__auto_generated_subquery_name.earnings) + CAST(1 AS BIGINT))#xL]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x, earnings#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings) + count(year)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query analysis
+Project [dotNET#xL, Java#xL, Scala#xL]
++- Project [coalesce(__pivot_(count(__auto_generated_subquery_name.earnings) + count(__auto_generated_subquery_name.year)) AS `(count(__auto_generated_subquery_name.earnings) + count(__auto_generated_subquery_name.year))`#x[0], (0 + 0)) AS dotNET#xL, coalesce(__pivot_(count(__auto_generated_subquery_name.earnings) + count(__auto_generated_subquery_name.year)) AS `(count(__auto_generated_subquery_name.earnings) + count(__auto_generated_subquery_name.year))`#x[1], (0 + 0)) AS Java#xL, coalesce(__pivot_(count(__auto_generated_subquery_name.earnings) + count(__auto_generated_subquery_name.year)) AS `(count(__auto_generated_subquery_name.earnings) + count(__auto_generated_subquery_name.year))`#x[2], (0 + 0)) AS Scala#xL]
+   +- Aggregate [pivotfirst(course#x, (count(__auto_generated_subquery_name.earnings) + count(__auto_generated_subquery_name.year))#xL, dotNET, Java, Scala, 0, 0) AS __pivot_(count(__auto_generated_subquery_name.earnings) + count(__auto_generated_subquery_name.year)) AS `(count(__auto_generated_subquery_name.earnings) + count(__auto_generated_subquery_name.year))`#x]
+      +- Aggregate [course#x], [course#x, (count(earnings#x) + count(year#x)) AS (count(__auto_generated_subquery_name.earnings) + count(__auto_generated_subquery_name.year))#xL]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x, earnings#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(CASE WHEN earnings > 15000 THEN earnings END)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query analysis
+Project [year#x, dotNET#xL, Java#xL, Scala#xL]
++- Project [year#x, coalesce(__pivot_count(CASE WHEN (__auto_generated_subquery_name.earnings > 15000) THEN __auto_generated_subquery_name.earnings END) AS `count(CASE WHEN (__auto_generated_subquery_name.earnings > 15000) THEN __auto_generated_subquery_name.earnings END)`#x[0], 0) AS dotNET#xL, coalesce(__pivot_count(CASE WHEN (__auto_generated_subquery_name.earnings > 15000) THEN __auto_generated_subquery_name.earnings END) AS `count(CASE WHEN (__auto_generated_subquery_name.earnings > 15000) THEN __auto_generated_subquery_name.earnings END)`#x[1], 0) AS Java#xL, coalesce(__pivot_count(CASE WHEN (__auto_generated_subquery_name.earnings > 15000) THEN __auto_generated_subquery_name.earnings END) AS `count(CASE WHEN (__auto_generated_subquery_name.earnings > 15000) THEN __auto_generated_subquery_name.earnings END)`#x[2], 0) AS Scala#xL]
+   +- Aggregate [year#x], [year#x, pivotfirst(course#x, count(CASE WHEN (__auto_generated_subquery_name.earnings > 15000) THEN __auto_generated_subquery_name.earnings END)#xL, dotNET, Java, Scala, 0, 0) AS __pivot_count(CASE WHEN (__auto_generated_subquery_name.earnings > 15000) THEN __auto_generated_subquery_name.earnings END) AS `count(CASE WHEN (__auto_generated_subquery_name.earnings > 15000) THEN __auto_generated_subquery_name.earnings END)`#x]
+      +- Aggregate [year#x, course#x], [year#x, course#x, count(CASE WHEN (earnings#x > 15000) THEN earnings#x END) AS count(CASE WHEN (__auto_generated_subquery_name.earnings > 15000) THEN __auto_generated_subquery_name.earnings END)#xL]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x, earnings#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SET spark.sql.pivot.emptyBucketReturnsAggregateDefault=false
+-- !query analysis
+SetCommand (spark.sql.pivot.emptyBucketReturnsAggregateDefault,Some(false))
+
+
+-- !query
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+)
+-- !query analysis
+Project [year#x, dotNET#xL, Java#xL, Scala#xL]
++- Project [year#x, __pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x[0] AS dotNET#xL, __pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x[1] AS Java#xL, __pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x[2] AS Scala#xL]
+   +- Aggregate [year#x], [year#x, pivotfirst(course#x, count(__auto_generated_subquery_name.earnings)#xL, dotNET, Java, Scala, 0, 0) AS __pivot_count(__auto_generated_subquery_name.earnings) AS `count(__auto_generated_subquery_name.earnings)`#x]
+      +- Aggregate [year#x, course#x], [year#x, course#x, count(earnings#x) AS count(__auto_generated_subquery_name.earnings)#xL]
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Project [year#x, course#x, earnings#x]
+               +- SubqueryAlias coursesales
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
+                     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
+                        +- Project [course#x, year#x, earnings#x]
+                           +- SubqueryAlias courseSales
+                              +- LocalRelation [course#x, year#x, earnings#x]
+
+
+-- !query
+SET spark.sql.pivot.emptyBucketReturnsAggregateDefault=true
+-- !query analysis
+SetCommand (spark.sql.pivot.emptyBucketReturnsAggregateDefault,Some(true))
