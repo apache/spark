@@ -68,4 +68,13 @@ trait SevenZArchiveTestUtils {
   protected def writeCorruptArchive(dest: File): Unit =
     Files.write(dest.toPath, "this is not a valid 7z archive, just some random bytes"
       .getBytes(StandardCharsets.UTF_8))
+
+  // 7z stores its entry index at the end of the file and validates it when the archive is opened,
+  // so it cannot read a first entry and then fail while advancing to a later one -- the open-time
+  // corrupt case is covered by the shared corrupt-archive tests instead.
+  protected def supportsMidAdvanceFailure: Boolean = false
+
+  protected def writeArchiveFailingAfterFirstEntry(
+      dest: File, firstEntry: (String, Array[Byte])): Unit =
+    throw new UnsupportedOperationException("7z cannot fail while advancing to a later entry")
 }

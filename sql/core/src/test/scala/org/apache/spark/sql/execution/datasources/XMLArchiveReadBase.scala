@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -131,6 +132,28 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
       Seq(entryName(0) -> xmlBytes("<row><id>1</id><name>Alice</name>")),
       extraOptions = Map("multiLine" -> "true"),
       schema = corruptSchema)
+  }
+
+  if (supportsMidAdvanceFailure) {
+    test("XML: multiLine inference skips a corrupt entry reached while advancing " +
+        "(ignoreCorruptFiles)") {
+      // The first entry is valid; advancing to a later entry throws (not at open). With
+      // ignoreCorruptFiles the whole archive is skipped via the hasNext recovery in
+      // inferWithArchives, so a good sibling archive still infers -- proving the skip covers a
+      // mid-advance failure, not only the first entry.
+      val opts = Map("multiLine" -> "true")
+      withTempDir { dir =>
+        writeArchiveFailingAfterFirstEntry(new File(dir, s"bad.${archiveExtensions.head}"),
+          entryName(0) -> xmlBytes("<rows><row><id>1</id><name>Alice</name></row></rows>"))
+        writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
+          Seq(entryName(0) -> xmlBytes("<rows><row><id>2</id><name>Bob</name></row></rows>")))
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+          val schema = inferredSchema(Seq(dir.getCanonicalPath), opts)
+          assert(schema.fieldNames.toSet == Set("id", "name"),
+            s"expected the good archive's schema after skipping the corrupt one, got $schema")
+        }
+      }
+    }
   }
 }
 

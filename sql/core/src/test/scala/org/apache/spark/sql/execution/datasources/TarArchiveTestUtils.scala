@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{File, FileOutputStream, OutputStream}
+import java.io.{ByteArrayOutputStream, File, FileOutputStream, OutputStream}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.Locale
@@ -62,4 +62,33 @@ trait TarArchiveTestUtils {
   protected def writeCorruptArchive(dest: File): Unit =
     Files.write(dest.toPath, "this is not a valid gzip-compressed tar archive"
       .getBytes(StandardCharsets.UTF_8))
+
+  protected def supportsMidAdvanceFailure: Boolean = true
+
+  /**
+   * Writes a plain `.tar` with `firstEntry` intact followed by a second entry that is then
+   * truncated partway through its header, so a reader parses the first entry cleanly and throws
+   * from `getNextEntry` while advancing to the second. Plain (uncompressed) tar keeps the first
+   * entry readable after truncation; gzipping corrupts the whole stream, so the ext is `.tar`.
+   */
+  protected def writeArchiveFailingAfterFirstEntry(
+      dest: File, firstEntry: (String, Array[Byte])): Unit = {
+    val buf = new ByteArrayOutputStream()
+    val out = new TarArchiveOutputStream(buf)
+    Seq(firstEntry, ("part-later.bin", ("x" * 4096).getBytes(StandardCharsets.UTF_8))).foreach {
+      case (entryName, bytes) =>
+        val entry = new TarArchiveEntry(entryName)
+        entry.setSize(bytes.length.toLong)
+        out.putArchiveEntry(entry)
+        out.write(bytes)
+        out.closeArchiveEntry()
+    }
+    out.finish()
+    out.close()
+    // Keep the first entry's 512-byte header and block-aligned body, then only part of the second
+    // entry's 512-byte header, so reading the first entry succeeds and `getNextEntry` throws on the
+    // partial header while advancing.
+    val firstBlocks = 512 + ((firstEntry._2.length + 511) / 512) * 512
+    Files.write(dest.toPath, buf.toByteArray.take(firstBlocks + 256))
+  }
 }

@@ -184,6 +184,28 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
       schema = corruptSchema)
   }
 
+  if (supportsMidAdvanceFailure) {
+    test("JSON: multiLine inference skips a corrupt entry reached while advancing " +
+        "(ignoreCorruptFiles)") {
+      // The first entry is valid; advancing to a later entry throws (not at open). With
+      // ignoreCorruptFiles the whole archive is skipped via the hasNext recovery in
+      // inferWithArchives, so a good sibling archive still infers -- proving the skip covers a
+      // mid-advance failure, not only the first entry.
+      val opts = Map("multiLine" -> "true")
+      withTempDir { dir =>
+        writeArchiveFailingAfterFirstEntry(new File(dir, s"bad.${archiveExtensions.head}"),
+          entryName(0) -> jsonBytes("{\n  \"id\": 1,\n  \"name\": \"Alice\"\n}"))
+        writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
+          Seq(entryName(0) -> jsonBytes("{\n  \"id\": 2,\n  \"name\": \"Bob\"\n}")))
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+          val schema = inferredSchema(Seq(dir.getCanonicalPath), opts)
+          assert(schema.fieldNames.toSet == Set("id", "name"),
+            s"expected the good archive's schema after skipping the corrupt one, got $schema")
+        }
+      }
+    }
+  }
+
   test("JSON: the DSv2 path refuses to infer a schema for an archive (UNABLE_TO_INFER_SCHEMA)") {
     // Forcing json off the v1 source list routes the archive read through the DSv2 JsonTable, which
     // cannot read archives and must fail with UNABLE_TO_INFER_SCHEMA, not parse raw bytes.
