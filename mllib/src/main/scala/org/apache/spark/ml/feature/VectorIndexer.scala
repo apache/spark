@@ -326,10 +326,10 @@ class VectorIndexerModel private[ml] (
   }
 
   /**
-   * Pre-computed feature attributes, with some missing info.
-   * In transform(), set attribute name and other info, if available.
+   * Computes feature attributes with some missing information.
+   * In transform(), set attribute name and other information, if available.
    */
-  private val partialFeatureAttributes: Array[Attribute] = {
+  private def partialFeatureAttributes: Array[Attribute] = {
     val attrs = new Array[Attribute](numFeatures)
     var categoricalFeatureCount = 0 // validity check for numFeatures, categoryMaps
     var featureIndex = 0
@@ -358,8 +358,11 @@ class VectorIndexerModel private[ml] (
       }
       featureIndex += 1
     }
-    require(categoricalFeatureCount == categoryMaps.size, "VectorIndexerModel given categoryMaps" +
-      s" with keys outside expected range [0,...,numFeatures), where numFeatures=$numFeatures")
+    require(
+      categoricalFeatureCount == categoryMaps.size,
+      "VectorIndexerModel given categoryMaps" +
+        s" with keys outside expected range [0,...,numFeatures), " +
+        s"where numFeatures=$numFeatures")
     attrs
   }
 
