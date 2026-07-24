@@ -125,6 +125,7 @@ object HashBenchmark extends BenchmarkBase {
       .add("binary", BinaryType)
       .add("date", DateType)
       .add("timestamp", TimestampType)
+      .add("time", TimeType())
     test("normal", normal, 1 << 10, 1 << 11)
 
     val arrayOfInt = ArrayType(IntegerType)
