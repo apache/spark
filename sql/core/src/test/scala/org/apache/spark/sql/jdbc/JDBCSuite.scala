@@ -31,7 +31,8 @@ import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkSQLException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, Row, SaveMode}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
@@ -39,7 +40,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils,
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
-import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
+import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec, RowDataSourceScanExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
@@ -2729,6 +2730,84 @@ class JDBCSuite extends SharedSparkSession {
         parameters = Map("url" -> s"$connectionUrl:${Utils.REDACTION_REPLACEMENT_TEXT}")
       )
     }
+  }
+
+  private def collectJdbcReadBytes(table: String): Long = {
+    val props = new Properties()
+    props.setProperty("user", "testUser")
+    props.setProperty("password", "testPass")
+    val qes = withQueryExecutionsCaptured(spark) {
+      spark.read.jdbc(urlWithUserAndPass, table, props).collect()
+    }
+    val scanExec = qes.head.executedPlan.collectFirst {
+      case s: RowDataSourceScanExec => s
+    }.get
+    scanExec.metrics("dataSizeBytes").value
+  }
+
+  test("SPARK-57471: data size metric scales with data size") {
+    val props = new Properties()
+    props.setProperty("user", "testUser")
+    props.setProperty("password", "testPass")
+
+    val shortStrings = (1 to 10).map(i => Row(i, "a"))
+    val longStrings = (1 to 10).map(i => Row(i, "a" * 100))
+    val schema = new StructType().add("id", IntegerType).add("data", StringType)
+
+    spark.createDataFrame(sparkContext.makeRDD(shortStrings), schema)
+      .write.mode(SaveMode.Overwrite).jdbc(urlWithUserAndPass, "TEST.BYTES_SHORT", props)
+    spark.createDataFrame(sparkContext.makeRDD(longStrings), schema)
+      .write.mode(SaveMode.Overwrite).jdbc(urlWithUserAndPass, "TEST.BYTES_LONG", props)
+
+    val shortBytes = collectJdbcReadBytes("TEST.BYTES_SHORT")
+    val longBytes = collectJdbcReadBytes("TEST.BYTES_LONG")
+
+    assert(shortBytes > 0, "data size should be > 0 for short strings")
+    assert(longBytes > shortBytes,
+      s"longer strings ($longBytes) should yield more bytes than short ($shortBytes)")
+  }
+
+  test("SPARK-57471: data size metric scales with binary data size") {
+    val props = new Properties()
+    props.setProperty("user", "testUser")
+    props.setProperty("password", "testPass")
+
+    val shortBinary = (1 to 10).map(i => Row(i, Array[Byte](1, 2)))
+    val longBinary = (1 to 10).map(i => Row(i, new Array[Byte](100)))
+    val schema = new StructType().add("id", IntegerType).add("data", BinaryType)
+
+    spark.createDataFrame(sparkContext.makeRDD(shortBinary), schema)
+      .write.mode(SaveMode.Overwrite).jdbc(urlWithUserAndPass, "TEST.BIN_SHORT", props)
+    spark.createDataFrame(sparkContext.makeRDD(longBinary), schema)
+      .write.mode(SaveMode.Overwrite).jdbc(urlWithUserAndPass, "TEST.BIN_LONG", props)
+
+    val shortBytes = collectJdbcReadBytes("TEST.BIN_SHORT")
+    val longBytes = collectJdbcReadBytes("TEST.BIN_LONG")
+
+    assert(shortBytes > 0, "data size should be > 0 for short binary")
+    assert(longBytes > shortBytes,
+      s"longer binary ($longBytes) should yield more bytes than short ($shortBytes)")
+  }
+
+  test("SPARK-57471: data size with nulls does not NPE and yields fewer bytes") {
+    val props = new Properties()
+    props.setProperty("user", "testUser")
+    props.setProperty("password", "testPass")
+
+    val withNulls = (1 to 10).map(i => Row(i, null: String))
+    val withValues = (1 to 10).map(i => Row(i, "hello"))
+    val schema = new StructType().add("id", IntegerType).add("data", StringType)
+
+    spark.createDataFrame(sparkContext.makeRDD(withNulls), schema)
+      .write.mode(SaveMode.Overwrite).jdbc(urlWithUserAndPass, "TEST.NULL_DATA", props)
+    spark.createDataFrame(sparkContext.makeRDD(withValues), schema)
+      .write.mode(SaveMode.Overwrite).jdbc(urlWithUserAndPass, "TEST.NONNULL_DATA", props)
+
+    val nullBytes = collectJdbcReadBytes("TEST.NULL_DATA")
+    val valueBytes = collectJdbcReadBytes("TEST.NONNULL_DATA")
+
+    assert(valueBytes > nullBytes,
+      s"non-null data ($valueBytes) should yield more bytes than nulls ($nullBytes)")
   }
 }
 

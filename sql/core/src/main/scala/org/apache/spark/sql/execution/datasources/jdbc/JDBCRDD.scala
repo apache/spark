@@ -236,6 +236,14 @@ class JDBCRDD(
     // Message that user sees does not have to leak details about conversion
     name = "JDBC remote data fetch and translation time")
 
+  // Measures decoded Spark-side row size using UTF8String.numBytes() (actual UTF-8 bytes).
+  // createSizeMetric defaults initValue to -1 as a 'task did not update' sentinel; we use 0
+  // here so no-update partitions report 0 instead of the -1 'invalid' sentinel.
+  val dataSizeBytesMetric: SQLMetric = SQLMetrics.createSizeMetric(
+    sparkContext,
+    name = "JDBC data size",
+    initValue = 0)
+
   private lazy val dialect = JdbcDialects.get(url)
 
   def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
@@ -390,7 +398,8 @@ class JDBCRDD(
         dialect,
         schema,
         inputMetrics,
-        Some(fetchAndTransformToInternalRowsMetric))
+        Some(fetchAndTransformToInternalRowsMetric),
+        Some(dataSizeBytesMetric))
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())
@@ -399,7 +408,8 @@ class JDBCRDD(
   override def getMetrics: Seq[(String, SQLMetric)] = {
     Seq(
       "fetchAndTransformToInternalRowsNs" -> fetchAndTransformToInternalRowsMetric,
-      "queryExecutionTime" -> queryExecutionTimeMetric
+      "queryExecutionTime" -> queryExecutionTimeMetric,
+      "dataSizeBytes" -> dataSizeBytesMetric
     ) ++ additionalMetrics
   }
 }
