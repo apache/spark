@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.ui
 import java.util.{Calendar, Locale}
 
 import jakarta.servlet.http.HttpServletRequest
+import org.apache.commons.text.StringEscapeUtils
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 
@@ -110,6 +111,7 @@ class SparkConnectServerPageSuite
 
     val request = mock(classOf[HttpServletRequest])
     when(request.getParameter("id")).thenReturn("sessionId")
+    when(request.getParameter("userId")).thenReturn(ConnectUiUtils.encodeUserId("userId"))
     val tab = mock(classOf[SparkConnectServerTab], RETURNS_SMART_NULLS)
     when(tab.startTime).thenReturn(Calendar.getInstance().getTime)
     when(tab.store).thenReturn(store)
@@ -130,5 +132,59 @@ class SparkConnectServerPageSuite
     assert(
       html.contains("collapse-table\" data-bs-toggle=\"collapse\"" +
         " data-bs-target=\"#aggregated-sqlsessionstat\""))
+  }
+
+  test("SPARK-58097: session page only shows the requested user's operations") {
+    // Two users share the same session UUID, each running a distinct query.
+    kvstore = new ElementTrackingStore(new InMemoryStore, new SparkConf())
+    val listener = new SparkConnectServerListener(kvstore, new SparkConf)
+    val store = new SparkConnectServerAppStatusStore(kvstore)
+    Seq(("userA", "query from A"), ("userB", "query from B")).foreach { case (user, query) =>
+      val jobTag = s"jobTag-$user"
+      listener.onOtherEvent(
+        SparkListenerConnectSessionStarted("sharedSession", user, System.currentTimeMillis()))
+      listener.onOtherEvent(
+        SparkListenerConnectOperationStarted(
+          jobTag,
+          "operationId",
+          System.currentTimeMillis(),
+          "sharedSession",
+          user,
+          "userName",
+          query,
+          Set()))
+      listener.onOtherEvent(
+        SparkListenerConnectOperationClosed(jobTag, "operationId", System.currentTimeMillis()))
+    }
+
+    val request = mock(classOf[HttpServletRequest])
+    when(request.getParameter("id")).thenReturn("sharedSession")
+    when(request.getParameter("userId")).thenReturn(ConnectUiUtils.encodeUserId("userA"))
+    val tab = mock(classOf[SparkConnectServerTab], RETURNS_SMART_NULLS)
+    when(tab.startTime).thenReturn(Calendar.getInstance().getTime)
+    when(tab.store).thenReturn(store)
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+    val page = new SparkConnectServerSessionPage(tab)
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+
+    // Only userA's operation is listed; userB's must not leak into userA's session page.
+    assert(html.contains("query from a"))
+    assert(!html.contains("query from b"))
+  }
+
+  test("SPARK-58097: encoded userId survives UI request sanitization") {
+    // Mirror XssSafeRequest.stripXSS: strip newlines/apostrophes, then HTML-escape (version 4.0).
+    val newlineAndQuote = raw"(?i)(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)".r
+    def stripXSS(s: String): String =
+      StringEscapeUtils.escapeHtml4(newlineAndQuote.replaceAllIn(s, ""))
+
+    // Opaque user ids with characters the sanitizer would otherwise strip or escape.
+    Seq("a'b", "alice+tag", "user=name", "plain", "a/b&c").foreach { userId =>
+      val token = ConnectUiUtils.encodeUserId(userId)
+      // The base64url token passes through request sanitization unchanged, so it round-trips.
+      assert(stripXSS(token) === token, s"token for '$userId' was altered by sanitization")
+      assert(ConnectUiUtils.decodeUserId(stripXSS(token)) === userId)
+    }
   }
 }

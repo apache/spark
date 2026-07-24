@@ -47,11 +47,17 @@ class SparkConnectServerAppStatusStore(store: KVStore) {
     KVUtils.count(store.view(classOf[SessionInfo]))(_.finishTimestamp == 0)
   }
 
-  def getSession(sessionId: String): Option[SessionInfo] = {
+  def getSession(userId: String, sessionId: String): Option[SessionInfo] = {
     try {
-      Some(store.read(classOf[SessionInfo], sessionId))
+      Some(store.read(classOf[SessionInfo], SessionInfo.uniqueId(userId, sessionId)))
     } catch {
-      case _: NoSuchElementException => None
+      case _: NoSuchElementException =>
+        // Fallback for stores written before the natural key became (userId, sessionId), e.g. a
+        // History Server disk store cached by an older Spark that keyed SessionInfo on sessionId
+        // alone. Such rows still carry userId in the value, so we can match on both fields. Rows
+        // where two users shared a UUID were already merged under the old key and cannot be
+        // recovered here.
+        getSessionList.find(s => s.userId == userId && s.sessionId == sessionId)
     }
   }
 
@@ -82,11 +88,16 @@ class SparkConnectServerAppStatusStore(store: KVStore) {
 }
 
 private[spark] class SessionInfo(
-    @KVIndexParam val sessionId: String,
+    val sessionId: String,
     val startTimestamp: Long,
     val userId: String,
     val finishTimestamp: Long,
     val totalExecution: Long) {
+  // Natural key. A session is identified by (userId, sessionId), since two users may share the
+  // same session UUID; keying on sessionId alone would merge them into one record.
+  @KVIndexParam
+  def uniqueId: String = SessionInfo.uniqueId(userId, sessionId)
+
   @JsonIgnore @KVIndex("finishTime")
   private def finishTimeIndex: Long = if (finishTimestamp > 0L) finishTimestamp else -1L
   def totalTime: Long = {
@@ -96,6 +107,11 @@ private[spark] class SessionInfo(
       finishTimestamp - startTimestamp
     }
   }
+}
+
+private[connect] object SessionInfo {
+  // sessionId is a UUID, so joining with '/' yields a key that is unique per (userId, sessionId).
+  def uniqueId(userId: String, sessionId: String): String = s"$userId/$sessionId"
 }
 
 private[spark] class ExecutionInfo(

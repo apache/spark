@@ -38,10 +38,15 @@ private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
   def render(request: HttpServletRequest): Seq[Node] = {
     val sessionId = request.getParameter("id")
     require(sessionId != null && sessionId.nonEmpty, "Missing id parameter")
+    // userId is an opaque identifier and part of the session's natural key, so it is carried in the
+    // link as a base64url token that survives the UI's XSS request sanitization intact.
+    val userIdParam = request.getParameter("userId")
+    require(userIdParam != null, "Missing userId parameter")
+    val userId = ConnectUiUtils.decodeUserId(userIdParam)
 
     val content = store.synchronized { // make sure all parts in this page are consistent
       store
-        .getSession(sessionId)
+        .getSession(userId, sessionId)
         .map { sessionStat =>
           generateBasicStats(sessionId) ++
             <br/> ++
@@ -56,7 +61,7 @@ private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
             {sessionStat.totalExecution}
             Request(s)
           </h4> ++
-            generateSQLStatsTable(request, sessionStat.sessionId)
+            generateSQLStatsTable(request, sessionStat.userId, sessionStat.sessionId)
         }
         .getOrElse(<div>No information to display for session {sessionId}</div>)
     }
@@ -80,9 +85,12 @@ private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
   }
 
   /** Generate stats of batch statements of the Spark Connect server */
-  private def generateSQLStatsTable(request: HttpServletRequest, sessionID: String): Seq[Node] = {
+  private def generateSQLStatsTable(
+      request: HttpServletRequest,
+      userId: String,
+      sessionId: String): Seq[Node] = {
     val executionList = store.getExecutionList
-      .filter(_.sessionId == sessionID)
+      .filter(exec => exec.userId == userId && exec.sessionId == sessionId)
     val numStatement = executionList.size
     val table = if (numStatement > 0) {
 

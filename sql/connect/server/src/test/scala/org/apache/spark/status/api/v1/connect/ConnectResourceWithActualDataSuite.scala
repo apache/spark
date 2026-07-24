@@ -73,6 +73,9 @@ class ConnectResourceWithActualDataSuite extends SparkConnectServerTest {
   private def enc(s: String): String =
     java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8)
 
+  private def encodeUserId(s: String): String =
+    org.apache.spark.sql.connect.ui.ConnectUiUtils.encodeUserId(s)
+
   test("Connect REST API exposes sessions and operations") {
     // Run a real query through a Connect session; this posts the session/operation listener
     // events that the SparkConnectServerListener writes into the KVStore.
@@ -95,8 +98,11 @@ class ConnectResourceWithActualDataSuite extends SparkConnectServerTest {
       assert(op.get.userId === defaultUserId)
       assert(ExecutionState.values.map(_.toString).contains(op.get.state))
 
-      val one = JsonMethods.parse(getOk(s"/sessions/$defaultSessionId")).extract[TestSessionData]
+      val one = JsonMethods
+        .parse(getOk(s"/sessions/$defaultSessionId?userId=${encodeUserId(defaultUserId)}"))
+        .extract[TestSessionData]
       assert(one.sessionId === defaultSessionId)
+      assert(one.userId === defaultUserId)
 
       val oneOp = JsonMethods
         .parse(getOk(s"/operations/detail?jobTag=${enc(op.get.jobTag)}"))
@@ -130,7 +136,10 @@ class ConnectResourceWithActualDataSuite extends SparkConnectServerTest {
   }
 
   test("Connect REST API returns 404 for unknown ids") {
-    assert(get(new URI(s"$baseUrl/sessions/does-not-exist").toURL)._1 === 404)
+    assert(
+      get(
+        new URI(
+          s"$baseUrl/sessions/does-not-exist?userId=${encodeUserId("nobody")}").toURL)._1 === 404)
     assert(get(new URI(s"$baseUrl/operations/detail?jobTag=does-not-exist").toURL)._1 === 404)
   }
 
