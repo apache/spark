@@ -217,12 +217,29 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     val metadata = new MetadataBuilder()
       .putString("comment", "field metadata")
       .putDouble("score", 1.5)
+      // Integral-valued double: the canonical spot where JSON number formatting can diverge
+      // between renderers (1.0 vs 1). Pins the byte-for-byte guarantee for this case.
+      .putDouble("whole", 1.0)
       .putBooleanArray("flags", Array(true, false))
       .putDoubleArray("weights", Array(2.5, 3.5))
       .putLongArray("ids", Array(1L, 2L))
       .putMetadata("nested", nestedMetadata)
       .putMetadataArray("children", Array(nestedMetadata))
       .build()
+    // Large schemas exercise the PR's core goal: streaming bounds peak memory for schemas whose
+    // node count is large. A wide struct (many fields), a deeply nested struct, and structs under
+    // array/map all stream field-by-field, so they must stay byte-identical to the json4s path.
+    val wideStruct = StructType((1 to 200).map { i =>
+      StructField(s"f$i", if (i % 2 == 0) LongType else StringType, nullable = i % 3 == 0)
+    })
+    val deepStruct = (1 to 50).foldLeft[DataType](LongType) { (inner, i) =>
+      StructType(Seq(StructField(s"level$i", inner, nullable = i % 2 == 0)))
+    }
+    val structUnderArrayAndMap = StructType(Seq(
+      StructField("arr", ArrayType(wideStruct, containsNull = false)),
+      StructField("map",
+        MapType(StringType(UTF8_LCASE_COLLATION_ID), wideStruct, valueContainsNull = false)),
+      StructField("deep", deepStruct)))
     val objectTypes = Seq(
       DecimalType(10, 2),
       CharType(5),
@@ -254,7 +271,10 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
           nullable = true),
         StructField("lookup",
           MapType(StringType(UTF8_LCASE_COLLATION_ID), StringType(UNICODE_COLLATION_ID)),
-          nullable = false))))
+          nullable = false))),
+      wideStruct,
+      deepStruct,
+      structUnderArrayAndMap)
     val mapper = new ObjectMapper()
     val dataTypes = (atomicTypes.toSeq ++ objectTypes).distinct
 
