@@ -114,7 +114,9 @@ public enum TableCapability {
    * <p>
    * When this capability is present, Spark will:
    * <ul>
-   *   <li>Auto-compute missing generated column values using the generation expression.</li>
+   *   <li>Auto-compute missing generated column values using the generation expression for
+   *       by-name writes. Ordinary by-position writes still require the input to provide a
+   *       value for every table column.</li>
    *   <li>Validate explicitly-provided generated column values against the generation
    *       expression.</li>
    * </ul>
