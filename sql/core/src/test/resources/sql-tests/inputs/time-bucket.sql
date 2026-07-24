@@ -1,5 +1,7 @@
 -- time_bucket function tests
 
+--SET spark.sql.timestampNanosTypes.enabled=true
+
 -- Pin session timezone to UTC. With UTC as the session zone, TIMESTAMP (LTZ)
 -- bucketing produces the same results as TIMESTAMP_NTZ. The session-zone-aware
 -- behavior is exercised in a dedicated `SET TIME ZONE 'America/Los_Angeles'`
@@ -213,6 +215,52 @@ SELECT t, time_bucket(INTERVAL '15' MINUTE, t) AS bucket
 -- YearMonthInterval bucket over TIMESTAMP column
 SELECT t, time_bucket(INTERVAL '1' MONTH, t) AS bucket
   FROM VALUES (TIMESTAMP '2024-03-15 10:23:00'), (TIMESTAMP '2024-06-01 00:00:00') tab(t)
+  ORDER BY t;
+
+
+-- Nanosecond-precision timestamps (SPARK-57820): TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p),
+-- p in [7, 9]. Bucket boundaries fall on whole microseconds, so the result's sub-microsecond
+-- digits always equal the origin's; only placement of `ts` needs nanosecond resolution.
+
+-- DayTimeInterval bucket, default (epoch, zero sub-micro remainder) origin: result has no
+-- fractional digits left (all-zero fraction renders as none).
+SELECT time_bucket(INTERVAL '1' SECOND, CAST('2024-06-20 10:00:00.123456789' AS timestamp_ntz(9)));
+
+-- YearMonthInterval bucket, default origin, TIMESTAMP_LTZ(p).
+SELECT time_bucket(INTERVAL '1' MONTH, CAST('2024-06-20 10:00:00.123456789' AS timestamp_ltz(9)));
+
+-- Custom origin with a nonzero sub-micro remainder: ts's own microsecond doesn't match any
+-- grid point's, so the remainder never comes into play and the result carries origin's.
+SELECT time_bucket(
+  INTERVAL '1' SECOND,
+  CAST('2024-06-20 10:00:03.500000999' AS timestamp_ntz(9)),
+  CAST('1970-01-01 00:00:00.000000500' AS timestamp_ntz(9)));
+
+-- Boundary case: ts lands on the same microsecond as a grid point, but with a smaller
+-- sub-micro remainder than the origin's -- steps back to the previous bucket.
+SELECT time_bucket(
+  INTERVAL '1' SECOND,
+  CAST('2024-06-20 10:00:04.000000100' AS timestamp_ntz(9)),
+  CAST('1970-01-01 00:00:00.000000500' AS timestamp_ntz(9)));
+
+-- Same microsecond, ts's remainder >= origin's: stays in the bucket starting there.
+SELECT time_bucket(
+  INTERVAL '1' SECOND,
+  CAST('2024-06-20 10:00:04.000000700' AS timestamp_ntz(9)),
+  CAST('1970-01-01 00:00:00.000000500' AS timestamp_ntz(9)));
+
+-- ts and origin must be the same TIMESTAMP flavor: TIMESTAMP_NTZ(p) vs microsecond
+-- TIMESTAMP_NTZ is rejected, same as the microsecond LTZ/NTZ mismatch above.
+SELECT time_bucket(
+  INTERVAL '1' HOUR,
+  CAST('2024-01-01 11:27:00.123456789' AS timestamp_ntz(9)),
+  TIMESTAMP_NTZ '2024-01-01 00:00:00');
+
+-- Column reference as ts, TIMESTAMP_LTZ(p).
+SELECT t, time_bucket(INTERVAL '1' HOUR, t) AS bucket
+  FROM VALUES
+    (CAST('2024-01-15 10:23:00.123456789' AS timestamp_ltz(9))),
+    (CAST('2024-01-15 14:45:00.987654321' AS timestamp_ltz(9))) tab(t)
   ORDER BY t;
 
 
