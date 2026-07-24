@@ -6829,7 +6829,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       // Consumer finishes early -> whole completion buffered; no TaskEnd yet.
       complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
       sc.listenerBus.waitUntilEmpty()
-      assert(taskEndCount.get() === 0, "buffered consumer TaskEnds are held while the producer runs")
+      assert(taskEndCount.get() === 0, "buffered consumer TaskEnds are held while producer runs")
 
       // Drive the producer into resubmit limbo: finished, no error, but not available -> the
       // deferral is retained and the producer leaves runningStages. No task failed, so it also has
