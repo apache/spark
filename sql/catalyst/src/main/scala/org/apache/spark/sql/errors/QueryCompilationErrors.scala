@@ -1970,19 +1970,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def orcNotUsedWithHiveEnabledError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1138",
+      errorClass = "ORC_DATA_SOURCE_REQUIRES_HIVE_SUPPORT",
       messageParameters = Map.empty)
   }
 
   def failedToFindAvroDataSourceError(provider: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1139",
+      errorClass = "AVRO_DATA_SOURCE_NOT_ENABLED",
       messageParameters = Map("provider" -> provider))
   }
 
   def failedToFindKafkaDataSourceError(provider: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1140",
+      errorClass = "KAFKA_DATA_SOURCE_NOT_ENABLED",
       messageParameters = Map("provider" -> provider))
   }
 
@@ -1996,7 +1996,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1141",
+      errorClass = "MULTIPLE_DATA_SOURCES",
       messageParameters = Map(
         "provider" -> provider,
         "sourceNames" -> sourceNames.mkString(", ")))
