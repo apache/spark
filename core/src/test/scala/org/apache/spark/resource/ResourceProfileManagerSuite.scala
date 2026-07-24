@@ -188,36 +188,34 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
         " with dynamic allocation"))
   }
 
-  test("ResourceProfileManager has equivalent profile") {
+  test("getOrAddEquivalentProfile reuses an equivalent profile") {
     val conf = new SparkConf().set(EXECUTOR_CORES, 4)
     val rpmanager = new ResourceProfileManager(conf, listenerBus)
-    var rpAlreadyExist: Option[ResourceProfile] = None
-    val checkId = 500
-    for (i <- 1 to 1000) {
+
+    def buildProfile(cores: Int): ResourceProfile = {
       val rprofBuilder = new ResourceProfileBuilder()
       val ereqs = new ExecutorResourceRequests()
-      ereqs.cores(i).memory("4g").memoryOverhead("2000m")
+      ereqs.cores(cores).memory("4g").memoryOverhead("2000m")
       val treqs = new TaskResourceRequests()
-      treqs.cpus(i)
-      rprofBuilder.require(ereqs).require(treqs)
-      val rprof = rprofBuilder.build()
-      rpmanager.addResourceProfile(rprof)
-      if (i == checkId) rpAlreadyExist = Some(rprof)
+      treqs.cpus(1)
+      rprofBuilder.require(ereqs).require(treqs).build()
     }
-    val rpNotMatch = new ResourceProfileBuilder().build()
-    assert(rpmanager.getEquivalentProfile(rpNotMatch).isEmpty,
-      s"resourceProfile should not have existed")
 
-    val rprofBuilder = new ResourceProfileBuilder()
-    val ereqs = new ExecutorResourceRequests()
-    ereqs.cores(checkId).memory("4g").memoryOverhead("2000m")
-    val treqs = new TaskResourceRequests()
-    treqs.cpus(checkId)
-    rprofBuilder.require(ereqs).require(treqs)
-    val rpShouldMatch = rprofBuilder.build()
+    val first = buildProfile(8)
+    val registered = rpmanager.getOrAddEquivalentProfile(first)
+    // A brand-new profile is registered and returned as-is.
+    assert(registered.id == first.id)
 
-    val equivProf = rpmanager.getEquivalentProfile(rpShouldMatch)
-    assert(equivProf.nonEmpty)
-    assert(equivProf.get.id == rpAlreadyExist.get.id, s"resourceProfile should have existed")
+    // A distinct profile object with equal resources resolves to the already-registered one,
+    // so they share a single id and can therefore reuse the same executors.
+    val equivalent = buildProfile(8)
+    assert(equivalent.id != first.id, "the new profile object should have a different id")
+    val resolved = rpmanager.getOrAddEquivalentProfile(equivalent)
+    assert(resolved.id == first.id, "equivalent profile should resolve to the existing id")
+
+    // A profile with different resources is registered under its own id.
+    val different = buildProfile(16)
+    val resolvedDifferent = rpmanager.getOrAddEquivalentProfile(different)
+    assert(resolvedDifferent.id == different.id)
   }
 }
