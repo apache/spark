@@ -612,7 +612,7 @@ class ApproxTopKSuite extends SharedSparkSession {
     val combined = sketches.selectExpr("approx_top_k_combine(sketch) AS sketch")
 
     checkAnswer(
-      combined.selectExpr("inline(approx_top_k_estimate(sketch))"),
+      combined.selectExpr("inline(approx_top_k_estimate(sketch, 10))"),
       (0L until 10L).map(Row(_, 1L)))
   }
 
