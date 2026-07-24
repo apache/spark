@@ -8002,6 +8002,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PROTOBUF_DESCRIPTOR_CACHE_SIZE =
+    buildConf("spark.sql.protobuf.descriptorCacheSize")
+      .internal()
+      .doc("Maximum number of entries in the per-JVM cache of parsed Protobuf FileDescriptor " +
+        "graphs built from a binary FileDescriptorSet, used by from_protobuf/to_protobuf. This " +
+        "knob only bounds memory (each graph can be hundreds of KB). Setting it to 0 disables " +
+        "the cache entirely and acts as an immediate kill-switch; a non-zero size bound is fixed " +
+        "when the cache is first built for a JVM, so changing it has no effect on an " +
+        "already-built cache.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "descriptorCacheSize must be non-negative; 0 disables the cache")
+      .createWithDefault(8)
+
   val LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER =
     buildConf("spark.sql.listagg.allowDistinctCastWithOrder.enabled")
       .internal()
