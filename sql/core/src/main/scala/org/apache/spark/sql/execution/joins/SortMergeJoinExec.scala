@@ -121,6 +121,17 @@ case class SortMergeJoinExec(
     }
   }
 
+  /**
+   * For join types that preserve all streamed rows, split the condition into
+   * streamed-only and rest. The streamed-only part can be evaluated once per streamed row
+   * before walking the buffered matches.
+   */
+  private lazy val (streamedOnlyCondition, restCondition):
+      (Option[Expression], Option[Expression]) = {
+    StreamedSideJoinCondition.split(
+      condition, joinType, streamedPlan, conf.splitStreamedSideJoinCondition)
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val spillSize = longMetric("spillSize")
@@ -140,7 +151,9 @@ case class SortMergeJoinExec(
       sizeInBytesSpillThreshold,
       numOutputRows,
       spillSize,
-      onlyBufferFirstMatchedRow
+      onlyBufferFirstMatchedRow,
+      streamedOnlyCondition,
+      restCondition
     )
     if (conf.usePartitionEvaluator) {
       left.execute().zipPartitionsWithEvaluator(right.execute(), evaluatorFactory)
@@ -513,7 +526,28 @@ case class SortMergeJoinExec(
           s"SortMergeJoin.doProduce should not take $x as the JoinType")
     }
 
-    val (streamedBeforeLoop, condCheck, loadStreamed) = if (condition.isDefined) {
+    // Generate streamed-only condition check for join types that preserve streamed rows.
+    val (streamedOnlyPre, streamedOnlyGuard) =
+      if (streamedOnlyCondition.isDefined) {
+        ctx.currentVars = streamedVars
+        val ev = BindReferences.bindReference(
+          streamedOnlyCondition.get, streamedPlan.output).genCode(ctx)
+        val isNullVar = ctx.freshName("streamedOnlyIsNull")
+        val valueVar = ctx.freshName("streamedOnlyValue")
+        val pre =
+          s"""
+             |${ev.code}
+             |boolean $isNullVar = ${ev.isNull};
+             |boolean $valueVar = ${ev.value};
+           """.stripMargin
+        (pre, Some(s"!$isNullVar && $valueVar"))
+      } else {
+        ("", None)
+      }
+
+    val conditionForCodegen = if (streamedOnlyGuard.isDefined) restCondition else condition
+
+    val (streamedBeforeLoop, condCheck, loadStreamed) = if (conditionForCodegen.isDefined) {
       // Split the code of creating variables based on whether it's used by condition or not.
       val loaded = ctx.freshName("loaded")
       val (streamedBefore, streamedAfter) = splitVarsByCondition(streamedOutput, streamedVars)
@@ -521,7 +555,7 @@ case class SortMergeJoinExec(
       // Generate code for condition
       ctx.currentVars = streamedVars ++ bufferedVars
       val cond = BindReferences.bindReference(
-        condition.get, streamedPlan.output ++ bufferedPlan.output).genCode(ctx)
+        conditionForCodegen.get, streamedPlan.output ++ bufferedPlan.output).genCode(ctx)
       // Evaluate the columns those used by condition before loop
       val before = joinType match {
         case LeftAnti =>
@@ -572,10 +606,14 @@ case class SortMergeJoinExec(
       (evaluateVariables(streamedVars), "", "")
     }
 
-    val beforeLoop =
+    val existsVarDecl = existsVar.map(v => s"boolean $v = false;").getOrElse("")
+
+    val beforeLoopWithoutGuard =
       s"""
          |${streamedVarDecl.mkString("\n")}
          |${streamedBeforeLoop.trim}
+         |$streamedOnlyPre
+         |$existsVarDecl
          |scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
        """.stripMargin
     val outputRow =
@@ -583,9 +621,39 @@ case class SortMergeJoinExec(
          |$numOutput.add(1);
          |${consume(ctx, resultVars)}
        """.stripMargin
+    val guardOutputRow = joinType match {
+      case LeftOuter | RightOuter =>
+        val defaultBufferedVars =
+          genOneSideJoinVars(ctx, bufferedRow, bufferedPlan, setDefaultValue = true)
+        val guardResultVars = joinType match {
+          case RightOuter => defaultBufferedVars ++ streamedVars
+          case _ => streamedVars ++ defaultBufferedVars
+        }
+        s"""
+           |$numOutput.add(1);
+           |${consume(ctx, guardResultVars)}
+         """.stripMargin
+      case _ => outputRow
+    }
     val findNextJoinRows = s"$findNextJoinRowsFuncName($streamedInput, $bufferedInput)"
     val thisPlan = ctx.addReferenceObj("plan", this)
     val eagerCleanup = s"$thisPlan.cleanupResources();"
+
+    // For join types with a streamed-only guard, prepend the guard to beforeLoop
+    // so the row is emitted before the inner loop.
+    val beforeLoop = streamedOnlyGuard match {
+      case Some(guard) =>
+        s"""
+           |$beforeLoopWithoutGuard
+           |if (!($guard)) {
+           |  InternalRow $bufferedRow = null;
+           |  $loadStreamed
+           |  $guardOutputRow
+           |  continue;
+           |}
+         """.stripMargin
+      case None => beforeLoopWithoutGuard
+    }
 
     val doJoin = joinType match {
       case _: InnerLike =>
@@ -781,7 +849,6 @@ case class SortMergeJoinExec(
        |while ($streamedInput.hasNext()) {
        |  $findNextJoinRows;
        |  $beforeLoop
-       |  boolean $exists = false;
        |
        |  while (!$exists && $matchIterator.hasNext()) {
        |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
@@ -1299,11 +1366,13 @@ private[joins] class SortMergeJoinScanner(
 private class LeftOuterIterator(
     smjScanner: SortMergeJoinScanner,
     rightNullRow: InternalRow,
-    boundCondition: InternalRow => Boolean,
+    boundStreamedOnly: InternalRow => Boolean,
+    boundRest: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
     numOutputRows: SQLMetric)
   extends OneSideOuterIterator(
-    smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows) {
+    smjScanner, rightNullRow, boundStreamedOnly, boundRest,
+    resultProj, numOutputRows) {
 
   protected override def setStreamSideOutput(row: InternalRow): Unit = joinedRow.withLeft(row)
   protected override def setBufferedSideOutput(row: InternalRow): Unit = joinedRow.withRight(row)
@@ -1315,10 +1384,13 @@ private class LeftOuterIterator(
 private class RightOuterIterator(
     smjScanner: SortMergeJoinScanner,
     leftNullRow: InternalRow,
-    boundCondition: InternalRow => Boolean,
+    boundStreamedOnly: InternalRow => Boolean,
+    boundRest: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
     numOutputRows: SQLMetric)
-  extends OneSideOuterIterator(smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows) {
+  extends OneSideOuterIterator(
+    smjScanner, leftNullRow, boundStreamedOnly, boundRest,
+    resultProj, numOutputRows) {
 
   protected override def setStreamSideOutput(row: InternalRow): Unit = joinedRow.withRight(row)
   protected override def setBufferedSideOutput(row: InternalRow): Unit = joinedRow.withLeft(row)
@@ -1336,14 +1408,17 @@ private class RightOuterIterator(
  *
  * @param smjScanner a scanner that streams rows and buffers any matching rows
  * @param bufferedSideNullRow the default row to return when a streamed row has no matches
- * @param boundCondition an additional filter condition for buffered rows
+ * @param boundStreamedOnly a predicate evaluated on the streamed row only
+ * @param boundRest a predicate evaluated on the joined (left ++ right) row for the residual
+ *                  condition, bound to the physical row order produced by this iterator
  * @param resultProj how the output should be projected
  * @param numOutputRows an accumulator metric for the number of rows output
  */
 private abstract class OneSideOuterIterator(
     smjScanner: SortMergeJoinScanner,
     bufferedSideNullRow: InternalRow,
-    boundCondition: InternalRow => Boolean,
+    boundStreamedOnly: InternalRow => Boolean,
+    boundRest: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
     numOutputRows: SQLMetric) extends RowIterator {
 
@@ -1368,12 +1443,15 @@ private abstract class OneSideOuterIterator(
     rightMatchesIterator = null
     if (smjScanner.findNextOuterJoinRows()) {
       setStreamSideOutput(smjScanner.getStreamedRow)
-      if (smjScanner.getBufferedMatches.isEmpty) {
+      if (!boundStreamedOnly(smjScanner.getStreamedRow)) {
+        // Streamed-only predicate is false/null -> full condition is false -> emit null-padded row.
+        setBufferedSideOutput(bufferedSideNullRow)
+      } else if (smjScanner.getBufferedMatches.isEmpty) {
         // There are no matching rows in the buffer, so return the null row
         setBufferedSideOutput(bufferedSideNullRow)
       } else {
-        // Find the next row in the buffer that satisfied the bound condition
-        if (!advanceBufferUntilBoundConditionSatisfied()) {
+        // Find the next row in the buffer that satisfied the rest condition
+        if (!advanceBufferUntilRestConditionSatisfied()) {
           setBufferedSideOutput(bufferedSideNullRow)
         }
       }
@@ -1385,10 +1463,10 @@ private abstract class OneSideOuterIterator(
   }
 
   /**
-   * Advance to the next row in the buffer that satisfies the bound condition.
+   * Advance to the next row in the buffer that satisfies the rest condition.
    * @return whether there is such a row in the current buffer.
    */
-  private def advanceBufferUntilBoundConditionSatisfied(): Boolean = {
+  private def advanceBufferUntilRestConditionSatisfied(): Boolean = {
     var foundMatch: Boolean = false
     if (rightMatchesIterator == null) {
       rightMatchesIterator = smjScanner.getBufferedMatches.generateIterator()
@@ -1396,13 +1474,18 @@ private abstract class OneSideOuterIterator(
 
     while (!foundMatch && rightMatchesIterator.hasNext) {
       setBufferedSideOutput(rightMatchesIterator.next())
-      foundMatch = boundCondition(joinedRow)
+      foundMatch = boundRest(joinedRow)
     }
     foundMatch
   }
 
   override def advanceNext(): Boolean = {
-    val r = advanceBufferUntilBoundConditionSatisfied() || advanceStream()
+    // Only walk the buffered matches if we are in the middle of iterating them for the
+    // current streamed row. If the iterator is null, advanceStream() has just emitted a
+    // null-padded row (either no matches or the streamed-only predicate was false), so we
+    // must move to the next streamed row rather than re-create the match iterator.
+    val r = (rightMatchesIterator != null && advanceBufferUntilRestConditionSatisfied()) ||
+      advanceStream()
     if (r) numOutputRows += 1
     r
   }

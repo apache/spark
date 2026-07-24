@@ -935,6 +935,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val SPLIT_STREAMED_SIDE_JOIN_CONDITION =
+    buildConf("spark.sql.join.splitStreamedSideJoinCondition")
+      .internal()
+      .doc("When true, split join conditions for LeftAnti, LeftOuter, RightOuter, and " +
+        "ExistenceJoin by referenced side, evaluating streamed-side-only conjuncts before " +
+        "the hash-bucket or merge walk. This avoids evaluating expensive streamed-side-only " +
+        "predicates once per matched buffered row.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val SORT_MERGE_AS_OF_JOIN_ENABLED =
     buildConf("spark.sql.join.sortMergeAsOfJoin.enabled")
       .doc("When true, use a dedicated sort-merge physical operator for AS-OF joins " +
@@ -8664,6 +8676,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
+
+  def splitStreamedSideJoinCondition: Boolean = getConf(SPLIT_STREAMED_SIDE_JOIN_CONDITION)
 
   def sortMergeAsOfJoinEnabled: Boolean = getConf(SORT_MERGE_AS_OF_JOIN_ENABLED)
 
