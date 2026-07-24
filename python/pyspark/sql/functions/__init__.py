@@ -268,6 +268,7 @@ __all__ = [  # noqa: F405
     "to_utc_timestamp",
     "trunc",
     "try_make_interval",
+    "try_make_time",
     "try_make_timestamp",
     "try_make_timestamp_ltz",
     "try_make_timestamp_ntz",

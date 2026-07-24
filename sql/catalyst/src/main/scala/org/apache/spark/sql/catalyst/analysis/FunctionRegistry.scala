@@ -746,6 +746,7 @@ object FunctionRegistry {
     expression[WindowTime]("window_time"),
     expression[MakeDate]("make_date"),
     expression[MakeTime]("make_time"),
+    expressionBuilder("try_make_time", TryMakeTimeExpressionBuilder),
     expression[TimeTrunc]("time_trunc"),
     expression[TimeFromSeconds]("time_from_seconds"),
     expression[TimeFromMillis]("time_from_millis"),
