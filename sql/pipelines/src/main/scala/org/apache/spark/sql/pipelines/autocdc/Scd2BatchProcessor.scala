@@ -1089,11 +1089,13 @@ object Scd2BatchProcessor {
    * eventually persisted in the target table. If the user's source dataframe contains any of
    * these columns, SCD2 reconciliation will fail.
    *
-   * TODO(SPARK-57251): validate at [[AutoCdcMergeFlow]] construction time that the source
-   *   schema and column selection do not collide with these reserved names, so we fail fast
-   *   with a user-actionable error instead of silently overwriting them at preprocess time.
+   * Note [[startAtColName]] and [[endAtColName]] do NOT carry the reserved
+   * [[AutoCdcReservedNames.prefix]], so a source-column collision with them is not caught by the
+   * prefix-based guard; [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] validates the
+   * source schema against this set at construction time (SPARK-57251) to fail fast with a
+   * user-actionable error instead of silently overwriting them at preprocess time.
    */
-  private val reservedFrameworkColNames: Set[String] = Set(
+  private[pipelines] val reservedFrameworkColNames: Set[String] = Set(
     startAtColName,
     endAtColName,
     AutoCdcReservedNames.cdcMetadataColName

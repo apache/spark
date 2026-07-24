@@ -30,6 +30,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
   ChangeArgs,
   ColumnSelection,
   Scd1BatchProcessor,
+  Scd2BatchProcessor,
   ScdType
 }
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -252,6 +253,7 @@ class AutoCdcMergeFlow(
     val funcResult: FlowFunctionResult
 ) extends ResolvedFlow {
   requireReservedPrefixAbsentInSourceColumns()
+  requireReservedFrameworkColumnsAbsentInSourceColumns()
 
   def changeArgs: ChangeArgs = flow.changeArgs
 
@@ -373,6 +375,52 @@ class AutoCdcMergeFlow(
         )
       )
     }
+  }
+
+  /**
+   * Validate that the resolved source dataframe does not contain any column whose name collides
+   * (by exact name, resolver-aware) with an SCD-type-specific reserved framework column that is
+   * NOT covered by [[requireReservedPrefixAbsentInSourceColumns]].
+   *
+   * The prefix guard above only rejects names starting with [[AutoCdcReservedNames.prefix]].
+   * SCD2 additionally persists the framework columns [[Scd2BatchProcessor.startAtColName]] and
+   * [[Scd2BatchProcessor.endAtColName]], which do NOT carry that prefix, so a colliding source
+   * column would otherwise be silently overwritten during preprocessing (SPARK-57251). SCD1
+   * targets carry no such non-prefixed framework columns, so this guard is a no-op for SCD1.
+   *
+   * Runs in the constructor before [[schema]] is forced, so it surfaces this actionable error
+   * ahead of the (temporary) [[AUTOCDC_SCD2_NOT_SUPPORTED]] gate, and remains correct once SCD2
+   * support lands.
+   */
+  private def requireReservedFrameworkColumnsAbsentInSourceColumns(): Unit = {
+    val resolver = spark.sessionState.conf.resolver
+    val reservedPrefix = AutoCdcReservedNames.prefix
+
+    // Only the non-prefixed reserved names need checking here; prefixed ones are already rejected
+    // by [[requireReservedPrefixAbsentInSourceColumns]].
+    val reservedNames: Set[String] = changeArgs.storedAsScdType match {
+      case ScdType.Type2 =>
+        Scd2BatchProcessor.reservedFrameworkColNames.filterNot(_.startsWith(reservedPrefix))
+      case ScdType.Type1 =>
+        Set.empty
+    }
+
+    df.schema.fieldNames
+      .find(name => reservedNames.exists(resolver(_, name)))
+      .foreach { conflictingColumnName =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
+          messageParameters = Map(
+            "caseSensitivity" -> CaseSensitivityLabels.of(
+              spark.sessionState.conf.caseSensitiveAnalysis
+            ),
+            "columnName" -> conflictingColumnName,
+            "schemaName" -> "changeDataFeed",
+            "scdType" -> changeArgs.storedAsScdType.label,
+            "reservedColumnNames" -> reservedNames.toSeq.sorted.mkString(", ")
+          )
+        )
+      }
   }
 
   /**
