@@ -20,13 +20,15 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, Date, Driver, ResultSetMetaData, SQLException, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
+import java.util.Locale
 import java.util.ServiceLoader
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException, SparkThrowable,
+  SparkUnsupportedOperationException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -992,6 +994,59 @@ private[sql] trait NoLegacyJDBCError extends JdbcDialect {
 @DeveloperApi
 object JdbcDialects {
 
+  @volatile private[this] var dialectsByUrlPrefix = List[(String, JdbcDialect)]()
+
+  /**
+   * Register an existing dialect for an additional JDBC URL prefix. The registration affects
+   * dialect lookup only; Spark still passes the original URL to the JDBC driver. Registering the
+   * same prefix again replaces its previous dialect. These registrations are used only when no
+   * registered dialect handles the URL through [[JdbcDialect#canHandle]].
+   *
+   * The prefix must start with `jdbc:` and end with `:`. Matching is case-insensitive.
+   * For example, a MySQL-compatible wrapper can reuse the built-in MySQL dialect:
+   *
+   * {{{
+   * JdbcDialects.registerDialectForUrlPrefix(
+   *   "jdbc:aws-wrapper:mysql:",
+   *   JdbcDialects.getBuiltInDialect("mysql"))
+   * }}}
+   *
+   * @param urlPrefix The additional JDBC URL prefix.
+   * @param dialect The existing dialect to use for URLs with the prefix.
+   */
+  @Since("4.3.0")
+  def registerDialectForUrlPrefix(urlPrefix: String, dialect: JdbcDialect): Unit = synchronized {
+    val prefix = normalizePrefix(urlPrefix)
+    dialectsByUrlPrefix = ((prefix, dialect) :: dialectsByUrlPrefix.filterNot(_._1 == prefix))
+      .sortBy { case (registeredPrefix, _) => -registeredPrefix.length }
+  }
+
+  /**
+   * Unregister the dialect associated with an additional JDBC URL prefix. Does nothing if the
+   * prefix is not registered.
+   *
+   * @param urlPrefix The additional JDBC URL prefix.
+   */
+  @Since("4.3.0")
+  def unregisterDialectForUrlPrefix(urlPrefix: String): Unit = synchronized {
+    val prefix = normalizePrefix(urlPrefix)
+    dialectsByUrlPrefix = dialectsByUrlPrefix.filterNot(_._1 == prefix)
+  }
+
+  private def normalizePrefix(prefix: String): String = {
+    val normalized = prefix.toLowerCase(Locale.ROOT)
+    require(normalized.startsWith("jdbc:") && normalized.endsWith(":"),
+      s"JDBC URL prefixes must start with 'jdbc:' and end with ':': $prefix")
+    normalized
+  }
+
+  private def getDialectForUrlPrefix(url: String): Option[JdbcDialect] = {
+    val normalizedUrl = url.toLowerCase(Locale.ROOT)
+    dialectsByUrlPrefix.collectFirst {
+      case (prefix, dialect) if normalizedUrl.startsWith(prefix) => dialect
+    }
+  }
+
   /**
    * Register a dialect for use on all new matching jdbc `org.apache.spark.sql.DataFrame`.
    * Reading an existing dialect will cause a move-to-front.
@@ -1022,11 +1077,45 @@ object JdbcDialects {
   }
   registerDialects()
 
+  private val builtInDialects: Map[String, JdbcDialect] = dialects.collect {
+    case dialect: MySQLDialect => "mysql" -> dialect
+    case dialect: PostgresDialect => "postgresql" -> dialect
+    case dialect: DB2Dialect => "db2" -> dialect
+    case dialect: MsSqlServerDialect => "sqlserver" -> dialect
+    case dialect: DerbyDialect => "derby" -> dialect
+    case dialect: OracleDialect => "oracle" -> dialect
+    case dialect: TeradataDialect => "teradata" -> dialect
+    case dialect: H2Dialect => "h2" -> dialect
+    case dialect: SnowflakeDialect => "snowflake" -> dialect
+    case dialect: DatabricksDialect => "databricks" -> dialect
+  }.toMap
+
+  /**
+   * Return a built-in JDBC dialect by name. The lookup is case-insensitive. Supported names are
+   * `mysql`, `postgresql`, `db2`, `sqlserver`, `derby`, `oracle`, `teradata`, `h2`, `snowflake`,
+   * and `databricks`.
+   *
+   * @param name The name of the built-in JDBC dialect.
+   */
+  @Since("4.3.0")
+  def getBuiltInDialect(name: String): JdbcDialect = {
+    Option(name).flatMap(name => builtInDialects.get(name.toLowerCase(Locale.ROOT))).getOrElse {
+      throw new SparkIllegalArgumentException(
+        errorClass = "UNSUPPORTED_BUILT_IN_JDBC_DIALECT",
+        messageParameters = Map(
+          "name" -> String.valueOf(name),
+          "supportedNames" -> builtInDialects.keys.toSeq.sorted.mkString(", ")))
+    }
+  }
+
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
    */
   def get(url: String): JdbcDialect = {
-    val matchingDialects = dialects.filter(_.canHandle(url))
+    val matchingDialects = dialects.filter(_.canHandle(url)) match {
+      case Nil => getDialectForUrlPrefix(url).toList
+      case matches => matches
+    }
     matchingDialects.length match {
       case 0 => NoopDialect
       case 1 => matchingDialects.head
