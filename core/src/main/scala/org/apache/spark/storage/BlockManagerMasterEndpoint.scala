@@ -87,8 +87,14 @@ class BlockManagerMasterEndpoint(
 
   // The authoritative sealed checksum per finalized block. Once present, only a copy with this
   // checksum is admitted to `blockLocations`; divergent copies are rejected, and reads self-check
-  // against it. Kept in lock-step with `blockLocations` on block/rdd/BM removal.
+  // against it. Unlike `blockChecksums`/`blockLocations`, this is a tombstone: it survives the loss
+  // of the block's last replica (so a late divergent copy of a finalized block is still rejected)
+  // and is reclaimed only with the RDD, in `removeRdd`.
   private val sealedChecksums = new JHashMap[BlockId, Long]
+
+  // rddId -> its sealed block ids, letting `removeRdd` reclaim the `sealedChecksums` tombstones by
+  // rddId without scanning the whole map.
+  private val sealedBlocksByRdd = new mutable.HashMap[Int, mutable.HashSet[RDDBlockId]]
 
   // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
@@ -376,7 +382,6 @@ class BlockManagerMasterEndpoint(
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.remove(blockId)
       blockChecksums.remove(blockId)
-      sealedChecksums.remove(blockId)
       if (trackingCacheVisibility) {
         invisibleRDDBlocks.remove(blockId)
       }
@@ -401,6 +406,10 @@ class BlockManagerMasterEndpoint(
         }
       }
     }
+
+    // Reclaim this RDD's sealed checksums via the index.
+    sealedBlocksByRdd.remove(rddId).foreach(_.foreach(sealedChecksums.remove))
+
     val removeRddFromExecutorsFutures = blockManagerInfo.values.map { bmInfo =>
       bmInfo.storageEndpoint.ask[Int](removeMsg).recover {
         // use 0 as default value means no blocks were removed
@@ -542,7 +551,7 @@ class BlockManagerMasterEndpoint(
       if (locations.isEmpty) {
         blockLocations.remove(blockId)
         blockChecksums.remove(blockId)
-        sealedChecksums.remove(blockId)
+        // `sealedChecksums` deliberately kept (tombstone; see its def).
         logWarning(log"No more replicas available for ${MDC(BLOCK_ID, blockId)}!")
       } else if (proactivelyReplicate && (blockId.isRDD || blockId.isInstanceOf[TestBlockId])) {
         // As a heuristic, assume single executor failure to find out the number of replicas that
@@ -907,7 +916,7 @@ class BlockManagerMasterEndpoint(
     if (locations.isEmpty) {
       blockLocations.remove(blockId)
       blockChecksums.remove(blockId)
-      sealedChecksums.remove(blockId)
+      // `sealedChecksums` deliberately kept (tombstone; see its def).
     }
     true
   }
@@ -959,6 +968,7 @@ class BlockManagerMasterEndpoint(
         // because a lost local-checkpoint block cannot be recomputed.
         val winner = perReplica.values.groupBy(identity).maxBy(_._2.size)._1
         sealedChecksums.put(blockId, winner)
+        sealedBlocksByRdd.getOrElseUpdate(rddId, new mutable.HashSet[RDDBlockId]) += blockId
         val losers = perReplica.collect { case (bmId, c) if c != winner => bmId }.toSeq
         losers.foreach { bmId =>
           perReplica.remove(bmId)
