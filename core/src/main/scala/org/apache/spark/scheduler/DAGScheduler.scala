@@ -2855,15 +2855,19 @@ private[spark] class DAGScheduler(
     // Group-observable completion (spec S5): if this stage is a pipelined consumer co-scheduled
     // with a still-running pipelined producer, defer its *successful* completion in full until the
     // producer(s) finish. Buffer the whole CompletionEvent and return before ANY of its side
-    // effects run (accumulator update, task-end listener event, stage/job completion) -- else a
-    // consumer finishing ahead of its producer would advance job completion and cancel the
-    // still-running producer (via cancelRunningIndependentStages), or expose its output early.
-    // Deferring the entire event (not just the completion bookkeeping) is what makes the side
-    // effects run exactly ONCE, at replay: releaseDeferredPipelinedConsumers re-posts the buffered
-    // event once the last producer completes (or drops it if a producer fails, S6), and it then
-    // re-enters here and runs the side effects normally. This deferral check must therefore precede
-    // updateAccumulators and postTaskEnd. Inert for jobs with no pipelined dependency (the map is
-    // empty), so the regular path is unchanged.
+    // effects run. Buffering the whole event DEFERS all three of those effects -- the accumulator
+    // update, the task-end listener event, and stage/job completion -- until the event is replayed;
+    // it is NOT just the stage/job-completion bookkeeping that waits. (A listener-visible
+    // consequence: a consumer task that finishes ahead of its producer emits no SparkListenerTaskEnd
+    // until the producer finishes, so the Spark UI reports that already-succeeded task as still
+    // running for the producer's remaining lifetime.) Else a consumer finishing ahead of its
+    // producer would advance job completion and cancel the still-running producer (via
+    // cancelRunningIndependentStages), or expose its output early.
+    // Deferring the entire event is what makes the side effects run exactly ONCE, at replay:
+    // releaseDeferredPipelinedConsumers re-posts the buffered event once the last producer completes
+    // (or drops it if a producer fails, S6), and it then re-enters here and runs the side effects
+    // normally. This deferral check must therefore precede updateAccumulators and postTaskEnd. Inert
+    // for jobs with no pipelined dependency (the map is empty), so the regular path is unchanged.
     if (event.reason == Success) {
       dependentStageMap.get(stage) match {
         case Some(deferral) if deferral.parents.nonEmpty =>
