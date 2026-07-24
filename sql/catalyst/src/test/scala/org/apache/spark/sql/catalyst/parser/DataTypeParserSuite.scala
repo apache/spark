@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.internal.SQLConf
@@ -501,5 +501,119 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
             fallbackParser = DataType.fromJson) === TimestampLTZNanosType(p))
       }
     }
+  }
+
+  test("SPARK-57955: integer type parameters that overflow Int surface a proper error") {
+    // The grammar backs length/precision/scale/SRID with `INTEGER_VALUE : DIGIT+` (an unbounded
+    // digit run), so a value > Int.MaxValue overflows Int. It must raise a Spark error with an
+    // error class -- mirroring the existing TIMESTAMP(p) behavior -- rather than a raw
+    // NumberFormatException. `tooLarge` is Int.MaxValue + 1, the first value that overflows.
+    val tooLarge = (Int.MaxValue.toLong + 1).toString // 2147483648
+
+    // A parameter equal to Int.MaxValue does NOT overflow: it parses to an Int and is then handled
+    // by each type's own validation, so no DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE is raised for it.
+    // CHAR(Int.MaxValue) is a valid declaration (only length >= 0 is checked at construction).
+    assert(CatalystSqlParser.parseDataType(s"CHAR(${Int.MaxValue})") === CharType(Int.MaxValue))
+
+    // DECIMAL precision reuses DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION (a
+    // SparkArithmeticException): an overflowing value trivially exceeds the max precision of 38,
+    // matching the error DECIMAL(50) already produces. Covers both the scale-present and
+    // scale-absent call sites.
+    Seq(s"DECIMAL($tooLarge, 2)", s"DECIMAL($tooLarge)").foreach { typeString =>
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          CatalystSqlParser.parseDataType(typeString)
+        },
+        condition = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+        parameters = Map("precision" -> tooLarge, "maxPrecision" -> "38"))
+    }
+
+    // DECIMAL scale and CHAR/VARCHAR length use the generic DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE.
+    // Both the bare and the COLLATE-qualified CHAR/VARCHAR branches are exercised.
+    Seq(
+      s"DECIMAL(10, $tooLarge)" -> ("scale", "DECIMAL"),
+      s"CHAR($tooLarge)" -> ("length", "CHAR"),
+      s"CHAR($tooLarge) COLLATE UTF8_BINARY" -> ("length", "CHAR"),
+      s"VARCHAR($tooLarge)" -> ("length", "VARCHAR"),
+      s"VARCHAR($tooLarge) COLLATE UTF8_BINARY" -> ("length", "VARCHAR")).foreach {
+      case (typeString, (parameter, typeName)) =>
+        checkError(
+          exception = intercept[SparkException] {
+            CatalystSqlParser.parseDataType(typeString)
+          },
+          condition = "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE",
+          parameters = Map(
+            "parameter" -> parameter,
+            "value" -> tooLarge,
+            "type" -> typeName))
+    }
+
+    // TIME precision reuses UNSUPPORTED_TIME_PRECISION.
+    checkError(
+      exception = intercept[SparkException] {
+        CatalystSqlParser.parseDataType(s"TIME($tooLarge)")
+      },
+      condition = "UNSUPPORTED_TIME_PRECISION",
+      parameters = Map("precision" -> tooLarge))
+
+    // GEOMETRY/GEOGRAPHY SRID reuses ST_INVALID_SRID_VALUE (a SparkIllegalArgumentException): an
+    // overflowing SRID surfaces the same error as an in-range but unsupported SRID.
+    Seq(s"GEOMETRY($tooLarge)", s"GEOGRAPHY($tooLarge)").foreach { typeString =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          CatalystSqlParser.parseDataType(typeString)
+        },
+        condition = "ST_INVALID_SRID_VALUE",
+        parameters = Map("srid" -> tooLarge))
+    }
+
+    // An unsupported parameterized type must not leak a raw NumberFormatException from rendering
+    // its (oversized) parameter into the error message.
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType(s"FOO($tooLarge)")
+      },
+      condition = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> s""""FOO($tooLarge)""""))
+
+    // The JSON path (DataType.fromJson) is guarded consistently with the parser path, for every
+    // capture that converts to Int: decimal precision, decimal scale, char length, varchar length.
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        DataType.fromJson(s""""decimal($tooLarge,2)"""")
+      },
+      condition = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      parameters = Map("precision" -> tooLarge, "maxPrecision" -> "38"))
+    Seq(
+      s"decimal(10,$tooLarge)" -> ("scale", "DECIMAL"),
+      s"char($tooLarge)" -> ("length", "CHAR"),
+      s"varchar($tooLarge)" -> ("length", "VARCHAR")).foreach {
+      case (jsonName, (parameter, typeName)) =>
+        checkError(
+          exception = intercept[SparkException] {
+            DataType.fromJson(s""""$jsonName"""")
+          },
+          condition = "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE",
+          parameters = Map(
+            "parameter" -> parameter,
+            "value" -> tooLarge,
+            "type" -> typeName))
+    }
+
+    // The legacy case-class type-string parser (Spark <= 1.1 Parquet compatibility) is guarded the
+    // same way. It is only reachable as a fallback from StructType.fromString when JSON parsing
+    // fails, so it must not leak a raw NumberFormatException either.
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        LegacyTypeStringParser.parseString(s"DecimalType($tooLarge,2)")
+      },
+      condition = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+      parameters = Map("precision" -> tooLarge, "maxPrecision" -> "38"))
+    checkError(
+      exception = intercept[SparkException] {
+        LegacyTypeStringParser.parseString(s"DecimalType(10,$tooLarge)")
+      },
+      condition = "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE",
+      parameters = Map("parameter" -> "scale", "value" -> tooLarge, "type" -> "DECIMAL"))
   }
 }
