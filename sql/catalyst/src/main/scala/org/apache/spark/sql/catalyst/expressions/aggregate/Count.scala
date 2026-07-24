@@ -94,7 +94,7 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate
       )
     } else {
       Seq(
-        /* count = */ If(nullableChildren.map(IsNull).reduce(Or), count, count + 1L)
+        /* count = */ If(nullableChildren.map(IsNull.apply).reduce(Or.apply), count, count + 1L)
       )
     }
   }

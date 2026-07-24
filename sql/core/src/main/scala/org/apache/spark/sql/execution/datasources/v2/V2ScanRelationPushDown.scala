@@ -125,7 +125,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             |Post-Scan Filters: ${MDC(POST_SCAN_FILTERS, postScanFilters.mkString(","))}
            """.stripMargin)
 
-      val filterCondition = postScanFilters.reduceLeftOption(And)
+      val filterCondition = postScanFilters.reduceLeftOption(And.apply)
       filterCondition.map(Filter(_, sHolder)).getOrElse(sHolder)
   }
 
@@ -895,7 +895,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // Rewrite filter expressions using the variant transformation
       val rewrittenFilters = if (filters.nonEmpty) {
         val rewrittenFilterExprs = filters.map(variants.rewriteExpr(_, attributeMap))
-        Some(rewrittenFilterExprs.reduce(And))
+        Some(rewrittenFilterExprs.reduce(And.apply))
       } else {
         None
       }
@@ -923,7 +923,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
         .asInstanceOf[Seq[NamedExpression]]
-      val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
+      val allFilters = filtersPushDown.reduceOption(And.apply).toSeq ++ filtersStayUp
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
       val (scan, output) = PushDownUtils.pruneColumns(
         sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)

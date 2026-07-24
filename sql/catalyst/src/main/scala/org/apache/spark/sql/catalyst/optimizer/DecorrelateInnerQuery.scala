@@ -623,7 +623,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               val newFilterCond = newCorrelated ++ uncorrelated
               val newFilter = newFilterCond match {
                 case Nil => newChild
-                case conditions => Filter(conditions.reduce(And), newChild)
+                case conditions => Filter(conditions.reduce(And.apply), newChild)
               }
               // Equality predicates are used as join conditions with the outer query.
               val newJoinCond = joinCond ++ equalityCond
@@ -638,7 +638,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               val newOuterReferenceMap = outerReferenceMap ++ equivalences
               val newFilter = uncorrelated match {
                 case Nil => newChild
-                case conditions => Filter(conditions.reduce(And), newChild)
+                case conditions => Filter(conditions.reduce(And.apply), newChild)
               }
               val newJoinCond = joinCond ++ correlated
               (newFilter, newJoinCond, newOuterReferenceMap)
@@ -907,7 +907,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               // Use the current join conditions returned from the recursive call as the join
               // conditions for the left outer join. All outer references in the join
               // conditions are replaced by the newly created domain attributes.
-              val condition = replaceOuterReferences(joinCond, mapping).reduceOption(And)
+              val condition = replaceOuterReferences(joinCond, mapping).reduceOption(And.apply)
               val domainJoin = DomainJoin(domainAttrs, agg, LeftOuter, condition)
               // Original domain attributes preserved through Aggregate are no longer needed.
               val newProjectList = projectList.filter(!referencesToAdd.contains(_))
@@ -1034,7 +1034,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               case (outer, inner) => rightOuterReferenceMap.get(outer).map(EqualNullSafe(inner, _))
             }
             val newCondition = (newCorrelated ++ uncorrelated
-              ++ augmentedConditions).reduceOption(And)
+              ++ augmentedConditions).reduceOption(And.apply)
             val newJoin = j.copy(left = newLeft, right = newRight, condition = newCondition)
             (newJoin, newJoinCond, newOuterReferenceMap)
 

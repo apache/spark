@@ -143,10 +143,10 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           }
 
           (
-            leftConjuncts.reduceOption(And),
-            rightConjuncts.reduceOption(And),
+            leftConjuncts.reduceOption(And.apply),
+            rightConjuncts.reduceOption(And.apply),
             (nonLeftConjuncts.intersect(nonRightConjuncts) ++ nonDeterministicConjuncts)
-              .reduceOption(And)
+              .reduceOption(And.apply)
           )
         }
       }
