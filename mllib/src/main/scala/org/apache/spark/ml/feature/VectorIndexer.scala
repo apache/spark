@@ -329,7 +329,7 @@ class VectorIndexerModel private[ml] (
    * Pre-computed feature attributes, with some missing info.
    * In transform(), set attribute name and other info, if available.
    */
-  private val partialFeatureAttributes: Array[Attribute] = {
+  private lazy val partialFeatureAttributes: Array[Attribute] = {
     val attrs = new Array[Attribute](numFeatures)
     var categoricalFeatureCount = 0 // validity check for numFeatures, categoryMaps
     var featureIndex = 0
