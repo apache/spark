@@ -48,6 +48,22 @@ struct<to_time(time_str, fmt_str):time(6)>
 
 
 -- !query
+select typeof(to_time('00:12:00', null))
+-- !query schema
+struct<typeof(to_time(00:12:00, NULL)):string>
+-- !query output
+time(6)
+
+
+-- !query
+select typeof(to_time('00:12:00', cast(null as string)))
+-- !query schema
+struct<typeof(to_time(00:12:00, CAST(NULL AS STRING))):string>
+-- !query output
+time(6)
+
+
+-- !query
 select to_time("11", "HH")
 -- !query schema
 struct<to_time(11, HH):time(6)>
