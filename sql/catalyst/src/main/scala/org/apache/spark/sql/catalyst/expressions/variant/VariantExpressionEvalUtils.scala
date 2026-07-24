@@ -274,6 +274,61 @@ object VariantExpressionEvalUtils {
     new VariantVal(v.getValue, v.getMetadata)
   }
 
+  /**
+   * Build a variant object directly from a keys array and a values array, without materializing an
+   * intermediate map. Keys must be non-null strings and the two arrays must have equal length. A
+   * null key raises `NULL_MAP_KEY`, a duplicate key raises `VARIANT_DUPLICATE_KEY` (matching
+   * to_variant_object), and null values are kept as variant null.
+   */
+  def variantFromArrays(keys: ArrayData, values: ArrayData, valueType: DataType): VariantVal = {
+    if (keys.numElements() != values.numElements()) {
+      // Reuse the same error map_from_arrays raises for a keys/values length mismatch.
+      throw QueryExecutionErrors.mapDataKeyArrayLengthDiffersFromValueArrayLengthError()
+    }
+    val builder = new VariantBuilder(false)
+    val start = builder.getWritePos
+    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](keys.numElements())
+    for (i <- 0 until keys.numElements()) {
+      if (keys.isNullAt(i)) {
+        throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
+      }
+      val key = keys.getUTF8String(i).toString
+      val id = builder.addKey(key)
+      fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
+      val value = if (values.isNullAt(i)) null else values.get(i, valueType)
+      buildVariant(builder, value, valueType)
+    }
+    builder.finishWritingObject(start, fields)
+    val v = builder.result()
+    new VariantVal(v.getValue, v.getMetadata)
+  }
+
+  /**
+   * Build a variant object directly from an array of key/value struct entries, without an
+   * intermediate map. Keys must be non-null strings. A null key raises `NULL_MAP_KEY`, a
+   * duplicate key raises `VARIANT_DUPLICATE_KEY`, null values are kept as variant null, and null
+   * entries are handled by the caller.
+   */
+  def variantFromEntries(entries: ArrayData, valueType: DataType): VariantVal = {
+    val builder = new VariantBuilder(false)
+    val start = builder.getWritePos
+    val fields = new java.util.ArrayList[VariantBuilder.FieldEntry](entries.numElements())
+    for (i <- 0 until entries.numElements()) {
+      val entry = entries.getStruct(i, 2)
+      if (entry.isNullAt(0)) {
+        throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
+      }
+      val key = entry.getUTF8String(0).toString
+      val id = builder.addKey(key)
+      fields.add(new VariantBuilder.FieldEntry(key, id, builder.getWritePos - start))
+      val value = if (entry.isNullAt(1)) null else entry.get(1, valueType)
+      buildVariant(builder, value, valueType)
+    }
+    builder.finishWritingObject(start, fields)
+    val v = builder.result()
+    new VariantVal(v.getValue, v.getMetadata)
+  }
+
   /** Returns `true` if a data type is or has a child variant type. */
   def typeContainsVariant(dt: DataType): Boolean = dt match {
     case _: VariantType => true

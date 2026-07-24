@@ -976,6 +976,63 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkFailure(Map(1 -> 1), toVariantObject = true)
   }
 
+  test("variant_from_arrays and variant_from_entries") {
+    def keysValues(keys: Any, values: Any, valueType: DataType): VariantFromArrays =
+      VariantFromArrays(
+        Literal.create(keys, ArrayType(StringType)),
+        Literal.create(values, ArrayType(valueType)))
+
+    def entriesOf(entries: Any, valueType: DataType,
+        containsNull: Boolean = false): VariantFromEntries =
+      VariantFromEntries(Literal.create(entries, ArrayType(
+        StructType(Seq(StructField("k", StringType), StructField("v", valueType))), containsNull)))
+
+    // Basic object construction; keys are sorted in the resulting variant object.
+    checkEvaluation(StructsToJson(Map.empty,
+      keysValues(Array("z", "a"), Array(1, 2), IntegerType)), """{"a":2,"z":1}""")
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", 1), Row("b", 2)), IntegerType)), """{"a":1,"b":2}""")
+
+    // Empty input produces an empty object.
+    checkEvaluation(StructsToJson(Map.empty,
+      keysValues(Array.empty[String], Array.empty[Int], IntegerType)), "{}")
+
+    // Null values are kept as variant null; nested values are converted recursively.
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", 1), Row("b", null)), IntegerType)), """{"a":1,"b":null}""")
+    checkEvaluation(StructsToJson(Map.empty,
+      keysValues(Array("a"), Array(Array(1, 2, 3)), ArrayType(IntegerType))), """{"a":[1,2,3]}""")
+    checkEvaluation(StructsToJson(Map.empty, keysValues(Array("a"), Array(Row(1)),
+      StructType(Seq(StructField("i", IntegerType))))), """{"a":{"i":1}}""")
+
+    // A null entry makes the whole result null.
+    checkEvaluation(StructsToJson(Map.empty,
+      entriesOf(Array(Row("a", 1), null), IntegerType, containsNull = true)), null)
+
+    // A null array input produces null.
+    checkEvaluation(StructsToJson(Map.empty, VariantFromArrays(
+      Literal.create(null, ArrayType(StringType)),
+      Literal.create(Array(1), ArrayType(IntegerType)))), null)
+
+    // A null key is rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      keysValues(Array("a", null), Array(1, 2), IntegerType),
+      "NULL_MAP_KEY", Map.empty[String, String])
+
+    // Duplicate keys are rejected for both forms.
+    checkErrorInExpression[SparkRuntimeException](
+      keysValues(Array("a", "a"), Array(1, 2), IntegerType),
+      "VARIANT_DUPLICATE_KEY", Map("key" -> "a"))
+    checkErrorInExpression[SparkRuntimeException](
+      entriesOf(Array(Row("a", 1), Row("a", 2)), IntegerType),
+      "VARIANT_DUPLICATE_KEY", Map("key" -> "a"))
+
+    // Mismatched array lengths are rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      keysValues(Array("a", "b"), Array(1), IntegerType),
+      "_LEGACY_ERROR_TEMP_2128", Map.empty[String, String])
+  }
+
   test("schema_of_variant - unknown type") {
     val emptyMetadata = Array[Byte](VERSION, 0, 0)
 

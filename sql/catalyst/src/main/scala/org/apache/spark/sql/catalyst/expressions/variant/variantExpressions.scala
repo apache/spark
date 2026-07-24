@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.json.JsonInferSchema
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, QuotingUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, QuotingUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -182,6 +182,151 @@ case class ToVariantObject(child: Expression)
         }
       """
     ev.copy(code = code)
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(keys, values) - Creates a variant object from the given arrays of keys and values. The keys must be non-null strings and the two arrays must have the same length.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array('a', 'b'), array(1, 2));
+       {"a":1,"b":2}
+  """,
+  since = "4.3.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+case class VariantFromArrays(left: Expression, right: Expression)
+    extends BinaryExpression
+    with ExpectsInputTypes
+    with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
+  override def dataType: DataType = VariantType
+
+  private lazy val valueType: DataType = right.dataType.asInstanceOf[ArrayType].elementType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      left.dataType.asInstanceOf[ArrayType].elementType match {
+        case _: StringType if VariantGet.checkDataType(valueType, allowStructsAndMaps = true) =>
+          TypeCheckResult.TypeCheckSuccess
+        case _: StringType =>
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITHOUT_SUGGESTION",
+            messageParameters =
+              Map("srcType" -> toSQLType(valueType), "targetType" -> toSQLType(VariantType)))
+        case _ =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(0),
+              "requiredType" -> toSQLType(ArrayType(StringType)),
+              "inputSql" -> toSQLExpr(left),
+              "inputType" -> toSQLType(left.dataType)))
+      }
+    }
+  }
+
+  override def prettyName: String = "variant_from_arrays"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): VariantFromArrays =
+    copy(left = newLeft, right = newRight)
+
+  override protected def nullSafeEval(keyArray: Any, valueArray: Any): Any =
+    VariantExpressionEvalUtils.variantFromArrays(
+      keyArray.asInstanceOf[ArrayData], valueArray.asInstanceOf[ArrayData], valueType)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (keyArray, valueArray) => {
+      val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+      val valueTypeArg = ctx.addReferenceObj("valueType", valueType)
+      s"${ev.value} = $cls.variantFromArrays($keyArray, $valueArray, $valueTypeArg);"
+    })
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(entries) - Creates a variant object from an array of key/value struct entries. The keys must be non-null strings.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(struct('a', 1), struct('b', 2)));
+       {"a":1,"b":2}
+  """,
+  since = "4.3.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+case class VariantFromEntries(child: Expression)
+    extends UnaryExpression
+    with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
+
+  @transient
+  private lazy val dataTypeDetails: Option[(DataType, Boolean)] = child.dataType match {
+    case ArrayType(
+        StructType(Array(StructField(_, _, _, _), StructField(_, valueType, _, _))),
+        containsNull) =>
+      Some((valueType, containsNull))
+    case _ => None
+  }
+
+  @transient private lazy val valueType: DataType = dataTypeDetails.get._1
+  @transient private lazy val nullEntries: Boolean = dataTypeDetails.get._2
+
+  override def nullable: Boolean = child.nullable || nullEntries
+  override def dataType: DataType = VariantType
+
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(
+        StructType(Array(StructField(_, _: StringType, _, _), StructField(_, vt, _, _))), _) =>
+      if (VariantGet.checkDataType(vt, allowStructsAndMaps = true)) {
+        TypeCheckResult.TypeCheckSuccess
+      } else {
+        DataTypeMismatch(
+          errorSubClass = "CAST_WITHOUT_SUGGESTION",
+          messageParameters =
+            Map("srcType" -> toSQLType(vt), "targetType" -> toSQLType(VariantType)))
+      }
+    case _ =>
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> s"${toSQLType(ArrayType)} of pair ${toSQLType(StructType)}",
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)))
+  }
+
+  override def prettyName: String = "variant_from_entries"
+
+  override protected def withNewChildInternal(newChild: Expression): VariantFromEntries =
+    copy(child = newChild)
+
+  override protected def nullSafeEval(input: Any): Any = {
+    val entries = input.asInstanceOf[ArrayData]
+    if (nullEntries) {
+      var i = 0
+      while (i < entries.numElements()) {
+        if (entries.isNullAt(i)) return null
+        i += 1
+      }
+    }
+    VariantExpressionEvalUtils.variantFromEntries(entries, valueType)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+      val valueTypeArg = ctx.addReferenceObj("valueType", valueType)
+      ctx.nullArrayElementsSaveExec(nullEntries, ev.isNull, c) {
+        s"${ev.value} = $cls.variantFromEntries($c, $valueTypeArg);"
+      }
+    })
   }
 }
 

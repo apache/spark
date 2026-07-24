@@ -985,6 +985,8 @@ object FunctionRegistry {
     expression[SchemaOfVariant]("schema_of_variant"),
     expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
     expression[ToVariantObject]("to_variant_object"),
+    expression[VariantFromArrays]("variant_from_arrays"),
+    expression[VariantFromEntries]("variant_from_entries"),
     expression[IsValidVariant]("is_valid_variant"),
     expression[VariantDelete]("variant_delete"),
     expressionBuilder("variant_insert", VariantInsertExpressionBuilder),

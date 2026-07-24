@@ -14082,6 +14082,36 @@ object functions {
   def to_variant_object(col: Column): Column = Column.fn("to_variant_object", col)
 
   /**
+   * Creates a variant object from the given arrays of keys and values. The keys must be non-null
+   * strings and the two arrays must have the same length.
+   *
+   * @param keys
+   *   a column that evaluates to an array of string keys.
+   * @param values
+   *   a column that evaluates to an array of values.
+   * @group variant_funcs
+   * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a variant.
+   */
+  def variant_from_arrays(keys: Column, values: Column): Column =
+    Column.fn("variant_from_arrays", keys, values)
+
+  /**
+   * Creates a variant object from an array of key/value struct entries. The keys must be non-null
+   * strings.
+   *
+   * @param entries
+   *   a column that evaluates to an array of key/value structs.
+   * @group variant_funcs
+   * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a variant.
+   */
+  def variant_from_entries(entries: Column): Column =
+    Column.fn("variant_from_entries", entries)
+
+  /**
    * Check if a variant value is a variant null. Returns true if and only if the input is a
    * variant null and false otherwise (including in the case of SQL NULL).
    *
