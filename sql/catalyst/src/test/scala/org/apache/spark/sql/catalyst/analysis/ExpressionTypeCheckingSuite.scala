@@ -471,7 +471,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
         "paramIndex" -> ordinalNumber(0),
         "inputSql" -> "\"booleanField\"",
         "inputType" -> "\"BOOLEAN\"",
-        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""))
+        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\" or \"TIME\""))
   }
 
   test("check types for others") {
