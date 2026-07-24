@@ -3398,6 +3398,26 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-57956: AQE must not eliminate a global LIMIT over a row-increasing outer join") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "1048576") {
+      // The re-optimization that can wrongly drop the root LIMIT depends on whether the
+      // OFFSET-side query stage is materialized when EliminateLimits runs, which is timing
+      // dependent. Repeat the query so the regression is caught deterministically.
+      (1 to 20).foreach { _ =>
+        val rows = sql(
+          """
+            |WITH top AS (SELECT id % 1 AS k FROM range(0, 2, 1, 1) OFFSET 1),
+            |     b   AS (SELECT * FROM VALUES (0), (0) AS b(k))
+            |SELECT 1 AS c FROM top LEFT JOIN b USING (k) LIMIT 1
+          """.stripMargin).collect()
+        assert(rows.length == 1, s"LIMIT 1 must cap the result at one row, but got ${rows.length}")
+      }
+    }
+  }
+
   test("SPARK-48037: Fix SortShuffleWriter lacks shuffle write related metrics " +
     "resulting in potentially inaccurate data") {
     withTable("t3") {
