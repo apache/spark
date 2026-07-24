@@ -2045,7 +2045,8 @@ class RocksDB(
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
-  def doMaintenance(): Unit = {
+  /** Run only the snapshot upload portion of maintenance. */
+  def doSnapshotMaintenance(): Unit = {
     if (enableChangelogCheckpointing) {
 
       var mostRecentSnapshot: Option[RocksDBSnapshot] = None
@@ -2076,6 +2077,10 @@ class RocksDB(
         uploadSnapshot(snapshotToUpload)
       }
     }
+  }
+
+  /** Run only the cleanup portion of maintenance. */
+  def doCleanupMaintenance(): Unit = {
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(
         numVersionsToRetain = conf.minVersionsToRetain,
@@ -2083,6 +2088,11 @@ class RocksDB(
         minVersionsToDelete = conf.minVersionsToDelete)
     }
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
+  }
+
+  def doMaintenance(): Unit = {
+    doSnapshotMaintenance()
+    doCleanupMaintenance()
   }
 
   /**

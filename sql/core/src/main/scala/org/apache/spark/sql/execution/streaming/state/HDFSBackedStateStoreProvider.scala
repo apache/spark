@@ -478,12 +478,27 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   /** Do maintenance backing data files, including creating snapshots and cleaning up old files */
   override def doMaintenance(): Unit = {
+    doSnapshotMaintenance()
+    doCleanupMaintenance()
+  }
+
+  /** Run only the snapshot upload portion of maintenance. */
+  override def doSnapshotMaintenance(): Unit = {
     try {
       doSnapshot("maintenance")
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Error performing snapshot maintenance", e)
+    }
+  }
+
+  /** Run only the cleanup portion of maintenance. */
+  override def doCleanupMaintenance(): Unit = {
+    try {
       cleanup()
     } catch {
       case NonFatal(e) =>
-        logWarning(log"Error performing snapshot and cleaning up")
+        logWarning(log"Error performing cleanup maintenance", e)
     }
   }
 
