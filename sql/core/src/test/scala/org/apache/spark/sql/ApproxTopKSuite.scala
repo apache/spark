@@ -591,7 +591,7 @@ class ApproxTopKSuite extends SharedSparkSession {
       assert(restored.getItemDataType == null)
       assert(restored.getMaxItemsTracked == maxItemsTracked)
       assert(restored.getSketchWithNullCount.sketch.isEmpty)
-      assert(restored.getSketchWithNullCount.eval(1, StringType).numElements() == 0)
+      assert(restored.getSketchWithNullCount.eval(1, StringType, StringType).numElements() == 0)
     }
   }
 
