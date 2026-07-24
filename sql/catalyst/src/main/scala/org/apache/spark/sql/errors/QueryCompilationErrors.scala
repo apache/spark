@@ -1361,7 +1361,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotUsePreservedDatabaseAsCurrentDatabaseError(database: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1068",
+      errorClass = "CANNOT_USE_PRESERVED_DATABASE_AS_CURRENT",
       messageParameters = Map("database" -> database))
   }
 

@@ -1109,6 +1109,15 @@ class QueryCompilationErrorsSuite
       )
     }
   }
+
+  test("CANNOT_USE_PRESERVED_DATABASE_AS_CURRENT: set the global temp database as current") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.catalog.setCurrentDatabase("global_temp")
+      },
+      condition = "CANNOT_USE_PRESERVED_DATABASE_AS_CURRENT",
+      parameters = Map("database" -> "global_temp"))
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
