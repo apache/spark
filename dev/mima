@@ -42,6 +42,18 @@ $JAVA_CMD \
   -cp "$TOOLS_CLASSPATH:$OLD_DEPS_CLASSPATH" \
   org.apache.spark.tools.GenerateMIMAIgnore
 
+# Sanity-check the generated exclude list. GenerateMIMAIgnore must see both
+# Scala package-private classes (public at the JVM level, e.g. Utils) and Java
+# package-private classes (non-public at the JVM level, e.g. LauncherProtocol).
+# Missing entries indicate a regression in the classpath scanning.
+for canary in org.apache.spark.util.Utils org.apache.spark.launcher.LauncherProtocol; do
+  if ! grep -q -x -F "$canary" .generated-mima-class-excludes; then
+    echo "ERROR: $canary is missing from .generated-mima-class-excludes."
+    echo "GenerateMIMAIgnore did not scan the classpath correctly."
+    exit 1
+  fi
+done
+
 echo -e "q\n" | build/sbt -mem 5632 -DcopyDependencies=false "$@" mimaReportBinaryIssues | grep -v -e "info.*Resolving"
 ret_val=$?
 
