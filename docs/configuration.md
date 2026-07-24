@@ -2853,6 +2853,20 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.8.0</td>
 </tr>
 <tr>
+  <td><code>spark.scheduler.taskPlacement.strategy</code></td>
+  <td>SPREAD</td>
+  <td>
+    The strategy used to traverse executor offers during the scheduler's <code>NO_PREF</code> and
+    <code>ANY</code> passes.
+    <code>SPREAD</code> cycles through shuffled eligible executor offers one task at a time.
+    <code>BIN_PACK</code> fills each eligible executor before moving to the next. Executors with
+    running or current-round assigned tasks are considered before idle executors; each group uses
+    lexicographic executor ID order. The <code>PROCESS_LOCAL</code>, <code>NODE_LOCAL</code>, and
+    <code>RACK_LOCAL</code> passes retain Spark's existing shuffled offer order.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.scheduler.revive.interval</code></td>
   <td>1s</td>
   <td>

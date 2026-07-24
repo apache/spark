@@ -184,13 +184,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(!scheduler.hasExecutorsAliveOnHost(host1))
   }
 
-  test("Scheduler does not always schedule tasks on the same workers") {
+  test("default SPREAD placement does not always select the same executor") {
     val taskScheduler = setupScheduler()
     val numFreeCores = 1
     val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores),
       new WorkerOffer("executor1", "host1", numFreeCores))
-    // Repeatedly try to schedule a 1-task job, and make sure that it doesn't always
-    // get scheduled on the same executor. While there is a chance this test will fail
+    // Repeatedly try to schedule a 1-task job, and make sure that default SPREAD placement
+    // doesn't always select the same executor. While there is a chance this test will fail
     // because the task randomly gets placed on the first executor all 1000 times, the
     // probability of that happening is 2^-1000 (so sufficiently small to be considered
     // negligible).
@@ -206,6 +206,259 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(count > 0)
     assert(count < numTrials)
     assert(!failedTaskSet)
+  }
+
+  test("task placement strategy configuration") {
+    val conf = new SparkConf(false)
+    assert(conf.get(config.TASK_PLACEMENT_STRATEGY) ===
+      TaskPlacementStrategy.SPREAD)
+
+    conf.set(config.TASK_PLACEMENT_STRATEGY.key, "bin_pack")
+    assert(conf.get(config.TASK_PLACEMENT_STRATEGY) === TaskPlacementStrategy.BIN_PACK)
+
+    conf.set(config.TASK_PLACEMENT_STRATEGY.key, "unsupported")
+    intercept[IllegalArgumentException] {
+      conf.get(config.TASK_PLACEMENT_STRATEGY)
+    }
+  }
+
+  test("SPREAD task placement cycles a TaskSet across executor offers") {
+    val taskScheduler = setupScheduler()
+    val workerOffers = IndexedSeq(
+      WorkerOffer("executor3", "host3", 4),
+      WorkerOffer("executor1", "host1", 4),
+      WorkerOffer("executor2", "host2", 4),
+      WorkerOffer("executor0", "host0", 4))
+
+    taskScheduler.submitTasks(FakeTask.createTaskSet(8))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    val taskCounts = taskDescriptions.groupBy(_.executorId).map {
+      case (executorId, tasks) => executorId -> tasks.size
+    }
+
+    assert(taskDescriptions.size === 8)
+    assert(taskCounts === Map(
+      "executor0" -> 2,
+      "executor1" -> 2,
+      "executor2" -> 2,
+      "executor3" -> 2))
+  }
+
+  test("BIN_PACK task placement fills executors in executor ID order") {
+    val taskScheduler = setupScheduler(
+      config.TASK_PLACEMENT_STRATEGY.key -> TaskPlacementStrategy.BIN_PACK.toString)
+    val workerOffers = IndexedSeq(
+      WorkerOffer("30", "host3", 4),
+      WorkerOffer("10", "host1", 4),
+      WorkerOffer("20", "host2", 4),
+      WorkerOffer("2", "host0", 4))
+
+    taskScheduler.submitTasks(FakeTask.createTaskSet(8))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    val taskCounts = taskDescriptions.groupBy(_.executorId).map {
+      case (executorId, tasks) => executorId -> tasks.size
+    }
+
+    assert(taskDescriptions.size === 8)
+    assert(taskCounts === Map("10" -> 4, "2" -> 4))
+  }
+
+  test("BIN_PACK fills busy executors in executor ID order before idle executors") {
+    val taskScheduler = setupScheduler(
+      config.TASK_PLACEMENT_STRATEGY.key -> TaskPlacementStrategy.BIN_PACK.toString)
+
+    taskScheduler.submitTasks(FakeTask.createTaskSet(
+      1, stageId = 0, stageAttemptId = 0))
+    val firstTask = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("20", "host20", 1))).flatten
+    assert(firstTask.map(_.executorId) === Seq("20"))
+
+    taskScheduler.submitTasks(FakeTask.createTaskSet(
+      1, stageId = 1, stageAttemptId = 0))
+    val secondTask = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("10", "host10", 1))).flatten
+    assert(secondTask.map(_.executorId) === Seq("10"))
+
+    taskScheduler.submitTasks(FakeTask.createTaskSet(
+      7, stageId = 2, stageAttemptId = 0))
+    val workerOffers = IndexedSeq(
+      WorkerOffer("20", "host20", 3),
+      WorkerOffer("00", "host00", 4),
+      WorkerOffer("10", "host10", 3))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    val taskCounts = taskDescriptions.groupBy(_.executorId).map {
+      case (executorId, tasks) => executorId -> tasks.size
+    }
+
+    assert(taskDescriptions.size === 7)
+    assert(taskCounts === Map("10" -> 3, "20" -> 3, "00" -> 1))
+  }
+
+  test("BIN_PACK task placement preserves PROCESS_LOCAL placement") {
+    val taskScheduler = setupScheduler(
+      config.TASK_PLACEMENT_STRATEGY.key -> TaskPlacementStrategy.BIN_PACK.toString)
+
+    taskScheduler.submitTasks(FakeTask.createTaskSet(
+      1, stageId = 0, stageAttemptId = 0))
+    val firstTask = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor1", "host1", 0),
+      WorkerOffer("executor0", "host0", 1))).flatten
+    assert(firstTask.map(_.executorId) === Seq("executor0"))
+
+    val localTaskSet = FakeTask.createTaskSet(
+      1, stageId = 1, stageAttemptId = 0, Seq(TaskLocation("host1", "executor1")))
+    taskScheduler.submitTasks(localTaskSet)
+    val taskDescriptions = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 3),
+      WorkerOffer("executor1", "host1", 1))).flatten
+
+    assert(taskDescriptions.map(_.executorId) === Seq("executor1"))
+    val taskSetManager = taskScheduler.taskSetManagerForAttempt(1, 0).get
+    assert(taskSetManager.taskInfos(taskDescriptions.head.taskId).taskLocality ===
+      TaskLocality.PROCESS_LOCAL)
+  }
+
+  test("BIN_PACK task placement preserves NODE_LOCAL placement") {
+    val taskScheduler = setupScheduler(
+      config.TASK_PLACEMENT_STRATEGY.key -> TaskPlacementStrategy.BIN_PACK.toString)
+
+    taskScheduler.submitTasks(FakeTask.createTaskSet(
+      1, stageId = 0, stageAttemptId = 0))
+    val firstTask = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor1", "host1", 0),
+      WorkerOffer("executor0", "host0", 1))).flatten
+    assert(firstTask.map(_.executorId) === Seq("executor0"))
+
+    val localTaskSet = FakeTask.createTaskSet(
+      1, stageId = 1, stageAttemptId = 0, Seq(TaskLocation("host1")))
+    taskScheduler.submitTasks(localTaskSet)
+    val taskDescriptions = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 3),
+      WorkerOffer("executor1", "host1", 1))).flatten
+
+    assert(taskDescriptions.map(_.executorId) === Seq("executor1"))
+    val taskSetManager = taskScheduler.taskSetManagerForAttempt(1, 0).get
+    assert(taskSetManager.taskInfos(taskDescriptions.head.taskId).taskLocality ===
+      TaskLocality.NODE_LOCAL)
+  }
+
+  test("BIN_PACK prioritizes executors made busy by locality placement") {
+    val taskScheduler = setupScheduler(
+      config.TASK_PLACEMENT_STRATEGY.key -> TaskPlacementStrategy.BIN_PACK.toString)
+    val workerOffers = IndexedSeq(
+      WorkerOffer("executor0", "host0", 4),
+      WorkerOffer("executor9", "host9", 4))
+
+    taskScheduler.resourceOffers(workerOffers.map(_.copy(cores = 0)))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(
+      4,
+      Seq(TaskLocation("host9", "executor9")),
+      Nil,
+      Nil,
+      Nil))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+
+    assert(taskDescriptions.size === 4)
+    assert(taskDescriptions.forall(_.executorId == "executor9"))
+  }
+
+  test("BIN_PACK reevaluates busy executors between TaskSets in one resource offer") {
+    val taskScheduler = setupScheduler(
+      config.TASK_PLACEMENT_STRATEGY.key -> TaskPlacementStrategy.BIN_PACK.toString)
+    val workerOffers = IndexedSeq(
+      WorkerOffer("executor0", "host0", 4),
+      WorkerOffer("executor9", "host9", 4))
+
+    taskScheduler.resourceOffers(workerOffers.map(_.copy(cores = 0)))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(
+      1, stageId = 0, stageAttemptId = 0, Seq(TaskLocation("host9", "executor9"))))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(
+      4, stageId = 1, stageAttemptId = 0))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    val taskCounts = taskDescriptions.groupBy(_.executorId).map {
+      case (executorId, tasks) => executorId -> tasks.size
+    }
+
+    assert(taskDescriptions.size === 5)
+    assert(taskCounts === Map("executor9" -> 4, "executor0" -> 1))
+  }
+
+  test("BIN_PACK task placement is applied at ANY locality") {
+    val taskScheduler = setupScheduler(
+      config.TASK_PLACEMENT_STRATEGY.key -> TaskPlacementStrategy.BIN_PACK.toString,
+      config.LOCALITY_WAIT.key -> "0")
+    taskScheduler.resourceOffers(
+      IndexedSeq(WorkerOffer("executor9", "host9", 0)))
+
+    val preferredLocations =
+      Seq.fill(4)(Seq(TaskLocation("host9", "executor9")))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(4, preferredLocations: _*))
+    val taskDescriptions = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor1", "host1", 4),
+      WorkerOffer("executor0", "host0", 4))).flatten
+
+    assert(taskDescriptions.size === 4)
+    assert(taskDescriptions.forall(_.executorId == "executor0"))
+    val taskSetManager = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    assert(taskSetManager.taskInfos.values.map(_.taskLocality).toSet === Set(TaskLocality.ANY))
+  }
+
+  test("BIN_PACK task placement respects custom resource limits") {
+    val taskScheduler = setupScheduler(
+      numCores = 4,
+      config.TASK_PLACEMENT_STRATEGY.key -> TaskPlacementStrategy.BIN_PACK.toString,
+      config.CPUS_PER_TASK.key -> "1",
+      TASK_GPU_ID.amountConf -> "1",
+      EXECUTOR_GPU_ID.amountConf -> "4",
+      config.EXECUTOR_CORES.key -> "4")
+    val workerOffers = IndexedSeq(
+      WorkerOffer("executor1", "host1", 4, None,
+        Map(GPU -> ArrayBuffer("2", "3", "4", "5"))),
+      WorkerOffer("executor0", "host0", 4, None,
+        Map(GPU -> ArrayBuffer("0", "1"))))
+
+    taskScheduler.submitTasks(FakeTask.createTaskSet(4))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    val taskCounts = taskDescriptions.groupBy(_.executorId).map {
+      case (executorId, tasks) => executorId -> tasks.size
+    }
+
+    assert(taskDescriptions.size === 4)
+    assert(taskCounts === Map("executor0" -> 2, "executor1" -> 2))
+  }
+
+  test("BIN_PACK task placement supports barrier tasks") {
+    val taskScheduler = setupScheduler(
+      config.TASK_PLACEMENT_STRATEGY.key -> TaskPlacementStrategy.BIN_PACK.toString)
+    val workerOffers = IndexedSeq(
+      WorkerOffer("executor1", "host1", 4, Some("192.168.0.101:49627")),
+      WorkerOffer("executor0", "host0", 4, Some("192.168.0.101:49625")))
+
+    taskScheduler.submitTasks(FakeTask.createBarrierTaskSet(4))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+
+    assert(taskDescriptions.size === 4)
+    assert(taskDescriptions.forall(_.executorId == "executor0"))
+  }
+
+  test("BIN_PACK treats barrier locality assignments as busy") {
+    val taskScheduler = setupScheduler(
+      config.TASK_PLACEMENT_STRATEGY.key -> TaskPlacementStrategy.BIN_PACK.toString)
+    val workerOffers = IndexedSeq(
+      WorkerOffer("executor0", "host0", 4, Some("192.168.0.101:49625")),
+      WorkerOffer("executor9", "host9", 4, Some("192.168.0.101:49627")))
+
+    taskScheduler.resourceOffers(workerOffers.map(_.copy(cores = 0)))
+    taskScheduler.submitTasks(FakeTask.createBarrierTaskSet(
+      4,
+      Seq(TaskLocation("host9", "executor9")),
+      Nil,
+      Nil,
+      Nil))
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+
+    assert(taskDescriptions.size === 4)
+    assert(taskDescriptions.forall(_.executorId == "executor9"))
   }
 
   test("Scheduler correctly accounts for multiple CPUs per task") {

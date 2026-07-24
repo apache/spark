@@ -28,7 +28,7 @@ import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
 import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
+import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode, TaskPlacementStrategy}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -2519,6 +2519,19 @@ package object config {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .createWithDefault(5)
+
+  private[spark] val TASK_PLACEMENT_STRATEGY =
+    ConfigBuilder("spark.scheduler.taskPlacement.strategy")
+      .doc("The strategy used to traverse executor offers during the scheduler's NO_PREF and ANY " +
+        "passes. SPREAD cycles through shuffled eligible executor offers one task at a time. " +
+        "BIN_PACK fills each eligible executor before moving to the next. Executors with running " +
+        "or current-round assigned tasks are considered before idle executors; each group uses " +
+        "lexicographic executor ID order. The PROCESS_LOCAL, NODE_LOCAL, and RACK_LOCAL passes " +
+        "retain Spark's existing shuffled offer order.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .enumConf(TaskPlacementStrategy)
+      .createWithDefault(TaskPlacementStrategy.SPREAD)
 
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")
