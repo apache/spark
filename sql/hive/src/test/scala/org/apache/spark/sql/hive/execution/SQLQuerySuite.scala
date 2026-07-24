@@ -562,32 +562,61 @@ abstract class SQLQuerySuiteBase extends QueryTest with TestHiveSingleton {
   }
 
   test("SPARK-28551: CTAS Hive Table should be with non-existent or empty location") {
-    def executeCTASWithNonEmptyLocation(tempLocation: String): Unit = {
+    def executeCTASWithNonEmptyLocation(tempLocation: String, ifNotExists: Boolean): Unit = {
       sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION '$tempLocation/ctas1'")
       sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
-      sql(s"""CREATE TABLE ctas_with_existing_location stored as rcfile LOCATION
-           |'$tempLocation' AS SELECT key k, value FROM src ORDER BY k, value""".stripMargin)
+      val ifNotExistsClause = if (ifNotExists) "IF NOT EXISTS" else ""
+      sql(s"""CREATE TABLE $ifNotExistsClause ctas_with_existing_location stored as rcfile
+           |LOCATION '$tempLocation'
+           |AS SELECT key k, value FROM src ORDER BY k, value""".stripMargin)
     }
 
     Seq(false, true).foreach { convertCTASFlag =>
       Seq(false, true).foreach { allowNonEmptyDirFlag =>
-        withSQLConf(
-          SQLConf.CONVERT_CTAS.key -> convertCTASFlag.toString,
-          SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key -> allowNonEmptyDirFlag.toString) {
-          withTempDir { dir =>
-            val tempLocation = dir.toURI.toString
-            withTable("ctas1", "ctas_with_existing_location") {
-              if (allowNonEmptyDirFlag == false) {
-                val m = intercept[AnalysisException] {
-                  // should not overwrite table location of table ctas1
-                  executeCTASWithNonEmptyLocation(tempLocation)
-                }.getMessage
-                assert(m.contains("CREATE-TABLE-AS-SELECT cannot create " +
-                  "table with location to a non-empty directory"))
-              } else {
-                executeCTASWithNonEmptyLocation(tempLocation)
+        Seq(false, true).foreach { ifNotExists =>
+          withSQLConf(
+            SQLConf.CONVERT_CTAS.key -> convertCTASFlag.toString,
+            SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key -> allowNonEmptyDirFlag.toString) {
+            withTempDir { dir =>
+              val tempLocation = dir.toURI.toString
+              withTable("ctas1", "ctas_with_existing_location") {
+                if (allowNonEmptyDirFlag == false) {
+                  val m = intercept[AnalysisException] {
+                    // should not overwrite table location of table ctas1
+                    executeCTASWithNonEmptyLocation(tempLocation, ifNotExists)
+                  }.getMessage
+                  assert(m.contains("CREATE-TABLE-AS-SELECT cannot create " +
+                    "table with location to a non-empty directory"))
+                } else {
+                  executeCTASWithNonEmptyLocation(tempLocation, ifNotExists)
+                }
               }
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-56558: CTAS IF NOT EXISTS skips execution when table exists, " +
+    "regardless of non-empty location") {
+    def executeCTASWithNonEmptyLocation(tempLocation: String): Unit = {
+      sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION '$tempLocation/ctas1'")
+      sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
+      sql(s"CREATE TABLE ctas2(id string) stored as rcfile LOCATION '$tempLocation/ctas2'")
+      sql(s"""CREATE TABLE IF NOT EXISTS ctas2 stored as rcfile
+             |LOCATION '$tempLocation/ctas1'
+             |AS SELECT key k, value FROM src ORDER BY k, value""".stripMargin)
+    }
+
+    Seq(false, true).foreach { convertCTASFlag =>
+      withSQLConf(
+        SQLConf.CONVERT_CTAS.key -> convertCTASFlag.toString,
+        SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key -> "false") {
+        withTempDir { dir =>
+          val tempLocation = dir.toURI.toString
+          withTable("ctas1", "ctas2") {
+            executeCTASWithNonEmptyLocation(tempLocation)
           }
         }
       }
