@@ -370,11 +370,18 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
 
   test("AutoCdcMergeFlow.schema lets a selection exclude a source column that collides with " +
     "a non-prefixed framework column, re-adding it from the framework") {
-    // __START_AT / __END_AT do not carry the reserved AutoCDC prefix, so a source change feed
-    // may legitimately contain columns with those names. The user excludes them via the column
-    // selection; they are dropped from the user-data portion and the engine's own framework
-    // columns are appended in their place, so each still appears exactly once in the output with
-    // the framework's type (the sequencing type), not the source column's type.
+    // Two of the three SCD2 framework columns -- __START_AT and __END_AT -- do not carry the
+    // reserved AutoCDC prefix, so a source change feed may legitimately contain columns with
+    // those names. The user excludes them via the column selection; they are dropped from the
+    // user-data portion and the engine's own framework columns are appended in their place, so
+    // each still appears exactly once in the output with the framework's type (the sequencing
+    // type), not the source column's type.
+    //
+    // The third framework column, _cdc_metadata, DOES carry the reserved prefix, so a source
+    // that contains it is rejected outright at flow construction -- it can never reach column
+    // selection and so is deliberately out of scope here. That rejection is covered separately by
+    // "AutoCdcMergeFlow rejects a source df column whose name equals the reserved CDC metadata
+    // column".
     val session = spark
     import session.implicits._
     // Source carries String-typed __START_AT / __END_AT columns alongside the data columns.
