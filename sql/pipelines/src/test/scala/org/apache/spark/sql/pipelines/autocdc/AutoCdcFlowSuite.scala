@@ -461,12 +461,23 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       storedAsScdType = ScdType.Type2
     )
 
-    // The struct's fields are non-nullable because they wrap concrete non-null source columns.
+    // Top-level nullability and inner-field nullability are independent. The __START_AT /
+    // __END_AT columns must themselves stay nullable -- an open/unset interval bound is
+    // represented as NULL, which reconciliation relies on -- even when the sequencing type is a
+    // struct whose fields happen to be non-nullable (here seq1 / seq2 wrap concrete non-null
+    // source columns). A struct column is free to be NULL at the top level regardless of its
+    // fields' nullability.
+    val startAtField = resolvedFlow.schema(Scd2BatchProcessor.startAtColName)
+    val endAtField = resolvedFlow.schema(Scd2BatchProcessor.endAtColName)
+    assert(startAtField.nullable, "__START_AT must be nullable")
+    assert(endAtField.nullable, "__END_AT must be nullable")
+
+    // The struct data type flows through unchanged, including its (non-nullable) inner fields.
     val expectedSeqType = new StructType()
       .add("seq1", IntegerType, nullable = false)
       .add("seq2", LongType, nullable = false)
-    assert(resolvedFlow.schema(Scd2BatchProcessor.startAtColName).dataType == expectedSeqType)
-    assert(resolvedFlow.schema(Scd2BatchProcessor.endAtColName).dataType == expectedSeqType)
+    assert(startAtField.dataType == expectedSeqType)
+    assert(endAtField.dataType == expectedSeqType)
     assert(
       resolvedFlow.schema(AutoCdcReservedNames.cdcMetadataColName).dataType ==
       Scd2BatchProcessor.cdcMetadataColSchema(expectedSeqType)
