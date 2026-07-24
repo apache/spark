@@ -159,16 +159,16 @@ class StreamRealTimeModeE2ESuite extends StreamRealTimeModeE2ESuiteBase {
               .batchId should be(i + 1)
             query.lastProgress.sources(0).numInputRows should be(numRows * 3)
 
-            val commitedResults = new mutable.ListBuffer[String]()
+            val committedResults = new mutable.ListBuffer[String]()
             val numPartitions = if (withUnion) 10 else 5
             for (v <- 0 until numPartitions) {
               val it = ResultsCollector.get(s"$uniqueSinkName-${i}-$v").iterator()
               while (it.hasNext) {
-                commitedResults += it.next()
+                committedResults += it.next()
               }
             }
 
-            commitedResults.sorted should equal(expectedResultsByBatch(i).sorted)
+            committedResults.sorted should equal(expectedResultsByBatch(i).sorted)
           }
         }
       }
