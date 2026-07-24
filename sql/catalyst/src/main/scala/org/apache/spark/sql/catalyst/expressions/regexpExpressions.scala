@@ -738,6 +738,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   // last replacement string, we don't want to convert a UTF8String => java.langString every time.
   @transient private var lastReplacement: String = _
   @transient private var lastReplacementInUTF8: UTF8String = _
+  override def stateful: Boolean = true
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_REPLACE)
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
@@ -855,6 +856,7 @@ abstract class RegExpExtractBase
   @transient private var lastRegex: UTF8String = _
   // last regex pattern, we cache it for performance concern
   @transient private var pattern: Pattern = _
+  override def stateful: Boolean = true
 
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_EXTRACT_FAMILY)
 

@@ -940,6 +940,16 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         "actualType" -> toSQLType(StringType)
       )))
   }
+
+  test("NamedLambdaVariable is stateful and produces a fresh copy") {
+    val lv = NamedLambdaVariable("x", IntegerType, nullable = false)
+    assert(lv.stateful, "NamedLambdaVariable.stateful should be true")
+    val copy = lv.freshCopyIfContainsStatefulExpression()
+    assert(copy ne lv,
+      "freshCopyIfContainsStatefulExpression should return a new instance for NamedLambdaVariable")
+    assert(copy.asInstanceOf[NamedLambdaVariable].value ne lv.value,
+      "fresh copy should have an independent AtomicReference value")
+  }
 }
 
 case class CodegenFallbackExpr(child: Expression) extends UnaryExpression with CodegenFallback {
