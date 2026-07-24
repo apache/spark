@@ -1002,6 +1002,11 @@ object JdbcDialects {
    * registered dialect handles the URL through [[JdbcDialect#canHandle]].
    *
    * The prefix must start with `jdbc:` and end with `:`. Matching is case-insensitive.
+   * For example, a MySQL-compatible wrapper can reuse [[MYSQL]]:
+   *
+   * {{{
+   * JdbcDialects.registerDialectForUrlPrefix("jdbc:aws-wrapper:mysql:", JdbcDialects.MYSQL)
+   * }}}
    *
    * @param urlPrefix The additional JDBC URL prefix.
    * @param dialect The existing dialect to use for URLs with the prefix.
@@ -1068,6 +1073,18 @@ object JdbcDialects {
     }
   }
   registerDialects()
+
+  /** The built-in MySQL dialect. */
+  @Since("4.3.0")
+  val MYSQL: JdbcDialect = dialects.collectFirst {
+    case dialect: MySQLDialect => dialect
+  }.get
+
+  /** The built-in PostgreSQL dialect. */
+  @Since("4.3.0")
+  val POSTGRESQL: JdbcDialect = dialects.collectFirst {
+    case dialect: PostgresDialect => dialect
+  }.get
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
