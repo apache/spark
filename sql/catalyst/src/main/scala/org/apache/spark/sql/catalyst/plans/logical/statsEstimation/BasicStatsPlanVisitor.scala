@@ -27,6 +27,14 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   /** Falls back to the estimation computed by [[SizeInBytesOnlyStatsPlanVisitor]]. */
   private def fallback(p: LogicalPlan): Statistics = SizeInBytesOnlyStatsPlanVisitor.visit(p)
 
+  // Cap composite estimates so a sequence of operators (e.g. self-joins) cannot grow the backing
+  // `BigInt` without limit (SPARK-52163). Leaf estimates are left untouched, since they reflect
+  // real source sizes and are never the product of repeatedly combined children.
+  override def visit(p: LogicalPlan): Statistics = p match {
+    case _: LeafNode => super.visit(p)
+    case _ => EstimationUtils.capStats(super.visit(p))
+  }
+
   override def default(p: LogicalPlan): Statistics = p match {
     case p: LeafNode => p.computeStats()
     case _: LogicalPlan =>
