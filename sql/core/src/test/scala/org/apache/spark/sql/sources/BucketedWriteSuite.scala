@@ -55,9 +55,11 @@ abstract class BucketedWriteSuite extends QueryTest {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
 
     Seq(-1, 0, 100001).foreach(numBuckets => {
-      val e = intercept[AnalysisException](df.write.bucketBy(numBuckets, "i").saveAsTable("tt"))
-      assert(
-        e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
+      checkError(
+        exception =
+          intercept[AnalysisException](df.write.bucketBy(numBuckets, "i").saveAsTable("tt")),
+        condition = "INVALID_BUCKET_COUNT.OUT_OF_RANGE",
+        parameters = Map("bucketingMaxBuckets" -> "100000", "numBuckets" -> numBuckets.toString))
     })
   }
 
@@ -77,10 +79,13 @@ abstract class BucketedWriteSuite extends QueryTest {
 
       // over the new limit
       withTable("t") {
-        val e = intercept[AnalysisException](
-          df.write.bucketBy(maxNrBuckets + 1, "i").saveAsTable("t"))
-        assert(
-          e.getMessage.contains("Number of buckets should be greater than 0 but less than"))
+        checkError(
+          exception = intercept[AnalysisException](
+            df.write.bucketBy(maxNrBuckets + 1, "i").saveAsTable("t")),
+          condition = "INVALID_BUCKET_COUNT.OUT_OF_RANGE",
+          parameters = Map(
+            "bucketingMaxBuckets" -> maxNrBuckets.toString,
+            "numBuckets" -> (maxNrBuckets + 1).toString))
       }
     }
   }

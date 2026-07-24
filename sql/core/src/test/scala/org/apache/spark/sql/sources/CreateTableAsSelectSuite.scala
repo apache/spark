@@ -223,17 +223,19 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
   test("create table using as select - with invalid number of buckets") {
     withTable("t") {
       Seq(0, 100001).foreach(numBuckets => {
-        val e = intercept[ParseException] {
-          sql(
-            s"""
-               |CREATE TABLE t USING PARQUET
-               |OPTIONS (PATH '${path.toURI}')
-               |CLUSTERED BY (a) SORTED BY (b) INTO $numBuckets BUCKETS
-               |AS SELECT 1 AS a, 2 AS b
-             """.stripMargin
-          )
-        }.getMessage
-        assert(e.contains("Number of buckets should be greater than 0 but less than"))
+        checkError(
+          exception = intercept[ParseException] {
+            sql(
+              s"""
+                 |CREATE TABLE t USING PARQUET
+                 |OPTIONS (PATH '${path.toURI}')
+                 |CLUSTERED BY (a) SORTED BY (b) INTO $numBuckets BUCKETS
+                 |AS SELECT 1 AS a, 2 AS b
+               """.stripMargin
+            )
+          },
+          condition = "INVALID_BUCKET_COUNT.OUT_OF_RANGE",
+          parameters = Map("bucketingMaxBuckets" -> "100000", "numBuckets" -> numBuckets.toString))
       })
     }
   }
@@ -264,10 +266,13 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
 
       // Over the new limit
       withTable("t") {
-        val e = intercept[ParseException](
-          sql(createTableSql(path.toURI.toString, maxNrBuckets + 1)))
-        assert(
-          e.getMessage.contains("Number of buckets should be greater than 0 but less than "))
+        checkError(
+          exception = intercept[ParseException](
+            sql(createTableSql(path.toURI.toString, maxNrBuckets + 1))),
+          condition = "INVALID_BUCKET_COUNT.OUT_OF_RANGE",
+          parameters = Map(
+            "bucketingMaxBuckets" -> maxNrBuckets.toString,
+            "numBuckets" -> (maxNrBuckets + 1).toString))
       }
     }
   }

@@ -667,7 +667,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       exception = intercept[AnalysisException] {
         transform(cmd)
       },
-      condition = "INVALID_BUCKET_COUNT",
+      condition = "INVALID_BUCKET_COUNT.OUT_OF_RANGE",
       parameters = Map("bucketingMaxBuckets" -> "100000", "numBuckets" -> "0"))
   }
 
