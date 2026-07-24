@@ -124,7 +124,15 @@ private case class PostgresDialect()
       Some(StringType)
     case "bytea" => Some(BinaryType)
     case "timestamptz" | "timetz" => Some(TimestampType)
-    case "timestamp" | "time" => Some(getTimestampType(md.build()))
+    case "timestamp" => Some(getTimestampType(md.build()))
+    case "time" =>
+      // Use DEFAULT_PRECISION (6) because PostgreSQL does not report element typmod for
+      // array columns, and 6 is the maximum fractional-second precision for time in Postgres.
+      if (conf.isTimeTypeEnabled && !conf.legacyJdbcTimeMappingEnabled) {
+        Some(TimeType(TimeType.DEFAULT_PRECISION))
+      } else {
+        Some(getTimestampType(md.build()))
+      }
     case "date" => Some(DateType)
     case "numeric" | "decimal" if precision > 0 =>
       val scale = md.build().getLong("scale").toInt
@@ -159,6 +167,11 @@ private case class PostgresDialect()
     case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
     case TimestampType if !conf.legacyPostgresDatetimeMappingEnabled =>
       Some(JdbcType("TIMESTAMP WITH TIME ZONE", Types.TIMESTAMP))
+    case t: TimeType =>
+      // PostgreSQL supports TIME(p) for p in [0,6]. Use the declared precision when valid;
+      // fall back to bare TIME (= TIME(6)) for out-of-range precisions (e.g. nanosecond).
+      val ddl = if (t.precision >= 0 && t.precision <= 6) s"TIME(${t.precision})" else "TIME"
+      Some(JdbcType(ddl, Types.TIME))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] || et.isInstanceOf[ArrayType] =>

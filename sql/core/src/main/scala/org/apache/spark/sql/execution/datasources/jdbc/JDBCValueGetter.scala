@@ -254,6 +254,11 @@ private[jdbc] object JDBCValueGetter {
         (d: Date) => fromJavaDate(dialect.convertJavaDateToDate(d))
       }
 
+      case _: TimeType =>
+        // Placeholder - TimeType arrays are handled specially in apply() below
+        // because java.sql.Time from getArray() loses sub-second precision.
+        null
+
       case dt: DecimalType =>
           arrayConverter[java.math.BigDecimal](d => Decimal(d, dt.precision, dt.scale))
 
@@ -279,7 +284,24 @@ private[jdbc] object JDBCValueGetter {
       try {
         val array = nullSafeConvert[java.sql.Array](
           input = rs.getArray(pos + 1),
-          arr => new GenericArrayData(elementConversion(arrayType.elementType)(arr.getArray())))
+          arr => arrayType.elementType match {
+            case _: TimeType =>
+              // Use getResultSet() + getObject(LocalTime) per element to preserve
+              // microsecond precision. java.sql.Time from getArray() loses sub-seconds.
+              val arrRs = arr.getResultSet()
+              val buf = scala.collection.mutable.ArrayBuffer[Any]()
+              try {
+                while (arrRs.next()) {
+                  val lt = arrRs.getObject(2, classOf[java.time.LocalTime])
+                  buf += (if (lt != null) lt.toNanoOfDay else null)
+                }
+              } finally {
+                arrRs.close()
+              }
+              new GenericArrayData(buf.toArray)
+            case _ =>
+              new GenericArrayData(elementConversion(arrayType.elementType)(arr.getArray()))
+          })
         row.update(pos, array)
       } catch {
         case _: java.lang.ClassCastException =>

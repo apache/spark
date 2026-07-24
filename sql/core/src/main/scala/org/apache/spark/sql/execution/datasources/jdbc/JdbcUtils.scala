@@ -546,6 +546,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
               getJdbcType(et, dialect).databaseTypeDefinition.split("\\(")(0),
               array.map(dialect.convertTimestampNTZToJavaTimestamp).toArray)
             stmt.setArray(pos + 1, arrayType)
+          case _: TimeType =>
+            val array = row.getSeq[java.time.LocalTime](pos)
+            val arrayType = conn.createArrayOf(
+              getJdbcType(et, dialect).databaseTypeDefinition.split("\\(")(0),
+              array.toArray)
+            stmt.setArray(pos + 1, arrayType)
           case _ =>
             @tailrec
             def getElementTypeName(dt: DataType): String = dt match {
