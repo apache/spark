@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DELETE_FROM_TABLE, MERGE_INTO_TABLE, REPLACE_DATA, TreePattern, UPDATE_TABLE, WRITE_DELTA}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr}
@@ -447,6 +448,8 @@ case class ReplaceData(
   override protected def withNewChildInternal(newChild: LogicalPlan): ReplaceData = {
     copy(query = newChild)
   }
+
+  override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(REPLACE_DATA)
 }
 
 /**
@@ -557,6 +560,8 @@ case class WriteDelta(
   override protected def withNewChildInternal(newChild: LogicalPlan): WriteDelta = {
     copy(query = newChild)
   }
+
+  override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(WRITE_DELTA)
 }
 
 trait V2CreateTableAsSelectPlan
@@ -1097,6 +1102,8 @@ case class DeleteFromTable(
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): DeleteFromTable =
     copy(table = newChild)
+
+  override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(DELETE_FROM_TABLE)
 }
 
 /**
@@ -1136,6 +1143,8 @@ case class UpdateTable(
       case r: NamedRelation => r.skipSchemaResolution
       case _ => false
     }
+
+  override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(UPDATE_TABLE)
 }
 
 /**
@@ -1227,6 +1236,8 @@ case class MergeIntoTable(
       newRight: LogicalPlan): MergeIntoTable = {
     copy(targetTable = newLeft, sourceTable = newRight)
   }
+
+  override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(MERGE_INTO_TABLE)
 }
 
 object MergeIntoTable {

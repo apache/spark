@@ -21,6 +21,7 @@ import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.DATA_SOURCE_V2_SCAN_RELATION
 import org.apache.spark.sql.connector.read.{SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, UnknownPartitioning}
 import org.apache.spark.util.ArrayImplicits._
@@ -40,7 +41,8 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
     }
   }
 
-  private def partitioning(plan: LogicalPlan) = plan.transformDown {
+  private def partitioning(plan: LogicalPlan) = plan.transformDownWithPruning(
+      _.containsPattern(DATA_SOURCE_V2_SCAN_RELATION)) {
     case d @ ExtractV2ScanInfo(relation, scan: SupportsReportPartitioning, _)
         if d.keyGroupedPartitioning.isEmpty =>
       val catalystPartitioning = scan.outputPartitioning() match {
@@ -68,7 +70,8 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with Logging {
       d.copy(keyGroupedPartitioning = catalystPartitioning)
   }
 
-  private def ordering(plan: LogicalPlan) = plan.transformDown {
+  private def ordering(plan: LogicalPlan) = plan.transformDownWithPruning(
+      _.containsPattern(DATA_SOURCE_V2_SCAN_RELATION)) {
     case d @ ExtractV2ScanInfo(relation, scan: SupportsReportOrdering, _) =>
       val ordering =
         V2ExpressionUtils.toCatalystOrdering(scan.outputOrdering(), relation, relation.funCatalog)

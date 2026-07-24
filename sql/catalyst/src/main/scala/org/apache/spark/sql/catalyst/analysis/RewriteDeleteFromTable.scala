@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Alias, EqualNullSafe, Expression, Literal, Not}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, LogicalPlan, Project, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.trees.TreePattern.DELETE_FROM_TABLE
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.{SupportsDeleteV2, SupportsRowLevelOperations, TruncatableTable}
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
@@ -37,7 +38,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 object RewriteDeleteFromTable extends RewriteRowLevelCommand {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    _.containsPattern(DELETE_FROM_TABLE)) {
     case d @ DeleteFromTable(aliasedTable, cond) if d.resolved =>
       EliminateSubqueryAliases(aliasedTable) match {
         case ExtractV2Table(_: TruncatableTable) if cond == TrueLiteral =>
