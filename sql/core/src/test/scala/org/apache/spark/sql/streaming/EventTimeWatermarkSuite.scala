@@ -35,9 +35,10 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeStats, StateStoreSaveExec}
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.functions.{count, expr, struct, timestamp_seconds, to_timestamp, window}
+import org.apache.spark.sql.functions.{count, expr, struct, timestamp_nanos, timestamp_seconds, to_timestamp, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
+import org.apache.spark.sql.types.TimestampNTZNanosType
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
@@ -1050,5 +1051,124 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
   private def awaitTermination(): AssertOnQuery = Execute("AwaitTermination") { q =>
     q.awaitTermination()
+  }
+
+  test("SPARK-57830: withWatermark accepts TimestampLTZNanosType column") {
+    val inputData = MemoryStream[Long]
+    // Use Complete mode so we don't need window-based eviction.
+    // This verifies the type-check fix and nanos->ms conversion in EventTimeWatermarkExec.
+    val aggWithWatermark = inputData.toDF()
+      .withColumn("eventTime", timestamp_nanos($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy($"eventTime")
+      .agg(count("*") as Symbol("count"))
+      .select($"count".as[Long])
+
+    testStream(aggWithWatermark, outputMode = Complete)(
+      AddData(inputData, 15L * 1000000000L),
+      CheckAnswer(1L),
+      assertEventStats(min = 15, max = 15, avg = 15, wtrmark = 0),
+      AddData(inputData, 10L * 1000000000L, 12L * 1000000000L, 14L * 1000000000L),
+      CheckAnswer(1L, 1L, 1L, 1L),
+      assertEventStats(min = 10, max = 14, avg = 12, wtrmark = 5),
+      AddData(inputData, 25L * 1000000000L),
+      CheckAnswer(1L, 1L, 1L, 1L, 1L),
+      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5)
+    )
+  }
+
+  test("SPARK-57830: withWatermark accepts TimestampNTZNanosType column") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val inputData = MemoryStream[Long]
+      val aggWithWatermark = inputData.toDF()
+        .withColumn("eventTime",
+          timestamp_nanos($"value").cast(TimestampNTZNanosType(9)))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy($"eventTime")
+        .agg(count("*") as Symbol("count"))
+        .select($"count".as[Long])
+
+      testStream(aggWithWatermark, outputMode = Complete)(
+        AddData(inputData, 15L * 1000000000L),
+        CheckAnswer(1L),
+        assertEventStats(min = 15, max = 15, avg = 15, wtrmark = 0),
+        AddData(inputData, 10L * 1000000000L, 12L * 1000000000L, 14L * 1000000000L),
+        CheckAnswer(1L, 1L, 1L, 1L),
+        assertEventStats(min = 10, max = 14, avg = 12, wtrmark = 5),
+        AddData(inputData, 25L * 1000000000L),
+        CheckAnswer(1L, 1L, 1L, 1L, 1L),
+        assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5)
+      )
+    }
+  }
+
+  test("SPARK-57830: nanos watermark matches micros watermark for equivalent instants") {
+    // Compare that the watermark advancement is identical between a micros and nanos column
+    // representing the same instant.
+    val inputDataMicros = MemoryStream[Int]
+    val microsDf = inputDataMicros.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy($"eventTime")
+      .agg(count("*") as Symbol("count"))
+      .select($"count".as[Long])
+
+    val inputDataNanos = MemoryStream[Long]
+    val nanosDf = inputDataNanos.toDF()
+      .withColumn("eventTime", timestamp_nanos($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy($"eventTime")
+      .agg(count("*") as Symbol("count"))
+      .select($"count".as[Long])
+
+    // Run both streams with the same logical timestamps and verify same watermark advancement
+    testStream(microsDf, outputMode = Complete)(
+      AddData(inputDataMicros, 15),
+      CheckAnswer(1L),
+      assertEventStats(min = 15, max = 15, avg = 15, wtrmark = 0),
+      AddData(inputDataMicros, 25),
+      CheckAnswer(1L, 1L),
+      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5)
+    )
+
+    testStream(nanosDf, outputMode = Complete)(
+      AddData(inputDataNanos, 15L * 1000000000L),
+      CheckAnswer(1L),
+      assertEventStats(min = 15, max = 15, avg = 15, wtrmark = 0),
+      AddData(inputDataNanos, 25L * 1000000000L),
+      CheckAnswer(1L, 1L),
+      assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5)
+    )
+  }
+
+  test("SPARK-57830: nanos watermark eviction in Update mode") {
+    // Exercises the scalar watermarkLiteral eviction path (LessThanOrEqual over
+    // TimestampNanosVal ordering) which is NOT reached by Complete output mode.
+    // In Update mode, state rows whose key timestamp is at or below the watermark are evicted.
+    val inputData = MemoryStream[Long]
+    val aggWithWatermark = inputData.toDF()
+      .withColumn("eventTime", timestamp_nanos($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy($"eventTime")
+      .agg(count("*") as Symbol("count"))
+      .select($"count".as[Long])
+
+    testStream(aggWithWatermark, OutputMode.Update)(
+      // Add events at t=10s, t=11s, t=12s (nanos representation)
+      AddData(inputData, 10L * 1000000000L, 11L * 1000000000L, 12L * 1000000000L),
+      CheckNewAnswer(1L, 1L, 1L),
+      assertNumStateRows(3),
+      // Add event at t=25s => watermark advances to 25-10 = 15s
+      // State rows at t=10s,11s,12s are all <= watermark and get evicted.
+      AddData(inputData, 25L * 1000000000L),
+      CheckNewAnswer(1L),
+      assertNumStateRows(1), // only t=25s remains; t=10,11,12 evicted
+      assertNumRowsDroppedByWatermark(0),
+      // Add a late event at t=10s which is below watermark => dropped
+      AddData(inputData, 10L * 1000000000L),
+      CheckNewAnswer(),
+      assertNumStateRows(1),
+      assertNumRowsDroppedByWatermark(1)
+    )
   }
 }
