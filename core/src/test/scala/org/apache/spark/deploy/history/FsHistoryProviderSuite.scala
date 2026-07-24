@@ -25,7 +25,9 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
+import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
@@ -47,14 +49,14 @@ import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.security.GroupMappingServiceProvider
-import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.{AppStatusStore, AppStatusStoreMetadata}
 import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
-import org.apache.spark.util.kvstore.InMemoryStore
+import org.apache.spark.util.kvstore.{InMemoryStore, KVStore, KVStoreView}
 import org.apache.spark.util.logging.DriverLogger
 
 abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with PrivateMethodTester {
@@ -109,6 +111,224 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     } else {
       assert(serializerOfKVStore.isInstanceOf[KVStoreProtobufSerializer])
     }
+  }
+
+  Seq(true, false).foreach { inMemory =>
+    test(s"load app UI from snapshot when event log is unavailable (inMemory = $inMemory)") {
+      val snapshotDir = Utils.createTempDir()
+      val conf = createTestConf(inMemory = inMemory)
+        .set(SNAPSHOT_ENABLED, true)
+        .set(SNAPSHOT_PATH, snapshotDir.getAbsolutePath)
+      val provider = new FsHistoryProvider(conf)
+
+      val logFile = newLogFile("snap-app", None, inProgress = false)
+      writeFile(logFile, None,
+        SparkListenerApplicationStart(logFile.getName(), Some("snap-app-id"), 1L, "test", None),
+        SparkListenerApplicationEnd(2L))
+
+      updateAndCheck(provider) { list =>
+        list.map(_.id) should contain ("snap-app-id")
+      }
+
+      val liveStore = AppStatusStore.createLiveStore(conf)
+      try {
+        val listener = liveStore.listener.get
+        listener.onApplicationStart(
+          SparkListenerApplicationStart("snap-app", Some("snap-app-id"), 1L, "test", None))
+        listener.onApplicationEnd(SparkListenerApplicationEnd(2L))
+        liveStore.store.count(
+          classOf[org.apache.spark.status.ApplicationInfoWrapper]) should be (1L)
+        liveStore.store.read(
+          classOf[org.apache.spark.status.ApplicationInfoWrapper],
+          "snap-app-id").info.id should be ("snap-app-id")
+        HistorySnapshotStore.writeSnapshot(conf, liveStore.store, "snap-app-id", None)
+
+        val manifest = HistorySnapshotStore.findSnapshot(conf, "snap-app-id", None)
+        assert(manifest.isDefined)
+        val snapshotFs = manifest.get.getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
+        val properties = new java.util.Properties()
+        Utils.tryWithResource(snapshotFs.open(manifest.get)) { in =>
+          properties.load(in)
+        }
+        assert(properties.getProperty("appId") == null)
+        assert(properties.getProperty("attemptId") == null)
+        assert(properties.stringPropertyNames().asScala.forall(!_.endsWith(".count")))
+      } finally {
+        liveStore.store.close()
+      }
+
+      assert(logFile.delete())
+      val appUi = provider.getAppUI("snap-app-id", None)
+      appUi should not be None
+      appUi.get.ui.store.applicationInfo().id should be ("snap-app-id")
+    }
+  }
+
+  test("failed snapshot rewrites keep the last valid snapshot published") {
+    val snapshotDir = Utils.createTempDir()
+    val conf = createTestConf(inMemory = true)
+      .set(SNAPSHOT_ENABLED, true)
+      .set(SNAPSHOT_PATH, snapshotDir.getAbsolutePath)
+
+    val liveStore = AppStatusStore.createLiveStore(conf)
+    try {
+      val listener = liveStore.listener.get
+      listener.onApplicationStart(
+        SparkListenerApplicationStart("snap-stable", Some("snap-stable-id"), 1L, "test", None))
+      listener.onApplicationEnd(SparkListenerApplicationEnd(2L))
+      HistorySnapshotStore.writeSnapshot(conf, liveStore.store, "snap-stable-id", None)
+
+      val firstManifest = HistorySnapshotStore.findSnapshot(conf, "snap-stable-id", None)
+      assert(firstManifest.isDefined)
+
+      val failingStore = new KVStore {
+        override def getMetadata[T](klass: Class[T]): T = liveStore.store.getMetadata(klass)
+
+        override def setMetadata(value: Object): Unit = liveStore.store.setMetadata(value)
+
+        override def read[T](klass: Class[T], naturalKey: Object): T = {
+          if (klass == classOf[org.apache.spark.status.ApplicationEnvironmentInfoWrapper]) {
+            throw new IOException("injected snapshot rewrite failure")
+          }
+          liveStore.store.read(klass, naturalKey)
+        }
+
+        override def write(value: Object): Unit = liveStore.store.write(value)
+
+        override def delete(klass: Class[_], naturalKey: Object): Unit = {
+          liveStore.store.delete(klass, naturalKey)
+        }
+
+        override def view[T](klass: Class[T]): KVStoreView[T] = liveStore.store.view(klass)
+
+        override def count(klass: Class[_]): Long = liveStore.store.count(klass)
+
+        override def count(klass: Class[_], index: String, indexedValue: Object): Long = {
+          liveStore.store.count(klass, index, indexedValue)
+        }
+
+        override def removeAllByIndexValues[T](
+            klass: Class[T],
+            index: String,
+            indexValues: java.util.Collection[_]): Boolean = {
+          liveStore.store.removeAllByIndexValues(klass, index, indexValues)
+        }
+
+        override def close(): Unit = ()
+      }
+
+      intercept[IOException] {
+        HistorySnapshotStore.writeSnapshot(conf, failingStore, "snap-stable-id", None)
+      }
+
+      val currentManifest = HistorySnapshotStore.findSnapshot(conf, "snap-stable-id", None)
+      currentManifest shouldEqual firstManifest
+
+      val restored = new InMemoryStore()
+      restored.setMetadata(AppStatusStoreMetadata(AppStatusStore.CURRENT_VERSION))
+      try {
+        HistorySnapshotStore.restoreSnapshot(conf, restored, currentManifest.get)
+        new AppStatusStore(restored).applicationInfo().id should be ("snap-stable-id")
+      } finally {
+        restored.close()
+      }
+    } finally {
+      liveStore.store.close()
+    }
+  }
+
+  Seq(true, false).foreach { inMemory =>
+    test(s"invalid snapshots are deleted after restore fallback (inMemory = $inMemory)") {
+      val snapshotDir = Utils.createTempDir()
+      val conf = createTestConf(inMemory = inMemory)
+        .set(SNAPSHOT_ENABLED, true)
+        .set(SNAPSHOT_PATH, snapshotDir.getAbsolutePath)
+      val provider = new FsHistoryProvider(conf)
+
+      val logFile = newLogFile("snap-invalid", None, inProgress = false)
+      writeFile(logFile, None,
+        SparkListenerApplicationStart(logFile.getName(), Some("snap-invalid-id"), 1L, "test", None),
+        SparkListenerApplicationEnd(2L))
+
+      updateAndCheck(provider) { list =>
+        list.map(_.id) should contain ("snap-invalid-id")
+      }
+
+      val liveStore = AppStatusStore.createLiveStore(conf)
+      try {
+        val listener = liveStore.listener.get
+        listener.onApplicationStart(
+          SparkListenerApplicationStart("snap-invalid", Some("snap-invalid-id"), 1L, "test", None))
+        listener.onApplicationEnd(SparkListenerApplicationEnd(2L))
+        HistorySnapshotStore.writeSnapshot(conf, liveStore.store, "snap-invalid-id", None)
+      } finally {
+        liveStore.store.close()
+      }
+
+      val manifest = HistorySnapshotStore.findSnapshot(conf, "snap-invalid-id", None)
+      assert(manifest.isDefined)
+      val snapshotFs = manifest.get.getFileSystem(SparkHadoopUtil.get.newConfiguration(conf))
+      val properties = new java.util.Properties()
+      Utils.tryWithResource(snapshotFs.open(manifest.get)) { in =>
+        properties.load(in)
+      }
+      val appInfoClass = classOf[org.apache.spark.status.ApplicationInfoWrapper].getName
+      val entityRoot = Option(properties.getProperty("snapshotDir"))
+        .map(dir => new Path(manifest.get.getParent, dir))
+        .getOrElse(manifest.get.getParent)
+      val entityPath = new Path(entityRoot, properties.getProperty(s"$appInfoClass.file"))
+      val originalBytes = Utils.tryWithResource(snapshotFs.open(entityPath)) { in =>
+        ByteStreams.toByteArray(in)
+      }
+      Utils.tryWithResource(snapshotFs.create(entityPath, true)) { out =>
+        out.write(originalBytes, 0, originalBytes.length - 1)
+      }
+
+      val appUi = provider.getAppUI("snap-invalid-id", None)
+      appUi should not be None
+      appUi.get.ui.store.applicationInfo().id should be ("snap-invalid-id")
+      snapshotFs.exists(manifest.get) shouldBe false
+    }
+  }
+
+  test("valid snapshots survive local disk-store failures") {
+    val snapshotDir = Utils.createTempDir()
+    val conf = createTestConf(inMemory = false)
+      .set(SNAPSHOT_ENABLED, true)
+      .set(SNAPSHOT_PATH, snapshotDir.getAbsolutePath)
+    val provider = new FsHistoryProvider(conf)
+
+    val logFile = newLogFile("snap-local-failure", None, inProgress = false)
+    writeFile(logFile, None,
+      SparkListenerApplicationStart(
+        logFile.getName(), Some("snap-local-failure-id"), 1L, "test", None),
+      SparkListenerApplicationEnd(2L))
+
+    updateAndCheck(provider) { list =>
+      list.map(_.id) should contain ("snap-local-failure-id")
+    }
+
+    val liveStore = AppStatusStore.createLiveStore(conf)
+    try {
+      val listener = liveStore.listener.get
+      listener.onApplicationStart(
+        SparkListenerApplicationStart(
+          "snap-local-failure", Some("snap-local-failure-id"), 1L, "test", None))
+      listener.onApplicationEnd(SparkListenerApplicationEnd(2L))
+      HistorySnapshotStore.writeSnapshot(conf, liveStore.store, "snap-local-failure-id", None)
+    } finally {
+      liveStore.store.close()
+    }
+
+    val localStoreDir = new File(conf.get(LOCAL_STORE_DIR).get)
+    Utils.deleteRecursively(new File(localStoreDir, "apps"))
+    Utils.deleteRecursively(new File(localStoreDir, "temp"))
+    val tempPath = new File(localStoreDir, "temp")
+    assert(tempPath.createNewFile())
+    assert(logFile.delete())
+
+    provider.getAppUI("snap-local-failure-id", None) shouldBe empty
+    HistorySnapshotStore.findSnapshot(conf, "snap-local-failure-id", None) should not be empty
   }
 
   private def testAppLogParsing(inMemory: Boolean, useHybridStore: Boolean = false): Unit = {
