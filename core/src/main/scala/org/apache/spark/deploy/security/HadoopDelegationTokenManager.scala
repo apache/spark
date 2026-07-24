@@ -78,13 +78,14 @@ private[spark] class HadoopDelegationTokenManager(
     "Both principal and keytab must be defined, or neither.")
 
   if (sparkConf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED)) {
-    val hasEncryption = sparkConf.get(NETWORK_CRYPTO_ENABLED) ||
-      sparkConf.get(SASL_ENCRYPTION_ENABLED) ||
-      sparkConf.getBoolean("spark.ssl.rpc.enabled", false)
+    val hasEncryption = sparkConf.getBoolean("spark.ssl.rpc.enabled", false) ||
+      (sparkConf.get(NETWORK_AUTH_ENABLED) &&
+        (sparkConf.get(NETWORK_CRYPTO_ENABLED) || sparkConf.get(SASL_ENCRYPTION_ENABLED)))
     require(hasEncryption,
-      "RPC channel encryption (spark.network.crypto.enabled, " +
-      "spark.authenticate.enableSaslEncryption, or spark.ssl.rpc.enabled) must be enabled when " +
-      "spark.security.credentials.directProviders.enabled is true. " +
+      "RPC channel encryption must be enabled when " +
+      "spark.security.credentials.directProviders.enabled is true: either " +
+      "spark.ssl.rpc.enabled=true, or spark.authenticate=true together with " +
+      "spark.network.crypto.enabled or spark.authenticate.enableSaslEncryption. " +
       "Credential tokens must not be transmitted over unencrypted channels.")
   }
 
@@ -108,7 +109,8 @@ private[spark] class HadoopDelegationTokenManager(
 
   /** @return Whether delegation token renewal is enabled. */
   def renewalEnabled: Boolean = {
-    hasKerberosCredentials || sparkConf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED)
+    hasKerberosCredentials ||
+      (sparkConf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED) && delegationTokenProviders.nonEmpty)
   }
 
   /**
@@ -249,6 +251,7 @@ private[spark] class HadoopDelegationTokenManager(
       tokens
     } catch {
       case _: InterruptedException =>
+        // Ignore, may happen if shutting down.
         null
       case e: Exception =>
         val delay = TimeUnit.SECONDS.toMillis(sparkConf.get(CREDENTIALS_RENEWAL_RETRY_WAIT))
@@ -283,7 +286,11 @@ private[spark] class HadoopDelegationTokenManager(
     } else if (sparkConf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED)) {
       obtainDelegationTokens(isolateFailures = true)
     } else {
-      (new Credentials(), Long.MaxValue, 0)
+      // Reachable when ccache-based Kerberos credentials expired after start().
+      // Throw so that updateTokensTask() reschedules a retry instead of silently
+      // distributing empty credentials and never renewing again.
+      throw new IllegalStateException("Cannot obtain delegation tokens: no Kerberos " +
+        "credentials are available and direct credential providers are not enabled.")
     }
 
     // Scheduling does not require a privileged context (only token acquisition does).

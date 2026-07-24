@@ -83,6 +83,7 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
 
   private def baseConf: SparkConf = new SparkConf(false)
     .set(CREDENTIALS_DIRECT_PROVIDERS_ENABLED, true)
+    .set(NETWORK_AUTH_ENABLED, true)
     .set(NETWORK_CRYPTO_ENABLED, true)
 
   test("renewalEnabled returns true when config is enabled") {
@@ -149,6 +150,7 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
   test("accepts SASL encryption as sufficient") {
     val sparkConf = new SparkConf(false)
       .set(CREDENTIALS_DIRECT_PROVIDERS_ENABLED, true)
+      .set(NETWORK_AUTH_ENABLED, true)
       .set(SASL_ENCRYPTION_ENABLED, true)
     val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
     assert(manager.renewalEnabled)

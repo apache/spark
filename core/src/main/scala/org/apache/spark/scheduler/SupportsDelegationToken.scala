@@ -21,12 +21,11 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.Logging
 
 /**
  * A mix-in trait for SchedulerBackend that supports delegation tokens.
  */
-private[spark] trait SupportsDelegationToken extends Logging {
+private[spark] trait SupportsDelegationToken {
 
   // The token manager used to create security tokens.
   protected var delegationTokenManager: Option[HadoopDelegationTokenManager] = None

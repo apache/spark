@@ -990,10 +990,11 @@ The following options provides finer-grained control for this feature:
     <code>doLogin</code>/<code>doAs</code>) and participate in the same renewal and
     distribution lifecycle as Kerberos delegation token providers. Providers that require
     Kerberos self-gate via their <code>delegationTokensRequired</code> method.
-    Requires RPC channel encryption: at least one of
-    <code>spark.network.crypto.enabled</code>,
-    <code>spark.authenticate.enableSaslEncryption</code>, or
-    <code>spark.ssl.rpc.enabled</code> must be true.
+    Requires RPC channel encryption: either <code>spark.ssl.rpc.enabled=true</code>,
+    or <code>spark.authenticate=true</code> together with
+    <code>spark.network.crypto.enabled</code> or
+    <code>spark.authenticate.enableSaslEncryption</code>.
+    Supported on YARN, Kubernetes, and local mode. Not supported on standalone clusters.
   </td>
   <td>4.3.0</td>
 </tr>
