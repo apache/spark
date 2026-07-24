@@ -83,27 +83,19 @@ object State extends Logging {
   private def reset(flow: ResolvedFlow, env: PipelineUpdateContext, graph: DataflowGraph): Unit = {
     logInfo(log"Clearing out state for flow ${MDC(LogKeys.FLOW_NAME, flow.displayName)}")
     val flowMetadata = FlowSystemMetadata(env, flow, graph)
-    flow match {
-      case f if flowMetadata.latestCheckpointLocationOpt().isEmpty =>
-        logInfo(
-          s"Skipping resetting flow ${f.identifier} since its destination not been previously" +
-          s"materialized and we can't find the checkpoint location."
-        )
-      case _ =>
-        val hadoopConf = env.spark.sessionState.newHadoopConf()
+    val hadoopConf = env.spark.sessionState.newHadoopConf()
 
-        // Write a new checkpoint folder if needed
-        val checkpointDir = new Path(flowMetadata.latestCheckpointLocation)
-        val fs1 = checkpointDir.getFileSystem(hadoopConf)
-        if (fs1.exists(checkpointDir)) {
-          val nextVersion = checkpointDir.getName.toInt + 1
-          val nextPath = new Path(checkpointDir.getParent, nextVersion.toString)
-          fs1.mkdirs(nextPath)
-          logInfo(
-            log"Created new checkpoint for stream ${MDC(LogKeys.FLOW_NAME, flow.displayName)} " +
-            log"at ${MDC(LogKeys.CHECKPOINT_PATH, nextPath.toString)}."
-          )
-        }
+    // Write a new checkpoint folder if needed
+    val checkpointDir = new Path(flowMetadata.latestCheckpointLocation)
+    val fs1 = checkpointDir.getFileSystem(hadoopConf)
+    if (fs1.exists(checkpointDir)) {
+      val nextVersion = checkpointDir.getName.toInt + 1
+      val nextPath = new Path(checkpointDir.getParent, nextVersion.toString)
+      fs1.mkdirs(nextPath)
+      logInfo(
+        log"Created new checkpoint for stream ${MDC(LogKeys.FLOW_NAME, flow.displayName)} " +
+        log"at ${MDC(LogKeys.CHECKPOINT_PATH, nextPath.toString)}."
+      )
     }
   }
 }
