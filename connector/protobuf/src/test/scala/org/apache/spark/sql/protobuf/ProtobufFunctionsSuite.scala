@@ -724,6 +724,75 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
     }
   }
 
+  test("convert.timestamp.duration.to.native=false keeps Timestamp/Duration as struct") {
+    // Build a proto payload the normal way (native Timestamp/Duration on the write side),
+    // then read it back with the conversion disabled and assert both fields deserialize as
+    // struct<seconds: bigint, nanos: int> -- the raw proto shape -- instead of TimestampType /
+    // DayTimeIntervalType.
+    val tsSchema = StructType(
+      StructField("timeStampMsg",
+        StructType(
+          StructField("key", StringType, nullable = true) ::
+            StructField("stmp", TimestampType, nullable = true) :: Nil
+        ), nullable = true) :: Nil)
+    val ts = Timestamp.valueOf("2016-05-09 10:12:43.999")
+    val tsInput = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Row("key1", ts)))),
+      tsSchema)
+
+    val expectedStruct = StructType(
+      StructField("seconds", LongType, nullable = true) ::
+        StructField("nanos", IntegerType, nullable = true) :: Nil)
+
+    checkWithFileAndClassName("timeStampMsg") {
+      case (name, descFilePathOpt) =>
+        val toProtoDf = tsInput
+          .select(to_protobuf_wrapper($"timeStampMsg", name, descFilePathOpt) as Symbol("to_proto"))
+        val fromProtoDf = toProtoDf
+          .select(from_protobuf_wrapper($"to_proto", name, descFilePathOpt,
+            Map("convert.timestamp.duration.to.native" -> "false")) as Symbol("timeStampMsg"))
+
+        val stmpField = fromProtoDf.schema("timeStampMsg").dataType
+          .asInstanceOf[StructType]("stmp")
+        assert(stmpField.dataType === expectedStruct)
+        // Derive the expected epoch from the input Timestamp so the assertion is independent
+        // of the JVM default time zone (Timestamp.valueOf parses in the local zone).
+        val row = fromProtoDf.select("timeStampMsg.stmp.seconds", "timeStampMsg.stmp.nanos").first()
+        assert(row.getLong(0) === ts.getTime / 1000)
+        assert(row.getInt(1) === 999000000)
+    }
+
+    val durSchema = StructType(
+      StructField("durationMsg",
+        StructType(
+          StructField("key", StringType, nullable = true) ::
+            StructField("duration", DayTimeIntervalType.defaultConcreteType, nullable = true) ::
+            Nil
+        ), nullable = true) :: Nil)
+    val durInput = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Row("key1", Duration.ofSeconds(4).plusNanos(500000000))))),
+      durSchema)
+
+    checkWithFileAndClassName("durationMsg") {
+      case (name, descFilePathOpt) =>
+        val toProtoDf = durInput
+          .select(to_protobuf_wrapper($"durationMsg", name, descFilePathOpt) as Symbol("to_proto"))
+        val fromProtoDf = toProtoDf
+          .select(from_protobuf_wrapper($"to_proto", name, descFilePathOpt,
+            Map("convert.timestamp.duration.to.native" -> "false")) as Symbol("durationMsg"))
+
+        val durField = fromProtoDf.schema("durationMsg").dataType
+          .asInstanceOf[StructType]("duration")
+        assert(durField.dataType === expectedStruct)
+        val row = fromProtoDf.select("durationMsg.duration.seconds", "durationMsg.duration.nanos")
+          .first()
+        assert(row.getLong(0) === 4L)
+        assert(row.getInt(1) === 500000000)
+    }
+  }
+
   test("SPARK-57573: Handle TimeType between to_protobuf and from_protobuf") {
     val schema = StructType(
       StructField("timeMsg",
