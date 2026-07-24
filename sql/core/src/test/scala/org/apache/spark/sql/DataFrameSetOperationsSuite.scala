@@ -1672,16 +1672,19 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
         // The first branch is an inner shuffled-hash join and selects both join keys (t1.c1 and
         // t2.c1), so its output partitioning is a PartitioningCollection(Hash(c1), Hash(c1#..))
         // that a downstream ProjectExec cannot narrow to a single member. The second branch is a
-        // left join, whose output partitioning is a single HashPartitioning(c1). The union should
-        // intersect the two to a single HashPartitioning(c1) and let the group-by skip a shuffle.
+        // left join, whose output partitioning is a single HashPartitioning(c1). Referencing `k`
+        // in the group-by keeps the first branch's collection alive (otherwise ColumnPruning drops
+        // it and the join narrows to a single Hash(c1)); aliasing t4.c1 (the build side of the
+        // left join) keeps the second branch a single Hash(c1). The union intersects the two to a
+        // single HashPartitioning(c1) and lets the group-by skip a shuffle.
         def unionDF: DataFrame = sql(
-          """SELECT c1, c2, c3, count(*) FROM (
+          """SELECT c1, c2, c3, k, count(*) FROM (
             |  SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1, t1.c2, t1.c3, t2.c1 AS k
             |  FROM t1 JOIN t2 ON t1.c1 = t2.c1
             |  UNION ALL
-            |  SELECT /*+ SHUFFLE_HASH(t4) */ t3.c1, t3.c2, t3.c3, t3.c1 AS k
+            |  SELECT /*+ SHUFFLE_HASH(t4) */ t3.c1, t3.c2, t3.c3, t4.c1 AS k
             |  FROM t3 LEFT JOIN t4 ON t3.c1 = t4.c1
-            |) GROUP BY c1, c2, c3
+            |) GROUP BY c1, c2, c3, k
             |""".stripMargin)
 
         val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
@@ -1817,14 +1820,16 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
         Seq((1, 2), (3, 4)).toDF("c1", "c2").createOrReplaceTempView("t3")
         Seq((1, 9), (3, 9)).toDF("c1", "y").createOrReplaceTempView("t4")
 
+        // Referencing `k` in the group-by keeps each branch's PartitioningCollection alive under
+        // AQE (otherwise ColumnPruning drops it and the join narrows to a single Hash(c1)).
         def unionDF: DataFrame = sql(
-          """SELECT c1, count(*) FROM (
+          """SELECT c1, k, count(*) FROM (
             |  SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1, t2.c1 AS k
             |  FROM t1 JOIN t2 ON t1.c1 = t2.c1
             |  UNION ALL
             |  SELECT /*+ SHUFFLE_HASH(t4) */ t3.c1, t4.c1 AS k
             |  FROM t3 JOIN t4 ON t3.c1 = t4.c1
-            |) GROUP BY c1
+            |) GROUP BY c1, k
             |""".stripMargin)
 
         val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {

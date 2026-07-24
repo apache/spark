@@ -987,12 +987,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     // set) and pass through the intersection across all children. Only index-co-locatable
     // partitionings participate; `KeyedPartitioning` is excluded here because its concatenation
     // semantics (Case A) are incompatible with the co-located union RDD.
-    def flattenPartitioning(p: Partitioning): Seq[Partitioning] = p match {
-      case pc: PartitioningCollection => pc.partitionings.flatMap(flattenPartitioning)
-      case other => Seq(other)
-    }
     val candidateSets = partitionings.map { p =>
-      flattenPartitioning(p).filter {
+      PartitioningCollection.flatten(p).filter {
         case _: HashPartitioningLike => true
         case SinglePartition => true
         case _ => false
