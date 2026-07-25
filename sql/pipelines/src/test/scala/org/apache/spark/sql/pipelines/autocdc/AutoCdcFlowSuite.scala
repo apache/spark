@@ -702,7 +702,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   // ===========================================================================================
-  // AutoCdcMergeFlow reserved framework-column (non-prefixed) validation tests (SPARK-57251)
+  // AutoCdcMergeFlow reserved framework-column (non-prefixed) validation tests
   //
   // SCD2 persists framework columns __START_AT / __END_AT that do NOT carry the reserved
   // AutoCDC prefix, so they are not caught by the prefix guard above. These tests lock in that a
@@ -717,7 +717,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       .toSeq
       .sorted
 
-  test("SPARK-57251: non-prefixed reserved names exist and are covered by this suite") {
+  test("non-prefixed reserved names exist and are covered by this suite") {
     // Guards against a future refactor renaming/removing __START_AT / __END_AT without updating
     // the flow-construction validation: if this set ever empties, the tests below silently
     // stop exercising anything.
@@ -728,8 +728,8 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   test(
-    "SPARK-57251: an SCD2 flow with a source column colliding with a reserved framework " +
-    "column is rejected at construction"
+    "an SCD2 flow with a source column colliding with a reserved framework column is rejected " +
+    "at construction"
   ) {
     nonPrefixedScd2ReservedNames.foreach { reservedName =>
       val sourceDf = sourceDfWithExtraColumns(reservedName -> StringType)
@@ -752,7 +752,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   test(
-    "SPARK-57251: the reserved framework-column check runs before the SCD2-not-supported gate"
+    "the reserved framework-column check runs before the SCD2-not-supported gate"
   ) {
     // The reserved-name error is more actionable than AUTOCDC_SCD2_NOT_SUPPORTED, so it must win
     // for an SCD2 flow that both is unsupported and carries a colliding source column. This also
@@ -765,8 +765,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   test(
-    "SPARK-57251: an SCD1 flow with a source column matching an SCD2-only reserved name is " +
-    "allowed"
+    "an SCD1 flow with a source column matching an SCD2-only reserved name is allowed"
   ) {
     // SCD1 targets carry no non-prefixed framework columns, so __START_AT / __END_AT are ordinary
     // user columns there. Construction succeeds and the column survives into the flow schema.
@@ -778,8 +777,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   test(
-    "SPARK-57251: an uppercase reserved framework-column name is rejected for SCD2 when " +
-    "caseSensitive=false"
+    "an uppercase reserved framework-column name is rejected for SCD2 when caseSensitive=false"
   ) {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val conflictingName = Scd2BatchProcessor.startAtColName.toLowerCase(Locale.ROOT)
@@ -803,8 +801,8 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   test(
-    "SPARK-57251: a differently-cased reserved framework-column name does not trip the reserved " +
-    "check for SCD2 when caseSensitive=true"
+    "a differently-cased reserved framework-column name does not trip the reserved check for " +
+    "SCD2 when caseSensitive=true"
   ) {
     // Under case-sensitive analysis, a lowercase variant is a distinct identifier and does not
     // collide with the reserved (uppercase) framework name, consistent with the prefix guard.
