@@ -390,7 +390,9 @@ class SparkConnectPlanner(
         s"_pos_$idx" -> expr
       }.toMap
       val resolvedParams = session.resolveAndValidateParameters(paramMap)
-      Some(PositionalParameterContext(resolvedParams.values.toSeq))
+      // Look up by the positional key instead of relying on `resolvedParams.values`:
+      // the map does not preserve insertion order for 5+ entries.
+      Some(PositionalParameterContext(paramList.indices.map(idx => resolvedParams(s"_pos_$idx"))))
     } else if (!args.isEmpty) {
       // Use named arguments (literals) - already resolved
       val paramMap = args.asScala.toMap.transform((_, v) => transformLiteral(v))
