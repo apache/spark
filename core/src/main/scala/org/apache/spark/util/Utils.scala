@@ -3153,6 +3153,59 @@ private[spark] object Utils
   }
 
   /**
+   * Return the n-th smallest element (0-indexed) of a long array, reordering `sizes` in place.
+   *
+   * This is a quickselect, which runs in O(sizes.length) on average. Callers that only need a few
+   * order statistics should prefer it over sorting the whole array, and must not rely on the
+   * element order of `sizes` afterwards.
+   */
+  def nthSmallest(sizes: Array[Long], n: Int): Long = {
+    require(n >= 0 && n < sizes.length, s"n must be in [0, ${sizes.length}) but was $n")
+    var low = 0
+    var high = sizes.length - 1
+    while (low < high) {
+      // The middle element keeps already sorted and reverse sorted inputs, which are both common
+      // for shuffle block sizes, away from the quadratic worst case.
+      val pivot = sizes(low + (high - low) / 2)
+      var i = low
+      var j = high
+      while (i <= j) {
+        while (sizes(i) < pivot) i += 1
+        while (sizes(j) > pivot) j -= 1
+        if (i <= j) {
+          val tmp = sizes(i)
+          sizes(i) = sizes(j)
+          sizes(j) = tmp
+          i += 1
+          j -= 1
+        }
+      }
+      if (n <= j) {
+        high = j
+      } else if (n >= i) {
+        low = i
+      } else {
+        // The n-th element sits between the two partitions, so it is already in its final position.
+        low = n
+        high = n
+      }
+    }
+    sizes(n)
+  }
+
+  /**
+   * Same as `median(sizes, false)`, but reorders `sizes` in place instead of sorting a copy of it.
+   */
+  def medianInPlace(sizes: Array[Long]): Long = {
+    val len = sizes.length
+    len match {
+      case _ if (len % 2 == 0) =>
+        math.max((nthSmallest(sizes, len / 2) + nthSmallest(sizes, len / 2 - 1)) / 2, 1)
+      case _ => math.max(nthSmallest(sizes, len / 2), 1)
+    }
+  }
+
+  /**
    * Check if a command is available.
    */
   def checkCommandAvailable(command: String): Boolean = {

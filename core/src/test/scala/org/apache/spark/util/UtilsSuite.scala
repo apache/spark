@@ -1892,6 +1892,43 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       assert(new String(Files.readAllBytes(new File(dir, "file2.txt").toPath), UTF_8) === "world")
     }
   }
+
+  test("SPARK-48290: nthSmallest returns the same elements as sorting") {
+    val inputs = Seq(
+      Array(1L),
+      Array(2L, 1L),
+      Array(5L, 4L, 3L, 2L, 1L),
+      Array(1L, 1L, 1L, 1L),
+      Array.tabulate(1000)(i => i.toLong),
+      Array.tabulate(1000)(i => (1000 - i).toLong),
+      Array.tabulate(1000)(_ => 7L),
+      Array.fill(1000)(Random.nextLong()))
+    inputs.foreach { input =>
+      val expected = input.sorted
+      for (n <- input.indices) {
+        assert(Utils.nthSmallest(input.clone(), n) === expected(n))
+      }
+    }
+  }
+
+  test("SPARK-48290: nthSmallest rejects an out of range index") {
+    intercept[IllegalArgumentException](Utils.nthSmallest(Array(1L, 2L), -1))
+    intercept[IllegalArgumentException](Utils.nthSmallest(Array(1L, 2L), 2))
+    intercept[IllegalArgumentException](Utils.nthSmallest(Array.empty[Long], 0))
+  }
+
+  test("SPARK-48290: medianInPlace agrees with median") {
+    val inputs = Seq(
+      Array(1L),
+      Array(2L, 1L),
+      Array(0L, 0L, 0L),
+      Array(5L, 4L, 3L, 2L, 1L),
+      Array.tabulate(999)(i => i.toLong),
+      Array.fill(1000)(Random.nextLong().abs))
+    inputs.foreach { input =>
+      assert(Utils.medianInPlace(input.clone()) === Utils.median(input, false))
+    }
+  }
 }
 
 private class SimpleExtension
