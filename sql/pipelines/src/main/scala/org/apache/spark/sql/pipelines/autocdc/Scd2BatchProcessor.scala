@@ -1404,8 +1404,7 @@ object Scd2BatchProcessor {
    * per-microbatch (against the reconciled dataframe's schema) and at
    * [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction time (against the
    * user-selected source schema), so an unresolvable or ineligible selection fails fast with a
-   * user-actionable [[org.apache.spark.sql.AnalysisException]] instead of surfacing mid-stream
-   * (SPARK-58313).
+   * user-actionable [[org.apache.spark.sql.AnalysisException]] instead of surfacing mid-stream.
    *
    * Throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` if the selection references a column that is not
    * an eligible history-tracking column in `schema` (i.e. absent, or a key/framework column).
