@@ -741,7 +741,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             cond, limit, remaining_index = self._select_rows(rows_sel)
             missing_keys: List[Name] = []
             (
-                selected_column_labels,
+                _,
                 data_spark_columns,
                 _,
                 _,
