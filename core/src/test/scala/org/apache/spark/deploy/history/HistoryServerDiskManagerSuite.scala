@@ -168,6 +168,23 @@ abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAn
     assert(manager.approximateSize(50L, true) > 50L)
   }
 
+  test("exact leases bypass the event log size heuristic") {
+    val conf = new SparkConf()
+      .set(HYBRID_STORE_DISK_BACKEND, backend.toString)
+      .set(MAX_LOCAL_DISK_USAGE, MAX_USAGE)
+    val manager = new HistoryServerDiskManager(conf, testDir, store, new ManualClock())
+
+    val exactLease = manager.leaseExact(2L)
+    assert(manager.free() === 1L)
+    exactLease.rollback()
+    assert(manager.free() === 3L)
+
+    val heuristicLease = manager.lease(2L, isCompressed = false)
+    assert(manager.free() === 2L)
+    heuristicLease.rollback()
+    assert(manager.free() === 3L)
+  }
+
   test("SPARK-32024: update ApplicationStoreInfo.size during initializing") {
     val manager = mockManager()
     val leaseA = manager.lease(2)
