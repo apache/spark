@@ -6713,6 +6713,50 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
+  test("pipelined shuffle: a fan-in consumer's buffered successes are dropped as soon as one " +
+      "producer fails, even if another later succeeds") {
+    // Fan-in: a consumer co-scheduled with TWO pipelined producers (A and B). If A fails, the
+    // consumer's buffered successes must be DROPPED -- they were computed against A's now-invalid
+    // output, and the group is failed as a unit (S6). The drop happens immediately when A fails,
+    // not deferred until the last producer finishes: so even if B later succeeds, the consumer has
+    // already been dropped and B's completion is a clean no-op (it must NOT replay the successes).
+    val producerA = new MyRDD(sc, 2, Nil)
+    val psdA = new PipelinedShuffleDependency(producerA, new HashPartitioner(2))
+    val producerB = new MyRDD(sc, 2, Nil)
+    val psdB = new PipelinedShuffleDependency(producerB, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(psdA, psdB), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    assert(taskSets.size === 3, s"A, B and the consumer must be co-scheduled; got ${taskSets.size}")
+    val consumerTaskSet =
+      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd).get
+    val stageA = scheduler.stageIdToStage(
+      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq producerA).get.stageId)
+    val stageB = scheduler.stageIdToStage(
+      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq producerB).get.stageId)
+    val consumerStage = scheduler.stageIdToStage(consumerTaskSet.stageId)
+
+    // Consumer finishes early -> its successes are buffered against BOTH A and B.
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    assert(results.isEmpty, "consumer completions should be buffered while its producers run")
+    assert(scheduler.dependentStageMap.get(consumerStage).exists(_.parents.size == 2),
+      "the consumer must be deferred against both producers")
+
+    // A fails: the consumer is dropped immediately (not retained pending B), and no result applied.
+    // (Driven via markStageAsFinished directly; the job-failure teardown that would normally follow
+    // is exercised by the group-atomic-failure tests in a later PR -- here we assert only the
+    // drop-vs-replay outcome.)
+    scheduler.markStageAsFinished(stageA, errorMessage = Some("producer A blew up"))
+    assert(!scheduler.dependentStageMap.contains(consumerStage),
+      "the consumer's deferral must be dropped as soon as a producer fails")
+    assert(results.isEmpty, "a fan-in consumer's buffered successes must not be applied on failure")
+
+    // B now succeeds: the consumer is already gone, so this is a clean no-op -- it must NOT replay.
+    scheduler.runningStages += stageB
+    completeShuffleMapStageSuccessfully(stageB.id, 0, 2)
+    assert(results.isEmpty,
+      s"a dropped fan-in consumer must not replay when a surviving producer succeeds; got $results")
+  }
+
 
   test("pipelined shuffle: a deferred consumer task fires its TaskEnd exactly once (at replay)") {
     // A deferred CompletionEvent must have its side effects (task-end listener event, accumulator
