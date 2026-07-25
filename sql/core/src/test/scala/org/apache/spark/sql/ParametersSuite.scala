@@ -72,6 +72,16 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       Row(true))
   }
 
+  test("SPARK-58341: bind 5 or more positional parameters in order") {
+    checkAnswer(
+      spark.sql("SELECT ?, ?, ?, ?, ?, ?", Array(1, 2, 3, 4, 5, 6)),
+      Row(1, 2, 3, 4, 5, 6))
+
+    checkAnswer(
+      spark.sql("SELECT ? + ?, ? * ?, ? - ?", Array(1, 2, 30, 4, 500, 6)),
+      Row(3, 120, 494))
+  }
+
   test("parameter binding is case sensitive") {
     checkAnswer(
       spark.sql("SELECT :p, :P", Map("p" -> 1, "P" -> 2)),
