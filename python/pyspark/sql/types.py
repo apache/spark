@@ -174,9 +174,9 @@ class DataType:
         ----------
         ddl : str
             DDL-formatted string representation of types, e.g.
-            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct
+            :class:`~pyspark.sql.types.DataType.simpleString`, except that top level struct
             type can omit the ``struct<>`` for the compatibility reason with
-            ``spark.createDataFrame`` and Python UDFs.
+            `~pyspark.sql.SparkSession.createDataFrame` and Python UDFs.
 
         Returns
         -------
