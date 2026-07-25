@@ -378,26 +378,19 @@ class AutoCdcMergeFlow(
   }
 
   /**
-   * Validate that the resolved source dataframe does not contain any column whose name collides
-   * (by exact name, resolver-aware) with an SCD-type-specific reserved framework column that is
-   * NOT covered by [[requireReservedPrefixAbsentInSourceColumns]].
-   *
-   * The prefix guard above only rejects names starting with [[AutoCdcReservedNames.prefix]].
-   * SCD2 additionally persists the framework columns [[Scd2BatchProcessor.startAtColName]] and
-   * [[Scd2BatchProcessor.endAtColName]], which do NOT carry that prefix, so a colliding source
-   * column would otherwise be silently overwritten during preprocessing (SPARK-57251). SCD1
-   * targets carry no such non-prefixed framework columns, so this guard is a no-op for SCD1.
-   *
-   * Runs in the constructor before [[schema]] is forced, so it surfaces this actionable error
-   * ahead of the (temporary) [[AUTOCDC_SCD2_NOT_SUPPORTED]] gate, and remains correct once SCD2
-   * support lands.
+   * Reject a source column that collides with an SCD2 reserved framework column not covered by
+   * [[requireReservedPrefixAbsentInSourceColumns]]: the prefix guard only rejects
+   * [[AutoCdcReservedNames.prefix]] names, but SCD2 also persists the non-prefixed
+   * [[Scd2BatchProcessor.startAtColName]] and [[Scd2BatchProcessor.endAtColName]]. Runs before
+   * [[schema]] is forced so the collision fails fast rather than being silently overwritten
+   * during preprocessing. No-op for SCD1, which has no such columns.
    */
   private def requireReservedFrameworkColumnsAbsentInSourceColumns(): Unit = {
     val resolver = spark.sessionState.conf.resolver
     val reservedPrefix = AutoCdcReservedNames.prefix
 
     // Only the non-prefixed reserved names need checking here; prefixed ones are already rejected
-    // by [[requireReservedPrefixAbsentInSourceColumns]].
+    // by requireReservedPrefixAbsentInSourceColumns.
     val reservedNames: Set[String] = changeArgs.storedAsScdType match {
       case ScdType.Type2 =>
         Scd2BatchProcessor.reservedFrameworkColNames.filterNot(_.startsWith(reservedPrefix))
