@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.adaptive
 import java.io.File
 import java.net.URI
 import java.util.Locale
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -517,6 +519,160 @@ class AdaptiveQueryExecSuite
         cancelObsoleteStages(replacementPlan, Seq(failedStage)))
       assert(failedCancelledIds.isEmpty)
       assert(!failedStage.cancelled)
+    }
+  }
+
+  test("concurrent exchange reuse and obsolete cancellation use the same lifecycle lock") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
+      val createNonResultQueryStages =
+        PrivateMethod[Any](Symbol("createNonResultQueryStages"))
+      val cancelObsoleteStages =
+        PrivateMethod[Seq[Int]](Symbol("cancelObsoleteStages"))
+      val replacementPlan = LocalTableScanExec(Nil, Nil, None)
+
+      def newPlanAndExchange(): (AdaptiveSparkPlanExec, ShuffleExchangeExec) = {
+        val df = spark.sql("SELECT * FROM testData JOIN testData2 ON key = a")
+        val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        val exchange = adaptivePlan.initialPlan.collectFirst {
+          case shuffle: ShuffleExchangeExec => shuffle
+        }.getOrElse(fail("expected a shuffle exchange in the initial adaptive plan"))
+        (adaptivePlan, exchange)
+      }
+
+      def acquireStage(
+          adaptivePlan: AdaptiveSparkPlanExec,
+          exchange: ShuffleExchangeExec): ExchangeQueryStageExec = {
+        adaptivePlan.invokePrivate(createNonResultQueryStages(exchange))
+          .asInstanceOf[Product].productElement(0).asInstanceOf[ExchangeQueryStageExec]
+      }
+
+      type LifecycleWorker = (Thread, AtomicReference[Throwable])
+
+      def startWorker(name: String)(body: => Unit): LifecycleWorker = {
+        val started = new CountDownLatch(1)
+        val failure = new AtomicReference[Throwable]()
+        val worker = new Thread(name) {
+          override def run(): Unit = {
+            started.countDown()
+            try {
+              spark.withActive {
+                body
+              }
+            } catch {
+              case error: Throwable => failure.set(error)
+            }
+          }
+        }
+        worker.setDaemon(true)
+        worker.start()
+        assert(started.await(30, TimeUnit.SECONDS), s"$name did not start")
+        (worker, failure)
+      }
+
+      def waitForWorker(worker: LifecycleWorker): Unit = {
+        worker._1.join(TimeUnit.SECONDS.toMillis(30))
+      }
+
+      def checkWorker(worker: LifecycleWorker): Unit = {
+        assert(!worker._1.isAlive, s"${worker._1.getName} did not finish")
+        Option(worker._2.get()).foreach(throw _)
+      }
+
+      {
+        val (adaptivePlan, exchange) = newPlanAndExchange()
+        val reuseEntered = new CountDownLatch(1)
+        val releaseReuse = new CountDownLatch(1)
+        val existingStage = TestExchangeQueryStageExec(
+          100,
+          exchange,
+          exchange.canonicalized,
+          reuseCallback = Some(() => {
+            reuseEntered.countDown()
+            assert(releaseReuse.await(30, TimeUnit.SECONDS), "stage reuse was not released")
+          }))
+        adaptivePlan.context.stageCache.put(exchange.canonicalized, existingStage)
+
+        val acquiredStage = new AtomicReference[ExchangeQueryStageExec]()
+        val cancelledIds = new AtomicReference[Seq[Int]]()
+        val reuseWorker = startWorker("aqe-stage-reuse-first") {
+          acquiredStage.set(acquireStage(adaptivePlan, exchange))
+        }
+        var cancellationWorker: Option[LifecycleWorker] = None
+
+        try {
+          assert(reuseEntered.await(30, TimeUnit.SECONDS), "exchange reuse did not start")
+          cancellationWorker = Some(startWorker("aqe-stage-cancellation-after-reuse") {
+            cancelledIds.set(adaptivePlan.invokePrivate(
+              cancelObsoleteStages(replacementPlan, Seq(existingStage))))
+          })
+          eventually(timeout(10.seconds), interval(10.milliseconds)) {
+            assert(cancellationWorker.get._1.getState == Thread.State.BLOCKED)
+          }
+        } finally {
+          releaseReuse.countDown()
+          waitForWorker(reuseWorker)
+          cancellationWorker.foreach(waitForWorker)
+        }
+
+        checkWorker(reuseWorker)
+        cancellationWorker.foreach(checkWorker)
+        assert(cancelledIds.get().isEmpty)
+        assert(!existingStage.cancelled)
+        assert(acquiredStage.get().resultOption.eq(existingStage.resultOption))
+        assert(adaptivePlan.context.isSharedStageResult(existingStage.resultOption))
+        assert(adaptivePlan.context.stageCache.get(exchange.canonicalized)
+          .exists(_ eq existingStage))
+      }
+
+      {
+        val (adaptivePlan, exchange) = newPlanAndExchange()
+        val cancellationEntered = new CountDownLatch(1)
+        val releaseCancellation = new CountDownLatch(1)
+        val obsoleteStage = TestExchangeQueryStageExec(
+          101,
+          exchange,
+          exchange.canonicalized,
+          cancelCallback = Some(() => {
+            cancellationEntered.countDown()
+            assert(releaseCancellation.await(30, TimeUnit.SECONDS),
+              "stage cancellation was not released")
+          }))
+        adaptivePlan.context.stageCache.put(exchange.canonicalized, obsoleteStage)
+
+        val acquiredStage = new AtomicReference[ExchangeQueryStageExec]()
+        val cancelledIds = new AtomicReference[Seq[Int]]()
+        val cancellationWorker = startWorker("aqe-stage-cancellation-first") {
+          cancelledIds.set(adaptivePlan.invokePrivate(
+            cancelObsoleteStages(replacementPlan, Seq(obsoleteStage))))
+        }
+        var reuseWorker: Option[LifecycleWorker] = None
+
+        try {
+          assert(cancellationEntered.await(30, TimeUnit.SECONDS),
+            "obsolete stage cancellation did not start")
+          reuseWorker = Some(startWorker("aqe-stage-reuse-after-cancellation") {
+            acquiredStage.set(acquireStage(adaptivePlan, exchange))
+          })
+          eventually(timeout(10.seconds), interval(10.milliseconds)) {
+            assert(reuseWorker.get._1.getState == Thread.State.BLOCKED)
+          }
+        } finally {
+          releaseCancellation.countDown()
+          waitForWorker(cancellationWorker)
+          reuseWorker.foreach(waitForWorker)
+        }
+
+        checkWorker(cancellationWorker)
+        reuseWorker.foreach(checkWorker)
+        assert(cancelledIds.get() == Seq(obsoleteStage.id))
+        assert(obsoleteStage.cancelled)
+        assert(acquiredStage.get().resultOption.ne(obsoleteStage.resultOption))
+        assert(adaptivePlan.context.stageCache.get(acquiredStage.get().plan.canonicalized)
+          .exists(_ eq acquiredStage.get()))
+      }
     }
   }
 
@@ -4430,7 +4586,9 @@ private case class TestExchangeQueryStageExec(
     override val plan: SparkPlan,
     override val _canonicalized: SparkPlan,
     runtimeRowCount: Option[BigInt] = None,
-    cancelFailure: Option[Throwable] = None) extends ExchangeQueryStageExec {
+    cancelFailure: Option[Throwable] = None,
+    reuseCallback: Option[() => Unit] = None,
+    cancelCallback: Option[() => Unit] = None) extends ExchangeQueryStageExec {
   @volatile var cancelled: Boolean = false
 
   override protected def doMaterialize(): Future[Any] = Future.successful(())
@@ -4443,12 +4601,14 @@ private case class TestExchangeQueryStageExec(
     cancelFailure.foreach { failure =>
       throw failure
     }
+    cancelCallback.foreach(_())
     cancelled = true
   }
 
   override def newReuseInstance(
       newStageId: Int,
       newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
+    reuseCallback.foreach(_())
     val reuse = copy(id = newStageId)
     reuse._resultOption = this._resultOption
     reuse._error = this._error

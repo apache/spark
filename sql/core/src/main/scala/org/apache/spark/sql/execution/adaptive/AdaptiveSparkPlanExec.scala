@@ -438,25 +438,28 @@ case class AdaptiveSparkPlanExec(
             newStage.id == stage.id || newStage.resultOption.eq(stage.resultOption)) => stage
     }
     obsoleteStages.flatMap { stage =>
-      if (!stage.isMaterialized && !context.isSharedStageResult(stage.resultOption)) {
-        removeStageFromCache(stage)
-        try {
-          stage.cancel("The query stage is no longer referenced by the current adaptive plan.")
-          Some(stage.id)
-        } catch {
-          case NonFatal(t) =>
-            logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)
-            None
+      context.withStageLifecycleLock {
+        if (!stage.isMaterialized && !context.isSharedStageResult(stage.resultOption)) {
+          removeStageFromCache(stage)
+          try {
+            stage.cancel("The query stage is no longer referenced by the current adaptive plan.")
+            Some(stage.id)
+          } catch {
+            case NonFatal(t) =>
+              logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)
+              None
+          }
+        } else {
+          None
         }
-      } else {
-        None
       }
     }
   }
 
   private def removeStageFromCache(stage: ExchangeQueryStageExec): Unit = {
     context.stageCache.foreach { case (plan, cachedStage) =>
-      if (cachedStage.resultOption.eq(stage.resultOption)) {
+      if (cachedStage.resultOption.eq(stage.resultOption) &&
+          context.stageCache.get(plan).exists(_ eq cachedStage)) {
         context.stageCache.remove(plan)
       }
     }
@@ -665,16 +668,25 @@ case class AdaptiveSparkPlanExec(
   private def createNonResultQueryStages(plan: SparkPlan): CreateStageResult = plan match {
     case e: Exchange =>
       // First have a quick check in the `stageCache` without having to traverse down the node.
-      context.stageCache.get(e.canonicalized) match {
-        case Some(existingStage) if conf.exchangeReuseEnabled =>
-          val stage = reuseQueryStage(existingStage, e)
+      val reusedStage = if (conf.exchangeReuseEnabled) {
+        context.withStageLifecycleLock {
+          context.stageCache.get(e.canonicalized).map { existingStage =>
+            reuseQueryStage(existingStage, e)
+          }
+        }
+      } else {
+        None
+      }
+
+      reusedStage match {
+        case Some(stage) =>
           val isMaterialized = stage.isMaterialized
           CreateStageResult(
             newPlan = stage,
             allChildStagesMaterialized = isMaterialized,
             newStages = if (isMaterialized) Seq.empty else Seq(stage))
 
-        case _ =>
+        case None =>
           val result = createNonResultQueryStages(e.child)
           val newPlan = e.withNewChildren(Seq(result.newPlan)).asInstanceOf[Exchange]
           // Create a query stage only when all the child query stages are ready.
@@ -684,10 +696,12 @@ case class AdaptiveSparkPlanExec(
               // Check the `stageCache` again for reuse. If a match is found, ditch the new stage
               // and reuse the existing stage found in the `stageCache`, otherwise update the
               // `stageCache` with the new stage.
-              val queryStage = context.stageCache.getOrElseUpdate(
-                newStage.plan.canonicalized, newStage)
-              if (queryStage.ne(newStage)) {
-                newStage = reuseQueryStage(queryStage, e)
+              context.withStageLifecycleLock {
+                val queryStage = context.stageCache.getOrElseUpdate(
+                  newStage.plan.canonicalized, newStage)
+                if (queryStage.ne(newStage)) {
+                  newStage = reuseQueryStage(queryStage, e)
+                }
               }
             }
             val isMaterialized = newStage.isMaterialized
@@ -1027,6 +1041,12 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
+
+  private val stageLifecycleLock = new Object
+
+  private[adaptive] def withStageLifecycleLock[T](body: => T): T = {
+    stageLifecycleLock.synchronized(body)
+  }
 
   private val sharedStageResults =
     new ConcurrentHashMap[AtomicReference[Option[Any]], Boolean]()
