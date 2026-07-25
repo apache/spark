@@ -514,7 +514,7 @@ class DefaultChannelBuilder(ChannelBuilder):
             session = PySparkSession._instantiatedSession
 
             if session is not None:
-                jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
+                jvm = session._jvm
                 return getattr(
                     getattr(
                         jvm,
