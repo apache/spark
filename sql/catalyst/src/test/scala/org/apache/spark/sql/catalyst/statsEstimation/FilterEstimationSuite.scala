@@ -523,6 +523,53 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 3)
   }
 
+  test("SPARK-57805: filters for timestamp NTZ, time and ANSI intervals") {
+    val testCases: Seq[(DataType, Any, Any, Any, Any, Any, Any)] = Seq(
+      (TimestampNTZType, 1L, 10L, 3L, 2L, 5L, 20L),
+      (TimeType(), 1_000L, 10_000L, 3_000L, 2_000L, 5_000L, 20_000L),
+      (YearMonthIntervalType(), 1, 10, 3, 2, 5, 20),
+      (DayTimeIntervalType(), 1L, 10L, 3L, 2L, 5L, 20L))
+
+    testCases.foreach { case (dataType, min, max, boundary, inMin, inMax, outside) =>
+      withClue(s"For data type $dataType") {
+        val attr = AttributeReference("cvalue", dataType)()
+        val colStat = ColumnStat(
+          distinctCount = Some(10),
+          min = Some(min),
+          max = Some(max),
+          nullCount = Some(0),
+          avgLen = Some(dataType.defaultSize),
+          maxLen = Some(dataType.defaultSize))
+        val localAttributeMap = AttributeMap(Seq(attr -> colStat))
+        val equalityColStat = colStat.copy(
+          distinctCount = Some(1), min = Some(boundary), max = Some(boundary))
+        validateEstimatedStats(
+          Filter(
+            EqualTo(attr, Literal(boundary, dataType)),
+            childStatsTestPlan(Seq(attr), 10L, localAttributeMap)),
+          Seq(attr -> equalityColStat),
+          expectedRowCount = 1)
+
+        validateEstimatedStats(
+          Filter(
+            LessThan(attr, Literal(boundary, dataType)),
+            childStatsTestPlan(Seq(attr), 10L, localAttributeMap)),
+          Seq(attr -> colStat.copy(distinctCount = Some(3), max = Some(boundary))),
+          expectedRowCount = 3)
+
+        validateEstimatedStats(
+          Filter(
+            InSet(attr, Set[Any](inMin, inMax, outside)),
+            childStatsTestPlan(Seq(attr), 10L, localAttributeMap)),
+          Seq(attr -> colStat.copy(
+            distinctCount = Some(2),
+            min = Some(inMin),
+            max = Some(inMax))),
+          expectedRowCount = 2)
+      }
+    }
+  }
+
   test("cdecimal = 0.400000000000000000") {
     val dec_0_40 = Decimal("0.400000000000000000")
     validateEstimatedStats(
