@@ -425,7 +425,7 @@ class AutoCdcMergeFlow(
    * Validate that this flow's [[ChangeArgs.trackHistorySelection]] (SCD2 `TRACK HISTORY ON ...`)
    * resolves against the user-selected source schema at construction time. Without this, an
    * unresolvable or ineligible (key/framework) tracking column would only surface when the first
-   * microbatch runs reconciliation, deep inside the SCD2 batch processor (SPARK-58313).
+   * microbatch runs reconciliation, deep inside the SCD2 batch processor.
    *
    * Delegates to [[Scd2BatchProcessor.computeTrackedHistoryColumns]] -- the same resolution used at
    * runtime -- so the two can never diverge; it throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` on an

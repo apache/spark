@@ -771,7 +771,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   // ===========================================================================================
-  // AutoCdcMergeFlow track-history validation tests (SPARK-58313)
+  // AutoCdcMergeFlow track-history validation tests
   //
   // SCD2 `TRACK HISTORY ON (...)` populates trackHistorySelection. These tests lock in that an
   // unresolvable or ineligible (key / dropped-by-column-selection) tracking column is rejected at
@@ -781,7 +781,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   // ===========================================================================================
 
   test(
-    "SPARK-58313: an SCD2 flow tracking a non-existent column is rejected at construction"
+    "an SCD2 flow tracking a non-existent column is rejected at construction"
   ) {
     // Eligible tracking columns from the 3-column source (id, name, seq), less the key `id`, are
     // {name, seq}. `missing` is absent, so resolution against trackHistorySelection fails.
@@ -806,7 +806,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   test(
-    "SPARK-58313: an SCD2 flow tracking a key column is rejected at construction (ineligible)"
+    "an SCD2 flow tracking a key column is rejected at construction (ineligible)"
   ) {
     // A key is never an eligible history-tracking column, so it is absent from the eligible
     // schema {name, seq} and resolution fails -- surfacing the misconfiguration eagerly.
@@ -831,7 +831,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   test(
-    "SPARK-58313: an SCD2 flow tracking a column dropped by columnSelection is rejected"
+    "an SCD2 flow tracking a column dropped by columnSelection is rejected"
   ) {
     // `name` exists in the source but is excluded from the selected schema, so it is not an
     // eligible tracking column. Eligible columns are then just {seq}.
@@ -859,7 +859,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   test(
-    "SPARK-58313: an SCD2 flow with a resolvable track-history selection passes the check"
+    "an SCD2 flow with a resolvable track-history selection passes the check"
   ) {
     // `name` is an eligible tracking column, so the construction-time check passes; construction
     // then forces `schema`, which throws AUTOCDC_SCD2_NOT_SUPPORTED. Observing that error (rather
@@ -877,7 +877,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   test(
-    "SPARK-58313: track-history validation respects case-insensitive analysis"
+    "track-history validation respects case-insensitive analysis"
   ) {
     // With caseSensitive=false, `NAME` resolves to the eligible `name`, so the check passes and
     // construction proceeds to the SCD2-not-supported gate.
@@ -896,7 +896,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   test(
-    "SPARK-58313: track-history validation respects case-sensitive analysis"
+    "track-history validation respects case-sensitive analysis"
   ) {
     // With caseSensitive=true, `NAME` is a distinct identifier from the eligible `name` and does
     // not resolve, so the construction-time check rejects it.
