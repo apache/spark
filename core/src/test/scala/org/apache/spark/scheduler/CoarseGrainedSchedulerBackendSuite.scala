@@ -41,7 +41,7 @@ import org.apache.spark.resource.{ExecutorResourceRequests, ResourceInformation,
 import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv, RpcTimeout}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, ExecutorInfo}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{RpcUtils, SerializableBuffer, Utils}
@@ -249,7 +249,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       "CLUSTER_ID" -> "cl1",
       "USER" -> "dummy",
       "CONTAINER_ID" -> "container1",
-      "LOG_FILES" -> "stdout,stderr")
+      "LOG_FILES" -> "stdout,stderr",
+      EXECUTOR_DRIVER_INSTANCE_TOKEN -> backend.driverInstanceToken)
     val baseUrl = s"http://newhost:9999/logs/clusters/${attributes("CLUSTER_ID")}" +
       s"/users/${attributes("USER")}/containers/${attributes("CONTAINER_ID")}"
 
@@ -325,13 +326,19 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     sc.addSparkListener(listener)
 
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        tokenAttrs(backend),
+        resources,
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        tokenAttrs(backend),
+        resources,
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        tokenAttrs(backend),
+        resources,
         rp.id))
 
     val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
@@ -432,13 +439,19 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     sc.addSparkListener(listener)
 
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        tokenAttrs(backend),
+        resources,
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+      RegisterExecutor("2", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        tokenAttrs(backend),
+        resources,
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty, resources,
+      RegisterExecutor("3", mockEndpointRef, mockAddress.host, 1, Map.empty,
+        tokenAttrs(backend),
+        resources,
         rp.id))
 
     val frameSize = RpcUtils.maxMessageSizeBytes(sc.conf)
@@ -531,7 +544,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(Seq.empty)
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef, mockAddress.host, execCores, Map.empty, Map.empty,
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, execCores, Map.empty,
+        tokenAttrs(backend),
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     backend.driverEndpoint.send(LaunchedExecutor("1"))
     eventually(timeout(5 seconds)) {
@@ -599,11 +613,153 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(!mockEndpointRef.decommissionReceived)
 
     backend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map(), Map(),
+      RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map(),
+        tokenAttrs(backend),
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
     assert(mockEndpointRef.decommissionReceived)
+  }
+
+  private def withBackend(
+      body: (SparkContext, CoarseGrainedSchedulerBackend) => Unit): Unit = {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+    sc = new SparkContext(conf)
+    body(sc, sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend])
+  }
+
+  private def tokenAttrs(backend: CoarseGrainedSchedulerBackend): Map[String, String] = {
+    Map(EXECUTOR_DRIVER_INSTANCE_TOKEN -> backend.driverInstanceToken)
+  }
+
+  test("SPARK-58322: reject RetrieveSparkAppConfigWithIdentity with stale token") {
+    withBackend { (_, backend) =>
+      val ex = intercept[SparkException] {
+        backend.driverEndpoint.askSync[SparkAppConfig](
+          RetrieveSparkAppConfigWithIdentity(
+            ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+            "stale-token"))
+      }
+      assert(ex.getCause.getMessage.contains(
+        "did not supply a matching driver instance token"))
+    }
+  }
+
+  test("SPARK-58322: accept RetrieveSparkAppConfigWithIdentity with matching token") {
+    withBackend { (sc, backend) =>
+      val cfg = backend.driverEndpoint.askSync[SparkAppConfig](
+        RetrieveSparkAppConfigWithIdentity(
+          ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+          backend.driverInstanceToken))
+      assert(cfg.sparkProperties.find(_._1 == "spark.app.id").isDefined)
+      // The driver instance token must not be echoed back in the response.
+      assert(cfg.sparkProperties.forall { case (k, _) =>
+        k != s"spark.executorEnv.$EXECUTOR_DRIVER_INSTANCE_TOKEN" },
+        s"Token should not be present in sparkProperties: ${cfg.sparkProperties}")
+    }
+  }
+
+  test("SPARK-58322: reject RetrieveSparkAppConfig without identity") {
+    withBackend { (_, backend) =>
+      val ex = intercept[SparkException] {
+        backend.driverEndpoint.askSync[SparkAppConfig](
+          RetrieveSparkAppConfig(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      }
+      assert(ex.getCause.getMessage.contains(
+        "Legacy RetrieveSparkAppConfig request rejected"))
+    }
+  }
+
+  test("SPARK-58322: reject RegisterExecutor with stale token in attributes") {
+    withBackend { (_, backend) =>
+      val mockEndpointRef = mock[RpcEndpointRef]
+      val mockAddress = mock[RpcAddress]
+      val ex = intercept[SparkException] {
+        backend.driverEndpoint.askSync[Boolean](
+          RegisterExecutor("1111", mockEndpointRef, mockAddress.host, 1, Map.empty,
+            Map(EXECUTOR_DRIVER_INSTANCE_TOKEN -> "stale-token"), Map.empty,
+            ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      }
+      assert(ex.getCause.getMessage.contains(
+        "did not supply a matching driver instance token"))
+    }
+  }
+
+  test("SPARK-58322: accept RegisterExecutor with matching token in attributes") {
+    withBackend { (sc, backend) =>
+      val mockEndpointRef = mock[RpcEndpointRef]
+      val mockAddress = mock[RpcAddress]
+      val result = backend.driverEndpoint.askSync[Boolean](
+        RegisterExecutor("1112", mockEndpointRef, mockAddress.host, 1, Map.empty,
+          tokenAttrs(backend), Map.empty,
+          ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      assert(result)
+    }
+  }
+
+  test("SPARK-58322: reject RegisterExecutor without identity attributes") {
+    withBackend { (_, backend) =>
+      val mockEndpointRef = mock[RpcEndpointRef]
+      val mockAddress = mock[RpcAddress]
+      val ex = intercept[SparkException] {
+        backend.driverEndpoint.askSync[Boolean](
+          RegisterExecutor("1113", mockEndpointRef, mockAddress.host, 1, Map.empty,
+            Map.empty, Map.empty,
+            ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+      }
+      assert(ex.getCause.getMessage.contains(
+        "did not supply a matching driver instance token"))
+    }
+  }
+
+  test("SPARK-58322: reject RegisterExecutor with stale token after driver swap") {
+    // Port-reuse scenario: executor fetches config from driver A (token
+    // validated by fake driver A), then driver A dies and driver B binds
+    // the same address. The executor sends RegisterExecutor to driver B
+    // with driver A's token in attributes -- driver B rejects it.
+    val driverAToken = "driver-A-instance-token"
+
+    val driverARpcEnv = RpcEnv.create("test-driverA", "localhost", 0, new SparkConf(),
+      new SecurityManager(new SparkConf()), clientMode = false)
+    try {
+      driverARpcEnv.setupEndpoint("fake-driverA", new RpcEndpoint {
+        override val rpcEnv: RpcEnv = driverARpcEnv
+        override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+          case RetrieveSparkAppConfigWithIdentity(_, _) =>
+            context.reply(SparkAppConfig(
+              Seq("spark.app.id" -> "app-driver-A"),
+              None, None, ResourceProfile.getOrCreateDefaultProfile(new SparkConf()), None))
+        }
+      })
+
+      // Executor fetches config from driver A (token passes validation).
+      val driverARef = driverARpcEnv.setupEndpointRefByURI(
+        s"spark://fake-driverA@localhost:${driverARpcEnv.address.port}")
+      val cfg = driverARef.askSync[SparkAppConfig](
+        RetrieveSparkAppConfigWithIdentity(
+          ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, driverAToken))
+      assert(cfg.sparkProperties.find(_._1 == "spark.app.id").isDefined)
+
+      // Now create driver B (a real SparkContext with a different token).
+      withBackend { (_, backend) =>
+        // Executor sends RegisterExecutor to driver B with driver A's token.
+        val mockEndpointRef = mock[RpcEndpointRef]
+        val mockAddress = mock[RpcAddress]
+        val ex = intercept[SparkException] {
+          backend.driverEndpoint.askSync[Boolean](
+            RegisterExecutor("1114", mockEndpointRef, mockAddress.host, 1, Map.empty,
+              Map(EXECUTOR_DRIVER_INSTANCE_TOKEN -> driverAToken),
+              Map.empty,
+              ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+        }
+        assert(ex.getCause.getMessage.contains(
+          "did not supply a matching driver instance token"))
+      }
+    } finally {
+      driverARpcEnv.shutdown()
+    }
   }
 
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {

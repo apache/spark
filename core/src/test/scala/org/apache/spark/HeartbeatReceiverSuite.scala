@@ -173,15 +173,16 @@ class HeartbeatReceiverSuite
     // Register fake executors with our fake scheduler backend
     // This is necessary because the backend refuses to kill executors it does not know about
     fakeSchedulerBackend.start()
+    val tokenAttrs = Map(EXECUTOR_DRIVER_INSTANCE_TOKEN -> fakeSchedulerBackend.driverInstanceToken)
     val dummyExecutorEndpoint1 = new FakeExecutorEndpoint(rpcEnv)
     val dummyExecutorEndpoint2 = new FakeExecutorEndpoint(rpcEnv)
     val dummyExecutorEndpointRef1 = rpcEnv.setupEndpoint("fake-executor-1", dummyExecutorEndpoint1)
     val dummyExecutorEndpointRef2 = rpcEnv.setupEndpoint("fake-executor-2", dummyExecutorEndpoint2)
     fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "1.2.3.4", 0, Map.empty, Map.empty,
+      RegisterExecutor(executorId1, dummyExecutorEndpointRef1, "1.2.3.4", 0, Map.empty, tokenAttrs,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     fakeSchedulerBackend.driverEndpoint.askSync[Boolean](
-      RegisterExecutor(executorId2, dummyExecutorEndpointRef2, "1.2.3.5", 0, Map.empty, Map.empty,
+      RegisterExecutor(executorId2, dummyExecutorEndpointRef2, "1.2.3.5", 0, Map.empty, tokenAttrs,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
     heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
     addExecutorAndVerify(executorId1)
