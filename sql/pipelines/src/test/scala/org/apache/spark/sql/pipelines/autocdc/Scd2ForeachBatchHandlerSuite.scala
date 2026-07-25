@@ -76,7 +76,7 @@ class Scd2ForeachBatchHandlerSuite
       sequencing = F.col("seq"),
       storedAsScdType = ScdType.Type2,
       deleteCondition = Some(F.col("is_delete")),
-      // Persist only id + value; seq / is_delete are control columns and must not be stored.
+      // Persist only id + value; seq / is_delete are control columns that need not be included.
       columnSelection = Some(
         ColumnSelection.ExcludeColumns(
           Seq(UnqualifiedColumnName("seq"), UnqualifiedColumnName("is_delete"))
@@ -197,14 +197,29 @@ class Scd2ForeachBatchHandlerSuite
     checkAnswer(targetTable, targetRow(1, "old", 10L, null, 10L))
   }
 
-  test("an empty microbatch leaves both tables unchanged") {
+  test("an empty microbatch with both tables empty leaves both empty (initial processing)") {
+    // The first batch of a stream may be empty before any data arrives; nothing should be
+    // written to either table.
     createAuxTable()
+    createTargetTable()
+
+    runBatch(1L)() // zero source rows
+
+    assert(targetTable.collect().isEmpty)
+    assert(auxTable.collect().isEmpty)
+  }
+
+  test("an empty microbatch with both tables non-empty leaves both unchanged") {
+    // A live target row plus a live (non-deletable) aux row must both survive an empty batch
+    // untouched: no spurious writes, and the aux row is not GC'd (it was not deleted by a prior
+    // batch, so its deletedByBatchId is null).
+    createAuxTable(auxRow(1, "hidden", 5L, null, 5L, null))
     createTargetTable(targetRow(1, "a", 10L, null, 10L))
 
     runBatch(2L)() // zero source rows
 
     checkAnswer(targetTable, targetRow(1, "a", 10L, null, 10L))
-    assert(auxTable.collect().isEmpty)
+    checkAnswer(auxTable, auxRow(1, "hidden", 5L, null, 5L, null))
   }
 
   test("an empty microbatch garbage-collects a stale aux row from a prior batch") {
@@ -591,17 +606,38 @@ class Scd2ForeachBatchHandlerSuite
     checkAnswer(auxTable, auxRow(1, null, 5L, 5L, 5L, null))
   }
 
-  test("byte-identical duplicate events in one microbatch collapse to a single record") {
+  test("duplicate events at the same key and sequence in one microbatch collapse to one record") {
     createAuxTable()
     createTargetTable()
 
-    // Two fully identical events (same key, value, and sequence). Preprocessing keeps both 1:1;
-    // because they share a recordStartAt, reconciliation collapses them to one. The result is a
-    // single open record - and notably no hidden aux row, unlike a run of same-value events at
-    // *distinct* sequences (where the non-tail members are retained as side state).
+    // Two fully identical events (same key, value, and sequence). The collapse condition is
+    // (key, recordStartAt), so they merge to a single open record - and notably no hidden aux
+    // row, unlike a run of same-value events at *distinct* sequences (where the non-tail members
+    // are retained as side state).
     runBatch(1L)(upsert(1, "a", 10L), upsert(1, "a", 10L))
 
     checkAnswer(targetTable, targetRow(1, "a", 10L, null, 10L))
+    assert(auxTable.collect().isEmpty)
+  }
+
+  test("events sharing key and sequence but differing in value still collapse to one record") {
+    createAuxTable()
+    createTargetTable()
+
+    // The "same event" condition is (key, recordStartAt), NOT byte-identity: two events at the
+    // same key and sequence collapse even when their values differ. Emitting two events at the
+    // same sequence for a key violates the documented uniqueness contract, so *which* value wins
+    // is undefined; we assert only the well-defined structural outcome -- exactly one open record
+    // for the key, with no hidden aux row -- and that the surviving value is one of the inputs.
+    runBatch(1L)(upsert(1, "a", 10L), upsert(1, "b", 10L))
+
+    val rows = targetTable.collect()
+    assert(rows.length == 1, s"expected a single collapsed record, got ${rows.toSeq}")
+    val row = rows.head
+    assert(row.getAs[Int]("id") == 1)
+    assert(Set("a", "b").contains(row.getAs[String]("value")))
+    assert(row.getAs[Long](Scd2BatchProcessor.startAtColName) == 10L)
+    assert(row.isNullAt(row.fieldIndex(Scd2BatchProcessor.endAtColName)), "record should be open")
     assert(auxTable.collect().isEmpty)
   }
 
@@ -621,6 +657,28 @@ class Scd2ForeachBatchHandlerSuite
     checkAnswer(targetTable, targetAfterFirst)
     checkAnswer(auxTable, auxAfterFirst)
     checkAnswer(targetTable, targetRow(1, "a", 10L, null, 10L))
+    assert(auxTable.collect().isEmpty)
+  }
+
+  test("a later microbatch event sharing key and sequence but differing in value is absorbed") {
+    // Confirms the across-batch "same event" condition is the same (key, recordStartAt) match used
+    // within a batch: a later event at the already-persisted key and sequence collides with the
+    // stored record and is absorbed, leaving a single open record rather than adding history.
+    // (Same-sequence collisions are undefined per the uniqueness contract, so we assert the
+    // structural outcome and that the value is one of the two inputs, not which one wins.)
+    createAuxTable()
+    createTargetTable()
+
+    runBatch(1L)(upsert(1, "a", 10L))
+    runBatch(2L)(upsert(1, "b", 10L))
+
+    val rows = targetTable.collect()
+    assert(rows.length == 1, s"expected a single absorbed record, got ${rows.toSeq}")
+    val row = rows.head
+    assert(row.getAs[Int]("id") == 1)
+    assert(Set("a", "b").contains(row.getAs[String]("value")))
+    assert(row.getAs[Long](Scd2BatchProcessor.startAtColName) == 10L)
+    assert(row.isNullAt(row.fieldIndex(Scd2BatchProcessor.endAtColName)), "record should be open")
     assert(auxTable.collect().isEmpty)
   }
 
