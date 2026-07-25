@@ -151,6 +151,55 @@ class Scd2ForeachBatchHandlerSuite
     checkAnswer(auxTable, auxAfterFirst)
   }
 
+  /**
+   * Replicate [[Scd2ForeachBatchHandler.execute]] but stop after the auxiliary-table merge,
+   * skipping the target-table merge. Models a crash *between* the two merges: the aux table has
+   * committed this `batchId`'s logical deletes / inserts, but the target table has not yet been
+   * updated. On recovery Structured Streaming reruns the same `batchId`, which
+   * [[Scd2BatchProcessor.deletedByBatchIdColName]] is designed to make idempotent.
+   */
+  private def runBatchAuxMergeOnly(batchId: Long)(rows: Row*): Unit = {
+    val batchDf = microbatchOf(sourceSchema)(rows: _*)
+    ScdBatchValidator(
+      destinationIdentifier = defaultTargetTableIdentifier,
+      changeArgs = processor.changeArgs,
+      batchDf = batchDf,
+      batchId = batchId
+    ).validateMicrobatch()
+
+    val preprocessed = processor.preprocessMicrobatch(batchDf)
+    val perKeyMin = processor.computeMinimumSequencePerKey(preprocessed)
+
+    val affectedAux = processor.findAffectedRowsFromAuxiliaryTable(
+      rawAuxiliaryTableDf = auxTable,
+      perKeyMinimumSequenceInMicrobatchDf = perKeyMin,
+      batchId = batchId
+    )
+    val affectedTarget = processor.findAffectedRowsFromTargetTable(
+      targetTableDf = targetTable,
+      perKeyMinimumSequenceInMicrobatchDf = perKeyMin
+    )
+
+    val reconciledAndRouted = preprocessed
+      .unionByName(affectedAux)
+      .unionByName(affectedTarget)
+      .transform(processor.decomposeOutOfOrderRows)
+      .transform(d => processor.assertWellFormedRowsPostDecomposition(d, batchId))
+      .transform(processor.dropRedundantRowsPostDecomposition)
+      .transform(processor.reconcileStartAndEndAt)
+      .transform(processor.dropLeftoverDeletesPostReconciliation)
+      .transform(processor.promoteDecompositionTailsToTombstones)
+      .transform(processor.identifyAndTagAuxRows)
+
+    // Only the aux merge runs; the target merge is skipped to model the mid-batch crash.
+    processor.mergeRowsIntoAuxiliaryTable(
+      reconciledDfWithAuxRowsTagged = reconciledAndRouted,
+      originalAffectedRowsFromAuxiliaryTable = affectedAux,
+      auxiliaryTableIdentifier = defaultAuxTableIdentifier,
+      batchId = batchId
+    )
+  }
+
   test("a record with a null sequencing value fails the microbatch without applying any changes") {
     createAuxTable()
     createTargetTable(targetRow(1, "old", 10L, null, 10L))
@@ -223,7 +272,8 @@ class Scd2ForeachBatchHandlerSuite
   }
 
   test("an empty microbatch garbage-collects a stale aux row from a prior batch") {
-    // Batch 1: a late upsert logically deletes a tombstone, stamping deletedByBatchId=1.
+    // Batches 1-2: a delete records a tombstone, then a late upsert logically deletes it,
+    // stamping deletedByBatchId=2.
     createAuxTable()
     createTargetTable()
     runBatch(1L)(del(1, 20L))
@@ -604,6 +654,36 @@ class Scd2ForeachBatchHandlerSuite
 
     assert(targetTable.collect().isEmpty)
     checkAnswer(auxTable, auxRow(1, null, 5L, 5L, 5L, null))
+  }
+
+  test("recovering after a crash between the aux and target merges converges (tombstone)") {
+    // A standalone delete records a tombstone in the aux table. Simulate a crash right after the
+    // aux merge commits but before the target merge, then rerun the same batchId end to end.
+    // deletedByBatchId keeps the batch's aux writes visible to the replay so it re-derives the
+    // same output, and the result must match a clean single run.
+    createAuxTable()
+    createTargetTable()
+
+    runBatchAuxMergeOnly(1L)(del(1, 5L)) // crash: aux merged, target not
+    runBatch(1L)(del(1, 5L)) // recovery: same batchId reruns fully
+
+    assert(targetTable.collect().isEmpty)
+    checkAnswer(auxTable, auxRow(1, null, 5L, 5L, 5L, null))
+  }
+
+  test("recovering after a crash between the aux and target merges converges (demotion)") {
+    // A run of same-value events coalesces: the visible tail lands in the target and the run head
+    // is demoted to a hidden no-op row in the aux table. Simulate a crash after the aux merge but
+    // before the target merge, then rerun the same batchId; the recovered state must match a clean
+    // single run (visible tail in target, hidden head in aux).
+    createAuxTable()
+    createTargetTable()
+
+    runBatchAuxMergeOnly(1L)(upsert(1, "a", 10L), upsert(1, "a", 20L)) // crash: aux merged only
+    runBatch(1L)(upsert(1, "a", 10L), upsert(1, "a", 20L)) // recovery: same batchId reruns fully
+
+    checkAnswer(targetTable, targetRow(1, "a", 10L, null, 20L))
+    checkAnswer(auxTable, auxRow(1, "a", 10L, null, 10L, null))
   }
 
   test("duplicate events at the same key and sequence in one microbatch collapse to one record") {

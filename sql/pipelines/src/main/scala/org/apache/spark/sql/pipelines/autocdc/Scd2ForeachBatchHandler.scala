@@ -69,8 +69,13 @@ case class Scd2ForeachBatchHandler(
 
     val decomposedDf = microbatchAndAffectedRows
       .transform(batchProcessor.decomposeOutOfOrderRows)
-      .transform(batchProcessor.dropRedundantRowsPostDecomposition)
+      // Assert well-formedness before dropping redundant rows: both transforms document their
+      // input as the output of decomposeOutOfOrderRows, and dropRedundantRowsPostDecomposition
+      // assumes decomposition tails are the only rows with a null recordStartAt. Checking first
+      // both honors that contract and prevents an ill-formed row from being silently dropped as
+      // redundant (when it ties with a neighbour) before the assertion can catch it.
       .transform(d => batchProcessor.assertWellFormedRowsPostDecomposition(d, batchId))
+      .transform(batchProcessor.dropRedundantRowsPostDecomposition)
 
     val reconciledAndRoutedDf = decomposedDf
       .transform(batchProcessor.reconcileStartAndEndAt)
