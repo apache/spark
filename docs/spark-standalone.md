@@ -21,7 +21,7 @@ license: |
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-In addition to running on the [YARN cluster manager](./running-on-yarn.md) and [Kubernetes](./running-on-kubernetes.md), Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
+In addition to running on the [YARN cluster manager](running-on-yarn.html) and [Kubernetes](running-on-kubernetes.html), Spark also provides a simple standalone deploy mode. You can launch a standalone cluster either manually, by starting a master and workers by hand, or use our provided [launch scripts](#cluster-launch-scripts). It is also possible to run these daemons on a single machine for testing.
 
 # Security
 
@@ -101,7 +101,7 @@ Once you've set up this file, you can launch or stop your cluster with the follo
 - `sbin/start-workers.sh` - Starts a worker instance on each machine specified in the `conf/workers` file.
 - `sbin/start-worker.sh` - Starts a worker instance on the machine the script is executed on.
 - `sbin/start-connect-server.sh` - Starts a [Spark Connect](spark-connect-overview.html) server on the machine the script is executed on.
-- `sbin/start-history-server.sh` - Starts the History Server, which lets you view logs for completed applications. Requires event logging to be enabled (see [Monitoring and Instrumentation](./monitoring.md)).
+- `sbin/start-history-server.sh` - Starts the History Server, which lets you view logs for completed applications. Requires event logging to be enabled (see [Monitoring and Instrumentation](monitoring.html)).
 - `sbin/start-all.sh` - Starts both a master and a number of workers as described above.
 - `sbin/stop-master.sh` - Stops the master that was started via the `sbin/start-master.sh` script.
 - `sbin/stop-worker.sh` - Stops all worker instances on the machine the script is executed on.
@@ -763,7 +763,7 @@ Spark's standalone mode offers a web-based user interface to monitor the cluster
 
 In addition, detailed log output for each job is also written to the work directory of each worker node (`SPARK_HOME/work` by default). You will see two files for each job, `stdout` and `stderr`, with all output it wrote to its console.
 
-For a richer monitoring experience across completed applications, [enable event logging and start the History Server](./monitoring.md#viewing-after-the-fact).
+To track and review logs across completed applications, [enable event logging and start the History Server](monitoring.html#viewing-after-the-fact).
 
 
 # Running Alongside Hadoop
