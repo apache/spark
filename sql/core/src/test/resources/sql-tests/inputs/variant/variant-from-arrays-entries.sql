@@ -33,6 +33,8 @@ select cast(variant_from_entries(array(named_struct('k', 'a', 'v', 1), cast(null
 select cast(variant_from_entries(cast(null as array<struct<k:string,v:int>>)) as string);
 -- A null key is rejected.
 select variant_from_entries(array(named_struct('k', cast(null as string), 'v', 1)));
+-- Duplicate keys are rejected.
+select variant_from_entries(array(named_struct('k', 'a', 'v', 1), named_struct('k', 'a', 'v', 2)));
 -- A non-array-of-pair-struct input is rejected.
 select variant_from_entries(array(1, 2));
 -- A value type that cannot be cast to variant is rejected.

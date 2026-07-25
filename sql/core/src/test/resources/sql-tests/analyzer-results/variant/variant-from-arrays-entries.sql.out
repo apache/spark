@@ -137,6 +137,13 @@ Project [variant_from_entries(array(named_struct(k, cast(null as string), v, 1))
 
 
 -- !query
+select variant_from_entries(array(named_struct('k', 'a', 'v', 1), named_struct('k', 'a', 'v', 2)))
+-- !query analysis
+Project [variant_from_entries(array(named_struct(k, a, v, 1), named_struct(k, a, v, 2))) AS variant_from_entries(array(named_struct(k, a, v, 1), named_struct(k, a, v, 2)))#x]
++- OneRowRelation
+
+
+-- !query
 select variant_from_entries(array(1, 2))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
