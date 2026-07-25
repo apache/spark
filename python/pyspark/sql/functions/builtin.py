@@ -52,7 +52,6 @@ from pyspark.sql.types import (
     MapType,
     NumericType,
     _from_numpy_type,
-    VariantType
 )
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
@@ -325,6 +324,7 @@ def col(col: str) -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql.functions import col
     >>> col('x')
     Column<'x'>
     >>> column('x')
@@ -7350,7 +7350,7 @@ def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
-    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+    """Returns a new :class:`~pyspark.sql.Column` for distinct count of ``col`` or ``cols``.
 
     .. versionadded:: 3.2.0
 
@@ -7897,7 +7897,7 @@ def monotonically_increasing_id() -> Column:
 def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """Returns col1 if it is not NaN, or col2 if col1 is NaN.
 
-    Both inputs should be floating point columns (:class:`DoubleType` or :class:`FloatType`).
+    Both inputs should be floating point columns (:class:`~pyspark.sql.types.DoubleType` or :class:`~pyspark.sql.types.FloatType`).
 
     .. versionadded:: 1.6.0
 
@@ -9752,7 +9752,7 @@ def ntile(n: int) -> Column:
 @_try_remote_functions
 def curdate() -> Column:
     """
-    Returns the current date at the start of query evaluation as a :class:`DateType` column.
+    Returns the current date at the start of query evaluation as a :class:`~pyspark.sql.types.DateType` column.
     All calls of current_date within the same query return the same value.
 
     .. versionadded:: 3.5.0
@@ -9785,7 +9785,7 @@ def curdate() -> Column:
 @_try_remote_functions
 def current_date() -> Column:
     """
-    Returns the current date at the start of query evaluation as a :class:`DateType` column.
+    Returns the current date at the start of query evaluation as a :class:`~pyspark.sql.types.DateType` column.
     All calls of current_date within the same query return the same value.
 
     .. versionadded:: 1.5.0
@@ -9877,7 +9877,7 @@ def current_time(precision: int) -> Column: ...
 @_try_remote_functions
 def current_time(precision: Optional[int] = None) -> Column:
     """
-    Returns the current time at the start of query evaluation as a :class:`TimeType` column. All
+    Returns the current time at the start of query evaluation as a :class:`~pyspark.sql.types.TimeType` column. All
     calls of current_time within the same query return the same value.
 
     .. versionadded:: 4.1.0
@@ -9933,7 +9933,7 @@ def current_time(precision: Optional[int] = None) -> Column:
 @_try_remote_functions
 def current_timestamp() -> Column:
     """
-    Returns the current timestamp at the start of query evaluation as a :class:`TimestampType`
+    Returns the current timestamp at the start of query evaluation as a :class:`~pyspark.sql.types.TimestampType`
     column. All calls of current_timestamp within the same query return the same value.
 
     .. versionadded:: 1.5.0
@@ -10062,7 +10062,7 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     date : :class:`~pyspark.sql.Column` or column name
         input column of values to format.
         A column that evaluates to a timestamp or time.
-    format: literal string
+    format : literal string
         format to use to represent datetime values.
         A column that evaluates to a string.
 
@@ -12178,9 +12178,9 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
 
 @_try_remote_functions
 def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
-    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.DateType`
+    """Converts a :class:`~pyspark.sql.Column` into :class:`~pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
-    By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
+    By default, it follows casting rules to :class:`~pyspark.sql.types.DateType` if the format
     is omitted. Equivalent to ``col.cast("date")``.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
@@ -12195,14 +12195,14 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         input column of values to convert.
         A column that evaluates to a string, date, or timestamp.
-    format: literal string, optional
+    format : literal string, optional
         format to use to convert date values.
         A column that evaluates to a string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        date value as :class:`pyspark.sql.types.DateType` type.
+        date value as :class:`~pyspark.sql.types.DateType` type.
         Returns a column that evaluates to a date.
 
     See Also
@@ -12255,14 +12255,14 @@ def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         input column of values to convert.
         A column that evaluates to a string, date, or timestamp.
-    format: literal string, optional
+    format : literal string, optional
         format to use to convert date values.
         A column that evaluates to a string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        date value as :class:`pyspark.sql.types.DateType` type.
+        date value as :class:`~pyspark.sql.types.DateType` type.
         Returns a column that evaluates to a date.
 
     See Also
@@ -12553,9 +12553,9 @@ def to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 @_try_remote_functions
 def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
-    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimeType` using the
+    """Converts a :class:`~pyspark.sql.Column` into :class:`~pyspark.sql.types.TimeType` using the
     optionally specified format. Specify formats according to `datetime pattern`_. By default, it
-    follows casting rules to :class:`pyspark.sql.types.TimeType` if the format is omitted.
+    follows casting rules to :class:`~pyspark.sql.types.TimeType` if the format is omitted.
     Equivalent to ``col.cast("time")``.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
@@ -12567,14 +12567,14 @@ def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Col
     str : :class:`~pyspark.sql.Column` or column name
         string to be parsed to time.
         A column that evaluates to a string.
-    format: :class:`~pyspark.sql.Column` or column name, optional
+    format : :class:`~pyspark.sql.Column` or column name, optional
         time format pattern to follow.
         A column that evaluates to a string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        time value as :class:`pyspark.sql.types.TimeType` type.
+        time value as :class:`~pyspark.sql.types.TimeType` type.
         Returns a column that evaluates to a time.
 
     See Also
@@ -12622,9 +12622,9 @@ def to_timestamp(col: "ColumnOrName", format: str) -> Column: ...
 
 @_try_remote_functions
 def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
-    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimestampType`
+    """Converts a :class:`~pyspark.sql.Column` into :class:`~pyspark.sql.types.TimestampType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
-    By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
+    By default, it follows casting rules to :class:`~pyspark.sql.types.TimestampType` if the format
     is omitted. Equivalent to ``col.cast("timestamp")``.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
@@ -12639,14 +12639,14 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
-    format: literal string, optional
+    format : literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        timestamp value as :class:`pyspark.sql.types.TimestampType` type.
+        timestamp value as :class:`~pyspark.sql.types.TimestampType` type.
         Returns a column that evaluates to a timestamp.
 
     See Also
@@ -12701,9 +12701,9 @@ def try_to_time(str: "ColumnOrName", format: "ColumnOrName") -> Column: ...
 
 @_try_remote_functions
 def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Column:
-    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimeType` using the
+    """Converts a :class:`~pyspark.sql.Column` into :class:`~pyspark.sql.types.TimeType` using the
     optionally specified format. Specify formats according to `datetime pattern`_. By default, it
-    follows casting rules to :class:`pyspark.sql.types.TimeType` if the format is omitted.
+    follows casting rules to :class:`~pyspark.sql.types.TimeType` if the format is omitted.
     Equivalent to ``col.cast("time")``. The function always returns null on an invalid input.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
@@ -12715,14 +12715,14 @@ def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) ->
     str : :class:`~pyspark.sql.Column` or column name
         string to be parsed to time.
         A column that evaluates to a string.
-    format: :class:`~pyspark.sql.Column` or column name, optional
+    format : :class:`~pyspark.sql.Column` or column name, optional
         time format pattern to follow.
         A column that evaluates to a string.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        time value as :class:`pyspark.sql.types.TimeType` type.
+        time value as :class:`~pyspark.sql.types.TimeType` type.
         Returns a column that evaluates to a time.
 
     See Also
@@ -12785,7 +12785,7 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
-    format: literal string, optional
+    format : literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
 
@@ -14277,7 +14277,7 @@ def window(
     [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
     the order of months are not supported.
 
-    The time column must be of :class:`pyspark.sql.types.TimestampType`.
+    The time column must be of :class:`~pyspark.sql.types.TimestampType`.
 
     Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
     interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
@@ -14288,7 +14288,7 @@ def window(
     past the hour, e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
 
     The output column will be a struct called 'window' by default with the nested columns 'start'
-    and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
+    and 'end', where 'start' and 'end' will be of :class:`~pyspark.sql.types.TimestampType`.
 
     .. versionadded:: 2.0.0
 
@@ -14451,7 +14451,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     It could also be a Column which can be evaluated to gap duration dynamically based on the
     input row.
     The output column will be a struct called 'session_window' by default with the nested columns
-    'start' and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
+    'start' and 'end', where 'start' and 'end' will be of :class:`~pyspark.sql.types.TimestampType`.
 
     .. versionadded:: 3.2.0
 
@@ -14984,7 +14984,7 @@ def session_user() -> Column:
 @_try_remote_functions
 def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
     """Returns an universally unique identifier (UUID) string.
-    The value is returned as a canonical UUID 36-character string.
+    The value is returned as a canonical UUIDv4 36-character string.
 
     .. versionadded:: 4.1.0
 
@@ -16849,7 +16849,7 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
         a string.
         A column that evaluates to a string.
     str : :class:`~pyspark.sql.Column` or column name
-        a Column of :class:`pyspark.sql.types.StringType`.
+        a Column of :class:`~pyspark.sql.types.StringType`.
         A column that evaluates to a string.
     pos : int, optional
         start position (zero based).
@@ -18027,9 +18027,9 @@ def bin(col: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def hex(col: "ColumnOrName") -> Column:
-    """Computes hex value of the given column, which could be :class:`pyspark.sql.types.StringType`,
-    :class:`pyspark.sql.types.BinaryType`, :class:`pyspark.sql.types.IntegerType` or
-    :class:`pyspark.sql.types.LongType`.
+    """Computes hex value of the given column, which could be :class:`~pyspark.sql.types.StringType`,
+    :class:`~pyspark.sql.types.BinaryType`, :class:`~pyspark.sql.types.IntegerType` or
+    :class:`~pyspark.sql.types.LongType`.
 
     .. versionadded:: 1.5.0
 
@@ -19363,6 +19363,7 @@ def char(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.chr`
+    :meth:`pyspark.sql.functions.ascii`
 
     Examples
     --------
@@ -19512,6 +19513,7 @@ def chr(n: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.char`
+    :meth:`pyspark.sql.functions.ascii`
 
     Examples
     --------
@@ -22888,8 +22890,8 @@ def from_json(
     options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     """
-    Parses a column containing a JSON string into a :class:`~MapType` with :class:`~StringType`
-    as keys type, :class:`~StructType` or :class:`~ArrayType` with
+    Parses a column containing a JSON string into a :class:`~pyspark.sql.types.MapType` with :class:`~pyspark.sql.types.StringType`
+    as keys type, :class:`~pyspark.sql.types.StructType` or :class:`~pyspark.sql.types.ArrayType` with
     the specified schema. Returns `null`, in the case of an unparsable string.
 
     .. versionadded:: 2.1.0
@@ -22902,7 +22904,7 @@ def from_json(
     col : :class:`~pyspark.sql.Column` or str
         A column that evaluates to a string.
         a column or column name in JSON format
-    schema : :class:`~StructType`, :class:`~ArrayType`, :class:`~MapType`, or str
+    schema : :class:`~pyspark.sql.types.StructType`, :class:`~pyspark.sql.types.ArrayType`, :class:`~pyspark.sql.types.MapType`, or str
         a StructType, ArrayType of StructType, MapType, or Python string literal with a DDL-formatted string
         A column that evaluates to a string, or a DDL-formatted type string, or a DataType.
         to use when parsing the json column
@@ -23011,7 +23013,7 @@ def try_parse_json(
     col: "ColumnOrName",
 ) -> Column:
     """
-    Parses a column containing a JSON string into a :class:`~VariantType`. Returns None if a string
+    Parses a column containing a JSON string into a :class:`~pyspark.sql.types.VariantType`. Returns None if a string
     contains an invalid JSON value.
 
     .. versionadded:: 4.0.0
@@ -23099,7 +23101,7 @@ def parse_json(
     col: "ColumnOrName",
 ) -> Column:
     """
-    Parses a column containing a JSON string into a :class:`~VariantType`. Throws exception if a
+    Parses a column containing a JSON string into a :class:`~pyspark.sql.types.VariantType`. Throws exception if a
     string represents an invalid JSON value.
 
     .. versionadded:: 4.0.0
@@ -23809,8 +23811,8 @@ def schema_of_variant_agg(v: "ColumnOrName") -> Column:
 @_try_remote_functions
 def to_json(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     """
-    Converts a column containing a :class:`StructType`, :class:`ArrayType`, :class:`MapType`
-    or a :class:`VariantType` into a JSON string. Throws an exception, in the case of an unsupported type.
+    Converts a column containing a :class:`~pyspark.sql.types.StructType`, :class:`~pyspark.sql.types.ArrayType`, :class:`~pyspark.sql.types.MapType`
+    or a :class:`~pyspark.sql.types.VariantType` into a JSON string. Throws an exception, in the case of an unsupported type.
 
     .. versionadded:: 2.1.0
 
@@ -23957,7 +23959,7 @@ def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a string representation of a :class:`StructType` parsed from given JSON.
+        a string representation of a :class:`~pyspark.sql.types.StructType` parsed from given JSON.
         Returns a column that evaluates to a string.
 
     Examples
@@ -24066,7 +24068,7 @@ def from_xml(
     col : :class:`~pyspark.sql.Column` or str
         A column that evaluates to a string.
         a column or column name in XML format
-    schema : :class:`StructType`, :class:`~pyspark.sql.Column` or str
+    schema : :class:`~pyspark.sql.types.StructType`, :class:`~pyspark.sql.Column` or str
         a StructType, Column or Python string literal with a DDL-formatted string
         A column that evaluates to a string, or a DDL-formatted type string, or a DataType.
         to use when parsing the Xml column
@@ -24097,7 +24099,7 @@ def from_xml(
     >>> df.select(sf.from_xml(df.value, schema).alias("xml")).collect()
     [Row(xml=Row(a=1))]
 
-    Example 2: Parsing XML with a :class:`StructType` schema
+    Example 2: Parsing XML with a :class:`~pyspark.sql.types.StructType` schema
 
     >>> import pyspark.sql.functions as sf
     >>> from pyspark.sql.types import StructType, LongType
@@ -24111,7 +24113,7 @@ def from_xml(
     |            {1}|
     +---------------+
 
-    Example 3: Parsing XML with :class:`ArrayType` in schema
+    Example 3: Parsing XML with :class:`~pyspark.sql.types.ArrayType` in schema
 
     >>> import pyspark.sql.functions as sf
     >>> data = [(1, '<p><a>1</a><a>2</a></p>')]
@@ -24189,7 +24191,7 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a string representation of a :class:`StructType` parsed from given XML.
+        a string representation of a :class:`~pyspark.sql.types.StructType` parsed from given XML.
         Returns a column that evaluates to a string.
 
     Examples
@@ -24267,7 +24269,7 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
 @_try_remote_functions
 def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     """
-    Converts a column containing a :class:`~StructType` into a XML string.
+    Converts a column containing a :class:`~pyspark.sql.types.StructType` into a XML string.
     Throws an exception, in the case of an unsupported type.
 
     .. versionadded:: 4.0.0
@@ -24288,7 +24290,7 @@ def to_xml(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a XML string converted from given :class:`StructType`.
+        a XML string converted from given :class:`~pyspark.sql.types.StructType`.
         Returns a column that evaluates to a string.
 
     Examples
@@ -24344,7 +24346,7 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A string representation of a :class:`StructType` parsed from the given CSV.
+        A string representation of a :class:`~pyspark.sql.types.StructType` parsed from the given CSV.
         Returns a column that evaluates to a string.
 
     Examples
@@ -24412,7 +24414,7 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
 @_try_remote_functions
 def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> Column:
     """
-    CSV Function: Converts a column containing a :class:`~StructType` into a CSV string.
+    CSV Function: Converts a column containing a :class:`~pyspark.sql.types.StructType` into a CSV string.
     Throws an exception, in the case of an unsupported type.
 
     .. versionadded:: 3.0.0
@@ -24436,7 +24438,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Mapping[str, str]] = None) -> 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A CSV string converted from the given :class:`StructType`.
+        A CSV string converted from the given :class:`~pyspark.sql.types.StructType`.
         Returns a column that evaluates to a string.
 
     Examples
@@ -33423,10 +33425,10 @@ def udf(
         .. versionchanged:: 4.1.0
            Supports vectorized function by specifiying the type hints.
 
-    returnType : :class:`pyspark.sql.types.DataType` or str, optional
+    returnType : :class:`~pyspark.sql.types.ArrayType` or str, optional
         the return type of the user-defined function. The value can be either a
-        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-        Defaults to :class:`~StringType`.
+        :class:`~pyspark.sql.types.ArrayType` object or a DDL-formatted type string.
+        Defaults to :class:`~pyspark.sql.types.StringType`.
     useArrow : bool, optional
         whether to use Arrow to optimize the (de)serialization. When it is None, the
         Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect.
@@ -33602,9 +33604,9 @@ def udtf(
     ----------
     cls : class, optional
         the Python user-defined table function handler class.
-    returnType : :class:`pyspark.sql.types.StructType` or str, optional
+    returnType : :class:`~pyspark.sql.types.StructType` or str, optional
         the return type of the user-defined table function. The value can be either a
-        :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+        :class:`~pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
         If None, the handler class must provide `analyze` static method.
     useArrow : bool, optional
         whether to use Arrow to optimize the (de)serializations. When it's set to None, the
@@ -33647,12 +33649,12 @@ def udtf(
     The `analyze` static method should take arguments:
 
     - The number and order of arguments are the same as the UDTF inputs
-    - Each argument is a :class:`pyspark.sql.udtf.AnalyzeArgument`, containing:
+    - Each argument is a :class:`~pyspark.sql.udtf.AnalyzeArgument`, containing:
       - dataType: DataType
       - value: Any: the calculated value if the argument is foldable; otherwise None
       - isTable: bool: True if the argument is a table argument
 
-    and return a :class:`pyspark.sql.udtf.AnalyzeResult`, containing.
+    and return a :class:`~pyspark.sql.udtf.AnalyzeResult`, containing.
 
     - schema: StructType
 
@@ -33769,9 +33771,9 @@ def arrow_udtf(
     ----------
     cls : class, optional
         the Python user-defined table function handler class.
-    returnType : :class:`pyspark.sql.types.StructType` or str, optional
+    returnType : :class:`~pyspark.sql.types.StructType` or str, optional
         the return type of the user-defined table function. The value can be either a
-        :class:`pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
+        :class:`~pyspark.sql.types.StructType` object or a DDL-formatted struct type string.
 
     Examples
     --------

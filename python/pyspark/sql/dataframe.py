@@ -6434,7 +6434,7 @@ class DataFrame:
 
         Returns
         -------
-        :class:`MergeIntoWriter`
+        :class:`~pyspark.sql.merge.MergeIntoWriter`
             MergeIntoWriter to use further to specify how to merge the source DataFrame
             into the target table.
 
