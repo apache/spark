@@ -3991,6 +3991,13 @@ private[spark] class DAGScheduler(
         // Drop immediately: the group is being failed as a unit, so this consumer's buffered
         // successes must not be applied no matter what its other producers do. Removing the entry
         // now leaves no deferral state to go stale for a later re-co-scheduling of this stage.
+        // This treats producerFailed as terminal, which holds for every producer-failure path that
+        // reaches here EXCEPT a barrier stage that fails a task and is resubmitted (its handler
+        // calls markStageAsFinished(errorMessage) without willRetry=true, then resubmits):
+        // there, dropping a fan-in consumer's deferral for a producer that will retry loses that
+        // consumer's buffered results. A barrier stage in a pipelined group is rejected up front by
+        // a later PR in this stack (checkPipelinedProducerSupported), which removes this path; on
+        // this PR standalone it is a known, narrow limitation (barrier producer + fan-in consumer).
         dependentStageMap -= consumer
         val events = deferral.delayedTaskCompletionEvents.toList
         logInfo(log"Dropping ${MDC(NUM_EVENTS, events.size.toLong)} deferred completion(s) for " +
