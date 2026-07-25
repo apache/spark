@@ -406,20 +406,59 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("empty filtered global aggregate stage is not treated as non-empty") {
+  test("empty filtered global aggregate stage preserves its single output row") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
       withTempView("empty_rows") {
         spark.range(1).where("id < 0").createOrReplaceTempView("empty_rows")
 
-        val df = sql(
-          "SELECT * FROM testData LEFT ANTI JOIN " +
-            "(SELECT count(*) c FROM empty_rows HAVING c < 0) r")
+        val globalAggregate = sql(
+          "SELECT count(*) AS c FROM " +
+            "(SELECT /*+ REPARTITION(2) */ id FROM empty_rows ORDER BY id) sorted_empty_rows")
+        checkAnswer(globalAggregate, Row(0L))
+        val finalAggregatePlan = stripAQEPlan(globalAggregate.queryExecution.executedPlan)
+        assert(!finalAggregatePlan.isInstanceOf[EmptyRelationExec])
 
-        checkAnswer(df, testData.collect().toSeq)
+        val df = sql(
+          "SELECT l.* FROM testData l LEFT ANTI JOIN " +
+            "(SELECT count(*) AS c FROM empty_rows HAVING count(*) = 0) r " +
+            "ON l.key = r.c + 1")
+
+        checkAnswer(df, testData.filter($"key" =!= 1).collect().toSeq)
       }
     }
+  }
+
+  test("limit wrappers propagate only provably empty query stages") {
+    val getEstimatedRowCount =
+      PrivateMethod[Option[BigInt]](Symbol("getEstimatedRowCount"))
+    val scan = LocalTableScanExec(Nil, Nil, None)
+
+    val unknownStage = TestExchangeQueryStageExec(0, scan, scan)
+    val emptyStage = TestExchangeQueryStageExec(
+      1, scan, scan, runtimeRowCount = Some(BigInt(0)))
+    emptyStage.resultOption.set(Some(()))
+    val nonEmptyStage = TestExchangeQueryStageExec(
+      2, scan, scan, runtimeRowCount = Some(BigInt(10)))
+    nonEmptyStage.resultOption.set(Some(()))
+
+    def estimatedRowCount(plan: SparkPlan): Option[BigInt] =
+      AQEPropagateEmptyRelation.invokePrivate(getEstimatedRowCount(plan))
+
+    assert(estimatedRowCount(LocalLimitExec(0, unknownStage)).contains(BigInt(0)))
+    assert(estimatedRowCount(GlobalLimitExec(0, unknownStage)).contains(BigInt(0)))
+
+    assert(estimatedRowCount(LocalLimitExec(5, emptyStage)).contains(BigInt(0)))
+    assert(estimatedRowCount(GlobalLimitExec(5, emptyStage)).contains(BigInt(0)))
+    assert(estimatedRowCount(GlobalLimitExec(5, emptyStage, offset = 2)).contains(BigInt(0)))
+    assert(estimatedRowCount(GlobalLimitExec(-1, emptyStage, offset = 2)).contains(BigInt(0)))
+
+    assert(estimatedRowCount(LocalLimitExec(5, unknownStage)).isEmpty)
+    assert(estimatedRowCount(GlobalLimitExec(5, unknownStage)).isEmpty)
+    assert(estimatedRowCount(LocalLimitExec(1, nonEmptyStage)).isEmpty)
+    assert(estimatedRowCount(GlobalLimitExec(1, nonEmptyStage, offset = 99)).isEmpty)
   }
 
   test("obsolete stage cancellation preserves shared reused exchange stages") {
@@ -436,15 +475,48 @@ class AdaptiveQueryExecSuite
 
       val sharedCancelledIds = adaptivePlan.invokePrivate(
         cancelObsoleteStages(replacementPlan, Seq(sharedStage)))
-      assert(sharedCancelledIds == Seq(sharedStage.id))
+      assert(sharedCancelledIds.isEmpty)
       assert(!sharedStage.cancelled)
 
-      val unsharedStage = TestExchangeQueryStageExec(
+      val materializedStage = TestExchangeQueryStageExec(
         1, LocalTableScanExec(Nil, Nil, None), LocalTableScanExec(Nil, Nil, None))
+      materializedStage.resultOption.set(Some(()))
+      val materializedCancelledIds = adaptivePlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(materializedStage)))
+      assert(materializedCancelledIds.isEmpty)
+      assert(!materializedStage.cancelled)
+
+      val retainedStage = TestExchangeQueryStageExec(
+        2, LocalTableScanExec(Nil, Nil, None), LocalTableScanExec(Nil, Nil, None))
+      val retainedCancelledIds = adaptivePlan.invokePrivate(
+        cancelObsoleteStages(retainedStage, Seq(retainedStage)))
+      assert(retainedCancelledIds.isEmpty)
+      assert(!retainedStage.cancelled)
+
+      val reusedStage = TestExchangeQueryStageExec(
+        3, LocalTableScanExec(Nil, Nil, None), LocalTableScanExec(Nil, Nil, None))
+      val reusedReplacementStage = reusedStage.newReuseInstance(4, reusedStage.output)
+      val reusedCancelledIds = adaptivePlan.invokePrivate(
+        cancelObsoleteStages(reusedReplacementStage, Seq(reusedStage)))
+      assert(reusedCancelledIds.isEmpty)
+      assert(!reusedStage.cancelled)
+
+      val unsharedStage = TestExchangeQueryStageExec(
+        5, LocalTableScanExec(Nil, Nil, None), LocalTableScanExec(Nil, Nil, None))
       val unsharedCancelledIds = adaptivePlan.invokePrivate(
         cancelObsoleteStages(replacementPlan, Seq(unsharedStage)))
       assert(unsharedCancelledIds == Seq(unsharedStage.id))
       assert(unsharedStage.cancelled)
+
+      val failedStage = TestExchangeQueryStageExec(
+        6,
+        LocalTableScanExec(Nil, Nil, None),
+        LocalTableScanExec(Nil, Nil, None),
+        cancelFailure = Some(new IllegalStateException("test stage cancellation failed")))
+      val failedCancelledIds = adaptivePlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(failedStage)))
+      assert(failedCancelledIds.isEmpty)
+      assert(!failedStage.cancelled)
     }
   }
 
@@ -4356,15 +4428,21 @@ class AdaptiveQueryExecSuite
 private case class TestExchangeQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
-    override val _canonicalized: SparkPlan) extends ExchangeQueryStageExec {
+    override val _canonicalized: SparkPlan,
+    runtimeRowCount: Option[BigInt] = None,
+    cancelFailure: Option[Throwable] = None) extends ExchangeQueryStageExec {
   @volatile var cancelled: Boolean = false
 
   override protected def doMaterialize(): Future[Any] = Future.successful(())
 
   override def getRuntimeStatistics: org.apache.spark.sql.catalyst.plans.logical.Statistics =
-    org.apache.spark.sql.catalyst.plans.logical.Statistics(sizeInBytes = BigInt(0))
+    org.apache.spark.sql.catalyst.plans.logical.Statistics(
+      sizeInBytes = BigInt(0), rowCount = runtimeRowCount)
 
   override protected def doCancel(reason: String): Unit = {
+    cancelFailure.foreach { failure =>
+      throw failure
+    }
     cancelled = true
   }
 

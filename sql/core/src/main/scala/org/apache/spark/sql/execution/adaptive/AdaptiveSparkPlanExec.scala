@@ -437,18 +437,21 @@ case class AdaptiveSparkPlanExec(
           if !newStages.exists(newStage =>
             newStage.id == stage.id || newStage.resultOption.eq(stage.resultOption)) => stage
     }
-    obsoleteStages.foreach { stage =>
+    obsoleteStages.flatMap { stage =>
       if (!stage.isMaterialized && !context.isSharedStageResult(stage.resultOption)) {
         removeStageFromCache(stage)
         try {
           stage.cancel("The query stage is no longer referenced by the current adaptive plan.")
+          Some(stage.id)
         } catch {
           case NonFatal(t) =>
             logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)
+            None
         }
+      } else {
+        None
       }
     }
-    obsoleteStages.map(_.id)
   }
 
   private def removeStageFromCache(stage: ExchangeQueryStageExec): Unit = {
