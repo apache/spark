@@ -37,15 +37,14 @@ private[v1] class ConnectResource extends BaseAppResource {
     sessions.map(prepareSessionData)
   }
 
-  // A session is identified by the composite (userId, sessionId): two users may share the same
-  // session UUID, so userId is required to resolve exactly one session. userId is an opaque
-  // identifier passed as a base64url token so it survives the UI request sanitization intact.
+  // Sessions are keyed by (userId, sessionId), so userId is required. It is a base64url token (see
+  // ConnectUiUtils); an empty token is a valid empty user id, so only an absent param is rejected.
   @GET
   @Path("sessions/{sessionId}")
   def session(
       @PathParam("sessionId") sessionId: String,
       @QueryParam("userId") userId: String): SessionData = withUI { ui =>
-    if (userId == null || userId.isEmpty) {
+    if (userId == null) {
       throw new BadParameterException("userId is required.")
     }
     val decodedUserId =

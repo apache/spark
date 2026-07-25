@@ -31,13 +31,9 @@ import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.util.Utils
 
-/**
- * userId is an opaque, arbitrary-character identifier that is now part of a session's natural
- * key. The Spark UI wraps every request in XssSafeRequest, which strips characters such as
- * apostrophes and HTML-escapes others, so a raw userId cannot survive a round trip through a page
- * link. Encode it as unpadded base64url, whose alphabet (A-Za-z0-9-_) passes through that
- * sanitization and the PagedTable parameter re-echo untouched.
- */
+// userId is part of a session's natural key but is opaque and arbitrary. It is carried through UI
+// links as unpadded base64url, whose alphabet (A-Za-z0-9-_) survives XssSafeRequest sanitization
+// and the PagedTable parameter re-echo unchanged.
 private[spark] object ConnectUiUtils {
   def encodeUserId(userId: String): String =
     Base64.getUrlEncoder.withoutPadding.encodeToString(userId.getBytes(UTF_8))

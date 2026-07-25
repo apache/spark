@@ -25,6 +25,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.connect.SparkConnectServerTest
+import org.apache.spark.sql.connect.service.SparkListenerConnectSessionStarted
 import org.apache.spark.sql.connect.ui.ExecutionState
 import org.apache.spark.util.Utils
 
@@ -110,6 +111,25 @@ class ConnectResourceWithActualDataSuite extends SparkConnectServerTest {
       assert(oneOp.operationId === op.get.operationId)
       assert(oneOp.jobTag === op.get.jobTag)
     }
+  }
+
+  test("SPARK-58097: session with an empty user id is addressable via an empty userId token") {
+    // An empty user id is valid (the protobuf default), and its base64url token is the empty
+    // string. The JVM client rejects it, so post the event directly to populate the store.
+    val sessionId = java.util.UUID.randomUUID.toString
+    spark.sparkContext.listenerBus.post(
+      SparkListenerConnectSessionStarted(sessionId, "", System.currentTimeMillis()))
+    spark.sparkContext.listenerBus.waitUntilEmpty(eventuallyTimeout.toMillis)
+
+    eventuallyWithTimeout {
+      val one = JsonMethods
+        .parse(getOk(s"/sessions/$sessionId?userId="))
+        .extract[TestSessionData]
+      assert(one.sessionId === sessionId)
+      assert(one.userId === "")
+    }
+    // An absent userId parameter is still rejected.
+    assert(get(new URI(s"$baseUrl/sessions/$sessionId").toURL)._1 === 400)
   }
 
   test("SPARK-57941: operation with a user id containing '/' is fetchable via the jobTag query") {

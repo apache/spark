@@ -38,8 +38,7 @@ private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
   def render(request: HttpServletRequest): Seq[Node] = {
     val sessionId = request.getParameter("id")
     require(sessionId != null && sessionId.nonEmpty, "Missing id parameter")
-    // userId is an opaque identifier and part of the session's natural key, so it is carried in the
-    // link as a base64url token that survives the UI's XSS request sanitization intact.
+    // userId arrives as a base64url token; see ConnectUiUtils.
     val userIdParam = request.getParameter("userId")
     require(userIdParam != null, "Missing userId parameter")
     val userId = ConnectUiUtils.decodeUserId(userIdParam)

@@ -141,12 +141,12 @@ class SparkConnectServerListenerSuite
       val (statusStore: SparkConnectServerAppStatusStore, listener: SparkConnectServerListener) =
         createAppStatusStore(live, sessionLimit = 10)
       val sessionId = "shared-session-uuid"
-      // Two different users open a session with the same UUID; Spark Connect keeps them distinct.
+      // Two users share the same session UUID; Spark Connect must keep them distinct.
       listener.onOtherEvent(
         SparkListenerConnectSessionStarted(sessionId, "userA", System.currentTimeMillis()))
       listener.onOtherEvent(
         SparkListenerConnectSessionStarted(sessionId, "userB", System.currentTimeMillis()))
-      // Register one operation against userA's session only.
+      // One operation against userA's session only.
       listener.onOtherEvent(
         SparkListenerConnectOperationStarted(
           ExecuteJobTag("userA", sessionId, "operationId"),
@@ -157,38 +157,33 @@ class SparkConnectServerListenerSuite
           "userName",
           "dummy query",
           Set()))
-      // Close userA's session; userB's must remain open (only observable in the live store).
       listener.onOtherEvent(SparkListenerConnectSessionClosed(sessionId, "userA", 1000L))
       if (live) {
         assert(statusStore.getOnlineSessionNum === 1)
         assert(statusStore.getSession("userB", sessionId).exists(_.finishTimestamp === 0))
       }
-      // Close userB's session at a different time so the history store also has both records.
+      // Close userB at a distinct time so the history store also records both.
       listener.onOtherEvent(SparkListenerConnectSessionClosed(sessionId, "userB", 2000L))
 
       if (!live) {
         kvstore.close(false)
       }
 
-      // The two sessions are stored as separate records and did not collapse.
+      // The sessions stay separate: distinct counts and close times, no collapse.
       assert(statusStore.getSessionCount === 2)
       val sessionA = statusStore.getSession("userA", sessionId)
       val sessionB = statusStore.getSession("userB", sessionId)
       assert(sessionA.isDefined && sessionB.isDefined)
-      // The operation count did not leak from userA's session into userB's.
       assert(sessionA.get.totalExecution === 1)
       assert(sessionB.get.totalExecution === 0)
-      // Each session kept its own close time, i.e. closing one did not finish the other.
       assert(sessionA.get.finishTimestamp === 1000L)
       assert(sessionB.get.finishTimestamp === 2000L)
     }
   }
 
   test("SPARK-58097: getSession falls back to a scan for legacy sessionId-keyed rows") {
-    // A History Server disk store written by an older Spark keys SessionInfo on sessionId alone,
-    // so a composite-key read misses while the row is still enumerable via the view. Simulate that
-    // by making the composite-key read of SessionInfo fail; the row remains reachable through the
-    // view, exactly as a legacy on-disk store presents it after an upgrade with no replay.
+    // A legacy store keys SessionInfo on sessionId alone, so the composite-key read misses while
+    // the row is still enumerable via the view. Force that read to fail to reproduce it.
     val legacyStore = new InMemoryStore {
       override def read[T](klass: Class[T], naturalKey: Object): T = {
         if (klass == classOf[SessionInfo]) throw new NoSuchElementException()
@@ -204,7 +199,7 @@ class SparkConnectServerListenerSuite
     assert(session.get.userId === "userA")
     assert(session.get.sessionId === sessionId)
     assert(session.get.totalExecution === 3L)
-    // A composite-key miss with no matching row still returns None.
+    // A miss with no matching row still returns None.
     assert(store.getSession("userB", sessionId).isEmpty)
   }
 
