@@ -11619,12 +11619,12 @@ def datepart(field: Column, source: "ColumnOrName") -> Column:
         selects which part of the source should be extracted, and supported string values
         are as same as the fields of the equivalent function `extract`.
     source : :class:`~pyspark.sql.Column` or column name
-        a date/timestamp or interval column from where `field` should be extracted.
+        a date, time, timestamp or interval column from where `field` should be extracted.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a part of the date/timestamp or interval source.
+        a part of the date, time, timestamp or interval source.
         Returns a column whose type depends on the field to extract, e.g. an integer
         for ``YEAR`` and a decimal for ``SECOND``.
 
@@ -16309,6 +16309,7 @@ def instr(
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.locate`
     :meth:`pyspark.sql.functions.substr`
     :meth:`pyspark.sql.functions.substring`
     :meth:`pyspark.sql.functions.substring_index`
@@ -33183,6 +33184,7 @@ def bitmap_bucket_number(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         The input column.
+        A column that evaluates to a long.
 
     Returns
     -------
