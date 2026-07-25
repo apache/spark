@@ -89,7 +89,6 @@ RUN python3.12 -m pip install \
     'grpcio==1.76.0' \
     'zstandard==0.25.0' \
     'ipython' \
-    'jinja2' \
     'matplotlib' \
     'mypy==1.19.1' \
     'numpy==2.4.1' \

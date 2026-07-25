@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{Closeable, InputStream}
+import java.io.{Closeable, File, FileOutputStream, InputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.{NonWritableChannelException, SeekableByteChannel}
 import java.util.Locale
@@ -37,9 +37,11 @@ import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.util.LineReader
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.HadoopFSUtils
+import org.apache.spark.paths.SparkPath
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.util.{HadoopFSUtils, Utils}
 
 /**
  * Mixed into a file-based data source to let it read tar/zip/7z archives of its files, treating an
@@ -91,9 +93,106 @@ trait SupportsArchiveFormat extends Logging {
     }
   }
 
+  /** Which archive entries are data files of this format; others are skipped. */
+  protected def archiveEntryFilter(name: String): Boolean =
+    throw new UnsupportedOperationException(
+      s"${getClass.getName} does not support random-access archive reads")
+
+  /**
+   * Reads an archive by unpacking each entry to a temp file and applying `readEntry`, for a
+   * format that needs a complete file on disk (random access).
+   *
+   * @param file       the archive as a [[PartitionedFile]]
+   * @param conf       Hadoop configuration used to open the archive
+   * @param tempPrefix prefix for the per-task temp dir the entries are unpacked into
+   * @param readEntry  reads one unpacked entry file into rows
+   * @return iterator of rows across all entries
+   */
+  protected def readLocalizedEntries(
+      file: PartitionedFile,
+      conf: Configuration,
+      tempPrefix: String)(
+      readEntry: PartitionedFile => Iterator[InternalRow]): Iterator[InternalRow] = {
+    val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), tempPrefix)
+    // Register cleanup before constructing `entries`, which can throw before returning an iterator
+    // that FileScanRDD could close.
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ =>
+      Utils.deleteRecursively(tempDir)
+    })
+    val entries =
+      try SupportsArchiveFormat.localizeEntries(file.toPath, conf, tempDir, archiveEntryFilter)
+      catch {
+        case NonFatal(e) =>
+          Utils.deleteRecursively(tempDir)
+          throw e
+      }
+
+    // Element type is `Object`, not `InternalRow`: a batch scan yields `ColumnarBatch`.
+    val rows = new Iterator[Object] with Closeable {
+      private var current: Iterator[Object] = Iterator.empty
+      private var currentFile: File = _
+      private var done = false
+
+      private def releaseCurrent(): Unit = {
+        current match {
+          case c: Closeable => try c.close() catch { case NonFatal(_) => }
+          case _ =>
+        }
+        current = Iterator.empty
+        if (currentFile != null) {
+          currentFile.delete()
+          currentFile = null
+        }
+      }
+
+      // Advance on `hasNext`, not `next`, so a reader reusing a mutable batch is not probed early.
+      private def advance(): Unit = {
+        while (!done && !current.hasNext) {
+          releaseCurrent()
+          if (entries.hasNext) {
+            val (_, entryFile) = entries.next()
+            currentFile = entryFile
+            current = readEntry(file.copy(
+              filePath = SparkPath.fromUri(entryFile.toURI),
+              start = 0L,
+              length = entryFile.length(),
+              fileSize = entryFile.length(),
+              modificationTime = file.modificationTime)).asInstanceOf[Iterator[Object]]
+          } else {
+            done = true
+          }
+        }
+      }
+
+      override def hasNext: Boolean = {
+        advance()
+        !done
+      }
+
+      override def next(): Object = {
+        if (!hasNext) throw new NoSuchElementException
+        current.next()
+      }
+
+      override def close(): Unit = {
+        done = true
+        releaseCurrent()
+        entries match {
+          case c: Closeable => try c.close() catch { case NonFatal(_) => }
+          case _ =>
+        }
+      }
+    }
+
+    rows.asInstanceOf[Iterator[InternalRow]]
+  }
+
 }
 
 object SupportsArchiveFormat {
+
+  // Basename chars unsafe in a temp file name; precompiled since it runs per entry.
+  private val unsafeEntryNameChars = Pattern.compile("[^A-Za-z0-9._-]")
 
   /**
    * Whether the file path is a supported archive format.
@@ -257,6 +356,47 @@ object SupportsArchiveFormat {
     }
     entries
   }
+
+  /**
+   * Copies one archive entry's bytes to a fresh temp file under localDir.
+   *
+   * @param in        the entry's byte stream, positioned at the entry start
+   * @param localDir  directory the temp file is created under
+   * @param entryName the entry's archive path; its sanitized basename names the temp file
+   * @return the temp [[File]] holding the entry's bytes
+   */
+  def copyEntryToLocalFile(in: InputStream, localDir: File, entryName: String): File = {
+    val rawBasename = entryName.substring(entryName.lastIndexOf('/') + 1)
+    val basename = unsafeEntryNameChars.matcher(rawBasename).replaceAll("_")
+    val local = File.createTempFile("archive-entry-", "-" + basename, localDir)
+    val out = new FileOutputStream(local)
+    try Utils.copyStream(in, out) finally out.close()
+    local
+  }
+
+  /**
+   * Materializes each entry passing `entryFilter` to a fresh temp file under `localDir`, lazily one
+   * at a time. Yields `(entryName, localFile)`; the caller owns deleting each file. On the
+   * companion so executor-side callers (a format's distributed archive inference) can use it
+   * without a trait instance.
+   *
+   * @param path        the archive path
+   * @param conf        Hadoop configuration used to open the archive
+   * @param localDir    directory the per-entry temp files are created under
+   * @param entryFilter which entry names to keep
+   */
+  def localizeEntries(
+      path: Path,
+      conf: Configuration,
+      localDir: File,
+      entryFilter: String => Boolean): Iterator[(String, File)] =
+    readArchiveEntries(path, conf) { (name, in) =>
+      if (entryFilter(name)) {
+        Iterator.single((name, copyEntryToLocalFile(in, localDir, name)))
+      } else {
+        Iterator.empty
+      }
+    }
 
 }
 
