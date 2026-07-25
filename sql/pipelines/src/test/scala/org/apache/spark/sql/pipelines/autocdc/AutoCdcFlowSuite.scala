@@ -776,8 +776,8 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   // SCD2 `TRACK HISTORY ON (...)` populates trackHistorySelection. These tests lock in that an
   // unresolvable or ineligible (key / dropped-by-column-selection) tracking column is rejected at
   // flow construction rather than deferring to the first microbatch's reconciliation, mirroring
-  // the keys-presence validator above. A resolvable selection passes the check; construction then
-  // proceeds to force `schema`, which currently throws AUTOCDC_SCD2_NOT_SUPPORTED.
+  // the keys-presence validator above. A resolvable selection passes the check and the flow
+  // constructs successfully.
   // ===========================================================================================
 
   test(
@@ -861,37 +861,32 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   test(
     "an SCD2 flow with a resolvable track-history selection passes the check"
   ) {
-    // `name` is an eligible tracking column, so the construction-time check passes; construction
-    // then forces `schema`, which throws AUTOCDC_SCD2_NOT_SUPPORTED. Observing that error (rather
-    // than AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA) confirms the track-history check did NOT fire.
-    val ex = intercept[AnalysisException] {
-      newAutoCdcMergeFlow(
-        sourceDf = threeColumnSourceDf(),
-        storedAsScdType = ScdType.Type2,
-        trackHistorySelection = Some(
-          ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))
-        )
+    // `name` is an eligible tracking column, so the construction-time check passes and the flow
+    // constructs successfully, resolving its SCD2 schema (no AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA).
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2,
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))
       )
-    }
-    assert(ex.getCondition == "AUTOCDC_SCD2_NOT_SUPPORTED")
+    )
+    assert(resolvedFlow.schema.fieldNames.contains(AutoCdcReservedNames.cdcMetadataColName))
   }
 
   test(
     "track-history validation respects case-insensitive analysis"
   ) {
     // With caseSensitive=false, `NAME` resolves to the eligible `name`, so the check passes and
-    // construction proceeds to the SCD2-not-supported gate.
+    // the flow constructs successfully.
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val ex = intercept[AnalysisException] {
-        newAutoCdcMergeFlow(
-          sourceDf = threeColumnSourceDf(),
-          storedAsScdType = ScdType.Type2,
-          trackHistorySelection = Some(
-            ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("NAME")))
-          )
+      val resolvedFlow = newAutoCdcMergeFlow(
+        sourceDf = threeColumnSourceDf(),
+        storedAsScdType = ScdType.Type2,
+        trackHistorySelection = Some(
+          ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("NAME")))
         )
-      }
-      assert(ex.getCondition == "AUTOCDC_SCD2_NOT_SUPPORTED")
+      )
+      assert(resolvedFlow.schema.fieldNames.contains(AutoCdcReservedNames.cdcMetadataColName))
     }
   }
 
