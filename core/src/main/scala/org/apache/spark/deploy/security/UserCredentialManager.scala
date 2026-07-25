@@ -33,7 +33,7 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.security._
 import org.apache.spark.ui.UIUtils
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Manager for OIDC-based credential propagation on the driver.
@@ -51,7 +51,7 @@ import org.apache.spark.util.ThreadUtils
  *   5. Retries with exponential backoff on failure
  *
  * Intended to be started from `CoarseGrainedSchedulerBackend.start()` when
- * `spark.security.credentials.enabled=true`, independently of
+ * `spark.security.oidc.enabled=true`, independently of
  * `UserGroupInformation.isSecurityEnabled()`.
  *
  * Lifecycle: call `start()` exactly once, then `stop()` to shut down.
@@ -71,10 +71,11 @@ private[spark] class UserCredentialManager(
   private val maxBackoffMs: Long = UserCredentialManager.MAX_BACKOFF_MS
 
   @volatile private var renewalExecutor: ScheduledExecutorService = _
+  @volatile private var stopped = false
 
-  // Pre-compute the filtered credential configuration map (SparkConf is immutable).
+  // Snapshot of credential-related configuration at construction time.
   private val credentialConfMap: java.util.Map[String, String] = sparkConf.getAll
-    .filter(_._1.startsWith("spark.security.credentials."))
+    .filter(_._1.startsWith("spark.security.oidc."))
     .toMap.asJava
 
   /**
@@ -106,7 +107,7 @@ private[spark] class UserCredentialManager(
       log"(issuer: ${MDC(LogKeys.URI, ctx.getIssuer)})")
 
     val (credentials, earliestExpiry) = resolveCredentials(ctx)
-    val serialized = serializeUserCredentials(credentials)
+    val serialized = UserCredentialManager.serializeUserCredentials(credentials)
 
     // Propagate initial credentials
     onCredentialsUpdate(serialized)
@@ -114,6 +115,10 @@ private[spark] class UserCredentialManager(
     // Create the renewal executor only after successful initial acquisition.
     // This avoids leaking a daemon thread if the fail-fast path throws, and
     // keeps the require() guard valid for retry scenarios.
+    // Check stopped flag to handle the race where stop() is called during start().
+    if (stopped) {
+      return serialized
+    }
     renewalExecutor =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("user-credential-renewal")
 
@@ -127,6 +132,7 @@ private[spark] class UserCredentialManager(
   }
 
   def stop(): Unit = {
+    stopped = true
     if (renewalExecutor != null) {
       renewalExecutor.shutdownNow()
     }
@@ -150,7 +156,7 @@ private[spark] class UserCredentialManager(
         log"(issuer: ${MDC(LogKeys.URI, ctx.getIssuer)})")
 
       val (credentials, earliestExpiry) = resolveCredentials(ctx)
-      val serialized = serializeUserCredentials(credentials)
+      val serialized = UserCredentialManager.serializeUserCredentials(credentials)
 
       // Propagate credentials to executors. Errors here are logged separately
       // so that credential-fetch success is not conflated with distribution failure.
@@ -244,7 +250,7 @@ private[spark] class UserCredentialManager(
    * Discover all schemes that have at least one registered provider.
    *
    * Schemes are determined by explicit configuration keys of the form
-   * `spark.security.credentials.provider.<scheme>`. If no explicit configuration
+   * `spark.security.oidc.provider.<scheme>`. If no explicit configuration
    * exists, the method queries `CredentialProviderLoader` to discover all providers
    * registered via ServiceLoader and collects their supported schemes.
    *
@@ -255,10 +261,14 @@ private[spark] class UserCredentialManager(
    * logging a warning and continuing with remaining schemes.
    */
   private def discoverSchemes(): Set[String] = {
-    // Extract explicitly configured scheme -> provider mappings
+    // Extract explicitly configured scheme names.
+    // Keys are of the form spark.security.oidc.provider.<scheme> or
+    // spark.security.oidc.provider.<scheme>.<subkey>. We extract only the first
+    // segment after the prefix to get the scheme name.
+    val providerPrefix = "spark.security.oidc.provider."
     val explicitSchemes = credentialConfMap.asScala
-      .filter { case (k, _) => k.startsWith("spark.security.credentials.provider.") }
-      .map { case (k, _) => k.stripPrefix("spark.security.credentials.provider.") }
+      .filter { case (k, _) => k.startsWith(providerPrefix) }
+      .map { case (k, _) => k.stripPrefix(providerPrefix).split('.').head }
       .toSet
 
     if (explicitSchemes.nonEmpty) {
@@ -340,24 +350,6 @@ private[spark] class UserCredentialManager(
     }
   }
 
-  /**
-   * Serialize [[UserCredentials]] to a byte array using Java serialization.
-   */
-  private[security] def serializeUserCredentials(credentials: UserCredentials): Array[Byte] = {
-    val bos = new ByteArrayOutputStream()
-    try {
-      val oos = new ObjectOutputStream(bos)
-      try {
-        oos.writeObject(credentials)
-        oos.flush()
-      } finally {
-        oos.close()
-      }
-      bos.toByteArray
-    } finally {
-      bos.close()
-    }
-  }
 }
 
 private[spark] object UserCredentialManager {
@@ -420,6 +412,18 @@ private[spark] object UserCredentialManager {
   }
 
   /**
+   * Serialize [[UserCredentials]] to a byte array using Java serialization.
+   */
+  private[security] def serializeUserCredentials(credentials: UserCredentials): Array[Byte] = {
+    val bos = new ByteArrayOutputStream()
+    Utils.tryWithResource(new ObjectOutputStream(bos)) { oos =>
+      oos.writeObject(credentials)
+      oos.flush()
+    }
+    bos.toByteArray
+  }
+
+  /**
    * Deserialize [[UserCredentials]] from a byte array.
    *
    * Uses an [[ObjectInputFilter]] to restrict deserialized classes to only those
@@ -427,17 +431,10 @@ private[spark] object UserCredentialManager {
    */
   def deserializeUserCredentials(bytes: Array[Byte]): UserCredentials = {
     val bis = new java.io.ByteArrayInputStream(bytes)
-    try {
-      val ois = new ObjectInputStream(bis)
-      try {
-        ois.setObjectInputFilter(
-          ObjectInputFilter.Config.createFilter(DESERIALIZATION_FILTER))
-        ois.readObject().asInstanceOf[UserCredentials]
-      } finally {
-        ois.close()
-      }
-    } finally {
-      bis.close()
+    Utils.tryWithResource(new ObjectInputStream(bis)) { ois =>
+      ois.setObjectInputFilter(
+        ObjectInputFilter.Config.createFilter(DESERIALIZATION_FILTER))
+      ois.readObject().asInstanceOf[UserCredentials]
     }
   }
 }

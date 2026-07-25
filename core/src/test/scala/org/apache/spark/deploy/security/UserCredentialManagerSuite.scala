@@ -70,7 +70,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
     // Use CredentialProviderLoader with the FakeCredentialProvider from ServiceLoader
     // FakeCredentialProvider supports scheme "fake"
-    conf.set("spark.security.credentials.provider.fake",
+    conf.set("spark.security.oidc.provider.fake",
       "org.apache.spark.security.FakeCredentialProvider")
 
     val manager = new UserCredentialManager(
@@ -95,7 +95,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("start() throws when TokenIngestor returns empty (fail-fast)") {
     val conf = createSparkConf()
-    conf.set("spark.security.credentials.provider.fake",
+    conf.set("spark.security.oidc.provider.fake",
       "org.apache.spark.security.FakeCredentialProvider")
 
     val manager = new UserCredentialManager(
@@ -128,7 +128,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
 
     try {
-      val serialized = manager.serializeUserCredentials(original)
+      val serialized = UserCredentialManager.serializeUserCredentials(original)
       val deserialized = UserCredentialManager.deserializeUserCredentials(serialized)
 
       assert(deserialized.forScheme("s3a").isPresent)
@@ -334,12 +334,12 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val ex = intercept[IllegalArgumentException] {
       UserCredentialManager.create(conf, _ => ())
     }
-    assert(ex.getMessage.contains("spark.security.credentials.identityToken.file"))
+    assert(ex.getMessage.contains("spark.security.oidc.identityToken.file"))
   }
 
   test("renewal is scheduled after successful credential acquisition") {
     val conf = createSparkConf()
-    conf.set("spark.security.credentials.provider.fake",
+    conf.set("spark.security.oidc.provider.fake",
       "org.apache.spark.security.FakeCredentialProvider")
     val ctx = createUserContext(expiresInSeconds = 60)
     var callbackCount = 0
@@ -360,7 +360,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("stop() after start() does not throw") {
     val conf = createSparkConf()
-    conf.set("spark.security.credentials.provider.fake",
+    conf.set("spark.security.oidc.provider.fake",
       "org.apache.spark.security.FakeCredentialProvider")
     val ctx = createUserContext()
 
@@ -378,9 +378,9 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     // and still return credentials from "fake".
     val conf = createSparkConf()
     // Only set explicit provider for "fake", leave "shared" ambiguous
-    conf.set("spark.security.credentials.provider.fake",
+    conf.set("spark.security.oidc.provider.fake",
       "org.apache.spark.security.FakeCredentialProvider")
-    conf.set("spark.security.credentials.provider.shared", "nonexistent.Provider")
+    conf.set("spark.security.oidc.provider.shared", "nonexistent.Provider")
 
     val ctx = createUserContext()
     val callbackRef = new AtomicReference[Array[Byte]]()
@@ -410,7 +410,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
   test("per-provider error isolation: all providers fail throws IllegalStateException") {
     // Configure only "shared" with a non-existent provider class
     val conf = createSparkConf()
-    conf.set("spark.security.credentials.provider.shared", "nonexistent.Provider")
+    conf.set("spark.security.oidc.provider.shared", "nonexistent.Provider")
 
     val ctx = createUserContext()
 
@@ -430,7 +430,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val conf = createSparkConf()
       .set(SECURITY_CREDENTIALS_RENEWAL_SAFETY_MARGIN, 1000L) // 1s
       .set(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL, 500L)   // 0.5s
-    conf.set("spark.security.credentials.provider.fake",
+    conf.set("spark.security.oidc.provider.fake",
       "org.apache.spark.security.FakeCredentialProvider")
 
     // First token: user-A
