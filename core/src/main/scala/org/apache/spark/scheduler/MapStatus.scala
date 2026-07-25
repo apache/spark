@@ -288,8 +288,6 @@ private[spark] object HighlyCompressedMapStatus {
         .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.defaultValue.get)
     val threshold =
       if (accurateBlockSkewedFactor > 0) {
-        val sortedSizes = uncompressedSizes.sorted
-        val medianSize: Long = Utils.median(sortedSizes, true)
         val maxAccurateSkewedBlockNumber =
           Math.min(
             Option(SparkEnv.get)
@@ -297,11 +295,14 @@ private[spark] object HighlyCompressedMapStatus {
               .getOrElse(config.SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.defaultValue.get),
             totalNumBlocks
           )
+        // Only two order statistics are needed here, so they are selected in O(totalNumBlocks)
+        // instead of sorting the sizes, which every map task would otherwise pay for.
+        val sizes = uncompressedSizes.clone()
+        val medianSize: Long = Utils.medianInPlace(sizes)
+        val smallestAccurateSize =
+          Utils.nthSmallest(sizes, totalNumBlocks - maxAccurateSkewedBlockNumber)
         val skewSizeThreshold =
-          Math.max(
-            medianSize * accurateBlockSkewedFactor,
-            sortedSizes(totalNumBlocks - maxAccurateSkewedBlockNumber).toDouble
-          )
+          Math.max(medianSize * accurateBlockSkewedFactor, smallestAccurateSize.toDouble)
         Math.min(shuffleAccurateBlockThreshold.toDouble, skewSizeThreshold)
       } else {
         // Disable skew detection if accurateBlockSkewedFactor <= 0

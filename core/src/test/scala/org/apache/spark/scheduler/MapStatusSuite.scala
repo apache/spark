@@ -289,4 +289,44 @@ class MapStatusSuite extends SparkFunSuite {
         "Only tracked skewed block size is accurate")
     }
   }
+
+  test("SPARK-48290: skewed blocks are recorded accurately with the default configuration") {
+    val emptyBlocksLength = 3
+    val smallBlocksLength = 3000
+    val skewedBlocksLength = 5
+    // Well above the median block size, but below SHUFFLE_ACCURATE_BLOCK_THRESHOLD, which is the
+    // case for a skewed partition whose rows are spread over a large number of map tasks.
+    val skewedBlockSize = 50 * 1024 * 1024L
+
+    // No skew related config is set: this asserts the out of the box behavior.
+    val conf = new SparkConf()
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+
+    val emptyBlocks = createArray(emptyBlocksLength, 0L)
+    val smallBlocks = Array.tabulate[Long](smallBlocksLength)(i => i + 1)
+    val skewedBlocks = createArray(skewedBlocksLength, skewedBlockSize)
+    val allBlocks = emptyBlocks ++: smallBlocks ++: skewedBlocks
+    assert(skewedBlockSize < conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD),
+      "the skewed blocks must not be tracked as huge blocks")
+    val avg = smallBlocks.sum / smallBlocks.length
+
+    val loc = BlockManagerId("a", "b", 10)
+    val mapTaskAttemptId = 5
+    val status = compressAndDecompressMapStatus(MapStatus(loc, allBlocks, mapTaskAttemptId))
+    assert(status.isInstanceOf[HighlyCompressedMapStatus])
+    for (i <- 0 until emptyBlocksLength) {
+      assert(status.getSizeForBlock(i) === 0L)
+    }
+    for (i <- 0 until smallBlocksLength) {
+      assert(status.getSizeForBlock(emptyBlocksLength + i) === avg,
+        "the average size must not be inflated by the skewed blocks")
+    }
+    for (i <- 0 until skewedBlocksLength) {
+      assert(status.getSizeForBlock(emptyBlocksLength + smallBlocksLength + i) ===
+        compressAndDecompressSize(skewedBlockSize),
+        "skewed block sizes must be accurate so that AQE can detect the skew")
+    }
+  }
 }
