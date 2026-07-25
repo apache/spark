@@ -88,7 +88,7 @@ by using [Apache Spark Kubernetes Operator](https://github.com/apache/spark-kube
 a separate Apache Spark project. The operator provides two custom resources:
 
 * [SparkApp](https://github.com/apache/spark-kubernetes-operator/blob/main/examples/pi-python.yaml): deploy Spark apps on top of Kubernetes
-* [SparkCluster](https://github.com/apache/spark-kubernetes-operator/blob/main/examples/cluster-with-template.yaml): deploy Spark clusters on top of Kubernetes
+* [SparkCluster](https://github.com/apache/spark-kubernetes-operator/blob/main/examples/cluster.yaml): deploy Spark clusters on top of Kubernetes
 
 The two approaches are complementary because the operator runs Spark applications on top of the same
 native Kubernetes scheduler backend described in this document. Please refer to the operator
