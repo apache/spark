@@ -80,6 +80,20 @@ driver and executor pods on a subset of available nodes through a [node selector
 using the configuration property for it. It will be possible to use more advanced
 scheduling hints like [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) in a future release.
 
+# Spark Kubernetes Operator
+
+In addition to the `spark-submit` based submission described in this document, users can deploy and
+manage Spark workloads declaratively via [operator patterns](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/)
+by using [Apache Spark Kubernetes Operator](https://github.com/apache/spark-kubernetes-operator),
+a separate Apache Spark project. The operator provides two custom resources:
+
+* [SparkApp](https://github.com/apache/spark-kubernetes-operator/blob/main/examples/pi-python.yaml): deploy Spark apps on top of Kubernetes
+* [SparkCluster](https://github.com/apache/spark-kubernetes-operator/blob/main/examples/cluster.yaml): deploy Spark clusters on top of Kubernetes
+
+The two approaches are complementary because the operator runs Spark applications on top of the same
+native Kubernetes scheduler backend described in this document. Please refer to the operator
+repository for its detailed documentation and usage.
+
 # Submitting Applications to Kubernetes
 
 ## Docker Images
