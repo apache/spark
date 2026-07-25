@@ -18,9 +18,8 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
 import org.apache.spark.sql.connector.catalog.CatalogV2Util
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 abstract class DeltaBasedNestedRowIdTableSuiteBase(splitUpdates: Boolean)
   extends RowLevelOperationSuiteBase {
@@ -35,14 +34,12 @@ abstract class DeltaBasedNestedRowIdTableSuiteBase(splitUpdates: Boolean)
     props
   }
 
-  // mirror the metadata marker on file-source row IDs
-  private val nestedPkMetadata =
-    new MetadataBuilder().putString(METADATA_COL_ATTR_KEY, "row_index").build()
-
+  // the nested row ID pk shares its leaf name with the top-level pk data column, so a name-based
+  // bind would confuse the two; the suite checks that the nested field is used
   private val tableSchema = StructType(Seq(
     StructField("pk", IntegerType, nullable = false),
     StructField("nested", StructType(Seq(
-      StructField("pk", IntegerType, nullable = false, metadata = nestedPkMetadata))),
+      StructField("pk", IntegerType, nullable = false))),
       nullable = false),
     StructField("id", IntegerType),
     StructField("dep", StringType)))
