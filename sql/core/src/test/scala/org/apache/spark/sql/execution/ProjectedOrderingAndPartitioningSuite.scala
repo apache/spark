@@ -84,6 +84,32 @@ class ProjectedOrderingAndPartitioningSuite
     }
   }
 
+  test("SPARK-58323: AliasAware output ordering and partitioning are strict, not lazy") {
+    // A multi-alias projection makes `sameOrderExpressions` and the projected partitionings
+    // non-trivial. They must be strict collections: the underlying `multiTransform` produces a
+    // `Stream`, and storing it unforced lets each plan node re-wrap the child's lazy stream.
+    // Across a deep projection chain that nesting overflows the stack when the ordering or
+    // partitioning is later serialized or deeply traversed.
+    withSQLConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT.key -> "5") {
+      // id -> {x, y, z} gives sameOrderExpressions.
+      val df = spark.range(2).orderBy($"id").selectExpr("id as x", "id as y", "id as z")
+      val outputOrdering = df.queryExecution.optimizedPlan.outputOrdering
+      assert(outputOrdering.head.sameOrderExpressions.nonEmpty)
+      outputOrdering.foreach { so =>
+        assert(!so.sameOrderExpressions.isInstanceOf[Stream[_]],
+          s"sameOrderExpressions must be strict, was ${so.sameOrderExpressions.getClass.getName}")
+      }
+      // id -> {x, y, z} gives a multi-partitioning PartitioningCollection.
+      val dfp = spark.range(2).repartition($"id").selectExpr("id as x", "id as y", "id as z")
+      val partitionings =
+        stripAQEPlan(dfp.queryExecution.executedPlan).outputPartitioning
+          .asInstanceOf[PartitioningCollection].partitionings
+      assert(partitionings.size > 1)
+      assert(!partitionings.isInstanceOf[Stream[_]],
+        s"partitionings must be strict, was ${partitionings.getClass.getName}")
+    }
+  }
+
   test("SPARK-42049: Improve AliasAwareOutputExpression - ordering - multi-references") {
     val df = spark.range(2).selectExpr("id as a", "id as b")
       .orderBy($"a" + $"b").selectExpr("a as x", "b as y")

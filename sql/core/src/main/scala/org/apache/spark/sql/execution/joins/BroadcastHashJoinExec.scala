@@ -117,7 +117,10 @@ case class BroadcastHashJoinExec(
       case e: Expression if streamedKeyToBuildKeyMapping.contains(e.canonicalized) =>
         e +: streamedKeyToBuildKeyMapping(e.canonicalized)
     }.asInstanceOf[Stream[HashPartitioningLike]]
-      .take(conf.broadcastHashJoinOutputPartitioningExpandLimit))
+      .take(conf.broadcastHashJoinOutputPartitioningExpandLimit)
+      // Materialize the bounded expansion into a strict `List` -- never an unforced `Stream`,
+      // which chained across nodes can overflow the stack when serialized or deeply traversed.
+      .toList)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

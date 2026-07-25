@@ -44,7 +44,12 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
             .take(aliasCandidateLimit)
             .asInstanceOf[Stream[Partitioning]]
         case o => Seq(o)
-      }.take(aliasCandidateLimit).toSeq
+      }.take(aliasCandidateLimit)
+        // Materialize the bounded result into a strict `List`. On Scala 2.12 `Iterator.toSeq` is
+        // lazy (a `Stream`); storing an unforced `Stream` in the `PartitioningCollection` below
+        // lets each plan node re-wrap the child's lazy stream, and across a deep projection chain
+        // that nesting overflows the stack when the partitioning is later serialized or traversed.
+        .toList
     } else {
       // Filter valid partitiongs (only reference output attributes of the current plan node)
       val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
