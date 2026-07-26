@@ -17,6 +17,7 @@
 # Reference: https://setuptools.pypa.io/en/latest/userguide/miscellaneous.html
 
 recursive-include pyspark *.pyi py.typed *.json
+recursive-include pyspark/sql/tests/df_golden *.test *.py
 recursive-include deps/jars *.jar
 graft deps/bin
 recursive-include deps/sbin spark-config.sh spark-daemon.sh start-history-server.sh stop-history-server.sh

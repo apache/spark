@@ -168,7 +168,11 @@ private[spark] class BasicExecutorFeatureStep(
           ENV_DRIVER_URL -> driverUrl,
           ENV_EXECUTOR_CORES -> {
             if (kubernetesConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).getOrElse(false)) {
-              kubernetesConf.get("spark.task.cpus", "1")
+              // `spark.task.cpus` may be fractional, so round up to an integer (at least 1).
+              // When it is 0.5 or less, the single announced core fits more than one task and
+              // the single-task-per-recovery-executor guarantee no longer holds;
+              // ExecutorPodsAllocator logs a warning for that case.
+              math.max(1, kubernetesConf.get("spark.task.cpus", "1.0").toDouble.ceil.toInt).toString
             } else {
               execResources.cores.get.toString
             }

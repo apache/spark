@@ -154,6 +154,11 @@ object RaiseError {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_( expr ) - Throws a USER_RAISED_EXCEPTION with `expr` as message.",
+  arguments = """
+    Arguments:
+      * expr - The message for the raised exception.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('custom error message');
@@ -177,6 +182,13 @@ object RaiseErrorExpressionBuilder extends ExpressionBuilder {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr [, message]) - Throws an exception if `expr` is not true.",
+  arguments = """
+    Arguments:
+      * expr - The expression that is expected to be true.
+        An expression that evaluates to a boolean.
+      * message - The message for the exception thrown when the expression is not true.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0 < 1);
@@ -412,15 +424,21 @@ case class CurrentUser()
   arguments = """
     Arguments:
       * expr - The binary value to encrypt.
+        An expression that evaluates to a binary.
       * key - The passphrase to use to encrypt the data.
+        An expression that evaluates to a binary.
       * mode - Specifies which block cipher mode should be used to encrypt messages.
                Valid modes: ECB, GCM, CBC.
+        An expression that evaluates to a string.
       * padding - Specifies how to pad messages whose length is not a multiple of the block size.
                   Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS for CBC.
+        An expression that evaluates to a string.
       * iv - Optional initialization vector. Only supported for CBC and GCM modes.
              Valid values: None or ''. 16-byte array for CBC mode. 12-byte array for GCM mode.
+        An expression that evaluates to a binary.
       * aad - Optional additional authenticated data. Only supported for GCM mode. This can be any free-form input and
               must be provided for both encryption and decryption.
+        An expression that evaluates to a binary.
   """,
   examples = """
     Examples:
@@ -495,13 +513,18 @@ case class AesEncrypt(
   arguments = """
     Arguments:
       * expr - The binary value to decrypt.
+        An expression that evaluates to a binary.
       * key - The passphrase to use to decrypt the data.
+        An expression that evaluates to a binary.
       * mode - Specifies which block cipher mode should be used to decrypt messages.
                Valid modes: ECB, GCM, CBC.
+        An expression that evaluates to a string.
       * padding - Specifies how to pad messages whose length is not a multiple of the block size.
                   Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS for CBC.
+        An expression that evaluates to a string.
       * aad - Optional additional authenticated data. Only supported for GCM mode. This can be any free-form input and
               must be provided for both encryption and decryption.
+        An expression that evaluates to a binary.
   """,
   examples = """
     Examples:
@@ -561,6 +584,19 @@ case class AesDecrypt(
 
 @ExpressionDescription(
   usage = "_FUNC_(expr, key[, mode[, padding[, aad]]]) - This is a special version of `aes_decrypt` that performs the same operation, but returns a NULL value instead of raising an error if the decryption cannot be performed.",
+  arguments = """
+    Arguments:
+      * expr - The encrypted value to decrypt.
+        An expression that evaluates to a binary.
+      * key - The key used to decrypt the value.
+        An expression that evaluates to a binary.
+      * mode - The block cipher mode used for decryption.
+        An expression that evaluates to a string.
+      * padding - The padding scheme used for decryption.
+        An expression that evaluates to a string.
+      * aad - The additional authenticated data.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(unhex('6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
@@ -600,3 +636,56 @@ case class TryAesDecrypt(
     this.copy(replacement = newChild)
 }
 // scalastyle:on line.size.limit
+
+/**
+ * A function that computes a keyed-hash message authentication code (HMAC) of the `message`
+ * using the given `key` and hash `algorithm`. The result is returned as raw MAC bytes, which
+ * can be fed back in as the `key` of a subsequent HMAC to chain derivations, or wrapped with
+ * `hex`/`base64` for a textual representation.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(key, message[, algorithm]) - Returns the keyed-hash message authentication code (HMAC) of `message` using `key` and the hash `algorithm`. The result is returned as raw MAC bytes; wrap it with `hex` or `base64` for a textual value. The default algorithm is 'SHA-256'.
+  """,
+  arguments = """
+    Arguments:
+      * key - The secret key, as a binary value.
+      * message - The message to authenticate, as a binary value.
+      * algorithm - Optional hash algorithm. Valid values: SHA-224, SHA-256, SHA-384, SHA-512, SHA-1, MD5. The default is SHA-256.
+  """,
+  examples = """
+    Examples:
+      > SELECT hex(_FUNC_('key', 'message'));
+       6E9EF29B75FFFC5B7ABAE527D58FDADB2FE42E7219011976917343065F58ED4A
+      > SELECT hex(_FUNC_('key', 'message', 'SHA-512'));
+       E477384D7CA229DD1426E64B63EBF2D36EBD6D7E669A6735424E72EA6C01D3F8B56EB39C36D8232F5427999B8D1A3F9CD1128FC69F4D75B434216810FA367E98
+  """,
+  since = "4.3.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+case class Hmac(key: Expression, message: Expression, algorithm: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    BinaryType,
+    "hmac",
+    Seq(key, message, algorithm),
+    inputTypes)
+
+  def this(key: Expression, message: Expression) =
+    this(key, message, Literal("SHA-256"))
+
+  override def prettyName: String = "hmac"
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(BinaryType, BinaryType, StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def children: Seq[Expression] = Seq(key, message, algorithm)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(newChildren(0), newChildren(1), newChildren(2))
+  }
+}

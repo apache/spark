@@ -1767,7 +1767,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "invalidExprSqls" : "\"row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
+    "invalidExprSqls" : "\"row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"",
+    "operator" : "Aggregate"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1931,15 +1932,13 @@ SELECT SUM(b) AS s
 FROM aggSrc
 GROUP BY GROUPING SETS (())
 -- !query analysis
-Aggregate [spark_grouping_id#xL], [sum(b#x) AS s#xL]
-+- Expand [[a#x, b#x, 0]], [a#x, b#x, spark_grouping_id#xL]
-   +- Project [a#x, b#x]
-      +- SubqueryAlias aggsrc
-         +- View (`aggSrc`, [a#x, b#x])
-            +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
-               +- Project [a#x, b#x]
-                  +- SubqueryAlias aggSrc
-                     +- LocalRelation [a#x, b#x]
+Aggregate [sum(b#x) AS s#xL]
++- SubqueryAlias aggsrc
+   +- View (`aggSrc`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias aggSrc
+               +- LocalRelation [a#x, b#x]
 
 
 -- !query

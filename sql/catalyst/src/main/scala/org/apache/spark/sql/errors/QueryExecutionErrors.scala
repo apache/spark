@@ -54,7 +54,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -2526,6 +2526,24 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId("aes_encrypt")))
   }
 
+  def hmacUnsupportedAlgorithmError(algorithm: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.HMAC_ALGORITHM",
+      messageParameters = Map(
+        "parameter" -> toSQLId("algorithm"),
+        "functionName" -> toSQLId("hmac"),
+        "algorithm" -> toSQLValue(algorithm, StringType)))
+  }
+
+  def hmacCryptoError(detailMessage: String): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.HMAC_CRYPTO_ERROR",
+      messageParameters = Map(
+        "parameter" -> toSQLId("key"),
+        "functionName" -> toSQLId("hmac"),
+        "detailMessage" -> detailMessage))
+  }
+
   def hiveTableWithAnsiIntervalsError(
       table: TableIdentifier): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
@@ -2619,6 +2637,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "operation" -> (s"add ${toSQLValue(amount, LongType)} $unit to " +
           s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def calendarIntervalArrowNanosOverflowError(
+      interval: CalendarInterval): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"write the interval value $interval as Arrow IntervalMonthDayNano " +
+          "nanoseconds (the microseconds component must be in +/-(Long.MaxValue / 1000), " +
+          "roughly +/-292 years)")),
       context = Array.empty,
       summary = "")
   }
@@ -3096,6 +3126,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("path" -> path, "functionName" -> toSQLId(functionName)))
   }
 
+  def variantPathTypeMismatch(path: String, failedAt: String, functionName: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "VARIANT_PATH_TYPE_MISMATCH",
+      messageParameters =
+        Map("path" -> path, "failedAt" -> failedAt, "functionName" -> toSQLId(functionName)))
+  }
+
   def malformedVariant(): Throwable = new SparkRuntimeException(
     "MALFORMED_VARIANT",
     Map.empty
@@ -3460,6 +3497,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "parameter" -> toSQLId("occurrence"),
         "actual" -> occurrence.toString
       )
+    )
+  }
+
+  def binByInvalidRangeError(rangeStart: String, rangeEnd: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "BIN_BY_INVALID_RANGE",
+      messageParameters = Map("rangeStart" -> rangeStart, "rangeEnd" -> rangeEnd)
     )
   }
 }

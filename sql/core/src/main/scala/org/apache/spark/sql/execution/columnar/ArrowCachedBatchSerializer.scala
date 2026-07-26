@@ -1,0 +1,1593 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.columnar
+
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.nio.channels.Channels
+
+import scala.jdk.CollectionConverters._
+
+import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
+import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot, VectorUnloader}
+import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
+import org.apache.arrow.vector.ipc.{ReadChannel, WriteChannel}
+import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
+
+import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
+import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
+import org.apache.spark.util.Utils
+
+/**
+ * A [[CachedBatchSerializer]] that uses Apache Arrow as the cache format.
+ *
+ * This serializer:
+ *  - Supports both row-based (InternalRow) and columnar (ColumnarBatch) input
+ *  - Stores each batch as an internal, schema-less encapsulated Arrow RecordBatch message with
+ *    optional compression (zstd/lz4); the schema is reconstructed from the relation's attributes
+ *    on read (see [[ArrowCachedBatch]])
+ *  - Enables zero-copy columnar reads when output is ColumnarBatch
+ *  - Uses off-heap memory via Arrow allocators during encode/decode
+ *  - Collects per-column statistics for partition pruning
+ *
+ * Configuration options:
+ *  - spark.sql.cache.serializer: Set to this class name to enable
+ *  - spark.sql.execution.arrow.maxRecordsPerBatch: Max rows per cached batch
+ *  - spark.sql.execution.arrow.maxBytesPerBatch: Max bytes per cached batch
+ *  - spark.sql.execution.arrow.compression.codec: Compression (none/zstd/lz4)
+ *  - spark.sql.execution.arrow.compression.zstd.level: zstd compression level
+ *  - spark.sql.execution.arrow.cache.prefetch.enabled: Enable background prefetch of the next
+ *    batch while the current one is being consumed
+ *  - spark.sql.inMemoryColumnarStorage.enableVectorizedReader: Enable columnar output
+ */
+class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
+
+  // supportsColumnarInput selects the columnar-vs-row input path; it does not gate which schemas
+  // this serializer accepts. The cache framework has no per-type fallback to another serializer
+  // (whatever spark.sql.cache.serializer selects handles every cached relation), so returning
+  // false here only routes input through convertInternalRowToCachedBatch, which is still this
+  // serializer. Type support is enforced once per partition by checkSupportedSchema below; the
+  // only real precondition for columnar input is that the plan can produce columnar output, which
+  // InMemoryRelation already checks via cachedPlan.supportsColumnar before calling this.
+  override def supportsColumnarInput(schema: Seq[Attribute]): Boolean = true
+
+  override def convertInternalRowToCachedBatch(
+      input: RDD[InternalRow],
+      schema: Seq[Attribute],
+      storageLevel: StorageLevel,
+      conf: SQLConf): RDD[CachedBatch] = {
+    ArrowCachedBatchSerializer.checkSupportedSchema(schema)
+    // Capture config values on driver before RDD transformation
+    val sparkSchema = DataTypeUtils.fromAttributes(schema)
+    val maxRecordsPerBatch = conf.arrowMaxRecordsPerBatch
+    val maxBytesPerBatch = conf.arrowMaxBytesPerBatch
+    val timeZoneId = conf.sessionLocalTimeZone
+    val compressionCodecName = conf.arrowCompressionCodec
+    val compressionLevel = conf.arrowZstdCompressionLevel
+
+    input.mapPartitionsInternal { rowIterator =>
+      new InternalRowToArrowCachedBatchIterator(
+        rowIterator,
+        schema,
+        sparkSchema,
+        maxRecordsPerBatch,
+        maxBytesPerBatch,
+        timeZoneId,
+        compressionCodecName,
+        compressionLevel)
+    }
+  }
+
+  override def convertColumnarBatchToCachedBatch(
+      input: RDD[ColumnarBatch],
+      schema: Seq[Attribute],
+      storageLevel: StorageLevel,
+      conf: SQLConf): RDD[CachedBatch] = {
+    ArrowCachedBatchSerializer.checkSupportedSchema(schema)
+    // Capture config values on driver before RDD transformation
+    val sparkSchema = DataTypeUtils.fromAttributes(schema)
+    val timeZoneId = conf.sessionLocalTimeZone
+    val compressionCodecName = conf.arrowCompressionCodec
+    val compressionLevel = conf.arrowZstdCompressionLevel
+
+    input.mapPartitionsInternal { batchIterator =>
+      new ColumnarBatchToArrowCachedBatchIterator(
+        batchIterator,
+        schema,
+        sparkSchema,
+        timeZoneId,
+        compressionCodecName,
+        compressionLevel)
+    }
+  }
+
+  override def supportsColumnarOutput(schema: StructType): Boolean = {
+    // Always support columnar output with Arrow
+    true
+  }
+
+  override def vectorTypes(attributes: Seq[Attribute], conf: SQLConf): Option[Seq[String]] = {
+    Option(Seq.fill(attributes.length)(classOf[ArrowColumnVector].getName))
+  }
+
+  override def convertCachedBatchToColumnarBatch(
+      input: RDD[CachedBatch],
+      cacheAttributes: Seq[Attribute],
+      selectedAttributes: Seq[Attribute],
+      conf: SQLConf): RDD[ColumnarBatch] = {
+    val cacheSchema = DataTypeUtils.fromAttributes(cacheAttributes)
+    val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
+    val columnIndices =
+      selectedAttributes.map(a => cacheAttributes.map(o => o.exprId).indexOf(a.exprId)).toArray
+    // Capture config on driver
+    val timeZoneId = conf.sessionLocalTimeZone
+    val prefetchEnabled = conf.arrowCachePrefetchEnabled
+
+    input.mapPartitionsInternal { batchIterator =>
+      new ArrowCachedBatchToColumnarBatchIterator(
+        batchIterator,
+        cacheSchema,
+        selectedSchema,
+        columnIndices,
+        timeZoneId,
+        prefetchEnabled)
+    }
+  }
+
+  override def convertCachedBatchToInternalRow(
+      input: RDD[CachedBatch],
+      cacheAttributes: Seq[Attribute],
+      selectedAttributes: Seq[Attribute],
+      conf: SQLConf): RDD[InternalRow] = {
+    val cacheSchema = DataTypeUtils.fromAttributes(cacheAttributes)
+    val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
+    val timeZoneId = conf.sessionLocalTimeZone
+
+    // Calculate column indices for projection
+    val selectedIndices = selectedAttributes.map { attr =>
+      cacheAttributes.indexWhere(_.exprId == attr.exprId)
+    }.toArray
+
+    // Check if all selected types can use the fast path.
+    // Types not handled by ArrowColumnReader must use the fallback path.
+    val needsFallback = selectedSchema.fields.exists { f =>
+      f.dataType match {
+        case _: ArrayType | _: StructType | _: MapType => true
+        case CalendarIntervalType | VariantType | NullType => true
+        case _: UserDefinedType[_] => true
+        // Geometry/Geography are represented as an Arrow struct (srid + wkb); the fast-path
+        // ArrowColumnReader does not handle them, so route them through the fallback.
+        case _: GeometryType | _: GeographyType => true
+        // Nanosecond timestamps write a 16-byte TimestampNanosVal payload into the UnsafeRow;
+        // the fast-path typed readers only write fixed primitives, so use the fallback, which
+        // reads through ArrowColumnVector.getTimestampNTZNanos/getTimestampLTZNanos.
+        case _: TimestampNTZNanosType | _: TimestampLTZNanosType => true
+        case _ => false
+      }
+    }
+
+    if (needsFallback) {
+      // Fall back to columnar-to-row conversion via ColumnarBatch for complex types.
+      // Use UnsafeProjection to convert ColumnarBatchRow to UnsafeRow.
+      convertCachedBatchToColumnarBatch(input, cacheAttributes, selectedAttributes, conf)
+        .mapPartitionsInternal { batchIter =>
+          val toUnsafe = org.apache.spark.sql.catalyst.expressions.UnsafeProjection.create(
+            selectedSchema)
+          batchIter.flatMap { batch =>
+            val numRows = batch.numRows()
+            new Iterator[InternalRow] {
+              private var rowIdx = 0
+              override def hasNext: Boolean = rowIdx < numRows
+              override def next(): InternalRow = {
+                val row = batch.getRow(rowIdx)
+                rowIdx += 1
+                toUnsafe(row)
+              }
+            }
+          }
+        }
+    } else {
+      val prefetchEnabled = conf.arrowCachePrefetchEnabled
+      input.mapPartitionsInternal { batchIterator =>
+        new ArrowCachedBatchToInternalRowIterator(
+          batchIterator,
+          cacheSchema,
+          selectedSchema,
+          selectedIndices,
+          timeZoneId,
+          prefetchEnabled)
+      }
+    }
+  }
+}
+
+/**
+ * Companion object with shared utility methods for Arrow cache serialization.
+ */
+private object ArrowCachedBatchSerializer {
+
+  /**
+   * Fail fast, once per partition on the driver-facing entry points, if any column type cannot be
+   * represented by the Arrow cache. This is the actual capability gate (supportsColumnarInput only
+   * chooses the input path). Without it, an unsupported type would otherwise surface as a less
+   * obvious failure deeper in schema conversion or statistics collection.
+   */
+  def checkSupportedSchema(schema: Seq[Attribute]): Unit = {
+    schema.find(attr => !ArrowUtils.isSupportedByArrow(attr.dataType)).foreach { attr =>
+      // Use the structured user-facing condition (UNSUPPORTED_DATATYPE) rather than an internal
+      // error: an unsupported column type is a user-visible limitation, and the docs promise this
+      // condition. It is also the same condition toArrowSchema raises, so callers see one
+      // condition for the capability regardless of which layer detects it first.
+      throw ExecutionErrors.unsupportedDataTypeError(attr.dataType)
+    }
+  }
+
+  // scalastyle:off caselocale
+  def createCompressionCodec(
+      codecName: String,
+      compressionLevel: Int): CompressionCodec = {
+    codecName.toLowerCase match {
+      case "none" => NoCompressionCodec.INSTANCE
+      // The codec instance must be constructed directly so that compressionLevel is honored:
+      // CompressionCodec.Factory.createCodec(codecType) ignores the level and builds a codec at
+      // the default level. The level only matters on the write side; the read side looks up the
+      // codec by the type recorded in the IPC message.
+      case "zstd" => new ZstdCompressionCodec(compressionLevel)
+      case "lz4" => new Lz4CompressionCodec()
+      case other =>
+        throw SparkException.internalError(
+          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
+    }
+  }
+  // scalastyle:on caselocale
+
+  def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
+    val out = new ByteArrayOutputStream()
+    val writeChannel = new WriteChannel(Channels.newChannel(out))
+    MessageSerializer.serialize(writeChannel, batch)
+    out.toByteArray
+  }
+
+  /**
+   * Byte offset of the unscaled low-order word within a 16-byte Arrow Decimal128 slot, for the
+   * given native byte order. Arrow Java writes decimal values in native byte order
+   * (DecimalUtility.writeLongToArrowBuf / writeBigDecimalToArrowBuf): on little-endian platforms
+   * the low-order word occupies the first 8 bytes and the sign-extension word follows, while on
+   * big-endian platforms the order is reversed and the low-order word occupies the last 8 bytes.
+   * Reading the wrong word on a big-endian JVM turns positive compact decimals into 0 and
+   * negative ones into an unscaled -1.
+   */
+  def compactDecimalUnscaledOffset(nativeOrder: java.nio.ByteOrder): Long =
+    if (nativeOrder == java.nio.ByteOrder.LITTLE_ENDIAN) 0L else 8L
+
+  /**
+   * Shut down a prefetch worker during task cleanup without leaking the root it may have produced.
+   *
+   * The prefetch worker deserializes the next batch into a fresh [[VectorSchemaRoot]] off-thread.
+   * If task completion runs while a result is in flight (e.g. a LIMIT consumer stops early),
+   * cancelling and discarding the future would drop a root that was already (or is about to be)
+   * produced, and the subsequent `allocator.close()` would fail with "Memory was leaked by query".
+   *
+   * This stops accepting new work, waits for the worker to finish so no root is produced after we
+   * stop looking, then closes any completed result. Always returns null so the caller can null out
+   * its future reference. Safe to call with a null executor or future.
+   */
+  def drainAndClosePrefetch(
+      executor: java.util.concurrent.ExecutorService,
+      future: java.util.concurrent.Future[VectorSchemaRoot]): java.util.concurrent.Future[
+        VectorSchemaRoot] = {
+    // Drain and join the worker uninterruptibly, then close any root it produced, before the
+    // caller closes the allocator. This runs from a task-completion listener, which can fire with
+    // the task thread already interrupted (e.g. a killed task). If we let awaitTermination or
+    // future.get observe the interrupt and bail early, the worker could still be allocating into,
+    // or have already returned, a root that we then neither join nor close -- and the subsequent
+    // allocator.close() would race the worker or fail with "Memory was leaked by query". So we
+    // defer every interruption -- whether present on entry or delivered while blocked (throwing
+    // InterruptedException clears the status, so it must be recorded here or it is lost) -- and
+    // restore the flag once draining is done.
+    var wasInterrupted = Thread.interrupted()
+    try {
+      if (executor != null) {
+        executor.shutdown()
+        var terminated = false
+        while (!terminated) {
+          try {
+            terminated =
+              executor.awaitTermination(Long.MaxValue, java.util.concurrent.TimeUnit.NANOSECONDS)
+          } catch {
+            // Record the interruption and keep waiting: we must not leave the worker running.
+            case _: InterruptedException => wasInterrupted = true
+          }
+        }
+      }
+      if (future != null) {
+        try {
+          // The worker has terminated, so this does not block; close the root it produced.
+          val root = future.get()
+          if (root != null) {
+            root.close()
+          }
+        } catch {
+          // The batch was never produced (cancelled/failed); nothing to close.
+          case _: java.util.concurrent.CancellationException =>
+          case _: java.util.concurrent.ExecutionException =>
+          case _: InterruptedException => wasInterrupted = true
+        }
+      }
+    } finally {
+      if (wasInterrupted) {
+        Thread.currentThread().interrupt()
+      }
+    }
+    null
+  }
+
+  def createColumnStats(dataType: DataType): ColumnStats = {
+    dataType match {
+      case BooleanType => new BooleanColumnStats
+      case ByteType => new ByteColumnStats
+      case ShortType => new ShortColumnStats
+      case IntegerType => new IntColumnStats
+      case DateType => new IntColumnStats  // Date is stored as Int
+      case LongType => new LongColumnStats
+      case TimestampType => new LongColumnStats  // Timestamp is stored as Long
+      case TimestampNTZType => new LongColumnStats  // TimestampNTZ is stored as Long
+      // Nanosecond timestamps use the TimestampNanosVal-aware collector (min/max bounds), the
+      // same one the default cache serializer uses for these types.
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType => new TimestampNanosColumnStats
+      case FloatType => new FloatColumnStats
+      case DoubleType => new DoubleColumnStats
+      case st: StringType => new StringColumnStats(st)
+      case BinaryType => new BinaryColumnStats
+      case dt: DecimalType => new DecimalColumnStats(dt)
+      case CalendarIntervalType => new IntervalColumnStats
+      case _: YearMonthIntervalType => new IntColumnStats   // stored as Int
+      case _: DayTimeIntervalType => new LongColumnStats  // stored as Long
+      case _: TimeType => new LongColumnStats  // Time is stored as Long (nanoseconds)
+      case VariantType => new VariantColumnStats
+      // Geometry/Geography collect size/count without min/max bounds. Their physical value is a
+      // BinaryView (not Array[Byte]), so GeoColumnStats reads it via getBinaryView rather than
+      // BinaryColumnStats' getBinary, which would throw ClassCastException on a row that stores a
+      // BinaryView. They are also AtomicTypes that ColumnType (used by ObjectColumnStats) does not
+      // handle, so they must be matched explicitly here.
+      case _: GeometryType | _: GeographyType => new GeoColumnStats
+      // Unwrap UDTs to the same collector their underlying type would use. isSupportedByArrow
+      // accepts a UDT whenever its sqlType is supported (including Variant/Geometry/Geography),
+      // but ObjectColumnStats -> ColumnType(udt.sqlType) only unwraps one level and has no case
+      // for those types, so it would throw UNSUPPORTED_DATATYPE during materialization. Recursing
+      // here keeps the capability check and the statistics path in agreement.
+      case udt: UserDefinedType[_] => createColumnStats(udt.sqlType)
+      case _ => new ObjectColumnStats(dataType)
+    }
+  }
+
+  def buildStatisticsFromCollectors(
+      collectors: Array[ColumnStats],
+      schema: Seq[Attribute]): InternalRow = {
+    val stats = collectors.flatMap { collector =>
+      val collected = collector.collectedStatistics
+      // ColumnStats returns: [lowerBound, upperBound, nullCount, count, sizeInBytes]
+      Seq(collected(0), collected(1), collected(2), collected(3), collected(4))
+    }
+    InternalRow.fromSeq(stats.toSeq)
+  }
+
+  def collectStatistics(
+      root: VectorSchemaRoot,
+      schema: Seq[Attribute]): InternalRow = {
+    val rowCount = root.getRowCount
+    val vectors = root.getFieldVectors.asScala.toSeq
+
+    // Collect stats for each column: lowerBound, upperBound, nullCount, rowCount, sizeInBytes.
+    // getNullCount reads the validity buffer with word-at-a-time bit counting instead of a
+    // per-row isNull call through the vector interface; NullVector reports all rows null and the
+    // struct-backed lossless types (nanos timestamps, CalendarInterval) count their struct's own
+    // validity buffer, so the semantics match the per-row loop for every shape this cache
+    // produces.
+    val stats = schema.zip(vectors).flatMap { case (attr, vector) =>
+      val nullCount = vector.getNullCount
+      val sizeInBytes = vector.getBufferSize.toLong
+
+      val (lower, upper) = attr.dataType match {
+        case BooleanType => calculateMinMaxBoolean(vector, rowCount)
+        case ByteType => calculateMinMaxByte(vector, rowCount)
+        case ShortType => calculateMinMaxShort(vector, rowCount)
+        case IntegerType => calculateMinMaxInt(vector, rowCount)
+        case DateType => calculateMinMaxDate(vector, rowCount)
+        case LongType => calculateMinMaxLong(vector, rowCount)
+        case TimestampType => calculateMinMaxTimestamp(vector, rowCount)
+        case TimestampNTZType => calculateMinMaxTimestampNTZ(vector, rowCount)
+        case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+          calculateMinMaxTimestampNanos(vector, rowCount)
+        case FloatType => calculateMinMaxFloat(vector, rowCount)
+        case DoubleType => calculateMinMaxDouble(vector, rowCount)
+        case st: StringType => calculateMinMaxString(vector, rowCount, st.collationId)
+        case _: DecimalType => calculateMinMaxDecimal(vector, rowCount, attr.dataType)
+        case _: YearMonthIntervalType => calculateMinMaxYearMonthInterval(vector, rowCount)
+        case _: DayTimeIntervalType => calculateMinMaxDayTimeInterval(vector, rowCount)
+        case _: TimeType => calculateMinMaxTime(vector, rowCount)
+        case _ => (null, null) // Skip for binary, complex, and other unsupported types
+      }
+
+      Seq(lower, upper, nullCount, rowCount, sizeInBytes)
+    }
+
+    new org.apache.spark.sql.catalyst.expressions.GenericInternalRow(stats.toArray)
+  }
+
+  def calculateMinMaxBoolean(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = true
+    var max = false
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.BitVector].get(i) != 0
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxByte(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Byte.MaxValue
+    var max = Byte.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.TinyIntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxShort(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Short.MaxValue
+    var max = Short.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.SmallIntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxInt(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Int.MaxValue
+    var max = Int.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.IntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxDate(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Int.MaxValue
+    var max = Int.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.DateDayVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxLong(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.BigIntVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxTimestamp(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value =
+          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroTZVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxTimestampNTZ(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value =
+          vector.asInstanceOf[org.apache.arrow.vector.TimeStampMicroVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxTimestampNanos(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    // The cache stores nanosecond timestamps in the lossless struct representation
+    // (losslessInternalTypes = true): child 0 holds epochMicros (int64) and child 1 holds
+    // nanosWithinMicro (int16) -- TimestampNanosVal's own components, no unit conversion. The
+    // bounds are therefore the exact stored values, compared with TimestampNanosVal's own
+    // ordering; no precision truncation is involved on either the stat or the read path, so the
+    // two cannot disagree.
+    val struct = vector.asInstanceOf[org.apache.arrow.vector.complex.StructVector]
+    val micros =
+      struct.getChild("epochMicros").asInstanceOf[org.apache.arrow.vector.BigIntVector]
+    val nanos =
+      struct.getChild("nanosWithinMicro").asInstanceOf[org.apache.arrow.vector.SmallIntVector]
+    var min: TimestampNanosVal = null
+    var max: TimestampNanosVal = null
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = TimestampNanosVal.fromParts(micros.get(i), nanos.get(i))
+        if (min == null || value.compareTo(min) < 0) min = value
+        if (max == null || value.compareTo(max) > 0) max = value
+      }
+    }
+
+    (min, max)
+  }
+
+  def calculateMinMaxFloat(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Float.MaxValue
+    var max = Float.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.Float4Vector].get(i)
+        // Skip NaN: IEEE 754 comparisons with NaN are always false, so NaN never
+        // updates min/max in the row-based path (FloatColumnStats.gatherValueStats).
+        if (!value.isNaN) {
+          if (!hasValue) {
+            min = value
+            max = value
+            hasValue = true
+          } else {
+            if (value < min) min = value
+            if (value > max) max = value
+          }
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxDouble(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Double.MaxValue
+    var max = Double.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.Float8Vector].get(i)
+        // Skip NaN to match DoubleColumnStats.gatherValueStats.
+        if (!value.isNaN) {
+          if (!hasValue) {
+            min = value
+            max = value
+            hasValue = true
+          } else {
+            if (value < min) min = value
+            if (value > max) max = value
+          }
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxString(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int,
+      collationId: Int = StringType.collationId): (Any, Any) = {
+    var min: org.apache.spark.unsafe.types.UTF8String = null
+    var max: org.apache.spark.unsafe.types.UTF8String = null
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val bytes = vector.asInstanceOf[org.apache.arrow.vector.VarCharVector].get(i)
+        val value = org.apache.spark.unsafe.types.UTF8String.fromBytes(bytes)
+        if (!hasValue) {
+          min = value.clone()
+          max = value.clone()
+          hasValue = true
+        } else {
+          if (value.semanticCompare(min, collationId) < 0) min = value.clone()
+          if (value.semanticCompare(max, collationId) > 0) max = value.clone()
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxDecimal(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int,
+      dataType: org.apache.spark.sql.types.DataType): (Any, Any) = {
+    val decimalType = dataType.asInstanceOf[DecimalType]
+    var min: org.apache.spark.sql.types.Decimal = null
+    var max: org.apache.spark.sql.types.Decimal = null
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val bigDecimal = vector.asInstanceOf[
+          org.apache.arrow.vector.DecimalVector].getObject(i)
+        val value = org.apache.spark.sql.types.Decimal(
+          bigDecimal, decimalType.precision, decimalType.scale)
+
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value.compareTo(min) < 0) min = value
+          if (value.compareTo(max) > 0) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxYearMonthInterval(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Int.MaxValue
+    var max = Int.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.IntervalYearVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxDayTimeInterval(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = org.apache.arrow.vector.DurationVector.get(
+          vector.asInstanceOf[org.apache.arrow.vector.DurationVector].getDataBuffer, i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxTime(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int): (Any, Any) = {
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.TimeNanoVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) (min, max) else (null, null)
+  }
+}
+
+/**
+ * Iterator that converts InternalRow to ArrowCachedBatch.
+ */
+private class InternalRowToArrowCachedBatchIterator(
+    rowIter: Iterator[InternalRow],
+    schema: Seq[Attribute],
+    sparkSchema: StructType,
+    maxRecordsPerBatch: Long,
+    maxBytesPerBatch: Long,
+    timeZoneId: String,
+    compressionCodecName: String,
+    compressionLevel: Int) extends Iterator[ArrowCachedBatch] {
+
+  private val compressionCodec = ArrowCachedBatchSerializer.createCompressionCodec(
+    compressionCodecName,
+    compressionLevel)
+
+  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+    s"InternalRowToArrowCachedBatchIterator-${TaskContext.get().taskAttemptId()}",
+    0,
+    Long.MaxValue)
+
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    sparkSchema, timeZoneId, false, false, losslessInternalTypes = true)
+  private val root = VectorSchemaRoot.create(arrowSchema, allocator)
+  private val arrowWriter = ArrowWriter.create(root)
+  private val unloader = new VectorUnloader(root, true, compressionCodec, true)
+
+  // Create statistics collectors for each column
+  private val statsCollectors: Array[ColumnStats] = schema.map { attr =>
+    ArrowCachedBatchSerializer.createColumnStats(attr.dataType)
+  }.toArray
+
+  // Register cleanup
+  Option(TaskContext.get()).foreach { tc =>
+    tc.addTaskCompletionListener[Unit] { _ =>
+      close()
+    }
+  }
+
+  override def hasNext: Boolean = rowIter.hasNext || {
+    close()
+    false
+  }
+
+  override def next(): ArrowCachedBatch = {
+    var rowCount = 0
+
+    // Reset statistics collectors for new batch
+    var idx = 0
+    while (idx < statsCollectors.length) {
+      statsCollectors(idx) = ArrowCachedBatchSerializer.createColumnStats(schema(idx).dataType)
+      idx += 1
+    }
+
+    Utils.tryWithSafeFinally {
+      // Write rows to Arrow vectors and collect statistics incrementally, stopping when either the
+      // record-count or byte limit is reached (whichever is hit first), so wide rows cannot form
+      // multi-gigabyte batches that exhaust memory or overflow Arrow's 32-bit variable-width
+      // offsets. A nonpositive limit means that limit is unlimited; the `<= 0` guards also keep the
+      // loop from emitting empty batches forever. At least one row is always written so a single
+      // oversized row still makes progress. The byte limit is measured from the actual bytes
+      // already written to the Arrow vectors (arrowWriter.sizeInBytes), which is accurate for every
+      // row type -- a row-size estimate would undercount large values in a GenericInternalRow (e.g.
+      // a multi-megabyte string) and let the batch grow past the limit.
+      def recordLimitReached: Boolean = maxRecordsPerBatch > 0 && rowCount >= maxRecordsPerBatch
+      def byteLimitReached: Boolean =
+        maxBytesPerBatch > 0 && arrowWriter.sizeInBytes() >= maxBytesPerBatch
+      while (rowIter.hasNext && (rowCount == 0 || (!recordLimitReached && !byteLimitReached))) {
+        val row = rowIter.next()
+        arrowWriter.write(row)
+
+        // Collect statistics for this row
+        var i = 0
+        while (i < statsCollectors.length) {
+          statsCollectors(i).gatherStats(row, i)
+          i += 1
+        }
+
+        rowCount += 1
+      }
+      arrowWriter.finish()
+
+      // Get the Arrow RecordBatch with compression
+      val recordBatch = unloader.getRecordBatch()
+
+      Utils.tryWithSafeFinally {
+        // Serialize to Arrow IPC format
+        val arrowData = ArrowCachedBatchSerializer.serializeBatch(recordBatch)
+
+        // Build statistics InternalRow from collected stats
+        val stats = ArrowCachedBatchSerializer.buildStatisticsFromCollectors(
+          statsCollectors, schema)
+
+        ArrowCachedBatch(rowCount, arrowData, stats)
+      } {
+        recordBatch.close()
+      }
+    } {
+      arrowWriter.reset()
+    }
+  }
+
+  private def close(): Unit = {
+    root.close()
+    allocator.close()
+  }
+}
+
+/**
+ * Iterator that converts ColumnarBatch to ArrowCachedBatch.
+ */
+private class ColumnarBatchToArrowCachedBatchIterator(
+    batchIter: Iterator[ColumnarBatch],
+    schema: Seq[Attribute],
+    sparkSchema: StructType,
+    timeZoneId: String,
+    compressionCodecName: String,
+    compressionLevel: Int) extends Iterator[ArrowCachedBatch] {
+
+  private val compressionCodec = ArrowCachedBatchSerializer.createCompressionCodec(
+    compressionCodecName,
+    compressionLevel)
+
+  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+    s"ColumnarBatchToArrowCachedBatchIterator-${TaskContext.get().taskAttemptId()}",
+    0,
+    Long.MaxValue)
+
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    sparkSchema, timeZoneId, false, false, losslessInternalTypes = true)
+
+  // Register cleanup
+  Option(TaskContext.get()).foreach { tc =>
+    tc.addTaskCompletionListener[Unit] { _ =>
+      allocator.close()
+    }
+  }
+
+  override def hasNext: Boolean = batchIter.hasNext
+
+  override def next(): ArrowCachedBatch = {
+    val batch = batchIter.next()
+    // Release the consumed input batch once converted. This iterator replaces the normal
+    // ColumnarToRow consumer (which calls closeIfFreeable() after each batch), so without this
+    // an Arrow-backed source's fresh off-heap vectors would stay live for every cached batch and
+    // grow executor memory until OOM. Both conversion branches finish synchronously and copy the
+    // data out (VectorUnloader / row conversion), so the input is safe to free here on success or
+    // failure; closeIfFreeable() is a no-op for reusable writable/constant vectors.
+    // One input ColumnarBatch maps to one cached batch: the upstream batch's row count is already
+    // bounded by the source's batch-size config (e.g. spark.sql.parquet.columnarReaderBatchSize),
+    // so no further record/byte splitting is needed here.
+    Utils.tryWithSafeFinally {
+      val rowCount = batch.numRows()
+
+      // Check if batch is already Arrow-based for zero-copy path. The zero-copy path reuses the
+      // input vectors but serializes them under the cache's own schema, and the read path
+      // reconstructs that same schema, so the input vectors' physical shape must match it:
+      //  - the cache schema is built with largeVarTypes=false, so large var-width vectors
+      //    (64-bit offsets) would be silently corrupted when read back under 32-bit offsets;
+      //  - the cache schema is built with losslessInternalTypes=true, so nanosecond timestamps
+      //    and CalendarInterval are lossless structs, and interchange-shaped input vectors
+      //    (TimeStampNano(TZ)Vector, IntervalMonthDayNanoVector, e.g. from a Python UDF output)
+      //    would not match the reconstructed struct schema.
+      // Fall back to the row-based conversion (which rewrites through ArrowWriter under the
+      // cache schema) whenever any input vector is, or nests, such a mismatched shape.
+      val vectors = (0 until batch.numCols()).map(batch.column)
+      val zeroCopyEligible = vectors.forall {
+        case acv: ArrowColumnVector =>
+          !ColumnarBatchToArrowCachedBatchIterator.containsCacheSchemaMismatch(
+            acv.getValueVector)
+        case _ => false
+      }
+      if (zeroCopyEligible) {
+        // Fast path: zero-copy extraction of Arrow RecordBatch
+        convertArrowBatchZeroCopy(batch, rowCount, schema, vectors)
+      } else {
+        // Slow path: convert to Arrow via rows
+        convertToArrowBatch(batch, rowCount, schema)
+      }
+    } {
+      batch.closeIfFreeable()
+    }
+  }
+
+  private def convertArrowBatchZeroCopy(
+      batch: ColumnarBatch,
+      rowCount: Int,
+      schema: Seq[Attribute],
+      vectors: Seq[ColumnVector]): ArrowCachedBatch = {
+    // Zero-copy path: extract Arrow vectors directly from ArrowColumnVector. Vectors reaching
+    // this path have already passed containsCacheSchemaMismatch, so nanosecond timestamp and
+    // CalendarInterval columns are in the lossless struct shape matching the cache schema; no
+    // value conversion happens here, so no overflow is possible.
+    val arrowVectors = vectors.map(
+      _.asInstanceOf[ArrowColumnVector].getValueVector.asInstanceOf[
+        org.apache.arrow.vector.FieldVector])
+
+    // Create a VectorSchemaRoot from the existing vectors
+    val root = new VectorSchemaRoot(arrowSchema, arrowVectors.asJava, rowCount)
+
+    Utils.tryWithSafeFinally {
+      // Use VectorUnloader to create compressed RecordBatch
+      val unloader = new VectorUnloader(root, true, compressionCodec, true)
+      val recordBatch = unloader.getRecordBatch()
+
+      Utils.tryWithSafeFinally {
+        val arrowData = ArrowCachedBatchSerializer.serializeBatch(recordBatch)
+        val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
+        ArrowCachedBatch(rowCount, arrowData, stats)
+      } {
+        recordBatch.close()
+      }
+    } {
+      // Note: We don't close the root here because we don't own the vectors -- they are owned by
+      // the input ColumnarBatch, whose buffers the caller frees via batch.closeIfFreeable() after
+      // this method returns. That is not a use-after-free: serializeBatch/collectStatistics above
+      // already copy everything this method returns (arrowData is a materialized Array[Byte],
+      // stats are plain values) out of the vectors before this method returns, so nothing here
+      // still references the input's buffers once the caller frees them.
+    }
+  }
+
+  private def convertToArrowBatch(
+      batch: ColumnarBatch,
+      rowCount: Int,
+      schema: Seq[Attribute]): ArrowCachedBatch = {
+    // Convert columnar batch to rows, then to Arrow
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val arrowWriter = ArrowWriter.create(root)
+    val unloader = new VectorUnloader(root, true, compressionCodec, true)
+
+    Utils.tryWithSafeFinally {
+      val rowIterator = batch.rowIterator().asScala
+      while (rowIterator.hasNext) {
+        arrowWriter.write(rowIterator.next())
+      }
+      arrowWriter.finish()
+
+      val recordBatch = unloader.getRecordBatch()
+      Utils.tryWithSafeFinally {
+        val arrowData = ArrowCachedBatchSerializer.serializeBatch(recordBatch)
+        // Derive statistics from the built Arrow vectors rather than the input rows. The input
+        // rows here are ColumnarArray/ColumnarMap/ColumnarRow views (this is the non-Arrow
+        // ColumnarBatch path, e.g. vectorized nested Parquet/ORC), which do not expose a byte
+        // size; collecting row-by-row would record zero bytes for every complex value and make a
+        // complex-only relation report sizeInBytes=0, wrongly eligible for broadcast. Reading
+        // vector.getBufferSize off the finished root accounts for the actual payload, matching the
+        // zero-copy path.
+        val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
+        ArrowCachedBatch(rowCount, arrowData, stats)
+      } {
+        recordBatch.close()
+      }
+    } {
+      arrowWriter.reset()
+      root.close()
+    }
+  }
+}
+
+private object ColumnarBatchToArrowCachedBatchIterator {
+  import org.apache.arrow.vector.{FieldVector, LargeVarBinaryVector, LargeVarCharVector}
+
+  /**
+   * Whether the vector is, or nests, a large var-width vector (64-bit offsets). These are not
+   * eligible for the zero-copy path because that path serializes and reloads under a schema built
+   * with largeVarTypes=false; reinterpreting 64-bit offset buffers as 32-bit would corrupt data.
+   */
+  /**
+   * Whether the vector tree contains any shape the cache schema cannot serialize as-is: large
+   * var-width vectors (the cache schema uses 32-bit offsets) or interchange-shaped nanosecond
+   * timestamp / CalendarInterval vectors (the cache schema uses the lossless struct
+   * representations from losslessInternalTypes=true). Such input must take the row-conversion
+   * path, which rewrites values through ArrowWriter under the cache schema. The lossless struct
+   * vectors themselves (e.g. from re-caching a projection of a cached relation) match the cache
+   * schema and stay zero-copy eligible.
+   */
+  def containsCacheSchemaMismatch(
+      vector: org.apache.arrow.vector.ValueVector): Boolean = vector match {
+    case _: LargeVarCharVector | _: LargeVarBinaryVector => true
+    case _: org.apache.arrow.vector.TimeStampNanoVector |
+        _: org.apache.arrow.vector.TimeStampNanoTZVector |
+        _: org.apache.arrow.vector.IntervalMonthDayNanoVector => true
+    case fv: FieldVector =>
+      fv.getChildrenFromFields.asScala.exists(containsCacheSchemaMismatch)
+    case _ => false
+  }
+}
+
+/**
+ * Iterator that converts ArrowCachedBatch to ColumnarBatch.
+ */
+private class ArrowCachedBatchToColumnarBatchIterator(
+    batchIter: Iterator[CachedBatch],
+    cacheSchema: StructType,
+    selectedSchema: StructType,
+    columnIndices: Array[Int],
+    timeZoneId: String,
+    prefetchEnabled: Boolean = false) extends Iterator[ColumnarBatch] {
+
+  import java.util.concurrent.{Callable, ExecutionException, Executors, ExecutorService, Future}
+
+  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+    s"ArrowCachedBatchToColumnarBatchIterator-${TaskContext.get().taskAttemptId()}",
+    0,
+    Long.MaxValue)
+
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    cacheSchema, timeZoneId, false, false, losslessInternalTypes = true)
+
+  // Track only the previous root to close it when next batch is produced
+  private var previousRoot: VectorSchemaRoot = null
+
+  // Prefetch support: deserialize the next batch into its own root in a background thread while
+  // the current batch is being consumed. Only the deserialization (IPC read + decompression +
+  // loading into a fresh root) happens off-thread; closing the previous root stays on the
+  // consumer thread in next(), so the vectors backing a returned ColumnarBatch are never released
+  // while the consumer may still read them.
+  private val prefetchExecutor: ExecutorService = if (prefetchEnabled) {
+    Executors.newSingleThreadExecutor(r => {
+      val t = new Thread(r, "arrow-cache-prefetch")
+      t.setDaemon(true)
+      t
+    })
+  } else {
+    null
+  }
+  private var prefetchFuture: Future[VectorSchemaRoot] = _
+
+  // Register cleanup - close remaining root and allocator when task completes
+  Option(TaskContext.get()).foreach { tc =>
+    tc.addTaskCompletionListener[Unit] { _ =>
+      // Stop the worker and close any root it already produced before closing the allocator.
+      // A short-circuiting consumer (e.g. LIMIT) can trigger task completion while a prefetched
+      // root is in flight; simply cancelling the future would drop that root and allocator.close()
+      // would then fail with "Memory was leaked by query".
+      prefetchFuture = ArrowCachedBatchSerializer.drainAndClosePrefetch(
+        prefetchExecutor, prefetchFuture)
+      if (previousRoot != null) {
+        previousRoot.close()
+        previousRoot = null
+      }
+      allocator.close()
+    }
+  }
+
+  override def hasNext: Boolean = prefetchFuture != null || batchIter.hasNext
+
+  override def next(): ColumnarBatch = {
+    // Close the previous root since the consumer has moved on from the batch it backed.
+    if (previousRoot != null) {
+      previousRoot.close()
+      previousRoot = null
+    }
+
+    val root = if (prefetchFuture != null) {
+      val r = try {
+        prefetchFuture.get()
+      } catch {
+        case e: ExecutionException => throw e.getCause
+      }
+      prefetchFuture = null
+      r
+    } else {
+      deserializeToRoot(batchIter.next().asInstanceOf[ArrowCachedBatch])
+    }
+
+    previousRoot = root
+
+    // Wrap vectors in ArrowColumnVector and project to selected columns.
+    val allColumns = root.getFieldVectors.asScala.map { vector =>
+      new ArrowColumnVector(vector)
+    }.toArray[ColumnVector]
+    val selectedColumns = columnIndices.map(allColumns(_))
+    val batch = new ColumnarBatch(selectedColumns, root.getRowCount)
+
+    // Start prefetching the next batch while this one is being consumed.
+    submitPrefetch()
+
+    batch
+  }
+
+  /** Deserialize a cached batch into its own freshly-created root. Does not touch other roots. */
+  private def deserializeToRoot(cachedBatch: ArrowCachedBatch): VectorSchemaRoot = {
+    val in = new ByteArrayInputStream(cachedBatch.arrowData)
+    val readChannel = new ReadChannel(Channels.newChannel(in))
+    val recordBatch = MessageSerializer.deserializeRecordBatch(readChannel, allocator)
+    Utils.tryWithSafeFinally {
+      val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      // VectorLoader.load fills vectors incrementally, so a failure (malformed data, decompression
+      // error, OOM) can occur after earlier vectors have allocated buffers. Close the partially
+      // loaded root on failure, otherwise it becomes unreachable and the later allocator.close()
+      // fails with a leak error that masks the original exception.
+      try {
+        val loader = new VectorLoader(root)
+        loader.load(recordBatch)
+        root
+      } catch {
+        case t: Throwable =>
+          root.close()
+          throw t
+      }
+    } {
+      recordBatch.close()
+    }
+  }
+
+  /** Submit deserialization of the next batch to the background thread, if prefetch is enabled. */
+  private def submitPrefetch(): Unit = {
+    if (prefetchEnabled && batchIter.hasNext) {
+      val nextCachedBatch = batchIter.next().asInstanceOf[ArrowCachedBatch]
+      prefetchFuture = prefetchExecutor.submit(new Callable[VectorSchemaRoot] {
+        override def call(): VectorSchemaRoot = deserializeToRoot(nextCachedBatch)
+      })
+    }
+  }
+}
+
+/**
+ * A typed column reader that reads from an Arrow FieldVector and writes directly
+ * to an UnsafeRowWriter, avoiding per-row pattern matching overhead.
+ */
+private abstract class ArrowColumnReader {
+  def vector: org.apache.arrow.vector.FieldVector
+  def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit
+  def setVector(v: org.apache.arrow.vector.FieldVector): Unit
+}
+
+private object ArrowColumnReader {
+  import org.apache.arrow.vector._
+
+  def create(dataType: DataType): ArrowColumnReader = dataType match {
+    case BooleanType => new ArrowColumnReader {
+      private var _vector: BitVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[BitVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex) != 0)
+    }
+    case ByteType => new ArrowColumnReader {
+      private var _vector: TinyIntVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[TinyIntVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex))
+    }
+    case ShortType => new ArrowColumnReader {
+      private var _vector: SmallIntVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[SmallIntVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex))
+    }
+    case IntegerType | DateType | _: YearMonthIntervalType => new ArrowColumnReader {
+      private var _vector: FieldVector = _
+      // Pre-bind accessor at setVector time to avoid per-row pattern match
+      private var _accessor: Int => Int = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = {
+        _vector = v
+        _accessor = v match {
+          case iv: IntVector => iv.get
+          case dv: DateDayVector => dv.get
+          case iv: org.apache.arrow.vector.IntervalYearVector => iv.get
+        }
+      }
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _accessor(rowIndex))
+    }
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+      new ArrowColumnReader {
+      private var _vector: FieldVector = _
+      private var _accessor: Int => Long = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = {
+        _vector = v
+        _accessor = v match {
+          case bv: BigIntVector => bv.get(_)
+          case tv: TimeStampMicroTZVector => tv.get(_)
+          case tv: TimeStampMicroVector => tv.get(_)
+          case dv: org.apache.arrow.vector.DurationVector =>
+            i => org.apache.arrow.vector.DurationVector.get(dv.getDataBuffer, i)
+          case tv: org.apache.arrow.vector.TimeNanoVector => tv.get(_)
+        }
+      }
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _accessor(rowIndex))
+    }
+    case FloatType => new ArrowColumnReader {
+      private var _vector: Float4Vector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[Float4Vector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex))
+    }
+    case DoubleType => new ArrowColumnReader {
+      private var _vector: Float8Vector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[Float8Vector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex))
+    }
+    case _: StringType => new ArrowColumnReader {
+      private var _vector: VarCharVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[VarCharVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit = {
+        val bytes = _vector.get(rowIndex)
+        writer.write(ordinal, UTF8String.fromBytes(bytes))
+      }
+    }
+    case BinaryType => new ArrowColumnReader {
+      private var _vector: VarBinaryVector = _
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[VarBinaryVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit =
+        writer.write(ordinal, _vector.get(rowIndex))
+    }
+    case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+      // Fast path for compact decimals (precision <= 18):
+      // Read the unscaled long directly from the Arrow buffer, zero allocation.
+      // Arrow Java stores Decimal128 in the platform's native byte order, so the position of
+      // the low-order word inside the 16-byte slot depends on endianness: first 8 bytes on
+      // little-endian, last 8 bytes on big-endian (the other word is sign extension). ArrowBuf
+      // getLong also reads in native order, so selecting the right word is all that is needed.
+      // See ArrowCachedBatchSerializer.compactDecimalUnscaledOffset.
+      new ArrowColumnReader {
+        private var _vector: DecimalVector = _
+        private var _dataBuffer: org.apache.arrow.memory.ArrowBuf = _
+        private val typeWidth = DecimalVector.TYPE_WIDTH // 16 bytes
+        private val unscaledOffset = ArrowCachedBatchSerializer
+          .compactDecimalUnscaledOffset(java.nio.ByteOrder.nativeOrder())
+        def vector: FieldVector = _vector
+        def setVector(v: FieldVector): Unit = {
+          _vector = v.asInstanceOf[DecimalVector]
+          _dataBuffer = _vector.getDataBuffer
+        }
+        def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit = {
+          val startIndex = rowIndex.toLong * typeWidth
+          val unscaledLong = _dataBuffer.getLong(startIndex + unscaledOffset)
+          writer.write(ordinal, unscaledLong)
+        }
+      }
+    case dt: DecimalType => new ArrowColumnReader {
+      // Slow path for wide decimals (precision > 18): must go through BigDecimal
+      private var _vector: DecimalVector = _
+      private val precision = dt.precision
+      private val scale = dt.scale
+      def vector: FieldVector = _vector
+      def setVector(v: FieldVector): Unit = _vector = v.asInstanceOf[DecimalVector]
+      def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit = {
+        val decimal = Decimal(_vector.getObject(rowIndex), precision, scale)
+        writer.write(ordinal, decimal, precision, scale)
+      }
+    }
+    case _ =>
+      throw new UnsupportedOperationException(
+        s"Complex type $dataType is handled by the fallback path")
+  }
+}
+
+/**
+ * Fast-path iterator that converts ArrowCachedBatch to InternalRow.
+ * Uses pre-built typed column readers to avoid per-row pattern matching,
+ * and writes directly to UnsafeRowWriter to avoid intermediate SpecificInternalRow.
+ * Only used for schemas without complex types (Array/Struct/Map).
+ */
+private class ArrowCachedBatchToInternalRowIterator(
+    batchIter: Iterator[CachedBatch],
+    cacheSchema: StructType,
+    selectedSchema: StructType,
+    columnIndices: Array[Int],
+    timeZoneId: String,
+    prefetchEnabled: Boolean = false) extends Iterator[InternalRow] {
+
+  import java.util.concurrent.{Callable, ExecutionException, Future, Executors,
+    ExecutorService}
+
+  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+    s"ArrowCachedBatchToInternalRowIterator-${TaskContext.get().taskAttemptId()}",
+    0,
+    Long.MaxValue)
+
+  private var currentRoot: VectorSchemaRoot = null
+  private var currentRowIndex: Int = 0
+  private var currentRowCount: Int = 0
+
+  private val numFields = selectedSchema.length
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    cacheSchema, timeZoneId, false, false, losslessInternalTypes = true)
+
+  // Pre-build typed readers per column at init time -- no per-row pattern match
+  private val columnReaders: Array[ArrowColumnReader] =
+    selectedSchema.fields.map(f => ArrowColumnReader.create(f.dataType))
+
+  // Write directly to UnsafeRow -- no intermediate SpecificInternalRow + UnsafeProjection
+  private val rowWriter = new UnsafeRowWriter(numFields)
+
+  // Prefetch support: deserialize the next batch in background while current batch is consumed
+  private val prefetchExecutor: ExecutorService = if (prefetchEnabled) {
+    Executors.newSingleThreadExecutor(r => {
+      val t = new Thread(r, "arrow-cache-row-prefetch")
+      t.setDaemon(true)
+      t
+    })
+  } else {
+    null
+  }
+  private var prefetchFuture: Future[VectorSchemaRoot] = _
+
+  // Register cleanup
+  Option(TaskContext.get()).foreach { tc =>
+    tc.addTaskCompletionListener[Unit] { _ =>
+      // Stop the worker and close any root it already produced before closing the allocator;
+      // otherwise a prefetched root produced after a short-circuiting consumer (e.g. LIMIT) stops
+      // reading would leak and allocator.close() would fail with "Memory was leaked by query".
+      prefetchFuture = ArrowCachedBatchSerializer.drainAndClosePrefetch(
+        prefetchExecutor, prefetchFuture)
+      if (currentRoot != null) {
+        currentRoot.close()
+        currentRoot = null
+      }
+      allocator.close()
+    }
+  }
+
+  override def hasNext: Boolean = {
+    // Keep loading batches until the current one has rows or the input is exhausted. A cached
+    // batch can legitimately have zero rows (e.g. an empty ColumnarBatch from a columnar source);
+    // without this loop an empty batch would make hasNext return false and silently drop all
+    // remaining, non-empty batches.
+    while (currentRowIndex >= currentRowCount && (prefetchFuture != null || batchIter.hasNext)) {
+      loadNextBatch()
+    }
+    if (currentRowIndex < currentRowCount) {
+      true
+    } else {
+      if (currentRoot != null) {
+        currentRoot.close()
+        currentRoot = null
+      }
+      false
+    }
+  }
+
+  override def next(): InternalRow = {
+    if (!hasNext) {
+      throw new NoSuchElementException("No more rows")
+    }
+
+    rowWriter.reset()
+    rowWriter.zeroOutNullBytes()
+
+    val rowIdx = currentRowIndex
+    var i = 0
+    while (i < numFields) {
+      val reader = columnReaders(i)
+      if (reader.vector.isNull(rowIdx)) {
+        rowWriter.setNullAt(i)
+      } else {
+        reader.read(rowIdx, i, rowWriter)
+      }
+      i += 1
+    }
+
+    currentRowIndex += 1
+    rowWriter.getRow()
+  }
+
+  /** Deserialize a cached batch into a VectorSchemaRoot. */
+  private def deserializeBatch(cachedBatch: ArrowCachedBatch): VectorSchemaRoot = {
+    val in = new ByteArrayInputStream(cachedBatch.arrowData)
+    val readChannel = new ReadChannel(Channels.newChannel(in))
+    val recordBatch = MessageSerializer.deserializeRecordBatch(readChannel, allocator)
+    try {
+      val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      // VectorLoader.load fills vectors incrementally, so a failure (malformed data, decompression
+      // error, OOM) can occur after earlier vectors have allocated buffers. Close the partially
+      // loaded root on failure, otherwise it becomes unreachable and the later allocator.close()
+      // fails with a leak error that masks the original exception.
+      try {
+        val loader = new VectorLoader(root)
+        loader.load(recordBatch)
+        root
+      } catch {
+        case t: Throwable =>
+          root.close()
+          throw t
+      }
+    } finally {
+      recordBatch.close()
+    }
+  }
+
+  /** Submit prefetch for the next batch if available. */
+  private def submitPrefetch(): Unit = {
+    if (prefetchEnabled && batchIter.hasNext) {
+      val nextCachedBatch = batchIter.next().asInstanceOf[ArrowCachedBatch]
+      prefetchFuture = prefetchExecutor.submit(new Callable[VectorSchemaRoot] {
+        override def call(): VectorSchemaRoot = deserializeBatch(nextCachedBatch)
+      })
+    }
+  }
+
+  private def loadNextBatch(): Unit = {
+    if (currentRoot != null) {
+      currentRoot.close()
+      currentRoot = null
+    }
+
+    val root = if (prefetchFuture != null) {
+      // Use the prefetched result
+      val r = try {
+        prefetchFuture.get()
+      } catch {
+        case e: ExecutionException => throw e.getCause
+      }
+      prefetchFuture = null
+      r
+    } else {
+      // No prefetch available, deserialize synchronously
+      val cachedBatch = batchIter.next().asInstanceOf[ArrowCachedBatch]
+      deserializeBatch(cachedBatch)
+    }
+
+    currentRoot = root
+
+    // Update pre-built readers with new vectors
+    var i = 0
+    while (i < numFields) {
+      columnReaders(i).setVector(root.getVector(columnIndices(i)))
+      i += 1
+    }
+
+    currentRowIndex = 0
+    currentRowCount = root.getRowCount
+
+    // Start prefetching the next batch while this one is being consumed
+    submitPrefetch()
+  }
+}

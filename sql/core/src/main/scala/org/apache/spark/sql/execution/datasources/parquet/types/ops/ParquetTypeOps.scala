@@ -21,7 +21,8 @@ import java.time.ZoneId
 
 import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.io.api.{Converter, RecordConsumer}
-import org.apache.parquet.schema.Type
+import org.apache.parquet.schema.{LogicalTypeAnnotation, Type}
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
@@ -46,7 +47,9 @@ import org.apache.spark.sql.types.{DataType, StructType, TimestampLTZNanosType, 
  *   - Type gates: declaring Parquet support (supportDataType)
  *   - Schema clipping: declaring internal struct schema for column pruning
  *
- * NOT yet on the trait (deferred to follow-ups): filter-pushdown predicates.
+ * Filter pushdown is handled separately, in the companion object rather than on this trait,
+ * because it is keyed on the Parquet file's on-disk encoding (a reverse lookup), not on the
+ * Spark DataType: see [[ParquetTypeOps.filterOpsFor]] and [[ParquetFilterOps]].
  *
  * DISPATCH PATTERN: Framework FIRST at all integration sites. Each Parquet infrastructure
  * method wraps itself with:
@@ -214,6 +217,25 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    * @param descriptor the Parquet column descriptor being read
    */
   def getVectorUpdater(descriptor: ColumnDescriptor): Option[ParquetVectorUpdater] = None
+
+  /**
+   * Whether a dictionary-encoded column of this type can be lazily dictionary-decoded on the
+   * vectorized path (the dictionary is attached to the column vector and decoded on read) rather
+   * than eagerly decoding every value up front. Consulted (Spark DataType -> ops) by
+   * `VectorizedColumnReader.isLazyDecodingSupported`.
+   *
+   * Default is false - a type must opt in by overriding to true, matching the opt-in stance of
+   * [[isBatchReadSupported]]. This is deliberately fail-safe: lazy decoding bypasses the
+   * per-value work a vectorized updater ([[getVectorUpdater]]) may do (unit conversion,
+   * truncation, rebasing), so a type that opts into vectorized reads but forgets to opt out of
+   * lazy decoding when it needs per-value processing would silently return wrong results. With a
+   * false default the worst case is a missed lazy-decode optimization, not incorrect data. Types
+   * whose updater is a plain identity copy (no per-value processing) should override to true to
+   * regain the optimization.
+   *
+   * @param descriptor the Parquet column descriptor being read
+   */
+  def supportsLazyDictionaryDecoding(descriptor: ColumnDescriptor): Boolean = false
 }
 
 /**
@@ -249,4 +271,40 @@ private[parquet] object ParquetTypeOps {
   private[parquet] def getVectorUpdaterOrNull(
       dt: DataType, descriptor: ColumnDescriptor): ParquetVectorUpdater =
     apply(dt).flatMap(_.getVectorUpdater(descriptor)).orNull
+
+  /**
+   * Java-friendly entry point for `VectorizedColumnReader`: whether `dt`'s dictionary-encoded
+   * column can be lazily decoded, or null if `dt` is not framework-managed (so the caller keeps
+   * its built-in decision).
+   */
+  private[parquet] def supportsLazyDictionaryDecodingOrNull(
+      dt: DataType, descriptor: ColumnDescriptor): java.lang.Boolean =
+    apply(dt).map(o => java.lang.Boolean.valueOf(o.supportsLazyDictionaryDecoding(descriptor)))
+      .orNull
+
+  /**
+   * Reverse lookup for filter pushdown: given a Parquet field's logical annotation and
+   * primitive type (from the file schema), returns the framework filter ops that owns that
+   * encoding, if any. Used by `ParquetFilters` (via its FrameworkFilterOps extractor) so
+   * framework types participate in predicate pushdown with no per-type changes there.
+   *
+   * Only the primitive name + logical annotation are matched, not the type length. That is
+   * sufficient today because every registered ops is a fixed-width primitive (getTypeLength == 0),
+   * so length carries no information. A future FIXED_LEN_BYTE_ARRAY-backed ops would need length
+   * added to the key to disambiguate widths.
+   */
+  private[parquet] def filterOpsFor(
+      logicalTypeAnnotation: LogicalTypeAnnotation,
+      primitiveTypeName: PrimitiveTypeName): Option[ParquetFilterOps] =
+    filterOpsList.find { ops =>
+      ops.primitiveTypeName == primitiveTypeName &&
+        ops.logicalTypeAnnotation == logicalTypeAnnotation
+    }
+
+  /**
+   * Registration point for filter pushdown: every framework type that supports Parquet
+   * predicate pushdown lists its [[ParquetFilterOps]] here. This is what `filterOpsFor`
+   * scans, so a new type participates in pushdown by adding its ops to this Seq.
+   */
+  private val filterOpsList: Seq[ParquetFilterOps] = Seq(TimeTypeParquetOps.filterOps)
 }

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, USER_DEFINED_AGGREGATION}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -125,6 +126,8 @@ case class SimpleTypedAggregateExpression(
     nullable: Boolean)
   extends DeclarativeAggregate with TypedAggregateExpression with NonSQLExpression {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(USER_DEFINED_AGGREGATION)
+
   override lazy val deterministic: Boolean = true
 
   override def children: Seq[Expression] = {
@@ -222,6 +225,8 @@ case class ComplexTypedAggregateExpression(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[Any] with TypedAggregateExpression with NonSQLExpression {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(USER_DEFINED_AGGREGATION)
 
   override lazy val deterministic: Boolean = true
 

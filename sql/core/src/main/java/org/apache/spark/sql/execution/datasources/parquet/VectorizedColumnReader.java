@@ -39,6 +39,7 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.SparkUnsupportedOperationException;
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps$;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
@@ -150,6 +151,14 @@ public class VectorizedColumnReader {
   private boolean isLazyDecodingSupported(
       PrimitiveType.PrimitiveTypeName typeName,
       DataType sparkType) {
+    // Types Framework: a framework-managed type decides whether its dictionary-encoded column can
+    // be lazily decoded (false when its vectorized updater does per-value processing that lazy
+    // decoding would bypass). Non-framework types fall through to the built-in cases below.
+    Boolean frameworkDecision =
+        ParquetTypeOps$.MODULE$.supportsLazyDictionaryDecodingOrNull(sparkType, descriptor);
+    if (frameworkDecision != null) {
+      return frameworkDecision;
+    }
     boolean isSupported = false;
     // Don't use lazy dictionary decoding if the column needs extra processing: upcasting or date
     // rebasing.
@@ -166,13 +175,8 @@ public class VectorizedColumnReader {
       }
       case INT64: {
         boolean isDecimal = sparkType instanceof DecimalType;
-        // TIME columns (both MICROS and NANOS) need per-value processing in the updater: a unit
-        // conversion for MICROS and/or truncation to the requested precision. Lazy dictionary
-        // decoding would bypass the updater, so it must be disabled for them.
         boolean needsUpcast = (isDecimal && !DecimalType.is64BitDecimalType(sparkType)) ||
-          updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS) ||
-          updaterFactory.isTimeTypeMatched(TimeUnit.MICROS) ||
-          updaterFactory.isTimeTypeMatched(TimeUnit.NANOS);
+          updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
         boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&
           !"CORRECTED".equals(datetimeRebaseMode);
         isSupported = !needsUpcast && !needsRebase && !needsDecimalScaleRebase(sparkType);

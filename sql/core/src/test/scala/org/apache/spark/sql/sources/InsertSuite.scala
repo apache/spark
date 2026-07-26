@@ -997,9 +997,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  for ((label, insertClause) <- Seq(
-      ("REPLACE ON", "AS t REPLACE ON t.i = 1"),
-      ("REPLACE USING", "AS t REPLACE USING (i)"))) {
+  for ((label, insertClause, operation) <- Seq(
+      ("REPLACE WHERE", "REPLACE WHERE i = 1", "INSERT INTO ... REPLACE WHERE"),
+      ("REPLACE ON", "AS t REPLACE ON t.i = 1", "INSERT INTO ... REPLACE ON/USING"),
+      ("REPLACE USING", "AS t REPLACE USING (i)", "INSERT INTO ... REPLACE ON/USING"))) {
     test(s"INSERT INTO ... $label is unsupported for V1 tables") {
       withTable("test_table") {
         val schema = new StructType().add("i", "int").add("j", "string")
@@ -1027,7 +1028,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sqlState = "0A000",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`test_table`",
-            "operation" -> "INSERT INTO ... REPLACE ON/USING")
+            "operation" -> operation)
         )
       }
     }

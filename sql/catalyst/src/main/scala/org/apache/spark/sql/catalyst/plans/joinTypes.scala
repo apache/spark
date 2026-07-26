@@ -160,6 +160,31 @@ case object Forward extends AsOfJoinDirection
 case object Backward extends AsOfJoinDirection
 case object Nearest extends AsOfJoinDirection
 
+sealed abstract class MatchComparisonOperator {
+  def sql: String
+  def flip: MatchComparisonOperator
+}
+
+case object GreaterThanOrEqualOp extends MatchComparisonOperator {
+  override def sql: String = ">="
+  override def flip: MatchComparisonOperator = LessThanOrEqualOp
+}
+
+case object GreaterThanOp extends MatchComparisonOperator {
+  override def sql: String = ">"
+  override def flip: MatchComparisonOperator = LessThanOp
+}
+
+case object LessThanOrEqualOp extends MatchComparisonOperator {
+  override def sql: String = "<="
+  override def flip: MatchComparisonOperator = GreaterThanOrEqualOp
+}
+
+case object LessThanOp extends MatchComparisonOperator {
+  override def sql: String = "<"
+  override def flip: MatchComparisonOperator = GreaterThanOp
+}
+
 object LateralJoinType {
 
   val supported = Seq(
@@ -224,6 +249,11 @@ object NearestByJoinType {
           "joinType" -> typ,
           "supported" -> supportedDisplay))
   }
+}
+
+object AsOfJoinType {
+
+  val supportedDisplay: String = "'INNER', 'LEFT OUTER'"
 }
 
 object NearestByJoinMode {

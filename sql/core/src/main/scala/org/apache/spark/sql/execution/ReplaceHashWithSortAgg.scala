@@ -18,31 +18,16 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final, Partial}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Replace hash-based aggregate with sort aggregate in the spark plan if:
+ * Replace hash-based aggregate with sort aggregate in the spark plan if the plan is a
+ * [[HashAggregateExec]] or [[ObjectHashAggregateExec]], and the child satisfies the sort order
+ * of corresponding [[SortAggregateExec]].
  *
- * 1. The plan is a pair of partial and final [[HashAggregateExec]] or [[ObjectHashAggregateExec]],
- *    and the child of partial aggregate satisfies the sort order of corresponding
- *    [[SortAggregateExec]].
- * or
- * 2. The plan is a [[HashAggregateExec]] or [[ObjectHashAggregateExec]], and the child satisfies
- *    the sort order of corresponding [[SortAggregateExec]].
- *
- * Examples:
- * 1. aggregate after join:
- *
- *  HashAggregate(t1.i, SUM, final)
- *               |                         SortAggregate(t1.i, SUM, complete)
- * HashAggregate(t1.i, SUM, partial)   =>                |
- *               |                            SortMergeJoin(t1.i = t2.j)
- *    SortMergeJoin(t1.i = t2.j)
- *
- * 2. aggregate after sort:
+ * Example:
  *
  * HashAggregate(t1.i, SUM, partial)         SortAggregate(t1.i, SUM, partial)
  *               |                     =>                  |
@@ -51,6 +36,10 @@ import org.apache.spark.sql.internal.SQLConf
  * Hash-based aggregate can be replaced when its child satisfies the sort order of
  * corresponding sort aggregate. Sort aggregate is faster in the sense that
  * it does not have hashing overhead of hash aggregate.
+ *
+ * Note that [[CombineAdjacentAggregation]] runs before this rule, so a pair of adjacent partial
+ * and final aggregate has already been combined into a single `Complete` mode aggregate, which
+ * this rule can further replace with a sort aggregate when the ordering is satisfied.
  */
 object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
@@ -68,41 +57,13 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
     plan.transformDown {
       case hashAgg: BaseAggregateExec if isHashBasedAggWithKeys(hashAgg) =>
         val sortAgg = hashAgg.toSortAggregate
-        hashAgg.child match {
-          case partialAgg: BaseAggregateExec
-            if isHashBasedAggWithKeys(partialAgg) && isPartialAgg(partialAgg, hashAgg) =>
-            if (SortOrder.orderingSatisfies(
-                partialAgg.child.outputOrdering, sortAgg.requiredChildOrdering.head)) {
-              sortAgg.copy(
-                aggregateExpressions = sortAgg.aggregateExpressions.map(_.copy(mode = Complete)),
-                child = partialAgg.child)
-            } else {
-              hashAgg
-            }
-          case other =>
-            if (SortOrder.orderingSatisfies(
-                other.outputOrdering, sortAgg.requiredChildOrdering.head)) {
-              sortAgg
-            } else {
-              hashAgg
-            }
+        if (SortOrder.orderingSatisfies(
+            hashAgg.child.outputOrdering, sortAgg.requiredChildOrdering.head)) {
+          sortAgg
+        } else {
+          hashAgg
         }
       case other => other
-    }
-  }
-
-  /**
-   * Check if `partialAgg` to be partial aggregate of `finalAgg`.
-   */
-  private def isPartialAgg(partialAgg: BaseAggregateExec, finalAgg: BaseAggregateExec): Boolean = {
-    if (partialAgg.aggregateExpressions.forall(_.mode == Partial) &&
-        finalAgg.aggregateExpressions.forall(_.mode == Final)) {
-      (finalAgg.logicalLink, partialAgg.logicalLink) match {
-        case (Some(agg1), Some(agg2)) => agg1.sameResult(agg2)
-        case _ => false
-      }
-    } else {
-      false
     }
   }
 

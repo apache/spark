@@ -24,7 +24,6 @@ import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.IntLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
-import org.apache.parquet.schema.LogicalTypeAnnotation.TimeLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.UnknownLogicalTypeAnnotation;
 import org.apache.parquet.schema.PrimitiveType;
@@ -247,11 +246,6 @@ public class ParquetVectorUpdaterFactory {
 
   boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
     return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation annotation &&
-      annotation.getUnit() == unit;
-  }
-
-  boolean isTimeTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
-    return logicalTypeAnnotation instanceof TimeLogicalTypeAnnotation annotation &&
       annotation.getUnit() == unit;
   }
 

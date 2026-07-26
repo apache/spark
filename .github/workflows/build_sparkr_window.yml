@@ -79,6 +79,13 @@ jobs:
         mvn -DskipTests -Psparkr -Djna.nosys=true package -Dmaven.version=3.8.7
       shell: cmd
     - name: Run SparkR tests
+      # The SparkR test launch occasionally hangs while the R process waits on the
+      # SparkR backend socket handshake on the windows-2025 runner. Without a
+      # step-level bound this silently consumes the full 120-minute job timeout and
+      # is reported as a cancellation rather than a fast, retryable failure. Cap the
+      # step so a stalled handshake fails fast; successful runs finish it in well
+      # under 60 minutes (the whole job normally completes in ~75-85 minutes).
+      timeout-minutes: 60
       run: |
         set HADOOP_HOME=%USERPROFILE%\hadoop-3.3.6
         set PATH=%HADOOP_HOME%\bin;%PATH%

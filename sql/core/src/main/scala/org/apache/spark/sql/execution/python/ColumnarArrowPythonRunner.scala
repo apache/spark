@@ -51,10 +51,22 @@ private[python] class ColumnarArrowPythonWithNamedArgumentRunner(
 
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
-  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+  // The input schema travels in evalConf (key "input_type"), exactly like
+  // ArrowPythonWithNamedArgumentRunner. It must NOT be written into the UDF command section:
+  // the worker's WorkerInitInfo.from_stream reads that section as a UDF count followed by UDF
+  // entries, so an extra UTF string there desyncs the whole init-message parse -- the worker
+  // then blocks waiting for bytes past the end of the init message and the task hangs forever.
+  override protected def evalConf: Map[String, String] = {
     if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
-      PythonWorkerUtils.writeUTF(schema.json, dataOut)
+      super.evalConf ++ Map(
+        "input_type" -> schema.json
+      )
+    } else {
+      super.evalConf
     }
+  }
+
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)
   }
 }

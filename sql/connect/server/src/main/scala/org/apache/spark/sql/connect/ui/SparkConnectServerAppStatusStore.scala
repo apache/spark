@@ -31,8 +31,16 @@ class SparkConnectServerAppStatusStore(store: KVStore) {
     KVUtils.viewToSeq(store.view(classOf[SessionInfo]))
   }
 
+  def getSessionList(offset: Int, length: Int): Seq[SessionInfo] = {
+    KVUtils.viewToSeq(store.view(classOf[SessionInfo]).skip(offset).max(length))
+  }
+
   def getExecutionList: Seq[ExecutionInfo] = {
     KVUtils.viewToSeq(store.view(classOf[ExecutionInfo]))
+  }
+
+  def getExecutionList(offset: Int, length: Int): Seq[ExecutionInfo] = {
+    KVUtils.viewToSeq(store.view(classOf[ExecutionInfo]).skip(offset).max(length))
   }
 
   def getOnlineSessionNum: Int = {
@@ -73,7 +81,7 @@ class SparkConnectServerAppStatusStore(store: KVStore) {
   }
 }
 
-private[connect] class SessionInfo(
+private[spark] class SessionInfo(
     @KVIndexParam val sessionId: String,
     val startTimestamp: Long,
     val userId: String,
@@ -90,7 +98,7 @@ private[connect] class SessionInfo(
   }
 }
 
-private[connect] class ExecutionInfo(
+private[spark] class ExecutionInfo(
     @KVIndexParam val jobTag: String,
     val statement: String,
     val sessionId: String,
@@ -125,7 +133,7 @@ private[connect] class ExecutionInfo(
   }
 }
 
-private[connect] object ExecutionState extends Enumeration {
+private[spark] object ExecutionState extends Enumeration {
   val STARTED, COMPILED, READY, CANCELED, FAILED, FINISHED, CLOSED = Value
   type ExecutionState = Value
 }

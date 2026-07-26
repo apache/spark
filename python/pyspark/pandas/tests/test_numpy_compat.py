@@ -85,6 +85,33 @@ class NumPyCompatTestsMixin:
         with self.assertRaisesRegex(ValueError, "cannot join with no overlapping index names"):
             np.left_shift(psdf1, psdf2)
 
+    def test_np_math_functions(self):
+        for np_func, values in (
+            (np.arccosh, [-np.inf, -1.0, 0.0, 1.0, 2.0, 64.0, np.inf, np.nan]),
+            (np.arcsinh, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (
+                np.arctanh,
+                [-np.inf, -64.0, -1.0, 0.0, 1.0, 64.0, np.inf, np.nan],
+            ),
+            (np.cosh, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (np.deg2rad, [-np.inf, -64.0, -180.0, 0.0, 180.0, 64.0, np.inf, np.nan]),
+            (np.exp2, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (np.fabs, [np.iinfo(np.int64).min, -2, 0, 2]),
+            (np.fabs, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (np.negative, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (np.positive, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (np.rad2deg, [-np.inf, -64.0, -np.pi, 0.0, np.pi, 64.0, np.inf, np.nan]),
+            (np.sign, [-np.inf, -64.0, -2.0, -0.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (np.sinh, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (np.square, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (np.tanh, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+        ):
+            with self.subTest(name=np_func.__name__, values=values):
+                pdf = pd.DataFrame({"a": values})
+                psdf = ps.from_pandas(pdf)
+
+                self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
+
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 
