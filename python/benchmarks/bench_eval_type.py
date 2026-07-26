@@ -701,15 +701,24 @@ class _ArrowTableUDFBenchMixin:
         "filter_udtf": (_ArrowTableUDFFilter, None, [0]),
         "stringify_udtf": (_ArrowTableUDFStringify, StringType(), [0]),
     }
-    params = [list(_scenario_configs), list(_udtfs)]
-    param_names = ["scenario", "udtf"]
+    # "arrow": non-legacy pure Arrow path; "legacy_pandas": legacy pandas
+    # conversion path (flag on), which goes through pandas Series/DataFrame.
+    _conversions = ["arrow", "legacy_pandas"]
+    params = [list(_scenario_configs), list(_udtfs), list(_conversions)]
+    param_names = ["scenario", "udtf", "conversion"]
 
-    def _write_scenario(self, scenario, udtf_name, buf):
+    def _write_scenario(self, scenario, udtf_name, conversion, buf):
         batches, schema = self._build_scenario(scenario)
         handler, ret_type, arg_offsets = self._udtfs[udtf_name]
         if ret_type is None:
             ret_type = schema.fields[0].dataType
         return_type = StructType([StructField("c0", ret_type)])
+
+        runner_conf = None
+        if conversion == "legacy_pandas":
+            runner_conf = {
+                "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": "true"
+            }
 
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_ARROW_TABLE_UDF,
@@ -718,6 +727,7 @@ class _ArrowTableUDFBenchMixin:
             ),
             lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
             buf,
+            runner_conf=runner_conf,
             eval_conf={"input_type": schema.json()},
         )
 
@@ -1797,9 +1807,9 @@ class WindowAggPandasUDFPeakmemBench(_WindowAggPandasBenchMixin, _PeakmemBenchBa
 # Stateful streaming with Pandas. UDF signature is
 # ``(api_client, mode, key, pdfs)`` and returns ``Iterator[pandas.DataFrame]``.
 # The input wire stream is a single plain Arrow stream pre-sorted by the
-# grouping key column at offset 0; ``TransformWithStateInPandasSerializer``
-# chunks rows into one ``(mode, key, pdfs)`` tuple per group, then emits a
-# phantom ``PROCESS_TIMER`` and ``COMPLETE`` call with an empty pdf iterator.
+# grouping key column at offset 0; ``read_udfs`` in worker.py chunks rows into
+# one ``(mode, key, pdfs)`` tuple per group, then emits a phantom
+# ``PROCESS_TIMER`` and ``COMPLETE`` call with an empty pdf iterator.
 # ``StatefulProcessorApiClient.__init__`` opens a real TCP socket to the JVM
 # state server; the stub listener below satisfies that connect. The benchmark
 # UDFs never invoke any state API method, so no protocol exchange is needed.
@@ -1996,10 +2006,9 @@ class TransformWithStatePandasUDFPeakmemBench(
 # either inputData or initState rows -- never both -- with the inactive column
 # written as an all-null struct. Matching the JVM ``initData ++ data`` ordering,
 # all initial-state batches are emitted first (initState populated), then all
-# data batches (inputData populated). ``TransformWithStateInPandasInitStateSerializer``
-# regroups rows by the leading key column, so each key surfaces as an init-only
-# call followed by a data-only call; the empty side of each call is filtered out
-# before the UDF sees it.
+# data batches (inputData populated). The worker regroups rows by the leading
+# key column, so each key surfaces as an init-only call followed by a data-only
+# call; the empty side of each call is filtered out before the UDF sees it.
 
 
 class _TransformWithStatePandasInitStateBenchMixin(_TransformWithStatePandasBenchMixin):
@@ -2153,7 +2162,7 @@ class TransformWithStatePandasInitStateUDFPeakmemBench(
 # Stateful streaming with plain PySpark Rows. UDF signature is
 # ``(api_client, mode, key, rows)`` and returns ``Iterator[Row]``. The input
 # wire stream is a single plain Arrow stream pre-sorted by the grouping key
-# column at offset 0; ``TransformWithStateInPySparkRowSerializer`` walks the
+# column at offset 0; the worker walks the
 # batch row by row, materializing each into a ``Row`` (all columns, including
 # the key) via ``.as_py()``, groups consecutive rows by key, and yields one
 # ``(mode, key, rows)`` tuple per group, then a phantom ``PROCESS_TIMER`` and
@@ -2172,7 +2181,7 @@ class _TransformWithStateRowBenchMixin:
     Each scenario emits one plain Arrow stream pre-sorted by the leading int
     key column. Unlike the Pandas variant, the key column is NOT projected out:
     UDFs receive an iterator of ``Row`` objects carrying every column (key
-    included), mirroring ``TransformWithStateInPySparkRowSerializer``. Row-by-row
+    included), mirroring the worker's row handling. Row-by-row
     materialization and re-encoding is ~10x slower than the columnar Pandas
     path, so row counts are scaled down accordingly to stay under ASV's 60s
     per-sample timeout.
@@ -2324,10 +2333,10 @@ class TransformWithStateRowUDFPeakmemBench(_TransformWithStateRowBenchMixin, _Pe
 # Each batch carries either inputData or initState rows -- never both -- with the
 # inactive column written as an all-null struct. Matching the JVM ``initData ++
 # data`` ordering, all initial-state batches are emitted first, then all data
-# batches. ``TransformWithStateInPySparkRowInitStateSerializer`` walks each
-# batch row by row, materializing every column (key included) into a ``Row`` via
-# ``.as_py()``, then regroups consecutive rows by the leading key column so each
-# key surfaces as one ``(mode, key, (input_rows, init_rows))`` call. This is the
+# batches. ``read_udfs`` walks each batch row by row, materializing every column
+# (key included) into a ``Row`` via ``.as_py()``, then regroups consecutive rows
+# by the leading key column so each key surfaces as one
+# ``(mode, key, (input_rows, init_rows))`` call. This is the
 # per-row Python object round trip the Row variant is built around, layered on
 # top of the nested-struct init-state deserialization, in contrast to the
 # columnar Pandas init-state variant above.
@@ -2491,8 +2500,8 @@ class TransformWithStateRowInitStateUDFPeakmemBench(
 # ``(key, pdfs, state)`` and returns ``Iterator[pandas.DataFrame]``, where
 # ``state`` is a ``GroupState`` the UDF may read (``getOption``) and write
 # (``update``/``remove``). Unlike TransformWithState, no state server socket is
-# involved: ``ApplyInPandasWithStateSerializer`` reconstructs each ``GroupState``
-# entirely from a metadata column carried inline in the Arrow stream.
+# involved: each ``GroupState`` is reconstructed entirely from a metadata column
+# carried inline in the Arrow stream.
 #
 # The wire stream is a single plain Arrow IPC stream whose batch schema is the
 # data columns followed by one trailing struct column (``__state``, matching the
@@ -2501,7 +2510,7 @@ class TransformWithStateRowInitStateUDFPeakmemBench(
 # state value), ``startOffset``, ``numRows``, ``isLastChunk``. Data and state
 # columns must share a row count, so exactly one populated state row per data
 # chunk sits at the top of each group's range and the remaining state rows are
-# null structs (which the serializer treats as end-of-data padding).
+# null structs (treated as end-of-data padding when read back).
 
 
 class _ApplyInPandasWithStateBenchMixin:

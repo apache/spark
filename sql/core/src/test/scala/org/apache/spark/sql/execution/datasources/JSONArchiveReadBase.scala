@@ -202,3 +202,18 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 }
+
+class JSONTarArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with JSONArchiveReadBase
+  with TarArchiveReadBase
+
+class JSONZipArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with JSONArchiveReadBase
+  with ZipArchiveReadBase
+
+class JSONSevenZArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with JSONArchiveReadBase
+  with SevenZArchiveReadBase

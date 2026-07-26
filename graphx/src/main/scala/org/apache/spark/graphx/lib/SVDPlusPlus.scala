@@ -156,7 +156,7 @@ object SVDPlusPlus {
         {
           val out1 = g1._1.clone()
           BLAS.nativeBLAS.daxpy(out1.length, 1.0, g2._1, 1, out1, 1)
-          val out2 = g2._2.clone()
+          val out2 = g1._2.clone()
           BLAS.nativeBLAS.daxpy(out2.length, 1.0, g2._2, 1, out2, 1)
           (out1, out2, g1._3 + g2._3)
         })

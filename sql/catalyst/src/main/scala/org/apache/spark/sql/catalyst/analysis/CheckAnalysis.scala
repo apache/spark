@@ -676,20 +676,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, _, _, _, _, _, _, _, _, _, _, true)
-              if !SQLConf.get.sortMergeAsOfJoinEnabled =>
-            j.failAnalysis(
-              errorClass = "AS_OF_JOIN.SORT_MERGE_REQUIRED",
-              messageParameters = Map(
-                "config" -> SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key))
-
           case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _)
               if condition.dataType != BooleanType =>
-            throw SparkException.internalError(
-              msg = s"join condition '${toSQLExpr(condition)}' " +
-                s"of type ${toSQLType(condition.dataType)} is not a boolean.",
-              context = j.origin.getQueryContext,
-              summary = j.origin.context.summary)
+            j.failAnalysis(
+              errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
+              messageParameters = Map(
+                "joinCondition" -> toSQLExpr(condition),
+                "conditionType" -> toSQLType(condition.dataType)))
 
           case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _, _, _) =>
             if (!toleranceAssertion.foldable) {
@@ -1262,27 +1255,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case AlterColumns(table: ResolvedTable, specs) =>
-        val groupedColumns = specs.groupBy(_.column.name)
-        groupedColumns.collect {
-          case (name, occurrences) if occurrences.length > 1 =>
-            alter.failAnalysis(
-              errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
-              messageParameters = Map(
-                "table" -> toSQLId(table.name),
-                "fieldName" -> toSQLId(name)))
-        }
-        groupedColumns.keys.foreach { name =>
-          if (groupedColumns.keys.exists(child => child != name && child.startsWith(name))) {
-            alter.failAnalysis(
-              errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
-              messageParameters = Map(
-                "table" -> toSQLId(table.name),
-                "fieldName" -> toSQLId(name)))
-          }
+      case AlterColumns(table: ResolvedTable, specs, _) =>
+        AlterColumns.findRepeatedColumn(specs).foreach { name =>
+          alter.failAnalysis(
+            errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+            messageParameters = Map(
+              "table" -> toSQLId(table.name),
+              "fieldName" -> toSQLId(name)))
         }
         specs.foreach {
-          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _) =>
+          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _, _) =>
             val fieldName = col.name.quoted
             if (dataType.isDefined) {
               val field = CharVarcharUtils.getRawType(col.field.metadata)

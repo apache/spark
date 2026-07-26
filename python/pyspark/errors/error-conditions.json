@@ -1208,11 +1208,6 @@
       "Value for `<arg_name>` must be a non-empty string, got '<arg_value>'."
     ]
   },
-  "VALUE_NOT_PEARSON": {
-    "message": [
-      "Value for `<arg_name>` only supports 'pearson', got '<arg_value>'."
-    ]
-  },
   "VALUE_NOT_PLAIN_COLUMN_REFERENCE": {
     "message": [
       "Value `<val>` in `<field_name>` should be a plain column reference such as `df.col` or `col('column')`."

@@ -107,6 +107,12 @@ trait AliasAwareQueryOutputOrdering[T <: QueryPlan[T]]
           .flatMap(projectExpression)
           .filter(e => orderingSet.add(e.canonicalized))
           .take(aliasCandidateLimit)
+          // Materialize the bounded result into a strict collection. The `LazyList` above is only
+          // needed so `take` can short-circuit candidate generation; storing `sameOrderExpressions`
+          // as an unforced `LazyList` lets each plan node re-wrap the child ordering's lazy list,
+          // and across a deep projection chain that nesting overflows the stack when the ordering
+          // is later serialized or deeply traversed.
+          .toList
         if (sameOrderings.nonEmpty) {
           Some(sortOrder.copy(child = sameOrderings.head,
             sameOrderExpressions = sameOrderings.tail))

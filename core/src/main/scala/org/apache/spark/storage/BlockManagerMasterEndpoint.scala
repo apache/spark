@@ -38,7 +38,6 @@ import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPu
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
-import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -56,14 +55,9 @@ class BlockManagerMasterEndpoint(
     externalBlockStoreClient: Option[ExternalBlockStoreClient],
     blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo],
     mapOutputTracker: MapOutputTrackerMaster,
-    private val _shuffleManager: ShuffleManager,
     isDriver: Boolean)
   extends IsolatedThreadSafeRpcEndpoint with Logging {
 
-  // We initialize the ShuffleManager later in SparkContext and Executor, to allow
-  // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
-  // (except for tests) and we ask for the instance from the SparkEnv.
-  private lazy val shuffleManager = Option(_shuffleManager).getOrElse(SparkEnv.get.shuffleManager)
 
   // Mapping from executor id to the block manager's local disk directories.
   private val executorIdToLocalDirs =
@@ -93,8 +87,14 @@ class BlockManagerMasterEndpoint(
 
   // The authoritative sealed checksum per finalized block. Once present, only a copy with this
   // checksum is admitted to `blockLocations`; divergent copies are rejected, and reads self-check
-  // against it. Kept in lock-step with `blockLocations` on block/rdd/BM removal.
+  // against it. Unlike `blockChecksums`/`blockLocations`, this is a tombstone: it survives the loss
+  // of the block's last replica (so a late divergent copy of a finalized block is still rejected)
+  // and is reclaimed only with the RDD, in `removeRdd`.
   private val sealedChecksums = new JHashMap[BlockId, Long]
+
+  // rddId -> its sealed block ids, letting `removeRdd` reclaim the `sealedChecksums` tombstones by
+  // rddId without scanning the whole map.
+  private val sealedBlocksByRdd = new mutable.HashMap[Int, mutable.HashSet[RDDBlockId]]
 
   // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
@@ -259,6 +259,9 @@ class BlockManagerMasterEndpoint(
     case SealRddChecksums(rddId) =>
       context.reply(sealRddChecksums(rddId))
 
+    case VerifyRddChecksumSeal(rddId) =>
+      context.reply(verifyRddChecksumSeal(rddId))
+
     case UpdateRDDBlockVisibility(taskId, visible) =>
       // This is to report the information that whether rdd blocks computed by task(with `taskId`)
       // can be turned to be visible. This is reported by DAGScheduler right after task completes.
@@ -379,7 +382,6 @@ class BlockManagerMasterEndpoint(
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.remove(blockId)
       blockChecksums.remove(blockId)
-      sealedChecksums.remove(blockId)
       if (trackingCacheVisibility) {
         invisibleRDDBlocks.remove(blockId)
       }
@@ -404,6 +406,10 @@ class BlockManagerMasterEndpoint(
         }
       }
     }
+
+    // Reclaim this RDD's sealed checksums via the index.
+    sealedBlocksByRdd.remove(rddId).foreach(_.foreach(sealedChecksums.remove))
+
     val removeRddFromExecutorsFutures = blockManagerInfo.values.map { bmInfo =>
       bmInfo.storageEndpoint.ask[Int](removeMsg).recover {
         // use 0 as default value means no blocks were removed
@@ -441,8 +447,12 @@ class BlockManagerMasterEndpoint(
           mapStatuses.filter(_ != null).foreach { mapStatus =>
             // Check if the executor has been deallocated
             if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
-              val blocksToDel =
-                shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
+              // Only a BlockingShuffleManager serves block-manager blocks; a pipelined shuffle is
+              // served out-of-band and is not in the MapOutputTracker this loop iterates, so this
+              // resolves only regular shuffles (None only before the manager is initialized).
+              val blocksToDel = SparkEnv.get.shuffleBlockResolver
+                .map(_.getBlocksForShuffle(shuffleId, mapStatus.mapId))
+                .getOrElse(Seq.empty)
               if (blocksToDel.nonEmpty) {
                 val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
                   new mutable.HashSet[BlockId])
@@ -541,7 +551,7 @@ class BlockManagerMasterEndpoint(
       if (locations.isEmpty) {
         blockLocations.remove(blockId)
         blockChecksums.remove(blockId)
-        sealedChecksums.remove(blockId)
+        // `sealedChecksums` deliberately kept (tombstone; see its def).
         logWarning(log"No more replicas available for ${MDC(BLOCK_ID, blockId)}!")
       } else if (proactivelyReplicate && (blockId.isRDD || blockId.isInstanceOf[TestBlockId])) {
         // As a heuristic, assume single executor failure to find out the number of replicas that
@@ -906,7 +916,7 @@ class BlockManagerMasterEndpoint(
     if (locations.isEmpty) {
       blockLocations.remove(blockId)
       blockChecksums.remove(blockId)
-      sealedChecksums.remove(blockId)
+      // `sealedChecksums` deliberately kept (tombstone; see its def).
     }
     true
   }
@@ -958,6 +968,7 @@ class BlockManagerMasterEndpoint(
         // because a lost local-checkpoint block cannot be recomputed.
         val winner = perReplica.values.groupBy(identity).maxBy(_._2.size)._1
         sealedChecksums.put(blockId, winner)
+        sealedBlocksByRdd.getOrElseUpdate(rddId, new mutable.HashSet[RDDBlockId]) += blockId
         val losers = perReplica.collect { case (bmId, c) if c != winner => bmId }.toSeq
         losers.foreach { bmId =>
           perReplica.remove(bmId)
@@ -971,6 +982,33 @@ class BlockManagerMasterEndpoint(
       }
     }
     unchecksummed
+  }
+
+  /**
+   * Invariant check for a sealed RDD: every block of `rddId` in the directory is sealed, and every
+   * replica the directory tracks for it carries the sealed content checksum. Returns `None` when
+   * the invariant holds, or `Some(diagnostic)` naming the first block that violates it. Runs on the
+   * message-handler thread, so it observes a consistent snapshot of the directory and the checksum
+   * maps.
+   */
+  private def verifyRddChecksumSeal(rddId: Int): Option[String] = {
+    val rddBlocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
+    rddBlocks.iterator.map { blockId =>
+      val sealedValue = Option(sealedChecksums.get(blockId)).map(_.longValue)
+      val perReplica = Option(blockChecksums.get(blockId)).getOrElse(mutable.HashMap.empty)
+      val locations = Option(blockLocations.get(blockId)).getOrElse(mutable.HashSet.empty)
+      if (sealedValue.isEmpty) {
+        Some(s"$blockId is present but not sealed")
+      } else if (locations.exists(bm =>
+          // Skip the external-shuffle-service pseudo-replica: it has no checksum entry of its own.
+          bm.port != externalShuffleServicePort &&
+            !perReplica.get(bm).contains(sealedValue.get))) {
+        Some(s"$blockId sealed to ${sealedValue.get} but the directory tracks a replica whose " +
+          s"checksum differs: locations=$locations checksums=$perReplica")
+      } else {
+        None
+      }
+    }.collectFirst { case Some(violation) => violation }
   }
 
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {

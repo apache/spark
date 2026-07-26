@@ -29,6 +29,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.util.SizeEstimator
 
 
 /**
@@ -275,6 +276,11 @@ private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
   extends Model[T] with SelectorParams with MLWritable {
   self: T =>
 
+  private[spark] override def estimatedSize: Long = {
+    // selectedFeatures: Array[Int]
+    estimateMatadataSize + SizeEstimator.estimate(selectedFeatures)
+  }
+
   /** @group setParam */
   @Since("3.1.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -385,4 +391,3 @@ private[feature] object SelectorModel {
     (newIndices.result(), newValues.result())
   }
 }
-

@@ -410,7 +410,7 @@ object InMemoryRelation {
   }
 
   /* Visible for testing */
-  private[columnar] def clearSerializer(): Unit = synchronized { ser = None }
+  private[sql] def clearSerializer(): Unit = synchronized { ser = None }
 
   def apply(
       storageLevel: StorageLevel,

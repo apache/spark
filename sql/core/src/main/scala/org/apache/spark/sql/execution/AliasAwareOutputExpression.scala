@@ -37,7 +37,12 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
       projectKeyedPartitionings(keyedPartitionings.map(_.asInstanceOf[KeyedPartitioning]))
     val projectedOthers = projectOtherPartitionings(otherPartitionings)
 
-    (projectedKPs ++ projectedOthers).take(aliasCandidateLimit) match {
+    // Materialize into a strict collection. The projected partitionings are lazy `LazyList`s
+    // (needed so `take` can short-circuit); storing an unforced `LazyList` in the returned
+    // `PartitioningCollection` lets each plan node re-wrap the child's lazy list, and across a
+    // deep projection chain that nesting overflows the stack when the partitioning is later
+    // serialized or deeply traversed.
+    (projectedKPs ++ projectedOthers).take(aliasCandidateLimit).toList match {
       case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
       case Seq(p) => p
       case ps => PartitioningCollection.fromPartitionings(ps)

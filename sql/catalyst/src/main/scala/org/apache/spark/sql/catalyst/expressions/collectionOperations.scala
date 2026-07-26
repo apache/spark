@@ -101,6 +101,11 @@ trait BinaryArrayExpressionWithImplicitCast
     spark.sql.legacy.sizeOfNull is true. Otherwise, it returns null for null input.
     With the default settings, the function returns null for null input.
   """,
+  arguments = """
+    Arguments:
+      * expr - The array or map whose size is returned.
+        An expression that evaluates to an array or map.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
@@ -157,6 +162,11 @@ object Size {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the size of an array. The function returns null for null input.",
+  arguments = """
+    Arguments:
+      * expr - The array to return the size of.
+        An expression that evaluates to an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
@@ -278,6 +288,13 @@ case class MapContainsKey(left: Expression, right: Expression)
   usage = """
     _FUNC_(a1, a2, ...) - Returns a merged array of structs in which the N-th struct contains all
     N-th values of input arrays.
+  """,
+  arguments = """
+    Arguments:
+      * a1 - The first array to merge.
+        An expression that evaluates to an array.
+      * a2 - The second array to merge.
+        An expression that evaluates to an array.
   """,
   examples = """
     Examples:
@@ -1044,6 +1061,13 @@ case class MapSort(base: Expression)
       elements for double/float type. Null elements will be placed at the beginning of the returned
       array in ascending order or at the end of the returned array in descending order.
   """,
+  arguments = """
+    Arguments:
+      * array - The array to sort.
+        An expression that evaluates to an array.
+      * ascendingOrder - Whether to sort in ascending order; false sorts in descending order.
+        An expression that evaluates to a boolean. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'), true);
@@ -1244,6 +1268,11 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(array) - Returns a random permutation of the given array.",
+  arguments = """
+    Arguments:
+      * array - The array to return a random permutation of.
+        An expression that evaluates to an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 20, 3, 5));
@@ -1344,6 +1373,11 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
 @ExpressionDescription(
   usage = """_FUNC_(expr) - Returns a reversed string, a binary value with bytes in reverse order,
     or an array with reverse order of elements.""",
+  arguments = """
+    Arguments:
+      * expr - The string, binary value, or array to reverse.
+        An expression that evaluates to a string, binary, or array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
@@ -1451,6 +1485,13 @@ case class Reverse(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(array, value) - Returns true if the array contains the value.",
+  arguments = """
+    Arguments:
+      * array - The array to search.
+        An expression that evaluates to an array.
+      * value - The value to check for membership in the array.
+        An expression of the same type as the array elements.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 2);
@@ -1731,6 +1772,13 @@ trait ArrayPendBase extends RuntimeReplaceable
       Null element is also prepended to the array. But if the array passed is NULL
       output is NULL
     """,
+  arguments = """
+    Arguments:
+      * array - The array to prepend the element to.
+        An expression that evaluates to an array.
+      * element - The element to add at the beginning of the array.
+        An expression of the same type as the array elements.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
@@ -1766,6 +1814,13 @@ case class ArrayPrepend(left: Expression, right: Expression) extends ArrayPendBa
       Null element is also appended into the array. But if the array passed, is NULL
       output is NULL
       """,
+  arguments = """
+    Arguments:
+      * array - The array to append the element to.
+        An expression that evaluates to an array.
+      * element - The element to add at the end of the array.
+        An expression of the same type as the array elements.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
@@ -1794,6 +1849,13 @@ case class ArrayAppend(left: Expression, right: Expression) extends ArrayPendBas
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(a1, a2) - Returns true if a1 contains at least a non-null element present also in a2. If the arrays have no common element and they are both non-empty and either of them contains a null element null is returned, false otherwise.",
+  arguments = """
+    Arguments:
+      * a1 - The first array to compare.
+        An expression that evaluates to an array.
+      * a2 - The second array to compare.
+        An expression that evaluates to an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(3, 4, 5));
@@ -2022,6 +2084,15 @@ case class ArraysOverlap(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(x, start, length) - Subsets array x starting from index start (array indices start at 1, or starting from the end if start is negative) with the specified length.",
+  arguments = """
+    Arguments:
+      * x - The array to take a subset of.
+        An expression that evaluates to an array.
+      * start - The 1-based start index, or from the end if negative.
+        An expression that evaluates to an integer.
+      * length - The number of elements to take.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 2, 2);
@@ -2121,6 +2192,15 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     _FUNC_(array, delimiter[, nullReplacement]) - Concatenates the elements of the given array
       using the delimiter and an optional string to replace nulls. If no value is set for
       nullReplacement, any null value is filtered.""",
+  arguments = """
+    Arguments:
+      * array - The array whose elements are concatenated.
+        An expression that evaluates to an array.
+      * delimiter - The delimiter placed between concatenated elements.
+        An expression that evaluates to a string.
+      * nullReplacement - The string used to replace null elements.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('hello', 'world'), ' ');
@@ -2316,6 +2396,11 @@ case class ArrayJoin(
   usage = """
     _FUNC_(array) - Returns the minimum value in the array. NaN is greater than
     any non-NaN elements for double/float type. NULL elements are skipped.""",
+  arguments = """
+    Arguments:
+      * array - The array to find the minimum value of.
+        An expression that evaluates to an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 20, null, 3));
@@ -2389,6 +2474,11 @@ case class ArrayMin(child: Expression)
   usage = """
     _FUNC_(array) - Returns the maximum value in the array. NaN is greater than
     any non-NaN elements for double/float type. NULL elements are skipped.""",
+  arguments = """
+    Arguments:
+      * array - The array to find the maximum value of.
+        An expression that evaluates to an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 20, null, 3));
@@ -2468,6 +2558,13 @@ case class ArrayMax(child: Expression)
   usage = """
     _FUNC_(array, element) - Returns the (1-based) index of the first matching element of
       the array as long, or 0 if no match is found.
+  """,
+  arguments = """
+    Arguments:
+      * array - The array to search within.
+        An expression that evaluates to an array.
+      * element - The element to find the position of.
+        An expression of the same type as the array elements.
   """,
   examples = """
     Examples:
@@ -2571,6 +2668,13 @@ case class ArrayPosition(left: Expression, right: Expression)
     _FUNC_(array, index) - Returns element of array at given (0-based) index. If the index points
      outside of the array boundaries, then this function returns NULL.
   """,
+  arguments = """
+    Arguments:
+      * array - The array to retrieve an element from.
+        An expression that evaluates to an array.
+      * index - The 0-based index of the element to return.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 0);
@@ -2618,6 +2722,13 @@ case class Get(left: Expression, right: Expression)
 
     _FUNC_(map, key) - Returns value for given key. The function returns NULL if the key is not
        contained in the map.
+  """,
+  arguments = """
+    Arguments:
+      * array - The array to retrieve the element from.
+        An expression that evaluates to an array or map.
+      * index - The 1-based index of the array element, or the key of the map entry, to return.
+        An expression that evaluates to an integer for an array, or the key type for a map.
   """,
   examples = """
     Examples:
@@ -2871,6 +2982,13 @@ case class ElementAt(
 
     _FUNC_(map, key) - Returns value for given key. The function always returns NULL
       if the key is not contained in the map.
+  """,
+  arguments = """
+    Arguments:
+      * array - The array or map to retrieve an element from.
+        An expression that evaluates to an array or map.
+      * index - The 1-based index of the array element, or the key of the map entry, to return.
+        An expression that evaluates to an integer for an array, or the key type for a map.
   """,
   examples = """
     Examples:
@@ -3253,11 +3371,14 @@ case class Flatten(child: Expression) extends UnaryExpression
   arguments = """
     Arguments:
       * start - an expression. The start of the range.
+        An expression that evaluates to an integral, date, or timestamp.
       * stop - an expression. The end the range (inclusive).
+        An expression that evaluates to an integral, date, or timestamp.
       * step - an optional expression. The step of the range.
           By default step is 1 if start is less than or equal to stop, otherwise -1.
           For the temporal sequences it's 1 day and -1 day respectively.
           If start is greater than stop then the step must be negative, and vice versa.
+        An expression that evaluates to an integral or interval.
   """,
   examples = """
     Examples:
@@ -3883,6 +4004,13 @@ object Sequence {
  */
 @ExpressionDescription(
   usage = "_FUNC_(element, count) - Returns the array containing element count times.",
+  arguments = """
+    Arguments:
+      * element - The element to repeat.
+        An expression of any type.
+      * count - The number of times to repeat the element.
+        An expression that evaluates to an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('123', 2);
@@ -4007,6 +4135,13 @@ case class ArrayRepeat(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(array, element) - Remove all elements that equal to element from array.",
+  arguments = """
+    Arguments:
+      * array - The array to remove elements from.
+        An expression that evaluates to an array.
+      * element - The element to remove from the array.
+        An expression of the same type as the array elements.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null, 3), 3);
@@ -4219,6 +4354,11 @@ trait ArraySetLike {
  */
 @ExpressionDescription(
   usage = "_FUNC_(array) - Removes duplicate values from the array.",
+  arguments = """
+    Arguments:
+      * array - The array to remove duplicate values from.
+        An expression that evaluates to an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null, 3));
@@ -4417,6 +4557,13 @@ trait ArrayBinaryLike
     _FUNC_(array1, array2) - Returns an array of the elements in the union of array1 and array2,
       without duplicates.
   """,
+  arguments = """
+    Arguments:
+      * array1 - The first array to union.
+        An expression that evaluates to an array.
+      * array2 - The second array to union.
+        An expression that evaluates to an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
@@ -4595,6 +4742,13 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
   usage = """
   _FUNC_(array1, array2) - Returns an array of the elements in the intersection of array1 and
     array2, without duplicates.
+  """,
+  arguments = """
+    Arguments:
+      * array1 - The first array to intersect.
+        An expression that evaluates to an array.
+      * array2 - The second array to intersect.
+        An expression that evaluates to an array.
   """,
   examples = """
     Examples:
@@ -4830,6 +4984,13 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
   _FUNC_(array1, array2) - Returns an array of the elements in array1 but not in array2,
     without duplicates.
   """,
+  arguments = """
+    Arguments:
+      * array1 - The array to take elements from.
+        An expression that evaluates to an array.
+      * array2 - The array of elements to exclude.
+        An expression that evaluates to an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
@@ -5042,6 +5203,15 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
       new element after the current last element.
       Index above array size appends the array, or prepends the array if index is negative,
       with 'null' elements.
+  """,
+  arguments = """
+    Arguments:
+      * x - The array to insert the value into.
+        An expression that evaluates to an array.
+      * pos - The 1-based index at which to insert the value.
+        An expression that evaluates to an integer.
+      * val - The value to insert into the array.
+        An expression of the same type as the array elements.
   """,
   examples = """
     Examples:
@@ -5391,6 +5561,11 @@ case class ArrayInsert(
 
 @ExpressionDescription(
   usage = "_FUNC_(array) - Removes null values from the array.",
+  arguments = """
+    Arguments:
+      * array - The array to remove null values from.
+        An expression that evaluates to an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null));
