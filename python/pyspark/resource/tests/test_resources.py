@@ -26,6 +26,12 @@ from pyspark.testing.utils import (
 
 
 class ResourceProfileTests(unittest.TestCase):
+    def test_fractional_cpus_request(self):
+        # SPARK-58192: fractional cpus amounts are preserved instead of being truncated to int
+        for amount in [0.5, 1.5]:
+            treqs = TaskResourceRequests().cpus(amount)
+            self.assertEqual(treqs.requests["cpus"].amount, amount)
+
     def test_profile_before_sc(self):
         rpb = ResourceProfileBuilder()
         ereqs = ExecutorResourceRequests().cores(2).memory("6g").memoryOverhead("1g")

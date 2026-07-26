@@ -341,7 +341,7 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
         taskMemoryManager = null,
         localProperties = new Properties,
         metricsSystem = null,
-        cpus = 1)
+        cpuAmount = 1)
       TaskContext.setTaskContext(ctx)
       try {
         val it = SupportsArchiveFormat.readArchiveEntries(
