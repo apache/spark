@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.planmerging
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, CreateNamedStruct, Expression, ExprId, GetStructField, If, Literal, Or, ScalarSubquery, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, CreateNamedStruct, ExprId, GetStructField, If, Literal, Or, ScalarSubquery, SortOrder}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -2441,34 +2441,6 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
-  test("SPARK-40259: a fully pushed non-deterministic filter blocks merging") {
-    // A source that fully enforces every pushed predicate. V2ScanRelationPushDown drops a
-    // non-deterministic filter from pushedFilters (that field is deterministic-only) but records
-    // it as a merge-blocking pushdown, since a rebuilt merged scan could neither see nor re-apply
-    // it -- fusing two such scans would silently drop each side's independent rand() draw. A
-    // deterministic filter, by contrast, lands in pushedFilters and stays mergeable.
-    val enforcing = new TestV2Table(StructType(Seq(
-      StructField("a", IntegerType), StructField("b", IntegerType))), enforceAll = true)
-    def pushDown(mkCondition: DataSourceV2Relation => Expression): DataSourceV2ScanRelation = {
-      val relation = DataSourceV2Relation(
-        enforcing, toAttributes(enforcing.schema()), None, None, CaseInsensitiveStringMap.empty())
-      V2ScanRelationPushDown(Filter(mkCondition(relation), relation))
-        .collectFirst { case s: DataSourceV2ScanRelation => s }.get
-    }
-
-    val nonDet = pushDown(_ => rand(0) < Literal(0.5))
-    assert(nonDet.hasMergeBlockingPushdown,
-      "a fully pushed non-deterministic filter must block merging")
-    assert(nonDet.pushedFilters.isEmpty,
-      "a non-deterministic filter must not appear in the deterministic pushedFilters")
-
-    val det = pushDown(_.output.head > 0)
-    assert(!det.hasMergeBlockingPushdown,
-      "a fully pushed deterministic filter must not block merging")
-    assert(det.pushedFilters.nonEmpty,
-      "a fully pushed deterministic filter must land in pushedFilters")
-  }
-
   test("SPARK-40259: do not merge DSv2 scans that report key-grouped partitioning or ordering") {
     // The rebuilt merged scan does not reconstruct reported partitioning/ordering, so a scan
     // reporting either declines the merge (checked on both the np and cp side) -- the plan is left
@@ -2615,29 +2587,25 @@ class MergeSubplansSuite extends PlanTest {
  * accepted by the source and NOT returned as a post-scan filter. Any other predicate is
  * best-effort (stats): accepted for row-group pruning but returned so it is re-checked above the
  * scan. When `acceptsFilters` is false the source rejects everything: nothing is accepted and
- * every predicate is returned (used to exercise the "no pruning recovery" path). When `enforceAll`
- * is true the source fully enforces every accepted predicate (nothing is returned as a post-scan
- * filter), including reference-less ones such as a non-deterministic filter.
+ * every predicate is returned (used to exercise the "no pruning recovery" path).
  */
 private class TestV2Table(
     tableSchema: StructType,
     acceptsFilters: Boolean = true,
-    strictColumns: Set[String] = Set.empty,
-    enforceAll: Boolean = false)
+    strictColumns: Set[String] = Set.empty)
   extends Table with SupportsRead {
   override def name(): String = "test_v2_table"
   override def schema(): StructType = tableSchema
   override def capabilities(): java.util.Set[TableCapability] =
     java.util.Collections.singleton(TableCapability.BATCH_READ)
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-    new TestV2ScanBuilder(tableSchema, acceptsFilters, strictColumns, enforceAll)
+    new TestV2ScanBuilder(tableSchema, acceptsFilters, strictColumns)
 }
 
 private class TestV2ScanBuilder(
     tableSchema: StructType,
     acceptsFilters: Boolean,
-    strictColumns: Set[String],
-    enforceAll: Boolean)
+    strictColumns: Set[String])
   extends ScanBuilder with SupportsPushDownRequiredColumns with SupportsPushDownV2Filters
     with SupportsPushDownLimit with SupportsPushDownOffset with SupportsPushDownTopN
     with SupportsPushDownTableSample {
@@ -2663,9 +2631,6 @@ private class TestV2ScanBuilder(
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (!acceptsFilters) {
       predicates // reject everything: nothing accepted, all returned as post-scan
-    } else if (enforceAll) {
-      accepted = predicates
-      Array.empty // fully enforce every accepted predicate, including reference-less ones
     } else {
       accepted = predicates
       predicates.filterNot(isStrict) // stats predicates are re-checked above the scan

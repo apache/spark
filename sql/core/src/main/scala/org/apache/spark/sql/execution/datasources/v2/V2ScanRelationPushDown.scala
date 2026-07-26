@@ -136,14 +136,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       sHolder.pushedFilterExpressions = normalizedFiltersWithoutSubquery
         .filterNot(postScanFilterSet.contains)
         .filter(_.deterministic)
-      // A non-deterministic filter the source fully enforced is dropped from the
-      // deterministic-only pushedFilterExpressions above, so a scan merge could neither see nor
-      // re-apply it. Record it so hasBlockingPushdown blocks the merge. ExpressionSet membership
-      // can't detect this (a non-deterministic expression never compares equal), so match the
-      // post-scan filters by identity: a non-deterministic conjunct absent from them was pushed.
-      sHolder.pushedNonDeterministicFilter = normalizedFiltersWithoutSubquery
-        .filterNot(_.deterministic)
-        .exists(f => !postScanFiltersWithoutSubquery.exists(_.fastEquals(f)))
 
       logInfo(
         log"""
@@ -868,9 +860,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    *   - `pushedOffset`           -- pushed OFFSET
    *   - `pushedSample`           -- pushed table sample
    *   - `sortOrders`             -- pushed sort order (top-N / ordering)
-   *   - `pushedNonDeterministicFilter` -- a non-deterministic filter the source fully enforced.
-   *     It is dropped from `pushedFilterExpressions` (deterministic-only), so a rebuild could
-   *     neither see nor re-apply it.
    *
    * Reproducible (re-applied by the merge), so NOT blocking: `output` (column pruning, via
    * `SupportsPushDownRequiredColumns`) and `pushedPredicates` / `pushedFilterExpressions`
@@ -883,8 +872,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     holder.pushedLimit.isDefined ||
       holder.pushedOffset.isDefined ||
       holder.pushedSample.isDefined ||
-      holder.sortOrders.nonEmpty ||
-      holder.pushedNonDeterministicFilter
+      holder.sortOrders.nonEmpty
 
   def buildScanWithPushedAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
     case holder: ScanBuilderHolder if holder.pushedAggregate.isDefined =>
@@ -1255,11 +1243,6 @@ case class ScanBuilderHolder(
   var pushedVariants: Option[VariantInRelation] = None
 
   var pushedFilterExpressions: Seq[Expression] = Seq.empty
-
-  // Set when a non-deterministic filter was fully pushed to the source. Such a filter is dropped
-  // from `pushedFilterExpressions` (deterministic-only), so a Spark-side scan merge cannot see or
-  // re-apply it; `hasBlockingPushdown` treats this as merge-blocking.
-  var pushedNonDeterministicFilter: Boolean = false
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with
