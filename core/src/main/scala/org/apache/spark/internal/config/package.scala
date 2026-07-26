@@ -28,6 +28,7 @@ import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
 import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.resource.CpuAmount
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
@@ -736,9 +737,19 @@ package object config {
   private[spark] val CPUS_PER_TASK =
     ConfigBuilder("spark.task.cpus")
       .version("0.5.0")
-      .intConf
-      .checkValue(_ > 0, "Number of cores to allocate for each task should be positive.")
-      .createWithDefault(1)
+      .decimalConf
+      // Validate before normalizing: bounding first keeps the setScale in the normalize step
+      // from materializing enormous unscaled values for extreme exponents (e.g. 1e100000000),
+      // and rejecting excess precision is clearer than silently rounding it away.
+      .checkValue(v => v >= CpuAmount.MIN_AMOUNT && v <= CpuAmount.MAX_AMOUNT,
+        "Number of cores to allocate for each task must be a positive value between " +
+          s"${CpuAmount.MIN_AMOUNT} and ${CpuAmount.MAX_AMOUNT} (inclusive).")
+      .checkValue(CpuAmount.stripTrailingZeros(_).scale <= CpuAmount.SCALE,
+        s"Number of cores to allocate for each task supports at most ${CpuAmount.SCALE} " +
+          "decimal places.")
+      // normalize to the fixed CPU accounting scale so every read is a uniform, compact BigDecimal
+      .transform(CpuAmount.normalize)
+      .createWithDefault(BigDecimal(1))
 
   private[spark] val DYN_ALLOCATION_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.enabled")
@@ -2566,8 +2577,10 @@ package object config {
         "longer time than the threshold. This config helps speculate stage with very few " +
         "tasks. Regular speculation configs may also apply if the executor slots are " +
         "large enough. E.g. tasks might be re-launched if there are enough successful runs " +
-        "even though the threshold hasn't been reached. The number of slots is computed based " +
-        "on the conf values of spark.executor.cores and spark.task.cpus minimum 1.")
+        "even though the threshold hasn't been reached. The number of slots is the maximum " +
+        "number of concurrent tasks per executor for the stage's resource profile, computed " +
+        "from the executor cores and the task cpus amount (which may be fractional), or 1 " +
+        "when the executor cores are not known.")
       .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional

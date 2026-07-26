@@ -578,7 +578,10 @@ class SparkContext(config: SparkConf) extends Logging {
       // SPARK-28843: limit the OpenMP thread pool to the number of cores assigned to this executor
       // this avoids high memory consumption with pandas/numpy because of a large OpenMP thread pool
       // see https://github.com/numpy/numpy/issues/10455
-      executorEnvs.put("OMP_NUM_THREADS", _conf.get("spark.task.cpus", "1"))
+      // `spark.task.cpus` may be fractional, so round up to an integer number of threads. It is
+      // validated to be > 0, so the ceiling is always >= 1.
+      executorEnvs.put("OMP_NUM_THREADS",
+        _conf.get(CPUS_PER_TASK).setScale(0, BigDecimal.RoundingMode.CEILING).intValue.toString)
     }
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
