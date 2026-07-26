@@ -2669,8 +2669,8 @@ package object config {
 
   private[spark] val SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER =
     ConfigBuilder("spark.speculation.efficiency.processRateMultiplier")
-      .doc("A multiplier that used when evaluating inefficient tasks. The higher the multiplier " +
-        "is, the more tasks will be possibly considered as inefficient.")
+      .doc("A multiplier that is used when evaluating inefficient tasks. The higher the " +
+        "multiplier is, the more tasks will be possibly considered as inefficient.")
       .version("3.4.0")
       .doubleConf
       .checkValue(v => v > 0.0 && v <= 1.0, "multiplier must be in (0.0, 1.0]")

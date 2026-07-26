@@ -3144,7 +3144,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.speculation.efficiency.processRateMultiplier</code></td>
   <td>0.75</td>
   <td>
-    A multiplier that used when evaluating inefficient tasks. The higher the multiplier
+    A multiplier that is used when evaluating inefficient tasks. The higher the multiplier
     is, the more tasks will be possibly considered as inefficient.
   </td>
   <td>3.4.0</td>
