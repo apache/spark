@@ -340,49 +340,51 @@ class PlanMerger(
                   // cp Filter is already a merged filter from a previous round: its condition
                   // is OR(f0, f1, ...) and its child Project already contains aliases for those
                   // attributes. Only create a new alias for the np side, and extend the OR
-                  // condition.
-                  val newNPCondition = npFilter.fold(mappedNPCondition) {
-                    case (f, _) => And(f, mappedNPCondition)
+                  // condition. A tagged filter is always built with a Project child (see the
+                  // first-time branch below), so a non-Project child should not happen; decline the
+                  // merge rather than fail, keeping the merge best-effort.
+                  mergedChild match {
+                    case childProject: Project =>
+                      val newNPCondition = npFilter.fold(mappedNPCondition) {
+                        case (f, _) => And(f, mappedNPCondition)
+                      }
+                      // If newNPCondition is already aliased in the child Project (e.g. a third
+                      // subplan whose filter matches one from a previous merge round), reuse the
+                      // existing attribute instead of creating a redundant alias.
+                      val existingNPFilter = childProject.projectList.collectFirst {
+                        case a: Alias if a.child.canonicalized == newNPCondition.canonicalized =>
+                          a.toAttribute
+                      }
+                      val (newProjectList, newCondition, newNPFilterOut) =
+                        existingNPFilter match {
+                          case Some(reusedFilter) =>
+                            // np matches an existing side: no new alias, OR condition unchanged.
+                            (childProject.projectList, cp.condition, (reusedFilter, false))
+                          case None =>
+                            val newNPFilterAlias =
+                              Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
+                            (childProject.projectList :+ newNPFilterAlias,
+                              Or(cp.condition, newNPFilterAlias.toAttribute): Expression,
+                              (newNPFilterAlias.toAttribute, true))
+                        }
+                      // Phase 2: the leaf re-merge rebuilt the scan with strict filters only,
+                      // dropping the OR pruning established in earlier rounds, so re-establish it
+                      // here from ALL propagated conditions, not just the new side's. Only the
+                      // aliases the OR condition references are filter sides; other aliases in the
+                      // Project are computed columns, not filters.
+                      val conditions = newProjectList.collect {
+                        case a: Alias if newCondition.references.contains(a.toAttribute) => a.child
+                      }
+                      val prunedChild =
+                        rePushMergedScan(childProject.child, conditions.reduceOption(Or))
+                      val newProject = childProject.copy(
+                        projectList = newProjectList, child = prunedChild)
+                      val newFilter = Filter(newCondition, newProject)
+                      newFilter.copyTagsFrom(cp)
+                      Some(TryMergeResult(newFilter, npMapping, Some(newNPFilterOut), None))
+                    case _ =>
+                      None
                   }
-                  val childProject = mergedChild match {
-                    case p: Project => p
-                    case other => throw new IllegalStateException(
-                      "Expected Project child under MERGED_FILTER_TAG filter, got " +
-                        s"${other.getClass.getSimpleName}")
-                  }
-                  // If newNPCondition is already aliased in the child Project (e.g. a third
-                  // subplan whose filter matches one from a previous merge round), reuse the
-                  // existing attribute instead of creating a redundant alias.
-                  val existingNPFilter = childProject.projectList.collectFirst {
-                    case a: Alias if a.child.canonicalized == newNPCondition.canonicalized =>
-                      a.toAttribute
-                  }
-                  val (newProjectList, newCondition, newNPFilterOut) = existingNPFilter match {
-                    case Some(reusedFilter) =>
-                      // np matches an existing side: no new alias, OR condition unchanged.
-                      (childProject.projectList, cp.condition, (reusedFilter, false))
-                    case None =>
-                      val newNPFilterAlias =
-                        Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
-                      (childProject.projectList :+ newNPFilterAlias,
-                        Or(cp.condition, newNPFilterAlias.toAttribute): Expression,
-                        (newNPFilterAlias.toAttribute, true))
-                  }
-                  // Phase 2: the leaf re-merge rebuilt the scan with strict filters only, dropping
-                  // the OR pruning established in earlier rounds, so re-establish it here from ALL
-                  // propagated conditions, not just the new side's. Only the aliases the OR
-                  // condition references are filter sides; other aliases in the Project are
-                  // computed columns, not filters.
-                  val conditions = newProjectList.collect {
-                    case a: Alias if newCondition.references.contains(a.toAttribute) => a.child
-                  }
-                  val prunedChild =
-                    rePushMergedScan(childProject.child, conditions.reduceOption(Or))
-                  val newProject = childProject.copy(
-                    projectList = newProjectList, child = prunedChild)
-                  val newFilter = Filter(newCondition, newProject)
-                  newFilter.copyTagsFrom(cp)
-                  Some(TryMergeResult(newFilter, npMapping, Some(newNPFilterOut), None))
                 } else {
                   // First-time filter propagation: alias both sides' conditions as boolean
                   // attributes in a new Project below the Filter, and set the Filter condition
@@ -514,6 +516,9 @@ class PlanMerger(
       })
   }
 
+  private def byName(attrs: Seq[AttributeReference]): Map[String, AttributeReference] =
+    attrs.map(a => a.name -> a).toMap
+
   /**
    * Whether the two scans pushed semantically equal filters. The two scans reference their columns
    * with different `ExprId`s, so the new plan's pushed filters are first remapped onto the cached
@@ -526,7 +531,7 @@ class PlanMerger(
   private def samePushedFilters(
       np: DataSourceV2ScanRelation,
       cp: DataSourceV2ScanRelation): Boolean = {
-    val cpOutputByName = cp.relation.output.map(a => a.name -> a).toMap
+    val cpOutputByName = byName(cp.relation.output)
     val npToCp = AttributeMap[Attribute](
       np.relation.output.flatMap(a => cpOutputByName.get(a.name).map(a -> _)))
     ExpressionSet(np.pushedFilters.map(mapAttributes(_, npToCp))) == ExpressionSet(cp.pushedFilters)
@@ -580,7 +585,7 @@ class PlanMerger(
     buildMergedScan(relation, unionAttrs, cp.pushedFilters, pruning = None).flatMap { scan =>
       // The rebuilt scan reuses the relation's exprIds, which match cp's for the shared columns, so
       // cp's references stay valid without remapping; np's references are remapped via npMapping.
-      val scanOutByName = scan.output.map(a => a.name -> a).toMap
+      val scanOutByName = byName(scan.output)
       val npMapping =
         AttributeMap[Attribute](np.output.flatMap(a => scanOutByName.get(a.name).map(a -> _)))
       if (npMapping.size == np.output.size) {
@@ -614,7 +619,7 @@ class PlanMerger(
     if (!strict.forall(_.references.subsetOf(relationOut))) {
       return None
     }
-    val relOutByName = relation.output.map(a => a.name -> a).toMap
+    val relOutByName = byName(relation.output)
     val projectList = columns.flatMap(a => relOutByName.get(a.name))
     if (projectList.size != columns.size) {
       return None

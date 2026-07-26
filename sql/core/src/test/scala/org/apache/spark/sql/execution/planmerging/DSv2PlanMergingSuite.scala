@@ -23,6 +23,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
 import org.apache.spark.sql.connector.catalog.InMemoryScanMergingPartitionFilterCatalog
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -116,6 +117,42 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
       assert(scans.map(_.canonicalized).distinct.length == 2,
         s"scans with different partition filters must not be fused:\n" +
           df.queryExecution.optimizedPlan)
+    }
+  }
+
+  test("SPARK-40259: merge two DSv2 scans with differing best-effort filters (OR-widen)") {
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (part_col string, c1 int, c2 int) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"INSERT INTO $tbl VALUES ('a', 1, 10), ('a', 2, 20), ('b', 3, 30)")
+
+      // c1 > 1 / c2 > 1 are data-column filters this source does not enforce (best-effort,
+      // post-scan), so the two scans carry no strict filter and fuse into one reading {c1, c2}.
+      // The differing post-scan filters are OR-widened above the merged scan (Phase 2) and each
+      // aggregate keeps its own filter. This runs the differing-filter path end to end, which the
+      // plan-shape tests in MergeSubplansSuite cover only structurally. (A rand() on one side is
+      // not added here: it would make the scalar subquery non-deterministic, so MergeSubplans would
+      // not extract it at all; the non-deterministic pruning drop is unit-covered in
+      // MergeSubplansSuite.)
+      withSQLConf(
+          SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+          SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+        val df = sql(
+          s"""
+             |SELECT
+             |  (SELECT max(c1) FROM $tbl WHERE c1 > 1) AS m1,
+             |  (SELECT max(c2) FROM $tbl WHERE c2 > 1) AS m2
+             |""".stripMargin)
+
+        // c1 > 1 -> {2, 3} -> max 3; c2 > 1 -> {10, 20, 30} -> max 30.
+        checkAnswer(df, Row(3, 30))
+
+        val scans = v2Scans(df)
+        assert(scans.map(_.canonicalized).distinct.length == 1,
+          s"the two scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
+        assert(scans.head.output.map(_.name).toSet == Set("c1", "c2"),
+          s"the merged scan should read the union of both columns; got ${scans.head.output}")
+      }
     }
   }
 }

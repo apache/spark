@@ -25,8 +25,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters, SupportsScanMerging}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsScanMerging}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -2259,6 +2260,60 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
+  test("SPARK-40259: three-way merge reuses an existing propagated filter (reuse branch)") {
+    // sub3's filter (a > 1) matches sub1's, so the tagged-filter merge takes the reuse branch:
+    // no new propagatedFilter alias is created and the OR stays two-way; sub3's aggregate reuses
+    // the existing filter attribute. This exercises the reuse branch against a DSv2 scan, which
+    // the all-distinct-filters three-way test above does not.
+    val t = new TestV2Table(StructType(Seq(StructField("a", IntegerType),
+      StructField("b", IntegerType), StructField("c", IntegerType))))
+    val sub1 = ScalarSubquery(
+      v2ScanReadingOn(t, Seq("a")).where($"a" > 1).groupBy()(sum($"a").as("s1")))
+    val sub2 = ScalarSubquery(
+      v2ScanReadingOn(t, Seq("b")).where($"b" > 2).groupBy()(sum($"b").as("s2")))
+    val sub3 = ScalarSubquery(
+      v2ScanReadingOn(t, Seq("a", "c")).where($"a" > 1).groupBy()(sum($"c").as("s3")))
+    val originalQuery = testRelation.select(sub1, sub2, sub3)
+
+    // Expected: one merged scan reading {a, b, c}; step 1 merges sub1 (cp) + sub2 (np) ->
+    // propagatedFilter_0 = b > 2 (np), _1 = a > 1 (cp). Step 2 merges sub3 (np, a > 1): its
+    // condition matches _1, so no new alias is created and the OR stays two-way; sub3 reuses _1.
+    val mergedScan = v2ScanReadingOn(t, Seq("a", "b", "c"))
+    val npFilterAlias = Alias($"b" > 2, "propagatedFilter_0")()
+    val cpFilterAlias = Alias($"a" > 1, "propagatedFilter_1")()
+    val npFilter = npFilterAlias.toAttribute
+    val cpFilter = cpFilterAlias.toAttribute
+    val mergedSubquery = mergedScan
+      .select(mergedScan.output ++ Seq(npFilterAlias, cpFilterAlias): _*)
+      .where(Or(npFilter, cpFilter))
+      .groupBy()(
+        sum($"a", Some(cpFilter)).as("s1"),
+        sum($"b", Some(npFilter)).as("s2"),
+        sum($"c", Some(cpFilter)).as("s3"))
+      .select(CreateNamedStruct(Seq(
+        Literal("s1"), $"s1",
+        Literal("s2"), $"s2",
+        Literal("s3"), $"s3")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1),
+        extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+      // The OR references only the two distinct conditions (a > 1, b > 2); c is not a filter.
+      val pushed = v2Scans(optimized).head.scan.asInstanceOf[TestV2Scan].pushed.mkString
+      assert(pushed.contains("a") && pushed.contains("b"),
+        s"expected an OR pruning over a and b pushed to the merged scan, got: $pushed")
+    }
+  }
+
   test("SPARK-40259: a non-deterministic filter conjunct is not pushed as a pruning predicate") {
     withSQLConf(
         SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
@@ -2513,16 +2568,43 @@ class MergeSubplansSuite extends PlanTest {
       "the merged scan must keep the shared strict filter on a")
   }
 
-  test("SPARK-40259: a pushed limit blocks merging (hasBlockingPushdown classification)") {
-    // hasBlockingPushdown flags a pushed limit/offset/sample/sort as merge-blocking; exercise the
-    // limit term through the real pushdown (the others are analogous). The stub opts into limit
-    // pushdown, so V2ScanRelationPushDown records pushedLimit on the resulting scan relation.
-    val relation = DataSourceV2Relation(
-      v2Table, toAttributes(v2Table.schema()), None, None, CaseInsensitiveStringMap.empty())
-    val pushed = V2ScanRelationPushDown(Limit(Literal(1), relation))
-      .collectFirst { case s: DataSourceV2ScanRelation => s }.get
-    assert(pushed.hasMergeBlockingPushdown,
-      "a pushed limit must be recorded as a merge-blocking pushdown")
+  test("SPARK-40259: pushed limit/offset/top-N/sample block merging " +
+      "(hasBlockingPushdown classification)") {
+    // hasBlockingPushdown flags every pushdown a rebuilt scan cannot reproduce. Drive each term
+    // through the real pushdown (the stub opts into all of them) so that a term silently dropped
+    // from the denylist is caught. Limit, offset and sample each set only their own holder field,
+    // so they are isolated; top-N sets sortOrders AND pushedLimit, so it exercises the top-N path
+    // but does not isolate the sortOrders term (no plan pushes a sort order without a limit).
+    def pushDown(op: DataSourceV2Relation => LogicalPlan): DataSourceV2ScanRelation = {
+      val relation = DataSourceV2Relation(
+        v2Table, toAttributes(v2Table.schema()), None, None, CaseInsensitiveStringMap.empty())
+      V2ScanRelationPushDown(op(relation))
+        .collectFirst { case s: DataSourceV2ScanRelation => s }.get
+    }
+
+    assert(pushDown(r => Limit(Literal(1), r)).hasMergeBlockingPushdown,
+      "a pushed limit must block merging")
+    assert(pushDown(r => Offset(Literal(1), r)).hasMergeBlockingPushdown,
+      "a pushed offset must block merging")
+    assert(
+      pushDown(r => Limit(Literal(1),
+        Sort(Seq(SortOrder(r.output.head, Ascending)), global = true, r)))
+        .hasMergeBlockingPushdown,
+      "a pushed top-N must block merging")
+    assert(pushDown(r => Sample(0.0, 0.5, withReplacement = false, Some(0L), r))
+        .hasMergeBlockingPushdown,
+      "a pushed sample must block merging")
+
+    // End-to-end: a scan that pushed a sample does not fuse with another (plain) scan of the same
+    // table -- the classification declines the scan merge, so the plan is left unchanged. The two
+    // read different columns, so they are not identical subplans and could only fuse via the
+    // (blocked) scan merge, not the identical-plan reuse short-circuit.
+    val sampled = pushDown(r => Sample(0.0, 0.5, withReplacement = false, Some(0L), r))
+    val plain = v2ScanReading("a")
+    val q = testRelation.select(
+      ScalarSubquery(plain.groupBy()(sum($"a").as("s1"))),
+      ScalarSubquery(sampled.groupBy()(sum(sampled.output(1)).as("s2"))))
+    comparePlans(Optimize.execute(q.analyze), q.analyze)
   }
 }
 
@@ -2557,7 +2639,8 @@ private class TestV2ScanBuilder(
     strictColumns: Set[String],
     enforceAll: Boolean)
   extends ScanBuilder with SupportsPushDownRequiredColumns with SupportsPushDownV2Filters
-    with SupportsPushDownLimit {
+    with SupportsPushDownLimit with SupportsPushDownOffset with SupportsPushDownTopN
+    with SupportsPushDownTableSample {
   private var prunedSchema: StructType = tableSchema
   private var accepted: Array[Predicate] = Array.empty  // strict UNION stats (pushedPredicates)
 
@@ -2565,6 +2648,17 @@ private class TestV2ScanBuilder(
 
   // Opts into limit pushdown so V2ScanRelationPushDown records a merge-blocking pushedLimit.
   override def pushLimit(limit: Int): Boolean = true
+
+  // Opts into offset/top-N/sample pushdown too, so V2ScanRelationPushDown records the matching
+  // merge-blocking pushdown for each (used by the hasBlockingPushdown classification test).
+  override def pushOffset(offset: Int): Boolean = true
+  override def pushTopN(orders: Array[V2SortOrder], limit: Int): Boolean = true
+  override def isPartiallyPushed(): Boolean = false
+  override def pushTableSample(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long): Boolean = true
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (!acceptsFilters) {
