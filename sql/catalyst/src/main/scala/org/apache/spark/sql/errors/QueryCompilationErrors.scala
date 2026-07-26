@@ -1439,7 +1439,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def tableNotSpecifyLocationUriError(identifier: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1081",
+      errorClass = "TABLE_LOCATION_URI_NOT_SPECIFIED",
       messageParameters = Map("identifier" -> identifier.toString))
   }
 
