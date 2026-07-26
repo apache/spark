@@ -24,6 +24,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFunSuite}
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -1728,5 +1729,15 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
       assert(PhysicalDataType(nonSingleton) != UninitializedPhysicalType,
         s"${clazz.getSimpleName}: PhysicalDataType should recognize non-singleton instance")
     }
+  }
+
+  test("SPARK-58350: DecimalType with scale greater than precision throws " +
+    "DECIMAL_SCALE_EXCEEDS_PRECISION") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        DecimalType(2, 3)
+      },
+      condition = "DECIMAL_SCALE_EXCEEDS_PRECISION",
+      parameters = Map("scale" -> "3", "precision" -> "2"))
   }
 }

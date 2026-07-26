@@ -2203,6 +2203,12 @@
     ],
     "sqlState" : "22003"
   },
+  "DECIMAL_SCALE_EXCEEDS_PRECISION" : {
+    "message" : [
+      "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
+    ],
+    "sqlState" : "22003"
+  },
   "DEFAULT_DATABASE_NOT_EXISTS" : {
     "message" : [
       "Default database <defaultDatabase> does not exist, please create it first or change default database to `<defaultDatabase>`."
@@ -10133,11 +10139,6 @@
   "_LEGACY_ERROR_TEMP_1226" : {
     "message" : [
       "The SQL config '<configName>' was removed in the version <version>. <comment>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1228" : {
-    "message" : [
-      "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1232" : {
