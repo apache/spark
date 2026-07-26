@@ -1077,7 +1077,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       if (files.nonEmpty) {
         val lastVersion = files.last.version
         val deltaFilesForLastVersion =
-          filesForVersion(files, lastVersion).filter(_.isSnapshot == false)
+          filesForVersion(files, lastVersion).filterNot(_.isSnapshot)
         synchronized { Option(loadedMaps.get(lastVersion)) } match {
           case Some(map) =>
             if (deltaFilesForLastVersion.size > storeConf.minDeltasForSnapshot) {
