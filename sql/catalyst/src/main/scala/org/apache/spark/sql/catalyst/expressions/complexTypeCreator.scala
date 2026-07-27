@@ -436,7 +436,12 @@ object CreateStruct {
       null,
       "struct",
       "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
-      "",
+      """
+        |    Arguments:
+        |      * colN - The field values of the struct. There can be one or more of them,
+        |          each an expression of any type. Field names are assigned as `colN` by
+        |          default unless the value is a named expression.
+        |  """.stripMargin,
       """
         |    Examples:
         |      > SELECT _FUNC_(1, 2, 3);
