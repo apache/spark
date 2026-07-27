@@ -277,7 +277,7 @@ class RelationResolution(
                 case mc: RelationCatalog
                     if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
                   try {
-                    Some(mc.loadRelation(ident))
+                    Some(mc.loadRelation(ident, finalOptions))
                   } catch {
                     case _: NoSuchTableException => None
                   }
