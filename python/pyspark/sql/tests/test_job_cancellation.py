@@ -37,6 +37,23 @@ class JobCancellationTestsMixin:
         self.assertEqual(self.spark.getTags(), set())
         self.spark.clearTags()
 
+    def test_invalid_tags(self):
+        # A tag cannot be an empty string or contain the ',' separator (documented on
+        # SparkSession.addTag / removeTag). Both the classic and Spark Connect paths reject
+        # such tags, so assert that an exception is raised and that no invalid tag leaks into
+        # the tag set. The two paths raise different exception types (a JVM
+        # IllegalArgumentException vs. a PySparkValueError), hence the assertion is on the
+        # shared contract -- that the call fails -- rather than on a specific error type.
+        self.spark.clearTags()
+        for invalid_tag in ["", "a,b", ","]:
+            with self.assertRaises(Exception):
+                self.spark.addTag(invalid_tag)
+            with self.assertRaises(Exception):
+                self.spark.removeTag(invalid_tag)
+        # A rejected tag must not have been recorded.
+        self.assertEqual(self.spark.getTags(), set())
+        self.spark.clearTags()
+
     def test_tags_multithread(self):
         output1 = None
         output2 = None
@@ -97,9 +114,14 @@ class JobCancellationTestsMixin:
                     u("a").alias("b")
                 ).collect()
                 is_job_cancelled[index] = False
-            except Exception:
-                # Assume that exception means job cancellation.
-                is_job_cancelled[index] = True
+            except Exception as e:
+                # Only treat an actual job cancellation as such. Any other exception (e.g. a
+                # UDF import error or a serialization failure) would otherwise be silently
+                # misread as a successful cancellation and hide a real failure, so re-raise it.
+                if "cancelled" in str(e).lower():
+                    is_job_cancelled[index] = True
+                else:
+                    raise
 
         # Test if job succeeded when not cancelled.
         run_job(job_id_a, 0, timeout=0)
