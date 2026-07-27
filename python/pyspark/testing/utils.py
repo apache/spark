@@ -85,6 +85,9 @@ graphviz_requirement_message = "" if have_graphviz else "No module named 'graphv
 have_flameprof = have_package("flameprof")
 flameprof_requirement_message = "" if have_flameprof else "No module named 'flameprof'"
 
+have_grimp = have_package("grimp")
+grimp_requirement_message = "" if have_grimp else "No module named 'grimp'"
+
 have_jinja2 = have_package("jinja2")
 jinja2_requirement_message = "" if have_jinja2 else "No module named 'jinja2'"
 
@@ -294,8 +297,35 @@ class QuietTest:
 class PySparkBaseTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if have_grimp and (path := os.environ.get("PYSPARK_CHANGED_FILES")):
+            cls.skip_if_changed_files_irrelevant(path)
+
         if os.environ.get("PYSPARK_TEST_TIMEOUT"):
             faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
+
+    @classmethod
+    def skip_if_changed_files_irrelevant(cls, path):
+        import grimp
+
+        with open(path, "r") as f:
+            changed_files = f.read().splitlines()
+
+        changed_modules = [
+            f.removeprefix("python/").rsplit(".", 1)[0].replace(os.path.sep, ".")
+            for f in changed_files
+        ]
+
+        module = cls.__module__
+        if module == "__main__":
+            module = sys.modules["__main__"].__spec__.name
+
+        graph = grimp.build_graph("pyspark")
+
+        for changed_module in changed_modules:
+            if graph.chain_exists(module, changed_module):
+                return
+
+        raise unittest.SkipTest("Skipping test because changed files are irrelevant")
 
     @classmethod
     def tearDownClass(cls):
