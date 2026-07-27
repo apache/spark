@@ -47,6 +47,14 @@ class InMemoryRelationCatalog extends RelationCatalog with SupportsNamespaces {
     Option(store.get(key)).getOrElse(throw new NoSuchTableException(ident))
   }
 
+  private var _lastLoadRelationOptions: Option[CaseInsensitiveStringMap] = None
+  def lastLoadRelationOptions: Option[CaseInsensitiveStringMap] = _lastLoadRelationOptions
+
+  override def loadRelation(ident: Identifier, options: CaseInsensitiveStringMap): Relation = {
+    _lastLoadRelationOptions = Some(options)
+    loadRelation(ident)
+  }
+
   // ----- TableCatalog -----------------------------------------------------------------
 
   override def createTable(ident: Identifier, info: TableInfo): Table = {

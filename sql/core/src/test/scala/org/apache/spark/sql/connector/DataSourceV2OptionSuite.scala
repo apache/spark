@@ -37,6 +37,7 @@ import org.apache.spark.sql.connector.catalog.{
   Identifier,
   InMemoryBaseTable,
   InMemoryCatalog,
+  InMemoryRelationCatalog,
   InMemoryRowLevelOperationTableCatalog,
   InMemoryTableCatalog,
   StagedTable,
@@ -226,6 +227,23 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         sql(s"SELECT * FROM $t1 WITH (`split-size`)"))
       assert(noValues.message.contains(
         "Operation not allowed: Values must be specified for key(s): [split-size]"))
+    }
+  }
+
+  test("Propagate options to RelationCatalog.loadRelation on read") {
+    registerCatalog("testrelcat", classOf[InMemoryRelationCatalog])
+    val t1 = "testrelcat.ns1.ns2.table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+
+      val relCatalog = catalog("testrelcat").asInstanceOf[InMemoryRelationCatalog]
+      assert(relCatalog.lastLoadRelationOptions.isEmpty)
+
+      spark.read.option("customOption", "customValue").table(t1)
+        .queryExecution.analyzed
+      val recorded = relCatalog.lastLoadRelationOptions
+      assert(recorded.isDefined)
+      assert(recorded.get.get("customOption") == "customValue")
     }
   }
 

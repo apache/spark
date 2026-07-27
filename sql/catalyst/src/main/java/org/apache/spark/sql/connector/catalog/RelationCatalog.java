@@ -22,6 +22,7 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * Catalog API for connectors that expose both tables and views in a single shared identifier
@@ -133,6 +134,26 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
    * @throws NoSuchTableException if neither a table nor a view exists at {@code ident}
    */
   Relation loadRelation(Identifier ident) throws NoSuchTableException;
+
+  /**
+   * Load the relation for an identifier that may resolve to either a table or a view, forwarding
+   * all user-specified options.
+   * <p>
+   * Behaves like {@link #loadRelation(Identifier)} but also receives the options passed to the
+   * read, so a catalog can take them into account when producing the {@link Table} or
+   * {@link View}. The default implementation ignores {@code options} and delegates to
+   * {@link #loadRelation(Identifier)}; override it to make use of the options.
+   *
+   * @param ident the identifier
+   * @param options all options passed to the read
+   * @return a {@link Table} for tables, or a {@link View} for views
+   * @throws NoSuchTableException if neither a table nor a view exists at {@code ident}
+   * @since 4.2.0
+   */
+  default Relation loadRelation(Identifier ident, CaseInsensitiveStringMap options)
+      throws NoSuchTableException {
+    return loadRelation(ident);
+  }
 
   /**
    * List the tables and views in a namespace, returned as {@link TableSummary} entries with
