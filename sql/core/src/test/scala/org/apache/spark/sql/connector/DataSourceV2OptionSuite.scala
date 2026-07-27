@@ -20,7 +20,11 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.connector.catalog.{
+  InMemoryBaseTable,
+  InMemoryRowLevelOperationTableCatalog
+}
 import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.functions.lit
@@ -176,6 +180,49 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert(splitSizes.sorted === Seq("5", "9"))
 
       checkAnswer(df, Seq(Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-58330: each reference in a streaming self-join keeps its own dynamic options") {
+    withSQLConf(
+      "spark.sql.catalog.streamcat" -> classOf[InMemoryRowLevelOperationTableCatalog].getName) {
+      val t1 = "streamcat.ns.table"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string)")
+
+        // Both references are streaming reads of the same table with different options, so they
+        // share one per-query relation-cache entry. Neither should inherit the other's options.
+        // The plan is only analyzed here, never executed (no writeStream.start()), so no actual
+        // streaming query runs.
+        val df = sql(s"SELECT a.id FROM STREAM $t1 WITH (`split-size` = 5) a " +
+          s"JOIN STREAM $t1 WITH (`split-size` = 9) b ON a.id = b.id")
+
+        val splitSizes = df.queryExecution.analyzed.collect {
+          case r: StreamingRelationV2 => r.extraOptions.get("split-size")
+        }
+        assert(splitSizes.sorted === Seq("5", "9"))
+      }
+    }
+  }
+
+  test("SPARK-58330: a streaming CTE referencing the same table keeps its own dynamic options") {
+    withSQLConf(
+      "spark.sql.catalog.streamcat" -> classOf[InMemoryRowLevelOperationTableCatalog].getName) {
+      val t1 = "streamcat.ns.table"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string)")
+
+        // The CTE's inner scan of `STREAM t WITH (...)` and the outer `STREAM t WITH (...)`
+        // reference resolve to the same per-query relation-cache entry; CTE substitution must
+        // not let one leak into the other. Analysis-only, as above.
+        val df = sql(s"WITH x AS (SELECT id FROM STREAM $t1 WITH (`split-size` = 5)) " +
+          s"SELECT a.id FROM STREAM $t1 WITH (`split-size` = 9) a CROSS JOIN x")
+
+        val splitSizes = df.queryExecution.analyzed.collect {
+          case r: StreamingRelationV2 => r.extraOptions.get("split-size")
+        }
+        assert(splitSizes.sorted === Seq("5", "9"))
+      }
     }
   }
 

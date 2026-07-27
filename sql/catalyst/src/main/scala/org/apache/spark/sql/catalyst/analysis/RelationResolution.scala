@@ -370,11 +370,17 @@ class RelationResolution(
     CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, conf)
   }
 
+  /**
+   * Re-applies `options` to the relation in a cached plan. Every `relationCache` entry holds a
+   * single relation for its own identifier (a view's body is still unresolved when it is cached),
+   * so this cannot reach another table's relation.
+   */
   private def applyOptions(
       cached: LogicalPlan,
       options: CaseInsensitiveStringMap): LogicalPlan = cached transform {
     case r: DataSourceV2Relation => r.copy(options = options)
     case r: UnresolvedCatalogRelation => r.copy(options = options)
+    case r: StreamingRelationV2 => r.copy(extraOptions = options)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
