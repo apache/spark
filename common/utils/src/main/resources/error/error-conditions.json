@@ -472,6 +472,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "BITMAP_INPUT_TOO_LARGE" : {
+    "message" : [
+      "The input bitmap has <inputNumBytes> bytes, which exceeds the maximum supported size of <maxNumBytes> bytes."
+    ],
+    "sqlState" : "22001"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
