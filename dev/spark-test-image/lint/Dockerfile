@@ -81,27 +81,6 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-RUN python3.12 -m pip install \
-    'ruff==0.14.8' \
-    'googleapis-common-protos-stubs==2.2.0' \
-    'grpc-stubs==1.24.11' \
-    'grpcio-status==1.76.0' \
-    'grpcio==1.76.0' \
-    'zstandard==0.25.0' \
-    'ipython' \
-    'matplotlib' \
-    'mypy==1.19.1' \
-    'numpy==2.4.1' \
-    'numpydoc' \
-    'pandas==2.3.3' \
-    'pandas-stubs==2.3.3.260113' \
-    'plotly>=4.8' \
-    'pyarrow>=23.0.0' \
-    'pytest-mypy-plugins==1.9.3' \
-    'pytest==7.1.3' \
-    'scipy>=1.8.0' \
-    'scipy-stubs' \
-    'types-protobuf==6.32.1.20260221' \
-    && python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
-    && python3.12 -m pip install torcheval \
-    && python3.12 -m pip cache purge
+RUN python3.12 -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install --group ci_lint && \
+    python3.12 -m pip cache purge

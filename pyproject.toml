@@ -255,3 +255,25 @@ ci_classic_minimum = [
     # Debug tools
     "psutil",
 ]
+
+ci_lint = [
+    {include-group = "_lint"},
+    {include-group = "ml_extra_base"},
+    {include-group = "pandas_on_spark_extra"},
+    {include-group = "_ci_connect"},
+    "pyarrow>=23.0.0",
+    "pandas==2.3.3",
+    "pandas-stubs==2.3.3.260113",
+    "ipython"
+]
+
+ci_docs = [
+    {include-group = "_docs"},
+    {include-group = "_ci_connect"},
+    {include-group = "_numpy"},
+    # These are required for sphinx to introspect the code
+    "pyarrow>=23.0.0",
+    "pandas==2.3.3",
+    # plotly is used for sphinx_plotly_directive examples
+    "plotly>=4.8"
+]
