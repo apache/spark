@@ -165,6 +165,9 @@ object BinaryFileFormat {
         case (MODIFICATION_TIME, i) =>
           writer.write(i, DateTimeUtils.millisToMicros(status.getModificationTime))
         case (CONTENT, i) =>
+          // Skipped when the size is unknown (`status.getLen < 0`), which is the case for a
+          // streaming-zip entry sized only by a trailing data descriptor; such an entry is read
+          // unbounded until zip reads move to ZipFile (which exposes entry sizes up front).
           if (status.getLen > maxLength) {
             throw QueryExecutionErrors.fileLengthExceedsMaxLengthError(status, maxLength)
           }
