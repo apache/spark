@@ -170,6 +170,9 @@ _test = [
     "lxml",
     "testcontainers[kafka]>=3.7.0",
     "kafka-python-ng>=2.0.2",
+    # Used by the opt-in UDF transpile hypothesis test suite (gated on
+    # the RUN_HYPOTHESIS env var); the suite skips cleanly if absent.
+    "hypothesis>=6,<7",
 ]
 
 _docs = [
