@@ -41,6 +41,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
