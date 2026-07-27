@@ -188,6 +188,11 @@ case class ToVariantObject(child: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(keys, values) - Creates a variant object from the given arrays of keys and values. The keys must be non-null strings and the two arrays must have the same length.",
+  arguments = """
+    Arguments:
+      * keys - An array of non-null strings used as the object keys.
+      * values - An array of values, with the same length as the keys array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('a', 'b'), array(1, 2));
@@ -253,6 +258,10 @@ case class VariantFromArrays(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(entries) - Creates a variant object from an array of key/value struct entries. The keys must be non-null strings.",
+  arguments = """
+    Arguments:
+      * entries - An array of key/value structs, where the first field is a non-null string key.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(struct('a', 1), struct('b', 2)));
