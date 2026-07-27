@@ -148,7 +148,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     RowDeltaPlan(buildPlan(output), reboundRowIdAttrs)
   }
 
-  private def resolveRefs(
+  private def resolveRowIdRefsToAttrs(
       relation: DataSourceV2Relation,
       refs: Seq[NamedReference]): ResolvedRowIdRefs = {
     val rowIdAttrs = mutable.ArrayBuffer.empty[AttributeReference]
@@ -161,7 +161,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
           scanAttrs += attr
         case alias: Alias =>
           extractionAliases += alias
-          scanAttrs ++= alias.references.collect { case ref: AttributeReference => ref }
+          scanAttrs ++= alias.references.collect { case scanRef: AttributeReference => scanRef }
           alias.toAttribute match {
             case attr: AttributeReference => rowIdAttrs += attr
             case other =>
@@ -178,14 +178,16 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
   protected def resolveRequiredMetadataAttrs(
       relation: DataSourceV2Relation,
       operation: RowLevelOperation): Seq[AttributeReference] = {
+
     V2ExpressionUtils.resolveRefs[AttributeReference](
-      operation.requiredMetadataAttributes.toImmutableArraySeq, relation)
+      operation.requiredMetadataAttributes.toImmutableArraySeq,
+      relation)
   }
 
   protected def resolveRowIdRefs(
       relation: DataSourceV2Relation,
       operation: SupportsDelta): ResolvedRowIdRefs = {
-    val resolved = resolveRefs(relation, operation.rowId.toImmutableArraySeq)
+    val resolved = resolveRowIdRefsToAttrs(relation, operation.rowId.toImmutableArraySeq)
     val nullableRowIdAttrs = resolved.rowIdAttrs.filter(_.nullable)
     if (nullableRowIdAttrs.nonEmpty) {
       throw QueryCompilationErrors.nullableRowIdError(nullableRowIdAttrs)
