@@ -78,12 +78,40 @@ public interface SupportsRealTimeRead<T> extends PartitionReader<T> {
      * Alternative function to be called than next(), that proceed to the next record. The different
      * from next() is that, if there is no more records, the call needs to keep waiting until
      * the timeout.
-     * @param startTimeMs the base time (milliseconds) the was used to calculate the timeout.
-     *                  Sources should use it as the reference time to start waiting for the next
-     *                  record instead of getting the latest time from LowLatencyClock.
+     * <p>
+     * A source must override exactly one of {@link #nextWithTimeout(Long)} and
+     * {@link #nextWithTimeout(Long, Long)}. This single-argument variant is enough for sources that
+     * do not need the engine's reference start time. The engine always invokes
+     * {@link #nextWithTimeout(Long, Long)}, whose default implementation delegates here, so
+     * overriding only this method is sufficient. The default implementation of this method throws,
+     * since the two-argument variant must have been overridden if this one was not.
      * @param timeoutMs if no result is available after this timeout (milliseconds), return
      * @return {@link RecordStatus} describing whether a record is available and its arrival time
      * @throws IOException
      */
-    RecordStatus nextWithTimeout(Long startTimeMs, Long timeoutMs) throws IOException;
+    default RecordStatus nextWithTimeout(Long timeoutMs) throws IOException {
+        throw new UnsupportedOperationException(
+            "A SupportsRealTimeRead implementation must override either " +
+            "nextWithTimeout(Long) or nextWithTimeout(Long, Long).");
+    }
+
+    /**
+     * Variant of {@link #nextWithTimeout(Long)} that additionally receives the reference start time
+     * used by the engine to compute the timeout. Sources may use {@code startTimeMs} as the base
+     * time to start waiting for the next record, instead of reading the latest time from the
+     * engine's clock. This keeps the engine and the source in agreement on the reference time,
+     * which matters when the engine runs against a manual clock (e.g. in tests).
+     * <p>
+     * This is the method the engine invokes. The default implementation ignores {@code startTimeMs}
+     * and delegates to {@link #nextWithTimeout(Long)}, so a source that does not need the reference
+     * time only has to implement the single-argument variant. Sources that need the reference time
+     * should override this method instead.
+     * @param startTimeMs the base time (milliseconds) that was used to calculate the timeout
+     * @param timeoutMs if no result is available after this timeout (milliseconds), return
+     * @return {@link RecordStatus} describing whether a record is available and its arrival time
+     * @throws IOException
+     */
+    default RecordStatus nextWithTimeout(Long startTimeMs, Long timeoutMs) throws IOException {
+        return nextWithTimeout(timeoutMs);
+    }
 }
