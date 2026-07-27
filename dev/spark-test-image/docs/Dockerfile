@@ -89,6 +89,9 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# See 'docutils<0.18.0' in SPARK-39421
+COPY --from=root pyproject.toml ./pyproject.toml
+
+RUN python3.12 -m pip install -U pip
+
 RUN python3.12 -m pip install --group ci_docs && \
     python3.12 -m pip cache purge
