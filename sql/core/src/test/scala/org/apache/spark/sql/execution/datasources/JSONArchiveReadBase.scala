@@ -185,22 +185,18 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   if (supportsMidAdvanceFailure) {
-    test("JSON: multiLine inference skips a corrupt entry reached while advancing " +
+    test("JSON: multiLine inference keeps entries read before a mid-advance failure " +
         "(ignoreCorruptFiles)") {
-      // The first entry is valid; advancing to a later entry throws (not at open). With
-      // ignoreCorruptFiles the whole archive is skipped via the hasNext recovery in
-      // inferWithArchives, so a good sibling archive still infers -- proving the skip covers a
-      // mid-advance failure, not only the first entry.
+      // Entry 0 is read, then advancing to a later entry throws (not at open). The `extra` field
+      // from entry 0 must survive the skip; a whole-archive drop would lose it.
       val opts = Map("multiLine" -> "true")
-      withTempDir { dir =>
-        writeArchiveFailingAfterFirstEntry(new File(dir, s"bad.${archiveExtensions.head}"),
-          entryName(0) -> jsonBytes("{\n  \"id\": 1,\n  \"name\": \"Alice\"\n}"))
-        writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
-          Seq(entryName(0) -> jsonBytes("{\n  \"id\": 2,\n  \"name\": \"Bob\"\n}")))
+      withArchiveFile() { archive =>
+        writeArchiveFailingAfterFirstEntry(archive,
+          entryName(0) -> jsonBytes("{\n  \"id\": 1,\n  \"name\": \"Alice\",\n  \"extra\": 9\n}"))
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-          val schema = inferredSchema(Seq(dir.getCanonicalPath), opts)
-          assert(schema.fieldNames.toSet == Set("id", "name"),
-            s"expected the good archive's schema after skipping the corrupt one, got $schema")
+          val schema = inferredSchema(Seq(archive.getCanonicalPath), opts)
+          assert(schema.fieldNames.toSet == Set("id", "name", "extra"),
+            s"expected the first entry (with `extra`) to survive the mid-advance skip, got $schema")
         }
       }
     }

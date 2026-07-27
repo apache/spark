@@ -276,8 +276,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
    * JSON document, and all feed a single [[JsonInferSchema]] pass -- exactly as a directory of the
    * same files would infer. Single-line archive inference does not come here: the Text data source
    * reads archives directly, so it flows through [[TextInputJsonDataSource.infer]] like any
-   * directory read. A corrupt/missing input is skipped as a unit when the ignore flags are set --
-   * across the whole input, since `readArchiveEntries` advances to later entries lazily (see
+   * directory read. Corrupt/missing inputs are skipped when the ignore flags are set (see
    * [[skipInputOnError]]).
    */
   private def inferWithArchives(
@@ -315,12 +314,11 @@ object MultiLineJsonDataSource extends JsonDataSource {
   }
 
   /**
-   * Builds one input's document iterator, skipping the whole input when the ignore flags are set
-   * and it is missing/corrupt. `readArchiveEntries` opens only the first entry eagerly and advances
-   * to later entries lazily, so a corrupt later entry throws while the returned iterator is
-   * consumed, not while it is built -- guarding only construction would let that escape. The
-   * returned iterator therefore catches on both construction and advancement (`hasNext`), ending
-   * the input on a skipped error rather than propagating it.
+   * Builds one input's document iterator, catching a missing/corrupt error when the ignore flags
+   * are set. `readArchiveEntries` advances to later entries lazily, so a corrupt later entry throws
+   * on `hasNext`, not at construction; the returned iterator catches both. A construction failure
+   * skips the whole input; a mid-advance failure keeps the entries already yielded and skips only
+   * the remainder of the archive.
    */
   private def skipInputOnError(
       inputPath: String,

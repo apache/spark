@@ -66,10 +66,9 @@ trait TarArchiveTestUtils {
   protected def supportsMidAdvanceFailure: Boolean = true
 
   /**
-   * Writes a plain `.tar` with `firstEntry` intact followed by a second entry that is then
-   * truncated partway through its header, so a reader parses the first entry cleanly and throws
-   * from `getNextEntry` while advancing to the second. Plain (uncompressed) tar keeps the first
-   * entry readable after truncation; gzipping corrupts the whole stream, so the ext is `.tar`.
+   * Writes a plain `.tar` (uncompressed, so the first entry survives truncation) with `firstEntry`
+   * intact followed by a second entry whose header is cut short, so `getNextEntry` throws while
+   * advancing to it.
    */
   protected def writeArchiveFailingAfterFirstEntry(
       dest: File, firstEntry: (String, Array[Byte])): Unit = {
@@ -85,9 +84,8 @@ trait TarArchiveTestUtils {
     }
     out.finish()
     out.close()
-    // Keep the first entry's 512-byte header and block-aligned body, then only part of the second
-    // entry's 512-byte header, so reading the first entry succeeds and `getNextEntry` throws on the
-    // partial header while advancing.
+    // Keep the first entry (512-byte header + block-aligned body) plus half of the second entry's
+    // 512-byte header, so `getNextEntry` hits a partial header while advancing.
     val firstBlocks = 512 + ((firstEntry._2.length + 511) / 512) * 512
     Files.write(dest.toPath, buf.toByteArray.take(firstBlocks + 256))
   }

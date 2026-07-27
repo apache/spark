@@ -106,17 +106,14 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     s"This is not a valid $format file".getBytes("UTF-8")
 
   /**
-   * Whether this container can produce an archive that reads a first entry cleanly and then throws
-   * while advancing to a later entry (see [[writeArchiveFailingAfterFirstEntry]]). A seek-indexed
-   * container (7z) validates its whole index at open, so it cannot fail mid-advance; sequential
-   * containers can. Gates the mid-advance corrupt-skip regression test. From the container trait.
+   * Whether [[writeArchiveFailingAfterFirstEntry]] is supported, gating the mid-advance
+   * corrupt-skip regression test. From the container trait.
    */
   protected def supportsMidAdvanceFailure: Boolean
 
   /**
-   * Writes an archive at `dest` whose first entry (`firstEntry`) reads cleanly but which then
-   * throws while advancing to a later entry -- a valid entry followed by a truncated one. Applies
-   * only where [[supportsMidAdvanceFailure]] is true. From the container trait.
+   * Writes an archive at `dest` whose first entry (`firstEntry`) reads cleanly but which then fails
+   * while advancing to a later entry. From the container trait.
    */
   protected def writeArchiveFailingAfterFirstEntry(
       dest: File, firstEntry: (String, Array[Byte])): Unit
