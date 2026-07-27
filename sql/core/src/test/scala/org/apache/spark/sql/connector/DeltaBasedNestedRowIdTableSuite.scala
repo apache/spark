@@ -69,6 +69,11 @@ abstract class DeltaBasedNestedRowIdTableSuiteBase(splitUpdates: Boolean)
     checkTable(Seq(
       Row(20, 2, 2, "software"),
       Row(30, 3, 3, "hr")))
+    // the row id written to the delta is the nested pk (1), not the top-level pk (10)
+    checkLastWriteInfo(
+      expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
+    checkLastWriteLog(deleteWriteLogEntry(id = 1, metadata = Row("hr", null)))
   }
 
   test("update with nested row id") {
@@ -78,6 +83,15 @@ abstract class DeltaBasedNestedRowIdTableSuiteBase(splitUpdates: Boolean)
       Row(10, 1, 1, "it"),
       Row(20, 2, 2, "software"),
       Row(30, 3, 3, "hr")))
+    // the row id written to the delta is the nested pk (1), not the top-level pk (10)
+    if (splitUpdates) {
+      checkLastWriteLog(
+        deleteWriteLogEntry(id = 1, metadata = Row("hr", null)),
+        reinsertWriteLogEntry(metadata = Row("hr", null), data = Row(10, Row(1), 1, "it")))
+    } else {
+      checkLastWriteLog(
+        updateWriteLogEntry(id = 1, metadata = Row("hr", null), data = Row(10, Row(1), 1, "it")))
+    }
   }
 
   test("update replacing the struct that holds the nested row id") {
@@ -160,6 +174,65 @@ abstract class DeltaBasedNestedRowIdTableSuiteBase(splitUpdates: Boolean)
         Row(20, 2, 2, "software"),
         Row(30, 3, 3, "hr"),
         Row(40, 4, 4, "new")))
+    }
+  }
+
+  // A data column `index` collides with the in-memory table's `index` metadata column: the row
+  // level rewrite must still resolve the nested row id and the metadata column correctly.
+  private def createDataMetadataConflictTable(): Unit = {
+    val schema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("nested", StructType(Seq(
+        StructField("pk", IntegerType, nullable = false))),
+        nullable = false),
+      StructField("id", IntegerType),
+      StructField("index", IntegerType),
+      StructField("dep", StringType)))
+    createTable(CatalogV2Util.structTypeToV2Columns(schema))
+    append(schema.toDDL,
+      """{ "pk": 10, "nested": { "pk": 1 }, "id": 1, "index": 100, "dep": "hr" }
+        |{ "pk": 20, "nested": { "pk": 2 }, "id": 2, "index": 200, "dep": "software" }
+        |{ "pk": 30, "nested": { "pk": 3 }, "id": 3, "index": 300, "dep": "hr" }
+        |""".stripMargin)
+  }
+
+  private def checkConflictTable(expected: Seq[Row]): Unit = {
+    checkAnswer(
+      sql(s"SELECT pk, nested.pk, id, index, dep FROM $tableNameAsString ORDER BY pk"),
+      expected)
+  }
+
+  test("delete with a data column named like a metadata column") {
+    createDataMetadataConflictTable()
+    sql(s"DELETE FROM $tableNameAsString WHERE id IN (1, 100)")
+    checkConflictTable(Seq(
+      Row(20, 2, 2, 200, "software"),
+      Row(30, 3, 3, 300, "hr")))
+  }
+
+  test("update with a data column named like a metadata column") {
+    createDataMetadataConflictTable()
+    sql(s"UPDATE $tableNameAsString SET dep = 'it' WHERE id = 1")
+    checkConflictTable(Seq(
+      Row(10, 1, 1, 100, "it"),
+      Row(20, 2, 2, 200, "software"),
+      Row(30, 3, 3, 300, "hr")))
+  }
+
+  test("merge with a data column named like a metadata column") {
+    withTempView("source") {
+      createDataMetadataConflictTable()
+      Seq((1, "it")).toDF("id", "dep").createOrReplaceTempView("source")
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.id = s.id
+           |WHEN MATCHED THEN UPDATE SET t.dep = s.dep
+           |""".stripMargin)
+      checkConflictTable(Seq(
+        Row(10, 1, 1, 100, "it"),
+        Row(20, 2, 2, 200, "software"),
+        Row(30, 3, 3, 300, "hr")))
     }
   }
 }
