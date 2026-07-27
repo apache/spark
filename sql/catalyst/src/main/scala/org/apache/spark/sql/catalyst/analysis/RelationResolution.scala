@@ -374,6 +374,7 @@ class RelationResolution(
       cached: LogicalPlan,
       options: CaseInsensitiveStringMap): LogicalPlan = cached transform {
     case r: DataSourceV2Relation => r.copy(options = options)
+    case r: UnresolvedCatalogRelation => r.copy(options = options)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {

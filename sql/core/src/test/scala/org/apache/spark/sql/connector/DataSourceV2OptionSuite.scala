@@ -159,6 +159,26 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-58330: each reference in a self-join keeps its own dynamic options") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      // Both references are reads of the same table with different options, so they share one
+      // per-query relation-cache entry. Neither scan should inherit the other's options.
+      val df = sql(s"SELECT a.id FROM $t1 WITH (`split-size` = 5) a " +
+        s"JOIN $t1 WITH (`split-size` = 9) b ON a.id = b.id")
+
+      val splitSizes = df.queryExecution.optimizedPlan.collect {
+        case s: DataSourceV2ScanRelation => s.relation.options.get("split-size")
+      }
+      assert(splitSizes.sorted === Seq("5", "9"))
+
+      checkAnswer(df, Seq(Row(1), Row(2)))
+    }
+  }
+
   test("SPARK-50286: Propagate options for DataFrameWriter Append") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
