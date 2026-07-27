@@ -331,6 +331,12 @@
     ],
     "sqlState" : "22023"
   },
+  "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT" : {
+    "message" : [
+      "The column `<columnName>` in the <schemaName> schema collides with a reserved AutoCDC <scdType> column name (using <caseSensitivity> column name comparison). The following column names are reserved by AutoCDC and cannot appear in the source: <reservedColumnNames>. Rename or remove the column."
+    ],
+    "sqlState" : "42710"
+  },
   "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
     "message" : [
       "The column `<columnName>` in the <schemaName> schema collides with the reserved AutoCDC column name prefix `<reservedColumnNamePrefix>` (using <caseSensitivity> column name comparison). Rename or remove the column."
@@ -556,6 +562,44 @@
       "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
     ],
     "sqlState" : "0A000"
+  },
+  "CANNOT_LOAD_CATALOG" : {
+    "message" : [
+      "Cannot load catalog '<name>' with the plugin class '<pluginClassName>':"
+    ],
+    "subClass" : {
+      "ABSTRACT_CLASS" : {
+        "message" : [
+          "the class is abstract and cannot be instantiated."
+        ]
+      },
+      "CONSTRUCTOR_FAILURE" : {
+        "message" : [
+          "the constructor threw an exception during instantiation."
+        ]
+      },
+      "CONSTRUCTOR_NOT_ACCESSIBLE" : {
+        "message" : [
+          "failed to call the public no-arg constructor."
+        ]
+      },
+      "CONSTRUCTOR_NOT_FOUND" : {
+        "message" : [
+          "failed to find the public no-arg constructor."
+        ]
+      },
+      "NOT_A_CATALOG_PLUGIN" : {
+        "message" : [
+          "the class does not implement CatalogPlugin."
+        ]
+      },
+      "PLUGIN_CLASS_NOT_FOUND" : {
+        "message" : [
+          "cannot find the plugin class."
+        ]
+      }
+    },
+    "sqlState" : "46103"
   },
   "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER" : {
     "message" : [
@@ -8169,6 +8213,12 @@
     },
     "sqlState" : "42000"
   },
+  "UNSUPPORTED_BUILT_IN_JDBC_DIALECT" : {
+    "message" : [
+      "`<name>` is not a supported built-in JDBC dialect. Supported dialects are: <supportedNames>."
+    ],
+    "sqlState" : "22023"
+  },
   "UNSUPPORTED_CALL" : {
     "message" : [
       "Cannot call the method \"<methodName>\" of the class \"<className>\"."
@@ -10949,36 +10999,6 @@
   "_LEGACY_ERROR_TEMP_2212" : {
     "message" : [
       "Invalid catalog name: <name>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2214" : {
-    "message" : [
-      "Plugin class for catalog '<name>' does not implement CatalogPlugin: <pluginClassName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2215" : {
-    "message" : [
-      "Cannot find catalog plugin class for catalog '<name>': <pluginClassName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2216" : {
-    "message" : [
-      "Failed to find public no-arg constructor for catalog '<name>': <pluginClassName>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2217" : {
-    "message" : [
-      "Failed to call public no-arg constructor for catalog '<name>': <pluginClassName>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2218" : {
-    "message" : [
-      "Cannot instantiate abstract catalog plugin class for catalog '<name>': <pluginClassName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2219" : {
-    "message" : [
-      "Failed during instantiating constructor for catalog '<name>': <pluginClassName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2220" : {

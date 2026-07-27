@@ -128,6 +128,7 @@ class TaskContext:
     _taskAttemptId: Optional[int] = None
     _localProperties: Optional[Dict[str, str]] = None
     _cpus: Optional[int] = None
+    _cpuAmount: Optional[float] = None
     _resources: Optional[Dict[str, "ResourceInformation"]] = None
 
     def __new__(cls: Type["TaskContext"], **kwargs: Any) -> "TaskContext":
@@ -191,6 +192,7 @@ class TaskContext:
             attemptNumber=json["attemptNumber"],
             taskAttemptId=json["taskAttemptId"],
             cpus=json["cpus"],
+            cpuAmount=float(json["cpuAmount"]) if "cpuAmount" in json else None,
             resources={
                 k: ResourceInformation(v["name"], v["addresses"])
                 for k, v in json["resources"].items()
@@ -263,7 +265,9 @@ class TaskContext:
 
     def cpus(self) -> int:
         """
-        CPUs allocated to the task.
+        CPUs allocated to the task, rounded up to a whole number when the exact
+        allocation is fractional. Use :meth:`TaskContext.cpuAmount` to get the exact,
+        possibly fractional, amount.
 
         Returns
         -------
@@ -271,6 +275,25 @@ class TaskContext:
             the number of CPUs.
         """
         return cast(int, self._cpus)
+
+    def cpuAmount(self) -> float:
+        """
+        The exact amount of CPUs allocated to the task. This can be fractional when
+        ``spark.task.cpus`` or the task resource profile requests a fractional amount
+        (e.g. 0.5).
+
+        .. versionadded:: 4.3.0
+
+        Returns
+        -------
+        float
+            the exact, possibly fractional, amount of CPUs.
+
+        See Also
+        --------
+        TaskContext.cpus
+        """
+        return cast(float, self._cpuAmount)
 
     def resources(self) -> Dict[str, "ResourceInformation"]:
         """

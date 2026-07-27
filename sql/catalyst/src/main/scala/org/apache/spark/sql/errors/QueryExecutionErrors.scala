@@ -1920,7 +1920,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def catalogPluginClassNotImplementedError(name: String, pluginClassName: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2214",
+      errorClass = "CANNOT_LOAD_CATALOG.NOT_A_CATALOG_PLUGIN",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
@@ -1932,7 +1932,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2215",
+      errorClass = "CANNOT_LOAD_CATALOG.PLUGIN_CLASS_NOT_FOUND",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
@@ -1944,7 +1944,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2216",
+      errorClass = "CANNOT_LOAD_CATALOG.CONSTRUCTOR_NOT_FOUND",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
@@ -1956,7 +1956,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2217",
+      errorClass = "CANNOT_LOAD_CATALOG.CONSTRUCTOR_NOT_ACCESSIBLE",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
@@ -1968,7 +1968,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2218",
+      errorClass = "CANNOT_LOAD_CATALOG.ABSTRACT_CLASS",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
@@ -1980,7 +1980,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       pluginClassName: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2219",
+      errorClass = "CANNOT_LOAD_CATALOG.CONSTRUCTOR_FAILURE",
       messageParameters = Map(
         "name" -> name,
         "pluginClassName" -> pluginClassName),
