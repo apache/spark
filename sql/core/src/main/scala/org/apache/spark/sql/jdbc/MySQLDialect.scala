@@ -130,6 +130,11 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
           // The common JDBC mapping is DOUBLE PRECISION, which is not a portable CAST target for
           // MySQL-compatible databases. In particular, MariaDB rejects it with a syntax error.
           throw new UnsupportedOperationException("Cannot cast to double type")
+        // MySQL does not support casting to SHORT, INT or BIGINT, it uses SIGNED instead.
+        case _: IntegralType if exprDataType.isInstanceOf[FractionalType] &&
+          !conf.legacyJdbcRoundIntegralCastPushdown =>
+          s"CAST(${truncateFractionalValue(expr)} AS SIGNED)"
+        case _: IntegralType => s"CAST($expr AS SIGNED)"
         case _ => super.visitCast(expr, exprDataType, dataType)
       }
     }
