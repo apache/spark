@@ -165,13 +165,15 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       keys: Seq[UnqualifiedColumnName] = Seq(UnqualifiedColumnName("id")),
       sequencing: Column = F.col("seq"),
       storedAsScdType: ScdType = ScdType.Type1,
-      columnSelection: Option[ColumnSelection] = None): AutoCdcMergeFlow = {
+      columnSelection: Option[ColumnSelection] = None,
+      trackHistorySelection: Option[ColumnSelection] = None): AutoCdcMergeFlow = {
     val flow = newAutoCdcFlow(
       changeArgs = ChangeArgs(
         keys = keys,
         sequencing = sequencing,
         storedAsScdType = storedAsScdType,
-        columnSelection = columnSelection
+        columnSelection = columnSelection,
+        trackHistorySelection = trackHistorySelection
       )
     )
     new AutoCdcMergeFlow(flow, successfulFuncResult(sourceDf))
@@ -766,5 +768,152 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         "keyColumnName" -> "id"
       )
     )
+  }
+
+  // ===========================================================================================
+  // AutoCdcMergeFlow track-history validation tests
+  //
+  // SCD2 `TRACK HISTORY ON (...)` populates trackHistorySelection. These tests lock in that an
+  // unresolvable or ineligible (key / dropped-by-column-selection) tracking column is rejected at
+  // flow construction rather than deferring to the first microbatch's reconciliation, mirroring
+  // the keys-presence validator above. A resolvable selection passes the check and the flow
+  // constructs successfully.
+  // ===========================================================================================
+
+  test(
+    "an SCD2 flow tracking a non-existent column is rejected at construction"
+  ) {
+    // Eligible tracking columns from the 3-column source (id, name, seq), less the key `id`, are
+    // {name, seq}. `missing` is absent, so resolution against trackHistorySelection fails.
+    checkError(
+      exception = intercept[AnalysisException] {
+        newAutoCdcMergeFlow(
+          sourceDf = threeColumnSourceDf(),
+          storedAsScdType = ScdType.Type2,
+          trackHistorySelection = Some(
+            ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("missing")))
+          )
+        )
+      },
+      condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+      parameters = Map(
+        "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+        "schemaName" -> "trackHistorySelection",
+        "missingColumns" -> "missing",
+        "availableColumns" -> "name, seq"
+      )
+    )
+  }
+
+  test(
+    "an SCD2 flow tracking a key column is rejected at construction (ineligible)"
+  ) {
+    // A key is never an eligible history-tracking column, so it is absent from the eligible
+    // schema {name, seq} and resolution fails -- surfacing the misconfiguration eagerly.
+    checkError(
+      exception = intercept[AnalysisException] {
+        newAutoCdcMergeFlow(
+          sourceDf = threeColumnSourceDf(),
+          storedAsScdType = ScdType.Type2,
+          trackHistorySelection = Some(
+            ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("id")))
+          )
+        )
+      },
+      condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+      parameters = Map(
+        "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+        "schemaName" -> "trackHistorySelection",
+        "missingColumns" -> "id",
+        "availableColumns" -> "name, seq"
+      )
+    )
+  }
+
+  test(
+    "an SCD2 flow tracking a column dropped by columnSelection is rejected"
+  ) {
+    // `name` exists in the source but is excluded from the selected schema, so it is not an
+    // eligible tracking column. Eligible columns are then just {seq}.
+    checkError(
+      exception = intercept[AnalysisException] {
+        newAutoCdcMergeFlow(
+          sourceDf = threeColumnSourceDf(),
+          storedAsScdType = ScdType.Type2,
+          columnSelection = Some(
+            ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name")))
+          ),
+          trackHistorySelection = Some(
+            ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))
+          )
+        )
+      },
+      condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+      parameters = Map(
+        "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+        "schemaName" -> "trackHistorySelection",
+        "missingColumns" -> "name",
+        "availableColumns" -> "seq"
+      )
+    )
+  }
+
+  test(
+    "an SCD2 flow with a resolvable track-history selection passes the check"
+  ) {
+    // `name` is an eligible tracking column, so the construction-time check passes and the flow
+    // constructs successfully, resolving its SCD2 schema (no AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA).
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      storedAsScdType = ScdType.Type2,
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))
+      )
+    )
+    assert(resolvedFlow.schema.fieldNames.contains(AutoCdcReservedNames.cdcMetadataColName))
+  }
+
+  test(
+    "track-history validation respects case-insensitive analysis"
+  ) {
+    // With caseSensitive=false, `NAME` resolves to the eligible `name`, so the check passes and
+    // the flow constructs successfully.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val resolvedFlow = newAutoCdcMergeFlow(
+        sourceDf = threeColumnSourceDf(),
+        storedAsScdType = ScdType.Type2,
+        trackHistorySelection = Some(
+          ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("NAME")))
+        )
+      )
+      assert(resolvedFlow.schema.fieldNames.contains(AutoCdcReservedNames.cdcMetadataColName))
+    }
+  }
+
+  test(
+    "track-history validation respects case-sensitive analysis"
+  ) {
+    // With caseSensitive=true, `NAME` is a distinct identifier from the eligible `name` and does
+    // not resolve, so the construction-time check rejects it.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          newAutoCdcMergeFlow(
+            sourceDf = threeColumnSourceDf(),
+            storedAsScdType = ScdType.Type2,
+            trackHistorySelection = Some(
+              ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("NAME")))
+            )
+          )
+        },
+        condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
+        parameters = Map(
+          "caseSensitivity" -> CaseSensitivityLabels.CaseSensitive,
+          "schemaName" -> "trackHistorySelection",
+          "missingColumns" -> "NAME",
+          "availableColumns" -> "name, seq"
+        )
+      )
+    }
   }
 }
