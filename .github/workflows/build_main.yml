@@ -47,17 +47,14 @@ jobs:
     name: Run
     needs: count-commits
     # GitHub Actions expressions do not support modulo. A non-negative decimal
-    # count is divisible by five when it ends in 0 or 5.
+    # count is divisible by ten when it ends in 0.
     # `branch-4.x` remains disabled to save post-merge CI resources. Fork master
     # remains disabled because the Sync fork button would rerun the full build.
     if: >-
       github.repository == 'apache/spark' && (
         (
           github.ref == 'refs/heads/master'
-          && (
-            endsWith(needs.count-commits.outputs.commit-count, '0')
-            || endsWith(needs.count-commits.outputs.commit-count, '5')
-          )
+          && endsWith(needs.count-commits.outputs.commit-count, '0')
         ) || (
           github.ref != 'refs/heads/master'
           && github.ref != 'refs/heads/branch-4.x'
