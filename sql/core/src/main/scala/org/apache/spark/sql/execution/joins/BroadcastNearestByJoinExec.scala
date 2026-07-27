@@ -41,7 +41,8 @@ private[joins] case class HeapEntry(index: Int, rankingValue: Any)
  * queue of size k, then emits the top-k matches directly.
  *
  * The right side is fully broadcast to all partitions. This operator only fires when
- * the right side fits within [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]]. For right tables
+ * the right side fits within the broadcast join threshold
+ * ([[org.apache.spark.sql.internal.SQLConf.autoBroadcastJoinThreshold]]). For right tables
  * exceeding this threshold, the existing cross-product + aggregate rewrite is used as
  * fallback. Tie-breaking among equal ranking values is non-deterministic (matches the
  * existing rewrite behavior).
@@ -95,7 +96,7 @@ case class BroadcastNearestByJoinExec(
     val allOutput = output
     val ordering = TypeUtils.getInterpretedOrdering(rankExpr.dataType)
 
-    left.execute().mapPartitionsInternal { leftIter =>
+    left.execute().mapPartitionsWithIndexInternal { (index, leftIter) =>
       val rightRows = broadcastedRight.value
       if (rightRows.isEmpty && localJoinType != LeftOuter) {
         Iterator.empty
@@ -103,6 +104,7 @@ case class BroadcastNearestByJoinExec(
         val joinedRow = new JoinedRow
         val rankingProj = UnsafeProjection.create(
           Seq(rankExpr), leftOutput ++ rightOutput)
+        rankingProj.initialize(index)
         val resultProj = UnsafeProjection.create(allOutput, allOutput)
         val rankingNeedsCopy = !UnsafeRow.isFixedLength(rankExpr.dataType)
 
