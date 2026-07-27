@@ -322,18 +322,52 @@ def col(col: str) -> Column:
     :class:`~pyspark.sql.Column`
         the corresponding column instance.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.column`
+
     Examples
     --------
     >>> from pyspark.sql.functions import col
     >>> col('x')
     Column<'x'>
-    >>> column('x')
-    Column<'x'>
     """
     return _invoke_function("col", col)
 
 
-column = col
+@_try_remote_functions
+@_with_origin
+def column(col: str) -> Column:
+    """
+    Returns a :class:`~pyspark.sql.Column` based on the given column name.
+    An alias of :func:`col`.
+
+    .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+
+    Parameters
+    ----------
+    col : column name
+        the name for the column
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the corresponding column instance.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.col`
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import column
+    >>> column('x')
+    Column<'x'>
+    """
+    return _invoke_function("col", col)
 
 
 @_try_remote_functions
@@ -4375,7 +4409,7 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     |  0| NULL|    Z|
     |  1|  Bob| NULL|
     |  2|Alice|    Y|
-    +---+-----+-----+
+    +---+-----+-----+stddev_samp
 
     Example 3: Sorting a DataFrame with null values in descending order using column name string
 
@@ -4475,7 +4509,7 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def stddev(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: alias for stddev_samp.
+    Aggregate function: alias for :func:`stddev_samp`.
 
     .. versionadded:: 1.6.0
 
@@ -4519,7 +4553,7 @@ def stddev(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def std(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: alias for stddev_samp.
+    Aggregate function: alias for :func:`stddev_samp`.
 
     .. versionadded:: 3.5.0
 
@@ -4646,7 +4680,7 @@ def stddev_pop(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def variance(col: "ColumnOrName") -> Column:
     """
-    Aggregate function: alias for var_samp
+    Aggregate function: alias for :func:`var_samp`.
 
     .. versionadded:: 1.6.0
 
@@ -22789,6 +22823,7 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.parse_json`
+    :meth:`pyspark.sql.functions.json_tuple`
 
     Examples
     --------
@@ -22864,6 +22899,11 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     :class:`~pyspark.sql.Column`
         a new row for each given field value from json object
         Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.parse_json`
+    :meth:`pyspark.sql.functions.get_json_object`
 
     Examples
     --------
@@ -23121,6 +23161,9 @@ def parse_json(
     See Also
     --------
     :meth:`pyspark.sql.functions.try_parse_json`
+    :meth:`pyspark.sql.functions.parse_json`
+    :meth:`pyspark.sql.functions.get_json_object`
+    :meth:`pyspark.sql.functions.json_tuple`
 
     Examples
     --------
