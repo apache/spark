@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.util.StringConcat
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -45,24 +46,15 @@ class ExplainUtilsSuite extends QueryTest with SharedSparkSession {
     assert(ids == ids.distinct, s"processPlan operator IDs should be unique: $ids")
   }
 
-  test("processPlan sets WholeStageCodegen tags on plan nodes") {
-    withSQLConf("spark.sql.codegen.wholeStage" -> "true") {
-      val df = spark.range(10).filter("id > 3")
-      val plan = df.queryExecution.executedPlan
-      ExplainUtils.processPlan(plan, _ => ())
-      // CODEGEN_ID_TAG is assigned only to nodes under a WholeStageCodegenExec (see
-      // generateWholeStageCodegenIds). Assert that invariant directly rather than assuming the
-      // planner fused this query into whole-stage codegen: when the executed plan contains
-      // WholeStageCodegenExec nodes, at least one node inside one of them carries the tag.
-      val wscgNodes = plan.collect { case w: WholeStageCodegenExec => w }
-      if (wscgNodes.nonEmpty) {
-        val taggedInsideWscg = wscgNodes.exists { w =>
-          w.collect { case p if p.getTagValue(QueryPlan.CODEGEN_ID_TAG).isDefined => p }.nonEmpty
-        }
-        assert(taggedInsideWscg,
-          "processPlan should set CODEGEN_ID_TAG on nodes inside WholeStageCodegenExec")
-      }
-    }
+  test("processPlan tags a WholeStageCodegenExec child with its codegen stage id") {
+    // Build the plan directly so the assertion does not depend on the planner producing a
+    // WholeStageCodegenExec for any particular query. processPlan should stamp the child of a
+    // WholeStageCodegenExec with CODEGEN_ID_TAG carrying that node's codegenStageId.
+    val child = RangeExec(Range(0, 10, 1, 1))
+    val plan = WholeStageCodegenExec(child)(codegenStageId = 7)
+    ExplainUtils.processPlan[SparkPlan](plan, _ => ())
+    assert(child.getTagValue(QueryPlan.CODEGEN_ID_TAG).contains(7),
+      "processPlan should tag a WholeStageCodegenExec child with its codegenStageId")
   }
 
   test("processPlan restores localIdMap to its prior value after completion") {
