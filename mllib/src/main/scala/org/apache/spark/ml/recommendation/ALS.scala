@@ -526,9 +526,11 @@ class ALSModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
     val userCount = userFactors.count()
     val itemCount = itemFactors.count()
-    (userCount + itemCount) * (rank + 1) * 4
+    size += (userCount + itemCount) * (rank + 1) * 4
+    size
   }
 }
 
@@ -805,10 +807,12 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   override def copy(extra: ParamMap): ALS = defaultCopy(extra)
 
   override def estimateModelSize(dataset: Dataset[_]): Long = {
+    var size = estimateMatadataSize
     val Row(userCount: Long, itemCount: Long) =
       dataset.select(count_distinct(col(getUserCol)), count_distinct(col(getItemCol))).head()
     val rank = getRank
-    (userCount + itemCount) * (rank + 1) * 4
+    size += (userCount + itemCount) * (rank + 1) * 4
+    size
   }
 }
 
