@@ -27,6 +27,10 @@ import org.apache.spark.sql.types._
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the minimum value of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any comparable type whose minimum value is returned.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (10), (-1), (20) AS tab(col);

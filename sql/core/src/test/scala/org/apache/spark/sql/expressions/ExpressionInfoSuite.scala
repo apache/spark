@@ -174,10 +174,38 @@ class ExpressionInfoSuite extends SharedSparkSession {
   }
 
   test("SPARK-32870: Default expressions in FunctionRegistry should have their " +
-    "usage, examples, since, and group filled") {
+    "usage, examples, arguments, since, and group filled") {
     val ignoreSet = Set(
       // Cast aliases do not need examples
       "org.apache.spark.sql.catalyst.expressions.Cast")
+
+    // Functions that take no arguments are exempt from the `arguments` documentation
+    // requirement, since there is nothing to describe.
+    val noArgumentsSet = Set(
+      "org.apache.spark.sql.catalyst.expressions.Collations",
+      "org.apache.spark.sql.catalyst.expressions.CumeDist",
+      "org.apache.spark.sql.catalyst.expressions.CurDateExpressionBuilder",
+      "org.apache.spark.sql.catalyst.expressions.CurrentCatalog",
+      "org.apache.spark.sql.catalyst.expressions.CurrentDatabase",
+      "org.apache.spark.sql.catalyst.expressions.CurrentDate",
+      "org.apache.spark.sql.catalyst.expressions.CurrentPath",
+      "org.apache.spark.sql.catalyst.expressions.CurrentTimeZone",
+      "org.apache.spark.sql.catalyst.expressions.CurrentTimestamp",
+      "org.apache.spark.sql.catalyst.expressions.CurrentUser",
+      "org.apache.spark.sql.catalyst.expressions.EulerNumber",
+      "org.apache.spark.sql.catalyst.expressions.InputFileBlockLength",
+      "org.apache.spark.sql.catalyst.expressions.InputFileBlockStart",
+      "org.apache.spark.sql.catalyst.expressions.InputFileName",
+      "org.apache.spark.sql.catalyst.expressions.LocalTimestamp",
+      "org.apache.spark.sql.catalyst.expressions.MonotonicallyIncreasingID",
+      "org.apache.spark.sql.catalyst.expressions.Now",
+      "org.apache.spark.sql.catalyst.expressions.Pi",
+      "org.apache.spark.sql.catalyst.plans.logical.PythonWorkerLogs",
+      "org.apache.spark.sql.catalyst.expressions.RowNumber",
+      "org.apache.spark.sql.catalyst.expressions.SQLKeywords",
+      "org.apache.spark.sql.catalyst.expressions.SparkPartitionID",
+      "org.apache.spark.sql.catalyst.expressions.SparkVersion",
+      "org.apache.spark.sql.catalyst.expressions.Uuid")
 
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
@@ -189,6 +217,9 @@ class ExpressionInfoSuite extends SharedSparkSession {
           assert(info.getSince.matches("[0-9]+\\.[0-9]+\\.[0-9]+"))
           assert(info.getGroup.nonEmpty)
 
+          if (!noArgumentsSet.contains(info.getClassName)) {
+            assert(info.getArguments.nonEmpty)
+          }
           if (info.getArguments.nonEmpty) {
             assert(info.getArguments.startsWith("\n    Arguments:\n"))
             assert(info.getArguments.endsWith("\n  "))

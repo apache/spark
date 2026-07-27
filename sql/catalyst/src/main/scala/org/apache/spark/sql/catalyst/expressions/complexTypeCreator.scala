@@ -55,6 +55,11 @@ trait NoThrow
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any type to include as an array element. One or more
+          expressions can be given, and they must share a common type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1, 2, 3);
@@ -179,6 +184,14 @@ private [sql] object GenArrayData {
  */
 @ExpressionDescription(
   usage = "_FUNC_(key0, value0, key1, value1, ...) - Creates a map with the given key/value pairs.",
+  arguments = """
+    Arguments:
+      * keyN - An expression for the N-th map key. Keys must not be NULL and all keys must
+          share a common type.
+      * valueN - An expression for the value paired with keyN. All values must share a common
+          type. Keys and values are supplied as alternating arguments, so the total number of
+          arguments must be even.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
@@ -446,6 +459,13 @@ object CreateStruct {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
+  arguments = """
+    Arguments:
+      * nameN - A STRING literal giving the name of the N-th struct field. It must not be NULL.
+      * valN - An expression of any type providing the value for the field named nameN. Names
+          and values are supplied as alternating arguments, so the total number of arguments
+          must be even.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
