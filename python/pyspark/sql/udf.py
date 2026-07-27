@@ -707,21 +707,22 @@ class UDFRegistration:
                         "SQL_GROUPED_AGG_PANDAS_ITER_UDF or SQL_GROUPED_AGG_ARROW_ITER_UDF"
                     },
                 )
-            register_udf = UserDefinedFunction(
+            source_udf = _create_udf(
                 f.func,
                 returnType=f.returnType,
                 name=name,
                 evalType=f.evalType,
                 deterministic=f.deterministic,
             )
-            return_udf: "UserDefinedFunctionLike" = register_udf
+            register_udf = source_udf._unwrapped  # type: ignore[attr-defined]
+            return_udf = register_udf
         else:
             if returnType is None:
                 returnType = StringType()
-            register_udf = UserDefinedFunction(
+            return_udf = _create_udf(
                 f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, name=name
             )
-            return_udf = register_udf._wrapped()
+            register_udf = return_udf._unwrapped  # type: ignore[attr-defined]
         self.sparkSession._jsparkSession.udf().registerPython(name, register_udf._judf)
         return return_udf
 
