@@ -159,42 +159,12 @@ class Scd2ForeachBatchHandlerSuite
    * [[Scd2BatchProcessor.deletedByBatchIdColName]] is designed to make idempotent.
    */
   private def runBatchAuxMergeOnly(batchId: Long)(rows: Row*): Unit = {
-    val batchDf = microbatchOf(sourceSchema)(rows: _*)
-    ScdBatchValidator(
-      destinationIdentifier = defaultTargetTableIdentifier,
-      changeArgs = processor.changeArgs,
-      batchDf = batchDf,
-      batchId = batchId
-    ).validateMicrobatch()
-
-    val preprocessed = processor.preprocessMicrobatch(batchDf)
-    val perKeyMin = processor.computeMinimumSequencePerKey(preprocessed)
-
-    val affectedAux = processor.findAffectedRowsFromAuxiliaryTable(
-      rawAuxiliaryTableDf = auxTable,
-      perKeyMinimumSequenceInMicrobatchDf = perKeyMin,
-      batchId = batchId
-    )
-    val affectedTarget = processor.findAffectedRowsFromTargetTable(
-      targetTableDf = targetTable,
-      perKeyMinimumSequenceInMicrobatchDf = perKeyMin
-    )
-
-    val reconciledAndRouted = preprocessed
-      .unionByName(affectedAux)
-      .unionByName(affectedTarget)
-      .transform(processor.decomposeOutOfOrderRows)
-      .transform(d => processor.assertWellFormedRowsPostDecomposition(d, batchId))
-      .transform(processor.dropRedundantRowsPostDecomposition)
-      .transform(processor.reconcileStartAndEndAt)
-      .transform(processor.dropLeftoverDeletesPostReconciliation)
-      .transform(processor.promoteDecompositionTailsToTombstones)
-      .transform(processor.identifyAndTagAuxRows)
-
-    // Only the aux merge runs; the target merge is skipped to model the mid-batch crash.
+    // Reuse the handler's own reconciliation chain so this helper cannot drift from execute(),
+    // then run only the aux merge (skipping the target merge) to model the mid-batch crash.
+    val reconciled = exec.reconcileMicrobatch(microbatchOf(sourceSchema)(rows: _*), batchId)
     processor.mergeRowsIntoAuxiliaryTable(
-      reconciledDfWithAuxRowsTagged = reconciledAndRouted,
-      originalAffectedRowsFromAuxiliaryTable = affectedAux,
+      reconciledDfWithAuxRowsTagged = reconciled.reconciledAndRoutedDf,
+      originalAffectedRowsFromAuxiliaryTable = reconciled.affectedRowsFromAuxiliaryTable,
       auxiliaryTableIdentifier = defaultAuxTableIdentifier,
       batchId = batchId
     )
@@ -486,6 +456,34 @@ class Scd2ForeachBatchHandlerSuite
     assert(auxTable.collect().isEmpty)
   }
 
+  test("a late delete bisecting a trailing closed record promotes the surviving tail to a " +
+    "tombstone") {
+    // Unlike the bisection cases above, the bisected record is the LAST record for the key -- there
+    // is no successor event tying with the decomposition tail at the original boundary. So the tail
+    // is not dropped as redundant; it survives reconciliation and is promoted to an aux tombstone
+    // by promoteDecompositionTailsToTombstones (a transform the other tests never actually reach).
+    createAuxTable()
+    createTargetTable(targetRow(1, "a", 10L, 20L, 10L)) // closed, nothing after it
+
+    runBatch(2L)(del(1, 15L))
+
+    // `a` is shortened to [10, 15); the original boundary at 20 survives as a promoted tombstone.
+    checkAnswer(targetTable, targetRow(1, "a", 10L, 15L, 10L))
+    checkAnswer(auxTable, auxRow(1, "a", 20L, 20L, 20L, null))
+  }
+
+  test("a late delete bisecting a trailing closed record is replay-stable") {
+    // Same scenario as above, exercised through a same-batchId replay (no replay test elsewhere
+    // covers a decomposition/promotion path).
+    createAuxTable()
+    createTargetTable(targetRow(1, "a", 10L, 20L, 10L))
+
+    assertReplayStable(2L)(del(1, 15L))
+
+    checkAnswer(targetTable, targetRow(1, "a", 10L, 15L, 10L))
+    checkAnswer(auxTable, auxRow(1, "a", 20L, 20L, 20L, null))
+  }
+
   test("two late events in one batch each bisect a distinct closed target row") {
     createAuxTable()
     createTargetTable(
@@ -665,6 +663,9 @@ class Scd2ForeachBatchHandlerSuite
     createTargetTable()
 
     runBatchAuxMergeOnly(1L)(del(1, 5L)) // crash: aux merged, target not
+    // Halfway state: the tombstone is a fresh insert, so it is alive (deletedByBatchId = null).
+    checkAnswer(auxTable, auxRow(1, null, 5L, 5L, 5L, null))
+
     runBatch(1L)(del(1, 5L)) // recovery: same batchId reruns fully
 
     assert(targetTable.collect().isEmpty)
@@ -680,10 +681,38 @@ class Scd2ForeachBatchHandlerSuite
     createTargetTable()
 
     runBatchAuxMergeOnly(1L)(upsert(1, "a", 10L), upsert(1, "a", 20L)) // crash: aux merged only
+    // Halfway state: the demoted run head is a fresh insert, alive (deletedByBatchId = null).
+    checkAnswer(auxTable, auxRow(1, "a", 10L, null, 10L, null))
+
     runBatch(1L)(upsert(1, "a", 10L), upsert(1, "a", 20L)) // recovery: same batchId reruns fully
 
     checkAnswer(targetTable, targetRow(1, "a", 10L, null, 20L))
     checkAnswer(auxTable, auxRow(1, "a", 10L, null, 10L, null))
+  }
+
+  test("recovering after a crash that logically deleted a pre-existing aux row converges") {
+    // This is the case the deletedByBatchId re-inclusion clause exists for: unlike the crash tests
+    // above (fresh inserts, deletedByBatchId = null), here the crashed attempt logically DELETES a
+    // pre-existing aux row, stamping it with the batch id. The replay must re-observe that row via
+    // the `deletedByBatchId === batchId` clause in findAffectedRowsFromAuxiliaryTable; otherwise it
+    // sees an empty affected-aux set, loses the deletion boundary, and writes an open record.
+    createAuxTable()
+    createTargetTable()
+
+    runBatch(1L)(del(1, 20L)) // batch 1: a live tombstone [20, 20) in the aux table
+    checkAnswer(auxTable, auxRow(1, null, 20L, 20L, 20L, null))
+
+    // Crash during batch 2: the late upsert promotes the tombstone out of the aux table, stamping
+    // it deletedByBatchId = 2, but the target merge never runs.
+    runBatchAuxMergeOnly(2L)(upsert(1, "x", 10L))
+    checkAnswer(auxTable, auxRow(1, null, 20L, 20L, 20L, 2L))
+
+    // Replay of batch 2: re-observes the stamped-by-2 aux row, re-derives the same output.
+    runBatch(2L)(upsert(1, "x", 10L))
+
+    // The upsert lands as a record closed at the recorded deletion boundary (20), not left open.
+    checkAnswer(targetTable, targetRow(1, "x", 10L, 20L, 10L))
+    checkAnswer(auxTable, auxRow(1, null, 20L, 20L, 20L, 2L))
   }
 
   test("duplicate events at the same key and sequence in one microbatch collapse to one record") {
@@ -719,6 +748,20 @@ class Scd2ForeachBatchHandlerSuite
     assert(row.getAs[Long](Scd2BatchProcessor.startAtColName) == 10L)
     assert(row.isNullAt(row.fieldIndex(Scd2BatchProcessor.endAtColName)), "record should be open")
     assert(auxTable.collect().isEmpty)
+  }
+
+  test("an upsert and a delete at the same sequence resolve in favor of the delete") {
+    createAuxTable()
+    createTargetTable()
+
+    // Unlike the upsert/upsert same-sequence case (undefined winner), the upsert-vs-delete
+    // tie-break at the same sequence is DEFINED: orderUpsertRepresentingRowsFirst sorts the upsert
+    // ahead so it detects the coincident delete via LEAD(1), and the delete wins -- surviving as a
+    // tombstone in the aux table with nothing left visible in the target.
+    runBatch(1L)(upsert(1, "a", 10L), del(1, 10L))
+
+    assert(targetTable.collect().isEmpty)
+    checkAnswer(auxTable, auxRow(1, null, 10L, 10L, 10L, null))
   }
 
   test("redelivering the same event in a later microbatch leaves both tables unchanged") {

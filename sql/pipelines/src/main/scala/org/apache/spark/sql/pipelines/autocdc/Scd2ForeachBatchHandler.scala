@@ -35,6 +35,32 @@ case class Scd2ForeachBatchHandler(
    * Idempotent under same-`batchId` replay.
    */
   def execute(batchDf: DataFrame, batchId: Long): Unit = {
+    val reconciled = reconcileMicrobatch(batchDf, batchId)
+
+    batchProcessor.mergeRowsIntoAuxiliaryTable(
+      reconciledDfWithAuxRowsTagged = reconciled.reconciledAndRoutedDf,
+      originalAffectedRowsFromAuxiliaryTable = reconciled.affectedRowsFromAuxiliaryTable,
+      auxiliaryTableIdentifier = auxiliaryTableIdentifier,
+      batchId = batchId
+    )
+
+    batchProcessor.mergeRowsIntoTargetTable(
+      reconciledDfWithAuxRowsTagged = reconciled.reconciledAndRoutedDf,
+      affectedRowsFromTargetTable = reconciled.affectedRowsFromTargetTable,
+      targetTableIdentifier = targetTableIdentifier
+    )
+  }
+
+  /**
+   * Validate and reconcile a single CDC microbatch against the current auxiliary- and target-table
+   * state, producing the tagged post-reconciliation rows plus the affected-row sets the two merges
+   * consume. Performs no writes: this is the entire pipeline up to (but excluding) the aux/target
+   * merges, factored out of [[execute]] so that both [[execute]] and tests exercise the exact same
+   * transform chain (they cannot silently desynchronize).
+   */
+  private[autocdc] def reconcileMicrobatch(
+      batchDf: DataFrame,
+      batchId: Long): Scd2ReconciliationResult = {
     ScdBatchValidator(
       destinationIdentifier = targetTableIdentifier,
       changeArgs = batchProcessor.changeArgs,
@@ -83,17 +109,24 @@ case class Scd2ForeachBatchHandler(
       .transform(batchProcessor.promoteDecompositionTailsToTombstones)
       .transform(batchProcessor.identifyAndTagAuxRows)
 
-    batchProcessor.mergeRowsIntoAuxiliaryTable(
-      reconciledDfWithAuxRowsTagged = reconciledAndRoutedDf,
-      originalAffectedRowsFromAuxiliaryTable = affectedRowsFromAuxiliaryTable,
-      auxiliaryTableIdentifier = auxiliaryTableIdentifier,
-      batchId = batchId
-    )
-
-    batchProcessor.mergeRowsIntoTargetTable(
-      reconciledDfWithAuxRowsTagged = reconciledAndRoutedDf,
-      affectedRowsFromTargetTable = affectedRowsFromTargetTable,
-      targetTableIdentifier = targetTableIdentifier
+    Scd2ReconciliationResult(
+      reconciledAndRoutedDf = reconciledAndRoutedDf,
+      affectedRowsFromAuxiliaryTable = affectedRowsFromAuxiliaryTable,
+      affectedRowsFromTargetTable = affectedRowsFromTargetTable
     )
   }
 }
+
+/**
+ * The products of [[Scd2ForeachBatchHandler.reconcileMicrobatch]] that the auxiliary- and
+ * target-table merges consume.
+ *
+ * @param reconciledAndRoutedDf the post-reconciliation rows tagged with aux-vs-target routing.
+ * @param affectedRowsFromAuxiliaryTable the aux rows pulled in for this microbatch (canonical SCD2
+ *        row schema, aux-only deletedByBatchId dropped).
+ * @param affectedRowsFromTargetTable the target rows pulled in for this microbatch.
+ */
+private[autocdc] case class Scd2ReconciliationResult(
+    reconciledAndRoutedDf: DataFrame,
+    affectedRowsFromAuxiliaryTable: DataFrame,
+    affectedRowsFromTargetTable: DataFrame)
