@@ -41,7 +41,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
@@ -213,8 +212,23 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   override def summary: KMeansSummary = super.summary
 
-  private[spark] override def estimatedSize: Long =
-    estimateMatadataSize + SizeEstimator.estimate(parentModel.clusterCenters)
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (parentModel != null) {
+      // parentModel.distanceMeasure is included in estimateMatadataSize.
+      // parentModel.trainingCost: Double, parentModel.numIter: Int
+      size += java.lang.Double.BYTES + java.lang.Integer.BYTES
+      // parentModel.clusterCenters: Array[org.apache.spark.mllib.linalg.Vector]
+      if (parentModel.clusterCenters != null) {
+        parentModel.clusterCenters.foreach { center =>
+          if (center != null) {
+            size += center.asML.getSizeInBytes
+          }
+        }
+      }
+    }
+    size
+  }
 
   private[spark] def createSummary(
     predictions: DataFrame, numIter: Int, trainingCost: Double
