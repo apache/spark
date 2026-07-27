@@ -1,26 +1,52 @@
 ================================================================================================
-Build HighlyCompressedMapStatus
+Build HighlyCompressedMapStatus, skewed block sizes
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
 Apple M4
 2048 shuffle partitions:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-skewed block sizes not recorded                       0              0           0          0.1        6833.0       1.0X
-skewed block sizes recorded accurately                0              0           0          0.1       17500.0       0.4X
+skewed block sizes not recorded                       0              0           0          0.2        6458.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.1       17250.0       0.4X
 
 OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
 Apple M4
 10000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-skewed block sizes not recorded                       0              0           0          0.1       14041.0       1.0X
-skewed block sizes recorded accurately                0              0           0          0.0       68083.0       0.2X
+skewed block sizes not recorded                       0              0           0          0.1       13834.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0       56250.0       0.2X
 
 OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
 Apple M4
 50000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-skewed block sizes not recorded                       0              0           0          0.0       67333.0       1.0X
-skewed block sizes recorded accurately                0              0           0          0.0      377667.0       0.2X
+skewed block sizes not recorded                       0              0           0          0.0       35959.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0      309750.0       0.1X
+
+
+================================================================================================
+Build HighlyCompressedMapStatus, organ pipe block sizes
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
+Apple M4
+2048 shuffle partitions:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.2        6416.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0       23583.0       0.3X
+
+OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
+Apple M4
+10000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.1       14666.0       1.0X
+skewed block sizes recorded accurately                0              0           0          0.0       99458.0       0.1X
+
+OpenJDK 64-Bit Server VM 21.0.10 on Mac OS X 26.5.2
+Apple M4
+50000 shuffle partitions:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skewed block sizes not recorded                       0              0           0          0.0       54583.0       1.0X
+skewed block sizes recorded accurately                1              1           0          0.0      530209.0       0.1X
 
 

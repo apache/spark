@@ -286,6 +286,11 @@ private[spark] object HighlyCompressedMapStatus {
       Option(SparkEnv.get)
         .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD))
         .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.defaultValue.get)
+    // Sizes at or above `threshold` are recorded accurately. Blocks of exactly `skewCutoff` are
+    // only recorded while `numTiedSkewedBlocksToRecord` lasts, because there can be arbitrarily
+    // many of them and recording them all would blow past SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.
+    var skewCutoff = Long.MaxValue
+    var numTiedSkewedBlocksToRecord = 0
     val threshold =
       if (accurateBlockSkewedFactor > 0) {
         val maxAccurateSkewedBlockNumber =
@@ -299,10 +304,20 @@ private[spark] object HighlyCompressedMapStatus {
         // instead of sorting the sizes, which every map task would otherwise pay for.
         val sizes = uncompressedSizes.clone()
         val medianSize: Long = Utils.medianInPlace(sizes)
-        val smallestAccurateSize =
-          Utils.nthSmallest(sizes, totalNumBlocks - maxAccurateSkewedBlockNumber)
+        val firstAccurateIdx = totalNumBlocks - maxAccurateSkewedBlockNumber
+        skewCutoff = Utils.nthSmallest(sizes, firstAccurateIdx)
+        // At most `maxAccurateSkewedBlockNumber` sizes are strictly larger than `skewCutoff`, and
+        // they all sit above `firstAccurateIdx` now, so counting them bounds how many blocks of
+        // exactly `skewCutoff` may still be recorded.
+        var numLargerSizes = 0
+        var j = firstAccurateIdx
+        while (j < totalNumBlocks) {
+          if (sizes(j) > skewCutoff) numLargerSizes += 1
+          j += 1
+        }
+        numTiedSkewedBlocksToRecord = maxAccurateSkewedBlockNumber - numLargerSizes
         val skewSizeThreshold =
-          Math.max(medianSize * accurateBlockSkewedFactor, smallestAccurateSize.toDouble)
+          Math.max(medianSize * accurateBlockSkewedFactor, skewCutoff.toDouble)
         Math.min(shuffleAccurateBlockThreshold.toDouble, skewSizeThreshold)
       } else {
         // Disable skew detection if accurateBlockSkewedFactor <= 0
@@ -316,11 +331,21 @@ private[spark] object HighlyCompressedMapStatus {
         numNonEmptyBlocks += 1
         // Huge blocks are not included in the calculation for average size, thus size for smaller
         // blocks is more accurate.
-        if (size < threshold) {
+        var isAccurate = size >= shuffleAccurateBlockThreshold
+        if (!isAccurate && size >= threshold) {
+          if (size > skewCutoff) {
+            isAccurate = true
+          } else if (numTiedSkewedBlocksToRecord > 0) {
+            // Ties are broken by block index so that the map status stays deterministic.
+            numTiedSkewedBlocksToRecord -= 1
+            isAccurate = true
+          }
+        }
+        if (isAccurate) {
+          hugeBlockSizes(i) = MapStatus.compressSize(size)
+        } else {
           totalSmallBlockSize += size
           numSmallBlocks += 1
-        } else {
-          hugeBlockSizes(i) = MapStatus.compressSize(uncompressedSizes(i))
         }
       } else {
         emptyBlocks.add(i)

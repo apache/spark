@@ -48,7 +48,7 @@ object HighlyCompressedMapStatusBenchmark extends BenchmarkBase {
     env
   }
 
-  private def blockSizes(numPartitions: Int): Array[Long] = {
+  private def skewedBlockSizes(numPartitions: Int): Array[Long] = {
     val r = new scala.util.Random(912)
     Array.tabulate(numPartitions) { i =>
       // A few blocks are orders of magnitude larger than the rest, as in a skewed shuffle.
@@ -57,26 +57,37 @@ object HighlyCompressedMapStatusBenchmark extends BenchmarkBase {
     }
   }
 
+  /**
+   * Sizes that rise and then fall. This is the worst case for selecting an order statistic with a
+   * fixed pivot choice, so it covers the cost of the fallback to sorting.
+   */
+  private def organPipeBlockSizes(numPartitions: Int): Array[Long] = {
+    Array.tabulate(numPartitions)(i => Math.min(i, numPartitions - 1 - i).toLong)
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val envWithoutSkewedSizes = envWithSkewedFactor(-1.0)
     val envWithSkewedSizes = envWithSkewedFactor(5.0)
-    runBenchmark("Build HighlyCompressedMapStatus") {
-      Seq(2048, 10000, 50000).foreach { numPartitions =>
-        val benchmark = new Benchmark(s"$numPartitions shuffle partitions", 1, output = output)
-        val sizes = blockSizes(numPartitions)
+    Seq("skewed" -> skewedBlockSizes _, "organ pipe" -> organPipeBlockSizes _).foreach {
+      case (distribution, blockSizes) =>
+        runBenchmark(s"Build HighlyCompressedMapStatus, $distribution block sizes") {
+          Seq(2048, 10000, 50000).foreach { numPartitions =>
+            val benchmark = new Benchmark(s"$numPartitions shuffle partitions", 1, output = output)
+            val sizes = blockSizes(numPartitions)
 
-        benchmark.addCase("skewed block sizes not recorded", 10) { _ =>
-          SparkEnv.set(envWithoutSkewedSizes)
-          HighlyCompressedMapStatus(loc, sizes, 0)
+            benchmark.addCase("skewed block sizes not recorded", 10) { _ =>
+              SparkEnv.set(envWithoutSkewedSizes)
+              HighlyCompressedMapStatus(loc, sizes, 0)
+            }
+
+            benchmark.addCase("skewed block sizes recorded accurately", 10) { _ =>
+              SparkEnv.set(envWithSkewedSizes)
+              HighlyCompressedMapStatus(loc, sizes, 0)
+            }
+
+            benchmark.run()
+          }
         }
-
-        benchmark.addCase("skewed block sizes recorded accurately", 10) { _ =>
-          SparkEnv.set(envWithSkewedSizes)
-          HighlyCompressedMapStatus(loc, sizes, 0)
-        }
-
-        benchmark.run()
-      }
     }
     SparkEnv.set(null)
   }

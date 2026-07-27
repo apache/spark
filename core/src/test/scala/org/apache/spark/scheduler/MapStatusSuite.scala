@@ -329,4 +329,54 @@ class MapStatusSuite extends SparkFunSuite {
         "skewed block sizes must be accurate so that AQE can detect the skew")
     }
   }
+
+  test("SPARK-48290: blocks tied at the cutoff size do not bypass the accurate skewed block " +
+    "limit") {
+    // The small blocks are the majority, so the median block size is smallBlockSize. Without the
+    // limit, all of the tied blocks would be recorded, which for a stage of 10000 map tasks would
+    // add more than a gigabyte of map status entries.
+    val smallBlocksLength = 25001
+    val tiedBlocksLength = 24999
+    val smallBlockSize = 1024L
+    // Far more blocks share this size than may be recorded, and it is the cutoff size itself:
+    // it is above the median times the skew factor, so the skew threshold is exactly this size.
+    val tiedBlockSize = 8 * 1024L
+    val maxAccurateSkewedBlockNumber =
+      config.SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.defaultValue.get
+
+    // No skew related config is set: this asserts the out of the box behavior.
+    val conf = new SparkConf()
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+
+    val allBlocks = createArray(smallBlocksLength, smallBlockSize) ++:
+      createArray(tiedBlocksLength, tiedBlockSize)
+    assert(tiedBlockSize < conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD),
+      "the tied blocks must not be recorded as huge blocks")
+    assert(Utils.median(allBlocks, false) *
+      conf.get(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR) < tiedBlockSize,
+      "the cutoff size, not the median times the skew factor, must set the skew threshold")
+    val numSmallBlocks = allBlocks.length - maxAccurateSkewedBlockNumber
+    val avg =
+      (smallBlockSize * smallBlocksLength +
+        tiedBlockSize * (tiedBlocksLength - maxAccurateSkewedBlockNumber)) / numSmallBlocks
+
+    val loc = BlockManagerId("a", "b", 10)
+    val status = compressAndDecompressMapStatus(MapStatus(loc, allBlocks, 5))
+    assert(status.isInstanceOf[HighlyCompressedMapStatus])
+    // Ties are broken by block index, so the first maxAccurateSkewedBlockNumber tied blocks are
+    // the ones recorded accurately.
+    val firstAccurateBlock = smallBlocksLength
+    for (i <- 0 until firstAccurateBlock) {
+      assert(status.getSizeForBlock(i) === avg)
+    }
+    for (i <- firstAccurateBlock until firstAccurateBlock + maxAccurateSkewedBlockNumber) {
+      assert(status.getSizeForBlock(i) === compressAndDecompressSize(tiedBlockSize))
+    }
+    for (i <- firstAccurateBlock + maxAccurateSkewedBlockNumber until allBlocks.length) {
+      assert(status.getSizeForBlock(i) === avg,
+        "no more than maxAccurateSkewedBlockNumber blocks may be recorded accurately")
+    }
+  }
 }
