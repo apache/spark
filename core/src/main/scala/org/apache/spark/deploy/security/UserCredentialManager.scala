@@ -70,8 +70,7 @@ private[spark] class UserCredentialManager(
   private val consecutiveFailures = new AtomicInteger(0)
   private val maxBackoffMs: Long = UserCredentialManager.MAX_BACKOFF_MS
 
-  @volatile private var renewalExecutor: ScheduledExecutorService = _
-  @volatile private var stopped = false
+  private var renewalExecutor: ScheduledExecutorService = _
 
   // Snapshot of credential-related configuration at construction time.
   private val credentialConfMap: java.util.Map[String, String] = sparkConf.getAll
@@ -115,10 +114,6 @@ private[spark] class UserCredentialManager(
     // Create the renewal executor only after successful initial acquisition.
     // This avoids leaking a daemon thread if the fail-fast path throws, and
     // keeps the require() guard valid for retry scenarios.
-    // Check stopped flag to handle the race where stop() is called during start().
-    if (stopped) {
-      return serialized
-    }
     renewalExecutor =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("user-credential-renewal")
 
@@ -132,7 +127,6 @@ private[spark] class UserCredentialManager(
   }
 
   def stop(): Unit = {
-    stopped = true
     if (renewalExecutor != null) {
       renewalExecutor.shutdownNow()
     }
@@ -217,13 +211,18 @@ private[spark] class UserCredentialManager(
           val target = new URI(scheme, UserCredentialManager.SYNTHETIC_TARGET_AUTHORITY,
             "/", null, null)
           val credential = provider.resolve(ctx, target)
-          credentialMap.put(scheme, credential)
+          if (credential == null) {
+            logWarning(log"Provider for scheme ${MDC(LogKeys.URI, scheme)} " +
+              log"returned null; skipping.")
+          } else {
+            credentialMap.put(scheme, credential)
 
-          val expiry = credential.getExpiresAt
-          if (expiry != null) {
-            earliestExpiry = earliestExpiry match {
-              case Some(existing) if existing.isBefore(expiry) => Some(existing)
-              case _ => Some(expiry)
+            val expiry = credential.getExpiresAt
+            if (expiry != null) {
+              earliestExpiry = earliestExpiry match {
+                case Some(existing) if existing.isBefore(expiry) => Some(existing)
+                case _ => Some(expiry)
+              }
             }
           }
         } else {
@@ -385,6 +384,8 @@ private[spark] object UserCredentialManager {
     "java.time.**;" +
     "java.lang.**;" +
     "maxdepth=10;" +
+    "maxarray=1000;" +
+    "maxrefs=1000;" +
     "!*"
 
   /**
