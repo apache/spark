@@ -546,4 +546,22 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
       ))
     }
   }
+
+  test("SPARK-57091: non-deterministic ranking expression (rand()) does not throw") {
+    withStreamingHeap {
+      // A non-deterministic ranking expression must have its projection initialized
+      // with the partition index before evaluation. Without initialization, rand() throws
+      // "Nondeterministic expression ... has not been initialized".
+      val left = spark.range(10).toDF("id").withColumn("x", col("id").cast("double"))
+      val right = Seq((10, 1.0), (11, 2.0), (12, 3.0)).toDF("rid", "y")
+      // Use rand() as ranking: non-deterministic, returns Double
+      val result = left.nearestByJoin(right, rand(),
+        numResults = 2, mode = "exact", direction = "similarity")
+      val plan = result.queryExecution.executedPlan
+      assert(plan.treeString.contains("BroadcastNearestByJoin"),
+        "Expected BroadcastNearestByJoinExec in plan but got:\n" + plan.treeString)
+      // Each of 10 left rows should get 2 right rows (k=2, right has 3 rows)
+      assert(result.count() == 20)
+    }
+  }
 }
