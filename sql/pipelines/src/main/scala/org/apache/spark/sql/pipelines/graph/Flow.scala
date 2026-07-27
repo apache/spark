@@ -253,6 +253,7 @@ class AutoCdcMergeFlow(
     val funcResult: FlowFunctionResult
 ) extends ResolvedFlow {
   requireReservedPrefixAbsentInSourceColumns()
+  requireReservedFrameworkColumnsAbsentInSourceColumns()
 
   def changeArgs: ChangeArgs = flow.changeArgs
 
@@ -398,6 +399,45 @@ class AutoCdcMergeFlow(
         )
       )
     }
+  }
+
+  /**
+   * Reject a source column that collides with an SCD2 reserved framework column not covered by
+   * [[requireReservedPrefixAbsentInSourceColumns]]: the prefix guard only rejects
+   * [[AutoCdcReservedNames.prefix]] names, but SCD2 also persists the non-prefixed
+   * [[Scd2BatchProcessor.startAtColName]] and [[Scd2BatchProcessor.endAtColName]]. Runs before
+   * [[schema]] is forced so the collision fails fast rather than being silently overwritten
+   * during preprocessing. No-op for SCD1, which has no such columns.
+   */
+  private def requireReservedFrameworkColumnsAbsentInSourceColumns(): Unit = {
+    val resolver = spark.sessionState.conf.resolver
+    val reservedPrefix = AutoCdcReservedNames.prefix
+
+    // Only the non-prefixed reserved names need checking here; prefixed ones are already rejected
+    // by requireReservedPrefixAbsentInSourceColumns.
+    val reservedNames: Set[String] = changeArgs.storedAsScdType match {
+      case ScdType.Type2 =>
+        Scd2BatchProcessor.reservedFrameworkColNames.filterNot(_.startsWith(reservedPrefix))
+      case ScdType.Type1 =>
+        Set.empty
+    }
+
+    df.schema.fieldNames
+      .find(name => reservedNames.exists(resolver(_, name)))
+      .foreach { conflictingColumnName =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
+          messageParameters = Map(
+            "caseSensitivity" -> CaseSensitivityLabels.of(
+              spark.sessionState.conf.caseSensitiveAnalysis
+            ),
+            "columnName" -> conflictingColumnName,
+            "schemaName" -> "changeDataFeed",
+            "scdType" -> changeArgs.storedAsScdType.label,
+            "reservedColumnNames" -> reservedNames.toSeq.sorted.mkString(", ")
+          )
+        )
+      }
   }
 
   /**
