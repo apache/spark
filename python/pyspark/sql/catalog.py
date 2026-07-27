@@ -252,7 +252,8 @@ class Catalog:
         """
         sc = self._sc
         assert sc is not None
-        ju = sc._gateway.jvm.java.util  # type: ignore[union-attr]
+        assert sc._gateway is not None
+        ju = sc._gateway.jvm.java.util
         m = ju.HashMap()
         if properties:
             for k, v in properties.items():
