@@ -20,6 +20,7 @@ package org.apache.spark
 import scala.collection.mutable.HashSet
 import scala.util.Random
 
+import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration
@@ -125,6 +126,48 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
 
     // Verify that shuffles can be re-executed after cleaning up
     assert(rdd.collect().toList.equals(collected))
+  }
+
+  test("cleanup shuffle unregisters a pipelined shuffle from the streaming output tracker") {
+    // A pipelined shuffle is registered in BOTH the MapOutputTracker and the driver-only
+    // StreamingShuffleOutputTracker (see DAGScheduler.createShuffleMapStage). doCleanupShuffle
+    // must unregister it from the streaming tracker too, mirroring the MapOutputTracker cleanup;
+    // otherwise the tracker grows without bound across micro-batches in Real-Time Mode.
+    val streamingTracker = sc.env.streamingShuffleOutputTracker.get
+      .asInstanceOf[StreamingShuffleOutputTrackerMaster]
+    val mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+
+    // Register a shuffle id in both trackers exactly as the scheduler does for a pipelined shuffle.
+    val shuffleId = 1000
+    mapOutputTracker.registerShuffle(shuffleId, numMaps = 2, numReduces = 2)
+    streamingTracker.registerShuffle(shuffleId, numMaps = 2, numReduces = 2, jobId = 0)
+    assert(streamingTracker.containsShuffle(shuffleId))
+
+    cleaner.doCleanupShuffle(shuffleId, blocking = true)
+
+    // The streaming tracker entry is gone, alongside the MapOutputTracker cleanup.
+    assert(!streamingTracker.containsShuffle(shuffleId))
+    assert(!mapOutputTracker.containsShuffle(shuffleId))
+  }
+
+  test("cleanup shuffle leaves a regular shuffle's streaming tracker untouched and quiet") {
+    // A regular (non-pipelined) shuffle is never registered with the streaming tracker, so
+    // doCleanupShuffle must skip it via the containsShuffle guard -- without emitting the
+    // "attempting to unregister a shuffle that hasn't been registered" warning for every shuffle.
+    val streamingTracker = sc.env.streamingShuffleOutputTracker.get
+      .asInstanceOf[StreamingShuffleOutputTrackerMaster]
+
+    val (rdd, shuffleDeps) = newRDDWithShuffleDependencies()
+    rdd.collect()
+    shuffleDeps.foreach(s => assert(!streamingTracker.containsShuffle(s.shuffleId)))
+
+    val logAppender = new LogAppender("unregister streaming shuffle")
+    logAppender.setThreshold(Level.WARN)
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      shuffleDeps.foreach(s => cleaner.doCleanupShuffle(s.shuffleId, blocking = true))
+    }
+    assert(!logAppender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("hasn't been registered")))
   }
 
   test("cleanup broadcast") {

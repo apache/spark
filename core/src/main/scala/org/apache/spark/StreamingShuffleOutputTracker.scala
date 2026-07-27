@@ -230,6 +230,10 @@ private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
     }
   }
 
+  // Whether the given shuffle is registered. ContextCleaner uses this on the driver to skip
+  // regular (non-pipelined) shuffles, which are never registered here, before unregistering.
+  def containsShuffle(shuffleId: Int): Boolean = shuffleInfos.containsKey(shuffleId)
+
   // for testing purposes
   private[spark] def getShuffleInfo(shuffleId: Int): Option[StreamingShuffleInfo] = {
     Option(shuffleInfos.get(shuffleId))
