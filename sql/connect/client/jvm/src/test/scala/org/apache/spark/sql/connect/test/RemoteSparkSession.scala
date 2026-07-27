@@ -18,8 +18,8 @@ package org.apache.spark.sql.connect.test
 
 import java.io.{File, IOException, OutputStream}
 import java.lang.ProcessBuilder.Redirect
-import java.net.ServerSocket
-import java.nio.file.Paths
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.FiniteDuration
@@ -52,11 +52,21 @@ object SparkConnectServerUtils {
   // The equivalent command to start the connect server via command line:
   // bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
 
-  // Bind a throwaway socket to port 0 to obtain an OS-assigned free port for the server process.
-  val port: Int = {
-    val socket = new ServerSocket(0)
-    try socket.getLocalPort
-    finally socket.close()
+  // File the server process writes its actual bound port into.
+  private val portFile: File = {
+    val f = File.createTempFile("spark-connect-server-port", ".tmp")
+    f.deleteOnExit()
+    f
+  }
+
+  // The port the launched server bound to, read from `portFile` once the server reports it.
+  lazy val port: Int = {
+    start()
+    eventually(timeout(1.minute)) {
+      val reported = new String(Files.readAllBytes(portFile.toPath), UTF_8).trim
+      assert(reported.nonEmpty, "The Spark Connect server has not reported its port yet.")
+      reported.toInt
+    }
   }
 
   @volatile private var stopped = false
@@ -78,7 +88,8 @@ object SparkConnectServerUtils {
     command += "--driver-class-path" += connectJar
     command += "--class" += "org.apache.spark.sql.connect.SimpleSparkConnectService"
     command += "--jars" += catalystTestJar
-    command += "--conf" += s"spark.connect.grpc.binding.port=$port"
+    command += "--conf" += "spark.connect.grpc.binding.port=0"
+    command += "--conf" += s"spark.connect.test.portFile=${portFile.getAbsolutePath}"
     command ++= testConfigs
     command ++= log4jConfigs
     command += connectJar

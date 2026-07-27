@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect
 
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.TimeUnit
 
 import scala.io.StdIn
@@ -38,6 +40,9 @@ import org.apache.spark.sql.internal.SQLConf
 private[sql] object SimpleSparkConnectService {
   private val stopCommand = "q"
 
+  // Conf naming a file to write the actual bound port into.
+  private val portFileConf = "spark.connect.test.portFile"
+
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf()
       .set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
@@ -45,6 +50,10 @@ private[sql] object SimpleSparkConnectService {
       .set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER, true)
     val sparkSession = SparkSession.builder().config(conf).getOrCreate()
     val sparkContext = sparkSession.sparkContext // init spark context
+    // Write the actual bound port to the file, if one was configured.
+    sparkContext.getConf.getOption(portFileConf).foreach { path =>
+      Files.write(Paths.get(path), SparkConnectService.localPort.toString.getBytes(UTF_8))
+    }
     // scalastyle:off println
     println("Ready for client connections.")
     // scalastyle:on println
