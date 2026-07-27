@@ -6373,6 +6373,31 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined shuffle: a barrier group member is rejected up front") {
+    // A barrier stage exposes its output only after a global sync, which is incompatible with a
+    // pipelined consumer reading the producer's output incrementally. It is also a recovery hazard:
+    // a barrier task failure fails the stage and RESUBMITS it (markStageAsFinished without
+    // willRetry), and if such a producer were co-scheduled, the resubmit would drop a fan-in
+    // consumer's buffered completions and the job could never complete. Reject any job whose
+    // pipelined group contains a barrier member before any stage is created, so that path is
+    // unreachable.
+    val producerRdd = new MyRDD(sc, 2, Nil).barrier().mapPartitions(iter => iter)
+    assert(producerRdd.isBarrier(), "test setup: the producer must be a barrier RDD")
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(consumerRdd, Array(0, 1), listener = failListener)
+    assert(failure.get() != null,
+      "a pipelined job with a barrier group member should be rejected")
+    assert(failure.get().getMessage.contains("barrier"))
+    assert(taskSets.isEmpty, "no stage should be created for a rejected job")
+    assertDataStructuresEmpty()
+  }
+
   test("regular shuffle job with dynamic allocation enabled is NOT rejected (path is inert)") {
     // The dynamic-allocation fail-fast must apply only to jobs with a pipelined dependency; a plain
     // regular-shuffle job with dynamic allocation on runs normally.

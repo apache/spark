@@ -1563,19 +1563,38 @@ private[spark] class DAGScheduler(
    */
   private def rejectUnadmittablePipelinedGroup(
       jobId: Int, finalRDD: RDD[_], partitions: Array[Int], listener: JobListener): Boolean = {
-    // The whole group must run on the default resource profile. Admission below measures capacity
-    // and occupancy against the default profile, but each stage derives its profile from its RDDs
-    // (see createShuffleMapStage/createResultStage). A member carrying a non-default profile would
-    // therefore be admitted against the default profile's free slots yet run in a different, often
-    // smaller pool -- and could then queue or deadlock there. Reject such a job up front (before
-    // any stage is created, like the checks above), rather than admit it against the wrong pool.
+    // Reject up-front (before any stage is created) two group members the admission model cannot
+    // support, walking the group's RDD graph once:
+    //  - A barrier member. A barrier stage exposes its output only after a global sync, which
+    //    contradicts a pipelined consumer reading the producer's output incrementally as it runs;
+    //    and its failure recovery resubmits the stage, which the group's atomic completion cannot
+    //    accommodate (a resubmitted producer would drop a co-scheduled consumer's buffered
+    //    completions). Reject it here rather than let it be co-scheduled.
+    //  - A member on a non-default resource profile. Admission below measures capacity and
+    //    occupancy against the default profile, but each stage derives its profile from its RDDs
+    //    (see createShuffleMapStage/createResultStage). A member carrying a non-default profile would be
+    //    admitted against the default profile's free slots yet run in a different, often smaller
+    //    pool -- and could then queue or deadlock there.
+    var offendingBarrier = false
     var offendingRp: Option[ResourceProfile] = None
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
+      if (rdd.isBarrier()) {
+        offendingBarrier = true
+      }
       val rp = rdd.getResourceProfile()
       if (offendingRp.isEmpty && rp != null && rp.id != DEFAULT_RESOURCE_PROFILE_ID) {
         offendingRp = Some(rp)
       }
       rdd.dependencies.foreach(dep => enqueue(dep.rdd))
+    }
+    if (offendingBarrier) {
+      logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: a pipelined stage group contains a " +
+        log"barrier member")
+      listener.jobFailed(new SparkException(
+        "A pipelined shuffle job with a barrier stage in the pipelined group is not supported: a " +
+          "barrier stage exposes its output only after a global sync, which is incompatible with " +
+          "a pipelined consumer reading its output incrementally."))
+      return true
     }
     if (offendingRp.nonEmpty) {
       logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: a pipelined stage group member uses a " +
@@ -3991,14 +4010,11 @@ private[spark] class DAGScheduler(
         // Drop immediately: the group is being failed as a unit, so this consumer's buffered
         // successes must not be applied no matter what its other producers do. Removing the entry
         // now leaves no deferral state to go stale for a later re-co-scheduling of this stage.
-        // This treats producerFailed as terminal, which holds for every producer-failure path that
-        // reaches here EXCEPT a barrier stage that fails a task and is resubmitted (its handler
-        // calls markStageAsFinished(errorMessage) without willRetry=true, then resubmits):
-        // there, dropping a fan-in consumer's deferral for a producer that will retry loses that
-        // consumer's buffered results. This edge is closed by rejecting a barrier stage in a
-        // pipelined group up front (checkPipelinedProducerSupported, added with the group fail-fast
-        // checks later in this stack); until that rejection is in place it is a known, narrow
-        // limitation (barrier producer feeding a fan-in consumer).
+        // Treating producerFailed as terminal is sound because every failure path that reaches a
+        // pipelined member's markStageAsFinished(errorMessage) here is terminal for the group: the
+        // one base path that fails a stage and then resubmits it (a barrier task failure) cannot
+        // occur, because a barrier member is rejected up front (rejectUnadmittablePipelinedGroup),
+        // so a pipelined group never contains one.
         dependentStageMap -= consumer
         val events = deferral.delayedTaskCompletionEvents.toList
         logInfo(log"Dropping ${MDC(NUM_EVENTS, events.size.toLong)} deferred completion(s) for " +
