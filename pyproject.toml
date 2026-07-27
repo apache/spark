@@ -148,12 +148,14 @@ pipelines = [
 _lint = [
     "ruff==0.14.8",
     "mypy==1.19.1",
+    "pytest",
     "pytest-mypy-plugins==3.2.0",
     "mypy-protobuf==3.3.0",
     "googleapis-common-protos-stubs==2.2.0",
     "grpc-stubs==1.24.11",
     "pandas-stubs>=2.2.0",
     "scipy-stubs",
+    "types-protobuf==6.32.1.20260221",
     "types-PyYAML"
 ]
 
