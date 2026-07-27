@@ -195,6 +195,46 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
+   * Load table metadata by {@link Identifier identifier} from the catalog, forwarding all
+   * user-specified options.
+   * <p>
+   * The default implementation ignores {@code options} and delegates to the existing
+   * {@code loadTable} overloads based on {@code context}: {@link #loadTable(Identifier, String)}
+   * or {@link #loadTable(Identifier, long)} when time travel is present,
+   * {@link #loadTable(Identifier, Set)} when write privileges are present, otherwise
+   * {@link #loadTable(Identifier)}. Catalogs that want to receive the user options while reading a
+   * table (e.g. to customize the scan) must override this method.
+   *
+   * @param ident a table identifier
+   * @param context the parsed load parameters (time travel, write privileges)
+   * @param options all options passed to the read, including any keys that are also parsed into
+   *                {@code context}
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist
+   *
+   * @since 4.2.0
+   */
+  default Table loadTable(
+      Identifier ident,
+      TableContext context,
+      CaseInsensitiveStringMap options) throws NoSuchTableException {
+    if (context.timeTravel().isPresent()) {
+      TimeTravel timeTravel = context.timeTravel().get();
+      if (timeTravel instanceof TimeTravel.Version v) {
+        return loadTable(ident, v.version());
+      } else if (timeTravel instanceof TimeTravel.Timestamp ts) {
+        return loadTable(ident, ts.micros());
+      } else {
+        throw new IllegalArgumentException("Unsupported time travel spec: " + timeTravel);
+      }
+    } else if (!context.writePrivileges().isEmpty()) {
+      return loadTable(ident, context.writePrivileges());
+    } else {
+      return loadTable(ident);
+    }
+  }
+
+  /**
    * Load a {@link Changelog} for the given table, representing the row-level changes within the
    * range specified by {@code context}.
    * <p>

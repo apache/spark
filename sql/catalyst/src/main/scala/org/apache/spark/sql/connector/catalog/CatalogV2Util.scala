@@ -472,9 +472,10 @@ private[sql] object CatalogV2Util {
       catalog: CatalogPlugin,
       ident: Identifier,
       timeTravelSpec: Option[TimeTravelSpec] = None,
-      writePrivilegesString: Option[String] = None): Option[Table] =
+      writePrivilegesString: Option[String] = None,
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): Option[Table] =
     try {
-      Option(getTable(catalog, ident, timeTravelSpec, writePrivilegesString))
+      Option(getTable(catalog, ident, timeTravelSpec, writePrivilegesString, options))
     } catch {
       case _: NoSuchTableException => None
       case _: NoSuchDatabaseException => None
@@ -484,24 +485,21 @@ private[sql] object CatalogV2Util {
       catalog: CatalogPlugin,
       ident: Identifier,
       timeTravelSpec: Option[TimeTravelSpec] = None,
-      writePrivilegesString: Option[String] = None): Table = {
-    if (timeTravelSpec.nonEmpty) {
-      assert(writePrivilegesString.isEmpty, "Should not write to a table with time travel")
-      timeTravelSpec.get match {
-        case v: AsOfVersion =>
-          catalog.asTableCatalog.loadTable(ident, v.version)
-        case ts: AsOfTimestamp =>
-          catalog.asTableCatalog.loadTable(ident, ts.timestamp)
-      }
-    } else {
-      if (writePrivilegesString.isDefined) {
-        val writePrivileges = writePrivilegesString.get.split(",").map(_.trim)
-          .map(TableWritePrivilege.valueOf).toSet.asJava
-        catalog.asTableCatalog.loadTable(ident, writePrivileges)
-      } else {
-        catalog.asTableCatalog.loadTable(ident)
-      }
+      writePrivilegesString: Option[String] = None,
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): Table = {
+    val timeTravel: TimeTravel = timeTravelSpec match {
+      case Some(v: AsOfVersion) => new TimeTravel.Version(v.version)
+      case Some(ts: AsOfTimestamp) => new TimeTravel.Timestamp(ts.timestamp)
+      case None => null
     }
+    val writePrivileges: util.Set[TableWritePrivilege] = writePrivilegesString match {
+      case Some(str) =>
+        str.split(",").map(_.trim).map(TableWritePrivilege.valueOf).toSet.asJava
+      case None =>
+        Collections.emptySet()
+    }
+    val context = new TableContext(timeTravel, writePrivileges)
+    catalog.asTableCatalog.loadTable(ident, context, options)
   }
 
   /**

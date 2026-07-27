@@ -48,6 +48,16 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   private var _name: Option[String] = None
   private var copyOnLoad: Boolean = false
 
+  // Stores the most recent TableContext and options passed to the options-aware loadTable(), so
+  // tests can verify that the analyzer / DataFrame API correctly constructed and forwarded them.
+  // "loadTable" is in the name because the subclass InMemoryChangelogCatalog has an analogous
+  // `lastOptions` recording the options passed to loadChangelog(); the two must not collide.
+  private var _lastTableContext: Option[TableContext] = None
+  def lastTableContext: Option[TableContext] = _lastTableContext
+
+  private var _lastLoadTableOptions: Option[CaseInsensitiveStringMap] = None
+  def lastLoadTableOptions: Option[CaseInsensitiveStringMap] = _lastLoadTableOptions
+
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     _name = Some(name)
     copyOnLoad = options.getBoolean("copyOnLoad", false)
@@ -122,6 +132,17 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case _ =>
         throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
+  }
+
+  // Records the forwarded context/options so tests can verify they reached the catalog, then
+  // defers to the default dispatch in TableCatalog (rather than reimplementing it here).
+  override def loadTable(
+      ident: Identifier,
+      context: TableContext,
+      options: CaseInsensitiveStringMap): Table = {
+    _lastTableContext = Some(context)
+    _lastLoadTableOptions = Some(options)
+    super.loadTable(ident, context, options)
   }
 
   override def invalidateTable(ident: Identifier): Unit = {

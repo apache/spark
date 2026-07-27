@@ -280,7 +280,8 @@ class RelationResolution(
                     catalog,
                     ident,
                     finalTimeTravelSpec,
-                    Option(writePrivileges))
+                    Option(writePrivileges),
+                    finalOptions)
                 } else {
                   None
                 }

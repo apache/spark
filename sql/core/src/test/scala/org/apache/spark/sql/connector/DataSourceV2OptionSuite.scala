@@ -19,9 +19,10 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.catalog.{InMemoryBaseTable, InMemoryRowLevelOperationTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog, TimeTravel}
 import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.functions.lit
@@ -30,6 +31,9 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
   import testImplicits._
 
   private val catalogAndNamespace = "testcat.ns1.ns2."
+
+  private def inMemoryCatalog: InMemoryCatalog =
+    catalog("testcat").asInstanceOf[InMemoryCatalog]
 
   test("SPARK-36680: Supports Dynamic Table Options for SQL Select") {
     val t1 = s"${catalogAndNamespace}table"
@@ -424,6 +428,86 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           assert(append.info.options.get("write.split-size") === "10")
       }
       assert (collected.size == 1)
+    }
+  }
+
+  test("options are forwarded to loadTable - DataFrame API") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      spark.read.option("customOption", "customValue").table(t1).collect()
+
+      val opts = inMemoryCatalog.lastLoadTableOptions
+      assert(opts.isDefined)
+      assert(opts.get.get("customOption") === "customValue")
+    }
+  }
+
+  test("options are forwarded to loadTable - SQL") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"SELECT * FROM $t1 WITH ('customOption' = 'customValue')").collect()
+
+      val opts = inMemoryCatalog.lastLoadTableOptions
+      assert(opts.isDefined)
+      assert(opts.get.get("customOption") === "customValue")
+    }
+  }
+
+  test("options are forwarded to loadTable - DataStreamReader") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      // Trigger analysis of the streaming relation.
+      spark.readStream.option("customOption", "customValue").table(t1).queryExecution.analyzed
+
+      val opts = inMemoryCatalog.lastLoadTableOptions
+      assert(opts.isDefined)
+      assert(opts.get.get("customOption") === "customValue")
+    }
+  }
+
+  test("options are forwarded to loadTable alongside time travel") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      // versionAsOf is the default time-travel version option key
+      // (SQLConf.TIME_TRAVEL_VERSION_KEY). Pin a versioned copy so the versioned load succeeds.
+      inMemoryCatalog.pinTable(Identifier.of(Array("ns1", "ns2"), "table"), "v1")
+
+      spark.read
+        .option("versionAsOf", "v1")
+        .option("customOption", "customValue")
+        .table(t1)
+        .collect()
+
+      val ctx = inMemoryCatalog.lastTableContext
+      assert(ctx.isDefined)
+      assert(ctx.get.timeTravel().isPresent)
+      assert(ctx.get.timeTravel().get() === new TimeTravel.Version("v1"))
+
+      val opts = inMemoryCatalog.lastLoadTableOptions
+      assert(opts.isDefined)
+      assert(opts.get.get("customOption") === "customValue")
+      assert(opts.get.get("versionAsOf") === "v1")
+    }
+  }
+
+  test("write privileges are carried in TableContext, internal key stripped") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a')")
+
+      val ctx = inMemoryCatalog.lastTableContext
+      assert(ctx.isDefined)
+      assert(!ctx.get.writePrivileges().isEmpty)
+
+      val opts = inMemoryCatalog.lastLoadTableOptions
+      assert(opts.isDefined)
+      // The internal write-privileges marker must not leak to the connector as a user option.
+      assert(opts.get.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES) === null)
     }
   }
 }
