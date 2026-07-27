@@ -273,8 +273,8 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     // Exercise the real LocalSchedulerBackend end to end: the first attempt of each task OOMs, the
     // retry needs 2 cpus, and the whole job must still complete.
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 1)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
       .set(config.EXECUTOR_CORES, 4)
     sc = new SparkContext("local[4,2]", "test", conf)
     FailureSuiteState.clear()
@@ -308,8 +308,8 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     // at the configured 4, the retry would be rejected on every offer forever (never launching nor
     // reaching maxFailures). Capping at the offer's actual registered total (2) lets it complete.
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 2)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(2))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
       .set(config.EXECUTOR_CORES, 4)
     sc = new SparkContext("local[2,2]", "test", conf)
     FailureSuiteState.clear()

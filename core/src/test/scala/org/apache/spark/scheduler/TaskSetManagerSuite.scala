@@ -2444,7 +2444,7 @@ class TaskSetManagerSuite
   test("SPARK-58187: repeated OOM failures still abort the task set at maxTaskFailures") {
     // OOM failures count towards numFailures, so the existing maxTaskFailures cap still bounds
     // the number of retries (and thus the growth of the requested cpus).
-    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(1)
@@ -2459,7 +2459,7 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-58187: SparkOutOfMemoryError increments numOomRetries when enabled") {
-    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(1)
@@ -2478,8 +2478,8 @@ class TaskSetManagerSuite
 
   test("SPARK-58187: OOM retry task is allocated increasing cpus") {
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 1)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
       .set(config.EXECUTOR_CORES, 4)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -2501,10 +2501,41 @@ class TaskSetManagerSuite
     assert(a2.isDefined && a2.get.cpus === 3)
   }
 
+  test("SPARK-58187: OOM retry grows fractional cpus exactly (spark.task.cpus and increment)") {
+    // spark.task.cpus is fractional (0.5) and the increment is fractional (0.5); the exact
+    // BigDecimal accounting must grow the retry to 0.5 + 0.5 * N without rounding drift, capped
+    // at the executor cores.
+    val conf = new SparkConf()
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(0.5))
+      .set(config.CPUS_PER_TASK, BigDecimal(0.5))
+      .set(config.EXECUTOR_CORES, 4)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    // First attempt: base 0.5 cpus.
+    val a0 = manager.resourceOffer(
+      "exec1", "host1", ANY, taskCpus = BigDecimal(0.5), availCpus = 4)._1
+    assert(a0.isDefined && a0.get.cpus === BigDecimal(0.5))
+    manager.handleFailedTask(a0.get.taskId, TaskState.FAILED, oomExceptionFailure)
+
+    // First OOM retry: 0.5 + 0.5 * 1 = 1.0 cpus (exact, no drift).
+    val a1 = manager.resourceOffer(
+      "exec1", "host1", ANY, taskCpus = BigDecimal(0.5), availCpus = 4)._1
+    assert(a1.isDefined && a1.get.cpus === BigDecimal(1))
+    manager.handleFailedTask(a1.get.taskId, TaskState.FAILED, oomExceptionFailure)
+
+    // Second OOM retry: 0.5 + 0.5 * 2 = 1.5 cpus.
+    val a2 = manager.resourceOffer(
+      "exec1", "host1", ANY, taskCpus = BigDecimal(0.5), availCpus = 4)._1
+    assert(a2.isDefined && a2.get.cpus === BigDecimal(1.5))
+  }
+
   test("SPARK-58187: OOM retry waits when the offer has too few free cpus (strict)") {
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 2)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(2))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
       .set(config.EXECUTOR_CORES, 4)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -2527,8 +2558,8 @@ class TaskSetManagerSuite
 
   test("SPARK-58187: OOM retry does not starve a normal task on the same executor") {
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 2)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(2))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
       .set(config.EXECUTOR_CORES, 4)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -2547,8 +2578,8 @@ class TaskSetManagerSuite
 
   test("SPARK-58187: OOM retry cpus are capped at executor cores") {
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 10)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(10))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
       .set(config.EXECUTOR_CORES, 4)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -2568,7 +2599,7 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-58187: numOomRetries is reset when the task succeeds") {
-    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(1)
@@ -2586,7 +2617,7 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-58187: JVM heap OOM via ExecutorLostFailure increments numOomRetries") {
-    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(1)
@@ -2603,7 +2634,7 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-58187: non-OOM executor exit codes do not increment numOomRetries") {
-    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(1)
@@ -2619,7 +2650,7 @@ class TaskSetManagerSuite
 
   test("SPARK-58187: custom oomRetryExecutorExitCodes are honored (YARN memory-limit codes)") {
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
       .set(config.OOM_RETRY_EXECUTOR_EXIT_CODES, Seq(SparkExitCode.OOM, -103, -104))
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
@@ -2636,8 +2667,8 @@ class TaskSetManagerSuite
 
   test("SPARK-58187: barrier stage does not get the OOM cpus increment") {
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 2)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(2))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
       .set(config.EXECUTOR_CORES, 4)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -2659,8 +2690,8 @@ class TaskSetManagerSuite
 
   test("SPARK-58187: speculative copy of an OOM-retried task uses the same increased cpus") {
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 2)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(2))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
       .set(config.EXECUTOR_CORES, 8)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
@@ -2697,8 +2728,8 @@ class TaskSetManagerSuite
     // which oomRetryNeedsMoreCpus would reject on every offer forever, starving the task. So when
     // the cap is unknown the retry keeps the base cpus (no growth) and is always schedulable.
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 1)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
     sc = new SparkContext("local[4]", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     // Build a TaskResourceProfile (only task resources, no executor cores) and make sure no
@@ -2731,8 +2762,8 @@ class TaskSetManagerSuite
     // more cpus than the executor can physically run, which oomRetryNeedsMoreCpus would then
     // reject on every offer forever. The retry must be capped at the offer's registered total.
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 4)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(4))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
       .set(config.EXECUTOR_CORES, 8)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -2758,8 +2789,8 @@ class TaskSetManagerSuite
     // overflow the request arithmetic; the Long computation is clamped to the executor cores, so
     // the very first OOM retry requests exactly the cap (4), never a wrapped negative value.
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, Int.MaxValue)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(Int.MaxValue))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
       .set(config.EXECUTOR_CORES, 4)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -2783,8 +2814,8 @@ class TaskSetManagerSuite
     // base into resourceOffer, so with a stage profile requiring 4 task cpus and increment 1, the
     // first OOM retry needs 4 + 1 = 5, not spark.task.cpus (1) + 1 = 2.
     val conf = new SparkConf()
-      .set(config.OOM_RETRY_CPUS_INCREMENT, 1)
-      .set(config.CPUS_PER_TASK, 1)
+      .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
+      .set(config.CPUS_PER_TASK, BigDecimal(1))
       .set(config.EXECUTOR_CORES, 8)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
@@ -2805,7 +2836,7 @@ class TaskSetManagerSuite
     // The Executor sends the ExceptionFailure (java.lang.OutOfMemoryError) before it exits with
     // the OOM exit code, so the driver may process FAILED first. That path must recognize the
     // fatal OOM, and the later ExecutorExited(52) must not double-count.
-    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(1)
@@ -2827,7 +2858,7 @@ class TaskSetManagerSuite
     // The reverse ordering: the ExecutorExited(52) is processed before the stale FAILED. The
     // executor-loss path increments and marks the attempt finished, so the later FAILED is a
     // no-op (info.finished guard).
-    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(1)
@@ -2848,7 +2879,7 @@ class TaskSetManagerSuite
     // FileFormatDataWriter.enrichWriteError wraps the cause in a SparkException, and a wrapped
     // SparkOutOfMemoryError is non-fatal so there is no executor-loss fallback. The OOM must be
     // recognized through the preserved cause chain, not just the top-level exception.
-    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(1)
@@ -2866,7 +2897,7 @@ class TaskSetManagerSuite
   test("SPARK-58187: wrapped JVM OutOfMemoryError FAILED before executor loss increments once") {
     // A wrapped JVM OutOfMemoryError sent as FAILED before the executor exits must be recognized
     // through the preserved cause chain, and the later OOM exit must not double-count.
-    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+    val conf = new SparkConf().set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(1)
@@ -2891,7 +2922,7 @@ class TaskSetManagerSuite
       // reuse it: a direct SparkOutOfMemoryError must always count, and a SparkException-wrapped
       // OOM must count regardless of this setting.
       val conf = new SparkConf()
-        .set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+        .set(config.OOM_RETRY_CPUS_INCREMENT, BigDecimal(1))
         .set(config.KILL_ON_FATAL_ERROR_DEPTH, killDepth)
       sc = new SparkContext("local", "test", conf)
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
