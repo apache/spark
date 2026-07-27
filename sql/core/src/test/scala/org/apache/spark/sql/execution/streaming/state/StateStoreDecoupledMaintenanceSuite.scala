@@ -30,7 +30,6 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.LocalSparkContext._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STATE_STORE_PROVIDER_CLASS
@@ -250,6 +249,11 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
     new StateStoreConf(sqlConf)
   }
 
+  private def withSparkContext(body: SparkContext => Unit): Unit = {
+    body(SparkContext.getOrCreate(
+      new SparkConf().setMaster("local").setAppName("test")))
+  }
+
   private def loadNullProvider(
       dir: String,
       storeConf: StateStoreConf,
@@ -264,8 +268,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
 
   test("SPARK-51596: task thread unload lifecycle " +
       "from queue to close") {
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+    withSparkContext { sc =>
       withCoordinatorRef(sc) { coordinatorRef =>
         // Long interval so close can only happen via triggerNow, not the
         // periodic scheduler tick. Without triggerNow the test fails at the
@@ -399,8 +402,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
 
   test("concurrent snapshot and cleanup on same provider " +
       "both succeed") {
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+    withSparkContext { sc =>
       withCoordinatorRef(sc) { _ =>
         val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
         val storeId = loadNullProvider("concurrentDir", storeConf)
@@ -454,8 +456,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
 
   test("partition sets and locks released when maintenance throws, " +
       "write lock blocks until read lock is freed") {
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+    withSparkContext { sc =>
       withCoordinatorRef(sc) { _ =>
         val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
         val storeId = loadNullProvider("errorDir", storeConf)
@@ -522,47 +523,47 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
   }
 
   private def testRequeue(opRequest: MaintenanceOpRequest): Unit = {
-    val logAppender = new LogAppender("requeue-log", maxEvents = 100)
+    val logAppender = new LogAppender("requeue-log", maxEvents = 10000)
     logAppender.setThreshold(Level.INFO)
     withLogAppender(logAppender, level = Some(Level.INFO)) {
-      val conf = new SparkConf().setMaster("local").setAppName("test")
-      withSpark(SparkContext.getOrCreate(conf)) { sc =>
+      withSparkContext { sc =>
         withCoordinatorRef(sc) { _ =>
           val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
           val storeId = loadNullProvider("requeueDir", storeConf)
           val bp = getBlockingProvider(storeId)
-
-          // Wait for both ops to enter, occupying both partition sets.
-          assert(bp.snapshotEnteredLatch.await(10, TimeUnit.SECONDS))
-          assert(bp.cleanupEnteredLatch.await(10, TimeUnit.SECONDS))
-
-          // Add an entry to the queue. The scheduler will try to drain
-          // it but the partition set is occupied (held by the blocked
-          // task above), so it should be requeued.
           val queue = getUnloadQueue()
-          queue.add((storeId, bp, opRequest))
 
-          // Wait for the scheduler to attempt draining and verify
-          // the requeue log. Queue checks are inside eventually to
-          // handle the momentary gap between the poll removing the
-          // entry and offer putting the entry back.
-          // Queue should still have the entry.
-          eventually(timeout(10.seconds)) {
-            assert(logAppender.loggingEvents.exists(
-              _.getMessage.getFormattedMessage.contains("Had to requeue")),
-              s"scheduler should have logged requeue for $opRequest")
-            val peeked = queue.peek()
-            assert(peeked != null,
-              s"$opRequest entry should have been requeued")
-            val (requeuedId, _, requeuedOp) = peeked
-            assert(requeuedId == storeId)
-            assert(requeuedOp == opRequest)
+          try {
+            // Wait for both ops to enter, occupying both partition sets.
+            assert(bp.snapshotEnteredLatch.await(10, TimeUnit.SECONDS))
+            assert(bp.cleanupEnteredLatch.await(10, TimeUnit.SECONDS))
+
+            // Add an entry to the queue. The scheduler will try to drain
+            // it but the partition set is occupied (held by the blocked
+            // task above), so it should be requeued.
+            queue.add((storeId, bp, opRequest))
+
+            // Wait for the scheduler to attempt draining and verify
+            // the requeue log. Queue checks are inside eventually to
+            // handle the momentary gap between the poll removing the
+            // entry and offer putting the entry back.
+            // Queue should still have the entry.
+            eventually(timeout(10.seconds)) {
+              assert(logAppender.loggingEvents.exists(
+                _.getMessage.getFormattedMessage.contains("Had to requeue")),
+                s"scheduler should have logged requeue for $opRequest")
+              val peeked = queue.peek()
+              assert(peeked != null,
+                s"$opRequest entry should have been requeued")
+              val (requeuedId, _, requeuedOp) = peeked
+              assert(requeuedId == storeId)
+              assert(requeuedOp == opRequest)
+            }
+          } finally {
+            bp.snapshotContinueSignal.countDown()
+            bp.cleanupContinueSignal.countDown()
+            queue.clear()
           }
-
-          // Clean up: release latches
-          bp.snapshotContinueSignal.countDown()
-          bp.cleanupContinueSignal.countDown()
-          queue.clear()
         }
       }
     }
@@ -582,8 +583,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
 
   test("When MaintenanceOpRequest is All, cleanup is submitted " +
       "if snapshot partition set is occupied") {
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+    withSparkContext { sc =>
       withCoordinatorRef(sc) { _ =>
         // Long interval so we can set up before the first
         // cycle fires (5s initial delay).
@@ -625,8 +625,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
     val logAppender = new LogAppender("canProcess-log", maxEvents = 100)
     logAppender.setThreshold(Level.INFO)
     withLogAppender(logAppender, level = Some(Level.INFO)) {
-      val conf = new SparkConf().setMaster("local").setAppName("test")
-      withSpark(SparkContext.getOrCreate(conf)) { sc =>
+      withSparkContext { sc =>
         withCoordinatorRef(sc) { _ =>
           val storeConf = maintenanceStoreConf(
             classOf[BlockingMaintenanceProvider], interval = 5000L)
@@ -659,8 +658,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
     val logAppender = new LogAppender("canProcess-stale-log", maxEvents = 100)
     logAppender.setThreshold(Level.INFO)
     withLogAppender(logAppender, level = Some(Level.INFO)) {
-      val conf = new SparkConf().setMaster("local").setAppName("test")
-      withSpark(SparkContext.getOrCreate(conf)) { sc =>
+      withSparkContext { sc =>
         withCoordinatorRef(sc) { _ =>
           // Long interval so we can block the cleanup pool before the
           // first cycle fires. numThreads=2 gives each pool 1 thread.
@@ -712,8 +710,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
   }
 
   test("FromLoadedProviders unload: reloaded provider is not removed nor queued") {
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+    withSparkContext { sc =>
       withCoordinatorRef(sc) { coordinatorRef =>
         val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
         val id = loadNullProvider("staleInstance", storeConf)
@@ -761,8 +758,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
 
   test("FromLoadedProviders unload: with concurrent ops, " +
       "only one removes and queues") {
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+    withSparkContext { sc =>
       withCoordinatorRef(sc) { coordinatorRef =>
         val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
         val id = loadNullProvider("concurrentUnload", storeConf)
@@ -803,8 +799,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
     // 4. Cleanup runs as FromUnloadedProvidersQueue and closes the provider
     // 5. During close: write lock held, no read locks
     // 6. After close: all locks released, provider removed, queue drained
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+    withSparkContext { sc =>
       withCoordinatorRef(sc) { coordinatorRef =>
         val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
         val id = loadNullProvider("decoupled", storeConf)
@@ -905,8 +900,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
   }
 
   test("scheduler maintenance triggerNow: at-most-one pending, no-op after stop") {
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+    withSparkContext { sc =>
       withCoordinatorRef(sc) { _ =>
         val storeConf = maintenanceStoreConf(
           classOf[BlockingMaintenanceProvider], interval = 60000L)
@@ -1006,8 +1000,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
   }
 
   test("scheduler maintenance triggerNow: only unloaded queue is processed") {
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+    withSparkContext { sc =>
       withCoordinatorRef(sc) { coordinatorRef =>
         // Long interval so periodic cycles don't interfere.
         val storeConf = maintenanceStoreConf(
@@ -1103,8 +1096,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
    * @param blockSnapshot if true, fill snapshot pool; if false, fill cleanup pool
    */
   private def testPoolIsolation(blockSnapshot: Boolean): Unit = {
-    val conf = new SparkConf().setMaster("local").setAppName("test")
-    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+    withSparkContext { sc =>
       withCoordinatorRef(sc) { _ =>
         // numThreads=2: each pool gets exactly 1 thread.
         val storeConf = maintenanceStoreConf(
@@ -1155,13 +1147,12 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
   }
 
   test("maintenance op skips when write lock is held during close") {
-    val conf = new SparkConf().setMaster("local").setAppName("test")
     val logAppender = new LogAppender("tryLock-skip", maxEvents = 100)
     logAppender.setThreshold(Level.DEBUG)
     val loggerName = StateStore.getClass.getName.stripSuffix("$")
     withLogAppender(logAppender,
         loggerNames = Seq(loggerName), level = Some(Level.DEBUG)) {
-      withSpark(SparkContext.getOrCreate(conf)) { sc =>
+      withSparkContext { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           val storeConf = maintenanceStoreConf(
             classOf[BlockingMaintenanceProvider])
