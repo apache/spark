@@ -4409,7 +4409,7 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     |  0| NULL|    Z|
     |  1|  Bob| NULL|
     |  2|Alice|    Y|
-    +---+-----+-----+stddev_samp
+    +---+-----+-----+
 
     Example 3: Sorting a DataFrame with null values in descending order using column name string
 
