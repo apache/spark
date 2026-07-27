@@ -29,7 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.SparkConnectServerTest
 import org.apache.spark.sql.connect.client.{RetryPolicy, SparkConnectClient}
 import org.apache.spark.sql.connect.config.Connect
-import org.apache.spark.util.Utils.tryWithSafeFinally
+import org.apache.spark.util.Utils.tryWithResource
 
 /**
  * End-to-end test that the *real* `SparkConnectService.startGRPCService()` wiring actually
@@ -59,13 +59,7 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
     SparkConnectService.stop(Some(30), Some(TimeUnit.SECONDS))
     Eventually.eventually(timeout(eventuallyTimeout)) {
       var s: ServerSocket = null
-      tryWithSafeFinally {
-        s = new ServerSocket(serverPort)
-      } {
-        if (s != null) {
-          s.close()
-        }
-      }
+      tryWithResource(new ServerSocket(serverPort))(identity)
     }
   }
 
