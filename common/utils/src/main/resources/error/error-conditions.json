@@ -1936,6 +1936,11 @@
           "Input schema <schema> must be a struct, an array, a map or a variant."
         ]
       },
+      "INVALID_JSON_TABLE_PATH" : {
+        "message" : [
+          "The <location> of JSON_TABLE has an invalid or unsupported JSON path <path>. Only simple, wildcard-free paths are supported (a trailing '[*]' is allowed on the row path)."
+        ]
+      },
       "INVALID_MAP_KEY_TYPE" : {
         "message" : [
           "The key of map cannot be/contain <keyType>."
@@ -5025,6 +5030,11 @@
       "CREATE_TEMP_TABLE_USING_PROVIDER" : {
         "message" : [
           "CREATE TEMPORARY TABLE ... USING ... is a deprecated syntax. To overcome the issue, please use CREATE TEMPORARY VIEW instead."
+        ]
+      },
+      "DUPLICATE_JSON_TABLE_COLUMN" : {
+        "message" : [
+          "JSON_TABLE has duplicate column name <columnName>. Column names in the COLUMNS clause must be unique."
         ]
       },
       "EMPTY_IN_PREDICATE" : {

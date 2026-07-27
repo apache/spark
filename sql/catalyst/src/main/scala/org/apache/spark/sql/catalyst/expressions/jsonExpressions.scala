@@ -17,20 +17,21 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils,
-  JsonPathParser, JsonToStructsEvaluator, JsonTupleEvaluator, MultiGetJsonObjectEvaluator,
-  PathInstruction, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
+  JsonPathParser, JsonPathResult, JsonTableEvaluator, JsonToStructsEvaluator, JsonTupleEvaluator,
+  MultiGetJsonObjectEvaluator, PathInstruction, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
   RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
@@ -337,6 +338,255 @@ case class JsonTuple(children: Seq[Expression])
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): JsonTuple =
     copy(children = newChildren)
+}
+
+/**
+ * The kind of a single `JSON_TABLE` column.
+ */
+sealed trait JsonTableColumnKind
+object JsonTableColumnKind {
+  /** A `FOR ORDINALITY` column: a 1-based sequential row counter. */
+  case object Ordinality extends JsonTableColumnKind
+  /** A regular value column: extracts the value at `path` and casts it to `dataType`. */
+  case object Value extends JsonTableColumnKind
+  /** An `EXISTS` column: true when `path` matches, cast to `dataType`. */
+  case object Exists extends JsonTableColumnKind
+}
+
+/**
+ * A single column definition of a `JSON_TABLE` invocation.
+ *
+ * @param name     the output column name
+ * @param dataType the declared Spark type of the column (LongType for ORDINALITY columns)
+ * @param path     the SQL/JSON path relative to a row item; None for ORDINALITY columns
+ * @param kind     the column kind (ordinality / value / exists)
+ */
+case class JsonTableColumn(
+    name: String,
+    dataType: DataType,
+    path: Option[String],
+    kind: JsonTableColumnKind)
+
+/**
+ * Behavior when the JSON input is malformed.
+ */
+sealed trait JsonTableErrorMode
+object JsonTableErrorMode {
+  /** Produce no rows on malformed input (the SQL-standard default). */
+  case object NullOnError extends JsonTableErrorMode
+  /** Raise an error on malformed input. */
+  case object ErrorOnError extends JsonTableErrorMode
+}
+
+// scalastyle:off line.size.limit
+/**
+ * The SQL:2016 `JSON_TABLE` table-valued function. Shreds a JSON document into a relational table:
+ * the `rowPath` selects a sequence of row items and each [[JsonTableColumn]] projects a value out
+ * of each item. Implemented as a [[Generator]] so it plugs into the existing, well-tested
+ * [[org.apache.spark.sql.catalyst.plans.logical.Generate]] operator; no new execution operator is
+ * introduced.
+ *
+ * Only the flat (non-`NESTED PATH`) subset of the standard is supported. Row-source and value
+ * extraction use the token-aware [[JsonTableEvaluator]], which (unlike `get_json_object`)
+ * distinguishes a missing path from a JSON `null` value; type coercion reuses [[Cast]].
+ *
+ * {{{
+ *   SELECT t.* FROM json_table(
+ *     '{"items":[{"id":1,"n":"a"},{"id":2,"n":"b"}]}',
+ *     '$.items[*]'
+ *     COLUMNS (seq FOR ORDINALITY, id INT PATH '$.id', name STRING PATH '$.n')
+ *   ) AS t;
+ * }}}
+ */
+// scalastyle:on line.size.limit
+case class JsonTable(
+    child: Expression,
+    rowPath: String,
+    columns: Seq[JsonTableColumn],
+    errorMode: JsonTableErrorMode,
+    timeZoneId: Option[String] = None,
+    // Captured at plan-construction time so column casts do not change behavior if the session's
+    // ANSI mode is flipped between building the plan and executing it (matching `Cast`, which
+    // fixes its eval mode when the expression is constructed).
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends UnaryExpression
+  with Generator
+  with TimeZoneAwareExpression
+  with CodegenFallback
+  with ImplicitCastInputTypes
+  with QueryErrorsBase {
+
+  // Declared via ImplicitCastInputTypes so the analyzer coerces the JSON input to STRING. In
+  // particular an untyped SQL NULL (NullType) is cast to STRING rather than rejected, so
+  // `JSON_TABLE(NULL, ...)` reaches the runtime and applies the NULL ON ERROR behavior.
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+
+  // ORDINALITY columns always hold a non-null counter; value/EXISTS columns may be null.
+  override def elementSchema: StructType =
+    StructType(columns.map { c =>
+      val nullable = c.kind != JsonTableColumnKind.Ordinality
+      StructField(c.name, c.dataType, nullable = nullable)
+    })
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // First the standard input-type check (STRING for the JSON input, with NULL coerced).
+    val inputCheck = super.checkInputDataTypes()
+    if (inputCheck.isFailure) {
+      inputCheck
+    } else {
+      // Validate the row path and every column path. A path is valid here iff it parses and is
+      // free of wildcards -- except the row path may end in a single `[*]`, which is stripped into
+      // `containerInstructions`, so the row path is checked on that already-stripped list.
+      val rowPathValid = JsonPathParser.parse(rowPath).isDefined &&
+        !containerInstructions.contains(PathInstruction.Wildcard)
+      val invalid: Option[(String, String)] = if (!rowPathValid) {
+        Some(("row path", rowPath))
+      } else {
+        columns.iterator.collect { case c if c.path.isDefined => (c.name, c.path.get) }
+          .collectFirst {
+            // Valid column path: parses and is wildcard-free, i.e. hasWildcard == Some(false).
+            case (name, path) if !JsonPathParser.hasWildcard(path).contains(false) =>
+              (s"column '$name'", path)
+          }
+      }
+      invalid match {
+        case Some((location, path)) =>
+          DataTypeMismatch(
+            errorSubClass = "INVALID_JSON_TABLE_PATH",
+            messageParameters = Map("location" -> location, "path" -> toSQLValue(path)))
+        case None =>
+          // Every value/EXISTS column is produced by casting from a source type (StringType for
+          // value columns, BooleanType for EXISTS columns) to the declared column type. Reject a
+          // non-castable declared type (e.g. a value column declared STRUCT/ARRAY/MAP) here rather
+          // than failing at runtime. Ordinality columns are always LongType and need no check.
+          // The castability rules differ between ANSI and non-ANSI mode (e.g. BOOLEAN -> TIMESTAMP
+          // is allowed by non-ANSI casts but not ANSI casts), so this must use the same eval mode
+          // as the actual per-column `Cast` built in `columnCasts`.
+          def sourceType(c: JsonTableColumn): Option[DataType] = c.kind match {
+            case JsonTableColumnKind.Value => Some(StringType)
+            case JsonTableColumnKind.Exists => Some(BooleanType)
+            case JsonTableColumnKind.Ordinality => None
+          }
+          def castable(src: DataType, target: DataType): Boolean =
+            if (ansiEnabled) Cast.canAnsiCast(src, target) else Cast.canCast(src, target)
+          columns.iterator.flatMap(c => sourceType(c).map((c, _)))
+            .collectFirst { case (c, src) if !castable(src, c.dataType) => (c, src) } match {
+            case Some((c, srcType)) =>
+              DataTypeMismatch(
+                errorSubClass = "CAST_WITHOUT_SUGGESTION",
+                messageParameters = Map(
+                  "srcType" -> toSQLType(srcType),
+                  "targetType" -> toSQLType(c.dataType)))
+            case None =>
+              TypeCheckResult.TypeCheckSuccess
+          }
+      }
+    }
+  }
+
+  // The row path is `containerRowPath` plus an optional trailing `[*]`. Splitting on the parsed
+  // instruction list (rather than the raw string) is whitespace-insensitive and unambiguous.
+  // `checkInputDataTypes` guarantees the path parses and is wildcard-free at this point.
+  @transient private lazy val (containerInstructions, explodeRoot)
+      : (Seq[PathInstruction], Boolean) = {
+    val parsed = JsonPathParser.parse(rowPath).getOrElse(Nil)
+    parsed match {
+      case init :+ PathInstruction.Subscript :+ PathInstruction.Wildcard =>
+        (init, true)
+      case other =>
+        (other, false)
+    }
+  }
+
+  @transient private lazy val rowEvaluator: JsonTableEvaluator =
+    JsonTableEvaluator(containerInstructions, explodeRoot)
+
+  // Parsed instruction list per column (empty for ordinality columns, which have no path).
+  @transient private lazy val columnPaths: Array[Seq[PathInstruction]] =
+    columns.map(c => c.path.flatMap(JsonPathParser.parse).getOrElse(Nil)).toArray
+
+  // One reusable Cast per non-ordinality column, evaluated against a single-slot mutable input
+  // row. Building the Cast once (over a BoundReference) avoids allocating an expression tree per
+  // row/column on the hot path. The source type is BooleanType for EXISTS, StringType otherwise.
+  @transient private lazy val columnCasts: Array[Expression] = {
+    val evalMode = EvalMode.fromBoolean(ansiEnabled)
+    columns.map { c =>
+      c.kind match {
+        case JsonTableColumnKind.Ordinality => null
+        case JsonTableColumnKind.Exists =>
+          Cast(BoundReference(0, BooleanType, nullable = false), c.dataType, timeZoneId, evalMode)
+        case JsonTableColumnKind.Value =>
+          Cast(BoundReference(0, StringType, nullable = true), c.dataType, timeZoneId, evalMode)
+      }
+    }.toArray
+  }
+
+  // Reusable single-slot input row for the per-column casts above.
+  @transient private lazy val castInput: GenericInternalRow = new GenericInternalRow(1)
+
+  private def castColumn(i: Int, value: Any): Any = {
+    castInput.update(0, value)
+    columnCasts(i).eval(castInput)
+  }
+
+  private def projectRow(item: UTF8String, ordinal: Long): InternalRow = {
+    val values = new Array[Any](columns.length)
+    var i = 0
+    while (i < columns.length) {
+      values(i) = columns(i).kind match {
+        case JsonTableColumnKind.Ordinality =>
+          ordinal
+        case JsonTableColumnKind.Exists =>
+          // Present (including an explicit JSON null) counts as existing; only Missing is false.
+          val exists = rowEvaluator.navigate(item, columnPaths(i)) != JsonPathResult.Missing
+          castColumn(i, exists)
+        case JsonTableColumnKind.Value =>
+          rowEvaluator.navigate(item, columnPaths(i)) match {
+            // `raw` is a re-parseable JSON fragment; unquote a scalar string so the column gets
+            // its content (e.g. `"hi"` -> `hi`), then cast to the declared type.
+            case JsonPathResult.Found(raw) => castColumn(i, rowEvaluator.unquotedString(raw))
+            // A missing path and an explicit JSON null both yield SQL NULL for a value column.
+            case _ => null
+          }
+      }
+      i += 1
+    }
+    new GenericInternalRow(values)
+  }
+
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
+    val json = child.eval(input).asInstanceOf[UTF8String]
+    rowEvaluator.evaluate(json) match {
+      case Some(items) =>
+        // A manual Long counter for FOR ORDINALITY: `zipWithIndex` is Int-based and would wrap
+        // past Int.MaxValue for a very large array, whereas ordinality is a BIGINT.
+        var ordinal = 0L
+        items.map { item =>
+          ordinal += 1L
+          projectRow(item, ordinal)
+        }
+      case None =>
+        // `errorMode` governs the row-source JSON only (null / malformed input, or `[*]` over a
+        // non-array). Per-column value extraction follows normal `Cast` semantics: a bad cast is
+        // NULL in non-ANSI mode and raises in ANSI mode, independent of ON ERROR.
+        errorMode match {
+          case JsonTableErrorMode.NullOnError => Iterator.empty
+          case JsonTableErrorMode.ErrorOnError =>
+            throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
+              if (json == null) "null" else json.toString,
+              SparkException.internalError("JSON_TABLE encountered malformed JSON input."))
+        }
+    }
+  }
+
+  override def prettyName: String = "json_table"
+
+  override protected def withNewChildInternal(newChild: Expression): JsonTable =
+    copy(child = newChild)
 }
 
 /**
