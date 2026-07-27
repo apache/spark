@@ -242,6 +242,17 @@ private[spark] class ContextCleaner(
         // to find blocks served by the shuffle service on deallocated executors
         shuffleDriverComponents.removeShuffle(shuffleId, blocking)
         mapOutputTrackerMaster.unregisterShuffle(shuffleId)
+        // A pipelined shuffle is also registered with the driver-only
+        // StreamingShuffleOutputTracker (see DAGScheduler.createShuffleMapStage). Its state lives
+        // solely on the driver -- the worker tracker caches nothing -- so unregister it directly
+        // here, alongside the MapOutputTracker cleanup, rather than through the RemoveShuffle RPC.
+        // Guarded by containsShuffle so regular (non-pipelined) shuffles are skipped without a
+        // spurious "not registered" warning.
+        streamingShuffleOutputTrackerMaster.foreach { tracker =>
+          if (tracker.containsShuffle(shuffleId)) {
+            tracker.unregisterShuffle(shuffleId)
+          }
+        }
         listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
         logDebug("Cleaned shuffle " + shuffleId)
       } else {
@@ -308,6 +319,8 @@ private[spark] class ContextCleaner(
 
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+  private def streamingShuffleOutputTrackerMaster: Option[StreamingShuffleOutputTrackerMaster] =
+    sc.env.streamingShuffleOutputTracker.map(_.asInstanceOf[StreamingShuffleOutputTrackerMaster])
 }
 
 private object ContextCleaner {
