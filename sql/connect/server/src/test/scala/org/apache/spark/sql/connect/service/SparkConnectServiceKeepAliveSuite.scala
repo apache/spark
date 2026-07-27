@@ -58,7 +58,6 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
   private def stopSparkConnectServiceAndUnbind(): Unit = {
     SparkConnectService.stop(Some(30), Some(TimeUnit.SECONDS))
     Eventually.eventually(timeout(eventuallyTimeout)) {
-      var s: ServerSocket = null
       tryWithResource(new ServerSocket(serverPort))(identity)
     }
   }
