@@ -73,7 +73,7 @@ public final class CredentialProviderLoader {
    * {@link CredentialProvider#init(Map)}. Only keys starting with this prefix are forwarded,
    * preventing unrelated secrets from leaking to third-party provider implementations.
    */
-  private static final String CREDENTIALS_CONF_PREFIX = "spark.security.oidc.";
+  private static final String OIDC_CONF_PREFIX = "spark.security.oidc.";
 
   private static volatile List<CredentialProvider> cachedProviders;
 
@@ -180,7 +180,7 @@ public final class CredentialProviderLoader {
       if (!initializedProviders.contains(selected)) {
         Map<String, String> filteredConf = new HashMap<>();
         for (Map.Entry<String, String> entry : conf.entrySet()) {
-          if (entry.getKey().startsWith(CREDENTIALS_CONF_PREFIX)) {
+          if (entry.getKey().startsWith(OIDC_CONF_PREFIX)) {
             filteredConf.put(entry.getKey(), entry.getValue());
           }
         }

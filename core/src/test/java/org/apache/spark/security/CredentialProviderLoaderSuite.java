@@ -328,7 +328,7 @@ public class CredentialProviderLoaderSuite {
   }
 
   @Test
-  public void testInitConfScopedToCredentialsKeysOnly() {
+  public void testInitConfScopedToOidcKeysOnly() {
     // Verify that init() receives only spark.security.oidc.* keys,
     // and foreign secrets from other subsystems are NOT leaked to providers.
     Map<String, String> conf = new HashMap<>();
@@ -344,7 +344,7 @@ public class CredentialProviderLoaderSuite {
     Map<String, String> initConf = fake.getInitConf();
     assertNotNull(initConf, "init() should have been called");
 
-    // Credentials keys should be present
+    // OIDC keys should be present
     assertEquals("https://sts.example.com",
         initConf.get("spark.security.oidc.endpoint"));
     assertTrue(initConf.containsKey("spark.security.oidc.provider.fake"),
