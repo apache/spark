@@ -6639,6 +6639,106 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
+  test("pipelined shuffle: a diamond reusing one producer counts its tasks once for admission") {
+    // Fan-out/diamond: ONE PipelinedShuffleDependency (one producer, one shuffle id) is read by TWO
+    // consumers that are then narrow-joined into the result. Execution creates ONE producer stage
+    // (getOrCreateShuffleMapStage keys on shuffle id), so the group's real concurrent demand is
+    // producer(2) + result(2) = 4 -- NOT 6. Counting the producer once per consumer EDGE would make
+    // demand 6 and wrongly reject this group at capacity 4. Pinning capacity to exactly 4 admits
+    // the correctly-deduped group and would fail if the producer were double-counted.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
+    myScheduler.maxConcurrentTasksForTest = 4
+    myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
+    try {
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumer1 = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      val consumer2 = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      // Narrow-join the two consumers into the result stage; the same pipelined dependency is thus
+      // referenced from two distinct consumer RDDs, exercising the per-edge double-count.
+      val resultRdd = new MyRDD(
+        sc, 2, List(new OneToOneDependency(consumer1), new OneToOneDependency(consumer2)),
+        tracker = mapOutputTracker)
+      submit(resultRdd, Array(0, 1))
+      assert(taskSets.size === 2,
+        s"diamond group is producer + result (both consumers); got ${taskSets.size} task sets")
+      // Drain to completion: producer stage first, then the result stage.
+      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+      complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+      assert(results === Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    } finally {
+      myScheduler.maxConcurrentTasksForTest = 1000
+      myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
+    }
+  }
+
+  test("pipelined shuffle: a wide fan-out reusing one producer counts its tasks once") {
+    // Wider fan-out: ONE producer feeds THREE consumers, all narrow-joined into the result. Real
+    // demand is still producer(2) + result(2) = 4; a per-edge count would be 2 + 3*2 = 8. Capacity
+    // 4 admits the deduped group and would reject the double-counted one.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
+    myScheduler.maxConcurrentTasksForTest = 4
+    myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
+    try {
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumers = (0 until 3).map { _ =>
+        new OneToOneDependency(new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker))
+      }.toList
+      val resultRdd = new MyRDD(sc, 2, consumers, tracker = mapOutputTracker)
+      submit(resultRdd, Array(0, 1))
+      assert(taskSets.size === 2,
+        s"wide fan-out group is producer + result; got ${taskSets.size} task sets")
+      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+      complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+      assert(results === Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    } finally {
+      myScheduler.maxConcurrentTasksForTest = 1000
+      myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
+    }
+  }
+
+  test("pipelined shuffle: two distinct shuffles over one producer RDD are both counted") {
+    // Mirror case guarding against OVER-deduping. Two SEPARATE PipelinedShuffleDependency objects
+    // are built over the SAME producer RDD; each calls newShuffleId() so they carry DISTINCT
+    // shuffle ids and produce DISTINCT stages. Both must be counted: demand is producer1(2) +
+    // producer2(2) + result(2) = 6. Deduping on producer RDD (instead of shuffle id) would drop one
+    // and undercount to 4. Capacity 5 must REJECT the true 6-task group; if it were wrongly deduped
+    // to 4 it would be admitted. The two producer stages share an RDD but are separate shuffles.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
+    myScheduler.maxConcurrentTasksForTest = 5
+    myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
+    try {
+      val dep1 = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val dep2 = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      assert(dep1.shuffleId != dep2.shuffleId, "the two deps must carry distinct shuffle ids")
+      val consumer1 = new MyRDD(sc, 2, List(dep1), tracker = mapOutputTracker)
+      val consumer2 = new MyRDD(sc, 2, List(dep2), tracker = mapOutputTracker)
+      val resultRdd = new MyRDD(
+        sc, 2, List(new OneToOneDependency(consumer1), new OneToOneDependency(consumer2)),
+        tracker = mapOutputTracker)
+      val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+      val failListener = new JobListener {
+        override def taskSucceeded(index: Int, result: Any): Unit = {}
+        override def jobFailed(exception: Exception): Unit = failure.set(exception)
+      }
+      submit(resultRdd, Array(0, 1), listener = failListener)
+      assert(failure.get() != null,
+        "a 6-task group over 5 slots must fail fast; both distinct shuffles must be counted")
+      assert(failure.get().getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT") ||
+        failure.get().getMessage.contains("concurrent task slots"),
+        s"expected an insufficient-slot error, got: ${failure.get().getMessage}")
+      assert(taskSets.isEmpty, "no stage should be submitted for an up-front-rejected group")
+      assertDataStructuresEmpty()
+    } finally {
+      myScheduler.maxConcurrentTasksForTest = 1000
+      myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
+    }
+  }
+
   // ==========================================================================================
   // Group-observable completion
   // ==========================================================================================

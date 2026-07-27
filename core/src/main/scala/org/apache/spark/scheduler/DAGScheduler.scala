@@ -1521,12 +1521,23 @@ private[spark] class DAGScheduler(
    * partition count (`rdd.partitions.length`), matching how `createShuffleMapStage` derives
    * `numTasks`. `finalNumPartitions` is the result stage's task count (the number of partitions the
    * job runs, which may be a subset of `finalRDD.partitions`).
+   *
+   * Count each producer once per SHUFFLE ID, matching what execution schedules: one stage is
+   * created per shuffle ID (`getOrCreateShuffleMapStage`), not per dependency edge. A fan-out or
+   * diamond graph references one `PipelinedShuffleDependency` from more than one consumer RDD, so
+   * charging its producer per edge would over-count and could reject a group whose stages actually
+   * fit. Dedup on `shuffleId`, not `pd.rdd`: two distinct dependencies can share a producer RDD yet
+   * carry distinct shuffle IDs and produce distinct stages, and both must be counted.
    */
   private def pipelinedJobConcurrentTaskDemand(finalRDD: RDD[_], finalNumPartitions: Int): Int = {
     var demand = finalNumPartitions
+    val countedShuffleIds = new HashSet[Int]
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
       rdd.dependencies.foreach {
-        case pd: PipelinedShuffleDependency[_, _, _] => demand += pd.rdd.partitions.length
+        case pd: PipelinedShuffleDependency[_, _, _] =>
+          if (countedShuffleIds.add(pd.shuffleId)) {
+            demand += pd.rdd.partitions.length
+          }
         case _ => // regular/narrow deps do not occur in an all-pipelined job's group
       }
       rdd.dependencies.foreach(dep => enqueue(dep.rdd))
