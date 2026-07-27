@@ -1362,6 +1362,27 @@ private[v2] trait V2JDBCTest
     }
   }
 
+  test("fractional to integral cast pushed down truncates toward zero like Spark") {
+    val tbl = s"$catalogName.integral_cast"
+    withTable(tbl) {
+      // label is a string so the result type is the same across dialects (a numeric column
+      // comes back as BigDecimal on some engines such as Oracle).
+      sql(s"CREATE TABLE $tbl (double_col DOUBLE, decimal_col DECIMAL(10, 2), label VARCHAR(8))")
+      sql(s"INSERT INTO $tbl VALUES (1.5, 1.5, 'a'), (2.5, 2.5, 'b'), (-1.5, -1.5, 'c')")
+
+      // Spark truncates toward zero, so 1.5, 2.5 and -1.5 become 1, 2 and -1. A database that
+      // rounds half away from zero would return 2, 3 and -2 instead.
+      Seq("double_col", "decimal_col").foreach { col =>
+        val projected = sql(s"SELECT CAST($col AS INT) FROM $tbl ORDER BY $col")
+        assert(projected.collect().map(_.getInt(0)) === Array(-1, 1, 2))
+
+        val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS INT) = 2")
+        checkFilterPushed(filtered)
+        assert(filtered.collect().map(_.getString(0)) === Array("b"))
+      }
+    }
+  }
+
   test("SPARK-52262: FAILED_JDBC.TABLE_EXISTS not thrown on connection error") {
     val invalidTableName = s"$catalogName.invalid"
     val originalUrl = spark.conf.get(s"spark.sql.catalog.$catalogName.url")

@@ -50,6 +50,10 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  // MySQL rounds half away from zero when casting to an integral type. It has no single argument
+  // TRUNCATE, so the number of decimal places to keep is passed explicitly.
+  override def truncateFractionalValue(expr: String): String = s"TRUNCATE($expr, 0)"
+
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getErrorCode == 1146
   }
