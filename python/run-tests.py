@@ -420,6 +420,12 @@ def parse_opts():
         default=4,
         help="The number of suites to test in parallel (default %(default)d)",
     )
+    parser.add_argument(
+        "--changed-files",
+        type=str,
+        default=None,
+        help="A file containing a list of changed files (default: %(default)s)",
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable additional debug logging")
 
     group = parser.add_argument_group("Developer Options")
@@ -484,6 +490,12 @@ def main():
         os.remove(LOG_FILE)
     python_execs = opts.python_executables.split(",")
     LOGGER.info("Will test against the following Python executables: %s", python_execs)
+
+    if opts.changed_files:
+        with open(opts.changed_files, "r") as f:
+            changed_files = f.read().splitlines()
+        os.environ["PYSPARK_CHANGED_FILES"] = opts.changed_files
+        LOGGER.info("Will select tests based on the following changed files: %s", changed_files)
 
     if should_test_modules:
         modules_to_test = []
