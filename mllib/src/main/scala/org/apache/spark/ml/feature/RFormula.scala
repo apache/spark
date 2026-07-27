@@ -356,6 +356,7 @@ class RFormulaModel private[feature](
   private[ml] def this() = this("", null, null)
 
   private[spark] override def estimatedSize: Long = {
+    // ResolvedRFormula(label: String, terms: Seq[Seq[String]], hasIntercept: Boolean)
     estimateMatadataSize + SizeEstimator.estimate(resolvedFormula) + pipelineModel.estimatedSize
   }
 
