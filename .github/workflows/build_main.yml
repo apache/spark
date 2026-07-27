@@ -25,32 +25,21 @@ on:
     - '**'
 
 jobs:
-  count-post-merge-commits:
-    name: Count post-merge commits
-    if: github.repository == 'apache/spark' && github.ref == 'refs/heads/master'
+  count-commits:
+    name: Count commits
     runs-on: ubuntu-slim
     permissions:
       contents: read
     outputs:
       commit-count: ${{ steps.count.outputs.commit-count }}
     steps:
-      - name: Count commits since the cadence was enabled
-        id: count
-        uses: actions/github-script@v9
+      - name: Check out the full branch history
+        uses: actions/checkout@v4
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            // This is the master commit immediately before the cadence was enabled.
-            const cadenceBase = 'f6975c913fd1107143d0dd0a42b265496a99149a'
-            const { data: comparison } = await github.rest.repos.compareCommits({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              base: cadenceBase,
-              head: context.sha
-            })
-
-            console.log(`Master commits since ${cadenceBase}: ${comparison.ahead_by}`)
-            core.setOutput('commit-count', comparison.ahead_by)
+          fetch-depth: 0
+      - name: Count commits on the pushed branch
+        id: count
+        run: echo "commit-count=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
 
   call-build-and-test:
     permissions:
@@ -61,16 +50,16 @@ jobs:
     #     integration/staging branch is disabled to save resources.
     #   - pushes to `master` on forks: the "Sync fork" button mirrors
     #     apache/spark and would otherwise re-run the full build on every sync.
-    needs: count-post-merge-commits
+    needs: count-commits
     # GitHub Actions expressions do not support modulo. A non-negative decimal
     # count is divisible by five when it ends in 0 or 5.
     if: >-
-      always() && (
+      (
         (github.repository == 'apache/spark' && github.ref != 'refs/heads/branch-4.x')
         || (github.repository != 'apache/spark' && github.ref != 'refs/heads/master')
       ) && (
         github.ref != 'refs/heads/master'
-        || endsWith(needs.count-post-merge-commits.outputs.commit-count, '0')
-        || endsWith(needs.count-post-merge-commits.outputs.commit-count, '5')
+        || endsWith(needs.count-commits.outputs.commit-count, '0')
+        || endsWith(needs.count-commits.outputs.commit-count, '5')
       )
     uses: ./.github/workflows/build_and_test.yml
