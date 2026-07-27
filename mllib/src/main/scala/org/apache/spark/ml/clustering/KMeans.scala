@@ -214,7 +214,7 @@ class KMeansModel private[ml] (
   override def summary: KMeansSummary = super.summary
 
   private[spark] override def estimatedSize: Long =
-    SizeEstimator.estimate(parentModel.clusterCenters)
+    estimateMatadataSize + SizeEstimator.estimate(parentModel.clusterCenters)
 
   private[spark] def createSummary(
     predictions: DataFrame, numIter: Int, trainingCost: Double

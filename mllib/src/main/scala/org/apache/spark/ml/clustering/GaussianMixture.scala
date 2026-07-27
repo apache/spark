@@ -223,7 +223,7 @@ class GaussianMixtureModel private[ml] (
   override def summary: GaussianMixtureSummary = super.summary
 
   private[spark] override def estimatedSize: Long =
-    SizeEstimator.estimate((weights, gaussians))
+    estimateMatadataSize + SizeEstimator.estimate((weights, gaussians))
 
   private[spark] def createSummary(
     predictions: DataFrame, logLikelihood: Double, iteration: Int
