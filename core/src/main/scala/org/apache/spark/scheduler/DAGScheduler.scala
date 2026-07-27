@@ -170,8 +170,8 @@ private[spark] class DAGScheduler(
   private[scheduler] val failedStages = new HashSet[Stage]
 
   /**
-   * Deferred completion for pipelined groups. When a stage is co-scheduled with a pipelined
-   * producer that is still running (a "pipelined consumer"), the stage/job-completion decision from
+   * Deferred completion for pipelined groups. When a stage (a "pipelined consumer") is co-scheduled
+   * with a pipelined producer that is still running, the stage/job-completion decision from
    * its successful task-completion events must not be processed yet: doing so could finish the
    * consumer's job and cancel the still-running producer, or make the consumer's output observable
    * before the producer's. We buffer such events here and replay them once every pipelined producer
