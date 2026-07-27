@@ -49,6 +49,20 @@ Project [to_time(time_str#x, Some(fmt_str#x)) AS to_time(time_str, fmt_str)#x]
 
 
 -- !query
+select typeof(to_time('00:12:00', null))
+-- !query analysis
+Project [typeof(to_time(00:12:00, Some(null))) AS typeof(to_time(00:12:00, NULL))#x]
++- OneRowRelation
+
+
+-- !query
+select typeof(to_time('00:12:00', cast(null as string)))
+-- !query analysis
+Project [typeof(to_time(00:12:00, Some(cast(null as string)))) AS typeof(to_time(00:12:00, CAST(NULL AS STRING)))#x]
++- OneRowRelation
+
+
+-- !query
 select to_time("11", "HH")
 -- !query analysis
 Project [to_time(11, Some(HH)) AS to_time(11, HH)#x]
