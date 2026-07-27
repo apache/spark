@@ -68,8 +68,7 @@ trait SparkConnectServerTest extends SharedSparkSession {
 
   /** Starts the service on an OS-assigned free port (port 0) and records it in `serverPort`. */
   protected def startService(confs: Seq[(String, String)] = extraServerConfs): Unit = {
-    withSparkEnvConfs(
-      (Seq((Connect.CONNECT_GRPC_BINDING_PORT.key, "0")) ++ confs): _*) {
+    withSparkEnvConfs((Seq((Connect.CONNECT_GRPC_BINDING_PORT.key, "0")) ++ confs): _*) {
       SparkConnectService.start(spark.sparkContext)
     }
     serverPort = SparkConnectService.localPort

@@ -55,7 +55,8 @@ object SparkConnectServerUtils {
   // Bind a throwaway socket to port 0 to obtain an OS-assigned free port for the server process.
   val port: Int = {
     val socket = new ServerSocket(0)
-    try socket.getLocalPort finally socket.close()
+    try socket.getLocalPort
+    finally socket.close()
   }
 
   @volatile private var stopped = false

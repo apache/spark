@@ -127,10 +127,11 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
     // behavior), this client's cadence would violate that coupled invariant; with today's fixed,
     // decoupled GRPC_KEEPALIVE_PERMIT_TIME_SECONDS floor (10s), it's comfortably tolerated.
     val clientKeepAliveMs = (SparkConnectService.GRPC_KEEPALIVE_PERMIT_TIME_SECONDS + 1) * 1000
-    restartService(Seq(
-      Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
-      Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "20s",
-      Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "5s"))
+    restartService(
+      Seq(
+        Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
+        Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "20s",
+        Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "5s"))
     try {
       val client = SparkConnectClient
         .builder()
@@ -158,10 +159,11 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
         client.shutdown()
       }
     } finally {
-      restartService(Seq(
-        Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
-        Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
-        Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s"))
+      restartService(
+        Seq(
+          Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
+          Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
+          Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s"))
     }
   }
 
@@ -188,10 +190,11 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
     // truly idle connection -- hence one call to establish the transport, then real idle time
     // (no further calls) spanning several ping intervals, then a connection-count check.
     val clientKeepAliveMs = (SparkConnectService.GRPC_KEEPALIVE_PERMIT_TIME_SECONDS + 1) * 1000
-    restartService(Seq(
-      Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "false",
-      Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
-      Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s"))
+    restartService(
+      Seq(
+        Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "false",
+        Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
+        Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s"))
     val relay = new FreezableTcpRelay(serverPort)
     try {
       val client = SparkConnectClient
@@ -232,10 +235,11 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
       }
     } finally {
       relay.close()
-      restartService(Seq(
-        Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
-        Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
-        Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s"))
+      restartService(
+        Seq(
+          Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
+          Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
+          Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s"))
     }
   }
 
@@ -243,10 +247,11 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
     "SPARK-58094: disabling spark.connect.grpc.keepAlive.enabled reverts to the pre-fix hang") {
     // Restart the real service with keepalive fully disabled (not just given short/aggressive
     // timing) to prove the flag genuinely gates the fix rather than only tuning its timing.
-    restartService(Seq(
-      Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "false",
-      Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
-      Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s"))
+    restartService(
+      Seq(
+        Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "false",
+        Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
+        Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s"))
     try {
       val serverSession =
         SparkConnectService
@@ -307,10 +312,11 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
       }
     } finally {
       // Restore the enabled server for afterAll()/subsequent tests in this suite.
-      restartService(Seq(
-        Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
-        Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
-        Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s"))
+      restartService(
+        Seq(
+          Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
+          Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
+          Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s"))
     }
   }
 }
