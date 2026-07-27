@@ -39,6 +39,7 @@ import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
 import org.mockito.Mockito.when
+import org.scalatest.time.SpanSugar._
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
@@ -1902,11 +1903,47 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       Array.tabulate(1000)(i => i.toLong),
       Array.tabulate(1000)(i => (1000 - i).toLong),
       Array.tabulate(1000)(_ => 7L),
+      Array.tabulate(1000)(i => math.min(i, 999 - i).toLong),
       Array.fill(1000)(Random.nextLong()))
     inputs.foreach { input =>
       val expected = input.sorted
       for (n <- input.indices) {
         assert(Utils.nthSmallest(input.clone(), n) === expected(n))
+      }
+    }
+  }
+
+  test("SPARK-48290: nthSmallest is not quadratic on an organ pipe distribution") {
+    // Sizes that rise and then fall defeat any fixed pivot choice, so a plain quickselect needs
+    // more than 10^11 comparisons for these selections and does not finish in any reasonable
+    // time. Sorting the range still under consideration keeps each selection in the millisecond
+    // range, so the time limit only has to be generous enough to be free of flakiness.
+    val length = 1 << 20
+    val input = Array.tabulate(length)(i => math.min(i, length - 1 - i).toLong)
+    val expected = input.sorted
+    failAfter(60.seconds) {
+      Seq(0, 1, length / 2 - 1, length / 2, length - 100, length - 1).foreach { n =>
+        assert(Utils.nthSmallest(input.clone(), n) === expected(n))
+      }
+    }
+  }
+
+  test("SPARK-48290: nthSmallest partitions the array around the returned element") {
+    // HighlyCompressedMapStatus counts the block sizes above the cutoff by scanning only the tail
+    // of the array, so it relies on this ordering and not just on the returned value.
+    val inputs = Seq(
+      Array.tabulate(1000)(i => i.toLong),
+      Array.tabulate(1000)(i => (1000 - i).toLong),
+      Array.tabulate(1000)(i => math.min(i, 999 - i).toLong),
+      Array.tabulate(1000)(i => (i % 7).toLong),
+      Array.fill(1000)(Random.nextLong()))
+    inputs.foreach { input =>
+      Seq(0, 1, 17, 500, 900, 998, 999).foreach { n =>
+        val sizes = input.clone()
+        val nth = Utils.nthSmallest(sizes, n)
+        assert(sizes(n) === nth)
+        assert(sizes.take(n).forall(_ <= nth), "no element below index n may be larger")
+        assert(sizes.drop(n + 1).forall(_ >= nth), "no element above index n may be smaller")
       }
     }
   }
