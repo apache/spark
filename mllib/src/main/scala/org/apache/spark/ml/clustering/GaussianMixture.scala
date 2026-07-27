@@ -225,19 +225,8 @@ class GaussianMixtureModel private[ml] (
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
     // weights: Array[Double]
-    size += SizeEstimator.estimate(weights)
-    if (gaussians != null) {
-      gaussians.foreach { gaussian =>
-        if (gaussian != null && gaussian.mean != null) {
-          // gaussian.mean: Vector
-          size += gaussian.mean.getSizeInBytes
-        }
-        if (gaussian != null && gaussian.cov != null) {
-          // gaussian.cov: Matrix
-          size += gaussian.cov.getSizeInBytes
-        }
-      }
-    }
+    // gaussians: Array[MultivariateGaussian], each containing a mean Vector and covariance Matrix
+    size += SizeEstimator.estimate((weights, gaussians))
     size
   }
 
