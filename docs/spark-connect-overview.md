@@ -305,6 +305,28 @@ python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("sc
 $SPARK_HOME/sbin/stop-connect-server.sh
 ```
 
+Alternatively, on POSIX systems PySpark can manage this persistent server for you. With
+`SPARK_LOCAL_CONNECT_REUSE=1` set (or `spark.local.connect.reuse=true` on the builder),
+`SparkSession.builder.remote("local[*]").getOrCreate()` starts a persistent server through
+`sbin/start-connect-server.sh` on the first run and reconnects to it on later runs, so scripts
+keep the plain `local[*]` URL:
+
+```bash
+export SPARK_LOCAL_CONNECT_REUSE=1
+
+# The first run starts the server; later runs reconnect to it.
+python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("local[*]").getOrCreate()'
+
+# Stop the managed server when you are done.
+python -m pyspark.sql.connect.local_server --stop
+```
+
+The connection details (host, port, auth token, pid, Spark version) are recorded in a discovery
+file in a private per-user directory; set `SPARK_LOCAL_CONNECT_DISCOVERY` to override its
+location. A run reconnects only to a server whose Spark version matches. After upgrading Spark,
+the server from the previous version cannot be reused and the next run fails with an error asking
+you to stop it; run the `--stop` command above and rerun to start a fresh server.
+
 Each run connects as its own Connect session, so session-local state -- temp views, runtime SQL
 configurations, and session artifacts -- is fresh on every run and never leaks between runs. State
 backed by the shared `SparkContext` (the persistent catalog/warehouse, global temp views, and

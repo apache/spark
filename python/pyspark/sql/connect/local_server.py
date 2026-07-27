@@ -32,9 +32,10 @@ location. The auth token is stored with ``0600`` and the server binds localhost,
 users on the machine can neither read the token nor reach the server. Processes of the same
 user share the server by design.
 
-The server runs until stopped with ``python -m pyspark.sql.connect.local_server --stop`` or
-``sbin/stop-connect-server.sh``. Windows is not supported, as this relies on the POSIX
-scripts under ``sbin/``.
+The server runs until stopped with ``python -m pyspark.sql.connect.local_server --stop``.
+(A plain ``sbin/stop-connect-server.sh`` cannot find it: the daemon runs with a custom pid
+dir and ident string.) Windows is not supported, as this relies on the POSIX scripts under
+``sbin/``.
 """
 
 import argparse
@@ -49,7 +50,7 @@ import sys
 import tempfile
 import time
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterator, Optional
 
 from pyspark.errors import PySparkRuntimeError
 
@@ -80,14 +81,22 @@ class Discovery:
     @staticmethod
     def _runtime_dir() -> str:
         path = os.path.join(tempfile.gettempdir(), "spark-connect-{}".format(getpass.getuser()))
-        if os.path.exists(path):
+        try:
+            # exist_ok also covers two first runs racing to create the directory; chmod
+            # re-asserts 0700 and fails if another user owns the path.
+            os.makedirs(path, mode=0o700, exist_ok=True)
             os.chmod(path, 0o700)
-        else:
-            os.mkdir(path, 0o700)
+        except OSError as e:
+            e.strerror = (
+                "{}. Cannot claim the per-user runtime directory {} (was it created by "
+                "another user?); remove it or point SPARK_LOCAL_CONNECT_DISCOVERY at a "
+                "path you own".format(e.strerror, path)
+            )
+            raise
         return path
 
     def __init__(self, path: Optional[str] = None):
-        self.path = (
+        self.path = os.path.abspath(
             path
             or os.environ.get("SPARK_LOCAL_CONNECT_DISCOVERY")
             or os.path.join(self._runtime_dir(), "connect-local.json")
@@ -96,16 +105,24 @@ class Discovery:
 
     @property
     def directory(self) -> str:
-        return os.path.dirname(self.path) or os.getcwd()
+        return os.path.dirname(self.path)
 
     @property
     def daemon_pid_path(self) -> str:
         return os.path.join(self.directory, "spark-{}-{}-1.pid".format(_SPARK_IDENT, _SERVER_CLASS))
 
+    def daemon_pid(self) -> Optional[int]:
+        """The pid recorded by ``spark-daemon.sh``, or ``None`` if absent or unreadable.
+        The daemon writes this file outside our lock, so no lock is required to read it.
+        """
+        try:
+            with open(self.daemon_pid_path, "r") as f:
+                return int(f.read().strip())
+        except (OSError, ValueError):
+            return None
+
     def __enter__(self) -> "Discovery":
-        parent = os.path.dirname(self.path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
+        os.makedirs(self.directory, exist_ok=True)
         self._lock_file = open(self.path + ".lock", "a+")
         import fcntl
 
@@ -140,16 +157,16 @@ class Discovery:
         return data
 
     def save(self, data: Dict[str, Any]) -> None:
-        """Atomically write the discovery file with ``0600`` perms; it holds the auth token."""
+        """Write the discovery file with ``0600`` perms; it holds the auth token. Readers
+        and writers all hold the exclusive lock, so the write does not need to be atomic.
+        """
         self._assert_locked()
-        parent = os.path.dirname(self.path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        tmp = "{}.{}.tmp".format(self.path, os.getpid())
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as f:
+            # O_CREAT applies the 0600 mode only when it creates the file; re-assert it in
+            # case a pre-existing file had wider permissions.
+            os.fchmod(fd, 0o600)
             f.write(json.dumps(data))
-        os.replace(tmp, self.path)
 
     def clear(self) -> None:
         self._assert_locked()
@@ -167,6 +184,9 @@ class LocalConnectServer:
         self._reload()
 
     def _reload(self) -> None:
+        # ``data`` is None when no server is recorded yet (first run, or the file was
+        # cleared): the None fields make ``is_reusable()`` False, so ``reuse_or_start()``
+        # launches a fresh server.
         data = self._discovery.load()
         self.host = data["host"] if data else None
         self.port = data["port"] if data else None
@@ -226,22 +246,16 @@ class ServerLauncher:
         self._master = master
         self._opts = opts
         self._discovery = discovery
-        self._directory = discovery.directory
-        self._log_dir = os.path.join(self._directory, "logs")
-        self._pid_file = discovery.daemon_pid_path
+        self._log_dir = os.path.join(discovery.directory, "logs")
 
     def launch(self) -> None:
-        os.makedirs(self._directory, exist_ok=True)
         token = self._token()
         port = self._pick_port()
-        conf_file = self._write_seed_properties()
-        try:
+        # The conf file must outlive _await_ready: spark-daemon.sh backgrounds the JVM,
+        # which reads --properties-file while starting up.
+        with self._seed_properties_file() as conf_file:
             self._run_script(port, token, conf_file)
             self._await_ready(port, token)
-        finally:
-            if conf_file is not None:
-                with contextlib.suppress(OSError):
-                    os.remove(conf_file)
 
     def _token(self) -> str:
         # Same precedence as the in-process _start_connect_server: explicit env token, then
@@ -255,7 +269,8 @@ class ServerLauncher:
     def _pick_port(self) -> int:
         """Under SPARK_TESTING always use an OS-assigned free port so suites can run in
         parallel; otherwise honor the configured/default port, falling back to a free one if
-        it is taken (e.g. by a stale server just rejected on version mismatch). The sbin
+        another process holds it. (A live stale server of ours also holds the port, but that
+        start fails later at spark-daemon.sh's pid-file check regardless of port.) The sbin
         script cannot report an ephemeral port back, so the free port is picked and released
         here, with a small race until the server binds it.
         """
@@ -301,28 +316,26 @@ class ServerLauncher:
                 conf.pop(k)
         return conf
 
-    def _write_seed_properties(self) -> Optional[str]:
-        # Written with 0600 perms since confs may hold sensitive values; a --properties-file
-        # keeps them off the server's argv where they would show up in `ps`.
+    @contextlib.contextmanager
+    def _seed_properties_file(self) -> Iterator[Optional[str]]:
+        # NamedTemporaryFile creates the file with 0600 perms since confs may hold sensitive
+        # values; a --properties-file keeps them off the server's argv where they would show
+        # up in `ps`. Yields None when there is nothing to seed.
         seed = self._seed_conf()
         if not seed:
-            return None
-        fd, path = tempfile.mkstemp(
-            prefix="connect-local-conf-", suffix=".properties", dir=self._directory
-        )
-        with os.fdopen(fd, "w") as f:
+            yield None
+            return
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            prefix="connect-local-conf-",
+            suffix=".properties",
+            dir=self._discovery.directory,
+        ) as f:
             for key, value in seed.items():
                 escaped = str(value).replace("\\", "\\\\").replace("\n", "\\n")
                 f.write("{}={}\n".format(key, escaped))
-        os.chmod(path, 0o600)
-        return path
-
-    def _daemon_pid(self) -> Optional[int]:
-        try:
-            with open(self._pid_file, "r") as f:
-                return int(f.read().strip())
-        except (OSError, ValueError):
-            return None
+            f.flush()
+            yield f.name
 
     def _run_script(self, port: int, token: str, conf_file: Optional[str]) -> None:
         from pyspark.find_spark_home import _find_spark_home
@@ -339,7 +352,7 @@ class ServerLauncher:
         for var in ("SPARK_REMOTE", "SPARK_LOCAL_REMOTE", "SPARK_CONNECT_MODE_ENABLED"):
             env.pop(var, None)
         env["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = token
-        env["SPARK_PID_DIR"] = self._directory
+        env["SPARK_PID_DIR"] = self._discovery.directory
         env["SPARK_LOG_DIR"] = self._log_dir
         env["SPARK_IDENT_STRING"] = _SPARK_IDENT
 
@@ -362,7 +375,7 @@ class ServerLauncher:
             timeout=120,
         )
         if result.returncode != 0:
-            stale_pid = self._daemon_pid()
+            stale_pid = self._discovery.daemon_pid()
             if stale_pid is not None and _pid_alive(stale_pid):
                 # spark-daemon.sh refuses to start while its pid file points at a live
                 # process -- here a server this client just rejected as not reusable
@@ -391,7 +404,7 @@ class ServerLauncher:
 
         deadline = time.time() + self._READY_TIMEOUT
         while time.time() < deadline:
-            pid = self._daemon_pid()
+            pid = self._discovery.daemon_pid()
             if pid is not None:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                     sock.settimeout(0.5)
@@ -418,7 +431,7 @@ class ServerLauncher:
                     )
             time.sleep(0.25)
 
-        pid = self._daemon_pid()
+        pid = self._discovery.daemon_pid()
         if pid is not None:
             with contextlib.suppress(OSError):
                 os.kill(pid, signal.SIGTERM)
