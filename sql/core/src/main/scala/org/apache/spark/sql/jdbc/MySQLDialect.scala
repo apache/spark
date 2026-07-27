@@ -60,6 +60,16 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   class MySQLSQLBuilder extends JDBCSQLBuilder {
 
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String =
+      dataType match {
+        // MySQL does not support casting to SHORT, INT or BIGINT, it uses SIGNED instead.
+        case _: IntegralType if exprDataType.isInstanceOf[FractionalType] &&
+          !conf.legacyJdbcRoundIntegralCastPushdown =>
+          s"CAST(${truncateFractionalValue(expr)} AS SIGNED)"
+        case _: IntegralType => s"CAST($expr AS SIGNED)"
+        case _ => super.visitCast(expr, exprDataType, dataType)
+      }
+
     override def visitExtract(extract: Extract): String = {
       val field = extract.field
       field match {

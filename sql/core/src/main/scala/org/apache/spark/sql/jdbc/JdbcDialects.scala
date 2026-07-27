@@ -447,7 +447,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       // Dialects for such databases override `truncateFractionalValue` to truncate the value first.
       val castedExpr = if (exprDataType.isInstanceOf[FractionalType] &&
         dataType.isInstanceOf[IntegralType] &&
-        !SQLConf.get.getConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN)) {
+        !SQLConf.get.legacyJdbcRoundIntegralCastPushdown) {
         truncateFractionalValue(expr)
       } else {
         expr

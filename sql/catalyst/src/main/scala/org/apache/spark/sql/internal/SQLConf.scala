@@ -8592,6 +8592,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyMsSqlServerDatetimeOffsetMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_DATETIMEOFFSET_MAPPING_ENABLED)
 
+  def legacyJdbcRoundIntegralCastPushdown: Boolean =
+    getConf(LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN)
+
   def legacyMySqlBitArrayMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED)
 
