@@ -523,9 +523,13 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
   }
 
   private def testRequeue(opRequest: MaintenanceOpRequest): Unit = {
-    val logAppender = new LogAppender("requeue-log", maxEvents = 10000)
+    val logAppender = new LogAppender("requeue-log", maxEvents = 1000)
     logAppender.setThreshold(Level.INFO)
-    withLogAppender(logAppender, level = Some(Level.INFO)) {
+    // Scope to the StateStore logger so unrelated INFO logs (e.g. a streaming
+    // query leaked from a prior suite) cannot flood the appender and trip its cap.
+    val loggerName = StateStore.getClass.getName.stripSuffix("$")
+    withLogAppender(logAppender,
+        loggerNames = Seq(loggerName), level = Some(Level.INFO)) {
       withSparkContext { sc =>
         withCoordinatorRef(sc) { _ =>
           val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
