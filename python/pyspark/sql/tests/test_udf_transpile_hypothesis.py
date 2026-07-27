@@ -140,6 +140,12 @@ if _have_hypothesis:
 
     _bool_strategy = st.one_of(st.none(), st.booleans())
 
+    # 32-bit signed boundaries. Values round-trip through LongType, but the
+    # int32 limits are where narrowing / off-by-one bugs in parameter-index
+    # plumbing and boundary handling tend to hide, so we always seed them.
+    _INT32_MAX = 2**31 - 1
+    _INT32_MIN = -(2**31)
+
     # ---- Edge-case seeds (scalacheck-style) -----------------------------
     #
     # Hypothesis already biases toward "interesting" boundary values, but
@@ -147,7 +153,7 @@ if _have_hypothesis:
     # value -- e.g. NULL, zero, the type's max -- deterministic across
     # runs. These are the values we always want to try, before random
     # generation kicks in.
-    _LONG_EDGES = (None, 0, 1, -1, 7, -7, _LONG_BOUND, -_LONG_BOUND)
+    _LONG_EDGES = (None, 0, 1, -1, 7, -7, _INT32_MAX, _INT32_MIN, _LONG_BOUND, -_LONG_BOUND)
     _LONG_ARITH_EDGES = (None, 0, 1, -1, 7, -7, _LONG_ARITH_BOUND, -_LONG_ARITH_BOUND)
     # Bool space is exhaustive (only three values) so the @example
     # decorators here serve more as documentation of the NULL handling
@@ -164,6 +170,8 @@ if _have_hypothesis:
         (0, 0),
         (1, -1),
         (-1, 1),
+        (_INT32_MAX, _INT32_MIN),
+        (_INT32_MIN, _INT32_MAX),
         (_LONG_BOUND, 1),
         (1, -_LONG_BOUND),
     )

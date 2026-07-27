@@ -777,6 +777,54 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     results = [r[0] for r in df.select(pudf("a")).collect()]
                     self.assertEqual(results, [False, False], "must match Python's ==")
 
+    def test_udf_transpile_str_int_compare_matches_python(self):
+        # Comparing a value against a string literal (``x == "5"`` / ``x < "5"``)
+        # under the untyped-parameter path produces two candidate options -- a
+        # numeric variant and a string variant. The numeric variant mixes
+        # categories (numeric column vs string literal): Python compares such
+        # values as unequal / raises TypeError, while a lowered ``x = '5'`` would
+        # coerce under ANSI and silently diverge -- so ``_lower_eq`` /
+        # ``_lower_value_compare`` refuse it. Only the string variant survives.
+        # When the UDF is applied to a numeric column, ResolveTranspiledPython-
+        # UDFOptions drops the string option (no category match) and the UDF
+        # falls back to interpreted Python. We verify the observable guarantee on
+        # both sides: ``==`` returns Python's result (no coerced ``True``), and
+        # ``<`` raises on the Python side directly and surfaces the same error
+        # through Spark rather than returning a coerced answer.
+        from pyspark.errors import PythonException
+        from pyspark.sql.types import StructField, StructType
+
+        def eq_str(x):
+            return x == "5"
+
+        def lt_str(x):
+            return x < "5"
+
+        long_schema = StructType([StructField("a", LongType(), nullable=True)])
+        with self.sql_conf(_TRANSPILE_ON):
+            df = self.spark.createDataFrame([Row(a=5), Row(a=1)], schema=long_schema)
+
+            # ``==`` : numeric column -> string option dropped -> interpreted
+            # Python, so the result matches ``5 == "5"`` (False), not a coerced
+            # ``True`` from ``bigint = '5'``.
+            pudf_eq = UserDefinedFunction(eq_str, BooleanType())
+            results = [r[0] for r in df.select(pudf_eq("a")).collect()]
+            self.assertEqual(results, [5 == "5", 1 == "5"], "must match Python's ==")
+
+            # ``<`` : Python raises TypeError for ``int < str``; the transpiled
+            # string option is dropped for a numeric column, so Spark runs the
+            # interpreted UDF and surfaces the same error rather than coercing.
+            # Asserting PythonException (not a bare Exception) pins this to the
+            # interpreted-fallback path: a Catalyst AnalysisException here would
+            # instead mean the string option was wrongly kept and broke the
+            # query rather than falling back.
+            pudf_lt = UserDefinedFunction(lt_str, BooleanType())
+            with self.assertRaises(TypeError):
+                lt_str(5)
+            with self.assertRaises(PythonException) as ctx:
+                df.select(pudf_lt("a")).collect()
+            self.assertIn("not supported between", str(ctx.exception))
+
     def test_udf_transpile_falls_back_for_bool_arithmetic(self):
         # `(x > 0) + 1` is valid Python (True + 1 == 2), but the lowered
         # Add(boolean, int) fails ANSI analysis. The category of a
