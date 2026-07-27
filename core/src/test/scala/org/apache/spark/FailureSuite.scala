@@ -302,6 +302,37 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-58187: OOM retry is capped at the actual registered cores, not configured cores") {
+    // spark.executor.cores (4) exceeds the local backend's actual total cores (local[2,...] = 2).
+    // With increment 2, base+increment = 3 would exceed the real capacity of 2 and, if capped only
+    // at the configured 4, the retry would be rejected on every offer forever (never launching nor
+    // reaching maxFailures). Capping at the offer's actual registered total (2) lets it complete.
+    val conf = new SparkConf()
+      .set(config.OOM_RETRY_CPUS_INCREMENT, 2)
+      .set(config.CPUS_PER_TASK, 1)
+      .set(config.EXECUTOR_CORES, 4)
+    sc = new SparkContext("local[2,2]", "test", conf)
+    FailureSuiteState.clear()
+    val results = sc.makeRDD(1 to 2, 2).map { x =>
+      val failFirstAttempt = FailureSuiteState.synchronized {
+        FailureSuiteState.tasksRun += 1
+        TaskContext.get().attemptNumber() == 0
+      }
+      if (failFirstAttempt) {
+        // scalastyle:off throwerror
+        throw new SparkOutOfMemoryError(
+          "POINTER_ARRAY_OUT_OF_MEMORY", new java.util.HashMap[String, String])
+        // scalastyle:on throwerror
+      }
+      x * x
+    }.collect()
+    assert(results.toSet === Set(1, 4))
+    // 2 tasks * 2 attempts = 4; a strand would hang the job (and time out) rather than reach here.
+    FailureSuiteState.synchronized {
+      assert(FailureSuiteState.tasksRun === 4)
+    }
+  }
+
   // TODO: Need to add tests with shuffle fetch failures.
 }
 

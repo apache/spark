@@ -430,9 +430,13 @@ private[spark] class TaskSchedulerImpl(
           availableCpus(i), availableResources(i))
         taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
+            // The offer's actual registered total cores (if provided) caps the OOM retry cpus at
+            // what the executor can physically run (see spark.task.oomRetryCpusIncrement).
+            val offerTotalCores =
+              Some(shuffledOffers(i).totalCores).filter(_ >= 0)
             val (taskDescOption, didReject, index) =
               taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments,
-                availableCpus(i))
+                availableCpus(i), offerTotalCores)
             noDelayScheduleRejects &= !didReject
             for (task <- taskDescOption) {
               // The CPUs actually used may exceed the ResourceProfile's taskCpus when the task is

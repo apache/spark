@@ -757,18 +757,18 @@ package object config {
       .doc("Number of additional CPUs to allocate when retrying a task that failed due to " +
         "out-of-memory. When a task fails with a SparkOutOfMemoryError (unable to acquire " +
         "execution memory) or the executor exits with an OOM exit code, each subsequent retry " +
-        "of that task is allocated `spark.task.cpus + spark.task.oomRetryCpusIncrement * N` " +
-        "CPUs, where N is the number of OOM failures the task has experienced. The additional " +
-        "CPUs reduce the number of concurrent tasks on the executor, which increases the share " +
-        "of the execution memory pool available to the retrying task, improving the chance of " +
-        "success. The total CPUs per task is capped at the executor's total core count " +
-        "(spark.executor.cores or the ResourceProfile equivalent). If that core count is not " +
-        "known (e.g. Standalone / local-cluster without spark.executor.cores), the retry keeps " +
-        "the original CPUs rather than risk requesting more than the executor has. If the " +
-        "executor does not currently have enough free CPUs to satisfy the request, the retry " +
-        "waits for an offer that does, rather than falling back to the default. Set to 0 (the " +
-        "default) to disable this feature and retry OOM tasks with the same resources as the " +
-        "original attempt. This feature does not apply to barrier stages.")
+        "of that task is allocated `T + spark.task.oomRetryCpusIncrement * N` CPUs, where T is " +
+        "the task's CPU request (the ResourceProfile's task cpus, or spark.task.cpus when the " +
+        "profile supplies no override) and N is the number of OOM failures the task has " +
+        "experienced. The additional CPUs reduce the number of concurrent tasks on the executor, " +
+        "which increases the share of the execution memory pool available to the retrying task, " +
+        "improving the chance of success. The total CPUs per task is capped at the executor's " +
+        "actual total core count. If that core count is not known, the retry keeps the original " +
+        "CPUs rather than risk requesting more than the executor has. If the executor does not " +
+        "currently have enough free CPUs to satisfy the request, the retry waits for an offer " +
+        "that does, rather than falling back to the default. Set to 0 (the default) to disable " +
+        "this feature and retry OOM tasks with the same resources as the original attempt. This " +
+        "feature does not apply to barrier stages.")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .decimalConf
       .checkValue(v => v >= 0 && v <= CpuAmount.MAX_AMOUNT,

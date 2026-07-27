@@ -3192,16 +3192,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Number of additional CPUs to allocate for each retry of a task that failed due to
     out-of-memory. Each OOM retry of a task gets
-    <code>spark.task.cpus + spark.task.oomRetryCpusIncrement * N</code> CPUs (N = number of
-    OOM failures of that task), capped at the executor's total core count. If that core count
-    is not known (e.g. Standalone / local-cluster without <code>spark.executor.cores</code>),
-    the retry keeps the original CPUs rather than risk requesting more than the executor has.
-    The extra CPUs reduce concurrent tasks on the executor, increasing the retrying task's
-    share of the execution memory pool. If the executor lacks enough free CPUs, the retry waits
-    for a sufficient offer rather than falling back. Set to 0 to disable (retry with the same
-    resources). Does not apply to barrier stages. Note: for a true JVM heap OOM (executor
-    exited), the executor heap size is fixed, so this only indirectly helps; it most directly
-    helps SparkOutOfMemoryError (execution memory pool exhaustion).
+    <code>T + spark.task.oomRetryCpusIncrement * N</code> CPUs, where T is the task's CPU request
+    (the ResourceProfile's task cpus, or <code>spark.task.cpus</code> when the profile supplies no
+    override) and N = number of OOM failures of that task, capped at the executor's actual total
+    core count. If that core count is not known, the retry keeps the original CPUs rather than
+    risk requesting more than the executor has. The extra CPUs reduce concurrent tasks on the
+    executor, increasing the retrying task's share of the execution memory pool. If the executor
+    lacks enough free CPUs, the retry waits for a sufficient offer rather than falling back. Set
+    to 0 to disable (retry with the same resources). Does not apply to barrier stages. Note: for a
+    true JVM heap OOM (executor exited), the executor heap size is fixed, so this only indirectly
+    helps; it most directly helps SparkOutOfMemoryError (execution memory pool exhaustion).
   </td>
   <td>4.3.0</td>
 </tr>

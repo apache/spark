@@ -2724,6 +2724,35 @@ class TaskSetManagerSuite
     assert(a1.isDefined && a1.get.cpus === 1)
   }
 
+  test("SPARK-58187: OOM retry cpus are capped at the offer's actual registered total cores") {
+    // The configured/profile cap can exceed an executor's actual registered total cores (e.g.
+    // Kubernetes OOM recovery registers spark.task.cpus cores, or local[N] differs from
+    // spark.executor.cores). Capping only at the configured cores would let the retry request
+    // more cpus than the executor can physically run, which oomRetryNeedsMoreCpus would then
+    // reject on every offer forever. The retry must be capped at the offer's registered total.
+    val conf = new SparkConf()
+      .set(config.OOM_RETRY_CPUS_INCREMENT, 4)
+      .set(config.CPUS_PER_TASK, 1)
+      .set(config.EXECUTOR_CORES, 8)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    // The executor actually registered only 2 cores, even though spark.executor.cores is 8.
+    val a0 = manager.resourceOffer(
+      "exec1", "host1", ANY, availCpus = 2, offerTotalCores = Some(2))._1
+    assert(a0.isDefined && a0.get.cpus === 1)
+    manager.handleFailedTask(a0.get.taskId, TaskState.FAILED, oomExceptionFailure)
+
+    // Base + increment would be 1 + 4 = 5, and the profile cap is 8, but the offer's registered
+    // total is 2, so the request is capped at 2 and launches (rather than needing 5 and being
+    // rejected forever).
+    val a1 = manager.resourceOffer(
+      "exec1", "host1", ANY, availCpus = 2, offerTotalCores = Some(2))._1
+    assert(a1.isDefined && a1.get.cpus === 2)
+  }
+
   test("SPARK-58187: maximum increment is capped at executor cores without overflow") {
     // The config accepts any non-negative Int. An extreme increment (Int.MaxValue) must not
     // overflow the request arithmetic; the Long computation is clamped to the executor cores, so
@@ -2747,6 +2776,29 @@ class TaskSetManagerSuite
     // overflowed value that only becomes positive after several wraps.
     val a1 = manager.resourceOffer("exec1", "host1", ANY, availCpus = 4)._1
     assert(a1.isDefined && a1.get.cpus === 4)
+  }
+
+  test("SPARK-58187: OOM retry grows from the task ResourceProfile's cpus, not spark.task.cpus") {
+    // TaskSchedulerImpl passes the profile's task cpus (getTaskCpusOrDefaultForProfile) as the
+    // base into resourceOffer, so with a stage profile requiring 4 task cpus and increment 1, the
+    // first OOM retry needs 4 + 1 = 5, not spark.task.cpus (1) + 1 = 2.
+    val conf = new SparkConf()
+      .set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+      .set(config.CPUS_PER_TASK, 1)
+      .set(config.EXECUTOR_CORES, 8)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    // Model the scheduler offering the profile's task cpus (4) as the base.
+    val a0 = manager.resourceOffer("exec1", "host1", ANY, taskCpus = 4, availCpus = 8)._1
+    assert(a0.isDefined && a0.get.cpus === 4)
+    manager.handleFailedTask(a0.get.taskId, TaskState.FAILED, oomExceptionFailure)
+
+    // First OOM retry: 4 (profile task cpus) + 1 * 1 = 5 cpus, not 2.
+    val a1 = manager.resourceOffer("exec1", "host1", ANY, taskCpus = 4, availCpus = 8)._1
+    assert(a1.isDefined && a1.get.cpus === 5)
   }
 
   test("SPARK-58187: fatal JVM OutOfMemoryError FAILED before executor loss increments once") {
@@ -2830,6 +2882,36 @@ class TaskSetManagerSuite
     manager.executorLost(
       "exec1", "host1", ExecutorExited(SparkExitCode.OOM, exitCausedByApp = true))
     assert(numOomRetriesOf(manager)(0) === 1)
+  }
+
+  Seq(0, 1).foreach { killDepth =>
+    test(s"SPARK-58187: OOM classification is independent of killOnFatalError.depth=$killDepth") {
+      // spark.executor.killOnFatalError.depth is the executor's fatal-kill search bound and may be
+      // 0 (do not inspect for a fatal error). OOM classification for the cpus increment must not
+      // reuse it: a direct SparkOutOfMemoryError must always count, and a SparkException-wrapped
+      // OOM must count regardless of this setting.
+      val conf = new SparkConf()
+        .set(config.OOM_RETRY_CPUS_INCREMENT, 1)
+        .set(config.KILL_ON_FATAL_ERROR_DEPTH, killDepth)
+      sc = new SparkContext("local", "test", conf)
+      sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+
+      // Direct SparkOutOfMemoryError: recognized even at depth 0.
+      val m1 = new TaskSetManager(sched, FakeTask.createTaskSet(1), MAX_TASK_FAILURES)
+      val a0 = m1.resourceOffer("exec1", "host1", ANY, availCpus = 4)._1
+      assert(a0.isDefined)
+      m1.handleFailedTask(a0.get.taskId, TaskState.FAILED, oomExceptionFailure)
+      assert(numOomRetriesOf(m1)(0) === 1)
+
+      // SparkException-wrapped OOM: recognized regardless of the fatal-kill depth.
+      val m2 = new TaskSetManager(sched, FakeTask.createTaskSet(1), MAX_TASK_FAILURES)
+      val b0 = m2.resourceOffer("exec1", "host1", ANY, availCpus = 4)._1
+      assert(b0.isDefined)
+      val cause = new SparkOutOfMemoryError(
+        "POINTER_ARRAY_OUT_OF_MEMORY", new java.util.HashMap[String, String])
+      m2.handleFailedTask(b0.get.taskId, TaskState.FAILED, wrappedOomExceptionFailure(cause))
+      assert(numOomRetriesOf(m2)(0) === 1)
+    }
   }
 
   test("SPARK-30359: don't clean executorsPendingToRemove " +
