@@ -102,12 +102,13 @@ class CapturedException(PySparkException):
         from py4j.java_gateway import is_instance_of
 
         assert SparkContext._gateway is not None
+        assert SparkContext._jvm is not None
 
         gw = SparkContext._gateway
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            utils = SparkContext._jvm.PythonErrorUtils
             return utils.getCondition(self._origin)
         else:
             return None
@@ -121,12 +122,13 @@ class CapturedException(PySparkException):
         from py4j.java_gateway import is_instance_of
 
         assert SparkContext._gateway is not None
+        assert SparkContext._jvm is not None
 
         gw = SparkContext._gateway
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            utils = SparkContext._jvm.PythonErrorUtils
             return dict(utils.getMessageParameters(self._origin))
         else:
             return None
@@ -136,11 +138,12 @@ class CapturedException(PySparkException):
         from py4j.java_gateway import is_instance_of
 
         assert SparkContext._gateway is not None
+        assert SparkContext._jvm is not None
         gw = SparkContext._gateway
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            utils = SparkContext._jvm.PythonErrorUtils
             return utils.getSqlState(self._origin)
         else:
             return None
@@ -150,12 +153,13 @@ class CapturedException(PySparkException):
         from py4j.java_gateway import is_instance_of
 
         assert SparkContext._gateway is not None
+        assert SparkContext._jvm is not None
         gw = SparkContext._gateway
 
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
-            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            utils = SparkContext._jvm.PythonErrorUtils
             errorClass = utils.getCondition(self._origin)
             messageParameters = utils.getMessageParameters(self._origin)
 
@@ -172,13 +176,14 @@ class CapturedException(PySparkException):
         from py4j.java_gateway import is_instance_of
 
         assert SparkContext._gateway is not None
+        assert SparkContext._jvm is not None
 
         gw = SparkContext._gateway
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
             contexts: List[BaseQueryContext] = []
-            utils = SparkContext._jvm.PythonErrorUtils  # type: ignore[union-attr]
+            utils = SparkContext._jvm.PythonErrorUtils
             for q in utils.getQueryContext(self._origin):
                 if q.contextType().toString() == "SQL":
                     contexts.append(SQLQueryContext(q))
