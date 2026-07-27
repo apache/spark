@@ -127,6 +127,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.CollapseRepartition" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.ColumnPruning" ::
+      "org.apache.spark.sql.catalyst.optimizer.CombineApproximatePercentiles" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineConcats" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineTypedFilters" ::

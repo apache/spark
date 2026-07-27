@@ -255,6 +255,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Eliminate Sorts", Once,
       EliminateSorts,
       RemoveRedundantSorts),
+    Batch("Combine Approximate Percentiles", Once,
+      CombineApproximatePercentiles),
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates),
     // This batch must run after "Decimal Optimizations", as that one may change the

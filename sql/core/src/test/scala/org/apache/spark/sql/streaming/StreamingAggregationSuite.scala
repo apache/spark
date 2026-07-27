@@ -110,6 +110,36 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
+  testWithAllStateVersions("approximate percentiles preserve existing streaming checkpoints") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[(Int, Int)]
+      val aggregated = inputData.toDF()
+        .groupBy($"_1")
+        .agg(
+          expr("percentile_approx(_2, 0.5)").as("p50"),
+          expr("percentile_approx(_2, 0.9)").as("p90"))
+        .as[(Int, Int, Int)]
+
+      // Create the two-digest checkpoint used before percentile fusion was introduced.
+      testStream(aggregated, Update)(
+        StartStream(
+          checkpointLocation = checkpointDir.getAbsolutePath,
+          additionalConfs = Map(
+            SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+              "org.apache.spark.sql.catalyst.optimizer.CombineApproximatePercentiles")),
+        AddData(inputData, (0, 1), (0, 2), (0, 3)),
+        CheckLastBatch((0, 2, 3)),
+        StopStream)
+
+      // Start a separate stream so that the optimizer exclusion has been fully restored.
+      testStream(aggregated, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, (0, 4)),
+        CheckLastBatch((0, 2, 4)),
+        StopStream)
+    }
+  }
+
   testWithAllStateVersions("count distinct") {
     val inputData = MemoryStream[(Int, Seq[Int])]
 
