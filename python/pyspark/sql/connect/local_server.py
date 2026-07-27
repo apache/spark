@@ -50,7 +50,7 @@ import sys
 import tempfile
 import time
 import uuid
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict, Iterator, Optional, TextIO
 
 from pyspark.errors import PySparkRuntimeError
 
@@ -101,7 +101,7 @@ class Discovery:
             or os.environ.get("SPARK_LOCAL_CONNECT_DISCOVERY")
             or os.path.join(self._runtime_dir(), "connect-local.json")
         )
-        self._lock_file = None
+        self._lock_file: Optional[TextIO] = None
 
     @property
     def directory(self) -> str:
