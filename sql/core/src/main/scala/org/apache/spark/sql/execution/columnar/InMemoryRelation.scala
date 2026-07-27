@@ -315,6 +315,8 @@ case class CachedRDDBuilder(
       partitionStats = newPartitionStats()
     }
     isCachedRDDRepeatable = false
+    // Read strictness is derived independently for each cache generation.
+    hasStrictFileSourceReads = true
   }
 
   def isCachedColumnBuffersLoaded: Boolean = loadedMaterializedStats.isDefined
@@ -469,12 +471,17 @@ object InMemoryRelation extends PredicateHelper {
     "org.apache.spark.sql.avro.AvroFileFormat",
     "org.apache.spark.sql.hive.orc.OrcFileFormat")
 
+  private val catalystExpressionPackage = "org.apache.spark.sql.catalyst.expressions."
+
   private def hasSafeExpressions(plan: QueryPlan[_]): Boolean = {
+    // Treat the Catalyst namespace as the trust boundary for Expression.deterministic's
+    // repeatability contract. Expressions outside it fail closed; reject AesEncrypt and
+    // opaque/user-defined expressions explicitly.
     plan.expressions.forall { expression =>
       !expression.exists {
         case _: AesEncrypt | _: NonSQLExpression | _: UserDefinedExpression => true
         case value => !value.deterministic || value.containsPattern(CURRENT_LIKE) ||
-          !value.getClass.getName.startsWith("org.apache.spark.sql.catalyst.expressions.")
+          !value.getClass.getName.startsWith(catalystExpressionPackage)
       }
     }
   }
@@ -634,7 +641,7 @@ case class InMemoryRelation(
     output: Seq[Attribute],
     @transient cacheBuilder: CachedRDDBuilder,
     override val outputOrdering: Seq[SortOrder])
-  extends logical.LeafNodeWithAccurateStats with MultiInstanceRelation {
+  extends logical.MaterializedLeafNode with MultiInstanceRelation {
 
   @volatile var statsOfPlanToCache: Statistics = null
 

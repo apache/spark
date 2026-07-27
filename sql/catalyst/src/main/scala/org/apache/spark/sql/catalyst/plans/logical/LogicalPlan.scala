@@ -242,9 +242,17 @@ trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3114")
 }
 
-/** A materialized leaf whose output can safely be scanned again to build a runtime filter. */
-private[sql] trait LeafNodeWithAccurateStats extends LeafNode {
-  /** Whether the current materialized output has complete, accurate statistics. */
+/**
+ * A leaf node that exposes materialization metadata used by
+ * [[org.apache.spark.sql.catalyst.optimizer.InjectRuntimeFilter]] to determine whether its output
+ * can be scanned again safely and profitably to build a runtime filter.
+ */
+private[sql] trait MaterializedLeafNode extends LeafNode {
+  /**
+   * Whether the current materialized output has complete, accurate statistics and durable storage
+   * for another scan. This excludes memory-only storage levels, whose blocks may be discarded
+   * under memory pressure and recomputed.
+   */
   def statsAvailable: Boolean
 
   /** Whether scanning the materialized output again returns the same rows. */

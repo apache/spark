@@ -762,6 +762,35 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
           preinitialized.unpersist(blocking = true)
         }
 
+        val rebuildable = spark.read.parquet(path.getCanonicalPath)
+          .filter($"id" < 5)
+          .persist(MEMORY_AND_DISK)
+        try {
+          val relation = rebuildable.queryExecution.withCachedData.collectFirst {
+            case plan: InMemoryRelation => plan
+          }.get
+          val builder = relation.cacheBuilder
+          val fileScan = builder.cachedPlan.collectFirst {
+            case scan: FileSourceScanExec => scan
+          }.get
+
+          // Keep the physical file reader strict while making only this cache generation observe
+          // best-effort session settings.
+          fileScan.inputRDD
+          withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+            builder.cachedColumnBuffers.count()
+          }
+          assert(!relation.isOutputRepeatable)
+          assert(!relation.statsAvailable)
+
+          builder.clearCache(blocking = true)
+          builder.cachedColumnBuffers.count()
+          assert(relation.isOutputRepeatable)
+          assert(relation.statsAvailable)
+        } finally {
+          rebuildable.unpersist(blocking = true)
+        }
+
         checkCache(
           spark.read.option("ignoreMissingFiles", "true").parquet(path.getCanonicalPath),
           expected = false)

@@ -187,7 +187,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         } else {
           None
         }
-      case leaf: LeafNodeWithAccurateStats =>
+      case leaf: MaterializedLeafNode =>
         val safeLineage = currentPlan.deterministic &&
           findExpressionAndTrackLineageDown(targetKey, currentPlan).exists {
             case (trackedKey, _) => isSimpleExpression(trackedKey)
