@@ -703,7 +703,32 @@ private[spark] class DAGScheduler(
     shuffleIdToMapStage(shuffleDep.shuffleId) = stage
     updateJobIdStageIdMaps(jobId, stage)
 
-    if (!mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
+    // A pipelined shuffle and a regular shuffle live in DIFFERENT trackers -- the split is by
+    // dependency type, with no overlap. A pipelined shuffle produces no durable, addressable map
+    // output; its producer/consumer task-location routing lives entirely in the
+    // StreamingShuffleOutputTracker, and it is never registered with the MapOutputTracker (nothing
+    // reads such an entry -- availability is tracked on the stage via pipelinedCompletedPartitions,
+    // the reader locates writers through the streaming tracker, and every MapOutputTracker path a
+    // pipelined shuffle could reach is either type-gated out or tolerant of its absence). A regular
+    // shuffle is registered with the MapOutputTracker exactly as before.
+    if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
+      // Register the producer/consumer fan-in before any consumer task asks for a writer location.
+      // Self-guarded on the streaming tracker's own state (createShuffleMapStage runs once per
+      // shuffleId via getOrCreateShuffleMapStage, but guard defensively against a re-entry).
+      sc.env.streamingShuffleOutputTracker.foreach { tracker =>
+        val streamingTracker = tracker.asInstanceOf[StreamingShuffleOutputTrackerMaster]
+        if (!streamingTracker.containsShuffle(shuffleDep.shuffleId)) {
+          logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)} " +
+            log"(${MDC(CREATION_SITE, rdd.getCreationSite)}) as input to pipelined " +
+            log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
+          streamingTracker.registerShuffle(
+            shuffleDep.shuffleId,
+            rdd.partitions.length,
+            shuffleDep.partitioner.numPartitions,
+            jobId)
+        }
+      }
+    } else if (!mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
       logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)} " +
@@ -711,21 +736,6 @@ private[spark] class DAGScheduler(
         log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
       mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
         shuffleDep.partitioner.numPartitions)
-      // A pipelined shuffle streams records from a live producer to a co-scheduled consumer, so the
-      // consumer must be able to look up its producer tasks' locations while both stages run. That
-      // routing lives in the StreamingShuffleOutputTracker (the MapOutputTracker registration above
-      // only tracks the empty, never-materialized durable output). Register here, inside the same
-      // once-per-shuffleId guard, so the tracker knows the producer/consumer fan-in before any
-      // consumer task asks for a writer location. Inert (tracker absent) for a regular shuffle.
-      if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
-        sc.env.streamingShuffleOutputTracker.foreach { tracker =>
-          tracker.asInstanceOf[StreamingShuffleOutputTrackerMaster].registerShuffle(
-            shuffleDep.shuffleId,
-            rdd.partitions.length,
-            shuffleDep.partitioner.numPartitions,
-            jobId)
-        }
-      }
     }
     stage
   }

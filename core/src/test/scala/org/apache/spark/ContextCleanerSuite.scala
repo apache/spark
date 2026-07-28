@@ -129,31 +129,35 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
   }
 
   test("cleanup shuffle unregisters a pipelined shuffle from the streaming output tracker") {
-    // A pipelined shuffle is registered in BOTH the MapOutputTracker and the driver-only
-    // StreamingShuffleOutputTracker (see DAGScheduler.createShuffleMapStage). doCleanupShuffle
-    // must unregister it from the streaming tracker too, mirroring the MapOutputTracker cleanup;
-    // otherwise the tracker grows without bound across micro-batches in Real-Time Mode.
+    // A pipelined shuffle lives ONLY in the driver-only StreamingShuffleOutputTracker -- it is
+    // never registered with the MapOutputTracker (see DAGScheduler.createShuffleMapStage). So the
+    // MapOutputTracker.containsShuffle guard is false for it, and doCleanupShuffle must still clean
+    // it up via its own streaming branch; otherwise the tracker grows without bound across
+    // micro-batches in Real-Time Mode.
     val streamingTracker = sc.env.streamingShuffleOutputTracker.get
       .asInstanceOf[StreamingShuffleOutputTrackerMaster]
     val mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 
-    // Register a shuffle id in both trackers exactly as the scheduler does for a pipelined shuffle.
+    // Register a shuffle id in the streaming tracker ONLY, exactly as the scheduler now does for a
+    // pipelined shuffle (nothing is put in the MapOutputTracker).
     val shuffleId = 1000
-    mapOutputTracker.registerShuffle(shuffleId, numMaps = 2, numReduces = 2)
     streamingTracker.registerShuffle(shuffleId, numMaps = 2, numReduces = 2, jobId = 0)
     assert(streamingTracker.containsShuffle(shuffleId))
+    assert(!mapOutputTracker.containsShuffle(shuffleId),
+      "a pipelined shuffle must not be registered with the MapOutputTracker")
 
     cleaner.doCleanupShuffle(shuffleId, blocking = true)
 
-    // The streaming tracker entry is gone, alongside the MapOutputTracker cleanup.
+    // The streaming tracker entry is gone -- cleanup fired even though the shuffle was never in the
+    // MapOutputTracker, proving the streaming cleanup branch is independent of MapOutputTracker.
     assert(!streamingTracker.containsShuffle(shuffleId))
-    assert(!mapOutputTracker.containsShuffle(shuffleId))
   }
 
   test("cleanup shuffle leaves a regular shuffle's streaming tracker untouched and quiet") {
-    // A regular (non-pipelined) shuffle is never registered with the streaming tracker, so
-    // doCleanupShuffle must skip it via the containsShuffle guard -- without emitting the
-    // "attempting to unregister a shuffle that hasn't been registered" warning for every shuffle.
+    // A regular (non-pipelined) shuffle is registered only with the MapOutputTracker, never the
+    // streaming tracker. doCleanupShuffle must take the MapOutputTracker branch and never touch the
+    // streaming tracker -- in particular it must not emit the streaming tracker's "attempting to
+    // unregister a shuffle that hasn't been registered" warning.
     val streamingTracker = sc.env.streamingShuffleOutputTracker.get
       .asInstanceOf[StreamingShuffleOutputTrackerMaster]
 
