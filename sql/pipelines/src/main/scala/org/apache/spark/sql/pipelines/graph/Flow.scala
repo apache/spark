@@ -263,7 +263,7 @@ class AutoCdcMergeFlow(
       schemaName = "changeDataFeed",
       schema = df.schema,
       columnSelection = changeArgs.columnSelection,
-      caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
+      resolver = spark.sessionState.conf.resolver
     )
     // AutoCDC flows require all key columns to be present in the user-selected source schema,
     // so that they survive into the target table where SCD reconciliation needs them.
@@ -478,7 +478,7 @@ class AutoCdcMergeFlow(
       Scd2BatchProcessor.computeTrackedHistoryColumns(
         schema = selectedSchema,
         changeArgs = changeArgs,
-        caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
+        resolver = spark.sessionState.conf.resolver
       )
     }
   }

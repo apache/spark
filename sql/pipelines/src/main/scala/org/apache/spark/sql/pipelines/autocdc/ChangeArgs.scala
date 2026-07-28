@@ -19,6 +19,7 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Column}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.types.StructType
@@ -72,26 +73,26 @@ object ColumnSelection {
    * @param schema          The schema to filter.
    * @param columnSelection The user-provided selection. `None` is a no-op and returns `schema`
    *                        unchanged.
-   * @param caseSensitive   Whether to match column names case-sensitively against the schema.
-   *                        Callers should derive this from the session, e.g.
-   *                        `session.sessionState.conf.caseSensitiveAnalysis`, so column matching
-   *                        stays consistent with `spark.sql.caseSensitive`.
+   * @param resolver        Determines whether two column names are considered equal. Callers
+   *                        should pass the session resolver, e.g.
+   *                        `session.sessionState.conf.resolver`, so column matching stays
+   *                        consistent with `spark.sql.caseSensitive`.
    */
   def applyToSchema(
       schemaName: String,
       schema: StructType,
       columnSelection: Option[ColumnSelection],
-      caseSensitive: Boolean): StructType = columnSelection match {
+      resolver: Resolver): StructType = columnSelection match {
     case None =>
       // A None column selection is interpreted as a no-op.
       schema
     case Some(IncludeColumns(cols)) =>
-      val keepIndices = lookupFieldIndices(schemaName, schema, cols, caseSensitive)
+      val keepIndices = lookupFieldIndices(schemaName, schema, cols, resolver)
       StructType(schema.fields.zipWithIndex.collect {
         case (field, idx) if keepIndices.contains(idx) => field
       })
     case Some(ExcludeColumns(cols)) =>
-      val dropIndices = lookupFieldIndices(schemaName, schema, cols, caseSensitive)
+      val dropIndices = lookupFieldIndices(schemaName, schema, cols, resolver)
       StructType(schema.fields.zipWithIndex.collect {
         case (field, idx) if !dropIndices.contains(idx) => field
       })
@@ -101,17 +102,20 @@ object ColumnSelection {
       schemaName: String,
       schema: StructType,
       fields: Seq[UnqualifiedColumnName],
-      caseSensitive: Boolean): Set[Int] = {
-    val caseAwareGetFieldIndex: String => Option[Int] =
-      if (caseSensitive) schema.getFieldIndex else schema.getFieldIndexCaseInsensitive
+      resolver: Resolver): Set[Int] = {
+    def resolveFieldIndex(name: String): Option[Int] =
+      schema.fieldNames.indexWhere(resolver(_, name)) match {
+        case -1 => None
+        case idx => Some(idx)
+      }
 
-    val fieldIndexResolutions = fields.map(f => f -> caseAwareGetFieldIndex(f.name))
+    val fieldIndexResolutions = fields.map(f => f -> resolveFieldIndex(f.name))
     val missingFieldNames = fieldIndexResolutions.collect { case (f, None) => f.name }.distinct
     if (missingFieldNames.nonEmpty) {
       throw new AnalysisException(
         errorClass = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
         messageParameters = Map(
-          "caseSensitivity" -> CaseSensitivityLabels.of(caseSensitive),
+          "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
           "schemaName" -> schemaName,
           "missingColumns" -> missingFieldNames.mkString(", "),
           "availableColumns" -> schema.fieldNames.mkString(", ")
@@ -129,6 +133,13 @@ private[pipelines] object CaseSensitivityLabels {
 
   def of(caseSensitive: Boolean): String =
     if (caseSensitive) CaseSensitive else CaseInsensitive
+
+  /**
+   * Maps a [[Resolver]] to its user-facing label. A resolver is case-insensitive iff it treats
+   * two identifiers differing only in case as equal, so we classify it by probing with such a
+   * pair rather than by reference identity; the label then stays correct for any resolver.
+   */
+  def of(resolver: Resolver): String = of(caseSensitive = !resolver("a", "A"))
 }
 
 /** The SCD (Slowly Changing Dimension) strategy for a CDC flow. */
