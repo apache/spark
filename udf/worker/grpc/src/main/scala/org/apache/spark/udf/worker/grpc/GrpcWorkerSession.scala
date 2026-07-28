@@ -238,18 +238,17 @@ class GrpcWorkerSession(
     case UdfControlResponse.ControlCase.INIT =>
       val resp = ctrl.getInit
       if (resp.hasError) {
-        // Attribute a subsequent close()'s terminator to the init error rather
-        // than a bare Cancelled, mirroring the data-phase ERROR branch.
+        // Record the error and publish the InitResponse; do NOT settle a terminal
+        // or send Cancel here. The proto requires the engine to Cancel after an
+        // init error (udf_message.proto), but a Cancel written from this callback
+        // could race requestObserver still being null (a directExecutor worker
+        // delivers this reentrantly, inside doInit's stream.onNext, before doInit
+        // publishes requestObserver). So we leave the session in Initializing and
+        // let doInit -- which runs only after requestObserver is published -- send
+        // the Cancel and drain the CancelResponse. Settle-before-release (see
+        // initValue): there is no terminal to settle first here, just publish.
         executionError.compareAndSet(None, Some(resp.getError))
-        // Settle Failed(err) before the Cancel below (not after its CancelResponse):
-        // the sticky terminal makes close() report the init error, and the Cancel
-        // becomes best-effort worker cleanup -- so if it can't be written (a
-        // directExecutor worker delivered this reentrantly, before doInit published
-        // requestObserver), doInit still doesn't wait terminalTimeoutMs for a
-        // CancelResponse that can never arrive. Settle-before-release (see initValue).
-        Transitions.failed(resp.getError)
         initValue.complete(resp)
-        sendCancelInternal(() => cancelWithReason("init failed"))
       } else {
         // InitResponse OK. Only advance from Initializing so a terminal that raced
         // in (e.g. a transport error) still wins; process() then opens the data
@@ -261,19 +260,21 @@ class GrpcWorkerSession(
     case UdfControlResponse.ControlCase.ERROR =>
       val err = ctrl.getError.getError
       executionError.compareAndSet(None, Some(err))
-      // Before init resolves, settle Failed here rather than rely on the Cancel
-      // below: sendCancelInternal may find requestObserver still null (reentrant
-      // delivery inside stream.onNext, before doInit published it), so no Cancel --
-      // hence no CancelResponse -- would settle the terminal, and doInit would
-      // return as if init succeeded. completeTerminal is idempotent, so the
-      // data-phase ERROR -> Cancel -> CancelResponse path is unaffected.
       if (!initResolved) {
-        Transitions.failed(err)
+        // Pre-init ErrorResponse. Leave the session in Initializing and just wake
+        // init(): the recorded executionError tells doInit the worker failed, and
+        // doInit -- running after requestObserver is published -- sends the Cancel
+        // and drains the CancelResponse. Same reasoning as the INIT-error branch:
+        // a Cancel from this callback could race requestObserver still being null
+        // under reentrant (directExecutor) delivery.
+        initValue.signalWithoutValue()
+      } else {
+        // Data-phase ErrorResponse: requestObserver is published, so cancel here.
+        // Cancel -> CancelResponse settles the terminal; the iterator surfaces the
+        // recorded executionError. The init latch already fired in init(), so no
+        // signalWithoutValue is needed.
+        sendCancelInternal(() => cancelWithReason("aborting after ErrorResponse"))
       }
-      // Settle-before-release (see initValue). No value to publish -- ERROR is not
-      // an InitResponse; on the data-phase path the latch already fired in init.
-      initValue.signalWithoutValue()
-      sendCancelInternal(() => cancelWithReason("aborting after ErrorResponse"))
 
     case UdfControlResponse.ControlCase.FINISH =>
       // The FinishResponse carries metrics + the finish-callback data/error.
@@ -327,7 +328,7 @@ class GrpcWorkerSession(
    *   Streaming -> Finishing          finishSent      advance branch 3       [engine]
    *   non-terminal -> Cancelling      cancelSentFrom  sendCancelInternal, iff a Cancel
    *                                     reaches the wire  [gRPC cb | engine | init | close]
-   *   non-terminal -> Terminal        finished/cancelled/failed/transportFailed
+   *   non-terminal -> Terminal        finished/cancelled/transportFailed
    *                                     handleControl / doInit / doClose / advance / onError
    * }}}
    * `Cancelling` is reached only if a Cancel is actually written; a pre-stream or
@@ -355,10 +356,6 @@ class GrpcWorkerSession(
     /** Clean terminal carrying the worker's `CancelResponse`. */
     def cancelled(response: CancelResponse): Boolean =
       completeTerminal(Termination.Cancelled(response))
-
-    /** Failure terminal carrying a structured [[ExecutionError]]. */
-    def failed(error: ExecutionError): Boolean =
-      completeTerminal(Termination.Failed(error))
 
     /** Failure terminal carrying a transport-level cause. */
     def transportFailed(cause: Throwable): Boolean =
@@ -411,68 +408,91 @@ class GrpcWorkerSession(
         throw new GrpcWorkerSessionException("UDF worker stream failed during init", e)
     }
 
-    val responded = try {
+    try {
       initValue.await(initResponseTimeoutMs)
     } catch {
       case _: InterruptedException =>
         Thread.currentThread().interrupt()
         sendCancelInternal(() => cancelWithReason("interrupted during init"))
-        // Make sure close() does not block waiting for a terminator that
-        // will never arrive on this thread's behalf.
+        // Attribute the terminal to a transport failure, not a cancel: the
+        // interrupt comes from the engine/task thread that called init() (e.g.
+        // Spark task kill), and after it the worker's state is unknown -- the
+        // Cancel above is best-effort and may not have been acked -- so the
+        // worker is not salvageable. It also stops close() from blocking on a
+        // terminator that will never arrive on this thread's behalf.
         Transitions.transportFailed(
           new InterruptedException("interrupted while waiting for InitResponse"))
         throw new InterruptedException("interrupted while waiting for InitResponse")
-    }
-
-    if (!responded) {
-      sendCancelInternal(() => cancelWithReason("InitResponse timed out"))
-      val timeout = new TimeoutException(
-        s"timed out waiting for InitResponse after ${initResponseTimeoutMs}ms")
-      // Settle the terminal so a subsequent close() does not stall for a
-      // second `terminalTimeoutMs` waiting for a worker that already missed
-      // its init deadline.
-      Transitions.transportFailed(timeout)
-      // Surface as GrpcWorkerSessionException (carrying the timeout cause) so
-      // the engine integration layer that catches that type can wrap it.
-      throw new GrpcWorkerSessionException(
-        s"timed out waiting for InitResponse after ${initResponseTimeoutMs}ms", timeout)
+      case e: TimeoutException =>
+        sendCancelInternal(() => cancelWithReason("InitResponse timed out"))
+        // Settle the terminal so a subsequent close() does not stall for a
+        // second `terminalTimeoutMs` waiting for a worker that already missed
+        // its init deadline.
+        Transitions.transportFailed(e)
+        // Surface as GrpcWorkerSessionException (carrying the timeout cause) so
+        // the engine integration layer that catches that type can wrap it.
+        throw new GrpcWorkerSessionException(
+          s"timed out waiting for InitResponse after ${initResponseTimeoutMs}ms", e)
     }
 
     initValue.get match {
       case Some(resp) if resp.hasError =>
-        // The protocol requires the engine to send Cancel after an init
-        // error and the worker to respond with CancelResponse. Drain it
-        // before throwing so we don't leave a dangling stream.
-        awaitTerminal()
-        throw new GrpcWorkerSessionException(
-          s"UDF worker init failed: ${describeError(resp.getError)}", resp.getError)
+        failInitWithError(resp.getError,
+          s"UDF worker init failed: ${describeError(resp.getError)}")
       case Some(resp) =>
         resp
       case None =>
-        // No InitResponse arrived but the latch fired. The defensive
-        // initValue.signalWithoutValue() in handleControl / onError /
-        // onCompleted means we get here when the worker terminated the stream
-        // before sending InitResponse. Surface that as an init failure rather
-        // than letting the caller proceed as if init succeeded.
-        currentState match {
-          case SessionState.Terminal(Termination.TransportFailed(cause)) =>
-            throw new GrpcWorkerSessionException(
-              "UDF worker stream failed during init", cause)
-          case SessionState.Terminal(Termination.Failed(err)) =>
-            throw new GrpcWorkerSessionException(
-              s"UDF worker reported an error before init completed: " +
-                describeError(err), err)
-          case SessionState.Terminal(Termination.Cancelled(_)) =>
-            throw new GrpcWorkerSessionException(
-              "UDF worker stream was cancelled before init completed")
-          case SessionState.Terminal(Termination.Finished(_)) =>
-            throw new GrpcWorkerSessionException(
-              "UDF worker finished before init completed")
-          case other =>
-            throw new IllegalStateException(
-              s"init latch fired without an InitResponse or terminal: $other")
+        // No InitResponse arrived but the latch fired.
+        //
+        // A pre-init ErrorResponse leaves the session in Initializing with the
+        // error recorded in executionError (see handleControl ERROR branch): the
+        // engine must now Cancel and drain the CancelResponse, which failInit does.
+        executionError.get() match {
+          case Some(err) if !currentState.isTerminal =>
+            failInitWithError(err,
+              s"UDF worker reported an error before init completed: ${describeError(err)}")
+          case _ =>
+            // Otherwise a terminal already settled -- the worker terminated the
+            // stream before sending InitResponse (transport error, half-close, or
+            // a premature FinishResponse/CancelResponse). Surface it as an init
+            // failure rather than letting the caller proceed as if init succeeded.
+            currentState match {
+              case SessionState.Terminal(Termination.TransportFailed(cause)) =>
+                throw new GrpcWorkerSessionException(
+                  "UDF worker stream failed during init", cause)
+              case SessionState.Terminal(Termination.Failed(err)) =>
+                throw new GrpcWorkerSessionException(
+                  s"UDF worker reported an error before init completed: " +
+                    describeError(err), err)
+              case SessionState.Terminal(Termination.Cancelled(_)) =>
+                throw new GrpcWorkerSessionException(
+                  "UDF worker stream was cancelled before init completed")
+              case SessionState.Terminal(Termination.Finished(_)) =>
+                throw new GrpcWorkerSessionException(
+                  "UDF worker finished before init completed")
+              case other =>
+                throw new IllegalStateException(
+                  s"init latch fired without an InitResponse or terminal: $other")
+            }
         }
     }
+  }
+
+  /**
+   * Fail init after the worker reported an error before accepting the session
+   * (an `InitResponse` carrying an error, or a pre-init `ErrorResponse`). The
+   * protocol requires the engine to send `Cancel` after an init error and the
+   * worker to reply with `CancelResponse` (udf_message.proto); we do that here --
+   * where [[requestObserver]] is published, unlike the response callback that
+   * recorded the error -- then drain the terminator so no stream is left
+   * dangling, and throw. The settled terminal is `Cancelled`; the structured
+   * error is surfaced through this throw and kept on [[executionError]] for the
+   * iterator / close()'s salvage decision.
+   */
+  private def failInitWithError(err: ExecutionError, message: String): Nothing = {
+    sendCancelInternal(() => cancelWithReason("init failed"))
+    awaitTerminal()
+    throw new GrpcWorkerSessionException(message, err)
   }
 
   override protected def doProcess(
@@ -486,11 +506,16 @@ class GrpcWorkerSession(
   override protected def doClose(cancel: () => Cancel): Termination = {
     if (requestObserver == null) {
       // init() never put a stream on the wire (closed before/around init, or
-      // init threw before publishing). There is no protocol terminator; treat
-      // the session as cancelled-before-start. The base WorkerSession still
-      // releases the worker handle, so the worker is torn down.
-      Transitions.cancelled(CancelResponse.getDefaultInstance)
-      return Termination.Cancelled(CancelResponse.getDefaultInstance)
+      // init threw before publishing). There is no protocol terminator; if no
+      // terminal has settled yet, treat the session as cancelled-before-start.
+      // A terminal may already be settled here (e.g. the channel-shutdown
+      // TransportFailed in doInit also leaves requestObserver null); return the
+      // settled terminal as-is rather than a bare Cancelled that disagrees with
+      // the state. The base WorkerSession still releases the worker handle.
+      if (!currentState.isTerminal) {
+        Transitions.cancelled(CancelResponse.getDefaultInstance)
+      }
+      return settledTermination
     }
     // If the stream has not finished on its own, cancel anything in flight so
     // the worker can clean up, then wait for the terminator. sendCancelInternal
@@ -878,8 +903,16 @@ object GrpcWorkerSession {
     /** Releases the waiter without a value (a terminal arrived, not the value). */
     def signalWithoutValue(): Unit = latch.countDown()
 
-    /** Blocks up to `timeoutMs` for a release; true iff released in time. */
-    def await(timeoutMs: Long): Boolean = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+    /**
+     * Blocks up to `timeoutMs` for a release, throwing [[TimeoutException]] if
+     * none arrives so the caller handles the timeout on the exception path rather
+     * than by inspecting a return value.
+     */
+    def await(timeoutMs: Long): Unit =
+      if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+        throw new TimeoutException(
+          s"timed out waiting for InitResponse after ${timeoutMs}ms")
+      }
 
     /** The published value, or None if none was ever set. */
     def get: Option[A] = ref.get()

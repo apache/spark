@@ -705,13 +705,15 @@ class GrpcWorkerSessionConcurrencySuite
   }
 
   // ---------------------------------------------------------------------------
-  // close() reports failures faithfully (Termination.Failed / TransportFailed)
-  // rather than collapsing them into a clean Cancelled, so a failure that occurs
-  // during finish/close -- where nothing is consuming the result iterator -- is
-  // not lost.
+  // An init error surfaces through init()'s exception (carrying the structured
+  // ExecutionError); per the protocol the engine then sends Cancel and the worker
+  // replies CancelResponse, so the terminal -- and close()'s return -- is the
+  // proto terminator Cancelled, not Failed. A genuine transport failure (worker
+  // never replies to Cancel) still reports TransportFailed faithfully rather than
+  // collapsing into a clean Cancelled.
   // ---------------------------------------------------------------------------
 
-  test("close after a pre-init error returns a Failed termination carrying the error") {
+  test("pre-init error: init throws the structured error; close returns Cancelled") {
     val service = new CapturingService(
       onRequest = (req, resp) => {
         if (req.hasControl && req.getControl.hasInit) {
@@ -722,20 +724,25 @@ class GrpcWorkerSessionConcurrencySuite
                   UserError.newBuilder().setMessage("pre-init boom")
                     .setErrorClass("PreInitError").build()).build()).build()).build())
             .build())
+        } else if (req.hasControl && req.getControl.hasCancel) {
+          // Proto: the engine must Cancel after an init error and the worker
+          // replies CancelResponse, settling the terminal as Cancelled.
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setCancel(
+              CancelResponse.getDefaultInstance).build()).build())
         }
       })
     val (_, channel) = startServer(service)
-    val session = newSession(channel, terminalTimeoutMs = 3000L)
-    intercept[GrpcWorkerSessionException](session.init(basicInit()))
+    val session = newSession(channel, terminalTimeoutMs = NeverReachedTimeoutMs)
+    // The structured error is surfaced through init()'s exception, not the terminal.
+    val ex = intercept[GrpcWorkerSessionException](session.init(basicInit()))
+    assert(ex.executionError != null && ex.executionError.getUser.getErrorClass == "PreInitError",
+      s"init() must throw the structured error, got: ${ex.executionError}")
 
+    // close() returns the proto terminator: Cancelled, not a bare/Failed outcome.
     val termination = session.close(emptyCancel)
-    termination match {
-      case Termination.Failed(err) =>
-        assert(err.getUser.getErrorClass == "PreInitError",
-          s"the structured error must be carried on the Termination, got: $err")
-      case other =>
-        fail(s"expected Termination.Failed carrying the error, got: $other")
-    }
+    assert(termination.isInstanceOf[Termination.Cancelled],
+      s"expected the proto terminator Termination.Cancelled, got: $termination")
   }
 
   test("close that times out without a terminator returns a TransportFailed termination") {
@@ -800,13 +807,15 @@ class GrpcWorkerSessionConcurrencySuite
   }
 
   // ---------------------------------------------------------------------------
-  // Init-error terminal carries the error (Termination.Failed), symmetric with
-  // the data-phase ERROR branch, even when a Cancel reaches the wire and the
-  // worker replies CancelResponse (cross-thread delivery). Without carrying the
-  // error onto the terminal, close() would return a bare Cancelled.
+  // Proto compliance on an init error: the engine MUST send Cancel after an init
+  // error and the worker replies CancelResponse (udf_message.proto). init()
+  // sends the Cancel -- from where requestObserver is published, not the response
+  // callback that may still see it null under reentrant delivery -- and drains
+  // the CancelResponse, so the terminal is Cancelled. The structured error is
+  // surfaced through init()'s exception, not the terminal.
   // ---------------------------------------------------------------------------
 
-  test("cross-thread InitResponse error: close carries Failed, not a bare Cancelled") {
+  test("cross-thread InitResponse error: engine sends Cancel, close returns Cancelled") {
     val service = new CapturingService(
       onRequest = (req, resp) => {
         if (req.hasControl && req.getControl.hasInit) {
@@ -818,35 +827,28 @@ class GrpcWorkerSessionConcurrencySuite
                     .setErrorClass("InitError").build()).build()).build()).build())
             .build())
         } else if (req.hasControl && req.getControl.hasCancel) {
-          // Defensive: reply CancelResponse if a Cancel ever arrives. With the
-          // init error settled as Failed BEFORE any Cancel is attempted, the
-          // terminal is already set, so sendCancelInternal suppresses the wire
-          // Cancel and this branch should not fire -- but were a regression to
-          // write the Cancel, this CancelResponse settling the terminal as a bare
-          // Cancelled is exactly what the Failed-before-Cancel ordering prevents.
           resp.onNext(UdfResponse.newBuilder().setControl(
             UdfControlResponse.newBuilder().setCancel(
               CancelResponse.getDefaultInstance).build()).build())
         }
       })
     // Cross-thread delivery: requestObserver is published before the InitResponse
-    // error arrives. Under the older "Cancel then let CancelResponse settle"
-    // design a Cancel would have reached the wire here and its CancelResponse
-    // would have overwritten the outcome with a bare Cancelled; the fix settles
-    // Failed first, so close() reports the init error either way.
+    // error arrives, so the Cancel reaches the wire and its CancelResponse settles
+    // the terminal Cancelled -- the proto terminator.
     val (_, channel) = startServer(service, directExecutor = false)
     val session = newSession(channel,
       initResponseTimeoutMs = NeverReachedTimeoutMs, terminalTimeoutMs = NeverReachedTimeoutMs)
-    intercept[GrpcWorkerSessionException](session.init(basicInit()))
+    val ex = intercept[GrpcWorkerSessionException](session.init(basicInit()))
+    assert(ex.executionError != null && ex.executionError.getUser.getErrorClass == "InitError",
+      s"init() must throw the structured error, got: ${ex.executionError}")
+
+    // Proto invariant: a Cancel was actually written to the worker on the init error.
+    assert(service.captured.asScala.exists(r => r.hasControl && r.getControl.hasCancel),
+      "the engine must send Cancel after an init error (udf_message.proto)")
 
     val termination = session.close(emptyCancel)
-    termination match {
-      case Termination.Failed(err) =>
-        assert(err.getUser.getErrorClass == "InitError",
-          s"the init error must be carried on the Termination, got: $err")
-      case other =>
-        fail(s"expected Termination.Failed carrying the init error, got: $other")
-    }
+    assert(termination.isInstanceOf[Termination.Cancelled],
+      s"expected the proto terminator Termination.Cancelled, got: $termination")
   }
 
   // ---------------------------------------------------------------------------
