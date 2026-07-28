@@ -49,7 +49,7 @@ unary_np_spark_mappings = {
     "floor": F.floor,
     "frexp": lambda _: NotImplemented,  # 'frexp' output lengths become different
     # and it cannot be supported via pandas UDF.
-    "invert": pandas_udf(lambda s: np.invert(s), DoubleType()),  # type: ignore[call-overload]
+    "invert": F.bitwise_not,
     "isfinite": lambda c: c != float("inf"),
     "isinf": lambda c: c == float("inf"),
     "isnan": F.isnan,
