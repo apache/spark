@@ -118,11 +118,17 @@ class RelationResolution(
         case CatalogAndIdentifier(catalog, ident) =>
           val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
           val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
-          relationCache
-            .get(key)
+          val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+          // A reference that requires write privileges is never served from the per-query relation
+          // cache. The catalog authorizes the write in `loadTable(ident, writePrivileges)` below,
+          // and a cache hit would skip that call entirely. The hit happens whenever the write
+          // target is also read in the same statement -- the target is resolved after its query
+          // (see `ResolveRelations`), so it finds the relation the query already put in the cache,
+          // e.g. for `INSERT INTO t SELECT * FROM t`.
+          val cached = if (writePrivileges == null) relationCache.get(key) else None
+          cached
             .map(adaptCachedRelation(_, planId))
             .orElse {
-              val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
               val finalOptions = u.clearWritePrivileges.options
               val table = CatalogV2Util.loadTable(
                 catalog,
