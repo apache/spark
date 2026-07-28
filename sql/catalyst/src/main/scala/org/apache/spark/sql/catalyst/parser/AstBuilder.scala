@@ -1420,11 +1420,27 @@ class AstBuilder extends DataTypeAstBuilder
         }
       }
       val keys = visitIdentifierSeq(params.keys).map(UnresolvedAttribute.quoted)
-      val deleteCondition = Option(params.autoCdcDeleteClause())
-        .map(c => expression(c.deleteCondition))
-      val sequencing = expression(params.autoCdcSequenceByClause().sequence)
 
-      val columnsClause = Option(params.autoCdcColumnsClause())
+      // The optional clauses may appear in any order after `KEYS (...)`, so the grammar accepts
+      // each any number of times; reject an accidental repeat here rather than silently taking
+      // the last occurrence.
+      checkDuplicateClauses(params.autoCdcDeleteClause(), "APPLY AS DELETE WHEN", params)
+      checkDuplicateClauses(params.autoCdcSequenceByClause(), "SEQUENCE BY", params)
+      checkDuplicateClauses(params.autoCdcColumnsClause(), "COLUMNS", params)
+      checkDuplicateClauses(params.autoCdcStoredAsClause(), "STORED AS SCD TYPE", params)
+      checkDuplicateClauses(params.autoCdcTrackHistoryClause(), "TRACK HISTORY ON", params)
+
+      val deleteCondition = params.autoCdcDeleteClause().asScala.headOption
+        .map(c => expression(c.deleteCondition))
+
+      // SEQUENCE BY is mandatory; the grammar no longer enforces its presence (the clauses are an
+      // unordered set), so require it explicitly here with a targeted error.
+      val sequenceByClause = params.autoCdcSequenceByClause().asScala.headOption.getOrElse {
+        operationNotAllowed("AUTO CDC requires a SEQUENCE BY clause.", params)
+      }
+      val sequencing = expression(sequenceByClause.sequence)
+
+      val columnsClause = params.autoCdcColumnsClause().asScala.headOption
       val includeColumns = columnsClause.collect {
         case c if c.columns != null =>
           visitIdentifierSeq(c.columns).map(UnresolvedAttribute.quoted)
@@ -1438,7 +1454,7 @@ class AstBuilder extends DataTypeAstBuilder
       // supported; reject anything else (including oversized numeric literals) with a clear
       // error rather than a generic parse failure or NumberFormatException. Match on the token
       // text rather than parsing to Int so an overflowing literal cannot throw.
-      val storedAsScdType = Option(params.autoCdcStoredAsClause()) match {
+      val storedAsScdType = params.autoCdcStoredAsClause().asScala.headOption match {
         case Some(c) =>
           c.scdType.getText match {
             case "1" => 1
@@ -1451,7 +1467,7 @@ class AstBuilder extends DataTypeAstBuilder
         case None => 1
       }
 
-      val trackHistoryClause = Option(params.autoCdcTrackHistoryClause())
+      val trackHistoryClause = params.autoCdcTrackHistoryClause().asScala.headOption
       val trackHistoryColumns = trackHistoryClause.collect {
         case c if c.trackCols != null =>
           visitIdentifierSeq(c.trackCols).map(UnresolvedAttribute.quoted)
