@@ -68,13 +68,15 @@ object Termination {
   /**
    * The session was interrupted (an [[InterruptedException]] on the engine
    * thread driving it, e.g. a Spark task kill) before a terminator arrived. A
-   * best-effort `Cancel` is sent but its `CancelResponse` is not awaited -- the
-   * interrupted thread must unwind rather than block -- so this is distinct from
-   * a cooperative [[Cancelled]] (which carries the drained `CancelResponse`) and
-   * from a [[TransportFailed]] (a genuine transport fault). The interrupt is an
-   * engine-side event, not a worker fault, so the worker is treated as
-   * salvageable (see [[WorkerSession.isWorkerSalvageable]]). Carries the
-   * interrupt cause.
+   * best-effort `Cancel` is sent and its `CancelResponse` awaited only briefly
+   * (the interrupted thread must unwind promptly rather than block); this
+   * terminal is settled only when that brief wait expires without an ack -- if
+   * the worker acks in time the session settles a cooperative [[Cancelled]]
+   * instead. So it is distinct from a [[Cancelled]] (which carries the drained
+   * `CancelResponse`) and from a [[TransportFailed]] (a genuine transport
+   * fault). The interrupt is an engine-side event, not a worker fault, so the
+   * worker is treated as salvageable (see [[WorkerSession.isWorkerSalvageable]]).
+   * Carries the interrupt cause.
    */
   final case class Interrupted(cause: Throwable) extends Termination
 }

@@ -376,8 +376,9 @@ class GrpcWorkerSession(
     /**
      * Terminal for an engine-thread interrupt (e.g. a Spark task kill). Distinct
      * from [[transportFailed]]: the worker is salvageable (the interrupt is not a
-     * worker fault) and a best-effort `Cancel` is sent but its `CancelResponse`
-     * is not awaited, since the interrupted thread must unwind rather than block.
+     * worker fault). Settled by [[handleInterrupt]] only when the brief
+     * post-Cancel drain expires without a `CancelResponse`; if the worker acks in
+     * time the session settles a cooperative [[cancelled]] instead.
      */
     def interrupted(cause: Throwable): Boolean =
       completeTerminal(Termination.Interrupted(cause))
@@ -549,6 +550,16 @@ class GrpcWorkerSession(
           // shared handler rather than falling through to the TransportFailed
           // guard below. The Cancel is already on the wire, so handleInterrupt's
           // sendCancelInternal is a no-op and it just runs the bounded drain.
+          //
+          // TODO [SPARK-57640]: close() is a finalizer often already on the task
+          // kill path, yet this makes an interrupted close block up to another
+          // interruptCancelTimeoutMs (chasing a clean, salvageable Cancelled
+          // rather than immediately unwinding to Interrupted). Current choice:
+          // spend the bounded wait to keep the worker recyclable; it is small
+          // next to terminalTimeoutMs. Revisit if killed-task teardown latency
+          // (esp. many sessions torn down at once) makes an immediate unwind
+          // preferable -- e.g. skip this second drain in the close() path, since
+          // close already gave the worker its terminalTimeoutMs window.
           handleInterrupt("closing the session")
       }
     }
@@ -662,7 +673,7 @@ class GrpcWorkerSession(
           s"timed out waiting for stream terminator after ${terminalTimeoutMs}ms"))
       }
     } catch {
-      case _: InterruptedException => handleInterrupt(s"waiting for stream terminator")
+      case _: InterruptedException => handleInterrupt("waiting for stream terminator")
     }
   }
 
