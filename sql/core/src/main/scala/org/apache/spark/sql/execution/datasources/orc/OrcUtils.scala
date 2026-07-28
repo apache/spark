@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.io.FileNotFoundException
+import java.io.{File, FileNotFoundException, IOException}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
@@ -35,7 +35,7 @@ import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStat
 import org.apache.orc.mapred.{OrcInputFormat => OrcMapredInputFormat, OrcStruct}
 import org.apache.orc.mapreduce.OrcMapreduceRecordReader
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkEnv, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
@@ -47,12 +47,13 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils, SupportsArchiveFormat}
 import org.apache.spark.sql.execution.datasources.orc.types.ops.OrcTypeOps
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.ThreadUtils
 
 object OrcUtils extends Logging {
 
@@ -184,11 +185,20 @@ object OrcUtils extends Logging {
       : Option[StructType] = {
     val ignoreCorruptFiles = new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
-    files.iterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
-      case Some(schema) =>
-        logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
-        toCatalystSchema(schema)
-    }
+    val ignoreMissingFiles =
+      new FileSourceOptions(CaseInsensitiveMap(options)).ignoreMissingFiles
+    val archiveFormatEnabled = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+    files.iterator.flatMap { file =>
+      if (archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.getPath)) {
+        readArchiveSchemas(conf, file, ignoreCorruptFiles, ignoreMissingFiles, stopAtFirst = true)
+          .headOption
+      } else {
+        readSchema(file.getPath, conf, ignoreCorruptFiles).map { schema =>
+          logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
+          toCatalystSchema(schema)
+        }
+      }
+    }.collectFirst { case schema => schema }
   }
 
   /**
@@ -199,9 +209,72 @@ object OrcUtils extends Logging {
     files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
     ignoreMissingFiles: Boolean): Seq[StructType] = {
     ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
-      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
-        .map(toCatalystSchema)
+      if (SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED) &&
+          SupportsArchiveFormat.isArchivePath(currentFile.getPath)) {
+        readArchiveSchemas(conf, currentFile, ignoreCorruptFiles, ignoreMissingFiles,
+          stopAtFirst = false)
+      } else {
+        OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
+          .map(toCatalystSchema).toSeq
+      }
     }.flatten
+  }
+
+  /**
+   * Reads ORC entry schemas from one archive.
+   *
+   * @param stopAtFirst when true, returns just the first entry's schema (sample-one); otherwise
+   *                    reads every entry so a corrupt entry fails the whole archive.
+   */
+  private def readArchiveSchemas(
+      conf: Configuration,
+      archive: FileStatus,
+      ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean,
+      stopAtFirst: Boolean): Seq[StructType] = {
+    val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), "orc-archive-infer")
+    // localizeEntries eagerly opens the first entry, so build it inside the try; the finally must
+    // still delete tempDir when a corrupt archive throws there.
+    var entries: Iterator[(String, File)] = Iterator.empty
+    try {
+      entries = SupportsArchiveFormat.localizeEntries(archive.getPath, conf, tempDir, _ => true)
+      // Ignore flags off so a corrupt entry throws to the per-archive catch below. `.toList` reads
+      // every entry (whole archive atomic); `stopAtFirst` stays lazy and stops at the first.
+      val schemas = entries.flatMap { case (_, entryFile) =>
+        try {
+          readSchema(new Path(entryFile.toURI), conf, ignoreCorruptFiles = false,
+            ignoreMissingFiles = false).map(toCatalystSchema)
+        } finally entryFile.delete()
+      }
+      if (stopAtFirst) schemas.take(1).toList else schemas.toList
+    } catch {
+      // A corrupt container throws IOException at open; a corrupt entry footer throws
+      // cannotReadFooterForFileError, whose root cause is also an IOException.
+      case e: Exception if ignoreMissingFiles &&
+          ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
+        logWarning(log"Skipped missing archive during inference: ${MDC(PATH, archive.getPath)}", e)
+        Seq.empty
+      case e: Exception if {
+            val root = Utils.getRootCause(e)
+            root.isInstanceOf[IOException] && !root.isInstanceOf[FileNotFoundException]
+          } =>
+        if (ignoreCorruptFiles) {
+          logWarning(log"Skipped the corrupt archive during inference: " +
+            log"${MDC(PATH, archive.getPath)}", e)
+          Seq.empty
+        } else if (e.isInstanceOf[SparkException]) {
+          throw e // a corrupt entry footer already is cannotReadFooterForFileError
+        } else {
+          // Match the loose-file footer error rather than leaking the raw container IOException.
+          throw QueryExecutionErrors.cannotReadFooterForFileError(archive.getPath, e)
+        }
+    } finally {
+      entries match {
+        case c: java.io.Closeable => c.close()
+        case _ =>
+      }
+      Utils.deleteRecursively(tempDir)
+    }
   }
 
   def inferSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
