@@ -112,8 +112,20 @@ class RelationResolution(override val catalogManager: CatalogManager)
               (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq,
               finalTimeTravelSpec
             )
-          AnalysisContext.get.relationCache
-            .get(key)
+          val writePrivilegesString =
+            Option(u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES))
+          // A reference that requires write privileges is never served from the per-query relation
+          // cache. The catalog authorizes the write in `loadTable(ident, writePrivileges)` below,
+          // and a cache hit would skip that call entirely. The hit happens whenever the write
+          // target is also read in the same statement -- the target is resolved after its query
+          // (see `ResolveRelations`), so it finds the relation the query already put in the cache,
+          // e.g. for `INSERT INTO t SELECT * FROM t`.
+          val cached = if (writePrivilegesString.isEmpty) {
+            AnalysisContext.get.relationCache.get(key)
+          } else {
+            None
+          }
+          cached
             .map { cache =>
               val cachedRelation = cache.transform {
                 case multi: MultiInstanceRelation =>
@@ -130,8 +142,6 @@ class RelationResolution(override val catalogManager: CatalogManager)
                 .getOrElse(cachedRelation)
             }
             .orElse {
-              val writePrivilegesString =
-                Option(u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES))
               val table =
                 CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec, writePrivilegesString)
               val loaded = createRelation(
