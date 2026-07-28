@@ -35,10 +35,10 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   private def createSparkConf(): SparkConf = {
     new SparkConf(loadDefaults = false)
-      .set(SECURITY_CREDENTIALS_ENABLED, true)
-      .set(SECURITY_CREDENTIALS_IDENTITY_TOKEN_FILE, "/tmp/fake-token")
-      .set(SECURITY_CREDENTIALS_RENEWAL_SAFETY_MARGIN, 5000L) // 5s for tests
-      .set(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL, 1000L)  // 1s for tests
+      .set(SECURITY_OIDC_ENABLED, true)
+      .set(SECURITY_OIDC_IDENTITY_TOKEN_FILE, "/tmp/fake-token")
+      .set(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN, 5000L) // 5s for tests
+      .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 1000L)  // 1s for tests
   }
 
   private def createUserContext(
@@ -161,8 +161,8 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("computeRenewalDelay respects safetyMargin and minInterval") {
     val conf = createSparkConf()
-      .set(SECURITY_CREDENTIALS_RENEWAL_SAFETY_MARGIN, 10000L) // 10s
-      .set(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL, 5000L)   // 5s
+      .set(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN, 10000L) // 10s
+      .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 5000L)   // 5s
 
     val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
     try {
@@ -182,8 +182,8 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("computeRenewalDelay uses minInterval when expiry is very close") {
     val conf = createSparkConf()
-      .set(SECURITY_CREDENTIALS_RENEWAL_SAFETY_MARGIN, 10000L)
-      .set(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL, 5000L)
+      .set(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN, 10000L)
+      .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 5000L)
 
     val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
     try {
@@ -201,8 +201,8 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("computeRenewalDelay uses identity token expiry when credential has no expiry") {
     val conf = createSparkConf()
-      .set(SECURITY_CREDENTIALS_RENEWAL_SAFETY_MARGIN, 10000L) // 10s
-      .set(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL, 5000L)   // 5s
+      .set(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN, 10000L) // 10s
+      .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 5000L)   // 5s
 
     val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
     try {
@@ -237,7 +237,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("computeBackoffDelay increases exponentially") {
     val conf = createSparkConf()
-      .set(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL, 1000L)
+      .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 1000L)
 
     val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
     try {
@@ -268,7 +268,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("computeBackoffDelay is capped at maxBackoffMs") {
     val conf = createSparkConf()
-      .set(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL, 1000L)
+      .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 1000L)
 
     val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
     try {
@@ -287,7 +287,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("computeBackoffDelay handles zero consecutiveFailures defensively") {
     val conf = createSparkConf()
-      .set(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL, 1000L)
+      .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 1000L)
 
     val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
     try {
@@ -308,7 +308,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("UserCredentialManager.create returns None when disabled") {
     val conf = new SparkConf(loadDefaults = false)
-      .set(SECURITY_CREDENTIALS_ENABLED, false)
+      .set(SECURITY_OIDC_ENABLED, false)
 
     val result = UserCredentialManager.create(conf, _ => ())
     assert(result.isEmpty)
@@ -322,8 +322,8 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("UserCredentialManager.create throws when enabled without token file") {
     val conf = new SparkConf(loadDefaults = false)
-      .set(SECURITY_CREDENTIALS_ENABLED, true)
-    // Deliberately not setting SECURITY_CREDENTIALS_IDENTITY_TOKEN_FILE
+      .set(SECURITY_OIDC_ENABLED, true)
+    // Deliberately not setting SECURITY_OIDC_IDENTITY_TOKEN_FILE
 
     val ex = intercept[IllegalArgumentException] {
       UserCredentialManager.create(conf, _ => ())
@@ -422,8 +422,8 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("token rotation triggers new credential acquisition and propagation") {
     val conf = createSparkConf()
-      .set(SECURITY_CREDENTIALS_RENEWAL_SAFETY_MARGIN, 1000L) // 1s
-      .set(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL, 500L)   // 0.5s
+      .set(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN, 1000L) // 1s
+      .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 500L)   // 0.5s
     conf.set("spark.security.oidc.provider.fake",
       "org.apache.spark.security.FakeCredentialProvider")
 

@@ -61,8 +61,8 @@ private[spark] class UserCredentialManager(
     tokenIngestor: TokenIngestor,
     onCredentialsUpdate: Array[Byte] => Unit) extends Logging {
 
-  private val safetyMargin = sparkConf.get(SECURITY_CREDENTIALS_RENEWAL_SAFETY_MARGIN)
-  private val minInterval = sparkConf.get(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL)
+  private val safetyMargin = sparkConf.get(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN)
+  private val minInterval = sparkConf.get(SECURITY_OIDC_RENEWAL_MIN_INTERVAL)
 
   // Counter for exponential backoff calculation.
   // Only accessed from the single-thread renewal executor.
@@ -96,7 +96,7 @@ private[spark] class UserCredentialManager(
     if (!userContext.isPresent) {
       throw new IllegalStateException(
         "Failed to start UserCredentialManager: identity token file is missing or malformed. " +
-          s"Check ${SECURITY_CREDENTIALS_IDENTITY_TOKEN_FILE.key} configuration.")
+          s"Check ${SECURITY_OIDC_IDENTITY_TOKEN_FILE.key} configuration.")
     }
 
     val ctx = userContext.get()
@@ -398,13 +398,13 @@ private[spark] object UserCredentialManager {
   def create(
       sparkConf: SparkConf,
       onCredentialsUpdate: Array[Byte] => Unit): Option[UserCredentialManager] = {
-    if (!sparkConf.get(SECURITY_CREDENTIALS_ENABLED)) {
+    if (!sparkConf.get(SECURITY_OIDC_ENABLED)) {
       None
     } else {
-      val tokenFile = sparkConf.get(SECURITY_CREDENTIALS_IDENTITY_TOKEN_FILE).getOrElse {
+      val tokenFile = sparkConf.get(SECURITY_OIDC_IDENTITY_TOKEN_FILE).getOrElse {
         throw new IllegalArgumentException(
-          s"${SECURITY_CREDENTIALS_IDENTITY_TOKEN_FILE.key} must be set when " +
-            s"${SECURITY_CREDENTIALS_ENABLED.key} is true")
+          s"${SECURITY_OIDC_IDENTITY_TOKEN_FILE.key} must be set when " +
+            s"${SECURITY_OIDC_ENABLED.key} is true")
       }
 
       val tokenIngestor = new FileTokenIngestor(Paths.get(tokenFile))

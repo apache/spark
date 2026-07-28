@@ -232,7 +232,7 @@ public final class CredentialProviderLoader {
    * explicit selection rules -- it only reports what schemes are potentially available.
    * <p>
    * Intended for use by {@code UserCredentialManager} when no explicit scheme configuration
-   * (e.g., {@code spark.security.credentials.provider.<scheme>}) is provided.
+   * (e.g., {@code spark.security.oidc.provider.<scheme>}) is provided.
    *
    * @return a set of all supported scheme names (lowercased), possibly empty
    */
