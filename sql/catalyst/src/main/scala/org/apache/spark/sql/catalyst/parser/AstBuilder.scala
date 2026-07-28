@@ -1244,7 +1244,8 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitDeleteFromTable(
       ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
     val table = createUnresolvedRelation(
-      ctx.identifierReference, writePrivileges = Set(TableWritePrivilege.DELETE))
+      ctx.identifierReference, Option(ctx.optionsClause()),
+      writePrivileges = Set(TableWritePrivilege.DELETE))
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "DELETE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val predicate = if (ctx.whereClause() != null) {
@@ -7641,7 +7642,7 @@ class AstBuilder extends DataTypeAstBuilder
     // Extract original SQL text to preserve parameter markers
     val queryText = getOriginalText(ctx.query())
 
-    val asensitive = if (ctx.INSENSITIVE() != null) false else true
+    val asensitive = ctx.INSENSITIVE() == null
     DeclareCursor(cursorName, queryText, asensitive)
   }
 

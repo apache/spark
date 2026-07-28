@@ -272,21 +272,21 @@ object SupportsArchiveFormat {
 
   /**
    * Streams the archive at `path` entry by entry, applying `parseEntry` to each non-skipped
-   * `(name, stream)` and concatenating the results.
+   * `(entry, stream)` and concatenating the results.
    *
    * @param path                    the archive path
    * @param conf                    Hadoop configuration used to open the archive
    * @param ignoredPathSegmentRegex per-segment filter for entries to skip (defaults to the
    *                                `InMemoryFileIndex` filter); pass a custom one to match a
    *                                loose-file scan
-   * @param parseEntry              turns one entry's `(name, stream)` into an iterator of results
+   * @param parseEntry              turns one entry's `(entry, stream)` into an iterator of results
    * @return the concatenated results across kept entries, lazily one entry at a time
    */
   def readArchiveEntries[T](
       path: Path,
       conf: Configuration,
       ignoredPathSegmentRegex: Pattern = HadoopFSUtils.defaultIgnoredPathSegmentRegexPattern)(
-      parseEntry: (String, InputStream) => Iterator[T]): Iterator[T] = {
+      parseEntry: (ArchiveEntry, InputStream) => Iterator[T]): Iterator[T] = {
     val archive = openArchiveStream(path, conf)
     var closed = false
 
@@ -322,7 +322,7 @@ object SupportsArchiveFormat {
           } else {
             // CloseShieldInputStream ignores close(), so a parser closing its input does not close
             // the archive; any unread remainder is skipped by getNextEntry() when advancing.
-            currentIter = parseEntry(entry.getName, CloseShieldInputStream.wrap(archive))
+            currentIter = parseEntry(entry, CloseShieldInputStream.wrap(archive))
           }
         }
       }
@@ -390,7 +390,8 @@ object SupportsArchiveFormat {
       conf: Configuration,
       localDir: File,
       entryFilter: String => Boolean): Iterator[(String, File)] =
-    readArchiveEntries(path, conf) { (name, in) =>
+    readArchiveEntries(path, conf) { (entry, in) =>
+      val name = entry.getName
       if (entryFilter(name)) {
         Iterator.single((name, copyEntryToLocalFile(in, localDir, name)))
       } else {
