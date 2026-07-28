@@ -189,11 +189,11 @@ class GrpcWorkerSession(
         case UdfResponse.ResponseCase.DATA =>
           // A DataResponse before InitResponse violates the protocol (InitResponse
           // must precede any DataResponse): fast-fail rather than enqueue it and let
-          // init() block to its timeout. Settle-before-release (see initValue).
+          // init() block to its timeout. Settling the terminal wakes a blocked
+          // init() via onTerminalSettled.
           if (!initResolved) {
             Transitions.transportFailed(new IllegalStateException(
               "worker sent a DataResponse before InitResponse"))
-            initValue.signalWithoutValue()
           } else {
             outputQueue.put(QueueItem.Batch(response.getData))
           }
@@ -203,32 +203,28 @@ class GrpcWorkerSession(
 
         case other =>
           // A malformed response (empty / unknown oneof) is a terminal transport
-          // failure; fast-fail init the same way. Settle-before-release (see initValue).
+          // failure; fast-fail init the same way.
           Transitions.transportFailed(new IllegalStateException(
             s"unexpected response oneof: $other"))
-          initValue.signalWithoutValue()
       }
     }
 
     override def onError(t: Throwable): Unit = {
       // Transport-level failure: the stream is dead, no further writes possible.
-      // Settle-before-release (see initValue) so init() surfaces the transport
-      // cause instead of the initResponseTimeoutMs "timed out" error.
+      // Settling the terminal wakes a blocked init() (via onTerminalSettled) so it
+      // surfaces the transport cause instead of the initResponseTimeoutMs error.
       Transitions.transportFailed(t)
-      initValue.signalWithoutValue()
     }
 
     override def onCompleted(): Unit = {
       // Worker half-closed its side without sending a terminator (FinishResponse
       // / CancelResponse). Treat as transport error so the engine sees a
-      // failure, not a silent end-of-stream.
+      // failure, not a silent end-of-stream. Settling the terminal wakes a blocked
+      // init() via onTerminalSettled.
       if (!currentState.isTerminal) {
         Transitions.transportFailed(new IllegalStateException(
           "worker response stream closed without a terminator"))
       }
-      // Defensive: if onCompleted reached us before InitResponse, doInit is
-      // still blocked on initValue and would otherwise time out.
-      initValue.signalWithoutValue()
     }
   }
 
@@ -236,16 +232,15 @@ class GrpcWorkerSession(
    * Wakes everything that can be blocked when the base settles a terminal:
    * the result iterator (on [[outputQueue]]), a thread on [[terminalLatch]]
    * (close), and a thread still blocked in [[doInit]] on [[initValue]]. Invoked
-   * once, by the caller that wins [[completeTerminal]], so waking [[initValue]]
-   * here covers every terminal-settling path uniformly -- including the close()
-   * path, which settles a terminal without going through the response callback
-   * that would otherwise signal [[initValue]]. Settle-before-release (see
-   * [[initValue]]) holds because this runs after the terminal CAS in
-   * [[completeTerminal]]. The per-callback [[initValue.signalWithoutValue]] calls
-   * that also settle a terminal are now redundant with this but harmless (the
-   * latch countDown is idempotent); the non-terminal init signals
-   * ([[handleControl]]'s INIT / pre-init ERROR branches) are still required, as
-   * they wake [[initValue]] without settling a terminal.
+   * once, by the caller that wins [[completeTerminal]], so this is the '''single'''
+   * place a settled terminal wakes a blocked [[doInit]] -- callers that settle a
+   * terminal (any response-callback failure/terminator branch, the timeout paths,
+   * or close()) do NOT signal [[initValue]] themselves; settling is enough.
+   * Settle-before-release (see [[initValue]]) holds because this runs after the
+   * terminal CAS in [[completeTerminal]]. The only direct [[initValue]] signals
+   * left are the non-terminal init paths ([[handleControl]]'s INIT-ok / INIT-error
+   * / pre-init-ERROR branches), which must wake [[doInit]] '''without''' settling a
+   * terminal -- the session stays `Initializing` so `process()` can still run.
    */
   override protected def onTerminalSettled(termination: Termination): Unit = {
     outputQueue.put(QueueItem.EndOfStream)
@@ -298,25 +293,23 @@ class GrpcWorkerSession(
     case UdfControlResponse.ControlCase.FINISH =>
       // The FinishResponse carries metrics + the finish-callback data/error.
       // Keep it on the terminal so close() can return it; the iterator inspects
-      // its error field to decide whether to throw.
+      // its error field to decide whether to throw. Settling the terminal wakes a
+      // blocked init() (a FINISH before InitResponse is a worker protocol bug, but
+      // fails init fast rather than hanging the init timeout) via onTerminalSettled.
       Transitions.finished(ctrl.getFinish)
-      // Defensive: FINISH before InitResponse is a worker protocol bug, but
-      // we should fail init fast rather than hang for the init timeout.
-      initValue.signalWithoutValue()
 
     case UdfControlResponse.ControlCase.CANCEL =>
       // The CancelResponse carries metrics + the cancel-callback error. Keep it
       // on the terminal so close() can return it; any prior ErrorResponse is
-      // tracked in executionError and surfaced by the iterator.
+      // tracked in executionError and surfaced by the iterator. Settling the
+      // terminal wakes a blocked init() (a CANCEL before InitResponse) via
+      // onTerminalSettled.
       Transitions.cancelled(ctrl.getCancel)
-      // Defensive: CANCEL before InitResponse unblocks doInit so it can
-      // surface the cancellation instead of timing out.
-      initValue.signalWithoutValue()
 
     case UdfControlResponse.ControlCase.CONTROL_NOT_SET =>
+      // Settling the terminal wakes a blocked init() via onTerminalSettled.
       Transitions.transportFailed(new IllegalStateException(
         "empty UdfControlResponse oneof"))
-      initValue.signalWithoutValue()
   }
 
   /**
