@@ -993,6 +993,13 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
           // holding loadedProviders lock while awaiting pool termination, but
           // pool threads needing to acquire the same lock.
           StateStore.stopMaintenanceTaskWithoutLock()
+          // triggerPending may still be set by a concurrent/in-flight cycle at
+          // this point. Reset it so the compareAndSet in triggerNow is
+          // guaranteed to proceed and actually submit to the (now stopped)
+          // executor, exercising the rejection path this assertion verifies.
+          // Without this, triggerNow could no-op and the warning would never
+          // be logged.
+          triggerPending.set(false)
           task.triggerNow()
           assert(!triggerPending.get(), "reset after rejection")
           assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage
