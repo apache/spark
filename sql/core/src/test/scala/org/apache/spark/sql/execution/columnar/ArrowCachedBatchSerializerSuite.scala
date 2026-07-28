@@ -25,8 +25,10 @@ import org.apache.arrow.vector.{
   Float4Vector, Float8Vector, IntVector, LargeVarCharVector, SmallIntVector,
   TimeNanoVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
   VarBinaryVector, VarCharVector, VectorSchemaRoot, VectorUnloader}
+import org.apache.arrow.vector.complex.{MapVector, StructVector}
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
 
-import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow}
@@ -729,6 +731,63 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
         Row(3, Seq(4, 5), null)
       ))
     }
+  }
+
+  test("zero-copy cache write requires physical congruence with the cache schema") {
+    // An Arrow map vector whose entry-struct children sit in [value, key] order: Arrow tolerates
+    // the layout and ArrowColumnVector reads it correctly (key/value are addressed by name), but
+    // record-batch buffers are laid out positionally, so serializing them verbatim under the
+    // cache's canonical [key, value] schema would silently swap every key with its value when the
+    // cached batch is read back. Such input must take the row-based conversion path, which
+    // rewrites the values through ArrowWriter under the cache schema.
+    val serializer = new ArrowCachedBatchSerializer
+    val attrs = Seq(AttributeReference("m", MapType(IntegerType, IntegerType, false))())
+    val input = spark.sparkContext.parallelize(Seq(0), 1).mapPartitions { _ =>
+      val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+        "swapped-map-input", 0, Long.MaxValue)
+      Option(TaskContext.get()).foreach(
+        _.addTaskCompletionListener[Unit](_ => allocator.close()))
+      val intType = new ArrowType.Int(32, true)
+      val entriesField = new Field(
+        "entries",
+        FieldType.notNullable(ArrowType.Struct.INSTANCE),
+        java.util.Arrays.asList(
+          new Field("value", FieldType.notNullable(intType), null),
+          new Field("key", FieldType.notNullable(intType), null)))
+      val mapField = new Field(
+        "m",
+        FieldType.nullable(new ArrowType.Map(false)),
+        java.util.Collections.singletonList(entriesField))
+      val mapVector = mapField.createVector(allocator).asInstanceOf[MapVector]
+      mapVector.allocateNew()
+      val entries = mapVector.getDataVector.asInstanceOf[StructVector]
+      entries.getChild("key").asInstanceOf[IntVector].setSafe(0, 123)
+      entries.getChild("value").asInstanceOf[IntVector].setSafe(0, 7)
+      entries.setIndexDefined(0)
+      mapVector.startNewValue(0)
+      mapVector.endValue(0, 1)
+      mapVector.setValueCount(1)
+      val column = new ArrowColumnVector(mapVector)
+      // The source itself reads correctly; only the cache round trip is under test.
+      val sourceMap = column.getMap(0)
+      assert(sourceMap.keyArray.getInt(0) == 123 && sourceMap.valueArray.getInt(0) == 7)
+      Iterator(new ColumnarBatch(Array[ColumnVector](column), 1))
+    }
+    val conf = spark.sessionState.conf
+    val cached = serializer.convertColumnarBatchToCachedBatch(
+      input, attrs, StorageLevel.MEMORY_ONLY, conf)
+    val roundTripped = serializer
+      .convertCachedBatchToColumnarBatch(cached, attrs, attrs, conf)
+      .mapPartitions { batches =>
+        batches.flatMap { batch =>
+          (0 until batch.numRows()).map { i =>
+            val m = batch.column(0).getMap(i)
+            (m.keyArray.getInt(0), m.valueArray.getInt(0))
+          }
+        }
+      }
+      .collect()
+    assert(roundTripped === Array((123, 7)))
   }
 
   test("columnar input with empty arrays and maps from parquet") {
