@@ -269,9 +269,9 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
       s"expected a fail-loud IllegalStateException about the missing tracker, got: $ex")
 
     // The fail-loud throw happens BEFORE createShuffleMapStage mutates stageIdToStage /
-    // shuffleIdToMapStage, so it leaves no partial scheduler state behind. If it left a half-created
-    // stage cached in shuffleIdToMapStage, a re-submission would reuse that stale stage instead of
-    // re-throwing. Re-submitting the same job must therefore throw the SAME fail-loud error again.
+    // shuffleIdToMapStage, so it leaves no partial scheduler state behind. If it left a
+    // half-created stage cached in shuffleIdToMapStage, a re-submission would reuse that stale
+    // stage instead of re-throwing. Re-submitting the same job must therefore re-throw the error.
     val ex2 = intercept[Exception] {
       consumer.count()
     }

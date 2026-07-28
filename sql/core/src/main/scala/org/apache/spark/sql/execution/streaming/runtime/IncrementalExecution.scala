@@ -676,6 +676,16 @@ class IncrementalExecution(
    * Real-Time Mode is detected structurally by a RealTimeStreamScanExec leaf (there is no
    * RTM-specific plan flag). Inert for a non-RTM batch, so the ordinary microbatch path is
    * unchanged.
+   *
+   * Single-shuffle assumption: today an RTM plan has exactly one shuffle exchange (a second one is
+   * rejected by RealTimeModeAllowlist -- see the "repartition not allowed" test / SPARK-54237), so
+   * transformUp marks that one exchange and there is no exchange reuse to worry about. If RTM is
+   * ever widened to multi-shuffle plans (stateful joins, CTEs read twice, a union of the same keyed
+   * stream), transformUp would NOT reach a ReusedExchangeExec's wrapped `child` (it is a leaf whose
+   * child is a field, not a tree child), so a reused shuffle would stay regular while its in-tree
+   * twin becomes pipelined -- a mixed regular+pipelined job the scheduler rejects every batch. When
+   * that day comes, mark inside ReusedExchangeExec (or run this before exchange reuse, or disable
+   * reuse for RTM) and add a multi-shuffle test.
    */
   object MarkPipelinedShuffleForRealTimeMode extends Rule[SparkPlan] {
     override def apply(plan: SparkPlan): SparkPlan = {
