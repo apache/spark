@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.IntegerType
 
 class CombineApproximatePercentilesSuite extends PlanTest {
 
@@ -129,6 +130,46 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
   }
 
+  test("do not fuse canonically equivalent but structurally different input groups") {
+    val firstInput = value + (other + group)
+    val secondInput = (value + other) + group
+    val result = optimizedAggregate(
+      Alias(percentile(firstInput, 0.5), "first_p50")(),
+      Alias(percentile(secondInput, 0.5), "second_p50")(),
+      Alias(percentile(secondInput, 0.9), "second_p90")(),
+      Alias(percentile(firstInput, 0.9), "first_p90")())
+
+    assert(firstInput != secondInput)
+    assert(firstInput.canonicalized == secondInput.canonicalized)
+    assert(percentileAggregates(result).map(_.resultId).distinct.size == 4)
+    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
+  }
+
+  test("do not fuse canonically equivalent but differently evaluated accuracies") {
+    val firstAccuracy =
+      ((Literal(1.0e16) + Literal(-1.0e16)) + Literal(3.0)).cast(IntegerType)
+    val secondAccuracy =
+      (Literal(1.0e16) + (Literal(-1.0e16) + Literal(3.0))).cast(IntegerType)
+
+    def percentileWithAccuracy(
+        percentage: Double,
+        accuracy: Expression): AggregateExpression = {
+      new ApproximatePercentile(value, Literal(percentage), accuracy).toAggregateExpression()
+    }
+
+    val result = optimizedAggregate(
+      Alias(percentileWithAccuracy(0.5, firstAccuracy), "first_p50")(),
+      Alias(percentileWithAccuracy(0.5, secondAccuracy), "second_p50")(),
+      Alias(percentileWithAccuracy(0.9, secondAccuracy), "second_p90")(),
+      Alias(percentileWithAccuracy(0.9, firstAccuracy), "first_p90")())
+
+    assert(firstAccuracy.eval() == 3)
+    assert(secondAccuracy.eval() == 4)
+    assert(firstAccuracy.canonicalized == secondAccuracy.canonicalized)
+    assert(percentileAggregates(result).map(_.resultId).distinct.size == 4)
+    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
+  }
+
   test("do not combine percentiles with different input columns") {
     val result = optimizedAggregate(
       Alias(percentile(value, 0.5), "value_p50")(),
@@ -208,6 +249,29 @@ class CombineApproximatePercentilesSuite extends PlanTest {
       Alias(percentile(value, 0.95), "p95")())
 
     assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
+    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
+  }
+
+  test("do not fuse percentages that collide with an existing array percentile") {
+    val firstPercentage =
+      (Literal(1.0e16) + Literal(-1.0e16)) + Literal(0.5)
+    val secondPercentage =
+      Literal(1.0e16) + (Literal(-1.0e16) + Literal(0.5))
+    val arrayPercentile = new ApproximatePercentile(
+      value,
+      CreateArray(Seq(firstPercentage, Literal(0.9))),
+      Literal(10000)).toAggregateExpression()
+    val scalarPercentile = new ApproximatePercentile(
+      value, secondPercentage, Literal(10000)).toAggregateExpression()
+    val result = optimizedAggregate(
+      Alias(arrayPercentile, "percentiles")(),
+      Alias(scalarPercentile, "p0")(),
+      Alias(percentile(value, 0.9), "p90")())
+
+    assert(firstPercentage.eval() == 0.5d)
+    assert(secondPercentage.eval() == 0.0d)
+    assert(firstPercentage.canonicalized == secondPercentage.canonicalized)
+    assert(percentileAggregates(result).map(_.resultId).distinct.size == 3)
     assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
   }
 

@@ -127,6 +127,233 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
   }
 
+  test("do not fuse input groups when physical deduplication suppresses ANSI overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val exception = intercept[SparkArithmeticException] {
+        spark.sql(
+          """SELECT
+            |  percentile_approx(a + (b + c), 0.5D),
+            |  percentile_approx((a + b) + c, 0.5D),
+            |  percentile_approx((a + b) + c, 0.9D),
+            |  percentile_approx(a + (b + c), 0.9D)
+            |FROM VALUES (
+            |  CAST(2147483647 AS INT),
+            |  CAST(1 AS INT),
+            |  CAST(-1 AS INT)
+            |) AS t(a, b, c)
+            |""".stripMargin).collect()
+      }
+
+      assert(exception.getCondition == "ARITHMETIC_OVERFLOW")
+    }
+  }
+
+  test("do not fuse inputs that collide with a scalar percentile") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkAnswer(
+        spark.sql(
+          """SELECT
+            |  percentile_approx(a + (b + c), 0.5D),
+            |  percentile_approx((a + b) + c, 0.5D),
+            |  percentile_approx(a + (b + c), 0.9D)
+            |FROM VALUES (
+            |  CAST(2147483647 AS INT),
+            |  CAST(1 AS INT),
+            |  CAST(-1 AS INT)
+            |) AS t(a, b, c)
+            |""".stripMargin),
+        Row(Int.MaxValue, Int.MaxValue, Int.MaxValue))
+    }
+  }
+
+  test("do not fuse inputs that collide with an existing array percentile") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val exception = intercept[SparkArithmeticException] {
+        spark.sql(
+          """SELECT
+            |  percentile_approx(a + (b + c), 0.5D),
+            |  percentile_approx((a + b) + c, array(0.5D, 0.9D)),
+            |  percentile_approx(a + (b + c), 0.9D)
+            |FROM VALUES (
+            |  CAST(2147483647 AS INT),
+            |  CAST(1 AS INT),
+            |  CAST(-1 AS INT)
+            |) AS t(a, b, c)
+            |""".stripMargin).collect()
+      }
+
+      assert(exception.getCondition == "ARITHMETIC_OVERFLOW")
+    }
+  }
+
+  test("do not fuse floating-point inputs that collide during physical deduplication") {
+    checkAnswer(
+      spark.sql(
+        """SELECT
+          |  percentile_approx(a + (b + c), 0.5D),
+          |  percentile_approx((a + b) + c, 0.5D),
+          |  percentile_approx((a + b) + c, 0.9D),
+          |  percentile_approx(a + (b + c), 0.9D)
+          |FROM VALUES (
+          |  CAST(10000000000000000 AS DOUBLE),
+          |  CAST(-10000000000000000 AS DOUBLE),
+          |  CAST(1 AS DOUBLE)
+          |) AS t(a, b, c)
+          |""".stripMargin),
+      Row(0.0d, 0.0d, 1.0d, 1.0d))
+  }
+
+  test("do not fuse floating-point inputs that collide with an existing array percentile") {
+    checkAnswer(
+      spark.sql(
+        """SELECT
+          |  percentile_approx(a + (b + c), array(0.5D, 0.9D)),
+          |  percentile_approx((a + b) + c, 0.5D),
+          |  percentile_approx((a + b) + c, 0.9D)
+          |FROM VALUES (
+          |  CAST(10000000000000000 AS DOUBLE),
+          |  CAST(-10000000000000000 AS DOUBLE),
+          |  CAST(1 AS DOUBLE)
+          |) AS t(a, b, c)
+          |""".stripMargin),
+      Row(Seq(0.0d, 0.0d), 1.0d, 1.0d))
+  }
+
+  test("do not fuse filter groups when physical deduplication suppresses ANSI overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val exception = intercept[SparkArithmeticException] {
+        spark.sql(
+          """SELECT
+            |  percentile_approx(v, 0.5D) FILTER (WHERE a + (b + c) > 0),
+            |  percentile_approx(v, 0.5D) FILTER (WHERE (a + b) + c > 0),
+            |  percentile_approx(v, 0.9D) FILTER (WHERE (a + b) + c > 0),
+            |  percentile_approx(v, 0.9D) FILTER (WHERE a + (b + c) > 0)
+            |FROM VALUES (
+            |  7,
+            |  CAST(2147483647 AS INT),
+            |  CAST(1 AS INT),
+            |  CAST(-1 AS INT)
+            |) AS t(v, a, b, c)
+            |""".stripMargin).collect()
+      }
+
+      assert(exception.getCondition == "ARITHMETIC_OVERFLOW")
+    }
+  }
+
+  test("do not fuse filters that collide with an existing array percentile") {
+    checkAnswer(
+      spark.sql(
+        """SELECT
+          |  percentile_approx(v, array(0.5D, 0.9D))
+          |    FILTER (WHERE a + (b + c) = 0D),
+          |  percentile_approx(v, 0.5D)
+          |    FILTER (WHERE (a + b) + c = 0D),
+          |  percentile_approx(v, 0.9D)
+          |    FILTER (WHERE (a + b) + c = 0D)
+          |FROM VALUES (
+          |  7,
+          |  CAST(10000000000000000 AS DOUBLE),
+          |  CAST(-10000000000000000 AS DOUBLE),
+          |  CAST(1 AS DOUBLE)
+          |) AS t(v, a, b, c)
+          |""".stripMargin),
+      Row(Seq(7, 7), null, null))
+  }
+
+  test("do not fuse canonically equivalent but differently evaluated accuracies") {
+    val constantFoldingRule = "org.apache.spark.sql.catalyst.optimizer.ConstantFolding"
+    val fusionRule = "org.apache.spark.sql.catalyst.optimizer.CombineApproximatePercentiles"
+    val existingRules = spark.sessionState.conf.optimizerExcludedRules.toSeq
+      .flatMap(_.split(","))
+      .map(_.trim)
+      .filter(_.nonEmpty)
+    val withoutConstantFolding = (existingRules :+ constantFoldingRule).distinct
+    val sql =
+      """SELECT
+        |  percentile_approx(
+        |    v, 0.5D, CAST((1e16D + -1e16D) + 3D AS INT)),
+        |  percentile_approx(
+        |    v, 0.5D, CAST(1e16D + (-1e16D + 3D) AS INT)),
+        |  percentile_approx(
+        |    v, 0.9D, CAST(1e16D + (-1e16D + 3D) AS INT)),
+        |  percentile_approx(
+        |    v, 0.9D, CAST((1e16D + -1e16D) + 3D AS INT))
+        |FROM range(100) AS t(v)
+        |""".stripMargin
+
+    def assertTwoDigests(query: DataFrame): Unit = {
+      val counts = query.queryExecution.sparkPlan.collect {
+        case aggregate: ObjectHashAggregateExec =>
+          aggregate.aggregateExpressions.count(
+            _.aggregateFunction.isInstanceOf[ApproximatePercentile])
+      }
+      assert(counts.nonEmpty)
+      assert(counts.forall(_ == 2))
+    }
+
+    val baseline = withSQLConf(
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        (withoutConstantFolding :+ fusionRule).distinct.mkString(",")) {
+      val query = spark.sql(sql)
+      assertTwoDigests(query)
+      query.collect().toSeq
+    }
+
+    withSQLConf(
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        withoutConstantFolding.filterNot(_ == fusionRule).mkString(",")) {
+      val query = spark.sql(sql)
+      checkAnswer(query, baseline)
+      assertTwoDigests(query)
+    }
+  }
+
+  test("do not fuse percentages that collide with an existing array percentile") {
+    val constantFoldingRule = "org.apache.spark.sql.catalyst.optimizer.ConstantFolding"
+    val fusionRule = "org.apache.spark.sql.catalyst.optimizer.CombineApproximatePercentiles"
+    val existingRules = spark.sessionState.conf.optimizerExcludedRules.toSeq
+      .flatMap(_.split(","))
+      .map(_.trim)
+      .filter(_.nonEmpty)
+    val withoutConstantFolding = (existingRules :+ constantFoldingRule).distinct
+    val sql =
+      """SELECT
+        |  percentile_approx(
+        |    id, array((1e16D + -1e16D) + 0.5D, 0.9D)),
+        |  percentile_approx(
+        |    id, 1e16D + (-1e16D + 0.5D)),
+        |  percentile_approx(id, 0.9D)
+        |FROM range(100)
+        |""".stripMargin
+
+    def assertThreeDigests(query: DataFrame): Unit = {
+      val counts = query.queryExecution.sparkPlan.collect {
+        case aggregate: ObjectHashAggregateExec =>
+          aggregate.aggregateExpressions.count(
+            _.aggregateFunction.isInstanceOf[ApproximatePercentile])
+      }
+      assert(counts.nonEmpty)
+      assert(counts.forall(_ == 3))
+    }
+
+    val baseline = withSQLConf(
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        (withoutConstantFolding :+ fusionRule).distinct.mkString(",")) {
+      val query = spark.sql(sql)
+      assertThreeDigests(query)
+      query.collect().toSeq
+    }
+
+    withSQLConf(
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        withoutConstantFolding.filterNot(_ == fusionRule).mkString(",")) {
+      val query = spark.sql(sql)
+      checkAnswer(query, baseline)
+      assertThreeDigests(query)
+    }
+  }
+
   test("combined scalar percentiles preserve empty-input nulls with ANSI enabled") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       withTempView(table) {

@@ -47,6 +47,22 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
       isDistinct: Boolean,
       filter: Option[Expression])
 
+  private case class PhysicalCompatibilityKey(
+      child: Expression,
+      accuracy: Expression,
+      mode: AggregateMode,
+      isDistinct: Boolean,
+      filter: Option[Expression])
+
+  private def physicalCompatibilityKey(
+      key: CompatibilityKey,
+      accuracy: Expression): PhysicalCompatibilityKey = PhysicalCompatibilityKey(
+    key.child.canonicalized,
+    accuracy.canonicalized,
+    key.mode,
+    key.isDistinct,
+    key.filter.map(_.canonicalized))
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(AGGREGATE), ruleId) {
     case aggregate: Aggregate if aggregate.resolved && !aggregate.isStreaming =>
@@ -56,25 +72,40 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
   private def combine(aggregate: Aggregate): Aggregate = {
     val compatible = mutable.LinkedHashMap.empty[
       CompatibilityKey, mutable.ArrayBuffer[AggregateExpression]]
+    val physicalCompatibilityKeys = mutable.HashMap.empty[
+      PhysicalCompatibilityKey, mutable.HashSet[CompatibilityKey]]
+    val arrayPercentiles = mutable.ArrayBuffer.empty[AggregateExpression]
 
     aggregate.aggregateExpressions.foreach(_.foreach {
       case expression @ AggregateExpression(
           percentile: ApproximatePercentile, mode, isDistinct, filter, _)
           if percentile.child.deterministic &&
-            filter.forall(_.deterministic) &&
-            percentile.percentageExpression.dataType == DoubleType =>
+            filter.forall(_.deterministic) =>
         val key = CompatibilityKey(
           percentile.child,
           percentile.accuracyExpression.eval().asInstanceOf[Number].longValue,
           mode,
           isDistinct,
           filter)
-        compatible.getOrElseUpdate(key, mutable.ArrayBuffer.empty) += expression
+        physicalCompatibilityKeys.getOrElseUpdate(
+          physicalCompatibilityKey(key, percentile.accuracyExpression),
+          mutable.HashSet.empty) += key
+        if (percentile.percentageExpression.dataType == DoubleType) {
+          compatible.getOrElseUpdate(key, mutable.ArrayBuffer.empty) += expression
+        } else {
+          arrayPercentiles += expression
+        }
       case _ =>
     })
 
     val replacements = mutable.HashMap.empty[ExprId, (AggregateExpression, Int)]
-    compatible.valuesIterator.filter(_.sizeCompare(1) > 0).foreach { expressions =>
+    compatible.iterator.filter { case (key, expressions) =>
+      expressions.sizeCompare(1) > 0 && expressions.forall { expression =>
+        val percentile = expression.aggregateFunction.asInstanceOf[ApproximatePercentile]
+        physicalCompatibilityKeys(
+          physicalCompatibilityKey(key, percentile.accuracyExpression)).sizeCompare(1) == 0
+      }
+    }.foreach { case (_, expressions) =>
       val first = expressions.head
       val percentile = first.aggregateFunction.asInstanceOf[ApproximatePercentile]
       val percentages = expressions.map { expression =>
@@ -85,8 +116,10 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
       val combined = first.copy(
         aggregateFunction = percentile.copy(
           percentageExpression = CreateArray(percentages.toSeq)))
-      expressions.zipWithIndex.foreach { case (expression, index) =>
-        replacements.put(expression.resultId, (combined, index))
+      if (!arrayPercentiles.exists(_.semanticEquals(combined))) {
+        expressions.zipWithIndex.foreach { case (expression, index) =>
+          replacements.put(expression.resultId, (combined, index))
+        }
       }
     }
 
