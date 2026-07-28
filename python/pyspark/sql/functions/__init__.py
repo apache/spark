@@ -367,6 +367,7 @@ __all__ = [  # noqa: F405
     "bool_or",
     "collect_list",
     "collect_set",
+    "collect_union",
     "corr",
     "count",
     "count_distinct",
