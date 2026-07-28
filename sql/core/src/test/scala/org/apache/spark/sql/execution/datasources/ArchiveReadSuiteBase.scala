@@ -600,7 +600,9 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
 
     test("archive inference unions differing fields across entries with mergeSchema=true") {
       // mergeSchema=true folds every entry's schema; over an archive, one unpacked entry at a time.
-      // Compare field name/type pairs as a set, since a format may merge entries unordered (ORC).
+      // Compare field name/type pairs as a set rather than by exact StructType equality: field
+      // order across archive entries follows the parallel merge order and is not a guaranteed
+      // contract, and some formats (ORC) merge entries unordered. Only the name/type union matters.
       val withName = sampleDf((1, "Alice"), (2, "Bob"))
       val idExtra = Seq((3, 30)).toDF("id", "extra")
       val entries = Seq(entryName(0) -> encodeFile(withName), entryName(1) -> encodeFile(idExtra))
