@@ -942,4 +942,204 @@ class GrpcWorkerSessionConcurrencySuite
       "a throwing finish thunk must Cancel the stream so the worker is not stranded")
     session.close(emptyCancel)
   }
+
+  // ---------------------------------------------------------------------------
+  // close() concurrent with a blocked init(): close() settles the terminal, so
+  // init() must be woken and fail fast rather than park for initResponseTimeoutMs.
+  //
+  // Regression guard for onTerminalSettled waking initValue. The terminal here is
+  // settled by close() ITSELF (the terminalTimeoutMs path in doClose, because the
+  // worker ignores Cancel), NOT by the response callback -- so unlike every other
+  // terminator this path does not run handleControl's signalWithoutValue(). Only
+  // onTerminalSettled can wake the init() blocked on initValue; without it, init()
+  // stays parked until initResponseTimeoutMs.
+  // ---------------------------------------------------------------------------
+
+  test("close concurrent with blocked init: init is woken and fails fast") {
+    val initReceived = new CountDownLatch(1)
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        // Accept the Init stream but never reply -- init() blocks awaiting
+        // InitResponse. Ignore Cancel too, so the terminator never arrives from
+        // the worker and close() must settle the terminal on its own timeout.
+        if (req.hasControl && req.getControl.hasInit) {
+          initReceived.countDown()
+        }
+      })
+    val (_, channel) = startServer(service)
+    // Huge initResponseTimeoutMs: a regression that fails to wake init() on the
+    // close-settled terminal would park it here for 10 minutes, so finishing
+    // within the join below is the proof it was woken -- no wall-clock threshold.
+    // Small terminalTimeoutMs: close() gives up waiting for the (never-arriving)
+    // CancelResponse quickly and settles TransportFailed itself.
+    val session = newSession(channel,
+      initResponseTimeoutMs = NeverReachedTimeoutMs, terminalTimeoutMs = 1000L)
+
+    val thrown = new AtomicReference[Throwable]()
+    val initThread = new Thread(() => {
+      try session.init(basicInit()) catch { case t: Throwable => thrown.set(t) }
+    }, "blocked-init")
+    initThread.start()
+    assert(initReceived.await(5, TimeUnit.SECONDS),
+      "worker never received the Init request")
+
+    // close() from the test thread settles the terminal (TransportFailed, after
+    // terminalTimeoutMs of no CancelResponse), which must wake the parked init().
+    session.close(emptyCancel)
+    initThread.join(10000)
+    assert(!initThread.isAlive,
+      "init() parked on initResponseTimeoutMs; the close-settled terminal did not " +
+        "wake it (onTerminalSettled must signal initValue)")
+    val t = thrown.get()
+    assert(t != null, "init() must surface an init-failure exception")
+    assert(t.isInstanceOf[GrpcWorkerSessionException],
+      s"expected GrpcWorkerSessionException, got ${if (t == null) "null" else t.getClass.getName}")
+  }
+
+  // ---------------------------------------------------------------------------
+  // Terminator-carried callback errors: a FinishResponse / CancelResponse may
+  // carry an error raised by the finish / cancel callback (udf_message.proto).
+  // The result iterator must surface it, and a prior data-phase ErrorResponse
+  // must take precedence over the terminator's own callback error
+  // (throwIfTerminalError / responseError).
+  // ---------------------------------------------------------------------------
+
+  test("FinishResponse carrying a callback error: iterator throws it") {
+    // Worker echoes the single batch, then finishes with a FinishResponse whose
+    // error field is set (a finish-callback failure). No data-phase ErrorResponse
+    // precedes it, so the terminator's own error is the one surfaced.
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        req.getRequestCase match {
+          case UdfRequest.RequestCase.CONTROL =>
+            val c = req.getControl
+            if (c.hasInit) {
+              resp.onNext(UdfResponse.newBuilder().setControl(
+                UdfControlResponse.newBuilder().setInit(
+                  InitResponse.getDefaultInstance).build()).build())
+            } else if (c.hasFinish) {
+              resp.onNext(UdfResponse.newBuilder().setControl(
+                UdfControlResponse.newBuilder().setFinish(
+                  FinishResponse.newBuilder().setError(
+                    ExecutionError.newBuilder().setUser(
+                      UserError.newBuilder().setMessage("finish callback boom")
+                        .setErrorClass("FinishCallbackError").build()).build())
+                    .build()).build()).build())
+            }
+          case UdfRequest.RequestCase.DATA =>
+            resp.onNext(UdfResponse.newBuilder()
+              .setData(DataResponse.newBuilder().setData(req.getData.getData).build())
+              .build())
+          case _ => ()
+        }
+      })
+    val (_, channel) = startServer(service, directExecutor = false)
+    val session = newSession(channel, terminalTimeoutMs = 5000L)
+    session.init(basicInit())
+
+    val it = session.process(echoIn("hello"), emptyFinish)
+    val ex = intercept[GrpcWorkerSessionException] { it.foreach(_ => ()) }
+    assert(ex.getMessage.contains("finish callback boom"),
+      s"the FinishResponse callback error must surface, got: ${ex.getMessage}")
+    assert(ex.executionError != null &&
+      ex.executionError.getUser.getErrorClass == "FinishCallbackError",
+      "the structured finish-callback error should be preserved")
+    session.close(emptyCancel)
+  }
+
+  test("data-phase ErrorResponse takes precedence over a CancelResponse callback error") {
+    // Worker replies to the first DataRequest with an ErrorResponse (data-phase
+    // failure), then -- per the protocol, the engine sends Cancel -- answers with
+    // a CancelResponse that ALSO carries a (cancel-callback) error. The iterator
+    // must surface the original data-phase error, not the terminator's, per
+    // responseError's precedence rule.
+    val erroredOnce = new AtomicBoolean(false)
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        req.getRequestCase match {
+          case UdfRequest.RequestCase.CONTROL =>
+            val c = req.getControl
+            if (c.hasInit) {
+              resp.onNext(UdfResponse.newBuilder().setControl(
+                UdfControlResponse.newBuilder().setInit(
+                  InitResponse.getDefaultInstance).build()).build())
+            } else if (c.hasCancel) {
+              resp.onNext(UdfResponse.newBuilder().setControl(
+                UdfControlResponse.newBuilder().setCancel(
+                  CancelResponse.newBuilder().setError(
+                    ExecutionError.newBuilder().setUser(
+                      UserError.newBuilder().setMessage("cancel callback boom")
+                        .setErrorClass("CancelCallbackError").build()).build())
+                    .build()).build()).build())
+            }
+          case UdfRequest.RequestCase.DATA =>
+            if (erroredOnce.compareAndSet(false, true)) {
+              resp.onNext(UdfResponse.newBuilder().setControl(
+                UdfControlResponse.newBuilder().setError(
+                  ErrorResponse.newBuilder().setError(
+                    ExecutionError.newBuilder().setUser(
+                      UserError.newBuilder().setMessage("data-phase boom")
+                        .setErrorClass("DataPhaseError").build()).build()).build())
+                  .build()).build())
+            }
+          case _ => ()
+        }
+      })
+    val (_, channel) = startServer(service, directExecutor = false)
+    val session = newSession(channel, terminalTimeoutMs = 5000L)
+    session.init(basicInit())
+
+    val it = session.process(echoIn("a", "b", "c"), emptyFinish)
+    val ex = intercept[GrpcWorkerSessionException] { it.foreach(_ => ()) }
+    assert(ex.getMessage.contains("data-phase boom"),
+      s"the prior data-phase error must take precedence, got: ${ex.getMessage}")
+    assert(ex.executionError != null &&
+      ex.executionError.getUser.getErrorClass == "DataPhaseError",
+      s"expected the data-phase error to be preserved, got: ${ex.executionError}")
+    session.close(emptyCancel)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Data-phase output timeout: after Finish, if the worker goes silent without a
+  // terminator, advance()'s per-poll wait (terminalTimeoutMs) must expire and the
+  // iterator must surface a TransportFailed rather than block forever.
+  // ---------------------------------------------------------------------------
+
+  test("data-phase output timeout: silent worker after Finish surfaces a timeout") {
+    // Worker accepts Init and echoes data, but never sends a terminator and
+    // ignores Finish/Cancel -- so once input is exhausted the iterator's output
+    // poll has nothing to drain and must time out on terminalTimeoutMs.
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        req.getRequestCase match {
+          case UdfRequest.RequestCase.CONTROL =>
+            val c = req.getControl
+            if (c.hasInit) {
+              resp.onNext(UdfResponse.newBuilder().setControl(
+                UdfControlResponse.newBuilder().setInit(
+                  InitResponse.getDefaultInstance).build()).build())
+            }
+          // Finish and Cancel ignored: no terminator ever arrives.
+          case UdfRequest.RequestCase.DATA =>
+            resp.onNext(UdfResponse.newBuilder()
+              .setData(DataResponse.newBuilder().setData(req.getData.getData).build())
+              .build())
+          case _ => ()
+        }
+      })
+    val (_, channel) = startServer(service, directExecutor = false)
+    // Small terminalTimeoutMs: the poll gives up quickly; assertFinishesWithin
+    // guards against a regression that blocks the iterator indefinitely.
+    val session = newSession(channel, terminalTimeoutMs = 1000L)
+    session.init(basicInit())
+
+    val it = session.process(echoIn("hello"), emptyFinish)
+    assertFinishesWithin(10000, "output-timeout") {
+      val ex = intercept[GrpcWorkerSessionException] { it.foreach(_ => ()) }
+      assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("timed out") ||
+        ex.getMessage.toLowerCase(Locale.ROOT).contains("stream failed"),
+        s"expected a timeout/transport-failure message, got: ${ex.getMessage}")
+    }
+    session.close(emptyCancel)
+  }
 }

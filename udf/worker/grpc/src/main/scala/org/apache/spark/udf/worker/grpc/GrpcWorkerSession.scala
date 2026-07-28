@@ -171,7 +171,7 @@ class GrpcWorkerSession(
   // gRPC requires serialized writes to a request StreamObserver.
   private val requestLock = new Object
 
-  // Initialised in init() -- before that, close() is a no-op on the request
+  // Initialized in init() -- before that, close() is a no-op on the request
   // side, which is exactly the contract the wrapping WorkerSession expects.
   @volatile private var requestObserver: StreamObserver[UdfRequest] = _
 
@@ -225,12 +225,23 @@ class GrpcWorkerSession(
   }
 
   /**
-   * Wakes the result iterator (blocked on [[outputQueue]]) and any thread
-   * waiting on [[terminalLatch]] when the base settles a terminal. Invoked once,
-   * by the caller that wins [[completeTerminal]].
+   * Wakes everything that can be blocked when the base settles a terminal:
+   * the result iterator (on [[outputQueue]]), a thread on [[terminalLatch]]
+   * (close), and a thread still blocked in [[doInit]] on [[initValue]]. Invoked
+   * once, by the caller that wins [[completeTerminal]], so waking [[initValue]]
+   * here covers every terminal-settling path uniformly -- including the close()
+   * path, which settles a terminal without going through the response callback
+   * that would otherwise signal [[initValue]]. Settle-before-release (see
+   * [[initValue]]) holds because this runs after the terminal CAS in
+   * [[completeTerminal]]. The per-callback [[initValue.signalWithoutValue]] calls
+   * that also settle a terminal are now redundant with this but harmless (the
+   * latch countDown is idempotent); the non-terminal init signals
+   * ([[handleControl]]'s INIT / pre-init ERROR branches) are still required, as
+   * they wake [[initValue]] without settling a terminal.
    */
   override protected def onTerminalSettled(termination: Termination): Unit = {
     outputQueue.put(QueueItem.EndOfStream)
+    initValue.signalWithoutValue()
     terminalLatch.countDown()
   }
 
@@ -282,7 +293,7 @@ class GrpcWorkerSession(
       // its error field to decide whether to throw.
       Transitions.finished(ctrl.getFinish)
       // Defensive: FINISH before InitResponse is a worker protocol bug, but
-      // we should fail init fast rather than hang the 30s init timeout.
+      // we should fail init fast rather than hang for the init timeout.
       initValue.signalWithoutValue()
 
     case UdfControlResponse.ControlCase.CANCEL =>
@@ -806,7 +817,7 @@ class GrpcWorkerSession(
      * suppressed by a pending cancel), `false` if a terminator settled and the
      * iterator should end (caller `return`s).
      *
-     * On a write failure a terminator usually already settled (the worker
+     * On a write failure a terminator has usually already settled (the worker
      * finished/failed early) and the write only failed because the stream is
      * closed: record a transport terminal if none is set ([[completeTerminal]] is
      * a no-op once settled), then [[throwIfTerminalError]] -- which throws for an
