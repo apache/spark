@@ -243,23 +243,21 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     try {
       val failuresField = classOf[UserCredentialManager].getDeclaredField("consecutiveFailures")
       failuresField.setAccessible(true)
-      val atomicFailures = failuresField.get(manager)
-        .asInstanceOf[java.util.concurrent.atomic.AtomicInteger]
 
       // First failure: base = minInterval * 2^0 = 1000ms
-      atomicFailures.set(1)
+      failuresField.setInt(manager, 1)
       val delay1 = manager.computeBackoffDelay()
       assert(delay1 >= 1000 && delay1 <= 1200,
         s"First backoff should be ~1000-1100ms, got ${delay1}ms")
 
       // Second failure: base = minInterval * 2^1 = 2000ms
-      atomicFailures.set(2)
+      failuresField.setInt(manager, 2)
       val delay2 = manager.computeBackoffDelay()
       assert(delay2 >= 2000 && delay2 <= 2300,
         s"Second backoff should be ~2000-2200ms, got ${delay2}ms")
 
       // Third failure: base = minInterval * 2^2 = 4000ms
-      atomicFailures.set(3)
+      failuresField.setInt(manager, 3)
       val delay3 = manager.computeBackoffDelay()
       assert(delay3 >= 4000 && delay3 <= 4500,
         s"Third backoff should be ~4000-4400ms, got ${delay3}ms")
@@ -276,11 +274,9 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     try {
       val failuresField = classOf[UserCredentialManager].getDeclaredField("consecutiveFailures")
       failuresField.setAccessible(true)
-      val atomicFailures = failuresField.get(manager)
-        .asInstanceOf[java.util.concurrent.atomic.AtomicInteger]
 
       // Many failures: should be capped at 10 minutes (600000ms)
-      atomicFailures.set(20)
+      failuresField.setInt(manager, 20)
       val delay = manager.computeBackoffDelay()
       assert(delay <= 660000L, // 600000 + 10% jitter
         s"Backoff should be capped at ~600000ms + jitter, got ${delay}ms")
@@ -297,11 +293,9 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     try {
       val failuresField = classOf[UserCredentialManager].getDeclaredField("consecutiveFailures")
       failuresField.setAccessible(true)
-      val atomicFailures = failuresField.get(manager)
-        .asInstanceOf[java.util.concurrent.atomic.AtomicInteger]
 
       // Edge case: 0 failures (should not happen in practice, but defensive)
-      atomicFailures.set(0)
+      failuresField.setInt(manager, 0)
       val delay = manager.computeBackoffDelay()
       // shiftAmount = max(0, min(0-1, 6)) = max(0, -1) = 0
       // baseDelay = 1000 * 2^0 = 1000

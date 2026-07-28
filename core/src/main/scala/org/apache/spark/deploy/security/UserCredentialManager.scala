@@ -22,7 +22,6 @@ import java.net.URI
 import java.nio.file.Paths
 import java.time.Instant
 import java.util.concurrent.{RejectedExecutionException, ScheduledExecutorService, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -67,7 +66,7 @@ private[spark] class UserCredentialManager(
 
   // Thread-safe counter for exponential backoff calculation.
   // Accessed from both the caller of start() and the scheduled renewal thread.
-  private val consecutiveFailures = new AtomicInteger(0)
+  private var consecutiveFailures: Int = 0
   private val maxBackoffMs: Long = UserCredentialManager.MAX_BACKOFF_MS
 
   private var renewalExecutor: ScheduledExecutorService = _
@@ -166,7 +165,7 @@ private[spark] class UserCredentialManager(
       // even if onCredentialsUpdate failed above: the backoff counter tracks credential
       // *resolution* failures (STS/provider issues), not propagation failures.
       // Propagation failures are transient and will be retried on next scheduled renewal.
-      consecutiveFailures.set(0)
+      consecutiveFailures = 0
 
       // Schedule next renewal
       val renewalDelay = computeRenewalDelay(ctx, earliestExpiry)
@@ -178,7 +177,8 @@ private[spark] class UserCredentialManager(
       case _: InterruptedException =>
         // Shutting down, ignore
       case e: Exception =>
-        val failures = consecutiveFailures.incrementAndGet()
+        consecutiveFailures += 1
+        val failures = consecutiveFailures
         val delay = computeBackoffDelay()
         logWarning(log"Failed to renew user credentials (attempt " +
           log"${MDC(LogKeys.NUM_RETRY, failures)}), " +
@@ -325,7 +325,7 @@ private[spark] class UserCredentialManager(
     // Guard against negative or zero shift amounts. consecutiveFailures should always
     // be >= 1 when this is called (incremented before calling), but we protect against
     // edge cases defensively.
-    val shiftAmount = math.max(0, math.min(consecutiveFailures.get() - 1, 6))
+    val shiftAmount = math.max(0, math.min(consecutiveFailures - 1, 6))
     val baseDelay = minInterval * (1L << shiftAmount)
     val cappedDelay = math.min(baseDelay, maxBackoffMs)
     // Add 10% jitter to avoid thundering herd on recovery
