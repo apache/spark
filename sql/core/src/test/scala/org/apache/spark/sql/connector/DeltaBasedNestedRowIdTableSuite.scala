@@ -242,3 +242,75 @@ class DeltaBasedNestedRowIdTableSuite
 
 class DeltaBasedNestedRowIdUpdateAsDeleteAndInsertTableSuite
   extends DeltaBasedNestedRowIdTableSuiteBase(splitUpdates = true)
+
+// Row id is nested.index, whose leaf name collides with the `index` metadata column
+// (PRESERVE_ON_DELETE = false). The metadata must be nulled on write, not bound to the row id
+// value it shares a name with.
+abstract class DeltaBasedNestedRowIdMetadataCollisionSuiteBase(splitUpdates: Boolean)
+  extends RowLevelOperationSuiteBase {
+
+  import testImplicits._
+
+  override protected def extraTableProps: java.util.Map[String, String] = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("supports-deltas", "true")
+    props.put("nested-metadata-name-row-id", "true")
+    if (splitUpdates) props.put("split-updates", "true")
+    props
+  }
+
+  private def createCollisionTable(): Unit = {
+    val schema = StructType(Seq(
+      StructField("pk", IntegerType, nullable = false),
+      StructField("nested", StructType(Seq(
+        StructField("index", IntegerType, nullable = false))),
+        nullable = false),
+      StructField("id", IntegerType),
+      StructField("dep", StringType)))
+    createTable(CatalogV2Util.structTypeToV2Columns(schema))
+    append(schema.toDDL,
+      """{ "pk": 10, "nested": { "index": 1 }, "id": 1, "dep": "hr" }
+        |{ "pk": 20, "nested": { "index": 2 }, "id": 2, "dep": "software" }
+        |{ "pk": 30, "nested": { "index": 3 }, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+  }
+
+  test("delete nulls a metadata column colliding with the nested row id") {
+    createCollisionTable()
+    sql(s"DELETE FROM $tableNameAsString WHERE id IN (1, 100)")
+    checkLastWriteLog(deleteWriteLogEntry(id = 1, metadata = Row("hr", null)))
+  }
+
+  test("update nulls a metadata column colliding with the nested row id") {
+    createCollisionTable()
+    sql(s"UPDATE $tableNameAsString SET dep = 'it' WHERE id = 1")
+    if (splitUpdates) {
+      checkLastWriteLog(
+        deleteWriteLogEntry(id = 1, metadata = Row("hr", null)),
+        reinsertWriteLogEntry(metadata = Row("hr", null), data = Row(10, Row(1), 1, "it")))
+    } else {
+      checkLastWriteLog(
+        updateWriteLogEntry(id = 1, metadata = Row("hr", null), data = Row(10, Row(1), 1, "it")))
+    }
+  }
+
+  test("merge delete nulls a metadata column colliding with the nested row id") {
+    withTempView("source") {
+      createCollisionTable()
+      Seq(1).toDF("id").createOrReplaceTempView("source")
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.id = s.id
+           |WHEN MATCHED THEN DELETE
+           |""".stripMargin)
+      checkLastWriteLog(deleteWriteLogEntry(id = 1, metadata = Row("hr", null)))
+    }
+  }
+}
+
+class DeltaBasedNestedRowIdMetadataCollisionSuite
+  extends DeltaBasedNestedRowIdMetadataCollisionSuiteBase(splitUpdates = false)
+
+class DeltaBasedNestedRowIdMetadataCollisionUpdateAsDeleteAndInsertSuite
+  extends DeltaBasedNestedRowIdMetadataCollisionSuiteBase(splitUpdates = true)

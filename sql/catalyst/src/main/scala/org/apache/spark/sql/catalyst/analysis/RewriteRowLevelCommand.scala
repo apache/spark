@@ -237,7 +237,9 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       shouldPreserve: Attribute => Boolean): Seq[NamedExpression] = {
     attrs.map {
       case MetadataAttribute(attr) if !shouldPreserve(attr) =>
-        Alias(Literal(null, attr.dataType), attr.name)(explicitMetadata = Some(attr.metadata))
+        // keep the exprId so the projection binds this by id, not by a name a row id may share
+        Alias(Literal(null, attr.dataType), attr.name)(
+          exprId = attr.exprId, explicitMetadata = Some(attr.metadata))
       case attr =>
         attr
     }
