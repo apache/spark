@@ -1284,13 +1284,13 @@
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.18.4</version>
+        <version>1.18.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.18.4</version>
+        <version>1.18.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
