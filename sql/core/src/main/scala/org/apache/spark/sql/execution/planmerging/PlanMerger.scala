@@ -581,24 +581,27 @@ class PlanMerger(
       })
   }
 
-  private def byName(attrs: Seq[AttributeReference]): Map[String, AttributeReference] =
-    attrs.map(a => a.name -> a).toMap
+  // Pairs np's relation attributes with cp's by position. The `mergeable` gate has checked the two
+  // relations are canonically equal, so they list the table's columns in the same order; pairing by
+  // position (not by name) stays correct even with duplicate column names. exprId then relates each
+  // scan's (pruned) output back to its own relation, and through this map to the other scan's.
+  private def relationCorrespondence(
+      np: DataSourceV2ScanRelation,
+      cp: DataSourceV2ScanRelation): AttributeMap[AttributeReference] =
+    AttributeMap(np.relation.output.zip(cp.relation.output))
 
   /**
    * Whether the two scans pushed semantically equal filters. The two scans reference their columns
    * with different `ExprId`s, so the new plan's pushed filters are first remapped onto the cached
-   * plan's attributes by column name before comparing. The remap is built from the relations' full
-   * output (not the scans' pruned output) because `pushedFilters` may reference columns pruned out
-   * of the scan output (e.g. an unselected partition column). The caller has already checked the
-   * relations are canonically equal, so every column maps by name. Trivially true when neither side
-   * pushed any filter (the common best-effort case).
+   * plan's attributes before comparing. The remap pairs the two relations' full outputs by position
+   * (see `relationCorrespondence`) -- not the scans' pruned output, because `pushedFilters` may
+   * reference columns pruned out of the scan output. Trivially true when neither side pushed any
+   * filter (the common best-effort case).
    */
   private def samePushedFilters(
       np: DataSourceV2ScanRelation,
       cp: DataSourceV2ScanRelation): Boolean = {
-    val cpOutputByName = byName(cp.relation.output)
-    val npToCp = AttributeMap[Attribute](
-      np.relation.output.flatMap(a => cpOutputByName.get(a.name).map(a -> _)))
+    val npToCp = relationCorrespondence(np, cp)
     ExpressionSet(np.pushedFilters.map(mapAttributes(_, npToCp))) == ExpressionSet(cp.pushedFilters)
   }
 
@@ -667,39 +670,39 @@ class PlanMerger(
     }
 
     val relation = cp.relation
-    val cpNames = cp.output.map(_.name).toSet
-    val npOnly = np.output.filterNot(a => cpNames.contains(a.name))
-    // cp columns keep cp's exprIds; np-only columns keep np's exprIds.
-    val unionAttrs = cp.output ++ npOnly
+    // Relate np's columns to cp's relation space by position+exprId (not by name).
+    val npToCp = relationCorrespondence(np, cp)
+    val npInCp = np.output.map(npToCp.get)
+    if (npInCp.contains(None)) {
+      return None
+    }
+    val npInCpAttrs = npInCp.flatten
+    // cp columns keep cp's exprIds; np-only columns (those cp does not already read) are appended.
+    val cpExprIds = cp.output.map(_.exprId).toSet
+    val unionAttrs = cp.output ++ npInCpAttrs.filterNot(a => cpExprIds.contains(a.exprId))
 
     if (context.filterAboveScan) {
       // Defer the build to the enclosing Filter so the scan is built once with strict + pruning.
       // The placeholder mergedPlan is the bare relation; its output is the full relation output, a
-      // superset of unionAttrs. `cp.relation.output` exprIds match the eventual built scan's
-      // output exprIds by name because `V2ScanRelationPushDown.rebuildScan` reuses the relation's
-      // exprIds (see buildMergedScan), so mapping np.output -> cp.relation.output by name is
-      // consistent with the eventual built scan.
-      val relOutByName = byName(relation.output)
-      val npMapping =
-        AttributeMap[Attribute](np.output.flatMap(a => relOutByName.get(a.name).map(a -> _)))
-      if (npMapping.size == np.output.size) {
-        Some(TryMergeResult(relation, npMapping,
-          deferredScan = Some(DeferredScan(unionAttrs, cp.pushedFilters))))
-      } else {
-        None
-      }
+      // superset of unionAttrs. `V2ScanRelationPushDown.rebuildScan` reuses the relation's exprIds
+      // (see buildMergedScan), so mapping np.output -> cp's relation attributes is consistent with
+      // the eventual built scan.
+      val npMapping = AttributeMap[Attribute](np.output.zip(npInCpAttrs))
+      Some(TryMergeResult(relation, npMapping,
+        deferredScan = Some(DeferredScan(unionAttrs, cp.pushedFilters))))
     } else {
       // No enclosing Filter: build the merged scan here enforcing the (equal) strict filters over
       // the union of columns, with no extra pruning (there is no post-scan Filter to prune on).
       buildMergedScan(relation, unionAttrs, cp.pushedFilters, pruning = None).flatMap { scan =>
         // The rebuilt scan reuses the relation's exprIds, which match cp's for the shared columns,
-        // so cp's references stay valid without remapping; np's references are remapped via
-        // npMapping.
-        val scanOutByName = byName(scan.output)
-        val npMapping =
-          AttributeMap[Attribute](np.output.flatMap(a => scanOutByName.get(a.name).map(a -> _)))
+        // so cp's references stay valid without remapping; np's references are remapped onto the
+        // scan's output by exprId (npInCpAttrs carry the relation exprIds the rebuild reuses).
+        val scanByExprId = scan.output.map(a => a.exprId -> a).toMap
+        val npMapping = np.output.zip(npInCpAttrs).flatMap {
+          case (npAttr, cpRelAttr) => scanByExprId.get(cpRelAttr.exprId).map(npAttr -> _)
+        }
         if (npMapping.size == np.output.size) {
-          Some(TryMergeResult(scan, npMapping))
+          Some(TryMergeResult(scan, AttributeMap[Attribute](npMapping)))
         } else {
           None
         }
@@ -730,8 +733,10 @@ class PlanMerger(
     if (!strict.forall(_.references.subsetOf(relationOut))) {
       return None
     }
-    val relOutByName = byName(relation.output)
-    val projectList = columns.flatMap(a => relOutByName.get(a.name))
+    // `columns` are the relation's own attributes (the union is built in cp's relation space), so
+    // map them back to the relation by exprId (not name, which duplicate columns would collide on).
+    val relByExprId = AttributeMap[AttributeReference](relation.output.map(a => a -> a))
+    val projectList = columns.flatMap(a => relByExprId.get(a))
     if (projectList.size != columns.size) {
       return None
     }
@@ -756,7 +761,7 @@ class PlanMerger(
         // re-checks it), and the scan must produce exactly the requested union of columns.
         strict.forall(pushedSet.contains) &&
         scan.output.length == columns.length &&
-        columns.forall(a => scan.output.exists(_.name == a.name))
+        columns.forall(a => scan.output.exists(_.exprId == a.exprId))
     }
   }
 
@@ -826,7 +831,7 @@ class PlanMerger(
       }
     }
 
-  private def mapAttributes[T <: Expression](expr: T, outputMap: AttributeMap[Attribute]) = {
+  private def mapAttributes[T <: Expression](expr: T, outputMap: AttributeMap[_ <: Attribute]) = {
     expr.transform {
       case a: Attribute => outputMap.getOrElse(a, a)
     }.asInstanceOf[T]
