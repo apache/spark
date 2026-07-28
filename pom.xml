@@ -152,7 +152,7 @@
     <javaxservlet.version>4.0.1</javaxservlet.version>
     <chill.version>0.10.0</chill.version>
     <kryo.version>4.0.3</kryo.version>
-    <ivy.version>2.5.3</ivy.version>
+    <ivy.version>2.6.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
     If you change codahale.metrics.version, you also need to change
@@ -214,7 +214,7 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.11.0</commons-cli.version>
     <bouncycastle.version>1.84</bouncycastle.version>
-    <tink.version>1.20.0</tink.version>
+    <tink.version>1.21.0</tink.version>
     <!--
       TODO: Once upgrade datasketches to a version that supports Java 25,
             SPARK-53327 workaround should be reverted.
@@ -894,7 +894,7 @@
       <dependency>
         <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.11.0</version>
+        <version>1.11.1</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
