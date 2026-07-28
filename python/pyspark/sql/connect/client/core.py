@@ -1577,11 +1577,13 @@ class SparkConnectClient(object):
         elif method == "explain":
             req.explain.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
             explain_mode = kwargs.get("explain_mode")
-            if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
+            allowed_explain_modes = ["simple", "extended", "codegen", "cost", "formatted"]
+            if explain_mode not in allowed_explain_modes:
                 raise PySparkValueError(
-                    errorClass="UNKNOWN_EXPLAIN_MODE",
+                    errorClass="VALUE_NOT_ALLOWED",
                     messageParameters={
-                        "explain_mode": str(explain_mode),
+                        "arg_name": "explain_mode",
+                        "allowed_values": str(allowed_explain_modes),
                     },
                 )
             if explain_mode == "simple":
