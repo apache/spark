@@ -304,28 +304,44 @@ class PySparkBaseTestCase(unittest.TestCase):
             faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
 
     @classmethod
-    def skip_if_changed_files_irrelevant(cls, path):
+    def skip_if_changed_files_irrelevant(cls, path: str) -> None:
+        module = cls.__module__
+        if module == "__main__":
+            mod = sys.modules["__main__"]
+            if mod.__spec__ and mod.__spec__.name:
+                module = mod.__spec__.name
+            else:
+                return
+
+        if not cls._is_module_relevant_to_changed_files(module, path):
+            raise unittest.SkipTest("Skipping test because changed files are irrelevant")
+
+    @functools.cache
+    @classmethod
+    def _is_module_relevant_to_changed_files(cls, module: str, path: str) -> bool:
         import grimp
 
         with open(path, "r") as f:
-            changed_files = f.read().splitlines()
+            changed_files = f.read().strip().splitlines()
 
         changed_modules = [
             f.removeprefix("python/").rsplit(".", 1)[0].replace(os.path.sep, ".")
             for f in changed_files
         ]
 
-        module = cls.__module__
-        if module == "__main__":
-            module = sys.modules["__main__"].__spec__.name
-
         graph = grimp.build_graph("pyspark")
 
         for changed_module in changed_modules:
-            if graph.chain_exists(module, changed_module):
-                return
+            if changed_module == module:
+                return True
+            try:
+                if graph.chain_exists(module, changed_module):
+                    return True
+            except Exception:
+                # Any exception, we just be conservative and run the test.
+                return True
 
-        raise unittest.SkipTest("Skipping test because changed files are irrelevant")
+        return False
 
     @classmethod
     def tearDownClass(cls):

@@ -414,6 +414,7 @@ def run_python_tests(
     if changed_files:
         with tempfile.NamedTemporaryFile("w") as f:
             f.write("\n".join(changed_files))
+            f.flush()
             command.append("--changed-files=%s" % f.name)
             run_cmd(command)
     else:
