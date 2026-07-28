@@ -50,8 +50,10 @@ unary_np_spark_mappings = {
     "frexp": lambda _: NotImplemented,  # 'frexp' output lengths become different
     # and it cannot be supported via pandas UDF.
     "invert": F.bitwise_not,
-    "isfinite": lambda c: c != float("inf"),
-    "isinf": lambda c: c == float("inf"),
+    "isfinite": lambda c: ~(
+        F.isnan(c) | (c == float("inf")) | (c == float("-inf"))
+    ),
+    "isinf": lambda c: (c == float("inf")) | (c == float("-inf")),
     "isnan": F.isnan,
     "isnat": lambda c: NotImplemented,  # pandas-on-Spark and PySpark does not have Nat concept.
     "log": F.log,
