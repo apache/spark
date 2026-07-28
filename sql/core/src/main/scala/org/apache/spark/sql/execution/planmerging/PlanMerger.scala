@@ -729,10 +729,16 @@ class PlanMerger(
     val conds = strict ++
       pruning.filter(p => p.deterministic && p.references.subsetOf(relationOut))
     V2ScanRelationPushDown.rebuildScan(relation, projectList, conds).filter { scan =>
-      // Every intended-strict filter must be fully enforced by the rebuilt scan (nothing above
-      // re-checks it), and the scan must produce exactly the requested union of columns.
       val pushedSet = ExpressionSet(scan.pushedFilters)
-      strict.forall(pushedSet.contains) &&
+      // The rebuilt scan must itself be mergeable. rebuildScan re-runs the full pushdown, so any
+      // non-reproducible pushdown it introduces would make the merged scan unsound. Today's
+      // Project-over-Filter input only triggers the plain path (always mergeable), so this is
+      // defensive: it re-validates the rebuild's output against the same gate applied to its
+      // inputs, rather than trusting the rebuild if its input plan ever broadens.
+      scan.mergeableScan &&
+        // Every intended-strict filter must be fully enforced by the rebuilt scan (nothing above
+        // re-checks it), and the scan must produce exactly the requested union of columns.
+        strict.forall(pushedSet.contains) &&
         scan.output.length == columns.length &&
         columns.forall(a => scan.output.exists(_.name == a.name))
     }
