@@ -631,9 +631,11 @@ class PlanMerger(
       // Same table, options, catalog and identifier: the relation's canonical form covers all of
       // these (options compares by content via `CaseInsensitiveStringMap.equals`).
       np.relation.canonicalized == cp.relation.canonicalized &&
-        // Neither side carries a pushdown a rebuilt scan cannot reproduce (aggregate, join,
-        // variant extraction, limit, offset, top-N or sample).
-        !np.hasMergeBlockingPushdown && !cp.hasMergeBlockingPushdown &&
+        // Both scans are mergeable: each came out of the plain column-pruning + filter pushdown
+        // path carrying only pushdowns a rebuilt scan can reproduce. A scan with a non-reproducible
+        // pushdown (aggregate, join, variant, limit, offset, top-N, sample) or built by any other
+        // rule is not mergeable by default.
+        np.mergeableScan && cp.mergeableScan &&
         // Reported partitioning/ordering (e.g. storage-partitioned join, reported sort) is not
         // reconstructed by the rebuilt scan, so decline the merge rather than silently drop it.
         // Merging these can be added as a follow-up.

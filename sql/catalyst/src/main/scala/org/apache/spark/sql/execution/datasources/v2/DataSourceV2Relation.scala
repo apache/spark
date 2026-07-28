@@ -165,10 +165,15 @@ case class DataSourceV2Relation(
  *                      complete set is what lets [[org.apache.spark.sql.execution.planmerging.
  *                      PlanMerger]] soundly compare and re-enforce a scan's filters when fusing two
  *                      scans via [[org.apache.spark.sql.connector.read.SupportsScanMerging]].
- * @param hasMergeBlockingPushdown whether a pushdown happened that cannot be reproduced by
- *                      re-running the scan builder (aggregate, join, variant extraction, limit,
- *                      offset, top-N, or sample). When true, this scan must not be fused with
- *                      another via [[org.apache.spark.sql.connector.read.SupportsScanMerging]].
+ * @param mergeableScan whether this scan may be fused with an equivalent scan by a Spark-side scan
+ *                      merge (see [[org.apache.spark.sql.connector.read.SupportsScanMerging]]).
+ *                      Default false (not mergeable): only the plain column-pruning + filter
+ *                      pushdown path in [[org.apache.spark.sql.execution.datasources.v2.
+ *                      V2ScanRelationPushDown]] sets this true, and only when the scan carries
+ *                      nothing a rebuilt scan cannot reproduce. A scan with a non-reproducible
+ *                      pushdown (aggregate, join, variant extraction, limit, offset, top-N, sample)
+ *                      or by any other rule stays not-mergeable by default, so merging is safe by
+ *                      construction -- a new scan-relation build site need not opt out.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -177,7 +182,7 @@ case class DataSourceV2ScanRelation(
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
     pushedFilters: Seq[Expression] = Seq.empty,
-    hasMergeBlockingPushdown: Boolean = false) extends LeafNode with NamedRelation {
+    mergeableScan: Boolean = false) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).

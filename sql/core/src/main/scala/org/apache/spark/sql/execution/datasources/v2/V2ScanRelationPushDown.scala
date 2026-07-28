@@ -846,16 +846,19 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
 
   /**
-   * Whether a pushdown happened that a Spark-side scan merge (see
-   * [[org.apache.spark.sql.connector.read.SupportsScanMerging]]) cannot reproduce by rebuilding the
-   * scan from a fresh `ScanBuilder` and re-applying the pushed filters and pruned columns. When
-   * true, the resulting [[DataSourceV2ScanRelation]] must not be fused with another scan.
+   * Whether the plain-scan path ([[pruneColumns]]) carries a pushdown that a Spark-side scan merge
+   * (see [[org.apache.spark.sql.connector.read.SupportsScanMerging]]) cannot reproduce by
+   * rebuilding the scan from a fresh `ScanBuilder` and re-applying the pushed filters and pruned
+   * columns. Used only to decide the plain-scan `mergeableScan` flag (`!hasBlockingPushdown`).
    *
-   * A scan carrying a pushed aggregate, join, or variant extraction is never mergeable; those are
-   * built by dedicated rules ([[buildScanWithPushedAggregate]] / [[buildScanWithPushedJoin]] /
-   * [[buildScanWithPushedVariants]]) that mark the scan blocking directly, so this helper does not
-   * repeat the check. It covers the remaining plain-scan path ([[pruneColumns]]), where the
-   * non-reproducible pushdowns are:
+   * Scan merging is default-safe: [[DataSourceV2ScanRelation.mergeableScan]] defaults to false and
+   * this is the ONLY site that ever sets it true. Every other scan-relation build path -- the
+   * dedicated aggregate/join/variant rules ([[buildScanWithPushedAggregate]] /
+   * [[buildScanWithPushedJoin]] / [[buildScanWithPushedVariants]]), row-level-operation planning,
+   * and anything added later -- leaves the scan not-mergeable by default, so those sites need no
+   * change here.
+   *
+   * The plain-scan non-reproducible pushdowns are:
    *   - `pushedLimit`            -- pushed LIMIT
    *   - `pushedOffset`           -- pushed OFFSET
    *   - `pushedSample`           -- pushed table sample
@@ -863,10 +866,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    *
    * Reproducible (re-applied by the merge), so NOT blocking: `output` (column pruning, via
    * `SupportsPushDownRequiredColumns`) and `pushedPredicates` / `pushedFilterExpressions`
-   * (deterministic filters, re-pushed via `SupportsPushDownV2Filters`).
-   *
-   * When a new pushdown capability adds state to [[ScanBuilderHolder]], classify it here (or, if it
-   * has its own build rule, mark that scan blocking there).
+   * (deterministic filters, re-pushed via `SupportsPushDownV2Filters`). A pushed aggregate, join or
+   * variant never reaches here -- their build rules run first. When a new pushdown capability adds
+   * plain-scan state to [[ScanBuilderHolder]], list it above so it keeps the scan not-mergeable.
    */
   private def hasBlockingPushdown(holder: ScanBuilderHolder): Boolean =
     holder.pushedLimit.isDefined ||
@@ -886,9 +888,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val wrappedScan = getWrappedScan(scan, holder)
       // Note: holder.pushedFilterExpressions is not propagated here because the output schema
       // changes to aggregate columns. When validConstraints is wired up, this needs revisiting.
-      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
-        // A pushed aggregate cannot be reproduced by rebuilding the scan, so it is never mergeable.
-        hasMergeBlockingPushdown = true)
+      // A pushed aggregate cannot be reproduced by rebuilding the scan, so this scan stays
+      // not-mergeable (the default `mergeableScan = false`).
+      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
       val projectList = realOutput.zip(holder.output).map { case (a1, a2) =>
         // The data source may return columns with arbitrary data types and it's safer to cast them
         // to the expected data type.
@@ -907,9 +909,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val wrappedScan = getWrappedScan(scan, holder)
       // Note: holder.pushedFilterExpressions is not propagated here because the output schema
       // changes with pushed join. When validConstraints is wired up, this needs revisiting.
-      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
-        // A pushed join cannot be reproduced by rebuilding the scan, so it is never mergeable.
-        hasMergeBlockingPushdown = true)
+      // A pushed join cannot be reproduced by rebuilding the scan, so this scan stays not-mergeable
+      // (the default `mergeableScan = false`).
+      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
 
       // When join is pushed down, the real output is going to be, for example,
       // SALARY_01234#0, NAME_ab123#1, DEPT_cd123#2.
@@ -937,9 +939,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val wrappedScan = getWrappedScan(scan, holder)
       // Note: holder.pushedFilterExpressions is not propagated here because the output schema
       // changes with variant extraction. When validConstraints is wired up, this needs revisiting.
-      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
-        // Pushed variant extraction cannot be reproduced by rebuilding the scan; never mergeable.
-        hasMergeBlockingPushdown = true)
+      // Pushed variant extraction cannot be reproduced by rebuilding the scan, so this scan stays
+      // not-mergeable (the default `mergeableScan = false`).
+      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
 
       // Create projection to map real output to expected output (with transformed types)
       val outputProjection = realOutput.zip(holder.output).map { case (realAttr, expectedAttr) =>
@@ -1004,7 +1006,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // merge unsound. See DataSourceV2ScanRelation.pushedFilters.
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output,
         pushedFilters = sHolder.pushedFilterExpressions,
-        hasMergeBlockingPushdown = hasBlockingPushdown(sHolder))
+        // The one site that grants mergeability: a plain scan carrying only reproducible pushdowns
+        // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
+        mergeableScan = !hasBlockingPushdown(sHolder))
 
       val finalFilters = normalizedFilters.map(projectionFunc)
       // bottom-most filters are put in the left of the list.

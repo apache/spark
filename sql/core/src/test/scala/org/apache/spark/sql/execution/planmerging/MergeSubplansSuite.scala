@@ -1987,7 +1987,8 @@ class MergeSubplansSuite extends PlanTest {
       DataSourceV2Relation(table, fullOutput, None, None, CaseInsensitiveStringMap.empty())
     val output = cols.map(c => fullOutput.find(_.name == c).get)
     val scan = TestV2Scan(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
-    DataSourceV2ScanRelation(relation, scan, output)
+    // These stand in for a plain scan produced by the column-pruning path, which is mergeable.
+    DataSourceV2ScanRelation(relation, scan, output, mergeableScan = true)
   }
 
   /** A `DataSourceV2ScanRelation` over [[v2Table]] projecting only the given columns. */
@@ -2050,7 +2051,7 @@ class MergeSubplansSuite extends PlanTest {
 
   test("SPARK-40259: do not merge DSv2 scans when a pushdown is merge-blocking") {
     val sub1 = ScalarSubquery(v2ScanReading("a").groupBy()(sum($"a").as("sum_a")))
-    val blockingScan = v2ScanReading("b").copy(hasMergeBlockingPushdown = true)
+    val blockingScan = v2ScanReading("b").copy(mergeableScan = false)
     val sub2 = ScalarSubquery(blockingScan.groupBy()(sum($"b").as("sum_b")))
     val originalQuery = testRelation.select(sub1, sub2)
 
@@ -2585,17 +2586,22 @@ class MergeSubplansSuite extends PlanTest {
         .collectFirst { case s: DataSourceV2ScanRelation => s }.get
     }
 
-    assert(pushDown(r => Limit(Literal(1), r)).hasMergeBlockingPushdown,
+    // Default-safe: only the plain column-pruning path grants mergeability, so a plain scan with
+    // no non-reproducible pushdown must come out mergeable (guards the one granting site).
+    assert(pushDown(r => Project(Seq(r.output.head), r)).mergeableScan,
+      "a plain scan with only reproducible pushdowns must be mergeable")
+
+    assert(!pushDown(r => Limit(Literal(1), r)).mergeableScan,
       "a pushed limit must block merging")
-    assert(pushDown(r => Offset(Literal(1), r)).hasMergeBlockingPushdown,
+    assert(!pushDown(r => Offset(Literal(1), r)).mergeableScan,
       "a pushed offset must block merging")
     assert(
-      pushDown(r => Limit(Literal(1),
+      !pushDown(r => Limit(Literal(1),
         Sort(Seq(SortOrder(r.output.head, Ascending)), global = true, r)))
-        .hasMergeBlockingPushdown,
+        .mergeableScan,
       "a pushed top-N must block merging")
-    assert(pushDown(r => Sample(0.0, 0.5, withReplacement = false, Some(0L), r))
-        .hasMergeBlockingPushdown,
+    assert(!pushDown(r => Sample(0.0, 0.5, withReplacement = false, Some(0L), r))
+        .mergeableScan,
       "a pushed sample must block merging")
 
     // End-to-end: a scan that pushed a sample does not fuse with another (plain) scan of the same
