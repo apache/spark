@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.planmerging
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, CreateNamedStruct, ExprId, GetStructField, If, Literal, Or, ScalarSubquery, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, AttributeReference, CreateNamedStruct, ExprId, GetStructField, If, Literal, Or, ScalarSubquery, SortOrder}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -2056,6 +2056,38 @@ class MergeSubplansSuite extends PlanTest {
     val originalQuery = testRelation.select(sub1, sub2)
 
     // A merge-blocking pushdown declines the merge: the plan is left unchanged.
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+  }
+
+  test("SPARK-40259: do not merge DSv2 scans when a column is read at a nested-pruned type") {
+    // A struct column read at a narrower (nested-pruned) type carries GetStructField ordinals
+    // against that narrow layout. The merged scan reads the full struct, so remapping those
+    // ordinals onto it would read the wrong field -- the merge must decline. np reads s pruned to
+    // <b>, cp reads a plain column x; without the guard they fuse into a scan of {s:<a,b>, x}.
+    val schema = StructType(Seq(
+      StructField("s", StructType(Seq(
+        StructField("a", IntegerType), StructField("b", IntegerType)))),
+      StructField("x", IntegerType)))
+    val relation = DataSourceV2Relation(
+      new TestV2Table(schema), toAttributes(schema), None, None, CaseInsensitiveStringMap.empty())
+    val sFull = relation.output.find(_.name == "s").get
+    val xFull = relation.output.find(_.name == "x").get
+
+    // np reads s at struct<b> (nested-pruned); cp reads x. Both opt in and are otherwise mergeable.
+    val sPruned = AttributeReference(
+      "s", StructType(Seq(StructField("b", IntegerType))))(sFull.exprId)
+    val npScan = DataSourceV2ScanRelation(relation,
+      TestV2Scan(StructType(Seq(StructField("s", sPruned.dataType)))),
+      Seq(sPruned), mergeableScan = true)
+    val cpScan = DataSourceV2ScanRelation(relation,
+      TestV2Scan(StructType(Seq(StructField("x", IntegerType)))),
+      Seq(xFull), mergeableScan = true)
+
+    val sub1 = ScalarSubquery(npScan.groupBy()(sum(GetStructField(sPruned, 0)).as("sb")))
+    val sub2 = ScalarSubquery(cpScan.groupBy()(sum(xFull).as("sx")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // The nested-pruned column declines the merge: the plan is left unchanged.
     comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
   }
 

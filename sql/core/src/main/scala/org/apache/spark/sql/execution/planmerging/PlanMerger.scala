@@ -650,6 +650,22 @@ class PlanMerger(
       return None
     }
 
+    // The merged scan reads each column at the relation's full type (buildMergedScan projects the
+    // whole relation attributes). A side that read a struct/array/map column at a narrower type via
+    // nested schema pruning carries positional extractors (e.g. GetStructField ordinals) resolved
+    // against that narrow layout; remapped onto the wider merged column they would read the wrong
+    // field. So decline unless each side reads every column at its relation's full type. exprId
+    // (unique within a relation) relates a scan's pruned output back to its own relation. Widening
+    // the merged scan to the union of nested fields and remapping the ordinals is a possible
+    // follow-up.
+    def readsRelationFullType(scan: DataSourceV2ScanRelation): Boolean = {
+      val relTypes = AttributeMap(scan.relation.output.map(a => a -> a.dataType))
+      scan.output.forall(a => relTypes.get(a).contains(a.dataType))
+    }
+    if (!readsRelationFullType(np) || !readsRelationFullType(cp)) {
+      return None
+    }
+
     val relation = cp.relation
     val cpNames = cp.output.map(_.name).toSet
     val npOnly = np.output.filterNot(a => cpNames.contains(a.name))
