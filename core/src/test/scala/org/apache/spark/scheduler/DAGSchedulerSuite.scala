@@ -7646,6 +7646,59 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined shuffle: a FetchFailed reaching the base path aborts the group instead of " +
+      "throwing or resubmitting the transient producer") {
+    // A pipelined-group FetchFailed is normally intercepted by the group-atomic branch, whose guard
+    // is keyed on the failed stage's active job carrying hasPipelinedDependency. If that flag is
+    // ever not set/propagated for a job reading a pipelined shuffle, the FetchFailed falls through
+    // to the base path. That base path is invalid for a pipelined shuffle in two ways: (a) its
+    // MapOutputTracker invalidation would throw ShuffleStatusNotFoundException (a pipelined shuffle
+    // is never registered there); (b) its resubmit branch would enqueue a lone-stage resubmit of
+    // the transient producer, which cannot be re-read and would deadlock the group. The base path
+    // must instead abort the group. We reproduce the guard-miss by clearing the flag on the live
+    // active job, then driving the FetchFailed.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    val producerTs = taskSets.head
+    complete(producerTs, Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    val consumerTs = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    val taskSetsBeforeFetchFailure = taskSets.size
+
+    // Force the group-atomic guard to miss: clear hasPipelinedDependency on the live active job so
+    // the FetchFailed reaches the base path with a pipelined mapStage.
+    scheduler.activeJobs.foreach(_.hasPipelinedDependency = false)
+    assert(scheduler.shuffleIdToMapStage(pipelinedDep.shuffleId).isPipelined,
+      "the fetched shuffle must be the pipelined producer's")
+
+    runEvent(makeCompletionEvent(
+      consumerTs.tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), pipelinedDep.shuffleId, 0L, 0, 0, "ignored"),
+      null))
+
+    // (a) The throwing MapOutputTracker invalidation was skipped for the pipelined id.
+    verify(mapOutputTracker, never()).unregisterAllMapAndMergeOutput(pipelinedDep.shuffleId)
+    verify(mapOutputTracker, never()).unregisterMapOutput(
+      org.mockito.ArgumentMatchers.eq(pipelinedDep.shuffleId),
+      org.mockito.ArgumentMatchers.anyInt(),
+      org.mockito.ArgumentMatchers.any())
+    // (b) The group was aborted, NOT resubmitted: the job failed and no lone-stage resubmit of the
+    // transient producer was enqueued or launched.
+    scheduler.resubmitFailedStages()
+    assert(failure != null, "the group must be aborted (job failed) on the base-path FetchFailed")
+    assert(taskSets.size === taskSetsBeforeFetchFailure,
+      "a pipelined producer must NOT be resubmitted as a lone stage")
+    assert(!scheduler.runningStages.exists(_.isInstanceOf[ShuffleMapStage]),
+      "the transient pipelined producer must not be left running/resubmitted")
+    sc.listenerBus.waitUntilEmpty()
+    assertDataStructuresEmpty()
+  }
+
   test("pipelined shuffle: a consumer result task throwing aborts the whole group") {
     // Defense-in-depth for the group-atomic model at the DAGScheduler layer: a CONSUMER (result)
     // task failing must tear down the whole group, not just its own stage. Result and map tasks
