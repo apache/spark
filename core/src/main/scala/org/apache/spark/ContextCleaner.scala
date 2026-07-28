@@ -236,25 +236,26 @@ private[spark] class ContextCleaner(
   /** Perform shuffle cleanup. */
   def doCleanupShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     try {
+      // A shuffle lives in exactly one tracker, split by dependency type: a regular shuffle in the
+      // MapOutputTracker, a pipelined shuffle in the driver-only StreamingShuffleOutputTracker (see
+      // DAGScheduler.createShuffleMapStage). Clean up whichever holds it -- the two branches are
+      // independent, each keyed on its own tracker's membership, so neither depends on the other.
       if (mapOutputTrackerMaster.containsShuffle(shuffleId)) {
         logDebug("Cleaning shuffle " + shuffleId)
         // Shuffle must be removed before it's unregistered from the output tracker
         // to find blocks served by the shuffle service on deallocated executors
         shuffleDriverComponents.removeShuffle(shuffleId, blocking)
         mapOutputTrackerMaster.unregisterShuffle(shuffleId)
-        // A pipelined shuffle is also registered with the driver-only
-        // StreamingShuffleOutputTracker (see DAGScheduler.createShuffleMapStage). Its state lives
-        // solely on the driver -- the worker tracker caches nothing -- so unregister it directly
-        // here, alongside the MapOutputTracker cleanup, rather than through the RemoveShuffle RPC.
-        // Guarded by containsShuffle so regular (non-pipelined) shuffles are skipped without a
-        // spurious "not registered" warning.
-        streamingShuffleOutputTrackerMaster.foreach { tracker =>
-          if (tracker.containsShuffle(shuffleId)) {
-            tracker.unregisterShuffle(shuffleId)
-          }
-        }
         listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
         logDebug("Cleaned shuffle " + shuffleId)
+      } else if (streamingShuffleOutputTrackerMaster.exists(_.containsShuffle(shuffleId))) {
+        // A pipelined shuffle's state is driver-only (the worker tracker caches nothing), so
+        // cleanup is a direct driver-side unregister. No RemoveShuffle RPC is needed: a streaming
+        // shuffle has no durable, block-manager-served files to remove.
+        logDebug("Cleaning pipelined shuffle " + shuffleId)
+        streamingShuffleOutputTrackerMaster.foreach(_.unregisterShuffle(shuffleId))
+        listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
+        logDebug("Cleaned pipelined shuffle " + shuffleId)
       } else {
         logDebug("Asked to cleanup non-existent shuffle (maybe it was already removed)")
       }
