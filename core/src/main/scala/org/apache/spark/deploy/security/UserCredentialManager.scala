@@ -64,8 +64,8 @@ private[spark] class UserCredentialManager(
   private val safetyMargin = sparkConf.get(SECURITY_CREDENTIALS_RENEWAL_SAFETY_MARGIN)
   private val minInterval = sparkConf.get(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL)
 
-  // Thread-safe counter for exponential backoff calculation.
-  // Accessed from both the caller of start() and the scheduled renewal thread.
+  // Counter for exponential backoff calculation.
+  // Only accessed from the single-thread renewal executor.
   private var consecutiveFailures: Int = 0
   private val maxBackoffMs: Long = UserCredentialManager.MAX_BACKOFF_MS
 
