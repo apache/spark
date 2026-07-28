@@ -333,6 +333,21 @@ object DatasetManager extends Logging {
     // Create the table if absent, otherwise evolve it (schema + properties).
     existingTableOpt match {
       case Some(existingTable) =>
+        // For an incrementally-updated AutoCDC target, reject a sequencing-type change before the
+        // schema merge, so it surfaces as an actionable SEQUENCING_TYPE_DRIFT rather than a generic
+        // CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE. The auxiliary spec carries the incoming type.
+        if (isTableIncrementallyUpdated) {
+          resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier).collect {
+            case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
+          }.foreach { autoCdcSpec =>
+            AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
+              existingTargetSchema =
+                CatalogV2Util.v2ColumnsToStructType(existingTable.columns()),
+              targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
+              expectedSequencingType = autoCdcSpec.expectedSequencingType
+            )
+          }
+        }
         evolveTable(
           catalog = catalog,
           tableIdentifier = identifier,
@@ -452,6 +467,12 @@ object DatasetManager extends Logging {
                 existingAuxiliaryTable = existingAuxiliaryTable,
                 targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
                 expectedScdType = autoCdcSpec.expectedScdType
+              )
+              AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift(
+                existingAuxiliaryTable = existingAuxiliaryTable,
+                targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
+                expectedTrackHistoryColumnNames = autoCdcSpec.expectedTrackHistoryColumnNames,
+                resolver = context.spark.sessionState.conf.resolver
               )
           }
           evolveTable(

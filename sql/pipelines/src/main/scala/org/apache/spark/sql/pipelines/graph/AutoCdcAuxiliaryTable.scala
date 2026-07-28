@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table => CatalogTable, TableCatalog}
 import org.apache.spark.sql.pipelines.autocdc.{AutoCdcReservedNames, Scd2BatchProcessor, ScdType}
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
 
 /**
  * Helpers to construct and validate an AutoCDC flow's auxiliary table within the context of a
@@ -59,6 +59,15 @@ object AutoCdcAuxiliaryTable {
    */
   val keyColumnNamesProperty: String =
     s"${PipelinesTableProperties.pipelinesPrefix}autocdc.keyColumnNames"
+
+  /**
+   * Table property recording the resolved SCD2 track-history column names as a JSON string array.
+   * These columns define an SCD2 run (a change in any of them opens a new historical record), so
+   * changing the set would reinterpret already-reconciled history. SCD2-only; absent for SCD1.
+   * Full-refresh is the only way to change it.
+   */
+  val trackHistoryColumnNamesProperty: String =
+    s"${PipelinesTableProperties.pipelinesPrefix}autocdc.trackHistoryColumnNames"
 
   /**
    * Serialize key column names to the JSON form stored at [[keyColumnNamesProperty]].
@@ -174,7 +183,9 @@ object AutoCdcAuxiliaryTable {
       properties = scd1AuxiliaryTableProperties,
       targetTableIdentifier = targetTable.identifier,
       expectedKeyFields = keyFields,
-      expectedScdType = ScdType.Type1
+      expectedScdType = ScdType.Type1,
+      expectedSequencingType = inputAutoCdcFlow.sequencingType,
+      expectedTrackHistoryColumnNames = None
     )
   }
 
@@ -227,6 +238,18 @@ object AutoCdcAuxiliaryTable {
       StructField(Scd2BatchProcessor.deletedByBatchIdColName, LongType, nullable = true)
     val scd2AuxiliaryTableSchema = StructType(targetTableSchema.fields :+ deletedByBatchIdField)
 
+    // Resolve the effective track-history columns (an explicit TRACK HISTORY selection, or the
+    // default of every eligible non-key/non-framework column) against the target schema, using the
+    // same single source of truth the reconciler uses. A change in this set reinterprets which
+    // transitions open a new historical record, so it is drift-checked.
+    val caseSensitive =
+      inputAutoCdcFlow.df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val trackHistoryColumnNames = Scd2BatchProcessor.computeTrackedHistoryColumns(
+      schema = targetTableSchema,
+      changeArgs = inputAutoCdcFlow.changeArgs,
+      caseSensitive = caseSensitive
+    )
+
     val scd2AuxiliaryTableProperties =
       // Record which SCD strategy this auxiliary table serves so downstream readers can identify it
       // without inspecting the schema.
@@ -234,6 +257,9 @@ object AutoCdcAuxiliaryTable {
       // Persist the AutoCDC key column names as a JSON list; immutable post-creation (full-refresh
       // is the only way to change it).
       Map(keyColumnNamesProperty -> serializeKeyColumnNames(keyFields.map(_.name))) ++
+      // Persist the resolved track-history column names; a change reinterprets already-reconciled
+      // history, so it is immutable post-creation (full-refresh is the only way to change it).
+      Map(trackHistoryColumnNamesProperty -> serializeKeyColumnNames(trackHistoryColumnNames)) ++
       // Inherit the target's format so MERGE semantics line up. When unspecified, omit the provider
       // so the catalog falls back to its default.
       targetTable.format.map(TableCatalog.PROP_PROVIDER -> _)
@@ -244,7 +270,9 @@ object AutoCdcAuxiliaryTable {
       properties = scd2AuxiliaryTableProperties,
       targetTableIdentifier = targetTable.identifier,
       expectedKeyFields = keyFields,
-      expectedScdType = ScdType.Type2
+      expectedScdType = ScdType.Type2,
+      expectedSequencingType = inputAutoCdcFlow.sequencingType,
+      expectedTrackHistoryColumnNames = Some(trackHistoryColumnNames)
     )
   }
 
@@ -370,6 +398,100 @@ object AutoCdcAuxiliaryTable {
           "recordedScdType" -> recordedScdType
         )
       )
+    }
+  }
+
+  /**
+   * Reject an incremental update to an existing AutoCDC target table whose sequencing type has
+   * drifted. The AutoCDC sequencing *expression* may legitimately change across runs (e.g. a new
+   * timestamp parse format), but its resolved result type must not: the target persists the
+   * sequencing type inside its `_cdc_metadata` struct (and, for SCD2, in the interval columns), so
+   * a changed type would make new events incomparable with the persisted history and would
+   * otherwise surface only as a generic CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE during schema
+   * evolution. Runs against the target table (before its schema is evolved), not the auxiliary
+   * table. The remedy is a full refresh.
+   *
+   * @param existingTargetSchema the schema of the already-materialized target table.
+   * @param expectedSequencingType the resolved sequencing type of the incoming AutoCDC flow.
+   */
+  private[graph] def validateNoTargetSequencingTypeDrift(
+      existingTargetSchema: StructType,
+      targetTableIdentifier: TableIdentifier,
+      expectedSequencingType: DataType): Unit = {
+    // The sequencing type is embedded as the inner field type(s) of the reserved _cdc_metadata
+    // struct, for both SCD1 (delete/upsert sequence fields) and SCD2 (recordStartAt field). Read it
+    // from the first inner field. If the metadata column is absent or not a struct, this is not a
+    // recognizable AutoCDC target state; skip rather than misreport (schema evolution will surface
+    // any genuine incompatibility).
+    val recordedSequencingType: Option[DataType] = existingTargetSchema.fields
+      .find(_.name == AutoCdcReservedNames.cdcMetadataColName)
+      .map(_.dataType)
+      .collect { case s: StructType if s.nonEmpty => s.fields.head.dataType }
+
+    recordedSequencingType.foreach { recordedType =>
+      if (!recordedType.sameType(expectedSequencingType)) {
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_INVALID_STATE.SEQUENCING_TYPE_DRIFT",
+          messageParameters = Map(
+            "tableName" -> targetTableIdentifier.unquotedString,
+            "expectedSequencingType" -> expectedSequencingType.sql,
+            "recordedSequencingType" -> recordedType.sql
+          )
+        )
+      }
+    }
+  }
+
+  /**
+   * Reject an existing SCD2 auxiliary table whose recorded track-history column set differs from
+   * `expected` (order-insensitive, resolver-aware). These columns define an SCD2 run - a change in
+   * any of them opens a new historical record - so changing the set would reinterpret already
+   * reconciled history. The remedy is a full refresh.
+   *
+   * `expected` is `None` for SCD1 (no track-history concept); the check is then a no-op.
+   */
+  private[graph] def validateNoTrackHistoryDrift(
+      existingAuxiliaryTable: CatalogTable,
+      targetTableIdentifier: TableIdentifier,
+      expectedTrackHistoryColumnNames: Option[Seq[String]],
+      resolver: Resolver): Unit = {
+    expectedTrackHistoryColumnNames.foreach { expectedNames =>
+      val rawRecorded = Option(
+        existingAuxiliaryTable.properties().get(trackHistoryColumnNamesProperty)
+      ).getOrElse {
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MISSING",
+          messageParameters = Map(
+            "tableName" -> targetTableIdentifier.unquotedString,
+            "propertyName" -> trackHistoryColumnNamesProperty
+          )
+        )
+      }
+      val recordedNames = parseKeyColumnNames(rawRecorded).getOrElse {
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MALFORMED",
+          messageParameters = Map(
+            "tableName" -> targetTableIdentifier.unquotedString,
+            "propertyName" -> trackHistoryColumnNamesProperty,
+            "rawValue" -> rawRecorded
+          )
+        )
+      }
+      // Set equality, resolver-aware: same arity and every expected name has a recorded
+      // counterpart. Order is irrelevant to run semantics.
+      val drifted =
+        recordedNames.length != expectedNames.length ||
+        expectedNames.exists(e => !recordedNames.exists(r => resolver(r, e)))
+      if (drifted) {
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT",
+          messageParameters = Map(
+            "tableName" -> targetTableIdentifier.unquotedString,
+            "expectedTrackHistoryColumns" -> expectedNames.mkString(", "),
+            "recordedTrackHistoryColumns" -> recordedNames.mkString(", ")
+          )
+        )
+      }
     }
   }
 
