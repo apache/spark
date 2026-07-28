@@ -4527,6 +4527,17 @@ object SQLConf {
         "The threshold of window group limit must be -1, 0 or positive integer.")
       .createWithDefault(1000)
 
+  val BYPASS_PARTIAL_WINDOW_GROUP_LIMIT =
+    buildConf("spark.sql.execution.bypassPartialWindowGroupLimit")
+      .doc("When true, skips the pre-shuffle partial WindowGroupLimit and runs only a single " +
+        "WindowGroupLimit after the shuffle. Bypassing the partial window group limit can " +
+        "improve performance when the pre-shuffle reduction ratio is low. When false (default), " +
+        "a partial WindowGroupLimit runs before the shuffle and a final one runs after it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
@@ -8909,6 +8920,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def windowExecBufferSpillSizeThreshold: Long = getConf(WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD)
 
   def windowGroupLimitThreshold: Int = getConf(WINDOW_GROUP_LIMIT_THRESHOLD)
+
+  def bypassPartialWindowGroupLimit: Boolean = getConf(BYPASS_PARTIAL_WINDOW_GROUP_LIMIT)
 
   def windowSegmentTreeEnabled: Boolean = getConf(WINDOW_SEGMENT_TREE_ENABLED)
 

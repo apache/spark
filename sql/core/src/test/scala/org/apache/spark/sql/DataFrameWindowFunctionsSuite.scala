@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.window.WindowExec
+import org.apache.spark.sql.execution.window.{WindowExec, WindowGroupLimitExec}
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1678,6 +1678,39 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
             )
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-58404: bypass partial WindowGroupLimit") {
+    val df = Seq(
+      ("a", 0, "c"),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("b", 1, "h"),
+      ("b", 1, "n"),
+      ("c", 1, "z"),
+      ("c", 2, "a")).toDF("key", "value", "order")
+
+    val window = Window.partitionBy($"key").orderBy($"order")
+    val expected = Seq(
+      Row("a", 0, "c", 1),
+      Row("b", 1, "h", 1),
+      Row("c", 2, "a", 1))
+
+    Seq(true, false).foreach { bypass =>
+      withSQLConf(
+        SQLConf.BYPASS_PARTIAL_WINDOW_GROUP_LIMIT.key -> bypass.toString,
+        SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "100") {
+        val result = df.withColumn("rn", row_number().over(window)).where($"rn" === 1)
+        checkAnswer(result, expected)
+
+        val limits = collect(result.queryExecution.executedPlan) {
+          case w: WindowGroupLimitExec => w
+        }
+        // When bypassed, only the final WindowGroupLimit remains; otherwise both partial and
+        // final are present since a shuffle is required.
+        assert(limits.size === (if (bypass) 1 else 2))
       }
     }
   }

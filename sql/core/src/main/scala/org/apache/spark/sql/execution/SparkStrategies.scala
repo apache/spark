@@ -802,10 +802,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object WindowGroupLimit extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child) =>
-        val partialWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec,
-          orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
+        // When the partial window group limit is bypassed, skip the pre-shuffle partial
+        // WindowGroupLimit and run only a single WindowGroupLimit after the shuffle. This can
+        // improve performance when the pre-shuffle reduction ratio is low.
+        val finalChild = if (conf.bypassPartialWindowGroupLimit) {
+          planLater(child)
+        } else {
+          execution.window.WindowGroupLimitExec(partitionSpec,
+            orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
+        }
         val finalWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec, orderSpec,
-          rankLikeFunction, limit, execution.window.Final, partialWindowGroupLimit)
+          rankLikeFunction, limit, execution.window.Final, finalChild)
         finalWindowGroupLimit :: Nil
       case _ => Nil
     }

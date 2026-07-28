@@ -136,6 +136,18 @@ Configuration of in-memory caching can be done via `spark.conf.set` or by runnin
     </td>
     <td>2.1.1</td>
   </tr>
+  <tr>
+    <td><code>spark.sql.execution.bypassPartialWindowGroupLimit</code></td>
+    <td>false</td>
+    <td>
+      When true, skips the pre-shuffle partial window group limit for top-k window queries (such as
+      filtering on <code>row_number</code>, <code>rank</code> or <code>dense_rank</code>) and runs
+      only a single window group limit after the shuffle. Bypassing the partial window group limit
+      can improve performance when the pre-shuffle reduction ratio is low. When false, a partial
+      window group limit runs before the shuffle and a final one runs after it.
+    </td>
+    <td>4.3.0</td>
+  </tr>
 </table>
 
 ### Coalesce Hints
