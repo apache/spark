@@ -640,6 +640,21 @@ class LocalLDAModel private[ml] (
   override def toString: String = {
     s"LocalLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
   }
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (oldLocalModel != null) {
+      // topicsMatrix: Matrix
+      if (oldLocalModel.topicsMatrix != null) {
+        size += oldLocalModel.topicsMatrix.asML.getSizeInBytes
+      }
+      // docConcentration: Vector
+      if (oldLocalModel.docConcentration != null) {
+        size += oldLocalModel.docConcentration.asML.getSizeInBytes
+      }
+    }
+    size
+  }
 }
 
 @Since("1.6.0")
