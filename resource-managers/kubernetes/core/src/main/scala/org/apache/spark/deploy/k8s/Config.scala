@@ -108,8 +108,9 @@ private[spark] object Config extends Logging {
         "Web UI (separate from the headless driver service). When enabled, after the driver " +
         "Web UI starts, Spark will patch the Service's targetPort to match the actual bound " +
         "UI port, which allows using `spark.ui.port=0` (random port). Requires the driver's " +
-        "ServiceAccount to have `get` and `patch` verbs on `services`.")
+        "ServiceAccount to have the `patch` verb on `services`.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -119,6 +120,7 @@ private[spark] object Config extends Logging {
         s"(only applies when ${KUBERNETES_DRIVER_UI_SERVICE_ENABLED.key}=true). " +
         "Supported values: ClusterIP, NodePort, LoadBalancer.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .checkValues(Set("ClusterIP", "NodePort", "LoadBalancer"))
       .createWithDefault("ClusterIP")
@@ -129,6 +131,7 @@ private[spark] object Config extends Logging {
         s"(only applies when ${KUBERNETES_DRIVER_UI_SERVICE_ENABLED.key}=true). " +
         "If unset, Spark derives the name as `<resourceNamePrefix>-ui-svc`.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .createOptional
 

@@ -137,12 +137,15 @@ private[spark] class KubernetesClusterSchedulerBackend(
     for {
       svcName <- conf.getOption(
         DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL)
+      servicePort <- conf.getOption(
+        DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL).map(_.toInt)
       actualPort <- sc.ui.map(_.boundPort)
     } {
       K8sDriverUIServicePatcher.patchTargetPort(
         kubernetesClient,
         conf.get(KUBERNETES_NAMESPACE),
         svcName,
+        servicePort,
         actualPort)
     }
   }

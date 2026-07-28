@@ -1628,7 +1628,7 @@ See the [configuration page](configuration.html) for information on Spark config
     When enabled, after the driver Web UI starts, Spark will patch the Service's
     <code>targetPort</code> to match the actual bound UI port, which allows using
     <code>spark.ui.port=0</code> (random port). Requires the driver's ServiceAccount to have
-    <code>get</code> and <code>patch</code> verbs on <code>services</code>.
+    the <code>patch</code> verb on <code>services</code>.
   </td>
   <td>4.3.0</td>
 </tr>
