@@ -25,6 +25,7 @@ import java.util.concurrent.{RejectedExecutionException, ScheduledExecutorServic
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -176,7 +177,7 @@ private[spark] class UserCredentialManager(
     } catch {
       case _: InterruptedException =>
         // Shutting down, ignore
-      case e: Exception =>
+      case NonFatal(e) =>
         consecutiveFailures += 1
         val failures = consecutiveFailures
         val delay = computeBackoffDelay()
@@ -184,6 +185,12 @@ private[spark] class UserCredentialManager(
           log"${MDC(LogKeys.NUM_RETRY, failures)}), " +
           log"will retry in ${MDC(LogKeys.TIME_UNITS, UIUtils.formatDuration(delay))}.", e)
         scheduleRenewal(delay)
+      case t: Throwable =>
+        // A fatal error would otherwise be swallowed by the executor, silently stopping
+        // all future renewals. Log it before propagating.
+        logError(log"Fatal error during credential renewal; no further renewals will be " +
+          log"scheduled.", t)
+        throw t
     }
   }
 

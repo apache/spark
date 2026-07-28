@@ -20,6 +20,7 @@ package org.apache.spark.security;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -238,7 +239,7 @@ public final class CredentialProviderLoader {
    */
   public static Set<String> discoverAllSchemes() {
     List<CredentialProvider> providers = getProviders();
-    Set<String> schemes = new java.util.HashSet<>();
+    Set<String> schemes = new HashSet<>();
     for (CredentialProvider provider : providers) {
       Set<String> providerSchemes = provider.supportedSchemes();
       if (providerSchemes != null) {

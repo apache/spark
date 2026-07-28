@@ -22,6 +22,10 @@ import java.util
 import java.util.Optional
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
+import scala.concurrent.duration._
+
+import org.scalatest.concurrent.Eventually.{eventually, timeout}
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.security._
@@ -458,11 +462,11 @@ class UserCredentialManagerSuite extends SparkFunSuite {
       assert(callbacks.size() === 1, "Should have one callback from start()")
 
       // Wait for renewal to fire (token expires in 2s, safety margin 1s -> renews after ~1s)
-      Thread.sleep(2000)
-
-      // After renewal, a second callback should have been invoked with new credentials
-      assert(callbacks.size() >= 2,
-        s"Expected at least 2 callbacks (initial + renewal), got ${callbacks.size()}")
+      eventually(timeout(10.seconds)) {
+        // After renewal, a second callback should have been invoked with new credentials
+        assert(callbacks.size() >= 2,
+          s"Expected at least 2 callbacks (initial + renewal), got ${callbacks.size()}")
+      }
 
       // Verify that the ingestor was called more than once (rotation detected)
       assert(callCount.get() >= 2,
