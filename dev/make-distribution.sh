@@ -255,14 +255,12 @@ if [ "$MAKE_PIP" == "true" ]; then
   pushd "$SPARK_HOME/python" > /dev/null
   # Delete the egg info file if it exists, this can cache older setup files.
   rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
-  # Ship the Apache LICENSE and NOTICE inside the PySpark source distributions
-  # (see MANIFEST.in). These are removed again after the sdists are built.
+  # Ship the Apache LICENSE and NOTICE inside the PySpark source distribution
+  # (see MANIFEST.in). These are removed again after the sdist is built.
   #
-  # The classic pyspark sdist bundles the assembly jars (packaging/classic/setup.py
-  # builds a deps/jars symlink farm), so it ships the binary LICENSE/NOTICE that
-  # enumerate the bundled third-party jars' licenses, mirroring the binary
-  # distribution above. The connect and client sdists bundle no jars and ship the
-  # plain source LICENSE/NOTICE.
+  # The pyspark sdist bundles the assembly jars, so it ships the binary
+  # LICENSE/NOTICE that enumerate the bundled third-party jars' licenses,
+  # mirroring the binary distribution above.
   if [ -e "$SPARK_HOME/LICENSE-binary" ]; then
     cp "$SPARK_HOME/LICENSE-binary" LICENSE
     cp "$SPARK_HOME/NOTICE-binary" NOTICE
@@ -281,6 +279,7 @@ if [ "$MAKE_PIP" == "true" ]; then
         { echo "ERROR: $f is missing $required at the package root"; exit 1; }
     done
   done
+  rm -f LICENSE NOTICE
   popd > /dev/null
 else
   echo "Skipping building python distribution package"
