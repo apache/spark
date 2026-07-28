@@ -30,7 +30,7 @@ import org.apache.ivy.core.report.{DownloadStatus, ResolveReport}
 import org.apache.ivy.core.resolve.ResolveOptions
 import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
-import org.apache.ivy.plugins.matcher.GlobPatternMatcher
+import org.apache.ivy.plugins.matcher.RegexpPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
@@ -281,7 +281,7 @@ private[spark] object MavenUtils extends Logging {
     processIvyPathArg(ivySettings, ivyPath)
 
     // create a pattern matcher
-    ivySettings.addMatcher(new GlobPatternMatcher)
+    ivySettings.addMatcher(new RegexpPatternMatcher)
     // create the dependency resolvers
     val repoResolver = createRepoResolvers(ivySettings.getDefaultIvyUserDir, useLocalM2AsCache)
     ivySettings.addResolver(repoResolver)
@@ -559,11 +559,16 @@ private[spark] object MavenUtils extends Logging {
       ivySettings: IvySettings,
       ivyConfName: String): ExcludeRule = {
     val c = extractMavenCoordinates(coords).head
-    val id = new ArtifactId(new ModuleId(c.groupId, c.artifactId), "*", "*", "*")
-    val rule = new DefaultExcludeRule(id, ivySettings.getMatcher("glob"), null)
+    val id = new ArtifactId(
+      new ModuleId(globToRegex(c.groupId), globToRegex(c.artifactId)), ".*", ".*", ".*")
+    val rule = new DefaultExcludeRule(id, ivySettings.getMatcher("regexp"), null)
     rule.addConfiguration(ivyConfName)
     rule
   }
+
+  // Converts a glob pattern (only * supported) to a Java regex, quoting literal parts.
+  private def globToRegex(glob: String): String =
+    glob.split("\\*", -1).map(java.util.regex.Pattern.quote).mkString(".*")
 
   private def isInvalidQueryString(tokens: Array[String]): Boolean = {
     tokens.length != 2 || SparkStringUtils.isBlank(tokens(0)) || SparkStringUtils.isBlank(tokens(1))

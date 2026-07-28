@@ -154,7 +154,6 @@
     <chill.version>0.10.0</chill.version>
     <kryo.version>4.0.3</kryo.version>
     <ivy.version>2.5.3</ivy.version>
-    <oro.version>2.0.8</oro.version>
     <!--
     If you change codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
