@@ -827,12 +827,15 @@ class DistributedLDAModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    this.oldDistributedModel.toInternals.map {
+    var size = estimateMatadataSize
+    // oldDistributedModel: metadata, global topic totals, graph vertices, and graph edges.
+    size += oldDistributedModel.toInternals.map {
       case df: org.apache.spark.sql.classic.DataFrame =>
         df.toArrowBatchRdd.map(_.length.toLong).reduce(_ + _)
       case o => throw new UnsupportedOperationException(
         s"Unsupported dataframe type: ${o.getClass.getName}")
     }.sum
+    size
   }
 }
 
