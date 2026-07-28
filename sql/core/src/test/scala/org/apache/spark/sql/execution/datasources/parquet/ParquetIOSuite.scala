@@ -2369,6 +2369,47 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-57828: vectorized read of TIMESTAMP(NANOS) with dictionary encoding") {
+    // Exercises TimestampNanosVectorUpdater.decodeSingleDictionaryId by writing a file with
+    // dictionary encoding enabled and a nullable column (OPTIONAL repetition, which forces
+    // single-value decode paths via def-level interleaving). Analogous to the TIME(NANOS)
+    // dictionary test above (SPARK-55444).
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional int64 ts_nanos(TIMESTAMP(NANOS,true));
+        |}""".stripMargin)
+    val readSchema = new StructType()
+      .add("ts_nanos", TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION))
+
+    // 1_000_000_500 ns = epoch micros 1000000 + 500 ns within micro
+    // Instant: 1000000 micros = 1.000000 seconds, plus 500 ns -> 1.000000500 s
+    val epochNanosValue = 1000000500L
+    val expectedInstant = java.time.Instant.ofEpochSecond(1L, 500L)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/ts_nanos_dict.parquet")
+        val numRecords = 100
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { i =>
+          val record = new SimpleGroup(schema)
+          // Every 7th row is null: interleaves null/value runs to force single-value path.
+          if (i % 7 != 0) record.add(0, epochNanosValue)
+          writer.write(record)
+        }
+        writer.close()
+
+        withAllParquetReaders {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          val expected = (0 until numRecords).map { i =>
+            if (i % 7 == 0) Row(null) else Row(expectedInstant)
+          }
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)

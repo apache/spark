@@ -482,6 +482,19 @@ The following configurations are optional:
   <td>milliseconds to wait before retrying to fetch Kafka offsets</td>
 </tr>
 <tr>
+  <td>partition.metadata.cache.ttl.ms</td>
+  <td>long</td>
+  <td>-1</td>
+  <td>streaming and batch</td>
+  <td>How long (in milliseconds) to cache the set of assigned Kafka topic-partitions in the driver
+  before issuing a fresh <code>DescribeTopics</code> RPC to the broker. When set to a positive value,
+  repeated offset fetches within the TTL window reuse the cached partition set instead of querying
+  the broker each time, reducing metadata load on the broker and on the driver. This mirrors
+  the semantics of the Kafka client's own <code>metadata.max.age.ms</code> setting. Set to -1
+  (the default) to disable caching (existing behavior). Note: newly added partitions will not be
+  discovered until the cache expires.</td>
+</tr>
+<tr>
   <td>maxOffsetsPerTrigger</td>
   <td>long</td>
   <td>none</td>

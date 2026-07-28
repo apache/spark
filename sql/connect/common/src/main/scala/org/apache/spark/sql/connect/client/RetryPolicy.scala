@@ -173,7 +173,9 @@ object RetryPolicy extends Logging {
         // ExecutePlanResponseReattachableIterator, which converts it to RetryException so the
         // server-side operation continues and a fresh ReattachExecute is issued. We do not retry
         // other RPCs on deadline: those are non-idempotent or the deadline signals a genuine
-        // timeout that retrying won't fix.
+        // timeout that retrying won't fix. RetryException retries bypass RetryPolicy entirely
+        // (see GrpcRetryHandler.Retrying.waitAfterAttempt), but are bounded by a separate
+        // cumulative elapsed-time cap (GrpcRetryHandler's maxRetryExceptionElapsedTime).
         false
       case _ => false
     }

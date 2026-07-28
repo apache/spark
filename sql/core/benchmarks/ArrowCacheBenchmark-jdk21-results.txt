@@ -1,0 +1,85 @@
+================================================================================================
+Arrow Cache vs Default Cache
+================================================================================================
+
+================================================================================================
+Cache primitive types
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+Cache 5M rows with primitives:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+Default cache - write + read                          1854           1922          97          2.7         370.8       1.0X
+Default cache - write + read (uncompressed)           1159           1165           8          4.3         231.8       1.6X
+Arrow cache - write + read                            1300           1315          21          3.8         260.0       1.4X
+Arrow cache - write + read (zstd level -1)            1808           1811           4          2.8         361.6       1.0X
+Arrow cache - write + read (zstd level 1)             1814           1830          23          2.8         362.8       1.0X
+Arrow cache - write + read (zstd level 3)             1902           1929          39          2.6         380.4       1.0X
+
+
+================================================================================================
+Cache then filter
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+Cache 5M rows, then filter:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Default cache - filter                             1662           1683          29          3.0         332.5       1.0X
+Default cache - filter (uncompressed)              1312           1312           0          3.8         262.4       1.3X
+Arrow cache - filter                               1447           1462          21          3.5         289.4       1.1X
+Arrow cache - filter (zstd level -1)               1729           1757          40          2.9         345.8       1.0X
+Arrow cache - filter (zstd level 1)                1787           1799          17          2.8         357.3       0.9X
+Arrow cache - filter (zstd level 3)                1951           1955           5          2.6         390.3       0.9X
+
+
+================================================================================================
+Cache columnar input (Parquet)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+Cache 2M rows from Parquet:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+Default cache - columnar input                          1545           1619         104          1.3         772.7       1.0X
+Default cache - columnar input (uncompressed)           1313           1336          33          1.5         656.4       1.2X
+Arrow cache - columnar input                            1353           1378          35          1.5         676.7       1.1X
+Arrow cache - columnar input (zstd level -1)            1535           1573          54          1.3         767.6       1.0X
+Arrow cache - columnar input (zstd level 1)             1619           1622           5          1.2         809.6       1.0X
+Arrow cache - columnar input (zstd level 3)             1708           1709           2          1.2         853.8       0.9X
+
+
+================================================================================================
+Re-cache Arrow cached data (zero-copy test)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+Re-cache 2M rows (zero-copy):                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+Default cache - cache a cached DF                           411            428          20          4.9         205.7       1.0X
+Default cache - cache a cached DF (uncompressed)            191            210          26         10.5          95.7       2.2X
+Arrow cache - cache a cached DF (zero-copy)                 137            156          24         14.6          68.4       3.0X
+Arrow cache - cache a cached DF (zstd level -1)             327            343          18          6.1         163.3       1.3X
+Arrow cache - cache a cached DF (zstd level 1)              338            341           3          5.9         168.8       1.2X
+Arrow cache - cache a cached DF (zstd level 3)              352            357           3          5.7         176.2       1.2X
+
+
+================================================================================================
+Cache with column pruning (select 1 of 20 columns)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+Cache 5M rows, select 1 column:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+Default cache - select 1 of 20 columns                 10855          11142         406          0.5        2171.0       1.0X
+Default cache - select 1 of 20 (uncompressed)           4135           4149          20          1.2         827.0       2.6X
+Arrow cache - select 1 of 20                            5179           5280         144          1.0        1035.8       2.1X
+Arrow cache - select 1 of 20 (zstd level -1)            9258           9283          35          0.5        1851.7       1.2X
+Arrow cache - select 1 of 20 (zstd level 1)             9437           9603         234          0.5        1887.4       1.2X
+Arrow cache - select 1 of 20 (zstd level 3)             9778           9794          23          0.5        1955.5       1.1X
+
+
+

@@ -107,30 +107,38 @@ case class ShowTablesJsonCommand(
       sparkSession: SparkSession,
       catalog: TableCatalog,
       ns: Seq[String]): JObject = {
-    val identifiers = if (!isExtended) {
+    val relations = if (!isExtended) {
       catalog match {
         case mc: RelationCatalog =>
-          mc.listRelationSummaries(ns.toArray).map(_.identifier())
-        case _ => catalog.listTables(ns.toArray)
+          mc.listRelationSummaries(ns.toArray).map(s => (s.identifier(), Option.empty[String]))
+        case _ =>
+          catalog.listTables(ns.toArray).map(ident => (ident, Option.empty[String]))
       }
     } else {
-      catalog.listTables(ns.toArray)
+      catalog match {
+        case mc: RelationCatalog =>
+          mc.listRelationSummaries(ns.toArray)
+            .map(s => (s.identifier(), Some(s.tableType())))
+        case _ =>
+          catalog.listTableSummaries(ns.toArray)
+            .map(s => (s.identifier(), Some(s.tableType())))
+      }
     }
 
     val pat = pattern.getOrElse("*")
-    val filteredIdents = identifiers.filter { ident =>
+    val filteredRelations = relations.filter { case (ident, _) =>
       StringUtils.filterPattern(Seq(ident.name()), pat).nonEmpty
     }
 
     val jsonRows = new ArrayBuffer[JObject]()
-    filteredIdents.foreach { ident =>
+    filteredRelations.foreach { case (ident, tableType) =>
       val nsArray = JArray(ident.namespace().map(JString(_)).toList)
       val entry = if (isExtended) {
         JObject(
           "name" -> JString(ident.name()),
           "catalog" -> JString(catalog.name()),
           "namespace" -> nsArray,
-          "type" -> JString("TABLE"),
+          "type" -> JString(tableType.get),
           "isTemporary" -> JBool(false)
         )
       } else {

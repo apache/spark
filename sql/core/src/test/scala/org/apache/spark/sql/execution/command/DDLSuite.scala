@@ -196,7 +196,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("CREATE TABLE t LIKE s USING org.apache.spark.sql.hive.orc")
         },
-        condition = "_LEGACY_ERROR_TEMP_1138",
+        condition = "ORC_DATA_SOURCE_REQUIRES_HIVE_SUPPORT",
         parameters = Map.empty
       )
     }
@@ -1204,6 +1204,12 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
         Row(
           """Extended Usage:
+            |    Arguments:
+            |      * expr1 - The first operand of the bitwise exclusive OR.
+            |        An expression that evaluates to an integral.
+            |      * expr2 - The second operand of the bitwise exclusive OR.
+            |        An expression that evaluates to an integral.
+            |  
             |    Examples:
             |      > SELECT 3 ^ 5;
             |       6

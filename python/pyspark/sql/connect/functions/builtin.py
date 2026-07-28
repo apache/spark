@@ -2252,6 +2252,21 @@ def variant_set(
 variant_set.__doc__ = pysparkfuncs.variant_set.__doc__
 
 
+def try_variant_set(
+    v: "ColumnOrName",
+    path: Union[Column, str],
+    value: "ColumnOrName",
+    create_if_missing: bool = True,
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "try_variant_set", _to_col(v), path_col, _to_col(value), lit(create_if_missing)
+    )
+
+
+try_variant_set.__doc__ = pysparkfuncs.try_variant_set.__doc__
+
+
 def variant_array_append(
     v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
 ) -> Column:
@@ -2260,6 +2275,16 @@ def variant_array_append(
 
 
 variant_array_append.__doc__ = pysparkfuncs.variant_array_append.__doc__
+
+
+def try_variant_array_append(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("try_variant_array_append", _to_col(v), path_col, _to_col(value))
+
+
+try_variant_array_append.__doc__ = pysparkfuncs.try_variant_array_append.__doc__
 
 
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
@@ -5371,6 +5396,20 @@ def zeroifnull(col: "ColumnOrName") -> Column:
 
 
 zeroifnull.__doc__ = pysparkfuncs.zeroifnull.__doc__
+
+
+def hmac(
+    key: "ColumnOrName",
+    message: "ColumnOrName",
+    algorithm: Optional["ColumnOrName"] = None,
+) -> Column:
+    if algorithm is None:
+        return _invoke_function_over_columns("hmac", key, message)
+    else:
+        return _invoke_function_over_columns("hmac", key, message, algorithm)
+
+
+hmac.__doc__ = pysparkfuncs.hmac.__doc__
 
 
 def aes_encrypt(

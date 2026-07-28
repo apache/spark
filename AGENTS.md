@@ -235,6 +235,12 @@ DO NOT force push or use `--amend` on pushed commits unless the user explicitly 
 
 Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
 
+## Project Instructions Discovery
+
+When exploring or working in any directory, always check for nested `AGENTS.md` files in that
+directory and its ancestors. Read and follow every applicable file; instructions in a more specific
+directory take precedence for that directory's scope.
+
 ## Versioning and Branch Policy
 
 When a change needs a version — `@since` annotations, config `.version("...")` (`SQLConf` / `*Conf`), new `MimaExcludes` sections, etc. — use the version of the branch it first ships in, with `-SNAPSHOT` stripped. Determine that branch:

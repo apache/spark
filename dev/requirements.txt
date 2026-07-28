@@ -68,7 +68,7 @@ googleapis-common-protos-stubs==2.2.0
 grpc-stubs==1.24.11
 
 # Debug for Spark and Spark Connect
-graphviz==0.20.3
+graphviz>=0.20
 flameprof==0.4
 viztracer
 debugpy

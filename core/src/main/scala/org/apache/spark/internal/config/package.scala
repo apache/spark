@@ -28,6 +28,7 @@ import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
 import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.resource.CpuAmount
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
@@ -736,9 +737,19 @@ package object config {
   private[spark] val CPUS_PER_TASK =
     ConfigBuilder("spark.task.cpus")
       .version("0.5.0")
-      .intConf
-      .checkValue(_ > 0, "Number of cores to allocate for each task should be positive.")
-      .createWithDefault(1)
+      .decimalConf
+      // Validate before normalizing: bounding first keeps the setScale in the normalize step
+      // from materializing enormous unscaled values for extreme exponents (e.g. 1e100000000),
+      // and rejecting excess precision is clearer than silently rounding it away.
+      .checkValue(v => v >= CpuAmount.MIN_AMOUNT && v <= CpuAmount.MAX_AMOUNT,
+        "Number of cores to allocate for each task must be a positive value between " +
+          s"${CpuAmount.MIN_AMOUNT} and ${CpuAmount.MAX_AMOUNT} (inclusive).")
+      .checkValue(CpuAmount.stripTrailingZeros(_).scale <= CpuAmount.SCALE,
+        s"Number of cores to allocate for each task supports at most ${CpuAmount.SCALE} " +
+          "decimal places.")
+      // normalize to the fixed CPU accounting scale so every read is a uniform, compact BigDecimal
+      .transform(CpuAmount.normalize)
+      .createWithDefault(BigDecimal(1))
 
   private[spark] val DYN_ALLOCATION_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.enabled")
@@ -1774,6 +1785,21 @@ package object config {
       .stringConf
       .createWithDefault("sort")
 
+  private[spark] val SHUFFLE_MANAGER_INCREMENTAL =
+    ConfigBuilder("spark.shuffle.manager.incremental")
+      .doc("The ShuffleManager implementation used for pipelined (incrementally-readable) " +
+        "shuffle dependencies, whose consumer stage may begin reading output while the producer " +
+        "stage is still running. Regular shuffle dependencies continue to use " +
+        "spark.shuffle.manager. The two managers coexist in the same JVM and each shuffle is " +
+        "routed by its dependency type, so a cluster can run both regular and pipelined (e.g. " +
+        "real-time mode) queries. Defaults to the built-in streaming shuffle manager; accepts " +
+        "the short alias \"streaming\" (the default) or a fully-qualified " +
+        "PipelinedShuffleManager class name.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .createWithDefault("streaming")
+
   private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
     ConfigBuilder("spark.shuffle.reduceLocality.enabled")
       .doc("Whether to compute locality preferences for reduce tasks")
@@ -1990,6 +2016,21 @@ package object config {
       .intConf
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
+
+  private[spark] val PIPELINED_GROUP_SLOT_CHECK_ENABLED =
+    ConfigBuilder("spark.scheduler.pipelinedGroup.slotCheck.enabled")
+      .internal()
+      .doc("When true, before co-scheduling a pipelined-shuffle stage group the DAGScheduler " +
+        "checks that the group's total task demand fits in the currently free slots of its " +
+        "resource profile (total capacity minus the outstanding -- running plus enqueued -- " +
+        "tasks of other work), and fails the job with CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT " +
+        "rather than co-scheduling a group that cannot fit and deadlocking. Set to false for " +
+        "deployments that admit capacity out-of-band (e.g. a slot reservation), which then own " +
+        "admission. Only applies to jobs that use a pipelined shuffle dependency.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val NUM_CANCELLED_JOB_GROUPS_TO_TRACK =
     ConfigBuilder("spark.scheduler.numCancelledJobGroupsToTrack")
@@ -2551,16 +2592,18 @@ package object config {
         "longer time than the threshold. This config helps speculate stage with very few " +
         "tasks. Regular speculation configs may also apply if the executor slots are " +
         "large enough. E.g. tasks might be re-launched if there are enough successful runs " +
-        "even though the threshold hasn't been reached. The number of slots is computed based " +
-        "on the conf values of spark.executor.cores and spark.task.cpus minimum 1.")
+        "even though the threshold hasn't been reached. The number of slots is the maximum " +
+        "number of concurrent tasks per executor for the stage's resource profile, computed " +
+        "from the executor cores and the task cpus amount (which may be fractional), or 1 " +
+        "when the executor cores are not known.")
       .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER =
     ConfigBuilder("spark.speculation.efficiency.processRateMultiplier")
-      .doc("A multiplier that used when evaluating inefficient tasks. The higher the multiplier " +
-        "is, the more tasks will be possibly considered as inefficient.")
+      .doc("A multiplier that is used when evaluating inefficient tasks. The higher the " +
+        "multiplier is, the more tasks will be possibly considered as inefficient.")
       .version("3.4.0")
       .doubleConf
       .checkValue(v => v > 0.0 && v <= 1.0, "multiplier must be in (0.0, 1.0]")
