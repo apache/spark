@@ -43,6 +43,8 @@ import org.apache.spark.sql.connect.pipelines.DataflowGraphRegistry
 import org.apache.spark.sql.connect.planner.PythonStreamingQueryListener
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper
 import org.apache.spark.sql.connect.service.SessionHolder.{ERROR_CACHE_SIZE, ERROR_CACHE_TIMEOUT_SEC}
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.pipelines.graph.PipelineUpdateContext
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.{SystemClock, Utils}
@@ -617,7 +619,16 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
           Option(cache.getIfPresent(rel)) match {
             case Some(plan) =>
               logDebug(s"Using cached plan for relation '$rel': $plan")
-              Some(plan)
+              val hasResolvedV2Table = plan.collectWithSubqueries {
+                case _: DataSourceV2Relation => true
+              }.nonEmpty
+              if (hasResolvedV2Table) {
+                val planCopy = plan.clone()
+                planCopy.setTagValue(QueryExecution.REQUIRES_V2_TABLE_REFRESH, ())
+                Some(planCopy)
+              } else {
+                Some(plan)
+              }
             case None => None
           }
         case _ => None

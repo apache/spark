@@ -18,6 +18,9 @@ package org.apache.spark.sql.connect
 
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.connector.catalog.CountingInMemoryTableCatalog
+
 /**
  * Test suite showcasing the APIs provided by SparkConnectServerTest trait.
  *
@@ -28,6 +31,62 @@ import org.scalatest.time.SpanSugar._
  *   - Assertion helpers for execution state
  */
 class SparkConnectServerTestSuite extends SparkConnectServerTest {
+
+  test("Spark Connect avoids redundant DSv2 table refreshes across server call sites") {
+    withSession { clientSession =>
+      val table = "countingcat.ns.tbl"
+      clientSession.conf.set(
+        "spark.sql.catalog.countingcat",
+        classOf[CountingInMemoryTableCatalog].getName)
+      clientSession.conf.set("spark.sql.catalog.countingcat.copyOnLoad", "true")
+      clientSession.sql(s"CREATE TABLE $table (id INT) USING foo").collect()
+
+      val serverSession = getServerSession(clientSession)
+
+      def assertRefreshSkipped(expectedLoads: Int)(f: => Unit): Unit = {
+        CountingInMemoryTableCatalog.resetLoadCount()
+        val queryExecutions = withQueryExecutionsCaptured(serverSession)(f)
+        assert(CountingInMemoryTableCatalog.loadCount == expectedLoads)
+        assert(queryExecutions.nonEmpty)
+        assert(queryExecutions.forall(!_.refreshPhaseEnabled))
+      }
+
+      try {
+        assertRefreshSkipped(expectedLoads = 1) {
+          clientSession.table(table).collect()
+        }
+
+        val dropMissing = clientSession.table(table).drop("missing")
+        assertRefreshSkipped(expectedLoads = 1) {
+          dropMissing.collect()
+        }
+
+        CountingInMemoryTableCatalog.resetLoadCount()
+        val cachedQueryExecutions = withQueryExecutionsCaptured(serverSession) {
+          dropMissing.collect()
+        }
+        assert(CountingInMemoryTableCatalog.loadCount == 1)
+        assert(cachedQueryExecutions.exists(_.refreshPhaseEnabled))
+
+        assertRefreshSkipped(expectedLoads = 2) {
+          clientSession.sql(s"SELECT * FROM $table").collect()
+        }
+
+        assertRefreshSkipped(expectedLoads = 1) {
+          clientSession.table(table).localCheckpoint(eager = true)
+        }
+
+        withTempDir { checkpointDir =>
+          serverSession.sparkContext.setCheckpointDir(checkpointDir.getCanonicalPath)
+          assertRefreshSkipped(expectedLoads = 1) {
+            clientSession.table(table).checkpoint(eager = true)
+          }
+        }
+      } finally {
+        clientSession.sql(s"DROP TABLE IF EXISTS $table").collect()
+      }
+    }
+  }
 
   test("withSession: execute SQL and collect results") {
     withSession { session =>
