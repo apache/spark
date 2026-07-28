@@ -18,7 +18,7 @@ import json
 import re
 import sys
 import pickle
-from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
+from typing import cast, overload, Callable, Dict, List, Optional, Sequence, TYPE_CHECKING, Union
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.plan import (
@@ -510,13 +510,15 @@ class DataStreamWriter:
     @overload
     def partitionBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
-    def partitionBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
+    def partitionBy(self, *cols: Union[str, List[str]]) -> "DataStreamWriter":
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]
+            columns: Sequence[str] = cols[0]
+        else:
+            columns = cast("Sequence[str]", cols)
         # Clear any existing columns (if any).
         while len(self._write_proto.partitioning_column_names) > 0:
             self._write_proto.partitioning_column_names.pop()
-        self._write_proto.partitioning_column_names.extend(cast(List[str], cols))
+        self._write_proto.partitioning_column_names.extend(columns)
         return self
 
     partitionBy.__doc__ = PySparkDataStreamWriter.partitionBy.__doc__
@@ -527,13 +529,15 @@ class DataStreamWriter:
     @overload
     def clusterBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
-    def clusterBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
+    def clusterBy(self, *cols: Union[str, List[str]]) -> "DataStreamWriter":
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]
+            columns: Sequence[str] = cols[0]
+        else:
+            columns = cast("Sequence[str]", cols)
         # Clear any existing columns (if any).
         while len(self._write_proto.clustering_column_names) > 0:
             self._write_proto.clustering_column_names.pop()
-        self._write_proto.clustering_column_names.extend(cast(List[str], cols))
+        self._write_proto.clustering_column_names.extend(columns)
         return self
 
     clusterBy.__doc__ = PySparkDataStreamWriter.clusterBy.__doc__

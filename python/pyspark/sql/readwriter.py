@@ -26,7 +26,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
     from pyspark.core.rdd import RDD
-    from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
+    from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName, SupportsOption
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.streaming import StreamingQuery
@@ -39,7 +39,7 @@ TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 class OptionUtils:
     def _set_opts(
-        self,
+        self: "SupportsOption",
         schema: Optional[Union[StructType, str]] = None,
         **options: "OptionalPrimitiveType",
     ) -> None:
@@ -50,7 +50,7 @@ class OptionUtils:
             self.schema(schema)  # type: ignore[attr-defined]
         for k, v in options.items():
             if v is not None:
-                self.option(k, v)  # type: ignore[attr-defined]
+                self.option(k, v)
 
 
 class DataFrameReader(OptionUtils):

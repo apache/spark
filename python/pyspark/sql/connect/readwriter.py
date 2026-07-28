@@ -45,7 +45,7 @@ from pyspark.sql.connect.functions import builtin as F
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType
+    from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType, SupportsOption
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.metrics import ExecutionInfo
 
@@ -57,7 +57,7 @@ TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 class OptionUtils:
     def _set_opts(
-        self,
+        self: "SupportsOption",
         schema: Optional[Union[StructType, str]] = None,
         **options: "OptionalPrimitiveType",
     ) -> None:
@@ -68,7 +68,7 @@ class OptionUtils:
             self.schema(schema)  # type: ignore[attr-defined]
         for k, v in options.items():
             if v is not None:
-                self.option(k, v)  # type: ignore[attr-defined]
+                self.option(k, v)
 
 
 class DataFrameReader(OptionUtils):
@@ -130,15 +130,15 @@ class DataFrameReader(OptionUtils):
             self.schema(schema)
         self.options(**options)
 
-        paths = path
-        if isinstance(path, str):
-            paths = [path]
+        paths: Optional[List[str]] = None
+        if path is not None:
+            paths = [path] if isinstance(path, str) else path
 
         plan = DataSource(
             format=self._format,
             schema=self._schema,
             options=self._options,
-            paths=paths,  # type: ignore[arg-type]
+            paths=paths,
         )
         return self._df(plan)
 
