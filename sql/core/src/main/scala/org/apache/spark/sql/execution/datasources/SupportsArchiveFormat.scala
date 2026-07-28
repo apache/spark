@@ -205,7 +205,7 @@ object SupportsArchiveFormat {
       name.endsWith(".zip") || name.endsWith(".7z")
   }
 
-  /** An archive's entries as lazy `(entry, entryBytes)` pairs; closing releases the container. */
+  /** An archive's entries as lazy `(entry, stream)` pairs; closing releases the container. */
   private type ArchiveEntries = Iterator[(ArchiveEntry, InputStream)] with Closeable
 
   /**
