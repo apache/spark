@@ -298,6 +298,8 @@ class PySparkBaseTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if have_grimp and (path := os.environ.get("PYSPARK_CHANGED_FILES")):
+            # PYSPARK_CHANGED_FILES should only be used when ONLY pyspark files are changed.
+            # If other files (JVM for example) are changed, do NOT set this.
             cls.skip_if_changed_files_irrelevant(path)
 
         if os.environ.get("PYSPARK_TEST_TIMEOUT"):
@@ -316,13 +318,17 @@ class PySparkBaseTestCase(unittest.TestCase):
         if not cls._is_module_relevant_to_changed_files(module, path):
             raise unittest.SkipTest("Skipping test because changed files are irrelevant")
 
+    @staticmethod
     @functools.cache
-    @classmethod
-    def _is_module_relevant_to_changed_files(cls, module: str, path: str) -> bool:
+    def _is_module_relevant_to_changed_files(module: str, path: str) -> bool:
         import grimp
 
         with open(path, "r") as f:
             changed_files = f.read().strip().splitlines()
+
+        assert all(f.startswith("python/pyspark/") and f.endswith(".py") for f in changed_files), (
+            "Changed files must be within python/pyspark/ directory and end with .py"
+        )
 
         changed_modules = [
             f.removeprefix("python/").rsplit(".", 1)[0].replace(os.path.sep, ".")
