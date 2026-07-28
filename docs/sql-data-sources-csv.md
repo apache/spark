@@ -231,7 +231,8 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>multiLine</code></td>
     <td>false</td>
-    <td>Allows a row to span multiple lines, by parsing line breaks within quoted values as part of the value itself. CSV built-in functions ignore this option.</td>
+    <td>Allows a row to span multiple lines, by parsing line breaks within quoted values as part of the value itself. CSV built-in functions ignore this option.<br>
+    When this option is disabled, a line break inside a quoted value terminates the record at that break: the value is truncated, the remaining fields of the schema are set to <code>null</code>, and the rest of the value begins a new record. Both halves are malformed records, so what happens next follows <code>mode</code>: <code>FAILFAST</code> raises an error, <code>DROPMALFORMED</code> discards both halves and therefore loses the whole source record, and <code>PERMISSIVE</code> retains both, without any signal unless the schema declares <code>columnNameOfCorruptRecord</code>. Note also that the split <em>increases</em> the number of records, and that an action requiring no columns (a bare <code>count()</code>, for instance) may surface none of this, because of parser column pruning.</td>
     <td>read</td>
   </tr>
   <tr>
