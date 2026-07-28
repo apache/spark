@@ -55,6 +55,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.util.PartitionKeyedAccumulator
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
 import org.apache.spark.tags.SlowSQLTest
@@ -509,7 +510,7 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-57547: clearCache resets materialization bookkeeping") {
+  test("SPARK-57547: clearCache isolates materialization bookkeeping by cache generation") {
     val df = spark.range(0, 100, 1, numPartitions = 4).filter($"id" >= 0)
     df.cache()
     try {
@@ -523,18 +524,33 @@ class CachedTableSuite extends SharedSparkSession
       builder.cachedColumnBuffers.count()
       assert(builder.isCachedColumnBuffersLoaded)
       assert(builder.materializedRowCount == 100L)
+      val oldAccumulatorId = builder.materializationAccumulatorId
+      val oldAccumulator = AccumulatorContext.get(oldAccumulatorId).get
+        .asInstanceOf[PartitionKeyedAccumulator[(Long, Long)]]
 
       builder.clearCache()
-      // The loaded latch and the materialization stats must not survive clearCache, otherwise a
-      // rebuilt cache would inherit a stale "loaded" state with stale/zero statistics.
+      assert(builder.materializationAccumulatorId != oldAccumulatorId)
       assert(!builder.isCachedColumnBuffersLoaded)
       assert(builder.materializedRowCount == 0L)
       assert(builder.materializedSizeInBytes == 0L)
 
-      // Rebuilding works and reports correct stats again.
-      builder.cachedColumnBuffers.count()
+      // Simulate tasks from the previous cache generation completing after clearCache. Their
+      // updates must remain isolated from the new generation.
+      (0 until 4).foreach(partitionId => oldAccumulator.add((partitionId, (1L, 1L))))
+      assert(builder.materializedRowCount == 0L)
+      assert(builder.materializedSizeInBytes == 0L)
+      val rebuiltBuffers = builder.cachedColumnBuffers
+      assert(!builder.isCachedColumnBuffersLoaded)
+
+      rebuiltBuffers.count()
       assert(builder.isCachedColumnBuffersLoaded)
       assert(builder.materializedRowCount == 100L)
+      val rebuiltSizeInBytes = builder.materializedSizeInBytes
+      assert(rebuiltSizeInBytes > 0L)
+
+      oldAccumulator.add((0, (999L, 999L)))
+      assert(builder.materializedRowCount == 100L)
+      assert(builder.materializedSizeInBytes == rebuiltSizeInBytes)
     } finally {
       df.unpersist(blocking = true)
     }
