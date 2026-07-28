@@ -23,6 +23,7 @@ import org.apache.spark.sql.functions
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
   ColumnSelection,
+  Scd2BatchProcessor,
   ScdType,
   UnqualifiedColumnName
 }
@@ -179,10 +180,21 @@ class AutoCdcScd2SinglePipelineSuite
     runPipeline(ctx)
 
     // The SCD2 auxiliary table exists and carries the aux-only deleted-by-batch-id marker column
-    // in addition to the full target row schema.
-    val auxColumns = spark.table(auxTableNameFor("target")).schema.fieldNames.toSet
-    assert(auxColumns.contains(AutoCdcReservedNames.cdcMetadataColName))
-    assert(auxColumns.contains("__START_AT"))
-    assert(auxColumns.contains("__END_AT"))
+    // in addition to the full target row schema (user columns + the framework columns). Assert the
+    // exact field list, via the reserved-name constants, so a rename of any framework column (in
+    // particular the non-prefixed __START_AT / __END_AT, which a prefix check would not catch) is
+    // caught here rather than silently passing a substring match.
+    val auxColumns = spark.table(auxTableNameFor("target")).schema.fieldNames.toSeq
+    assert(
+      auxColumns == Seq(
+        "id",
+        "name",
+        "version",
+        Scd2BatchProcessor.startAtColName,
+        Scd2BatchProcessor.endAtColName,
+        AutoCdcReservedNames.cdcMetadataColName,
+        Scd2BatchProcessor.deletedByBatchIdColName
+      )
+    )
   }
 }

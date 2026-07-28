@@ -77,7 +77,7 @@ class AutoCdcOutOfOrderConvergenceSuite
   // by setting this property. Mirrors the convention used by `RandomDataGenerator` and other Spark
   // suites that expose tunables via `spark.sql.test.<feature>` system properties.
   private val seedSystemProperty: String =
-    "spark.sql.test.autocdc.scd1OutOfOrderConvergenceSeed"
+    "spark.sql.test.autocdc.outOfOrderConvergenceSeed"
 
   private def resolveTestSeed(): Long = {
     Option(System.getProperty(seedSystemProperty)).map(_.toLong).getOrElse(Random.nextLong())
@@ -190,7 +190,10 @@ class AutoCdcOutOfOrderConvergenceSuite
       s"events (${sortedEventStream.size} total, sorted by sequence):\n" +
       sortedEventStream.map(r => s"  $r").mkString("\n") + "\n"
     ) {
-      // Table names are scd-type-suffixed so the SCD1 and SCD2 tests do not collide within a run.
+      // Table names are scd-type-suffixed purely for readability: the SCD1 and SCD2 tests run as
+      // separate test cases and the mixin's afterEach resets the catalog between them, so they
+      // could not collide even with identical names; the suffix just makes a failing run's tables
+      // self-identifying.
       val suffix = scdType.label.toLowerCase(java.util.Locale.ROOT)
       val inOrderTable = s"inorder_target_$suffix"
       val outOfOrderTable = s"outoforder_target_$suffix"
