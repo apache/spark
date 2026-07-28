@@ -16,10 +16,9 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import scala.jdk.CollectionConverters._
-
 import io.fabric8.kubernetes.api.model.{IntOrString, ServiceBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.base.{PatchContext, PatchType}
 
 import org.apache.spark.deploy.k8s.Constants.UI_PORT_NAME
 import org.apache.spark.internal.Logging
@@ -32,13 +31,13 @@ import org.apache.spark.internal.Logging
 private[k8s] object K8sDriverUIServicePatcher extends Logging {
 
   /**
-   * Patch the targetPort of the given Service's `spark-ui` port entry to `actualPort`, if the
-   * current value differs.
+   * Patch the targetPort of the given Service's `spark-ui` port entry to `actualPort`.
    *
    * @param client       Kubernetes client to use (typically the one already held by the backend).
    * @param namespace    Namespace where the Service lives.
    * @param serviceName  Name of the UI Service (from
    *                     `spark.kubernetes.driver.ui.service.name.internal`).
+   * @param servicePort  The Service's stable `port` for the `spark-ui` entry (strategic merge key).
    * @param actualPort   The actual port the driver's Jetty server bound to
    *                     (typically `SparkUI.boundPort`).
    */
@@ -46,45 +45,25 @@ private[k8s] object K8sDriverUIServicePatcher extends Logging {
       client: KubernetesClient,
       namespace: String,
       serviceName: String,
+      servicePort: Int,
       actualPort: Int): Unit = {
     try {
-      val service = client.services()
+      val patch = new ServiceBuilder()
+        .withNewSpec()
+          .addNewPort()
+            .withName(UI_PORT_NAME)
+            .withPort(servicePort)
+            .withTargetPort(new IntOrString(actualPort))
+            .endPort()
+          .endSpec()
+        .build()
+
+      client.services()
         .inNamespace(namespace)
         .withName(serviceName)
-        .get()
+        .patch(PatchContext.of(PatchType.STRATEGIC_MERGE), patch)
 
-      if (service == null) {
-        logWarning(s"UI service '$serviceName' not found in namespace '$namespace'; " +
-          "skipping targetPort patch.")
-        return
-      }
-
-      val currentTargetPort = service.getSpec.getPorts.asScala
-        .find(_.getName == UI_PORT_NAME)
-        .map(_.getTargetPort.getIntVal.toInt)
-
-      currentTargetPort match {
-        case Some(existing) if existing == actualPort =>
-          logInfo(s"UI service '$serviceName' targetPort already matches actual UI port " +
-            s"($actualPort); no patch needed.")
-
-        case _ =>
-          val updated = new ServiceBuilder(service)
-            .editSpec()
-              .editMatchingPort(portBuilder => portBuilder.build().getName == UI_PORT_NAME)
-                .withTargetPort(new IntOrString(actualPort))
-                .endPort()
-              .endSpec()
-            .build()
-
-          client.services()
-            .inNamespace(namespace)
-            .withName(serviceName)
-            .patch(updated)
-
-          logInfo(s"Patched UI service '$serviceName' targetPort " +
-            s"${currentTargetPort.map(_.toString).getOrElse("<unset>")} -> $actualPort")
-      }
+      logInfo(s"Patched UI service '$serviceName' targetPort to $actualPort")
     } catch {
       case e: Exception =>
         logError(s"Failed to patch UI service '$serviceName' targetPort to $actualPort", e)

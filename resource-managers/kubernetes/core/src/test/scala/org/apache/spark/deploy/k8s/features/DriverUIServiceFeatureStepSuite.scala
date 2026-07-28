@@ -61,6 +61,9 @@ class DriverUIServiceFeatureStepSuite extends SparkFunSuite {
     assert(step.getAdditionalPodSystemProperties()
       .get(DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL)
       === Some(s"${kconf.resourceNamePrefix}${DRIVER_UI_SVC_POSTFIX}"))
+    assert(step.getAdditionalPodSystemProperties()
+      .get(DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL)
+      === Some("4080"))
   }
 
   test("SPARK-58203: UI service honors explicit name and type overrides") {
@@ -93,5 +96,9 @@ class DriverUIServiceFeatureStepSuite extends SparkFunSuite {
     assert(uiSvc.getSpec.getPorts.size === 1)
     assert(uiSvc.getSpec.getPorts.get(0).getPort.intValue() === expectedPlaceholder)
     assert(uiSvc.getSpec.getPorts.get(0).getTargetPort.getIntVal === expectedPlaceholder)
+
+    assert(step.getAdditionalPodSystemProperties()
+      .get(DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL)
+      === Some(expectedPlaceholder.toString))
   }
 }

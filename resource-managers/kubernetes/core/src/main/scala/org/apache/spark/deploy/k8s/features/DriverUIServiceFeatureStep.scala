@@ -74,7 +74,9 @@ private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriver
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
     if (enabled) {
-      Map(KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL -> serviceName)
+      Map(
+        KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL -> serviceName,
+        KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL -> servicePort.toString)
     } else {
       Map.empty
     }
@@ -114,4 +116,12 @@ private[spark] object DriverUIServiceFeatureStep {
    */
   val KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL =
     "spark.kubernetes.driver.ui.service.name.internal"
+
+  /**
+   * Internal spark conf key used to pass the UI service's stable `port` from this feature step to
+   * the driver runtime, so `K8sDriverUIServicePatcher` can use it as the strategic-merge key when
+   * patching the Service's `targetPort`.
+   */
+  val KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL =
+    "spark.kubernetes.driver.ui.service.port.internal"
 }
