@@ -166,6 +166,19 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow] = {
+    if (selectedAttributes.isEmpty) {
+      // Empty projection (e.g. a count aggregate over the cached relation): every cached batch
+      // already records its row count, so emit that many empty rows without touching the Arrow
+      // payload at all -- deserializing and decompressing it would be pure waste. The emitted
+      // row is a single reused 0-field UnsafeRow, matching the reuse contract of the regular
+      // path.
+      return input.mapPartitionsInternal { batchIterator =>
+        val rowWriter = new UnsafeRowWriter(0)
+        rowWriter.reset()
+        val emptyRow = rowWriter.getRow
+        batchIterator.flatMap(batch => Iterator.fill(batch.numRows)(emptyRow))
+      }
+    }
     val cacheSchema = DataTypeUtils.fromAttributes(cacheAttributes)
     val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
     val timeZoneId = conf.sessionLocalTimeZone
