@@ -6827,13 +6827,19 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("pipelined shuffle: a diamond reusing one producer counts its tasks once for admission") {
+  test("pipelined shuffle: admission counts a reused producer once (diamond rejected for " +
+      "fan-out, not for slots)") {
     // Fan-out/diamond: ONE PipelinedShuffleDependency (one producer, one shuffle id) is read by TWO
-    // consumers that are then narrow-joined into the result. Execution creates ONE producer stage
-    // (getOrCreateShuffleMapStage keys on shuffle id), so the group's real concurrent demand is
-    // producer(2) + result(2) = 4 -- NOT 6. Counting the producer once per consumer EDGE would make
-    // demand 6 and wrongly reject this group at capacity 4. Pinning capacity to exactly 4 admits
-    // the correctly-deduped group and would fail if the producer were double-counted.
+    // consumers that are then narrow-joined into the result. Fan-out is unsupported, so the group
+    // is ultimately rejected -- but WHICH rejection it gets proves the admission demand is deduped.
+    // The up-front slot admission (rejectUnadmittablePipelinedGroup) runs BEFORE the fan-out idiom
+    // check (checkPipelinedGroupsSupportedInRDDGraph). Execution creates ONE producer stage
+    // (getOrCreateShuffleMapStage keys on shuffle id), so the real concurrent demand is
+    // producer(2) + result(2) = 4. Counting the producer once per consumer EDGE would inflate it
+    // to 6. Pinning capacity to exactly 4: the deduped group PASSES the slot check and is then
+    // rejected for fan-out (PIPELINED_SHUFFLE_UNSUPPORTED); a double-counted group (6 > 4) would
+    // instead be rejected earlier for CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT. So a dedup regression
+    // flips the error class -- which this test detects.
     val producerRdd = new MyRDD(sc, 2, Nil)
     val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
     myScheduler.maxConcurrentTasksForTest = 4
@@ -6847,13 +6853,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val resultRdd = new MyRDD(
         sc, 2, List(new OneToOneDependency(consumer1), new OneToOneDependency(consumer2)),
         tracker = mapOutputTracker)
-      submit(resultRdd, Array(0, 1))
-      assert(taskSets.size === 2,
-        s"diamond group is producer + result (both consumers); got ${taskSets.size} task sets")
-      // Drain to completion: producer stage first, then the result stage.
-      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
-      complete(taskSets(1), Seq((Success, 42), (Success, 43)))
-      assert(results === Map(0 -> 42, 1 -> 43))
+      val failure = submitAndCaptureFailure(resultRdd, Array(0, 1))
+      // Rejected for fan-out (demand fit within capacity 4), NOT for slots -- proving the reused
+      // producer was counted once.
+      assertPipelinedUnsupported(failure, "more than one consumer")
+      assert(!failure.getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT"),
+        s"a reused producer must be counted once (fit capacity 4), got a slot rejection: " +
+          s"${failure.getMessage}")
       assertDataStructuresEmpty()
     } finally {
       myScheduler.maxConcurrentTasksForTest = 1000
@@ -6861,10 +6867,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("pipelined shuffle: a wide fan-out reusing one producer counts its tasks once") {
+  test("pipelined shuffle: admission counts a reused producer once across a wide fan-out " +
+      "(rejected for fan-out, not for slots)") {
     // Wider fan-out: ONE producer feeds THREE consumers, all narrow-joined into the result. Real
-    // demand is still producer(2) + result(2) = 4; a per-edge count would be 2 + 3*2 = 8. Capacity
-    // 4 admits the deduped group and would reject the double-counted one.
+    // demand is still producer(2) + result(2) = 4; a per-edge count would be 2 + 3*2 = 8. At
+    // capacity 4 the deduped group passes the slot check and is rejected for fan-out; a
+    // double-counted group (8 > 4) would be rejected first for insufficient slots. See the diamond
+    // test above for the ordering rationale.
     val producerRdd = new MyRDD(sc, 2, Nil)
     val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
     myScheduler.maxConcurrentTasksForTest = 4
@@ -6875,12 +6884,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         new OneToOneDependency(new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker))
       }.toList
       val resultRdd = new MyRDD(sc, 2, consumers, tracker = mapOutputTracker)
-      submit(resultRdd, Array(0, 1))
-      assert(taskSets.size === 2,
-        s"wide fan-out group is producer + result; got ${taskSets.size} task sets")
-      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
-      complete(taskSets(1), Seq((Success, 42), (Success, 43)))
-      assert(results === Map(0 -> 42, 1 -> 43))
+      val failure = submitAndCaptureFailure(resultRdd, Array(0, 1))
+      assertPipelinedUnsupported(failure, "more than one consumer")
+      assert(!failure.getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT"),
+        s"a reused producer must be counted once (fit capacity 4), got a slot rejection: " +
+          s"${failure.getMessage}")
       assertDataStructuresEmpty()
     } finally {
       myScheduler.maxConcurrentTasksForTest = 1000
