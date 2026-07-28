@@ -111,6 +111,10 @@ public class TransportClientFactory implements Closeable {
   // How many times the worker group has been recreated after a dead event loop. Used only to make
   // each recreated group's thread names distinct; mutated under the recreateWorkerGroup lock.
   private int workerGroupRecreationCount;
+  // Set once close() has shut the worker group down, so the dead-event-loop path does not
+  // resurrect a closed factory by recreating a fresh (leaked) group. Guarded by the same lock as
+  // recreateWorkerGroup. See SPARK-58292.
+  private boolean closed = false;
   private final PooledByteBufAllocator pooledAllocator;
   private final NettyMemoryMetrics metrics;
   private final int fastFailTimeWindow;
@@ -429,6 +433,12 @@ public class TransportClientFactory implements Closeable {
    * same dead group replace it exactly once rather than spawning many groups.
    */
   private synchronized void recreateWorkerGroup(EventLoopGroup connectGroup) {
+    // The factory is closed (or closing): its worker group was shut down by close(), so a
+    // createClient() racing or following close() must not recreate a fresh group and resurrect a
+    // closed factory (which would leak threads that close() will never reap again).
+    if (closed) {
+      return;
+    }
     // A concurrent caller that hit the same dead group already swapped it out; nothing to do.
     if (workerGroup != connectGroup) {
       return;
@@ -460,6 +470,13 @@ public class TransportClientFactory implements Closeable {
       }
     }
     connectionPool.clear();
+
+    // Mark closed under the recreateWorkerGroup lock before shutting the group down, so a
+    // concurrent createClient() hitting the dead-event-loop path cannot recreate a fresh group
+    // after we have decided to close (which would leak threads). See SPARK-58292.
+    synchronized (this) {
+      closed = true;
+    }
 
     if (workerGroup != null && !workerGroup.isShuttingDown()) {
       workerGroup.shutdownGracefully();
