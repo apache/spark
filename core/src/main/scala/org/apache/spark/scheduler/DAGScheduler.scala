@@ -692,6 +692,24 @@ private[spark] class DAGScheduler(
     checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
     checkPipelinedProducerSupported(shuffleDep)
+    // A pipelined shuffle is served solely by the StreamingShuffleOutputTracker, so that tracker
+    // MUST exist for one -- it is created whenever a streaming-capable shuffle manager is set up
+    // (see SparkEnv.initializeStreamingShuffleOutputTracker), a prerequisite for producing a
+    // PipelinedShuffleDependency. Resolve it up front (BEFORE any stage-map mutation below), so a
+    // fail-loud on the misconfiguration leaves no partial scheduler state -- and so a pipelined
+    // shuffle is never silently registered in no tracker (a consumer would then find no writer
+    // locations). The reader enforces the same invariant (see StreamingShuffleReader). None for a
+    // regular shuffle, which is registered with the MapOutputTracker instead.
+    val streamingTrackerForPipelined: Option[StreamingShuffleOutputTrackerMaster] =
+      if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
+        Some(sc.env.streamingShuffleOutputTracker
+          .getOrElse(throw new IllegalStateException(
+            s"A pipelined shuffle (id ${shuffleDep.shuffleId}) requires a " +
+              "StreamingShuffleOutputTracker, but none is configured"))
+          .asInstanceOf[StreamingShuffleOutputTrackerMaster])
+      } else {
+        None
+      }
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(shuffleDeps, jobId)
     val id = nextStageId.getAndIncrement()
@@ -706,17 +724,22 @@ private[spark] class DAGScheduler(
     // A pipelined shuffle and a regular shuffle live in DIFFERENT trackers -- the split is by
     // dependency type, with no overlap. A pipelined shuffle produces no durable, addressable map
     // output; its producer/consumer task-location routing lives entirely in the
-    // StreamingShuffleOutputTracker, and it is never registered with the MapOutputTracker (nothing
-    // reads such an entry -- availability is tracked on the stage via pipelinedCompletedPartitions,
-    // the reader locates writers through the streaming tracker, and every MapOutputTracker path a
-    // pipelined shuffle could reach is either type-gated out or tolerant of its absence). A regular
-    // shuffle is registered with the MapOutputTracker exactly as before.
-    if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
-      // Register the producer/consumer fan-in before any consumer task asks for a writer location.
-      // Self-guarded on the streaming tracker's own state (createShuffleMapStage runs once per
-      // shuffleId via getOrCreateShuffleMapStage, but guard defensively against a re-entry).
-      sc.env.streamingShuffleOutputTracker.foreach { tracker =>
-        val streamingTracker = tracker.asInstanceOf[StreamingShuffleOutputTrackerMaster]
+    // StreamingShuffleOutputTracker (resolved fail-loud above), and it is never registered with the
+    // MapOutputTracker (nothing reads such an entry -- availability is tracked on the stage via
+    // pipelinedCompletedPartitions, and the reader locates writers through the streaming tracker).
+    // The MapOutputTracker.getStatistics paths, which WOULD throw ShuffleStatusNotFoundException on
+    // the absent entry, are all unreachable for a pipelined dependency: markMapStageJobsAsFinished
+    // only calls it when mapStageJobs is non-empty, but handleMapStageSubmitted rejects a pipelined
+    // dependency before addActiveJob (its sole populator) ever runs, so a pipelined stage's
+    // mapStageJobs is always empty; and the getStatistics in checkAndScheduleShuffleMergeFinalize
+    // is on the push-based-shuffle merge path, which a pipelined dependency rejects up front
+    // (shuffleMergeEnabled in checkPipelinedProducerSupported). A regular shuffle registers with
+    // the MapOutputTracker as before.
+    streamingTrackerForPipelined match {
+      case Some(streamingTracker) =>
+        // Register the producer/consumer fan-in before any consumer task asks for a writer loc.
+        // Self-guarded on the tracker's own state (createShuffleMapStage runs once per shuffleId
+        // via getOrCreateShuffleMapStage, but guard defensively against a re-entry).
         if (!streamingTracker.containsShuffle(shuffleDep.shuffleId)) {
           logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)} " +
             log"(${MDC(CREATION_SITE, rdd.getCreationSite)}) as input to pipelined " +
@@ -727,15 +750,16 @@ private[spark] class DAGScheduler(
             shuffleDep.partitioner.numPartitions,
             jobId)
         }
-      }
-    } else if (!mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
-      // Kind of ugly: need to register RDDs with the cache and map output tracker here
-      // since we can't do it in the RDD constructor because # of partitions is unknown
-      logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)} " +
-        log"(${MDC(CREATION_SITE, rdd.getCreationSite)}) as input to " +
-        log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
-      mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
-        shuffleDep.partitioner.numPartitions)
+      case None if !mapOutputTracker.containsShuffle(shuffleDep.shuffleId) =>
+        // Kind of ugly: need to register RDDs with the cache and map output tracker here
+        // since we can't do it in the RDD constructor because # of partitions is unknown
+        logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)} " +
+          log"(${MDC(CREATION_SITE, rdd.getCreationSite)}) as input to " +
+          log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
+        mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
+          shuffleDep.partitioner.numPartitions)
+
+      case _ => // regular shuffle already registered with the MapOutputTracker; nothing to do
     }
     stage
   }
@@ -3071,8 +3095,17 @@ private[spark] class DAGScheduler(
     // will be re-executed.
     if (clearShuffle) {
       logInfo(log"Cleaning up shuffle for stage ${MDC(STAGE, sms)} to ensure re-execution")
-      mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
-      sms.shuffleDep.newShuffleMergeState()
+      // A pipelined shuffle is not registered with the MapOutputTracker, so unregistering there
+      // would throw ShuffleStatusNotFoundException. Not reachable today -- an indeterminate
+      // pipelined producer is rejected up front (checkPipelinedProducerSupported), and a job is
+      // all-regular or all-pipelined (mixed rejected), so a pipelined stage is never a succeeding
+      // stage of a regular indeterminate producer that rolls back -- but guard defensively, like
+      // the pipelined branch on the FetchFailed base path. (A transient pipelined producer cannot
+      // be rolled back and recomputed anyway; a genuine member failure fails the group, not this.)
+      if (!sms.isPipelined) {
+        mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
+        sms.shuffleDep.newShuffleMergeState()
+      }
     }
   }
 
@@ -3436,86 +3469,101 @@ private[spark] class DAGScheduler(
               "longer running")
           }
 
-          if (mapStage.rdd.isBarrier()) {
-            // Mark all the map as broken in the map stage, to ensure retry all the tasks on
-            // resubmitted stage attempt.
-            // TODO: SPARK-35547: Clean all push-based shuffle metadata like merge enabled and
-            // TODO: finalized as we are clearing all the merge results.
-            mapOutputTracker.unregisterAllMapAndMergeOutput(shuffleId)
-          } else if (mapIndex != -1) {
-            // Mark the map whose fetch failed as broken in the map stage
-            mapOutputTracker.unregisterMapOutput(shuffleId, mapIndex, bmAddress)
-            if (pushBasedShuffleEnabled) {
-              // Possibly unregister the merge result <shuffleId, reduceId>, if the FetchFailed
-              // mapIndex is part of the merge result of <shuffleId, reduceId>
-              mapOutputTracker.
-                unregisterMergeResult(shuffleId, reduceId, bmAddress, Option(mapIndex))
-            }
+          if (mapStage.isPipelined) {
+            // Defense-in-depth for a pipelined-shuffle FetchFailed that reaches this base path
+            // rather than the group-atomic branch above (e.g. a job whose hasPipelinedDependency
+            // flag was not propagated through the group check). The base path is invalid for a
+            // pipelined shuffle in two ways: (a) the MapOutputTracker invalidation below would
+            // throw ShuffleStatusNotFoundException (a pipelined shuffle is never registered there,
+            // see createShuffleMapStage); (b) the resubmit branch would enqueue a lone-stage
+            // resubmit of the transient producer, which -- as the group-atomic branch's comment
+            // explains -- is never valid and would deadlock the group. So abort the group here
+            // instead, matching the group-atomic branch's outcome, and skip both.
+            abortStage(failedStage,
+              s"A pipelined group member failed with a fetch failure: $failureMessage", None)
           } else {
-            // Unregister the merge result of <shuffleId, reduceId> if there is a FetchFailed event
-            // and is not a  MetaDataFetchException which is signified by bmAddress being null
-            if (bmAddress != null &&
-              bmAddress.executorId.equals(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)) {
-              assert(pushBasedShuffleEnabled, "Push based shuffle expected to " +
-                "be enabled when handling merge block fetch failure.")
-              mapOutputTracker.
-                unregisterMergeResult(shuffleId, reduceId, bmAddress, None)
-            }
-          }
-
-          if (failedStage.rdd.isBarrier()) {
-            failedStage match {
-              case failedMapStage: ShuffleMapStage =>
-                // Mark all the map as broken in the map stage, to ensure retry all the tasks on
-                // resubmitted stage attempt.
-                mapOutputTracker.unregisterAllMapAndMergeOutput(failedMapStage.shuffleDep.shuffleId)
-
-              case failedResultStage: ResultStage =>
-                // Abort the failed result stage since we may have committed output for some
-                // partitions.
-                val reason = "Could not recover from a failed barrier ResultStage. Most recent " +
-                  s"failure reason: $failureMessage"
-                abortStage(failedResultStage, reason, None)
-            }
-          }
-
-          if (shouldAbortStage) {
-            abortStage(failedStage, abortReason.get, None)
-          } else { // update failedStages and make sure a ResubmitFailedStages event is enqueued
-            // TODO: Cancel running tasks in the failed stage -- cf. SPARK-17064
-            val noResubmitEnqueued = !failedStages.contains(failedStage)
-            failedStages += failedStage
-            failedStages += mapStage
-            if (noResubmitEnqueued) {
-              // For statically indeterminate stages, trigger rollback early (here and in
-              // submitMissingTasks) rather than deferring to task completion. This is more
-              // efficient because it clears shuffle outputs before the retry is submitted,
-              // ensuring findMissingPartitions() returns all partitions.
-              //
-              // For runtime detection (checksum mismatch), rollback is triggered at task
-              // completion when the mismatch is discovered.
-              //
-              // The `rollbackCurrentStage = true` parameter ensures the failed map stage is
-              // included in the cleanup: clearing its shuffle outputs, marking old task results
-              // to be ignored, and creating a new shuffle merge state for the upcoming retry.
-              if (mapStage.isStaticallyIndeterminate &&
-                  !mapStage.shuffleDep.checksumMismatchFullRetryEnabled) {
-                rollbackSucceedingStages(mapStage, rollbackCurrentStage = true)
+            if (mapStage.rdd.isBarrier()) {
+              // Mark all the map as broken in the map stage, to ensure retry all the tasks on
+              // resubmitted stage attempt.
+              // TODO: SPARK-35547: Clean all push-based shuffle metadata like merge enabled and
+              // TODO: finalized as we are clearing all the merge results.
+              mapOutputTracker.unregisterAllMapAndMergeOutput(shuffleId)
+            } else if (mapIndex != -1) {
+              // Mark the map whose fetch failed as broken in the map stage
+              mapOutputTracker.unregisterMapOutput(shuffleId, mapIndex, bmAddress)
+              if (pushBasedShuffleEnabled) {
+                // Possibly unregister the merge result <shuffleId, reduceId>, if the FetchFailed
+                // mapIndex is part of the merge result of <shuffleId, reduceId>
+                mapOutputTracker.
+                  unregisterMergeResult(shuffleId, reduceId, bmAddress, Option(mapIndex))
               }
+            } else {
+              // Unregister the merge result of <shuffleId, reduceId> if there is a FetchFailed
+              // event and is not a MetaDataFetchException (signified by bmAddress being null)
+              if (bmAddress != null &&
+                bmAddress.executorId.equals(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)) {
+                assert(pushBasedShuffleEnabled, "Push based shuffle expected to " +
+                  "be enabled when handling merge block fetch failure.")
+                mapOutputTracker.
+                  unregisterMergeResult(shuffleId, reduceId, bmAddress, None)
+              }
+            }
 
-              // We expect one executor failure to trigger many FetchFailures in rapid succession,
-              // but all of those task failures can typically be handled by a single resubmission of
-              // the failed stage.  We avoid flooding the scheduler's event queue with resubmit
-              // messages by checking whether a resubmit is already in the event queue for the
-              // failed stage.  If there is already a resubmit enqueued for a different failed
-              // stage, that event would also be sufficient to handle the current failed stage, but
-              // producing a resubmit for each failed stage makes debugging and logging a little
-              // simpler while not producing an overwhelming number of scheduler events.
-              logInfo(
-                log"Resubmitting ${MDC(STAGE, mapStage)} " +
-                log"(${MDC(STAGE_NAME, mapStage.name)}) and ${MDC(FAILED_STAGE, failedStage)} " +
-                log"(${MDC(FAILED_STAGE_NAME, failedStage.name)}) due to fetch failure")
-              scheduleResubmit()
+            if (failedStage.rdd.isBarrier()) {
+              failedStage match {
+                case failedMapStage: ShuffleMapStage =>
+                  // Mark all the map as broken in the map stage, to ensure retry all the tasks on
+                  // resubmitted stage attempt.
+                  mapOutputTracker.unregisterAllMapAndMergeOutput(
+                    failedMapStage.shuffleDep.shuffleId)
+
+                case failedResultStage: ResultStage =>
+                  // Abort the failed result stage since we may have committed output for some
+                  // partitions.
+                  val reason = "Could not recover from a failed barrier ResultStage. Most recent " +
+                    s"failure reason: $failureMessage"
+                  abortStage(failedResultStage, reason, None)
+              }
+            }
+
+            if (shouldAbortStage) {
+              abortStage(failedStage, abortReason.get, None)
+            } else { // update failedStages and make sure a ResubmitFailedStages event is enqueued
+              // TODO: Cancel running tasks in the failed stage -- cf. SPARK-17064
+              val noResubmitEnqueued = !failedStages.contains(failedStage)
+              failedStages += failedStage
+              failedStages += mapStage
+              if (noResubmitEnqueued) {
+                // For statically indeterminate stages, trigger rollback early (here and in
+                // submitMissingTasks) rather than deferring to task completion. This is more
+                // efficient because it clears shuffle outputs before the retry is submitted,
+                // ensuring findMissingPartitions() returns all partitions.
+                //
+                // For runtime detection (checksum mismatch), rollback is triggered at task
+                // completion when the mismatch is discovered.
+                //
+                // The `rollbackCurrentStage = true` parameter ensures the failed map stage is
+                // included in the cleanup: clearing its shuffle outputs, marking old task results
+                // to be ignored, and creating a new shuffle merge state for the upcoming retry.
+                if (mapStage.isStaticallyIndeterminate &&
+                    !mapStage.shuffleDep.checksumMismatchFullRetryEnabled) {
+                  rollbackSucceedingStages(mapStage, rollbackCurrentStage = true)
+                }
+
+                // We expect one executor failure to trigger many FetchFailures in rapid succession,
+                // but all of those task failures can typically be handled by a single resubmission
+                // of the failed stage.  We avoid flooding the scheduler's event queue with resubmit
+                // messages by checking whether a resubmit is already in the event queue for the
+                // failed stage.  If there is already a resubmit enqueued for a different failed
+                // stage, that event would also be sufficient to handle the current failed stage,
+                // but producing a resubmit for each failed stage makes debugging and logging a
+                // little simpler while not producing an overwhelming number of scheduler events.
+                logInfo(
+                  log"Resubmitting ${MDC(STAGE, mapStage)} " +
+                  log"(${MDC(STAGE_NAME, mapStage.name)}) and ${MDC(FAILED_STAGE, failedStage)} " +
+                  log"(${MDC(FAILED_STAGE_NAME, failedStage.name)}) due to fetch failure")
+                scheduleResubmit()
+              }
             }
           }
 
