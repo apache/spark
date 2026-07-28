@@ -331,6 +331,12 @@
     ],
     "sqlState" : "22023"
   },
+  "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT" : {
+    "message" : [
+      "The column `<columnName>` in the <schemaName> schema collides with a reserved AutoCDC <scdType> column name (using <caseSensitivity> column name comparison). The following column names are reserved by AutoCDC and cannot appear in the source: <reservedColumnNames>. Rename or remove the column."
+    ],
+    "sqlState" : "42710"
+  },
   "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
     "message" : [
       "The column `<columnName>` in the <schemaName> schema collides with the reserved AutoCDC column name prefix `<reservedColumnNamePrefix>` (using <caseSensitivity> column name comparison). Rename or remove the column."
@@ -361,6 +367,12 @@
       "To allow null value for this field, specify its avro schema as a union type with \"null\" using `avroSchema` option."
     ],
     "sqlState" : "22004"
+  },
+  "AVRO_DATA_SOURCE_NOT_ENABLED" : {
+    "message" : [
+      "Failed to find data source: <provider>. Avro is built-in but external data source module since Spark 2.4. Please deploy the application as per the deployment section of Apache Avro Data Source Guide."
+    ],
+    "sqlState" : "42K02"
   },
   "AVRO_INCOMPATIBLE_READ_TYPE" : {
     "message" : [
@@ -550,6 +562,44 @@
       "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
     ],
     "sqlState" : "0A000"
+  },
+  "CANNOT_LOAD_CATALOG" : {
+    "message" : [
+      "Cannot load catalog '<name>' with the plugin class '<pluginClassName>':"
+    ],
+    "subClass" : {
+      "ABSTRACT_CLASS" : {
+        "message" : [
+          "the class is abstract and cannot be instantiated."
+        ]
+      },
+      "CONSTRUCTOR_FAILURE" : {
+        "message" : [
+          "the constructor threw an exception during instantiation."
+        ]
+      },
+      "CONSTRUCTOR_NOT_ACCESSIBLE" : {
+        "message" : [
+          "failed to call the public no-arg constructor."
+        ]
+      },
+      "CONSTRUCTOR_NOT_FOUND" : {
+        "message" : [
+          "failed to find the public no-arg constructor."
+        ]
+      },
+      "NOT_A_CATALOG_PLUGIN" : {
+        "message" : [
+          "the class does not implement CatalogPlugin."
+        ]
+      },
+      "PLUGIN_CLASS_NOT_FOUND" : {
+        "message" : [
+          "cannot find the plugin class."
+        ]
+      }
+    },
+    "sqlState" : "46103"
   },
   "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER" : {
     "message" : [
@@ -1137,6 +1187,12 @@
       "Another instance of this query was just started by a concurrent session."
     ],
     "sqlState" : "0A000"
+  },
+  "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT" : {
+    "message" : [
+      "Cannot run the pipelined stage group: it needs <numTasks> concurrent task slots to run all its stages together, but only <numSlots> are currently free. The stages of a pipelined group must run concurrently, so the cluster must have enough free slots for all of them at once. Provision more executors, or reduce the parallelism of the query."
+    ],
+    "sqlState" : "53000"
   },
   "CONCURRENT_STREAM_LOG_UPDATE" : {
     "message" : [
@@ -2067,6 +2123,12 @@
       "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
     ],
     "sqlState" : "42K01"
+  },
+  "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE" : {
+    "message" : [
+      "The <parameter> value <value> of the <type> data type is out of the range of a 32-bit integer."
+    ],
+    "sqlState" : "22003"
   },
   "DATA_SOURCE_ALREADY_EXISTS" : {
     "message" : [
@@ -5427,6 +5489,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "KAFKA_DATA_SOURCE_NOT_ENABLED" : {
+    "message" : [
+      "Failed to find data source: <provider>. Please deploy the application as per the deployment section of Structured Streaming + Kafka Integration Guide."
+    ],
+    "sqlState" : "42K02"
+  },
   "KLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)."
@@ -5718,6 +5786,12 @@
       "Flow with multipart name '<flowName>' is not supported."
     ],
     "sqlState" : "0A000"
+  },
+  "MULTIPLE_DATA_SOURCES" : {
+    "message" : [
+      "Multiple sources found for <provider> (<sourceNames>), please specify the fully qualified class name."
+    ],
+    "sqlState" : "42710"
   },
   "MULTIPLE_EVENT_TIME_COLUMNS" : {
     "message" : [
@@ -6191,6 +6265,12 @@
     ],
     "sqlState" : "22023"
   },
+  "ORC_DATA_SOURCE_REQUIRES_HIVE_SUPPORT" : {
+    "message" : [
+      "Hive built-in ORC data source must be used with Hive support enabled. Please use the native ORC data source by setting 'spark.sql.orc.impl' to 'native'."
+    ],
+    "sqlState" : "0A000"
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
@@ -6585,6 +6665,12 @@
       "<sessionCatalog> requires a single-part namespace, but got identifier <identifier>."
     ],
     "sqlState" : "42K05"
+  },
+  "RESERVED_DATABASE_NAME" : {
+    "message" : [
+      "Cannot create the database <database> because the name is reserved for system use."
+    ],
+    "sqlState" : "42939"
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
@@ -8138,6 +8224,12 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "UNSUPPORTED_BUILT_IN_JDBC_DIALECT" : {
+    "message" : [
+      "`<name>` is not a supported built-in JDBC dialect. Supported dialects are: <supportedNames>."
+    ],
+    "sqlState" : "22023"
   },
   "UNSUPPORTED_CALL" : {
     "message" : [
@@ -9704,11 +9796,6 @@
       "<command> does not support nested column: <column>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1066" : {
-    "message" : [
-      "<database> is a system preserved database, you cannot create a database with this name."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1068" : {
     "message" : [
       "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
@@ -9839,26 +9926,6 @@
   "_LEGACY_ERROR_TEMP_1137" : {
     "message" : [
       "Unable to resolve <name> given [<outputStr>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1138" : {
-    "message" : [
-      "Hive built-in ORC data source must be used with Hive support enabled. Please use the native ORC data source by setting 'spark.sql.orc.impl' to 'native'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1139" : {
-    "message" : [
-      "Failed to find data source: <provider>. Avro is built-in but external data source module since Spark 2.4. Please deploy the application as per the deployment section of Apache Avro Data Source Guide."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1140" : {
-    "message" : [
-      "Failed to find data source: <provider>. Please deploy the application as per the deployment section of Structured Streaming + Kafka Integration Guide."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1141" : {
-    "message" : [
-      "Multiple sources found for <provider> (<sourceNames>), please specify the fully qualified class name."
     ]
   },
   "_LEGACY_ERROR_TEMP_1143" : {
@@ -10944,36 +11011,6 @@
   "_LEGACY_ERROR_TEMP_2212" : {
     "message" : [
       "Invalid catalog name: <name>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2214" : {
-    "message" : [
-      "Plugin class for catalog '<name>' does not implement CatalogPlugin: <pluginClassName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2215" : {
-    "message" : [
-      "Cannot find catalog plugin class for catalog '<name>': <pluginClassName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2216" : {
-    "message" : [
-      "Failed to find public no-arg constructor for catalog '<name>': <pluginClassName>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2217" : {
-    "message" : [
-      "Failed to call public no-arg constructor for catalog '<name>': <pluginClassName>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2218" : {
-    "message" : [
-      "Cannot instantiate abstract catalog plugin class for catalog '<name>': <pluginClassName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2219" : {
-    "message" : [
-      "Failed during instantiating constructor for catalog '<name>': <pluginClassName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2220" : {

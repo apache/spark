@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.ui
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.Base64
 
 import scala.xml.Node
 
@@ -29,6 +30,17 @@ import org.apache.spark.sql.connect.ui.ToolTips._
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.util.Utils
+
+// userId is part of a session's natural key but is opaque and arbitrary. It is carried through UI
+// links as unpadded base64url, whose alphabet (A-Za-z0-9-_) survives XssSafeRequest sanitization
+// and the PagedTable parameter re-echo unchanged.
+private[spark] object ConnectUiUtils {
+  def encodeUserId(userId: String): String =
+    Base64.getUrlEncoder.withoutPadding.encodeToString(userId.getBytes(UTF_8))
+
+  def decodeUserId(token: String): String =
+    new String(Base64.getUrlDecoder.decode(token), UTF_8)
+}
 
 /** Page for Spark UI that shows statistics for a Spark Connect Server. */
 private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
@@ -276,10 +288,11 @@ private[ui] class SqlStatsPagedTable(
         <a href={sqlURL(request, sqlExecId)}>[{sqlExecId}]</a>
       }
     }
-    val sessionLink = "%s/%s/session/?id=%s".format(
+    val sessionLink = "%s/%s/session/?id=%s&userId=%s".format(
       UIUtils.prependBaseUri(request, parent.basePath),
       parent.prefix,
-      info.sessionId)
+      URLEncoder.encode(info.sessionId, UTF_8.name()),
+      ConnectUiUtils.encodeUserId(info.userId))
 
     <tr>
       <td>
@@ -406,10 +419,11 @@ private[ui] class SessionStatsPagedTable(
   }
 
   override def row(session: SessionInfo): Seq[Node] = {
-    val sessionLink = "%s/%s/session/?id=%s".format(
+    val sessionLink = "%s/%s/session/?id=%s&userId=%s".format(
       UIUtils.prependBaseUri(request, parent.basePath),
       parent.prefix,
-      session.sessionId)
+      URLEncoder.encode(session.sessionId, UTF_8.name()),
+      ConnectUiUtils.encodeUserId(session.userId))
     <tr>
       <td> {session.userId} </td>
       <td> <a href={sessionLink}> {session.sessionId} </a> </td>

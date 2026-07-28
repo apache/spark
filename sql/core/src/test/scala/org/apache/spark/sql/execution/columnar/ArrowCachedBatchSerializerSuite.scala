@@ -26,10 +26,11 @@ import org.apache.arrow.vector.{
   TimeNanoVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
   VarBinaryVector, VarCharVector, VectorSchemaRoot, VectorUnloader}
 
-import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow}
+import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
@@ -2400,6 +2401,51 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(restored, "an interrupt delivered during the drain must be restored, not swallowed")
     // If the produced root was not closed, this throws "Memory was leaked by query".
     alloc.close()
+  }
+
+  test("empty projection emits row counts without deserializing the Arrow payload") {
+    // A count-style read selects no columns, and the row count is already recorded on the cached
+    // batch, so the Arrow payload must not be deserialized at all. Prove it by handing the reader
+    // a batch whose payload is garbage: the empty projection succeeds purely from numRows, while
+    // a projection that actually needs the payload fails on the same batch.
+    val serializer = new ArrowCachedBatchSerializer
+    val attrs = Seq(AttributeReference("i", IntegerType)())
+    val garbage = ArrowCachedBatch(
+      numRows = 5,
+      arrowData = Array[Byte](0x13, 0x37, 0x00, -1),
+      stats = InternalRow(null, null, 0, 5, 4L))
+    val input = spark.sparkContext.parallelize(Seq[CachedBatch](garbage), 1)
+    val conf = spark.sessionState.conf
+
+    val emptyProjection =
+      serializer.convertCachedBatchToInternalRow(input, attrs, Seq.empty, conf)
+    assert(emptyProjection.map(_.numFields).collect() === Array(0, 0, 0, 0, 0))
+
+    val fullProjection =
+      serializer.convertCachedBatchToInternalRow(input, attrs, attrs, conf)
+    intercept[SparkException] {
+      fullProjection.collect()
+    }
+  }
+
+  test("count aggregate over the cached relation with the row-based reader") {
+    // End-to-end coverage of the empty-projection read: with the vectorized reader disabled the
+    // scan produces rows via convertCachedBatchToInternalRow, and a count aggregate selects no
+    // columns. Small Arrow batches make the count span many cached batches.
+    withSQLConf(
+        SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> "false",
+        SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "10") {
+      val df = (1 to 257).toList.toDF("i")
+      df.cache()
+      try {
+        assert(df.count() === 257)
+        checkAnswer(df.selectExpr("count(*)"), Seq(Row(257)))
+        // A projecting query over the same cached data still reads the payload correctly.
+        checkAnswer(df.selectExpr("sum(i)"), Seq(Row((1 to 257).sum.toLong)))
+      } finally {
+        df.unpersist()
+      }
+    }
   }
 }
 

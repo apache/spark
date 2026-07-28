@@ -2580,6 +2580,63 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(master.getSealedChecksum(blockId).isEmpty)
   }
 
+  test("sealed checksum tombstone rejects a divergent late copy after the last replica is lost") {
+    val store1 = makeBlockManager(20000, "exec1")
+    val store2 = makeBlockManager(20000, "exec2")
+    val blockId = RDDBlockId(20, 0)
+    // store1 materializes and the block is sealed to checksum 42.
+    master.updateBlockInfo(
+      store1.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(42L))
+    assert(master.sealRddChecksums(20) === 0)
+    assert(master.getSealedChecksum(blockId) === Some(42L))
+    // store1's only replica is lost (invalid storage level empties its locations).
+    master.updateBlockInfo(store1.blockManagerId, blockId, StorageLevel.NONE, 0, 0, Some(42L))
+    assert(master.getLocations(blockId).isEmpty)
+    // The seal is a tombstone: it survives the loss of the last replica.
+    assert(master.getSealedChecksum(blockId) === Some(42L))
+    // A late divergent copy (e.g. a zombie task) is still rejected by the tombstone.
+    master.updateBlockInfo(
+      store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(99L))
+    assert(!master.getLocations(blockId).contains(store2.blockManagerId))
+    assert(master.getSealedChecksum(blockId) === Some(42L))
+    // A late copy matching the seal is admitted.
+    master.updateBlockInfo(
+      store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(42L))
+    assert(master.getLocations(blockId).contains(store2.blockManagerId))
+  }
+
+  test("sealed checksum tombstone survives losing the last replica via executor removal") {
+    val store1 = makeBlockManager(20000, "exec1")
+    val store2 = makeBlockManager(20000, "exec2")
+    val blockId = RDDBlockId(21, 0)
+    master.updateBlockInfo(
+      store1.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(42L))
+    assert(master.sealRddChecksums(21) === 0)
+    // The only replica's executor dies (removeBlockManager empties the block's locations).
+    master.removeExecutor(store1.blockManagerId.executorId)
+    assert(master.getLocations(blockId).isEmpty)
+    assert(master.getSealedChecksum(blockId) === Some(42L))
+    // A divergent late copy is still rejected.
+    master.updateBlockInfo(
+      store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(99L))
+    assert(!master.getLocations(blockId).contains(store2.blockManagerId))
+  }
+
+  test("removeRdd reclaims a sealed checksum tombstone whose last replica was lost") {
+    val store = makeBlockManager(20000, "exec1")
+    val blockId = RDDBlockId(22, 0)
+    master.updateBlockInfo(
+      store.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(42L))
+    assert(master.sealRddChecksums(22) === 0)
+    // Lose the last replica; the tombstone remains even though the block has no location.
+    master.updateBlockInfo(store.blockManagerId, blockId, StorageLevel.NONE, 0, 0, Some(42L))
+    assert(master.getLocations(blockId).isEmpty)
+    assert(master.getSealedChecksum(blockId) === Some(42L))
+    // removeRdd reclaims the tombstone via the sealedBlocksByRdd index (not blockLocations).
+    master.removeRdd(22, blocking = true)
+    assert(master.getSealedChecksum(blockId).isEmpty)
+  }
+
   test("local-checkpoint verification: agreeing disk and _SER replicas survive the seal") {
     val diskStore = makeBlockManager(20000, "exec1")
     val serStore = makeBlockManager(20000, "exec2")

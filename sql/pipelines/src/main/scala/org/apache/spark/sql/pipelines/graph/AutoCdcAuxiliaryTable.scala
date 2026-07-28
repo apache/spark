@@ -27,8 +27,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table => CatalogTable, TableCatalog}
-import org.apache.spark.sql.pipelines.autocdc.{AutoCdcReservedNames, ScdType}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.pipelines.autocdc.{AutoCdcReservedNames, Scd2BatchProcessor, ScdType}
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
 /**
  * Helpers to construct and validate an AutoCDC flow's auxiliary table within the context of a
@@ -106,10 +106,10 @@ object AutoCdcAuxiliaryTable {
           inputAutoCdcFlow
         )
       case ScdType.Type2 =>
-        // SCD2 auxiliary derivation lands with SCD2 support. AutoCdcMergeFlow rejects SCD2 at
-        // construction today, so a resolved SCD2 flow cannot exist and this branch is unreachable.
-        throw SparkException.internalError(
-          "SCD2 auxiliary table derivation is not yet implemented."
+        buildScd2AuxiliaryTableSpecFor(
+          targetTable,
+          targetTableSchema,
+          inputAutoCdcFlow
         )
     }
   }
@@ -175,6 +175,76 @@ object AutoCdcAuxiliaryTable {
       targetTableIdentifier = targetTable.identifier,
       expectedKeyFields = keyFields,
       expectedScdType = ScdType.Type1
+    )
+  }
+
+  /**
+   * Build the SCD2 auxiliary table spec given the AutoCdc flow's declared keys and the target
+   * table it writes to.
+   *
+   * Unlike the SCD1 auxiliary table (which stores only keys + CDC metadata), the SCD2 auxiliary
+   * table stores full hidden rows -- tombstones and coalesced no-op upserts that may later be
+   * promoted into the visible target -- so its schema is the entire SCD2 target row schema plus
+   * the aux-only [[Scd2BatchProcessor.deletedByBatchIdColName]] logical-delete marker. This
+   * matches what [[Scd2BatchProcessor.findAffectedRowsFromAuxiliaryTable]] reads and the merges
+   * write: "[[Scd2BatchProcessor.deletedByBatchIdColName]] in addition to all of the columns in
+   * the target table".
+   *
+   * @param targetTable the dataset that owns the SCD2 auxiliary table
+   * @param targetTableSchema the AutoCDC target's evolved schema as of the latest pipeline run
+   *                          (the union of all flows writing to the target after schema
+   *                          evolution), which already carries the SCD2 framework columns
+   *                          (`__START_AT`, `__END_AT`, and the CDC metadata column)
+   * @param inputAutoCdcFlow the AutoCDC flow writing to `targetTable`
+   * @return the SCD2 auxiliary-table spec
+   */
+  private def buildScd2AuxiliaryTableSpecFor(
+      targetTable: Table,
+      targetTableSchema: StructType,
+      inputAutoCdcFlow: AutoCdcMergeFlow
+  ): AuxiliaryTableSpec = {
+    val scd2AuxiliaryTableIdentifier = identifier(targetTable.identifier)
+
+    val resolver = inputAutoCdcFlow.df.sparkSession.sessionState.conf.resolver
+    val autoCdcKeyColumnNames = inputAutoCdcFlow.changeArgs.keys.map(_.name)
+
+    // Resolve the key fields from the (evolved) target schema, exactly as SCD1 does, so the
+    // recorded key names/types used for drift detection come from the same source of truth.
+    val keyFields = autoCdcKeyColumnNames.map { keyColumnName =>
+      findFieldInTargetSchema(
+        targetTableSchema = targetTableSchema,
+        targetTableIdentifier = targetTable.identifier,
+        autoCdcFlowIdentifier = inputAutoCdcFlow.identifier,
+        fieldName = keyColumnName,
+        resolver = resolver
+      )
+    }
+
+    // The SCD2 auxiliary table holds full rows in the SCD2 target row schema, plus the aux-only
+    // logical-delete marker column appended last. The marker holds the batchId whose MERGE
+    // logically deleted a row (null on live rows), so it is a nullable Long.
+    val deletedByBatchIdField =
+      StructField(Scd2BatchProcessor.deletedByBatchIdColName, LongType, nullable = true)
+    val scd2AuxiliaryTableSchema = StructType(targetTableSchema.fields :+ deletedByBatchIdField)
+
+    val scd2AuxiliaryTableProperties =
+      // Record which SCD strategy this auxiliary table serves so downstream readers can identify it
+      // without inspecting the schema.
+      Map(scdTypePropertyKey -> ScdType.Type2.label) ++
+      // Persist the AutoCDC key column names as a JSON list; immutable post-creation (full-refresh
+      // is the only way to change it).
+      Map(keyColumnNamesProperty -> serializeKeyColumnNames(keyFields.map(_.name))) ++
+      // Inherit the target's format so MERGE semantics line up. When unspecified, omit the provider
+      // so the catalog falls back to its default.
+      targetTable.format.map(TableCatalog.PROP_PROVIDER -> _)
+
+    AutoCdcAuxiliaryTableSpec(
+      identifier = scd2AuxiliaryTableIdentifier,
+      schema = scd2AuxiliaryTableSchema,
+      properties = scd2AuxiliaryTableProperties,
+      targetTableIdentifier = targetTable.identifier,
+      expectedKeyFields = keyFields,
+      expectedScdType = ScdType.Type2
     )
   }
 
