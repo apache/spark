@@ -57,10 +57,11 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
   test("RFormulaModel estimated size") {
     val dataset = Seq(("a", 1.0), ("b", 2.0), ("c", 3.0)).toDF("category", "label")
     val model = new RFormula().setFormula("label ~ category").fit(dataset)
+    val minSize = 1024 * 8
     val maxSize = 1024 * 16
     assert(
-      model.estimatedSize < maxSize,
-      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+      model.estimatedSize > minSize && model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be between $minSize and $maxSize")
   }
 
   test("transform numeric data") {
