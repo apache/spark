@@ -297,13 +297,28 @@ object SupportsArchiveFormat {
         try current.close() catch { case NonFatal(_) => }
         current = null
       }
+      // Open each entry's stream lazily, on first read. An entry the engine skips (directory or
+      // dotfile) is never read, so it is never opened and its readability never checked -- else a
+      // skipped-but-encrypted entry would throw CANNOT_READ_ZIP_ENTRY, unlike the streaming reader
+      // ZipFile replaced. Opening an entry releases the previous one's inflater.
       val entries = zipFile.getEntries.asScala.map { entry =>
-        closeCurrentStream()
-        if (!zipFile.canReadEntryData(entry)) {
-          throw QueryExecutionErrors.cannotReadZipEntry(entry.getName, path.toString)
+        val stream = new InputStream {
+          private var delegate: InputStream = _
+          private def open(): InputStream = {
+            if (delegate == null) {
+              closeCurrentStream()
+              if (!zipFile.canReadEntryData(entry)) {
+                throw QueryExecutionErrors.cannotReadZipEntry(entry.getName, path.toString)
+              }
+              delegate = zipFile.getInputStream(entry)
+              current = delegate
+            }
+            delegate
+          }
+          override def read(): Int = open().read()
+          override def read(b: Array[Byte], off: Int, len: Int): Int = open().read(b, off, len)
         }
-        current = zipFile.getInputStream(entry)
-        (entry: ArchiveEntry, current)
+        (entry: ArchiveEntry, stream)
       }
       closeable(entries, () => {
         try {

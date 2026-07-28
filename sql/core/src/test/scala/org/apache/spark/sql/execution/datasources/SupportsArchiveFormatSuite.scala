@@ -544,6 +544,16 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
     }
   }
 
+  test("readArchiveEntries: an encrypted zip entry that is skipped does not throw") {
+    withTempDir { dir =>
+      val zip = new File(dir, "encrypted-dotfile.zip")
+      // The encrypted entry has a dotfile name the engine filters out, so it is never read; its
+      // readability must not be checked (else it would throw CANNOT_READ_ZIP_ENTRY on a skip).
+      writeEncryptedEntry(zip, "._skipped.csv", "secret")
+      assert(collect(zip).isEmpty)
+    }
+  }
+
   // ----- 7z -----------------------------------------------------------------
   // 7z keeps its entry index at the end of the file, so the reader seeks rather than streaming
   // forward like tar and zip. These cases confirm the `.7z` dispatch and that the seek-based
