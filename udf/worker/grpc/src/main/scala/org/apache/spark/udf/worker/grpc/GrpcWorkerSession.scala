@@ -110,6 +110,11 @@ import org.apache.spark.udf.worker.grpc.GrpcWorkerSession._
  *                              `CancelResponse`, or `ErrorResponse`).
  *                              Each output-queue poll resets this wait;
  *                              see [[doProcess]] / `ProcessIterator`.
+ * @param interruptCancelTimeoutMs upper bound on the wait for a `CancelResponse`
+ *                              after an interrupt (cancelled query / killed
+ *                              task) sends `Cancel`. Short by design; on expiry
+ *                              the session settles `Interrupted`. See
+ *                              `handleInterrupt`.
  */
 @Experimental
 class GrpcWorkerSession(
@@ -117,7 +122,8 @@ class GrpcWorkerSession(
     channel: ManagedChannel,
     logger: WorkerLogger = WorkerLogger.NoOp,
     initResponseTimeoutMs: Long = DEFAULT_INIT_RESPONSE_TIMEOUT_MS,
-    terminalTimeoutMs: Long = DEFAULT_TERMINAL_TIMEOUT_MS)
+    terminalTimeoutMs: Long = DEFAULT_TERMINAL_TIMEOUT_MS,
+    interruptCancelTimeoutMs: Long = DEFAULT_INTERRUPT_CANCEL_TIMEOUT_MS)
   extends WorkerSession(workerHandle, logger) {
 
   require(channel != null, "channel is required")
@@ -373,6 +379,15 @@ class GrpcWorkerSession(
     /** Failure terminal carrying a transport-level cause. */
     def transportFailed(cause: Throwable): Boolean =
       completeTerminal(Termination.TransportFailed(cause))
+
+    /**
+     * Terminal for an engine-thread interrupt (e.g. a Spark task kill). Distinct
+     * from [[transportFailed]]: the worker is salvageable (the interrupt is not a
+     * worker fault) and a best-effort `Cancel` is sent but its `CancelResponse`
+     * is not awaited, since the interrupted thread must unwind rather than block.
+     */
+    def interrupted(cause: Throwable): Boolean =
+      completeTerminal(Termination.Interrupted(cause))
   }
 
   // ---- WorkerSession hooks ------------------------------------------------
@@ -425,16 +440,10 @@ class GrpcWorkerSession(
       initValue.await(initResponseTimeoutMs)
     } catch {
       case _: InterruptedException =>
-        Thread.currentThread().interrupt()
-        sendCancelInternal(() => cancelWithReason("interrupted during init"))
-        // Attribute the terminal to a transport failure, not a cancel: the
-        // interrupt comes from the engine/task thread that called init() (e.g.
-        // Spark task kill), and after it the worker's state is unknown -- the
-        // Cancel above is best-effort and may not have been acked -- so the
-        // worker is not salvageable. It also stops close() from blocking on a
-        // terminator that will never arrive on this thread's behalf.
-        Transitions.transportFailed(
-          new InterruptedException("interrupted while waiting for InitResponse"))
+        // Interrupt (cancelled query / killed task) while awaiting InitResponse:
+        // cooperatively Cancel with a bounded drain, settling Cancelled if the
+        // worker acks in time, else Interrupted. See handleInterrupt.
+        handleInterrupt("waiting for InitResponse")
         throw new InterruptedException("interrupted while waiting for InitResponse")
       case e: TimeoutException =>
         sendCancelInternal(() => cancelWithReason("InitResponse timed out"))
@@ -480,6 +489,9 @@ class GrpcWorkerSession(
               case SessionState.Terminal(Termination.Cancelled(_)) =>
                 throw new GrpcWorkerSessionException(
                   "UDF worker stream was cancelled before init completed")
+              case SessionState.Terminal(Termination.Interrupted(cause)) =>
+                throw new GrpcWorkerSessionException(
+                  "UDF worker init was interrupted", cause)
               case SessionState.Terminal(Termination.Finished(_)) =>
                 throw new GrpcWorkerSessionException(
                   "UDF worker finished before init completed")
@@ -539,12 +551,18 @@ class GrpcWorkerSession(
       try {
         terminalLatch.await(terminalTimeoutMs, TimeUnit.MILLISECONDS)
       } catch {
-        case _: InterruptedException => Thread.currentThread().interrupt()
+        case _: InterruptedException =>
+          // Interrupted mid-close: settle Interrupted (salvageable) via the
+          // shared handler rather than falling through to the TransportFailed
+          // guard below. The Cancel is already on the wire, so handleInterrupt's
+          // sendCancelInternal is a no-op and it just runs the bounded drain.
+          handleInterrupt("closing the session")
       }
     }
-    // If the worker still has not settled (timeout or interrupt above),
-    // record a terminal so isWorkerSalvageable returns a definite answer
-    // and any other thread reading the state sees a stable value.
+    // If the worker still has not settled (timeout above, or an interrupt whose
+    // bounded drain did not settle a terminal), record a terminal so
+    // isWorkerSalvageable returns a definite answer and any other thread reading
+    // the state sees a stable value.
     if (!currentState.isTerminal) {
       Transitions.transportFailed(new TimeoutException(
         s"timed out waiting for stream terminator after ${terminalTimeoutMs}ms"))
@@ -651,14 +669,58 @@ class GrpcWorkerSession(
           s"timed out waiting for stream terminator after ${terminalTimeoutMs}ms"))
       }
     } catch {
-      case _: InterruptedException =>
-        // Attribute the terminal to the interrupt, not a timeout: the wait was
-        // cut short, it did not exhaust terminalTimeoutMs. Reporting "timed
-        // out" here would misdiagnose an interrupted close as a slow worker.
-        Thread.currentThread().interrupt()
-        Transitions.transportFailed(
-          new InterruptedException("interrupted while waiting for stream terminator"))
+      case _: InterruptedException => handleInterrupt(s"waiting for stream terminator")
     }
+  }
+
+  /**
+   * Handles an [[InterruptedException]] observed while blocked on a worker event
+   * (init, terminal drain, close, or the result-iterator poll). An interrupt is
+   * an engine-side event -- typically a cancelled query / killed task -- not a
+   * worker fault, so we cancel cooperatively and keep the worker salvageable
+   * when it acks:
+   *
+   *  1. Send a best-effort `Cancel` (idempotent across call sites).
+   *  2. Wait up to [[interruptCancelTimeoutMs]] -- short, so the interrupted
+   *     thread unwinds promptly -- for the worker's `CancelResponse`. A healthy
+   *     worker acks in that window and the callback settles a clean `Cancelled`
+   *     terminal (worker salvageable, response drained).
+   *  3. If the ack does not arrive in time, settle `Interrupted` (also
+   *     salvageable): the worker is optimistically assumed reusable, and a
+   *     genuinely dead worker is expected to be caught by a separate liveness
+   *     check (see TODO below).
+   *
+   * The bounded wait deliberately runs '''before''' the thread's interrupt flag
+   * is restored: [[InterruptedException]] clears the flag on throw, so re-setting
+   * it first would make the wait below throw immediately and defeat the drain.
+   * The flag is restored at the end so the caller's unwind still observes the
+   * interrupt.
+   *
+   * TODO [SPARK-57640]: back the optimistic salvageable assumption with a worker
+   * liveness/heartbeat check, so an interrupt that leaves a wedged (but not
+   * transport-dead) worker still marks it invalid rather than recycling it.
+   */
+  private def handleInterrupt(waitContext: String): Unit = {
+    // NB: flag is currently clear (InterruptedException cleared it); do not
+    // restore it until after the bounded drain below.
+    if (!currentState.isTerminal) {
+      sendCancelInternal(() => cancelWithReason(s"interrupted while $waitContext"))
+      val acked = try {
+        terminalLatch.await(interruptCancelTimeoutMs, TimeUnit.MILLISECONDS)
+      } catch {
+        case _: InterruptedException =>
+          // A second interrupt during the drain: give up the wait immediately.
+          false
+      }
+      if (!acked && !currentState.isTerminal) {
+        // No CancelResponse in time: settle Interrupted (salvageable) rather
+        // than TransportFailed, and stop a later close() from blocking on a
+        // terminator that will not be drained on this thread's behalf.
+        Transitions.interrupted(
+          new InterruptedException(s"interrupted while $waitContext"))
+      }
+    }
+    Thread.currentThread().interrupt()
   }
 
   // ---- ProcessIterator ------------------------------------------------------
@@ -789,8 +851,10 @@ class GrpcWorkerSession(
             outputQueue.poll(terminalTimeoutMs, TimeUnit.MILLISECONDS)
           } catch {
             case _: InterruptedException =>
-              Thread.currentThread().interrupt()
-              sendCancelInternal(() => cancelWithReason("iterator interrupted"))
+              // Interrupt (cancelled query / killed task) while reading results:
+              // cooperatively Cancel with a bounded drain, settling Cancelled if
+              // the worker acks in time, else Interrupted. See handleInterrupt.
+              handleInterrupt("reading UDF result")
               exhausted.set(true)
               throw new InterruptedException("interrupted while reading UDF result")
           }
@@ -865,6 +929,8 @@ class GrpcWorkerSession(
           s"UDF execution failed: ${describeError(err)}", err)
       case SessionState.Terminal(Termination.TransportFailed(t)) =>
         throw new GrpcWorkerSessionException("UDF worker stream failed", t)
+      case SessionState.Terminal(Termination.Interrupted(t)) =>
+        throw new GrpcWorkerSessionException("UDF execution was interrupted", t)
       case other =>
         throw new IllegalStateException(s"terminator sentinel without terminal: $other")
     }
@@ -884,6 +950,16 @@ object GrpcWorkerSession {
 
   /** Upper bound on the wait for `FinishResponse` / `CancelResponse`. */
   val DEFAULT_TERMINAL_TIMEOUT_MS: Long = 30000L
+
+  /**
+   * Upper bound on the wait for a `CancelResponse` after an interrupt (e.g. a
+   * cancelled query / killed task) sends `Cancel`. Much shorter than
+   * [[DEFAULT_TERMINAL_TIMEOUT_MS]]: the interrupted thread must unwind
+   * promptly, so a healthy worker gets a brief window to ack the Cancel (clean
+   * `Cancelled` terminal, worker salvageable) before the session falls back to
+   * an `Interrupted` terminal. See `handleInterrupt`.
+   */
+  val DEFAULT_INTERRUPT_CANCEL_TIMEOUT_MS: Long = 2000L
 
   // Distinguishes a (possibly empty) data batch from end-of-stream, and makes
   // the iterator's match exhaustive.

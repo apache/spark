@@ -22,7 +22,7 @@ import org.apache.spark.udf.worker.{CancelResponse, ExecutionError, FinishRespon
 /**
  * :: Experimental ::
  * The terminal outcome a [[WorkerSession]] settles on, returned by
- * [[WorkerSession#close]]. Enumerates the four terminal outcomes, carried by the
+ * [[WorkerSession#close]]. Enumerates the terminal outcomes, carried by the
  * single `WorkerSession.SessionState.Terminal`, so close() reports the outcome
  * faithfully rather than collapsing failures into a clean cancel.
  *
@@ -59,8 +59,22 @@ object Termination {
   final case class Failed(error: ExecutionError) extends Termination
 
   /**
-   * A transport failure, timeout, or interrupt tore the stream down before any
-   * terminator arrived. Carries the underlying cause.
+   * A transport failure or timeout tore the stream down before any terminator
+   * arrived. Carries the underlying cause. Leaves the worker in an unknown state,
+   * so it is not salvageable (see [[WorkerSession.isWorkerSalvageable]]).
    */
   final case class TransportFailed(cause: Throwable) extends Termination
+
+  /**
+   * The session was interrupted (an [[InterruptedException]] on the engine
+   * thread driving it, e.g. a Spark task kill) before a terminator arrived. A
+   * best-effort `Cancel` is sent but its `CancelResponse` is not awaited -- the
+   * interrupted thread must unwind rather than block -- so this is distinct from
+   * a cooperative [[Cancelled]] (which carries the drained `CancelResponse`) and
+   * from a [[TransportFailed]] (a genuine transport fault). The interrupt is an
+   * engine-side event, not a worker fault, so the worker is treated as
+   * salvageable (see [[WorkerSession.isWorkerSalvageable]]). Carries the
+   * interrupt cause.
+   */
+  final case class Interrupted(cause: Throwable) extends Termination
 }

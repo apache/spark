@@ -152,11 +152,13 @@ class GrpcWorkerSessionConcurrencySuite
   private def newSession(
       channel: ManagedChannel,
       initResponseTimeoutMs: Long = 5000L,
-      terminalTimeoutMs: Long = 5000L): GrpcWorkerSession = {
+      terminalTimeoutMs: Long = 5000L,
+      interruptCancelTimeoutMs: Long = 5000L): GrpcWorkerSession = {
     val session = new GrpcWorkerSession(
       new TestWorkerHandle, channel, WorkerLogger.NoOp,
       initResponseTimeoutMs = initResponseTimeoutMs,
-      terminalTimeoutMs = terminalTimeoutMs)
+      terminalTimeoutMs = terminalTimeoutMs,
+      interruptCancelTimeoutMs = interruptCancelTimeoutMs)
     openSessions.add(session)
     session
   }
@@ -1141,5 +1143,95 @@ class GrpcWorkerSessionConcurrencySuite
         s"expected a timeout/transport-failure message, got: ${ex.getMessage}")
     }
     session.close(emptyCancel)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Interrupt handling (cancelled query / killed task). An interrupt while
+  // blocked on init sends a best-effort Cancel and waits interruptCancelTimeoutMs
+  // for the CancelResponse: a responsive worker settles a clean, salvageable
+  // Cancelled; an unresponsive one falls back to Interrupted (also salvageable).
+  // ---------------------------------------------------------------------------
+
+  test("interrupt during init: responsive worker settles Cancelled, worker salvageable") {
+    // Worker never sends InitResponse (so init() blocks), but DOES reply to
+    // Cancel -- so the interrupt's bounded drain observes the CancelResponse and
+    // settles a clean Cancelled.
+    val initReceived = new CountDownLatch(1)
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        if (req.hasControl && req.getControl.hasInit) {
+          initReceived.countDown() // block: no InitResponse
+        } else if (req.hasControl && req.getControl.hasCancel) {
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setCancel(
+              CancelResponse.getDefaultInstance).build()).build())
+        }
+      })
+    val (_, channel) = startServer(service, directExecutor = false)
+    // Huge initResponseTimeoutMs so only the interrupt can end the init wait;
+    // generous interruptCancelTimeoutMs so the ack is observed.
+    val session = newSession(channel,
+      initResponseTimeoutMs = NeverReachedTimeoutMs, interruptCancelTimeoutMs = 5000L)
+    val handle = handleOf(session)
+
+    val thrown = new AtomicReference[Throwable]()
+    val initThread = new Thread(() => {
+      try session.init(basicInit()) catch { case t: Throwable => thrown.set(t) }
+    }, "interrupt-init-responsive")
+    initThread.start()
+    assert(initReceived.await(5, TimeUnit.SECONDS), "worker never received Init")
+    initThread.interrupt()
+    initThread.join(10000)
+    assert(!initThread.isAlive, "init() must return after the interrupt")
+    assert(thrown.get().isInstanceOf[InterruptedException],
+      s"init() must rethrow InterruptedException, got: ${thrown.get()}")
+
+    val termination = session.close(emptyCancel)
+    assert(termination.isInstanceOf[Termination.Cancelled],
+      s"a responsive worker's ack should settle Cancelled, got: $termination")
+    assert(!handle.invalidated.get(),
+      "an Interrupted/Cancelled outcome is salvageable; the worker must not be invalidated")
+    assert(handle.released.get(), "close() must release the worker handle")
+  }
+
+  test("interrupt during init: unresponsive worker settles Interrupted, worker salvageable") {
+    // Worker never sends InitResponse and ignores Cancel -- so the interrupt's
+    // bounded drain times out and the session falls back to Interrupted.
+    val initReceived = new CountDownLatch(1)
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        if (req.hasControl && req.getControl.hasInit) {
+          initReceived.countDown() // block: no InitResponse, and Cancel ignored
+        }
+      })
+    val (_, channel) = startServer(service, directExecutor = false)
+    // Short interruptCancelTimeoutMs so the fallback fires quickly; huge
+    // terminalTimeoutMs so a regression that used the wrong timeout would stall.
+    val session = newSession(channel,
+      initResponseTimeoutMs = NeverReachedTimeoutMs,
+      terminalTimeoutMs = NeverReachedTimeoutMs,
+      interruptCancelTimeoutMs = 500L)
+    val handle = handleOf(session)
+
+    val thrown = new AtomicReference[Throwable]()
+    val initThread = new Thread(() => {
+      try session.init(basicInit()) catch { case t: Throwable => thrown.set(t) }
+    }, "interrupt-init-unresponsive")
+    initThread.start()
+    assert(initReceived.await(5, TimeUnit.SECONDS), "worker never received Init")
+    initThread.interrupt()
+    // Bounded by interruptCancelTimeoutMs (500ms), not terminalTimeoutMs (10min):
+    // if init parked on the wrong timeout this join would fail.
+    initThread.join(10000)
+    assert(!initThread.isAlive, "init() must return within interruptCancelTimeoutMs of the interrupt")
+    assert(thrown.get().isInstanceOf[InterruptedException],
+      s"init() must rethrow InterruptedException, got: ${thrown.get()}")
+
+    val termination = session.close(emptyCancel)
+    assert(termination.isInstanceOf[Termination.Interrupted],
+      s"an unresponsive worker should settle Interrupted, got: $termination")
+    assert(!handle.invalidated.get(),
+      "an Interrupted outcome is salvageable; the worker must not be invalidated")
+    assert(handle.released.get(), "close() must release the worker handle")
   }
 }

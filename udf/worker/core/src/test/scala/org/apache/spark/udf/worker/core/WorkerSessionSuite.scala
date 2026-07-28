@@ -166,6 +166,21 @@ class WorkerSessionSuite extends AnyFunSuite {
     assert(h.released == 1)
   }
 
+  test("close leaves a worker salvageable after an Interrupted termination") {
+    val h = new RecordingHandle
+    val cause = new InterruptedException("task killed")
+    // An Interrupted terminal is an engine-side event (cancelled query / killed
+    // task), not a worker fault, so the worker stays reusable: markInvalid must
+    // NOT be called.
+    val s = new FakeWorkerSession(handle = h, onCloseHook = (self, _) => {
+      self.settle(Termination.Interrupted(cause))
+      self.term
+    })
+    assert(s.close() == Termination.Interrupted(cause))
+    assert(h.invalidated == 0)
+    assert(h.released == 1)
+  }
+
   test("close enforces the doClose terminal post-condition") {
     val h = new RecordingHandle
     // doClose returns a Termination without settling any terminal -- a subclass
@@ -261,6 +276,7 @@ class WorkerSessionSuite extends AnyFunSuite {
     assert(termFor(Termination.Cancelled(can)) == Termination.Cancelled(can))
     assert(termFor(Termination.Failed(err)) == Termination.Failed(err))
     assert(termFor(Termination.TransportFailed(cause)) == Termination.TransportFailed(cause))
+    assert(termFor(Termination.Interrupted(cause)) == Termination.Interrupted(cause))
   }
 
   test("settledTermination throws before a terminal is settled") {

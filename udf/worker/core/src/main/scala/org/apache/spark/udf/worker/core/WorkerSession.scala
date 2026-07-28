@@ -89,10 +89,10 @@ import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, I
  *                                           |   (from any non-terminal state)
  * }}}
  * The clean path (via Finishing) and the cancel path (via Cancelling) settle the
- * same `(terminal)`. The four terminals are:
+ * same `(terminal)`. The terminals are:
  * {{{
  *   Finished(FinishResponse) | Cancelled(CancelResponse)
- *   Failed(ExecutionError)   | TransportFailed(Throwable)
+ *   Failed(ExecutionError)   | TransportFailed(Throwable) | Interrupted(Throwable)
  * }}}
  * The two clean terminals carry the worker's `FinishResponse` / `CancelResponse`
  * (metrics + finish/cancel callback `data`/`error`); the failure terminals carry
@@ -348,15 +348,16 @@ abstract class WorkerSession(
   /**
    * Whether the underlying worker is in a state safe to reuse after this
    * session ends. The default treats only a dead or unknown transport as
-   * unsafe: a [[Termination.TransportFailed]] outcome (transport failure,
-   * timeout, or interrupt) -- or a session that never settled -- leaves the
-   * worker in an unknown state and is not salvageable. Every other terminal is
-   * salvageable: a clean [[Termination.Finished]], a cooperative
-   * [[Termination.Cancelled]], and also an execution [[Termination.Failed]],
-   * which is typically a user-code (UDF) error reported by a still-healthy
-   * worker rather than a worker fault. A `false` result tells [[close]] to mark
-   * `workerHandle` invalid so no reuse pool recycles the worker. Subclasses may
-   * override for protocol-specific nuances.
+   * unsafe: a [[Termination.TransportFailed]] outcome (transport failure or
+   * timeout) -- or a session that never settled -- leaves the worker in an
+   * unknown state and is not salvageable. Every other terminal is salvageable:
+   * a clean [[Termination.Finished]], a cooperative [[Termination.Cancelled]],
+   * an execution [[Termination.Failed]] (typically a user-code (UDF) error
+   * reported by a still-healthy worker rather than a worker fault), and an
+   * [[Termination.Interrupted]] (an engine-side task kill, not a worker fault).
+   * A `false` result tells [[close]] to mark `workerHandle` invalid so no reuse
+   * pool recycles the worker. Subclasses may override for protocol-specific
+   * nuances.
    */
   protected def isWorkerSalvageable: Boolean = state.get() match {
     case SessionState.Terminal(_: Termination.TransportFailed) => false
@@ -461,8 +462,9 @@ object WorkerSession {
     /**
      * The session is over; no further writes are valid. The single terminal
      * state carries the public [[Termination]] outcome (`Finished` /
-     * `Cancelled` / `Failed` / `TransportFailed`), so those four outcome cases
-     * live once on [[Termination]] rather than being mirrored on the state.
+     * `Cancelled` / `Failed` / `TransportFailed` / `Interrupted`), so those
+     * outcome cases live once on [[Termination]] rather than being mirrored on
+     * the state.
      */
     final case class Terminal(termination: Termination) extends SessionState {
       override def isTerminal: Boolean = true
