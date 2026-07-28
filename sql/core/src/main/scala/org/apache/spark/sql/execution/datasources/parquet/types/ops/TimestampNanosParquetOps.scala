@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
+import org.apache.parquet.column.{ColumnDescriptor, Dictionary}
 import org.apache.parquet.io.api.{Converter, RecordConsumer}
 import org.apache.parquet.schema.{LogicalTypeAnnotation, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation.{TimestampLogicalTypeAnnotation, TimeUnit}
@@ -26,7 +27,9 @@ import org.apache.parquet.schema.Type.Repetition
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetPrimitiveConverter}
+import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetPrimitiveConverter, ParquetVectorUpdater, VectorizedValuesReader}
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 
@@ -53,9 +56,9 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  *
  * TIMESTAMP(NANOS) postdates Spark's switch to the proleptic Gregorian calendar, so the values are
  * exempt from datetime rebasing (the rebase modes only cover DATE, TIMESTAMP_MILLIS and
- * TIMESTAMP_MICROS). Vectorized read is not supported: the value is a 16-byte composite rather
- * than a single long slot, so `isBatchReadSupported` stays false (the trait default) and reads go
- * through the row-based converter.
+ * TIMESTAMP_MICROS). The vectorized reader decomposes the INT64 epoch-nanos into the two-child
+ * column vector (epochMicros: Long, nanosWithinMicro: Short) via [[TimestampNanosVectorUpdater]],
+ * routed through the types framework's `getVectorUpdater` hook.
  *
  * @see ParquetTypeOps for the dispatch contract
  * @since 4.3.0
@@ -76,6 +79,22 @@ private[parquet] trait TimestampNanosParquetOps extends ParquetTypeOps {
 
   // The Parquet TIMESTAMP `isAdjustedToUTC` flag: LTZ is UTC-adjusted, NTZ is not.
   private def isAdjustedToUTC: Boolean = !isNtz
+
+  // ==================== Vectorized Read Support ====================
+
+  override def isBatchReadSupported(sqlConf: SQLConf): Boolean = true
+
+  // Only a canonical INT64 TIMESTAMP(NANOS) column can be vectorized-decoded as a nanos timestamp.
+  // Return None for anything else so the factory falls through to its clean
+  // SchemaColumnConvertNotSupportedException instead of silently mis-reading.
+  override def getVectorUpdater(descriptor: ColumnDescriptor): Option[ParquetVectorUpdater] = {
+    val parquetType = descriptor.getPrimitiveType
+    if (TimestampNanosParquetOps.isNanosTimestamp(parquetType)) {
+      Some(new TimestampNanosVectorUpdater(precision))
+    } else {
+      None
+    }
+  }
 
   // ==================== Schema Conversion ====================
 
@@ -166,4 +185,67 @@ private[ops] object TimestampNanosParquetOps {
         case ts: TimestampLogicalTypeAnnotation => ts.getUnit == TimeUnit.NANOS
         case _ => false
       })
+}
+
+/**
+ * Vectorized (batch) updater for nanosecond-precision timestamps: reads an INT64 epoch-nanos
+ * column and decomposes each value into the two-child column vector (epochMicros: Long,
+ * nanosWithinMicro: Short). Sub-microsecond digits are truncated to the requested precision.
+ * Mirrors the row-based `newConverter` path which calls
+ * `DateTimeUtils.epochNanosToTimestampNanos(value, precision)`.
+ *
+ * No datetime rebase is applied (TIMESTAMP(NANOS) postdates the proleptic Gregorian switch).
+ * No timezone conversion is applied at the storage level.
+ *
+ * Owned by the type's ops ([[TimestampNanosParquetOps]]) and routed through the types
+ * framework's `getVectorUpdater` hook (no factory-level branch).
+ */
+private[ops] class TimestampNanosVectorUpdater(precision: Int) extends ParquetVectorUpdater {
+
+  // Truncation uses the shared DateTimeUtils.truncateNanosWithinMicroToPrecision helper so the
+  // vectorized path stays in lock-step with the row-based reader (epochNanosToTimestampNanos).
+  // We decompose floorDiv/floorMod inline rather than calling epochNanosToTimestampNanos directly
+  // because that method returns a heap-allocated TimestampNanosVal per value, which would add
+  // GC pressure on the hot vectorized decode loop. The truncation itself is a pure Int->Int
+  // operation with no allocation.
+
+  private def putTimestampNanos(
+      offset: Int, values: WritableColumnVector, epochNanos: Long): Unit = {
+    val epochMicros = Math.floorDiv(epochNanos, 1000L)
+    val rawNanosWithinMicro = Math.floorMod(epochNanos, 1000L).toInt
+    val nanosWithinMicro =
+      DateTimeUtils.truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision).toShort
+    values.getChild(0).putLong(offset, epochMicros)
+    values.getChild(1).putShort(offset, nanosWithinMicro)
+  }
+
+  override def readValues(
+      total: Int,
+      offset: Int,
+      values: WritableColumnVector,
+      valuesReader: VectorizedValuesReader): Unit = {
+    var i = 0
+    while (i < total) {
+      putTimestampNanos(offset + i, values, valuesReader.readLong())
+      i += 1
+    }
+  }
+
+  override def skipValues(total: Int, valuesReader: VectorizedValuesReader): Unit =
+    valuesReader.skipLongs(total)
+
+  override def readValue(
+      offset: Int,
+      values: WritableColumnVector,
+      valuesReader: VectorizedValuesReader): Unit =
+    putTimestampNanos(offset, values, valuesReader.readLong())
+
+  override def decodeSingleDictionaryId(
+      offset: Int,
+      values: WritableColumnVector,
+      dictionaryIds: WritableColumnVector,
+      dictionary: Dictionary): Unit = {
+    val epochNanos = dictionary.decodeToLong(dictionaryIds.getDictId(offset))
+    putTimestampNanos(offset, values, epochNanos)
+  }
 }

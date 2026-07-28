@@ -146,9 +146,9 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
       parseEntry: (UnivocityParser, CSVHeaderChecker, InputStream) => Iterator[InternalRow])
     : Iterator[InternalRow] = {
     SupportsArchiveFormat.readArchiveEntries(
-        file.toPath, conf, ignoredPathSegmentRegex) { (entryName, in) =>
+        file.toPath, conf, ignoredPathSegmentRegex) { (entry, in) =>
       val headerChecker =
-        getHeaderChecker(true, s"CSV archive entry: ${file.urlEncodedPath}!/$entryName")
+        getHeaderChecker(true, s"CSV archive entry: ${file.urlEncodedPath}!/${entry.getName}")
       val parser = getParser()
       headerChecker.setHeaderForSingleVariantColumn =
         CSVDataSource.setHeaderForSingleVariantColumn(conf, file, parser)

@@ -50,13 +50,13 @@ public interface CredentialProvider {
    * they need (e.g., endpoint URLs, role ARNs) from the provided map.
    * <p>
    * The configuration map passed to this method is scoped to keys starting with
-   * {@code spark.security.credentials.} only. Keys from other subsystems are not included,
+   * {@code spark.security.oidc.} only. Keys from other subsystems are not included,
    * preventing accidental leakage of unrelated secrets to third-party providers.
    * <p>
    * If init() throws, it may be retried on the next resolution attempt. Implementations
    * should be safe to call again after a prior failure.
    *
-   * @param conf Spark configuration properties scoped to {@code spark.security.credentials.*}
+   * @param conf Spark configuration properties scoped to {@code spark.security.oidc.*}
    *     keys (must not be null)
    * @since 4.3.0
    */

@@ -42,7 +42,7 @@ import org.apache.spark.annotation.Private;
  * with the configuration from the first call that selects it (first-conf-wins semantics);
  * subsequent resolutions reuse the already-initialized instance without re-calling {@code init}.
  * <p>
- * When the configuration key {@code spark.security.credentials.provider.<scheme>} is set
+ * When the configuration key {@code spark.security.oidc.provider.<scheme>} is set
  * (non-empty), the loader validates the configured fully-qualified class name against the
  * discovered candidates for that scheme regardless of candidate count. If the configured class
  * does not match any candidate, an {@link IllegalArgumentException} is thrown listing the
@@ -66,14 +66,14 @@ public final class CredentialProviderLoader {
    * When set (non-empty), the configured fully-qualified class name must match a discovered
    * provider that supports the scheme; a mismatch results in an {@link IllegalArgumentException}.
    */
-  private static final String CONF_PREFIX = "spark.security.credentials.provider.";
+  private static final String CONF_PREFIX = "spark.security.oidc.provider.";
 
   /**
    * Configuration key prefix used to scope the configuration passed to
    * {@link CredentialProvider#init(Map)}. Only keys starting with this prefix are forwarded,
    * preventing unrelated secrets from leaking to third-party provider implementations.
    */
-  private static final String CREDENTIALS_CONF_PREFIX = "spark.security.credentials.";
+  private static final String OIDC_CONF_PREFIX = "spark.security.oidc.";
 
   private static volatile List<CredentialProvider> cachedProviders;
 
@@ -92,7 +92,7 @@ public final class CredentialProviderLoader {
    * Returns the {@link CredentialProvider} for the given URI scheme, applying Binding Policy A:
    * <ol>
    *   <li>If no candidate supports the scheme, {@link Optional#empty()} is returned.</li>
-   *   <li>If {@code spark.security.credentials.provider.<scheme>} is set (non-empty) in
+   *   <li>If {@code spark.security.oidc.provider.<scheme>} is set (non-empty) in
    *       {@code conf}, the provider whose fully-qualified class name matches is selected
    *       regardless of candidate count. If the configured class does not match any candidate,
    *       an {@link IllegalArgumentException} is thrown naming the scheme, the configured class,
@@ -104,7 +104,7 @@ public final class CredentialProviderLoader {
    * The selected provider is initialized exactly once per provider instance via
    * {@link CredentialProvider#init(Map)} (first-conf-wins semantics); later resolutions reuse
    * the initialized instance without re-calling {@code init}. The configuration passed to
-   * {@code init()} is scoped to {@code spark.security.credentials.*} keys only; keys from
+   * {@code init()} is scoped to {@code spark.security.oidc.*} keys only; keys from
    * other subsystems are filtered out to prevent secret leakage to third-party providers.
    * <p>
    * Spark-internal callers pass their configuration as a {@code Map<String, String>} for
@@ -171,7 +171,7 @@ public final class CredentialProviderLoader {
     }
 
     // Initialize exactly once under the lock (first-conf-wins).
-    // Only pass spark.security.credentials.* keys to init() to avoid leaking secrets
+    // Only pass spark.security.oidc.* keys to init() to avoid leaking secrets
     // from other subsystems to third-party ServiceLoader providers. This follows the
     // precedent of DataSourceV2Utils.extractSessionConfigs() which scopes configuration
     // to a specific prefix. We keep the full key (unlike extractSessionConfigs which
@@ -180,7 +180,7 @@ public final class CredentialProviderLoader {
       if (!initializedProviders.contains(selected)) {
         Map<String, String> filteredConf = new HashMap<>();
         for (Map.Entry<String, String> entry : conf.entrySet()) {
-          if (entry.getKey().startsWith(CREDENTIALS_CONF_PREFIX)) {
+          if (entry.getKey().startsWith(OIDC_CONF_PREFIX)) {
             filteredConf.put(entry.getKey(), entry.getValue());
           }
         }
