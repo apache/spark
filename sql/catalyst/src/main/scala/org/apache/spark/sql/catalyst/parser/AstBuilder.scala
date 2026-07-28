@@ -7786,7 +7786,7 @@ class AstBuilder extends DataTypeAstBuilder
     // Extract original SQL text to preserve parameter markers
     val queryText = getOriginalText(ctx.query())
 
-    val asensitive = if (ctx.INSENSITIVE() != null) false else true
+    val asensitive = ctx.INSENSITIVE() == null
     DeclareCursor(cursorName, queryText, asensitive)
   }
 
