@@ -22,12 +22,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
-import org.apache.spark.sql.pipelines.autocdc.{
-  AutoCdcReservedNames,
-  ColumnSelection,
-  ScdType,
-  UnqualifiedColumnName
-}
+import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.graph.AutoCdcOutOfOrderConvergenceSuite.SourceRow
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -154,14 +149,12 @@ class AutoCdcOutOfOrderConvergenceSuite
 
   /**
    * DDL fragment for the SCD-type-specific reserved columns a target table carries after the
-   * user-selected data columns: just the CDC metadata column for SCD1, plus the __START_AT /
-   * __END_AT interval bounds for SCD2. The sequencing type is BIGINT here.
+   * user-selected data columns: the CDC metadata column for SCD1, and the interval bounds plus
+   * metadata column for SCD2. The sequencing type is BIGINT here.
    */
   private def reservedColumnsDdl(scdType: ScdType): String = scdType match {
-    case ScdType.Type1 => cdcMetadataDdl
-    case ScdType.Type2 =>
-      val meta = AutoCdcReservedNames.cdcMetadataColName
-      s"__START_AT BIGINT, __END_AT BIGINT, $meta STRUCT<__RECORD_START_AT:BIGINT> NOT NULL"
+    case ScdType.Type1 => scd1MetadataDdl
+    case ScdType.Type2 => scd2MetadataDdl
   }
 
   private def createTargetTable(targetTable: String, scdType: ScdType): Unit = {

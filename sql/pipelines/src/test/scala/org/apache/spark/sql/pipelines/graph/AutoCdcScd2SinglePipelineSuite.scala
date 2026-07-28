@@ -54,12 +54,9 @@ class AutoCdcScd2SinglePipelineSuite
    * retained as an ordinary user column in the target.
    */
   private def createScd2Target(table: String): Unit = {
-    val meta = AutoCdcReservedNames.cdcMetadataColName
     spark.sql(
       s"CREATE TABLE $table (" +
-      "id INT NOT NULL, name STRING, version BIGINT NOT NULL, " +
-      "__START_AT BIGINT, __END_AT BIGINT, " +
-      s"$meta STRUCT<__RECORD_START_AT:BIGINT> NOT NULL)"
+      s"id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
     )
   }
 
