@@ -815,6 +815,12 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_READ_ZIP_ENTRY" : {
+    "message" : [
+      "Cannot read zip entry <entry> in archive <path>: encrypted or an unsupported compression method."
+    ],
+    "sqlState" : "KD003"
+  },
   "CANNOT_RECOGNIZE_HIVE_TYPE" : {
     "message" : [
       "Cannot recognize hive type string: <fieldType>, column: <fieldName>. The specified data type for the field cannot be recognized by Spark SQL. Please check the data type of the specified field and ensure that it is a valid Spark SQL data type. Refer to the Spark SQL documentation for a list of valid data types and their format. If the data type is correct, please ensure that you are using a supported version of Spark SQL."
