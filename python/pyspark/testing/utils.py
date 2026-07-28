@@ -326,9 +326,9 @@ class PySparkBaseTestCase(unittest.TestCase):
         with open(path, "r") as f:
             changed_files = f.read().strip().splitlines()
 
-        assert all(f.startswith("python/pyspark/") and f.endswith(".py") for f in changed_files), (
-            "Changed files must be within python/pyspark/ directory and end with .py"
-        )
+        if not all(f.startswith("python/pyspark/") and f.endswith(".py") for f in changed_files):
+            # We have a wrong list of files, just run the test.
+            return True
 
         changed_modules = [
             f.removeprefix("python/").rsplit(".", 1)[0].replace(os.path.sep, ".")
