@@ -3946,6 +3946,65 @@ class DataSourceV2SQLSuiteV1Filter
     checkWriteOperations("read_only_cat")
   }
 
+  test("SPARK-58370: read-only catalog, write whose query reads the target table") {
+    def assertPrivilegeError(f: => Unit, privileges: String): Unit = {
+      val e = intercept[RuntimeException](f)
+      assert(e.getMessage == s"cannot write with $privileges")
+    }
+
+    def checkWritesReadingTheTarget(catalog: String): Unit = {
+      withSQLConf(s"spark.sql.catalog.$catalog" -> classOf[ReadOnlyCatalog].getName) {
+        val tbl = s"$catalog.default.t"
+        withTable(tbl) {
+          sql(s"CREATE TABLE $tbl (i INT)")
+
+          // The write target is resolved after its query, so it used to find the query's
+          // relation in the per-query relation cache and skip `loadTable(ident, writePrivileges)`.
+          assertPrivilegeError(sql(s"INSERT INTO $tbl SELECT * FROM $tbl"), "INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT OVERWRITE $tbl SELECT * FROM $tbl"), "DELETE,INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT OVERWRITE $tbl SELECT * FROM $tbl WHERE 1 = 0"), "DELETE,INSERT")
+          assertPrivilegeError(
+            sql(s"INSERT INTO $tbl REPLACE WHERE i = 0 SELECT * FROM $tbl"), "DELETE,INSERT")
+          // The reference to the target can be anywhere in the query.
+          assertPrivilegeError(
+            sql(s"INSERT INTO $tbl SELECT i FROM (SELECT i FROM $tbl) x"), "INSERT")
+          assertPrivilegeError(
+            sql(s"WITH c AS (SELECT i FROM $tbl) INSERT INTO $tbl SELECT i FROM c"), "INSERT")
+
+          // `DataFrameWriterV2` passes the unanalyzed query plan, so its target is resolved in the
+          // same analyzer run as the query's reference to the same table.
+          assertPrivilegeError(sql(s"SELECT * FROM $tbl").writeTo(tbl).append(), "INSERT")
+          assertPrivilegeError(
+            sql(s"SELECT * FROM $tbl").writeTo(tbl).overwritePartitions(), "DELETE,INSERT")
+          assertPrivilegeError(sql(s"SELECT * FROM $tbl").write.insertInto(tbl), "INSERT")
+
+          // Row-level operations resolve the target before the source / subquery, so these were
+          // already checked; they are here to keep both orders covered.
+          assertPrivilegeError(
+            sql(s"UPDATE $tbl SET i = 0 WHERE i IN (SELECT i FROM $tbl)"), "UPDATE")
+          assertPrivilegeError(
+            sql(s"DELETE FROM $tbl WHERE i IN (SELECT i FROM $tbl)"), "DELETE")
+          assertPrivilegeError(
+            sql(
+              s"""
+                 |MERGE INTO $tbl USING (SELECT i FROM $tbl) AS source
+                 |ON source.i = $tbl.i
+                 |WHEN MATCHED THEN UPDATE SET *
+                 |""".stripMargin),
+            "UPDATE")
+        }
+      }
+    }
+
+    // Reset CatalogManager to clear the materialized `spark_catalog` instance, so that we can
+    // configure a new implementation.
+    spark.sessionState.catalogManager.reset()
+    checkWritesReadingTheTarget(SESSION_CATALOG_NAME)
+    checkWritesReadingTheTarget("read_only_self_ref_cat")
+  }
+
   test("StagingTableCatalog without atomic support") {
     withSQLConf("spark.sql.catalog.fakeStagedCat" -> classOf[FakeStagedTableCatalog].getName) {
       withTable("fakeStagedCat.t") {
