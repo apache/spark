@@ -257,7 +257,7 @@ class GrpcWorkerSessionConcurrencySuite
   // Cancel-never-precedes-Init invariant.
   //
   // The former cancel()-vs-init() race test was retired when cancel() folded
-  // into close(): close() transitions the session to Closed and blocks init(),
+  // into close(): close() settles a terminal and blocks init(),
   // so a Cancel-before-Init race is no longer reachable through the public API
   // (close() almost always wins and aborts init() before any control is sent,
   // making such a race test vacuous). The invariant is now structural --

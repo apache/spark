@@ -22,9 +22,9 @@ import org.apache.spark.udf.worker.{CancelResponse, ExecutionError, FinishRespon
 /**
  * :: Experimental ::
  * The terminal outcome a [[WorkerSession]] settles on, returned by
- * [[WorkerSession#close]]. Mirrors the four terminal `WorkerSession.SessionState`s,
- * so close() reports the outcome faithfully rather than collapsing failures into
- * a clean cancel.
+ * [[WorkerSession#close]]. Enumerates the four terminal outcomes, carried by the
+ * single `WorkerSession.SessionState.Terminal`, so close() reports the outcome
+ * faithfully rather than collapsing failures into a clean cancel.
  *
  * '''Clean outcomes''' ([[Finished]] / [[Cancelled]]) wrap the worker's
  * `FinishResponse` / `CancelResponse` -- per-execution metrics, an optional

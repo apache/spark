@@ -38,7 +38,9 @@ import org.apache.spark.udf.worker.grpc.GrpcWorkerSession._
  * bidirectional RPC.
  *
  * Drives one bidirectional `Execute` stream against the worker per the
- * ordering invariants documented in `udf_message.proto`:
+ * ordering invariants documented in `udf_message.proto` (`PayloadChunk*`
+ * between Init and InitResponse omitted here; chunking is not yet
+ * implemented -- see the TODO below):
  * {{{
  *   Engine -> Worker:  Init -> (DataRequest)* -> Finish (Cancel)?
  *                                              | Cancel
