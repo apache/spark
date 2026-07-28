@@ -22,12 +22,17 @@ import scala.util.Random
 
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
-import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, UnqualifiedColumnName}
-import org.apache.spark.sql.pipelines.graph.AutoCdcScd1OutOfOrderConvergenceSuite.SourceRow
+import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
+  ColumnSelection,
+  ScdType,
+  UnqualifiedColumnName
+}
+import org.apache.spark.sql.pipelines.graph.AutoCdcOutOfOrderConvergenceSuite.SourceRow
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 
-object AutoCdcScd1OutOfOrderConvergenceSuite {
+object AutoCdcOutOfOrderConvergenceSuite {
   /**
    * A single CDC event in the source stream.
    *
@@ -49,11 +54,11 @@ object AutoCdcScd1OutOfOrderConvergenceSuite {
 }
 
 /**
- * Differential test for the SCD1 AutoCDC merge's order-invariance property: feeding the same
- * randomly-generated CDC event stream as a single sorted micro-batch and as several shuffled
- * micro-batches must converge to the same target table contents.
+ * Differential test for the AutoCDC merge's order-invariance property, for both SCD Type 1 and
+ * SCD Type 2: feeding the same randomly-generated CDC event stream as a single sorted micro-batch
+ * and as several shuffled micro-batches must converge to the same target table contents.
  */
-class AutoCdcScd1OutOfOrderConvergenceSuite
+class AutoCdcOutOfOrderConvergenceSuite
     extends ExecutionTest
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
@@ -125,10 +130,11 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
     events.sortBy(_.sequence).toSeq
   }
 
-  /** Build a pipeline context with a single SCD1 AutoCDC flow reading from `stream`. */
+  /** Build a pipeline context with a single AutoCDC flow of `scdType` reading from `stream`. */
   private def buildPipelineContext(
       targetTable: String,
-      stream: MemoryStream[SourceRow]): TestGraphRegistrationContext = {
+      stream: MemoryStream[SourceRow],
+      scdType: ScdType): TestGraphRegistrationContext = {
     new TestGraphRegistrationContext(spark) {
       registerTable(targetTable, catalog = Some(catalog), database = Some(namespace))
       registerFlow(autoCdcFlow(
@@ -140,12 +146,25 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
         deleteCondition = Some(functions.col(isDeleteColumn) === true),
         columnSelection = Some(ColumnSelection.ExcludeColumns(
           Seq(UnqualifiedColumnName(isDeleteColumn))
-        ))
+        )),
+        scdType = scdType
       ))
     }
   }
 
-  private def createTargetTable(targetTable: String): Unit = {
+  /**
+   * DDL fragment for the SCD-type-specific reserved columns a target table carries after the
+   * user-selected data columns: just the CDC metadata column for SCD1, plus the __START_AT /
+   * __END_AT interval bounds for SCD2. The sequencing type is BIGINT here.
+   */
+  private def reservedColumnsDdl(scdType: ScdType): String = scdType match {
+    case ScdType.Type1 => cdcMetadataDdl
+    case ScdType.Type2 =>
+      val meta = AutoCdcReservedNames.cdcMetadataColName
+      s"__START_AT BIGINT, __END_AT BIGINT, $meta STRUCT<__RECORD_START_AT:BIGINT> NOT NULL"
+  }
+
+  private def createTargetTable(targetTable: String, scdType: ScdType): Unit = {
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.$targetTable (" +
       s"`$keyColumn` INT NOT NULL, " +
@@ -153,7 +172,7 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
       s"`$amountColumn` INT, " +
       s"`$activeColumn` BOOLEAN, " +
       s"`$sequenceColumn` BIGINT NOT NULL, " +
-      s"$cdcMetadataDdl)"
+      s"${reservedColumnsDdl(scdType)})"
     )
   }
 
@@ -164,7 +183,7 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
     )
   }
 
-  private def runConvergenceTest(seed: Long): Unit = {
+  private def runConvergenceTest(seed: Long, scdType: ScdType): Unit = {
     val session = spark
     import session.implicits._
 
@@ -173,22 +192,25 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
     val shuffledEventStream = rand.shuffle(sortedEventStream)
 
     withClue(
-      s"\nseed=$seed (rerun with -D$seedSystemProperty=$seed to reproduce)\n" +
+      s"\nscdType=${scdType.label} seed=$seed " +
+      s"(rerun with -D$seedSystemProperty=$seed to reproduce)\n" +
       s"events (${sortedEventStream.size} total, sorted by sequence):\n" +
       sortedEventStream.map(r => s"  $r").mkString("\n") + "\n"
     ) {
-      val inOrderTable = "inorder_target"
-      val outOfOrderTable = "outoforder_target"
-      createTargetTable(inOrderTable)
-      createTargetTable(outOfOrderTable)
+      // Table names are scd-type-suffixed so the SCD1 and SCD2 tests do not collide within a run.
+      val suffix = scdType.label.toLowerCase(java.util.Locale.ROOT)
+      val inOrderTable = s"inorder_target_$suffix"
+      val outOfOrderTable = s"outoforder_target_$suffix"
+      createTargetTable(inOrderTable, scdType)
+      createTargetTable(outOfOrderTable, scdType)
 
       val inOrderStream = MemoryStream[SourceRow]
-      val inOrderCtx = buildPipelineContext(inOrderTable, inOrderStream)
+      val inOrderCtx = buildPipelineContext(inOrderTable, inOrderStream, scdType)
       inOrderStream.addData(sortedEventStream: _*)
       runPipeline(inOrderCtx)
 
       val outOfOrderStream = MemoryStream[SourceRow]
-      val outOfOrderCtx = buildPipelineContext(outOfOrderTable, outOfOrderStream)
+      val outOfOrderCtx = buildPipelineContext(outOfOrderTable, outOfOrderStream, scdType)
       val totalEvents = shuffledEventStream.size
       (0 until numOutOfOrderBatches).foreach { batchIndex =>
         val batchStart = batchIndex * totalEvents / numOutOfOrderBatches
@@ -197,11 +219,18 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
         runPipeline(outOfOrderCtx)
       }
 
+      // Only the user-visible target must converge. The auxiliary tables legitimately differ by
+      // arrival order (e.g. deletedByBatchId stamps and cross-batch GC depend on how events are
+      // batched), so they are not compared.
       assertTargetsConverge(inOrderTable, outOfOrderTable)
     }
   }
 
   test("SCD1 merge converges across micro-batch shuffling for randomly generated CDC events") {
-    runConvergenceTest(resolveTestSeed())
+    runConvergenceTest(resolveTestSeed(), ScdType.Type1)
+  }
+
+  test("SCD2 merge converges across micro-batch shuffling for randomly generated CDC events") {
+    runConvergenceTest(resolveTestSeed(), ScdType.Type2)
   }
 }
