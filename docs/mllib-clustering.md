@@ -32,10 +32,10 @@ The `spark.mllib` package supports the following models:
 
 ## K-means
 
-[K-means](http://en.wikipedia.org/wiki/K-means_clustering) is one of the
+[K-means](https://en.wikipedia.org/wiki/K-means_clustering) is one of the
 most commonly used clustering algorithms that clusters the data points into a
 predefined number of clusters. The `spark.mllib` implementation includes a parallelized
-variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
+variant of the [k-means++](https://en.wikipedia.org/wiki/K-means%2B%2B) method
 called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 The implementation in `spark.mllib` has the following parameters:
 
@@ -95,10 +95,10 @@ Refer to the [`KMeans` Java docs](api/java/org/apache/spark/mllib/clustering/KMe
 
 ## Gaussian mixture
 
-A [Gaussian Mixture Model](http://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
+A [Gaussian Mixture Model](https://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
 represents a composite distribution whereby points are drawn from one of *k* Gaussian sub-distributions,
 each with its own probability.  The `spark.mllib` implementation uses the
-[expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+[expectation-maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
  algorithm to induce the maximum-likelihood model given a set of samples.  The implementation
 has the following parameters:
 
@@ -153,7 +153,7 @@ Power iteration clustering (PIC) is a scalable and efficient algorithm for clust
 graph given pairwise similarities as edge properties,
 described in [Lin and Cohen, Power Iteration Clustering](http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf).
 It computes a pseudo-eigenvector of the normalized affinity matrix of the graph via
-[power iteration](http://en.wikipedia.org/wiki/Power_iteration)  and uses it to cluster vertices.
+[power iteration](https://en.wikipedia.org/wiki/Power_iteration)  and uses it to cluster vertices.
 `spark.mllib` includes an implementation of PIC using GraphX as its backend.
 It takes an `RDD` of `(srcId, dstId, similarity)` tuples and outputs a model with the clustering assignments.
 The similarities must be nonnegative.
@@ -222,7 +222,7 @@ Refer to the [`PowerIterationClustering` Java docs](api/java/org/apache/spark/ml
 
 ## Latent Dirichlet allocation (LDA)
 
-[Latent Dirichlet allocation (LDA)](http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation)
+[Latent Dirichlet allocation (LDA)](https://en.wikipedia.org/wiki/Latent_Dirichlet_allocation)
 is a topic model which infers topics from a collection of text documents.
 LDA can be thought of as a clustering algorithm as follows:
 
@@ -236,7 +236,7 @@ generated.
 
 LDA supports different inference algorithms via `setOptimizer` function.
 `EMLDAOptimizer` learns clustering using
-[expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+[expectation-maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
 on the likelihood function and yields comprehensive results, while
 `OnlineLDAOptimizer` uses iterative mini-batch sampling for [online
 variational

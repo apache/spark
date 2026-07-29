@@ -20,10 +20,10 @@ license: |
 ---
 
 The `spark.mllib` package supports various methods for
-[binary classification](http://en.wikipedia.org/wiki/Binary_classification),
+[binary classification](https://en.wikipedia.org/wiki/Binary_classification),
 [multiclass
-classification](http://en.wikipedia.org/wiki/Multiclass_classification), and
-[regression analysis](http://en.wikipedia.org/wiki/Regression_analysis). The table below outlines
+classification](https://en.wikipedia.org/wiki/Multiclass_classification), and
+[regression analysis](https://en.wikipedia.org/wiki/Regression_analysis). The table below outlines
 the supported algorithms for each type of problem.
 
 <table>

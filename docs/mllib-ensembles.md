@@ -22,7 +22,7 @@ license: |
 * Table of contents
 {:toc}
 
-An [ensemble method](http://en.wikipedia.org/wiki/Ensemble_learning)
+An [ensemble method](https://en.wikipedia.org/wiki/Ensemble_learning)
 is a learning algorithm which creates a model composed of a set of other base models.
 `spark.mllib` supports two major ensemble algorithms: [`GradientBoostedTrees`](api/scala/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`RandomForest`](api/scala/org/apache/spark/mllib/tree/RandomForest$.html).
 Both use [decision trees](mllib-decision-tree.html) as their base models.
@@ -40,7 +40,7 @@ In short, both algorithms can be effective, and the choice should be based on th
 
 ## Random Forests
 
-[Random forests](http://en.wikipedia.org/wiki/Random_forest)
+[Random forests](https://en.wikipedia.org/wiki/Random_forest)
 are ensembles of [decision trees](mllib-decision-tree.html).
 Random forests are one of the most successful machine learning models for classification and
 regression.  They combine many decision trees in order to reduce the risk of overfitting.
@@ -137,7 +137,7 @@ The example below demonstrates how to load a
 parse it as an RDD of `LabeledPoint` and then
 perform regression using a Random Forest.
 The Mean Squared Error (MSE) is computed at the end to evaluate
-[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
+[goodness of fit](https://en.wikipedia.org/wiki/Goodness_of_fit).
 
 <div class="codetabs">
 
@@ -163,7 +163,7 @@ Refer to the [`RandomForest` Java docs](api/java/org/apache/spark/mllib/tree/Ran
 
 ## Gradient-Boosted Trees (GBTs)
 
-[Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting)
+[Gradient-Boosted Trees (GBTs)](https://en.wikipedia.org/wiki/Gradient_boosting)
 are ensembles of [decision trees](mllib-decision-tree.html).
 GBTs iteratively train decision trees in order to minimize a loss function.
 Like decision trees, GBTs handle categorical features,
@@ -278,7 +278,7 @@ The example below demonstrates how to load a
 parse it as an RDD of `LabeledPoint` and then
 perform regression using Gradient-Boosted Trees with Squared Error as the loss.
 The Mean Squared Error (MSE) is computed at the end to evaluate
-[goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
+[goodness of fit](https://en.wikipedia.org/wiki/Goodness_of_fit).
 
 <div class="codetabs">
 
