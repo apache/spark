@@ -2283,15 +2283,15 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     // the tagged-struct recognizers -- so the lossless struct representation must round-trip at
     // any nesting depth, including values outside the int64 epoch-nanos window (~1677-2262)
     // that the standard interchange encoding cannot represent.
-    val outOfWindow = java.time.LocalDateTime.of(3000, 1, 6, 12, 30, 45, 123456789)
-    val inWindow = java.time.LocalDateTime.of(2025, 1, 6, 12, 30, 45, 987654321)
+    val outOfWindow = LocalDateTime.of(3000, 1, 6, 12, 30, 45, 123456789)
+    val inWindow = LocalDateTime.of(2025, 1, 6, 12, 30, 45, 987654321)
     val nanosType = TimestampNTZNanosType(9)
 
     val arrayDf = singlePartDf(
       Seq(Seq(outOfWindow, inWindow)), ArrayType(nanosType)).cache()
     try {
       assert(arrayDf.count() == 1)
-      val read = arrayDf.collect().head.getSeq[java.time.LocalDateTime](0)
+      val read = arrayDf.collect().head.getSeq[LocalDateTime](0)
       assert(read == Seq(outOfWindow, inWindow),
         s"expected nested nanos to round-trip through an array, got: $read")
     } finally {
@@ -2303,7 +2303,7 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       Seq(Row(outOfWindow)), StructType(Seq(StructField("ts", nanosType)))).cache()
     try {
       assert(structDf.count() == 1)
-      val read = structDf.collect().head.getStruct(0).getAs[java.time.LocalDateTime](0)
+      val read = structDf.collect().head.getStruct(0).getAs[LocalDateTime](0)
       assert(read == outOfWindow,
         s"expected nested nanos to round-trip through a struct, got: $read")
     } finally {
@@ -2315,7 +2315,7 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       Seq(Map(1 -> outOfWindow)), MapType(IntegerType, nanosType)).cache()
     try {
       assert(mapDf.count() == 1)
-      val read = mapDf.collect().head.getMap[Int, java.time.LocalDateTime](0)
+      val read = mapDf.collect().head.getMap[Int, LocalDateTime](0)
       assert(read == Map(1 -> outOfWindow),
         s"expected nested nanos to round-trip through a map value, got: $read")
     } finally {
