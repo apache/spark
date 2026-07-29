@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, CreateNamedStruct, Expression, GetStructField, If, IsNull, LambdaFunction, Literal, MapFromArrays, MapKeys, MapSort, MapValues, NamedExpression, NamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, REPARTITION_OPERATION}
@@ -27,8 +28,8 @@ import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 /**
- * Adds [[MapSort]] to [[Aggregate]] expressions containing map columns,
- * as the key/value pairs need to be in the correct order before grouping:
+ * Adds [[MapSort]] to grouping expressions, including distinct aggregate arguments, containing
+ * map columns, as the key/value pairs need to be in the correct order before grouping:
  *
  * SELECT map_column, COUNT(*) FROM TABLE GROUP BY map_column =>
  * SELECT _groupingmapsort as map_column, COUNT(*) FROM (
@@ -38,12 +39,25 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
   import InsertMapSortExpression._
 
+  private def distinctAggregateChildren(
+      aggregateExpressions: Seq[NamedExpression]): Seq[Expression] = {
+    aggregateExpressions
+      .flatMap(_.collect {
+        case ae: AggregateExpression if ae.isDistinct => ae
+      })
+      .flatMap(_.aggregateFunction.children)
+  }
+
+  private def expressionsToNormalize(agg: Aggregate): Seq[Expression] = {
+    agg.groupingExpressions ++ distinctAggregateChildren(agg.aggregateExpressions)
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.containsPattern(AGGREGATE)) {
       return plan
     }
     val shouldRewrite = plan.exists {
-      case agg: Aggregate if agg.groupingExpressions.exists(mapTypeExistsRecursively) => true
+      case agg: Aggregate if expressionsToNormalize(agg).exists(mapTypeExistsRecursively) => true
       case _ => false
     }
     if (!shouldRewrite) {
@@ -53,16 +67,17 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
     plan transformUpWithNewOutput {
       case agg @ Aggregate(groupingExprs, aggregateExpressions, child, hint) =>
         val exprToMapSort = new mutable.HashMap[Expression, NamedExpression]
-        val newGroupingKeys = groupingExprs.map { expr =>
+        expressionsToNormalize(agg).foreach { expr =>
           val inserted = insertMapSortRecursively(expr)
           if (expr.ne(inserted)) {
             exprToMapSort.getOrElseUpdate(
               expr.canonicalized,
               Alias(inserted, "_groupingmapsort")()
-            ).toAttribute
-          } else {
-            expr
+            )
           }
+        }
+        val newGroupingKeys = groupingExprs.map { expr =>
+          exprToMapSort.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
         }
         val newAggregateExprs = aggregateExpressions.map {
           case named if exprToMapSort.contains(named.canonicalized) =>
