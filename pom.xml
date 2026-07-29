@@ -85,6 +85,7 @@
     <module>common/utils-java</module>
     <module>common/variant</module>
     <module>common/tags</module>
+    <module>common/config</module>
     <module>sql/connect/shims</module>
     <module>core</module>
     <module>graphx</module>
@@ -126,7 +127,7 @@
     <maven.version>3.9.16</maven.version>
     <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <asm.version>9.9.1</asm.version>
+    <asm.version>9.10.1</asm.version>
     <slf4j.version>2.0.17</slf4j.version>
     <log4j.version>2.26.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
@@ -145,9 +146,9 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.17.1</parquet.version>
-    <orc.version>2.3.0</orc.version>
+    <orc.version>2.3.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>12.1.10</jetty.version>
+    <jetty.version>12.1.11</jetty.version>
     <jakartaservlet.version>6.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -203,7 +204,7 @@
     <gson.version>2.14.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.1.11</jersey.version>
-    <joda.version>2.14.2</joda.version>
+    <joda.version>2.14.3</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.16.0</libthrift.version>
@@ -215,14 +216,14 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.11.0</commons-cli.version>
     <bouncycastle.version>1.84</bouncycastle.version>
-    <tink.version>1.22.0</tink.version>
+    <tink.version>1.23.0</tink.version>
     <!--
       TODO: Once upgrade datasketches to a version that supports Java 25,
             SPARK-53327 workaround should be reverted.
      -->
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.16.Final</netty.version>
-    <netty-tcnative.version>2.0.80.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.81.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -314,7 +315,7 @@
     <mima.version>1.1.4</mima.version>
 
     <!-- Version used in Profiler -->
-    <ap-loader.version>4.3-13</ap-loader.version>
+    <ap-loader.version>4.5-13</ap-loader.version>
 
     <CodeCacheSize>128m</CodeCacheSize>
     <!-- Needed for consistent times -->
@@ -347,7 +348,7 @@
     </extraJavaTestArgs>
     <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
     <mysql.connector.version>9.6.0</mysql.connector.version>
-    <postgresql.version>42.7.11</postgresql.version>
+    <postgresql.version>42.7.13</postgresql.version>
     <db2.jcc.version>12.1.4.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
@@ -535,7 +536,7 @@
       <dependency>
         <groupId>com.github.jnr</groupId>
         <artifactId>jnr-posix</artifactId>
-        <version>3.1.15</version>
+        <version>3.2.1</version>
         <scope>test</scope>
       </dependency>
       <!-- This artifact is a shaded version of ASM 9.x. The POM that was used to produce this
@@ -544,7 +545,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.30</version>
+        <version>4.31</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -1283,13 +1284,13 @@
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.18.4</version>
+        <version>1.18.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.18.4</version>
+        <version>1.18.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2438,24 +2439,10 @@
       </dependency>
       <dependency>
         <groupId>org.apache.parquet</groupId>
-        <artifactId>parquet-encoding</artifactId>
-        <version>${parquet.version}</version>
-        <scope>${parquet.test.deps.scope}</scope>
-        <classifier>tests</classifier>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.parquet</groupId>
-        <artifactId>parquet-common</artifactId>
-        <version>${parquet.version}</version>
-        <scope>${parquet.test.deps.scope}</scope>
-        <classifier>tests</classifier>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.parquet</groupId>
         <artifactId>parquet-column</artifactId>
         <version>${parquet.version}</version>
         <scope>${parquet.test.deps.scope}</scope>
-        <classifier>tests</classifier>
+        <type>test-jar</type>
       </dependency>
       <dependency>
         <groupId>org.apache.parquet</groupId>

@@ -135,7 +135,7 @@ class BisectingKMeansModel(JavaModelWrapper):
 
         Parameters
         ----------
-        point : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+        x : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             A data point (or RDD of points) to compute the cost(s).
             :py:class:`pyspark.mllib.linalg.Vector` can be replaced with equivalent
             objects (list, tuple, numpy.ndarray).

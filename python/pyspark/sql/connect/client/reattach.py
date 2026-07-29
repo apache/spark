@@ -299,7 +299,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                         timeout=self._reattachable_execute_plan_timeout,
                     )
                 )
-                raise RetryException()
+                raise RetryException() from e
             elif e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
                 # The per-RPC deadline fired. The server-side operation is still alive; clear
                 # the iterator and raise RetryException so the retry loop opens a fresh

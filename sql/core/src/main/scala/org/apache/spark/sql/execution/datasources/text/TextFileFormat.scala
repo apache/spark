@@ -37,7 +37,10 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 /**
  * A data source for reading text files. The text files must be encoded as UTF-8.
  */
-case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister {
+case class TextFileFormat()
+    extends TextBasedFileFormat
+    with DataSourceRegister
+    with SupportsArchiveFormat {
 
   override def shortName(): String = "text"
 
@@ -60,7 +63,7 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       options: Map[String, String],
       path: Path): Boolean = {
     val textOptions = new TextOptions(options)
-    if (textOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(path)) {
+    if (textOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }
@@ -118,7 +121,7 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
     // archive reads are enabled; otherwise the file is read directly. Archive scanning is wired
     // into the V1 file source only, so this dispatch lives here rather than in a shared reader.
     (file: PartitionedFile) => {
-      if (textOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
+      if (textOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
         archiveReader(file)
       } else {
         perFileReader(file)
@@ -139,7 +142,7 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       textOptions: TextOptions): PartitionedFile => Iterator[UnsafeRow] = {
     (file: PartitionedFile) => {
       val confValue = conf.value.value
-      ArchiveReader(file.toPath).readEntries(confValue) { (_, in) =>
+      SupportsArchiveFormat.readArchiveEntries(file.toPath, confValue) { (_, in) =>
         // Each entry is read as a standalone text file, so it gets its own row writer, exactly as
         // `readToUnsafeMem` builds one per file.
         val emptyUnsafeRow = new UnsafeRow(0)
@@ -159,7 +162,7 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
           val content = in.readAllBytes()
           Iterator.single(toRow(content, content.length))
         } else {
-          ArchiveReader.lineIterator(in, textOptions.lineSeparatorInRead).map { line =>
+          lineIterator(in, textOptions.lineSeparatorInRead).map { line =>
             toRow(line.getBytes, line.getLength)
           }
         }

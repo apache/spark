@@ -51,7 +51,7 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       path: Path): Boolean = {
     val xmlOptions = getXmlOptions(sparkSession, options)
-    if (xmlOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(path)) {
+    if (xmlOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }
@@ -126,7 +126,7 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       // A tar archive (always a single split, see `isSplitable`) is streamed entry by entry when
       // archive reads are enabled; otherwise the file is parsed directly. XML has no DSv2 reader,
       // so this dispatch lives here rather than inside the shared `readFile`.
-      if (xmlOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
+      if (xmlOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
         XmlDataSource(xmlOptions).readArchive(
           broadcastedHadoopConf.value.value,
           file,

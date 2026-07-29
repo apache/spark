@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
@@ -231,6 +231,30 @@ class SparkPlanSuite extends SharedSparkSession {
       releaseLatch.countDown()
       executor.shutdown()
     }
+  }
+
+  test("SPARK-58120: BatchScanExec doCanonicalize preserves keyGroupedPartitioning order") {
+    // The int/string pair is known to reorder under normalizePredicates hashCode sorting.
+    // See QueryPlanSuite "SPARK-58120: normalizePredicates reorders expressions by hashCode
+    // via orderCommutative".
+    val id = AttributeReference("id", IntegerType)(ExprId(0))
+    val data = AttributeReference("data", StringType)(ExprId(1))
+    val scan = BatchScanExec(
+      output = Seq(id, data),
+      scan = null,
+      runtimeFilters = Seq.empty,
+      table = null,
+      keyGroupedPartitioning = Some(Seq(id, data)))
+    val canonicalized = scan.canonicalized.asInstanceOf[BatchScanExec]
+    assert(scan.keyGroupedPartitioning.isDefined,
+      "Expected BatchScanExec to have keyGroupedPartitioning set")
+    val originalTypes = scan.keyGroupedPartitioning.get.map(_.dataType)
+    val canonicalizedTypes = canonicalized.keyGroupedPartitioning.get.map(_.dataType)
+    assert(originalTypes == canonicalizedTypes,
+      s"Expression order changed after canonicalization: " +
+        s"original types=$originalTypes, canonicalized types=$canonicalizedTypes")
+    assert(canonicalizedTypes == Seq(IntegerType, StringType),
+      s"Expected [IntegerType, StringType] but got $canonicalizedTypes")
   }
 }
 

@@ -425,20 +425,24 @@ class SparkConnectClientTestCase(unittest.TestCase):
         session = (
             RemoteSparkSession.builder.remote("sc://foo")._registerHook(TestHook).getOrCreate()
         )
-        self.assertEqual(inits, 1)
-        self.assertEqual(calls, 0)
-        session.client._stub = MockService(session.client._session_id)
-        session.client.disable_reattachable_execute()
+        try:
+            self.assertEqual(inits, 1)
+            self.assertEqual(calls, 0)
+            session.client._stub = MockService(session.client._session_id)
+            session.client.disable_reattachable_execute()
 
-        # Called from _execute_and_fetch_as_iterator
-        session.range(1).collect()
-        self.assertEqual(inits, 1)
-        self.assertEqual(calls, 1)
+            # Called from _execute_and_fetch_as_iterator
+            session.range(1).collect()
+            self.assertEqual(inits, 1)
+            self.assertEqual(calls, 1)
 
-        # Called from _execute
-        session.udf.register("test_func", lambda x: x + 1)
-        self.assertEqual(inits, 1)
-        self.assertEqual(calls, 2)
+            # Called from _execute
+            session.udf.register("test_func", lambda x: x + 1)
+            self.assertEqual(inits, 1)
+            self.assertEqual(calls, 2)
+        finally:
+            # Close the session to avoid leaking dummy session inter-test
+            session.stop()
 
     def test_session_hook_preserved_after_new_session(self):
         calls = 0
@@ -473,6 +477,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
             # against the unreachable endpoint at interpreter shutdown.
             new_session.client.close()
             session.client.close()
+            session.stop()
 
     def test_new_session_preserves_custom_channel_builder(self):
         class CustomChannelBuilder(DefaultChannelBuilder):

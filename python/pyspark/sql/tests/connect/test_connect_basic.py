@@ -1119,8 +1119,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql("SELECT 1")._explain_string(mode="unknown")
         self.check_error(
             exception=pe.exception,
-            errorClass="UNKNOWN_EXPLAIN_MODE",
-            messageParameters={"explain_mode": "unknown"},
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
+                "arg_name": "explain_mode",
+                "allowed_values": "['simple', 'extended', 'codegen', 'cost', 'formatted']",
+            },
         )
 
     def test_count(self) -> None:

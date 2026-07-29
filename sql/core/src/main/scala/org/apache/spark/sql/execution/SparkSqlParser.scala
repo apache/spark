@@ -25,11 +25,10 @@ import scala.jdk.CollectionConverters._
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
   GlobalTempView, LocalTempView, PersistedView,
-  PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
+  SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
   UnresolvedIdentifier, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedProcedure,
   UnresolvedTableOrViewSearchPathMode}
 import org.apache.spark.sql.catalyst.catalog._
@@ -311,25 +310,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       case _ =>
         throw QueryParsingErrors.invalidTempObjQualifierError(
           "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."), ctx)
-    }
-  }
-
-  private def withCatalogIdentClause(
-      ctx: CatalogIdentifierReferenceContext,
-      builder: Seq[String] => LogicalPlan): LogicalPlan = {
-    val exprCtx = ctx.expression
-    if (exprCtx != null) {
-      // resolve later in analyzer
-      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, Nil,
-        (ident, _) => builder(ident))
-    } else if (ctx.errorCapturingIdentifier() != null) {
-      // resolve immediately
-      builder.apply(Seq(getIdentifierText(ctx.errorCapturingIdentifier())))
-    } else if (ctx.stringLit() != null) {
-      // resolve immediately
-      builder.apply(Seq(string(visitStringLit(ctx.stringLit()))))
-    } else {
-      throw SparkException.internalError("Invalid catalog name")
     }
   }
 
@@ -897,12 +877,12 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     if (ctx.METRICS(0) == null) {
       throw QueryParsingErrors.missingClausesForOperation(
-        ctx, "WITH METRICS", "METRIC VIEW CREATION")
+        ctx, "WITH METRICS", "CREATE METRIC VIEW")
     }
 
     if (ctx.routineLanguage(0) == null) {
       throw QueryParsingErrors.missingClausesForOperation(
-        ctx, "LANGUAGE", "METRIC VIEW CREATION")
+        ctx, "LANGUAGE", "CREATE METRIC VIEW")
     }
 
     val languageCtx = ctx.routineLanguage(0)
@@ -1633,7 +1613,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val flowHeaderCtx = ctx.createPipelineFlowHeader()
     val ident = withIdentClause(flowHeaderCtx.flowName, UnresolvedIdentifier(_))
     val commentOpt = Option(flowHeaderCtx.commentSpec()).map(visitCommentSpec)
-    val autoCdcInto = buildAutoCdcIntoCommand(ctx.autoCdcCommand())
+    val autoCdcInto = buildAutoCdcInto(ctx.autoCdcCommand())
     CreateFlowCommand(
       name = ident,
       flowOperation = autoCdcInto,
@@ -1747,7 +1727,10 @@ class SparkSqlAstBuilder extends AstBuilder {
           deleteCondition = params.deleteCondition,
           sequenceByExpr = params.sequencing,
           includeColumns = params.includeColumns,
-          excludeColumns = params.excludeColumns
+          excludeColumns = params.excludeColumns,
+          storedAsScdType = params.storedAsScdType,
+          trackHistoryColumns = params.trackHistoryColumns,
+          trackHistoryExceptColumns = params.trackHistoryExceptColumns
         )
       } else {
         Option(ctx.query) match {

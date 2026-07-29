@@ -189,14 +189,6 @@ case object NO_BROADCAST_HASH extends JoinStrategyHint {
 }
 
 /**
- * An internal hint to encourage shuffle hash join, used by adaptive query execution.
- */
-case object PREFER_SHUFFLE_HASH extends JoinStrategyHint {
-  override def displayName: String = "prefer_shuffle_hash"
-  override def hintAliases: Set[String] = Set.empty
-}
-
-/**
  * An internal hint to prohibit broadcasting and replicating one side of a join. This hint is used
  * by some rules where broadcasting or replicating a particular side of the join is not permitted,
  * such as the cardinality check in MERGE operations.

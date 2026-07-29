@@ -38,10 +38,15 @@ import org.apache.spark.unsafe.types.UTF8String
   arguments = """
     Arguments:
       * input      - string value to mask. Supported types: STRING, VARCHAR, CHAR
+        An expression that evaluates to a string.
       * upperChar  - character to replace upper-case characters with. Specify NULL to retain original character. Default value: 'X'
+        An expression that evaluates to a string. Must be a constant.
       * lowerChar  - character to replace lower-case characters with. Specify NULL to retain original character. Default value: 'x'
+        An expression that evaluates to a string. Must be a constant.
       * digitChar  - character to replace digit characters with. Specify NULL to retain original character. Default value: 'n'
+        An expression that evaluates to a string. Must be a constant.
       * otherChar  - character to replace all other characters with. Specify NULL to retain original character. Default value: NULL
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:

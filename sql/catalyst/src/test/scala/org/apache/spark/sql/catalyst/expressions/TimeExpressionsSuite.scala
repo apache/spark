@@ -59,6 +59,20 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map("input" -> "'100:50'", "format" -> "'mm:HH'"))
   }
 
+  test("SPARK-58296: to_time reports TimeType even when a foldable format is NULL") {
+    // A foldable format that evaluates to NULL must not change the output type: to_time
+    // still produces a TIME, matching the non-null and no-format branches. Before the fix
+    // the replacement fell back to the format argument's own type (STRING/NULL).
+    assert(new ToTime(Literal("00:00:00"), Literal.create(null, StringType)).dataType ===
+      TimeType())
+    assert(new ToTime(Literal("00:00:00"), Literal.create(null)).dataType === TimeType())
+    // The value is still NULL; assert type and value together for this exact case.
+    checkEvaluation(new ToTime(Literal("00:00:00"), Literal.create(null, StringType)), null)
+    // Sanity: the branches that were already correct.
+    assert(new ToTime(Literal("00:00:00")).dataType === TimeType())
+    assert(new ToTime(Literal("00:00:00"), Literal("HH:mm:ss")).dataType === TimeType())
+  }
+
   test("HourExpressionBuilder") {
     // Empty expressions list
     checkError(
@@ -360,9 +374,22 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       4 -> 15.9876,
       5 -> 15.98765,
       6 -> 15.987654).foreach { case (precision, expected) =>
-      checkEvaluation(
-        SecondsOfTimeWithFraction(Literal(localTime(13, 11, 15, 987654), TimeType(precision))),
-        BigDecimal(expected))
+      val expr = SecondsOfTimeWithFraction(
+        Literal(localTime(13, 11, 15, 987654), TimeType(precision)))
+      assert(expr.dataType == DecimalType(2 + precision, precision),
+        s"TIME($precision) SECOND should have DecimalType(${2 + precision}, $precision)")
+      checkEvaluation(expr, BigDecimal(expected))
+    }
+    // Precisions 7-9 require sub-microsecond nanos
+    Seq(
+      7 -> BigDecimal("15.9876543"),
+      8 -> BigDecimal("15.98765432"),
+      9 -> BigDecimal("15.987654321")).foreach { case (precision, expected) =>
+      val expr = SecondsOfTimeWithFraction(
+        Literal(localTime(13, 11, 15, 987654, 321), TimeType(precision)))
+      assert(expr.dataType == DecimalType(2 + precision, precision),
+        s"TIME($precision) SECOND should have DecimalType(${2 + precision}, $precision)")
+      checkEvaluation(expr, expected)
     }
     // Verify NULL handling
     checkEvaluation(

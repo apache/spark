@@ -22,10 +22,10 @@ import org.apache.spark.internal.config
 import org.apache.spark.sql.{sources, AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
-import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, RowLevelOperationWithOptions, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.write.{RowLevelOperationTable, UpdateSummary}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.connector.write.UpdateSummary
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
@@ -1236,27 +1236,6 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(2, 200, "software")))
   }
 
-  // asserts the given SQL options reached every layer that should carry them: the rewritten
-  // DataSourceV2Relation, the RowLevelOperationInfo passed to the operation builder, and the
-  // write builder's LogicalWriteInfo
-  protected def checkRowLevelOperationOptions(
-      func: => Unit,
-      expectedOptions: (String, String)*): Unit = {
-    val Seq(qe) = withQueryExecutionsCaptured(spark)(func)
-    val writeRelation = qe.optimizedPlan.collectFirst {
-      case rd: ReplaceData => rd.table
-      case wd: WriteDelta => wd.table
-    }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
-      .asInstanceOf[DataSourceV2Relation]
-    val operation = writeRelation.table.asInstanceOf[RowLevelOperationTable].operation
-      .asInstanceOf[RowLevelOperationWithOptions]
-    expectedOptions.foreach { case (key, value) =>
-      assert(writeRelation.options.get(key) === value, s"relation option '$key'")
-      assert(operation.options.get(key) === value, s"row-level operation option '$key'")
-      assert(table.lastWriteInfo.options().get(key) === value, s"write option '$key'")
-    }
-  }
-
   test("SPARK-57681: update with dynamic options") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -1289,6 +1268,46 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, -1, "hr") :: Row(2, 200, "software") :: Row(3, -1, "hr") :: Nil)
   }
 
+  test("SPARK-58330: update keeps its own options when a subquery references the same table " +
+    "with different options") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    // The target and the WHERE subquery reference the same table with different options; they
+    // share one per-query relation-cache entry. Each reference must keep its own options.
+    val Seq(qe) = withQueryExecutionsCaptured(spark) {
+      sql(s"UPDATE $tableNameAsString WITH (`write.split-size` = 10) SET salary = -1 " +
+        s"WHERE pk IN (SELECT pk FROM $tableNameAsString WITH (`split-size` = 5) WHERE dep = 'hr')")
+    }
+
+    // target write relation carries only its own option
+    val writeRelation = qe.optimizedPlan.collectFirst {
+      case rd: ReplaceData => rd.table
+      case wd: WriteDelta => wd.table
+    }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+      .asInstanceOf[DataSourceV2Relation]
+    assert(writeRelation.options.get("write.split-size") === "10", "target relation option")
+    assert(!writeRelation.options.containsKey("split-size"), "target must not see subquery option")
+
+    // the subquery scan carries only its own option
+    val subqueryOptions = qe.optimizedPlan.collect {
+      case r: DataSourceV2Relation => r.options
+      case s: DataSourceV2ScanRelation => s.relation.options
+    }.filter(_.containsKey("split-size"))
+    assert(subqueryOptions.nonEmpty, "subquery relation carrying the option was not found")
+    subqueryOptions.foreach { opts =>
+      assert(opts.get("split-size") === "5", "subquery relation option")
+      assert(!opts.containsKey("write.split-size"), "subquery must not see target option")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 200, "software") :: Row(3, -1, "hr") :: Nil)
+  }
+
   test("SPARK-57681: update with dynamic options and a CTE on the same table") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -1301,6 +1320,48 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         s"UPDATE $tableNameAsString WITH (`write.split-size` = 10) SET salary = -1 " +
         s"WHERE pk IN (SELECT pk FROM hr_rows)"),
       "write.split-size" -> "10")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 200, "software") :: Row(3, -1, "hr") :: Nil)
+  }
+
+  test("SPARK-58330: update keeps its own options when a CTE references the same table " +
+    "with different options") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    // The target and the CTE reference the same table with different options; they share one
+    // per-query relation-cache entry. Each reference must keep its own options.
+    val Seq(qe) = withQueryExecutionsCaptured(spark) {
+      sql(s"WITH hr_rows AS (SELECT pk FROM $tableNameAsString WITH (`split-size` = 5) " +
+        s"WHERE dep = 'hr') " +
+        s"UPDATE $tableNameAsString WITH (`write.split-size` = 10) SET salary = -1 " +
+        s"WHERE pk IN (SELECT pk FROM hr_rows)")
+    }
+
+    // target write relation carries only its own option
+    val writeRelation = qe.optimizedPlan.collectFirst {
+      case rd: ReplaceData => rd.table
+      case wd: WriteDelta => wd.table
+    }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+      .asInstanceOf[DataSourceV2Relation]
+    assert(writeRelation.options.get("write.split-size") === "10", "target relation option")
+    assert(!writeRelation.options.containsKey("split-size"), "target must not see CTE option")
+
+    // the CTE scan carries only its own option
+    val cteOptions = qe.optimizedPlan.collect {
+      case r: DataSourceV2Relation => r.options
+      case s: DataSourceV2ScanRelation => s.relation.options
+    }.filter(_.containsKey("split-size"))
+    assert(cteOptions.nonEmpty, "CTE relation carrying the option was not found")
+    cteOptions.foreach { opts =>
+      assert(opts.get("split-size") === "5", "CTE relation option")
+      assert(!opts.containsKey("write.split-size"), "CTE must not see target option")
+    }
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
