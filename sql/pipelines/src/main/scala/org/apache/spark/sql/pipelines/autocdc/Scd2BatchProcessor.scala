@@ -20,11 +20,14 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
-import org.apache.spark.sql.types.{BooleanType, DataType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, LongType, StringType, StructField,
+  StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -920,27 +923,320 @@ case class Scd2BatchProcessor(
    * the eligible user-data columns (those not in [[ChangeArgs.keys]] or the framework
    * reserved set) filtered through [[ChangeArgs.trackHistorySelection]].
    */
-  private def computeTrackedHistoryColumns(df: DataFrame): Seq[String] = {
-    val conf = df.sparkSession.sessionState.conf
-    val resolver = conf.resolver
+  private def computeTrackedHistoryColumns(df: DataFrame): Seq[String] =
+    Scd2BatchProcessor.computeTrackedHistoryColumns(
+      schema = df.schema,
+      changeArgs = changeArgs,
+      caseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    )
 
-    val keyColNames = changeArgs.keys.map(_.name)
-    val reservedColNames = Scd2BatchProcessor.reservedFrameworkColNames
+  /**
+   * Tag each post-reconciliation row with [[Scd2BatchProcessor.shouldRouteToAuxTableColName]]:
+   * `true` for rows that belong in the auxiliary table (tombstones and hidden no-op upserts),
+   * `false` for rows that do not. The flag's contract is solely about aux-table membership; it
+   * makes no claim about whether a `false` row belongs in the target table.
+   *
+   * @param reconciledDf the canonical post-reconciliation rows for the affected keys.
+   * @return `reconciledDf` with an added boolean
+   *         [[Scd2BatchProcessor.shouldRouteToAuxTableColName]] column; no rows are added or
+   *         removed.
+   */
+  private[autocdc] def identifyAndTagAuxRows(reconciledDf: DataFrame): DataFrame = {
+    val recordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
+    val startAt = F.col(Scd2BatchProcessor.startAtColName)
+    val endAt = F.col(Scd2BatchProcessor.endAtColName)
+    val current = Scd2IntervalColumns(recordStartAt, startAt, endAt)
+    val next = current.leadBy(1, orderChronologicallyPerKeyWindow)
 
-    val eligibleSchema = StructType(df.schema.fields.filterNot { field =>
-      reservedColNames.exists(resolver(_, field.name)) ||
-        keyColNames.exists(resolver(_, field.name))
-    })
+    val trackedHistoryColumns = computeTrackedHistoryColumns(reconciledDf)
+    val areTrackedColumnsEqualInNextRow = trackedHistoryColumns
+      .map { c =>
+        val col = F.col(QuotingUtils.quoteIdentifier(c))
+        col <=> F.lead(col, 1).over(orderChronologicallyPerKeyWindow)
+      }
+      .reduceOption(_ && _)
+      .getOrElse(F.lit(true))
 
-    ColumnSelection
-      .applyToSchema(
-        schemaName = "trackHistorySelection",
-        schema = eligibleSchema,
-        columnSelection = changeArgs.trackHistorySelection,
-        caseSensitive = conf.caseSensitiveAnalysis
+    val isTombstone = RowClassifier.isTombstone(current)
+    val isHiddenNoOpUpsert = RowClassifier.isNoOpUpsertContinuation(
+      row = current,
+      next = next,
+      areTrackedColumnsEqual = areTrackedColumnsEqualInNextRow
+    )
+
+    reconciledDf.withColumn(
+      Scd2BatchProcessor.shouldRouteToAuxTableColName,
+      isTombstone || isHiddenNoOpUpsert
+    )
+  }
+
+  /**
+   * Merge the reconciled rows that belong in the auxiliary table (tombstones and hidden no-op
+   * upserts, as tagged by [[identifyAndTagAuxRows]]) onto the auxiliary table, and logically
+   * delete any previously-affected aux row that did not survive reconciliation.
+   *
+   * Idempotency across `foreachBatch` retries: rows this batch logically deletes are not
+   * physically removed but stamped with [[Scd2BatchProcessor.deletedByBatchIdColName]] `=
+   * batchId`, so a retry of the same `batchId` still observes them via
+   * [[findAffectedRowsFromAuxiliaryTable]] and re-derives the same reconciliation output. Aux
+   * rows logically deleted by an older, already-committed batch
+   * ([[Scd2BatchProcessor.deletedByBatchIdColName]] `!= batchId`) are physically
+   * garbage-collected as part of this same merge.
+   *
+   * @param reconciledDfWithAuxRowsTagged reconciled rows tagged by [[identifyAndTagAuxRows]].
+   * @param originalAffectedRowsFromAuxiliaryTable the affected aux rows pulled in for this
+   *        microbatch, in canonical SCD2 row schema (i.e. as returned by
+   *        [[findAffectedRowsFromAuxiliaryTable]], with the aux-only
+   *        [[Scd2BatchProcessor.deletedByBatchIdColName]] already dropped).
+   * @param auxiliaryTableIdentifier the identifier of the auxiliary table to merge into.
+   * @param batchId the underlying Spark streaming query's batchId, used to stamp logical deletes
+   *        and scope garbage collection.
+   */
+  private[autocdc] def mergeRowsIntoAuxiliaryTable(
+      reconciledDfWithAuxRowsTagged: DataFrame,
+      originalAffectedRowsFromAuxiliaryTable: DataFrame,
+      auxiliaryTableIdentifier: TableIdentifier,
+      batchId: Long): Unit = {
+    val resolver = reconciledDfWithAuxRowsTagged.sparkSession.sessionState.conf.resolver
+    val deletedByBatchIdCol = Scd2BatchProcessor.deletedByBatchIdColName
+
+    val reconciledAuxRows = reconciledDfWithAuxRowsTagged
+      .filter(F.col(Scd2BatchProcessor.shouldRouteToAuxTableColName))
+      .drop(Scd2BatchProcessor.shouldRouteToAuxTableColName)
+
+    // All of the reconciledAuxRows will be landing in the aux table as alive (non-deleted) rows,
+    // so tag them with a null deleted-by batch id.
+    val auxRowsToUpsert = reconciledAuxRows
+      .withColumn(deletedByBatchIdCol, F.lit(null).cast(LongType))
+
+    // Any aux row pulled in for reconciliation but absent from the post-reconciliation aux rows
+    // was either dropped as redundant or promoted to the (now-visible) target table. Either way
+    // it must leave the aux table; stamp it with this batch's id for deleted-by batch id. On this
+    // batch's MERGE, the existing aux row will be considered logically deleted. In a future
+    // microbatch's merge, it will be physically deleted.
+    val auxRowsToDelete = antiJoinRowsByRecordStartAtPerKey(
+        leftRows = originalAffectedRowsFromAuxiliaryTable,
+        rightRows = reconciledAuxRows
       )
-      .fieldNames
-      .toImmutableArraySeq
+      .withColumn(deletedByBatchIdCol, F.lit(batchId))
+
+    val mergeSource = auxRowsToUpsert
+      .unionByName(auxRowsToDelete)
+      .as("source")
+
+    // At this point [[mergeSource]] must have the same columns/shape as the persisted aux table.
+    val auxTableColumns = mergeSource.columns.toImmutableArraySeq
+
+    // Build predicate for whether rows represent the same event (match). In SCD2 each key can have
+    // multiple records, so a row's identity is defined by (keys, sequencing).
+    val auxIdentQuoted = auxiliaryTableIdentifier.quotedString
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+
+    val mergeSourceRecordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(s"source.`$meta`"))
+    val auxTableRecordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(s"$auxIdentQuoted.`$meta`"))
+
+    val doKeysMatch = changeArgs.keys
+      .map(k => F.col(s"source.${k.quoted}") === F.col(s"$auxIdentQuoted.${k.quoted}"))
+      .reduce(_ && _)
+    val doRowsMatch = doKeysMatch && (mergeSourceRecordStartAt <=> auxTableRecordStartAt)
+
+    // On updates, MERGE requires only non-key columns are updated (remapped). For inserts, all of
+    // the row's columns must explicitly be mapped.
+    val keyNames = changeArgs.keys.map(_.name)
+    def upsertAssignments(columnName: String): (String, Column) = {
+      val quoted = QuotingUtils.quoteIdentifier(columnName)
+      s"$auxIdentQuoted.$quoted" -> F.col(s"source.$quoted")
+    }
+    val nonKeyUpdateAssignments = auxTableColumns
+      .filterNot(c => keyNames.exists(resolver(_, c)))
+      .map(upsertAssignments)
+      .toMap
+    val insertAssignments = auxTableColumns.map(upsertAssignments).toMap
+
+    // Physically garbage-collect aux rows logically deleted by some other, already-committed
+    // batch. Such rows are always excluded when pulling in the current microbatch's affected set,
+    // so they can never match against a row being merged in.
+    val auxTableDeletedByBatchId = F.col(s"$auxIdentQuoted.`$deletedByBatchIdCol`")
+    val isGarbageCollectableAuxRow =
+      auxTableDeletedByBatchId.isNotNull && auxTableDeletedByBatchId =!= F.lit(batchId)
+
+    // Whether a row in the MERGE source represents a row being [logically] deleted, as opposed to
+    // being upserted.
+    val shouldLogicallyDeleteAuxRow = F.col(s"source.`$deletedByBatchIdCol`").isNotNull
+
+    mergeSource
+      .mergeInto(auxIdentQuoted, doRowsMatch)
+      // Keys in source row match against existing row in aux table, and declare intent to delete
+      // the corresponding row in the aux; mark the row as logically deleted in the aux table.
+      .whenMatched(shouldLogicallyDeleteAuxRow)
+      .update(
+        Map(
+          s"$auxIdentQuoted.`$deletedByBatchIdCol`" ->
+            F.col(s"source.`$deletedByBatchIdCol`")
+        )
+      )
+      // Keys in source row match against existing row in aux table and does not represent a row
+      // being deleted; update the data/operational columns
+      .whenMatched(!shouldLogicallyDeleteAuxRow)
+      .update(nonKeyUpdateAssignments)
+      // Keys in source do not match against an existing row in aux table and does not represent a
+      // row being deleted; insert the new key's row.
+      .whenNotMatched(!shouldLogicallyDeleteAuxRow)
+      .insert(insertAssignments)
+      // If this is a row not affected by the current microbatch but is eligible for garbage
+      // collection now, proactively hard-delete it.
+      // TODO: This GC triggers a full scan of the aux table; revisit whether to GC only
+      // periodically rather than on every microbatch.
+      .whenNotMatchedBySource(isGarbageCollectableAuxRow)
+      .delete()
+      .merge()
+  }
+
+  /**
+   * Merge the reconciled rows that are visible in the target table (run tails that are
+   * upsert-representing and not routed to the aux table) onto the target table, and delete any
+   * previously-affected target row that did not survive reconciliation.
+   *
+   * A previously-affected target row is deleted when it is absent from the post-reconciliation
+   * visible rows. This covers both (a) a row reconciled away entirely (e.g. closed by a
+   * coincident tombstone) and (b) a row demoted to a hidden aux row (e.g. a previously-visible
+   * no-op tail superseded within its run by a later no-op upsert). In either case the
+   * corresponding target row must go.
+   *
+   * @param reconciledDfWithAuxRowsTagged reconciled rows tagged by [[identifyAndTagAuxRows]].
+   * @param affectedRowsFromTargetTable the affected target rows pulled in for this microbatch.
+   * @param targetTableIdentifier the identifier of the target table to merge into.
+   */
+  private[autocdc] def mergeRowsIntoTargetTable(
+      reconciledDfWithAuxRowsTagged: DataFrame,
+      affectedRowsFromTargetTable: DataFrame,
+      targetTableIdentifier: TableIdentifier): Unit = {
+    val targetIdentQuoted = targetTableIdentifier.quotedString
+    val meta = AutoCdcReservedNames.cdcMetadataColName
+
+    val resolver = reconciledDfWithAuxRowsTagged.sparkSession.sessionState.conf.resolver
+    val keyNames = changeArgs.keys.map(_.name)
+
+    // Find the reconciled rows that should specifically land in the target table, as per SCD2.
+    val recordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(reconciledDfWithAuxRowsTagged.col(meta))
+    val startAt = reconciledDfWithAuxRowsTagged.col(Scd2BatchProcessor.startAtColName)
+    val endAt = reconciledDfWithAuxRowsTagged.col(Scd2BatchProcessor.endAtColName)
+    val isVisibleTargetRow =
+      // Aux table by definition only holds rows that should not be visible to users, but are
+      // required for cross-microbatch stateful reconciliation (tombstones and currently no-op
+      // upserts).
+      !F.col(Scd2BatchProcessor.shouldRouteToAuxTableColName) &&
+        // While rows headed to aux are mutually exclusive to rows that should land in the target,
+        // it's possible there are rows that belong to neither aux nor target (ex. decomposition
+        // tails). Only non-no-op upsert-representing rows should land in the target, and no-op
+        // upsert-representing rows would have been marked as routed to aux table; hence all
+        // remaining upserts should land in the target table.
+        RowClassifier.isUpsertRepresentingRow(Scd2IntervalColumns(recordStartAt, startAt, endAt))
+
+    // Compute the set of affected rows that should be upserted back into the target table, as well
+    // as rows that have been dropped or demoted out of the target table.
+    val reconciledTargetRows = reconciledDfWithAuxRowsTagged
+      .filter(isVisibleTargetRow)
+      .drop(Scd2BatchProcessor.shouldRouteToAuxTableColName)
+
+    val rowsToDeleteFromTarget = antiJoinRowsByRecordStartAtPerKey(
+      leftRows = affectedRowsFromTargetTable,
+      rightRows = reconciledTargetRows
+    )
+
+    // At this point, [[reconciledTargetRows]] shares the same columns/shape as the target table.
+    val targetTableColumns = reconciledTargetRows.columns.toImmutableArraySeq
+
+    // Unlike the aux table the target table does not persist any delete marker (logical or not),
+    // so we need to augment a column to all MERGE source rows to indicate whether the row
+    // represents that a corresponding target table row should be deleted. Once we explicitly mark
+    // each row as a deletion or not, we can union them without losing information.
+    val shouldDeleteTargetRowCol = Scd2BatchProcessor.shouldDeleteTargetRowColName
+    val mergeSource = reconciledTargetRows
+      .withColumn(shouldDeleteTargetRowCol, F.lit(false))
+      .unionByName(rowsToDeleteFromTarget.withColumn(shouldDeleteTargetRowCol, F.lit(true)))
+      .select(
+        targetTableColumns.map(c => F.col(QuotingUtils.quoteIdentifier(c))) :+
+          F.col(shouldDeleteTargetRowCol): _*
+      )
+      .as("source")
+
+    val mergeSourceRecordStartAt = Scd2BatchProcessor.recordStartAtOf(F.col(s"source.`$meta`"))
+    val targetTableRecordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(s"$targetIdentQuoted.`$meta`"))
+    val doKeysMatch = changeArgs.keys
+      .map(k => F.col(s"source.${k.quoted}") === F.col(s"$targetIdentQuoted.${k.quoted}"))
+      .reduce(_ && _)
+    val doRowsMatch = doKeysMatch && (mergeSourceRecordStartAt <=> targetTableRecordStartAt)
+
+    // On updates, MERGE requires only non-key columns are updated (remapped). For inserts, all of
+    // the row's columns must explicitly be mapped.
+    def upsertAssignments(columnName: String): (String, Column) = {
+      val quoted = QuotingUtils.quoteIdentifier(columnName)
+      s"$targetIdentQuoted.$quoted" -> F.col(s"source.$quoted")
+    }
+    val nonKeyUpdateAssignments = targetTableColumns
+      .filterNot(c => keyNames.exists(resolver(_, c)))
+      .map(upsertAssignments)
+      .toMap
+    val insertAssignments = targetTableColumns.map(upsertAssignments).toMap
+
+    // Whether a row in the MERGE source represents a row being deleted, as opposed to being
+    // upserted. Unlike the aux table, target deletes are physical (hard) deletes.
+    val shouldDeleteTargetRow = F.col(s"source.`$shouldDeleteTargetRowCol`")
+
+    mergeSource
+      .mergeInto(targetIdentQuoted, doRowsMatch)
+      // Keys in source row match against an existing row in the target table, and declare intent
+      // to delete the corresponding row; physically remove it from the target table.
+      .whenMatched(shouldDeleteTargetRow)
+      .delete()
+      // Keys in source row match against an existing row in the target table and does not
+      // represent a row being deleted; update the data/operational columns.
+      .whenMatched(!shouldDeleteTargetRow)
+      .update(nonKeyUpdateAssignments)
+      // Keys in source do not match against an existing row in the target table and does not
+      // represent a row being deleted; insert the new key's row.
+      .whenNotMatched(!shouldDeleteTargetRow)
+      .insert(insertAssignments)
+      .merge()
+  }
+
+  /**
+   * Left-anti-join `leftRows` against `rightRows`, matching on the key columns and
+   * [[Scd2BatchProcessor.recordStartAtFieldName]] (null-safe). Returns the `leftRows` that have
+   * no counterpart in `rightRows` - i.e. the rows that were dropped between the two sets -
+   * preserving `leftRows`' schema.
+   *
+   * Both inputs must carry the key columns and the [[AutoCdcReservedNames.cdcMetadataColName]]
+   * column.
+   */
+  private[autocdc] def antiJoinRowsByRecordStartAtPerKey(
+      leftRows: DataFrame,
+      rightRows: DataFrame): DataFrame = {
+    val leftAlias = "left"
+    val rightAlias = "right"
+    val leftRecordStartAt = Scd2BatchProcessor.recordStartAtOf(
+      F.col(s"$leftAlias.`${AutoCdcReservedNames.cdcMetadataColName}`")
+    )
+    val rightRecordStartAt = Scd2BatchProcessor.recordStartAtOf(
+      F.col(s"$rightAlias.`${AutoCdcReservedNames.cdcMetadataColName}`")
+    )
+    val doKeysMatch = changeArgs.keys
+      .map(k => F.col(s"$leftAlias.${k.quoted}") === F.col(s"$rightAlias.${k.quoted}"))
+      .reduce(_ && _)
+
+    leftRows
+      .as(leftAlias)
+      .join(
+        rightRows.as(rightAlias),
+        doKeysMatch && (leftRecordStartAt <=> rightRecordStartAt),
+        joinType = "left_anti"
+      )
   }
 }
 
@@ -1039,7 +1335,7 @@ object Scd2BatchProcessor {
    * CDC metadata column field that represents the exact time (sequence) of the CDC event that
    * produced this row. Null only for synthetic decomposition tails.
    */
-  private[autocdc] val recordStartAtFieldName: String = "__RECORD_START_AT"
+  private[pipelines] val recordStartAtFieldName: String = "__RECORD_START_AT"
 
   /**
    * Aux-table only column that holds the microbatch id by which a row was logically
@@ -1051,7 +1347,7 @@ object Scd2BatchProcessor {
    * idempotency, should a microbatch fail between a MERGE executed against the auxiliary
    * table and the MERGE executed against the target table.
    */
-  private[autocdc] val deletedByBatchIdColName: String =
+  private[pipelines] val deletedByBatchIdColName: String =
     s"${AutoCdcReservedNames.prefix}deleted_by_batch_id"
 
   /**
@@ -1068,7 +1364,7 @@ object Scd2BatchProcessor {
    * The invariant in both tables is: startAtColName <= recordStartAtFieldName. If an event was
    * generated at time X, it is active by time X, or earlier if it is not a run head.
    */
-  private[autocdc] val startAtColName: String = "__START_AT"
+  private[pipelines] val startAtColName: String = "__START_AT"
 
   /**
    * What this column represents depends on which AutoCDC artifact table it is read from.
@@ -1082,22 +1378,60 @@ object Scd2BatchProcessor {
    *    Else this row is a coalesced no-op row that is part of an upsert run, and by
    *    convention the value will always be null.
    */
-  private[autocdc] val endAtColName: String = "__END_AT"
+  private[pipelines] val endAtColName: String = "__END_AT"
 
   /**
-   * Column names reserved by AutoCDC that will be projected onto the microbatch and
-   * eventually persisted in the target table. If the user's source dataframe contains any of
-   * these columns, SCD2 reconciliation will fail.
+   * Column names reserved by AutoCDC that are projected onto the microbatch and persisted in the
+   * target table. A source dataframe must not contain any of them.
    *
-   * TODO(SPARK-57251): validate at [[AutoCdcMergeFlow]] construction time that the source
-   *   schema and column selection do not collide with these reserved names, so we fail fast
-   *   with a user-actionable error instead of silently overwriting them at preprocess time.
+   * [[startAtColName]] and [[endAtColName]] do NOT carry the reserved
+   * [[AutoCdcReservedNames.prefix]], so a source-column collision with them is not caught by the
+   * prefix-based guard; [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] validates the
+   * source schema against the non-prefixed names in this set at construction time, failing fast
+   * instead of silently overwriting them at preprocess time.
    */
-  private val reservedFrameworkColNames: Set[String] = Set(
+  private[pipelines] val reservedFrameworkColNames: Set[String] = Set(
     startAtColName,
     endAtColName,
     AutoCdcReservedNames.cdcMetadataColName
   )
+
+  /**
+   * Resolve [[ChangeArgs.trackHistorySelection]] against `schema` and return the field names of
+   * the history-tracking columns: the eligible user-data columns (those that are neither
+   * [[ChangeArgs.keys]] nor framework reserved columns) filtered through the selection.
+   *
+   * This is the single source of truth for which columns define an SCD2 run. It is called both
+   * per-microbatch (against the reconciled dataframe's schema) and at
+   * [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction time (against the
+   * user-selected source schema), so an unresolvable or ineligible selection fails fast with a
+   * user-actionable [[org.apache.spark.sql.AnalysisException]] instead of surfacing mid-stream.
+   *
+   * Throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` if the selection references a column that is not
+   * an eligible history-tracking column in `schema` (i.e. absent, or a key/framework column).
+   */
+  private[pipelines] def computeTrackedHistoryColumns(
+      schema: StructType,
+      changeArgs: ChangeArgs,
+      caseSensitive: Boolean): Seq[String] = {
+    val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+    val keyColNames = changeArgs.keys.map(_.name)
+
+    val eligibleSchema = StructType(schema.fields.filterNot { field =>
+      reservedFrameworkColNames.exists(resolver(_, field.name)) ||
+        keyColNames.exists(resolver(_, field.name))
+    })
+
+    ColumnSelection
+      .applyToSchema(
+        schemaName = "trackHistorySelection",
+        schema = eligibleSchema,
+        columnSelection = changeArgs.trackHistorySelection,
+        caseSensitive = caseSensitive
+      )
+      .fieldNames
+      .toImmutableArraySeq
+  }
 
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per
@@ -1166,6 +1500,27 @@ object Scd2BatchProcessor {
    */
   private val anchorSequenceColName: String = s"${AutoCdcReservedNames.prefix}anchor_sequence"
 
+  /**
+   * Name of the temporary column projected by [[Scd2BatchProcessor.identifyAndTagAuxRows]] to
+   * mark rows destined for the auxiliary table (tombstones and hidden no-op upserts) rather than
+   * the target table.
+   *
+   * Temporary in that the column has no observable side effect or persistence across microbatches.
+   */
+  private[autocdc] val shouldRouteToAuxTableColName: String =
+    s"${AutoCdcReservedNames.prefix}should_route_to_aux_table"
+
+  /**
+   * Name of the temporary column used by [[Scd2BatchProcessor.mergeRowsIntoTargetTable]] to flag,
+   * within the unioned merge source, which rows should be deleted from (rather than upserted
+   * into) the target table.
+   *
+   * Temporary in that the column has no observable side effect or persistence across
+   * microbatches.
+   */
+  private val shouldDeleteTargetRowColName: String =
+    s"${AutoCdcReservedNames.prefix}should_delete_target_row"
+
   /** Project the [[recordStartAtFieldName]] out of an SCD2 CDC metadata column. */
   private def recordStartAtOf(cdcMetadataCol: Column): Column =
     cdcMetadataCol.getField(recordStartAtFieldName)
@@ -1187,7 +1542,7 @@ object Scd2BatchProcessor {
    * Construct the CDC metadata struct column for SCD2 rows, following the exact schema and
    * field ordering defined by [[cdcMetadataColSchema]].
    */
-  private def constructCdcMetadataCol(
+  private[pipelines] def constructCdcMetadataCol(
       recordStartAt: Column,
       sequencingType: DataType
   ): Column = {

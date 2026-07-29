@@ -527,8 +527,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, _, Some(write)) =>
       OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
-    case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters) =>
-      DeleteFromTableExec(r.table.asDeletable, filters.toArray, refreshCache(r)) :: Nil
+    case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters, options) =>
+      DeleteFromTableExec(r.table.asDeletable, filters.toArray, refreshCache(r), options) :: Nil
 
     case DeleteFromTable(relation, condition) =>
       relation match {
@@ -547,11 +547,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
           table match {
             case t: SupportsDeleteV2 if t.canDeleteWhere(filters) =>
-              DeleteFromTableExec(t, filters, refreshCache(r)) :: Nil
+              DeleteFromTableExec(t, filters, refreshCache(r), r.options) :: Nil
             case t: SupportsDeleteV2 =>
               throw QueryCompilationErrors.cannotDeleteTableWhereFiltersError(t, filters)
             case t: TruncatableTable if condition == TrueLiteral =>
-              TruncateTableExec(t, refreshCache(r)) :: Nil
+              TruncateTableExec(t, refreshCache(r), r.options) :: Nil
             case _ =>
               throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
           }

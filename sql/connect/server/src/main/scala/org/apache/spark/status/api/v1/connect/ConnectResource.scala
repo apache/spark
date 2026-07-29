@@ -20,7 +20,7 @@ package org.apache.spark.status.api.v1.connect
 import jakarta.ws.rs._
 import jakarta.ws.rs.core.MediaType
 
-import org.apache.spark.sql.connect.ui.{ExecutionInfo, SessionInfo, SparkConnectServerAppStatusStore}
+import org.apache.spark.sql.connect.ui.{ConnectUiUtils, ExecutionInfo, SessionInfo, SparkConnectServerAppStatusStore}
 import org.apache.spark.status.api.v1.{BadParameterException, BaseAppResource, NotFoundException}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
@@ -37,12 +37,26 @@ private[v1] class ConnectResource extends BaseAppResource {
     sessions.map(prepareSessionData)
   }
 
+  // Sessions are keyed by (userId, sessionId), so userId is required. It is a base64url token (see
+  // ConnectUiUtils); an empty token is a valid empty user id, so only an absent param is rejected.
   @GET
   @Path("sessions/{sessionId}")
-  def session(@PathParam("sessionId") sessionId: String): SessionData = withUI { ui =>
+  def session(
+      @PathParam("sessionId") sessionId: String,
+      @QueryParam("userId") userId: String): SessionData = withUI { ui =>
+    if (userId == null) {
+      throw new BadParameterException("userId is required.")
+    }
+    val decodedUserId =
+      try {
+        ConnectUiUtils.decodeUserId(userId)
+      } catch {
+        case _: IllegalArgumentException =>
+          throw new BadParameterException("userId must be a base64url-encoded string.")
+      }
     val store = new SparkConnectServerAppStatusStore(ui.store.store)
     store
-      .getSession(sessionId)
+      .getSession(decodedUserId, sessionId)
       .map(prepareSessionData)
       .getOrElse(throw new NotFoundException("unknown session id: " + sessionId))
   }

@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedInlineTable,
   UnresolvedOrdinal,
   UnresolvedRelation,
-  UnresolvedStar,
+  UnresolvedStarBase,
   UnresolvedStarExceptOrReplace,
   UnresolvedSubqueryColumnAliases
 }
@@ -219,16 +219,8 @@ class ResolverGuard(
         checkNamedParameter(namedParameter)
       case getStructField: GetStructField =>
         checkGetStructField(getStructField)
-      case lambdaFunction: LambdaFunction =>
-        checkLambdaFunction(lambdaFunction)
-      case unresolvedNamedLambdaVariable: UnresolvedNamedLambdaVariable =>
-        checkUnresolvedNamedLambdaVariable(unresolvedNamedLambdaVariable)
-      case namedLambdaVariable: NamedLambdaVariable =>
-        checkNamedLambdaVariable(namedLambdaVariable)
       case NamePlaceholder =>
         checkNamePlaceholder()
-      case baseGroupingSets: BaseGroupingSets =>
-        checkBaseGroupingSets(baseGroupingSets)
       case expression if isGenerallySupportedExpression(expression) =>
         expression.children.collectFirst { case CheckExpression(reason) => reason }
       case _ =>
@@ -265,9 +257,7 @@ class ResolverGuard(
     checkProjectHiddenOutputTag(project)
       .orElse(checkOperator(project.child))
       .orElse {
-        project.projectList.filterNot(_.isInstanceOf[UnresolvedStar]).collectFirst {
-          case CheckExpression(reason) => reason
-        }
+        project.projectList.collectFirst { case CheckExpression(reason) => reason }
       }
   }
 
@@ -277,9 +267,7 @@ class ResolverGuard(
         aggregate.groupingExpressions.collectFirst { case CheckExpression(reason) => reason }
       }
       .orElse {
-        aggregate.aggregateExpressions.filterNot(_.isInstanceOf[UnresolvedStar]).collectFirst {
-          case CheckExpression(reason) => reason
-        }
+        aggregate.aggregateExpressions.collectFirst { case CheckExpression(reason) => reason }
       }
   }
 
@@ -392,11 +380,28 @@ class ResolverGuard(
    * [[UnresolvedStarExceptOrReplace]] is handled separately, because it's a leaf expression,
    * but it has replacement expressions, that could be non-trivial.
    */
-  private def checkStar(star: Star) = star match {
-    case starExceptOrReplace: UnresolvedStarExceptOrReplace =>
-      starExceptOrReplace.replacements.collectFirst { case CheckExpressionSeq(reason) => reason }
-    case star =>
-      star.children.collectFirst { case CheckExpression(reason) => reason }
+  private def checkStar(star: Star) =
+    checkStarTarget(star).orElse {
+      star match {
+        case starExceptOrReplace: UnresolvedStarExceptOrReplace =>
+          starExceptOrReplace.replacements.collectFirst {
+            case CheckExpressionSeq(reason) => reason
+          }
+        case star =>
+          star.children.collectFirst { case CheckExpression(reason) => reason }
+      }
+    }
+
+  private def checkStarTarget(star: Star): Option[String] = star match {
+    case starBase: UnresolvedStarBase =>
+      starBase.target.flatMap { targetParts =>
+        targetParts
+          .find(name => ResolverGuard.UNSUPPORTED_ATTRIBUTE_NAMES.contains(name))
+          .map(unsupportedName =>
+            s"unsupported attribute name '${unsupportedName.toLowerCase(Locale.ROOT)}'"
+          )
+      }
+    case _ => None
   }
 
   private def checkNamedParameter(namedParameter: NamedParameter) = None
@@ -405,20 +410,7 @@ class ResolverGuard(
     checkExpression(getStructField.child)
   }
 
-  private def checkLambdaFunction(lambdaFunction: LambdaFunction) = {
-    lambdaFunction.children.collectFirst { case CheckExpression(reason) => reason }
-  }
-
-  private def checkUnresolvedNamedLambdaVariable(
-      unresolvedNamedLambdaVariable: UnresolvedNamedLambdaVariable) = None
-
-  private def checkNamedLambdaVariable(namedLambdaVariable: NamedLambdaVariable) = None
-
   private def checkNamePlaceholder() = None
-
-  private def checkBaseGroupingSets(baseGroupingSets: BaseGroupingSets) = {
-    baseGroupingSets.children.collectFirst { case CheckExpression(reason) => reason }
-  }
 
   private def checkUnresolvedAlias(unresolvedAlias: UnresolvedAlias) =
     checkExpression(unresolvedAlias.child)
@@ -486,14 +478,13 @@ class ResolverGuard(
     } else if (FunctionResolution.sessionNamespaceKind(nameParts)
         .contains(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Builtin)) {
       // Explicitly builtin-qualified: reject if unsupported, else check children
-      if (ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(funcName)) {
+      if (isUnsupportedFunction(funcName)) {
         Some(s"unsupported function ${funcName}")
       } else {
         unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
       }
     } else if (FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
-      // Session-qualified: allow through (PATH + system-first)
-      unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
+      Some("session-qualified user-defined function")
     } else {
       Some("multi-part function name")
     }
@@ -625,6 +616,10 @@ class ResolverGuard(
       Some("legacyCTEPrecedencePolicy")
     } else if (conf.getConfString("pipelines.id", null) != null) {
       Some("dlt")
+    } else if (!conf.getConf(SQLConf.PRIORITIZE_ORDINAL_RESOLUTION_IN_SORT)) {
+      Some("prioritizeOrdinalResolutionInSortDisabled")
+    } else if (conf.getConf(SQLConf.PERSISTENT_CATALOG_FIRST)) {
+      Some("persistentCatalogFirst")
     } else {
       None
     }
@@ -639,7 +634,9 @@ class ResolverGuard(
   }
 
   private def isUnsupportedFunction(name: String): Boolean = {
-    ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(name)
+    ResolverGuard.UNSUPPORTED_FUNCTION_NAMES.contains(name) ||
+    ResolverGuard.GENERATOR_FUNCTION_NAMES.contains(name) ||
+    ResolverGuard.HIGHER_ORDER_FUNCTIONS.contains(name)
   }
 
   private def isBuiltinFunction(singlePartName: String) = {

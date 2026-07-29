@@ -521,6 +521,55 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     }
   }
 
+  test("try_variant_set with literal arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    checkAnswer(
+      sql("SELECT to_json(try_variant_set(parse_json('{\"a\": 1}'), '$.a', 2))"),
+      rows("""{"a":2}"""))
+    checkAnswer(
+      sql("SELECT to_json(try_variant_set(parse_json('{\"a\": 1}'), '$.b', 2, false))"),
+      rows("""{"a":1}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(try_variant_set(parse_json('{\"a\": 1}'), '$.a.b', 2))"),
+      rows(null))
+
+    checkAnswer(
+      sql("SELECT to_json(try_variant_set(CAST(NULL AS VARIANT), '$.a', 1))"),
+      rows(null))
+
+    // A malformed path is still raised.
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT try_variant_set(parse_json('{}'), '$', 1)").collect()
+      },
+      condition = "INVALID_VARIANT_PATH",
+      parameters = Map("path" -> "$", "functionName" -> toSQLId("try_variant_set")))
+  }
+
+  test("try_variant_set with dynamic arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val df = Seq(
+          ("""{"a": 1}""", "$.a", 2),
+          ("""{"a": 1}""", "$.a.b", 9),
+          (null, "$.a", 2)
+        ).toDF("json", "path", "val")
+        val v = parse_json(col("json"))
+
+        checkAnswer(
+          df.select(to_json(try_variant_set(v, col("path"), col("val"))).alias("r")),
+          rows("""{"a":2}""", null, null))
+
+        checkAnswer(
+          df.select(to_json(try_variant_set(v, "$.b", col("val"), false)).alias("r")),
+          rows("""{"a":1}""", """{"a":1}""", null))
+      }
+    }
+  }
+
   test("variant_array_append with literal arguments") {
     def rows(results: Any*): Seq[Row] = results.map(Row(_))
 

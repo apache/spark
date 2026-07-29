@@ -514,7 +514,7 @@ class DefaultChannelBuilder(ChannelBuilder):
             session = PySparkSession._instantiatedSession
 
             if session is not None:
-                jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
+                jvm = session._jvm
                 return getattr(
                     getattr(
                         jvm,
@@ -1413,8 +1413,6 @@ class SparkConnectClient(object):
             # when not at debug log level.
             logger.debug(f"Execute command for command {self._proto_to_string(command, True)}")
         req = self._execute_plan_request_with_metadata()
-        if self._user_id:
-            req.user_context.user_id = self._user_id
         self._set_command_in_plan(req.plan, command)
         data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
             req, observations or {}
@@ -1439,8 +1437,6 @@ class SparkConnectClient(object):
                 f"Execute command as iterator for command {self._proto_to_string(command, True)}"
             )
         req = self._execute_plan_request_with_metadata()
-        if self._user_id:
-            req.user_context.user_id = self._user_id
         self._set_command_in_plan(req.plan, command)
         for response in self._execute_and_fetch_as_iterator(req, observations or {}):
             if isinstance(response, dict):
@@ -1581,11 +1577,13 @@ class SparkConnectClient(object):
         elif method == "explain":
             req.explain.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
             explain_mode = kwargs.get("explain_mode")
-            if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
+            allowed_explain_modes = ["simple", "extended", "codegen", "cost", "formatted"]
+            if explain_mode not in allowed_explain_modes:
                 raise PySparkValueError(
-                    errorClass="UNKNOWN_EXPLAIN_MODE",
+                    errorClass="VALUE_NOT_ALLOWED",
                     messageParameters={
-                        "explain_mode": str(explain_mode),
+                        "arg_name": "explain_mode",
+                        "allowed_values": str(allowed_explain_modes),
                     },
                 )
             if explain_mode == "simple":

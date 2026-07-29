@@ -638,7 +638,13 @@ abstract class BroadcastJoinSuiteBase extends QueryTest
           None,
           left = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(l1, l2), 1)),
           right = DummySparkPlan())
-        assert(bhj.outputPartitioning === PartitioningCollection(expected.take(limit)))
+        // A single expanded partitioning is returned directly; multiple are wrapped in a
+        // `PartitioningCollection`.
+        val expectedPartitioning = expected.take(limit) match {
+          case Seq(p) => p
+          case ps => PartitioningCollection(ps)
+        }
+        assert(bhj.outputPartitioning === expectedPartitioning)
       }
     }
   }

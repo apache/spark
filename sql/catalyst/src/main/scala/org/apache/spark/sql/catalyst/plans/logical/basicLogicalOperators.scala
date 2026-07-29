@@ -907,8 +907,6 @@ case class View(
     isTempView: Boolean,
     child: LogicalPlan,
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty) extends UnaryNode {
-  require(!isTempViewStoringAnalyzedPlan || child.resolved)
-
   override def output: Seq[Attribute] = child.output
 
   override def metadataOutput: Seq[Attribute] = Nil

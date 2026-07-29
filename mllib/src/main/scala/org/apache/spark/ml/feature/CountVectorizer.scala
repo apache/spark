@@ -33,6 +33,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.collection.{OpenHashMap, Utils}
 
 /**
@@ -284,6 +285,13 @@ class CountVectorizerModel(
 
   // For ml connect only
   private[ml] def this() = this("", Array.empty)
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    // vocabulary: Array[String]
+    size += SizeEstimator.estimate(vocabulary)
+    size
+  }
 
   @Since("1.5.0")
   def this(vocabulary: Array[String]) = {

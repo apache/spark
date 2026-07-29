@@ -83,7 +83,6 @@ class ArrowBatchTransformer:
         Flatten a struct column at given index into a RecordBatch.
 
         Used by:
-            - ArrowStreamUDFSerializer.load_stream
             - SQL_GROUPED_MAP_ARROW_UDF mapper
             - SQL_GROUPED_MAP_ARROW_ITER_UDF mapper
         """
@@ -111,7 +110,8 @@ class ArrowBatchTransformer:
         """
         Wrap a RecordBatch's columns into a single struct column.
 
-        Used by: ArrowStreamUDFSerializer.dump_stream
+        Used by: Arrow UDF mappers in worker.py to re-wrap flattened batches
+        before serialization.
         """
         import pyarrow as pa
 

@@ -487,6 +487,7 @@ __all__ = [  # noqa: F405
     "variant_insert",
     "try_variant_insert",
     "variant_set",
+    "try_variant_set",
     "try_parse_json",
     "to_variant_object",
     # XML Functions
