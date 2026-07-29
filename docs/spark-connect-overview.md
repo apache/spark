@@ -327,6 +327,10 @@ means a plain `sbin/stop-connect-server.sh` does not find it. The `--stop` comma
 recorded server and cleans up the discovery file; killing the server's pid directly also works,
 and the next run notices the dead server and starts a fresh one.
 
+This managed-server workflow is experimental. The `--stop` command and the discovery file
+location and format may change in a future release, for example if local server management is
+folded into a unified `spark connect` CLI.
+
 The connection details (host, port, auth token, pid, Spark version) are recorded in a discovery
 file in a private per-user directory; set `SPARK_LOCAL_CONNECT_DISCOVERY` to override its
 location. A run reconnects only to a server whose Spark version matches. After upgrading Spark,

@@ -36,6 +36,10 @@ The server runs until stopped with ``python -m pyspark.sql.connect.local_server 
 (A plain ``sbin/stop-connect-server.sh`` cannot find it: the daemon runs with a custom pid
 dir and ident string.) Windows is not supported, as this relies on the POSIX scripts under
 ``sbin/``.
+
+This module is experimental. The discovery file location and format and the ``--stop``
+entry point are internal details that may change or move server-side (e.g. into a unified
+``spark connect`` CLI); only the reuse opt-in itself is meant to be a stable surface.
 """
 
 import argparse
