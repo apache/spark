@@ -74,13 +74,13 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
     case j @ NearestByJoin(left, right, joinType, _, numResults, rankingExpression, direction)
-      // The optimizer checks both the config flag AND the broadcast threshold to decide
-      // whether to skip the rewrite. This mixes optimizer/planner concerns but is necessary:
-      // if we only checked the config flag, a NearestByJoin node with right side exceeding
-      // the broadcast threshold would reach the planner unrewritten, and no strategy would
-      // handle it (NearestByJoinSelection returns Nil for large right sides), causing a
-      // planning failure. The alternative (two-pass approach) is deferred to future work.
-      if !NearestByJoin.canBroadcastRight(j, SQLConf.get) =>
+      // When the broadcast flag is ON the NearestByJoin node is left intact for the
+      // planner's NearestByJoinSelection strategy, which unconditionally plans
+      // BroadcastNearestByJoinExec. Reading stats here is unsafe: this rule runs in
+      // FinishAnalysis, before filter/partition pushdown completes, so DSv2 sources
+      // throw INTERNAL_ERROR and partitioned tables report inflated sizeInBytes.
+      // The size decision is deferred entirely to the physical operator's runtime.
+      if !SQLConf.get.nearestByBroadcastEnabled =>
       // 1. Tag each left row with a unique id so that rows from the same left row can later be
       //    grouped together after the cross-join with `right`.
       val qidAlias = Alias(Uuid(Some(random.nextLong())), "__qid")()

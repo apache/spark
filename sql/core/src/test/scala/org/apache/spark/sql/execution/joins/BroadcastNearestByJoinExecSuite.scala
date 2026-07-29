@@ -157,7 +157,11 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("asymmetric - right exceeds broadcast threshold, fallback to rewrite") {
+  test("asymmetric - right exceeds broadcast threshold, broadcast still used (flag ON)") {
+    // Under option (a): when the broadcast flag is ON, BroadcastNearestByJoinExec is always
+    // used regardless of right-side size. The size decision is deferred to runtime -- the
+    // operator broadcasts unconditionally. This gives up automatic large-right fallback but
+    // avoids reading stats in the optimizer before pushdown completes (SPARK-57091).
     withSQLConf(
       SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
@@ -167,9 +171,9 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
       val df = left.nearestByJoin(right, abs(col("x") - col("y")),
         numResults = 2, mode = "exact", direction = "distance")
       val plan = df.queryExecution.executedPlan.toString()
-      assert(!plan.contains("BroadcastNearestByJoin"),
-        s"Did NOT expect BroadcastNearestByJoinExec in plan: $plan")
-      // Results still correct via rewrite path
+      assert(plan.contains("BroadcastNearestByJoin"),
+        s"Expected BroadcastNearestByJoinExec in plan (flag ON always broadcasts): $plan")
+      // Results still correct
       assert(df.count() == 10 * 2)
       val row0 = df.filter(col("id") === 0).orderBy(abs(col("x") - col("y"))).collect()
       assert(row0(0).getAs[Long]("rid") == 0L)
@@ -562,6 +566,68 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
         "Expected BroadcastNearestByJoinExec in plan but got:\n" + plan.treeString)
       // Each of 10 left rows should get 2 right rows (k=2, right has 3 rows)
       assert(result.count() == 20)
+    }
+  }
+
+  test("SPARK-57091: DSv2 right side does not throw INTERNAL_ERROR with flag ON") {
+    // Regression: before the stats-free fix, reading right.stats.sizeInBytes in the
+    // optimizer's FinishAnalysis batch triggered computeStats on a DSv2 source before
+    // filter/partition pushdown completed, throwing [INTERNAL_ERROR]. With the fix,
+    // the optimizer no longer reads stats -- the NearestByJoin node is left intact for
+    // the planner, which unconditionally plans BroadcastNearestByJoinExec.
+    withSQLConf(
+      "spark.sql.catalog.testcat" ->
+        classOf[org.apache.spark.sql.connector.catalog.InMemoryTableCatalog].getName,
+      SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
+      spark.sql(
+        """CREATE TABLE testcat.right_tbl (rid INT, y DOUBLE)
+          |USING foo""".stripMargin)
+      try {
+        spark.sql("INSERT INTO testcat.right_tbl VALUES (10, 1.0), (11, 5.0), (12, 9.0)")
+        val left = Seq((1, 3.0), (2, 7.0)).toDF("id", "x")
+        val right = spark.table("testcat.right_tbl")
+        val result = left.nearestByJoin(right, abs(col("x") - col("y")),
+          numResults = 2, mode = "exact", direction = "distance")
+        val plan = result.queryExecution.executedPlan
+        assert(plan.treeString.contains("BroadcastNearestByJoin"),
+          "Expected BroadcastNearestByJoinExec in plan but got:\n" + plan.treeString)
+        // Verify correct results:
+        // id=1(x=3.0) nearest y=1.0(d=2),5.0(d=2)
+        // id=2(x=7.0) nearest y=5.0(d=2),9.0(d=2)
+        assert(result.count() == 4)
+        val row1 = result.filter(col("id") === 1).orderBy(abs(col("x") - col("y"))).collect()
+        assert(row1.length == 2)
+      } finally {
+        spark.sql("DROP TABLE IF EXISTS testcat.right_tbl")
+      }
+    }
+  }
+
+  test("SPARK-57091: partitioned right table with flag ON uses BroadcastNearestByJoin") {
+    // Regression: before the stats-free fix, partitioned file tables reported
+    // sizeInBytes = Long.MaxValue before filter pushdown, so the old canBroadcastRight
+    // check always failed and the broadcast operator never fired. With the fix, the
+    // planner unconditionally plans BroadcastNearestByJoinExec when the flag is ON.
+    withStreamingHeap {
+      withTempPath { dir =>
+        // Create partitioned parquet data
+        val data = (1 to 100).map(i => (i % 5, i, i.toDouble))
+        spark.createDataFrame(data).toDF("part", "rid", "y")
+          .write.partitionBy("part").parquet(dir.getAbsolutePath)
+
+        val right = spark.read.parquet(dir.getAbsolutePath).filter(col("part") === 0)
+        val left = Seq((1, 10.0), (2, 50.0)).toDF("id", "x")
+        val result = left.nearestByJoin(right, abs(col("x") - col("y")),
+          numResults = 3, mode = "exact", direction = "distance")
+        val plan = result.queryExecution.executedPlan
+        assert(plan.treeString.contains("BroadcastNearestByJoin"),
+          "Expected BroadcastNearestByJoinExec for partitioned right but got:\n" +
+          plan.treeString)
+        // part=0 has values 5,10,15,...,100 (20 rows). Each left row gets 3 nearest.
+        assert(result.count() == 6)
+      }
     }
   }
 }

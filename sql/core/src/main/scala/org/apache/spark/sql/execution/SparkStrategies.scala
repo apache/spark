@@ -179,20 +179,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     Supports only inner like joins.
    */
 
-  object NearestByJoinSelection extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case j: NearestByJoin if NearestByJoin.canBroadcastRight(j, conf) =>
-        joins.BroadcastNearestByJoinExec(
-          planLater(j.left),
-          planLater(j.right),
-          j.joinType,
-          j.numResults,
-          j.rankingExpression,
-          j.direction) :: Nil
-      case _ => Nil
-    }
-  }
-
   object JoinSelection extends Strategy with JoinSelectionHelper {
     private val hintErrorHandler = conf.hintErrorHandler
 
@@ -435,6 +421,28 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
       // --- Cases where this strategy does not apply ---------------------------------------------
+      case _ => Nil
+    }
+  }
+
+  /**
+   * Plans NearestByJoin as a BroadcastNearestByJoinExec when the broadcast flag is ON.
+   * The optimizer's RewriteNearestByJoin leaves the NearestByJoin node intact when the flag
+   * is enabled, so this strategy unconditionally plans the broadcast operator -- the size
+   * decision is deferred to runtime (the right side is always broadcast). When the flag is
+   * OFF, RewriteNearestByJoin rewrites to the aggregate fallback and NearestByJoin never
+   * reaches the planner.
+   */
+  object NearestByJoinSelection extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case j: NearestByJoin =>
+        joins.BroadcastNearestByJoinExec(
+          planLater(j.left),
+          planLater(j.right),
+          j.joinType,
+          j.numResults,
+          j.rankingExpression,
+          j.direction) :: Nil
       case _ => Nil
     }
   }
