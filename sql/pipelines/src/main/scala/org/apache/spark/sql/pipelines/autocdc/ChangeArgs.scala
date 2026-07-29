@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Column}
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Resolver}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.types.StructType
@@ -135,11 +135,11 @@ private[pipelines] object CaseSensitivityLabels {
     if (caseSensitive) CaseSensitive else CaseInsensitive
 
   /**
-   * Maps a [[Resolver]] to its user-facing label. A resolver is case-insensitive iff it treats
-   * two identifiers differing only in case as equal, so we classify it by probing with such a
-   * pair rather than by reference identity; the label then stays correct for any resolver.
+   * Maps a [[Resolver]] to its user-facing label. Classifies by reference identity against the
+   * two session resolver singletons, matching `SchemaUtils.isCaseSensitiveAnalysis`;
+   * `conf.resolver` only ever returns one of these two.
    */
-  def of(resolver: Resolver): String = of(caseSensitive = !resolver("a", "A"))
+  def of(resolver: Resolver): String = of(caseSensitive = resolver == caseSensitiveResolution)
 }
 
 /** The SCD (Slowly Changing Dimension) strategy for a CDC flow. */
