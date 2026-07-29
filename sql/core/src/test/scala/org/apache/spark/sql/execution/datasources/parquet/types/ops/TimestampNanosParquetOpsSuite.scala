@@ -168,6 +168,27 @@ class TimestampNanosParquetOpsSuite extends SparkFunSuite {
     assert(ntzOps.acceptsValue(LocalDateTime.parse("2020-01-01T00:00:00")))
   }
 
+  test("filterOps make* throws on an out-of-range value - why acceptsValue must gate every In " +
+    "element, not just the head") {
+    // The encoder is exact (Math.addExact/multiplyExact), so building a predicate directly from an
+    // out-of-range value throws rather than clamping. This is the contract behind the
+    // ParquetFilters In-arm gating every element through acceptsValue: a makeIn set (or per-element
+    // makeEq) that includes an out-of-range tail would crash filter creation. `acceptsValue`
+    // (tested above) is the guard that keeps make* off such values on the pushdown path.
+    val path = Array("c")
+    val ltzOps = TimestampNanosParquetOps.ltzFilterOps
+    val ntzOps = TimestampNanosParquetOps.ntzFilterOps
+    val ltzOverflow = Instant.parse("2300-01-01T00:00:00Z")
+    val ntzOverflow = LocalDateTime.parse("2300-01-01T00:00:00")
+    intercept[ArithmeticException](ltzOps.makeEq(path, ltzOverflow))
+    intercept[ArithmeticException](ntzOps.makeEq(path, ntzOverflow))
+    // A mixed set (in-range head + out-of-range tail) is the crash the head-only guard let through.
+    val ltzInRange = Instant.parse("2020-01-01T00:00:00Z")
+    val ntzInRange = LocalDateTime.parse("2020-01-01T00:00:00")
+    intercept[ArithmeticException](ltzOps.makeIn(path, Array[Any](ltzInRange, ltzOverflow)))
+    intercept[ArithmeticException](ntzOps.makeIn(path, Array[Any](ntzInRange, ntzOverflow)))
+  }
+
   test("filterOps declares the canonical nanos-timestamp Parquet encoding") {
     // LTZ is isAdjustedToUTC=true, NTZ is false; both INT64 TIMESTAMP(NANOS). These are the keys
     // the ParquetFilters reverse lookup matches against the file schema.

@@ -2384,6 +2384,44 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
         sources.LessThan("c", Instant.parse("2020-01-01T00:00:00Z"))).isDefined)
     }
   }
+
+  test("SPARK-57822: an In list mixing in-range and out-of-range nanos values isn't pushed down") {
+    // A mixed In list (in-range head, out-of-range tail) must fall back to a full scan, not crash
+    // filter creation. The In arm converts *every* element - per-element `makeEq` under the
+    // pushdown threshold, `makeInPredicate` above it - so a head-only guard would let the
+    // out-of-range tail reach the encoder, which throws (SPARK-46092: never throw, full scan
+    // instead). Both branches are exercised by setting the threshold below and above the list
+    // size. The list must lead with an in-range value so the fix is what rejects it, not the old
+    // head check.
+    Seq("1", "10").foreach { threshold =>
+      withSQLConf(
+          SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+          SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> threshold) {
+        val ntzFilters = createParquetFilters(new SparkToParquetSchemaConverter(conf)
+          .convert(new StructType().add("c", TimestampNTZNanosType(9))))
+        val ltzFilters = createParquetFilters(new SparkToParquetSchemaConverter(conf)
+          .convert(new StructType().add("c", TimestampLTZNanosType(9))))
+        val ntzIn = sources.In("c", Array[Any](
+          LocalDateTime.parse("2020-01-01T00:00:00"), LocalDateTime.parse("2300-01-01T00:00:00")))
+        val ltzIn = sources.In("c", Array[Any](
+          Instant.parse("2020-01-01T00:00:00Z"), Instant.parse("2300-01-01T00:00:00Z")))
+        // Must not throw, and must not push down (a single out-of-range element disqualifies the
+        // whole In).
+        assert(ntzFilters.createFilter(ntzIn).isEmpty,
+          s"Mixed-range NTZ In (threshold=$threshold) shouldn't be pushed down.")
+        assert(ltzFilters.createFilter(ltzIn).isEmpty,
+          s"Mixed-range LTZ In (threshold=$threshold) shouldn't be pushed down.")
+        // An all-in-range In of the same size still pushes down (the fix rejects only on a
+        // non-pushable element, it doesn't disable In pushdown wholesale).
+        assert(ntzFilters.createFilter(sources.In("c", Array[Any](
+          LocalDateTime.parse("2020-01-01T00:00:00"),
+          LocalDateTime.parse("2021-01-01T00:00:00")))).isDefined)
+        assert(ltzFilters.createFilter(sources.In("c", Array[Any](
+          Instant.parse("2020-01-01T00:00:00Z"),
+          Instant.parse("2021-01-01T00:00:00Z")))).isDefined)
+      }
+    }
+  }
 }
 
 @ExtendedSQLTest
