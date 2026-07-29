@@ -166,6 +166,19 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       cacheAttributes: Seq[Attribute],
       selectedAttributes: Seq[Attribute],
       conf: SQLConf): RDD[InternalRow] = {
+    if (selectedAttributes.isEmpty) {
+      // Empty projection (e.g. a count aggregate over the cached relation): every cached batch
+      // already records its row count, so emit that many empty rows without touching the Arrow
+      // payload at all -- deserializing and decompressing it would be pure waste. The emitted
+      // row is a single reused 0-field UnsafeRow, matching the reuse contract of the regular
+      // path.
+      return input.mapPartitionsInternal { batchIterator =>
+        val rowWriter = new UnsafeRowWriter(0)
+        rowWriter.reset()
+        val emptyRow = rowWriter.getRow
+        batchIterator.flatMap(batch => Iterator.fill(batch.numRows)(emptyRow))
+      }
+    }
     val cacheSchema = DataTypeUtils.fromAttributes(cacheAttributes)
     val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
     val timeZoneId = conf.sessionLocalTimeZone
@@ -1004,22 +1017,24 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     Utils.tryWithSafeFinally {
       val rowCount = batch.numRows()
 
-      // Check if batch is already Arrow-based for zero-copy path. The zero-copy path reuses the
-      // input vectors but serializes them under the cache's own schema, and the read path
-      // reconstructs that same schema, so the input vectors' physical shape must match it:
-      //  - the cache schema is built with largeVarTypes=false, so large var-width vectors
-      //    (64-bit offsets) would be silently corrupted when read back under 32-bit offsets;
-      //  - the cache schema is built with losslessInternalTypes=true, so nanosecond timestamps
-      //    and CalendarInterval are lossless structs, and interchange-shaped input vectors
-      //    (TimeStampNano(TZ)Vector, IntervalMonthDayNanoVector, e.g. from a Python UDF output)
-      //    would not match the reconstructed struct schema.
-      // Fall back to the row-based conversion (which rewrites through ArrowWriter under the
-      // cache schema) whenever any input vector is, or nests, such a mismatched shape.
+      // Check if batch is already Arrow-based for zero-copy path. The zero-copy path serializes
+      // the input vectors' buffers verbatim under the cache's own schema (serializeBatch writes
+      // only the record batch; the read path reconstructs the schema from cacheSchema and loads
+      // the buffers positionally into it), so each input vector's field tree must be physically
+      // congruent with the corresponding cache schema field. Any divergence -- a var-width or
+      // list offset width disagreeing with the canonical one, view or dictionary encodings, an
+      // interchange-shaped nanosecond timestamp or CalendarInterval vector where the cache
+      // schema has the lossless structs (losslessInternalTypes=true), a tagged struct carrying
+      // extra children, map entry children in the wrong order -- would be silently reinterpreted
+      // under the canonical layout when the cached batch is read back. Incongruent input takes
+      // the row-based conversion instead, which rewrites the values through ArrowWriter under
+      // the cache schema.
+      val declaredFields = arrowSchema.getFields
       val vectors = (0 until batch.numCols()).map(batch.column)
-      val zeroCopyEligible = vectors.forall {
-        case acv: ArrowColumnVector =>
-          !ColumnarBatchToArrowCachedBatchIterator.containsCacheSchemaMismatch(
-            acv.getValueVector)
+      val zeroCopyEligible = vectors.zipWithIndex.forall {
+        case (acv: ArrowColumnVector, i) =>
+          ArrowUtils.isCompatibleWithDeclaredField(
+            acv.getValueVector.getField, declaredFields.get(i))
         case _ => false
       }
       if (zeroCopyEligible) {
@@ -1040,9 +1055,9 @@ private class ColumnarBatchToArrowCachedBatchIterator(
       schema: Seq[Attribute],
       vectors: Seq[ColumnVector]): ArrowCachedBatch = {
     // Zero-copy path: extract Arrow vectors directly from ArrowColumnVector. Vectors reaching
-    // this path have already passed containsCacheSchemaMismatch, so nanosecond timestamp and
-    // CalendarInterval columns are in the lossless struct shape matching the cache schema; no
-    // value conversion happens here, so no overflow is possible.
+    // this path are physically congruent with the cache schema (isCompatibleWithDeclaredField),
+    // so nanosecond timestamp and CalendarInterval columns are in the lossless struct shape
+    // matching it; no value conversion happens here, so no overflow is possible.
     val arrowVectors = vectors.map(
       _.asInstanceOf[ArrowColumnVector].getValueVector.asInstanceOf[
         org.apache.arrow.vector.FieldVector])
@@ -1107,35 +1122,6 @@ private class ColumnarBatchToArrowCachedBatchIterator(
       arrowWriter.reset()
       root.close()
     }
-  }
-}
-
-private object ColumnarBatchToArrowCachedBatchIterator {
-  import org.apache.arrow.vector.{FieldVector, LargeVarBinaryVector, LargeVarCharVector}
-
-  /**
-   * Whether the vector is, or nests, a large var-width vector (64-bit offsets). These are not
-   * eligible for the zero-copy path because that path serializes and reloads under a schema built
-   * with largeVarTypes=false; reinterpreting 64-bit offset buffers as 32-bit would corrupt data.
-   */
-  /**
-   * Whether the vector tree contains any shape the cache schema cannot serialize as-is: large
-   * var-width vectors (the cache schema uses 32-bit offsets) or interchange-shaped nanosecond
-   * timestamp / CalendarInterval vectors (the cache schema uses the lossless struct
-   * representations from losslessInternalTypes=true). Such input must take the row-conversion
-   * path, which rewrites values through ArrowWriter under the cache schema. The lossless struct
-   * vectors themselves (e.g. from re-caching a projection of a cached relation) match the cache
-   * schema and stay zero-copy eligible.
-   */
-  def containsCacheSchemaMismatch(
-      vector: org.apache.arrow.vector.ValueVector): Boolean = vector match {
-    case _: LargeVarCharVector | _: LargeVarBinaryVector => true
-    case _: org.apache.arrow.vector.TimeStampNanoVector |
-        _: org.apache.arrow.vector.TimeStampNanoTZVector |
-        _: org.apache.arrow.vector.IntervalMonthDayNanoVector => true
-    case fv: FieldVector =>
-      fv.getChildrenFromFields.asScala.exists(containsCacheSchemaMismatch)
-    case _ => false
   }
 }
 

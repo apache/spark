@@ -228,7 +228,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
   test("submit a barrier ResultStage that requires more slots than current total under " +
     "local-cluster mode") {
     val conf = new SparkConf()
-      .set(CPUS_PER_TASK, 2)
+      .set(CPUS_PER_TASK, BigDecimal(2))
       // Shorten the time interval between two failed checks to make the test fail faster.
       .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
       // Reduce max check failures allowed to make the test fail faster.
@@ -246,7 +246,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
   test("submit a barrier ShuffleMapStage that requires more slots than current total under " +
     "local-cluster mode") {
     val conf = new SparkConf()
-      .set(CPUS_PER_TASK, 2)
+      .set(CPUS_PER_TASK, BigDecimal(2))
       // Shorten the time interval between two failed checks to make the test fail faster.
       .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
       // Reduce max check failures allowed to make the test fail faster.

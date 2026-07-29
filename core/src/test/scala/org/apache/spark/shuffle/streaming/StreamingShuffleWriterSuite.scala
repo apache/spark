@@ -68,7 +68,7 @@ class StreamingShuffleWriterSuite
       taskMemoryManager = taskMemoryManager,
       localProperties = properties,
       metricsSystem = mock[MetricsSystem],
-      cpus = 1)
+      cpuAmount = 1)
   }
 
   test("getWriter returns a StreamingShuffleWriter") {

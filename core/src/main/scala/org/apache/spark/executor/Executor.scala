@@ -48,7 +48,7 @@ import org.apache.spark.internal.config.{EXECUTOR_USER_CLASS_PATH_FIRST => EXECU
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.metrics.source.JVMCPUSource
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{CpuAmount, ResourceInformation}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.SerializerHelper
@@ -767,8 +767,9 @@ private[spark] class Executor(
         t.metrics.setExecutorRunTime(TimeUnit.NANOSECONDS.toMillis(
           // SPARK-32898: it's possible that a task is killed when taskStartTimeNs has the initial
           // value(=0) still. In this case, the executorRunTime should be considered as 0.
-          if (taskStartTimeNs > 0) (System.nanoTime() - taskStartTimeNs) * taskDescription.cpus
-          else 0))
+          if (taskStartTimeNs > 0) {
+            Executor.cpuWeightedNanos(System.nanoTime() - taskStartTimeNs, taskDescription.cpus)
+          } else 0))
         t.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
       })
 
@@ -958,10 +959,14 @@ private[spark] class Executor(
           (taskStartTimeNs - deserializeStartTimeNs) + task.executorDeserializeTimeNs))
         task.metrics.setExecutorDeserializeCpuTime(
           (taskStartCpu - deserializeStartCpuTime) + task.executorDeserializeCpuTime)
-        // We need to subtract Task.run()'s deserialization time to avoid double-counting
-        task.metrics.setExecutorRunTime(TimeUnit.NANOSECONDS.toMillis(
-          (taskFinishNs - taskStartTimeNs) * taskDescription.cpus
-            - task.executorDeserializeTimeNs))
+        // We need to subtract Task.run()'s deserialization time to avoid double-counting:
+        // remove the in-run deserialization interval from the elapsed time first, then weight
+        // the remaining run interval by the task's cpu amount. Clamp at zero to guard against
+        // clock anomalies.
+        task.metrics.setExecutorRunTime(math.max(0L, TimeUnit.NANOSECONDS.toMillis(
+          Executor.cpuWeightedNanos(
+            (taskFinishNs - taskStartTimeNs) - task.executorDeserializeTimeNs,
+            taskDescription.cpus))))
         task.metrics.setExecutorCpuTime(
           (taskFinishCpu - taskStartCpu) - task.executorDeserializeCpuTime)
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
@@ -1589,6 +1594,20 @@ private[spark] class Executor(
 private[spark] object Executor extends Logging {
   val TASK_THREAD_NAME_PREFIX = "Executor task launch worker"
   val IDLE_TASK_THREAD_NAME = "Executor task idle worker"
+
+  /**
+   * Weights a measured task interval by the task's cpu reservation for `executorRunTime`
+   * (SPARK-51666), flooring the weight at 1: a sub-core weight would report a run time shorter
+   * than the elapsed interval, and UI/REST scheduler delay -- computed as wall-clock duration
+   * minus executorRunTime -- would misreport the un-consumed share of the core as scheduler
+   * delay. Relative comparisons for speculation are unaffected because all tasks of a stage
+   * share the same cpu amount. Trailing zeros are stripped from the scale-9 cpus so the
+   * product stays in BigDecimal's compact (long-backed) form  instead of inflating a long
+   * duration into a BigInteger.
+   */
+  private[spark] def cpuWeightedNanos(intervalNs: Long, cpus: BigDecimal): Long = {
+    (BigDecimal(intervalNs) * CpuAmount.stripTrailingZeros(cpus.max(BigDecimal(1)))).toLong
+  }
 
   // This is reserved for internal use by components that need to read task properties before a
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be

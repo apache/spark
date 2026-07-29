@@ -1483,8 +1483,9 @@ case class Reverse(child: Expression)
 /**
  * Checks if the array (left) has the element (right)
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(array, value) - Returns true if the array contains the value.",
+  usage = "_FUNC_(array, value) - Returns true if the array contains the value, false if not. Returns null if the array or value is null, or if the value is not found and the array contains a null element.",
   arguments = """
     Arguments:
       * array - The array to search.
@@ -1496,9 +1497,12 @@ case class Reverse(child: Expression)
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 2);
        true
+      > SELECT _FUNC_(array(1, NULL, 3), 2);
+       NULL
   """,
   group = "array_funcs",
   since = "1.5.0")
+// scalastyle:on line.size.limit
 case class ArrayContains(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with Predicate
   with QueryErrorsBase {

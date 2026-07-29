@@ -35,6 +35,8 @@ import org.apache.hadoop.mapreduce.OutputCommitter
 import org.slf4j.event.Level
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
+import org.apache.spark.config.ConfigRegistry
+import org.apache.spark.config.protobuf.Mutability
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigBindingPolicy, _}
 import org.apache.spark.internal.io.FileCommitProtocol
@@ -75,6 +77,9 @@ object SQLConf {
   private def register(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
     require(!sqlConfEntries.containsKey(entry.key),
       s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
+    require(!ConfigRegistry.containsConfig(entry.key),
+      s"${entry.key} is defined in a .textproto config file. " +
+        s"Use buildConfFromConfigFile instead of buildConf.")
     val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
     updatedMap.put(entry.key, entry)
     sqlConfEntries = updatedMap
@@ -88,11 +93,28 @@ object SQLConf {
   }
 
   private[internal] def getConfigEntry(key: String): ConfigEntry[_] = {
-    sqlConfEntries.get(key)
+    Option(sqlConfEntries.get(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
   }
 
+  // TODO: once all configs are migrated to textproto, this can be replaced by
+  //  ConfigEntry.listAllEntries() and callers can filter by config properties.
   private[sql] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
-    sqlConfEntries.values()
+    // Lazy concatenating view - no intermediate allocation
+    new util.AbstractCollection[ConfigEntry[_]]() {
+      private lazy val protoConfigs = ConfigEntry.listAllProtoDefinedConfigs()
+
+      override def iterator(): util.Iterator[ConfigEntry[_]] = {
+        val first = sqlConfEntries.values().iterator()
+        val second = protoConfigs.iterator()
+        new util.Iterator[ConfigEntry[_]]() {
+          override def hasNext: Boolean = first.hasNext || second.hasNext
+          override def next(): ConfigEntry[_] =
+            if (first.hasNext) first.next() else second.next()
+        }
+      }
+
+      override def size(): Int = sqlConfEntries.size() + protoConfigs.size()
+    }
   }
 
   private[internal] def containsConfigEntry(entry: ConfigEntry[_]): Boolean = {
@@ -100,7 +122,7 @@ object SQLConf {
   }
 
   private[sql] def containsConfigKey(key: String): Boolean = {
-    sqlConfEntries.containsKey(key)
+    sqlConfEntries.containsKey(key) || ConfigRegistry.containsConfig(key)
   }
 
   def registerStaticConfigKey(key: String): Unit = staticConfKeysUpdateLock.synchronized {
@@ -109,9 +131,26 @@ object SQLConf {
     staticConfKeys = updated
   }
 
-  def isStaticConfigKey(key: String): Boolean = staticConfKeys.contains(key)
+  def isStaticConfigKey(key: String): Boolean = {
+    staticConfKeys.contains(key) ||
+      Option(ConfigRegistry.getConfig(key)).exists(_.getMutability == Mutability.MUTABILITY_STATIC)
+  }
 
   def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)
+
+  def buildConfFromConfigFile[T](key: String): ProtoBackedConfigEntry[T] = {
+    Option(ConfigEntry.findProtoBackedEntry(key)).map(_.asInstanceOf[ProtoBackedConfigEntry[T]])
+      .getOrElse {
+        if (ConfigRegistry.containsConfig(key)) {
+          // The key is defined in a .textproto file but has no default value, so it is backed by
+          // a ProtoBackedOptionalConfigEntry. Such configs must be accessed via getConfByKeyStrict.
+          throw SparkException.internalError(
+            s"Config entry $key has no default value; use getConfByKeyStrict to read it.")
+        } else {
+          throw SparkException.internalError(s"Config entry $key not found in ConfigRegistry")
+        }
+      }
+  }
 
   def buildStaticConf(key: String): ConfigBuilder = {
     ConfigBuilder(key).onCreate { entry =>
@@ -129,7 +168,7 @@ object SQLConf {
   private[sql] def mergeNonStaticSQLConfigs(
       sqlConf: SQLConf,
       configs: Map[String, String]): Unit = {
-    for ((k, v) <- configs if !staticConfKeys.contains(k)) {
+    for ((k, v) <- configs if !isStaticConfigKey(k)) {
       sqlConf.setConfString(k, v)
     }
   }
@@ -570,12 +609,8 @@ object SQLConf {
     .stringConf
     .createOptional
 
-  val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")
-    .internal()
-    .doc("The max number of iterations the optimizer runs.")
-    .version("2.0.0")
-    .intConf
-    .createWithDefault(100)
+  val OPTIMIZER_MAX_ITERATIONS =
+    buildConfFromConfigFile[Int]("spark.sql.optimizer.maxIterations")
 
   val OPTIMIZER_INSET_CONVERSION_THRESHOLD =
     buildConf("spark.sql.optimizer.inSetConversionThreshold")
@@ -1001,13 +1036,9 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
 
-  val SHUFFLE_HASH_JOIN_FACTOR = buildConf("spark.sql.shuffledHashJoinFactor")
-    .doc("The shuffle hash join can be selected if the data size of small" +
-      " side multiplied by this factor is still smaller than the large side.")
-    .version("3.3.0")
-    .intConf
-    .checkValue(_ >= 1, "The shuffle hash join factor cannot be negative.")
-    .createWithDefault(3)
+  val SHUFFLE_HASH_JOIN_FACTOR =
+    buildConfFromConfigFile[Int]("spark.sql.shuffledHashJoinFactor")
+      .checkValue(_ >= 1, "The shuffle hash join factor must be at least 1.")
 
   val LIMIT_INITIAL_NUM_PARTITIONS = buildConf("spark.sql.limit.initialNumPartitions")
     .internal()
@@ -2217,15 +2248,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val DATA_SOURCE_V2_EXPR_FOLDING =
-    buildConf("spark.sql.optimizer.datasourceV2ExprFolding")
-      .internal()
-      .version("4.1.0")
-      .doc("When this config is set to true, do safe constant folding for the " +
-        "expressions before translation and pushdown.")
-      .booleanConf
-      .createWithDefault(true)
-
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
@@ -3043,18 +3065,17 @@ object SQLConf {
     .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
     .version("3.3.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val COMBINE_ADJACENT_AGGREGATION_ENABLED =
     buildConf("spark.sql.execution.combineAdjacentAggregation")
       .internal()
       .doc("When true, combine adjacent aggregation with `Partial` and `Final` to `Complete` " +
-        "mode. This defaults to the value of `spark.sql.execution.replaceHashWithSortAgg` since " +
-        "combining adjacent aggregation subsumes the partial-and-final merge that " +
-        "`replaceHashWithSortAgg` used to perform on its own.")
+        "mode.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .fallbackConf(REPLACE_HASH_WITH_SORT_AGG_ENABLED)
+      .booleanConf
+      .createWithDefault(true)
 
   val USE_PARTITION_EVALUATOR = buildConf("spark.sql.execution.usePartitionEvaluator")
     .internal()
@@ -6222,6 +6243,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_OBSERVE_METRICS_AGGREGATE_ALL_ATTEMPTS =
+    buildConf("spark.sql.legacy.observeMetricsAggregateAllAttempts")
+      .internal()
+      .doc("When true, metrics produced by `Dataset.observe` aggregate values from all task " +
+        "attempts. When false, only values from the last successful task attempts are used.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val MAX_TO_STRING_FIELDS = buildConf("spark.sql.debug.maxToStringFields")
     .doc("Maximum number of fields of sequence-like entries can be converted to strings " +
       "in debug output. Any elements beyond the limit will be dropped and replaced by a " +
@@ -6663,6 +6694,19 @@ object SQLConf {
       .doc("When true, replace variant type in the scan schema with a struct containing " +
         "requested fields.")
       .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PUSH_VARIANT_INTO_SCAN_PULL_OUT_EXTRACTIONS =
+    buildConf("spark.sql.variant.pushVariantIntoScan.pullOutExtractions")
+      .internal()
+      .doc("When true, extend variant field pushdown to extractions used inside aggregate " +
+        "functions, join conditions, sort keys, and projections above joins (including through " +
+        "chained joins), so that only the requested fields are read from the scan for these " +
+        "cases too instead of the whole variant column. Has no effect unless " +
+        "spark.sql.variant.pushVariantIntoScan is also true.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -9464,6 +9508,14 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
           defaultValue
       }
     }
+  }
+
+  def getConfByKeyStrict[T](key: String): T = {
+    Option(ConfigEntry.findProtoDefinedEntry(key))
+      .map(_.asInstanceOf[ConfigEntry[T]].readFrom(reader))
+      .getOrElse {
+        throw SparkException.internalError(s"Config entry $key not found in ConfigRegistry")
+      }
   }
 
   private var definedConfsLoaded = false
