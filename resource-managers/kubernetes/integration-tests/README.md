@@ -21,9 +21,8 @@ and the custom Dockerfile need to include a Java installation by itself.
 
     ./dev/dev-run-integration-tests.sh --docker-file ../docker/src/main/dockerfiles/spark/Dockerfile
 
-Minikube 1.28.0 or greater is required (the tests check this at startup and abort early on older
-versions), and the minimum tested version is 1.38.0. The kube-dns addon must be enabled. Minikube
-should run with a minimum of 4 CPUs and 6G of memory:
+The minimum tested version of Minikube is 1.38.0. The kube-dns addon must be enabled. Minikube should
+run with a minimum of 4 CPUs and 6G of memory:
 
     minikube start --cpus 4 --memory 6144
 
@@ -41,7 +40,7 @@ default this is set to `minikube`, the available backends are their prerequisite
 
 ### `minikube`
 
-Uses the local `minikube` cluster, this requires that `minikube` 1.28.0 or greater be installed and that it be allocated
+Uses the local `minikube` cluster, this requires that `minikube` 1.38.0 or greater be installed and that it be allocated
 at least 4 CPUs and 6GB memory (some users have reported success with as few as 3 CPUs and 4GB memory).  The tests will 
 check if `minikube` is started and abort early if it isn't currently running.
 
