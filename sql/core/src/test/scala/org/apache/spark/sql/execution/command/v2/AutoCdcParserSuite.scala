@@ -594,24 +594,30 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   // ---------------------------------------------------------------------------
 
   test("CREATE FLOW AS AUTO CDC INTO - SEQUENCE BY is required") {
-    val ex = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE FLOW f AS AUTO CDC INTO target
-          |FROM STREAM(source)
-          |KEYS (id)""".stripMargin)
-    }
-    assert(ex.getMessage.contains("AUTO CDC requires a SEQUENCE BY clause."))
+    val sql =
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)""".stripMargin
+    checkError(
+      intercept[ParseException] { parser.parsePlan(sql) },
+      condition = "MISSING_CLAUSES_FOR_OPERATION",
+      parameters = Map("clauses" -> "SEQUENCE BY", "operation" -> "AUTO CDC"),
+      queryContext = Array(ExpectedContext(autoCdcParams(sql), sql.indexOf("FROM"), sql.length - 1))
+    )
   }
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC - SEQUENCE BY is required") {
-    val ex = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE STREAMING TABLE target
-          |FLOW AUTO CDC
-          |FROM STREAM(source)
-          |KEYS (id)""".stripMargin)
-    }
-    assert(ex.getMessage.contains("AUTO CDC requires a SEQUENCE BY clause."))
+    val sql =
+      """CREATE STREAMING TABLE target
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)""".stripMargin
+    checkError(
+      intercept[ParseException] { parser.parsePlan(sql) },
+      condition = "MISSING_CLAUSES_FOR_OPERATION",
+      parameters = Map("clauses" -> "SEQUENCE BY", "operation" -> "AUTO CDC"),
+      queryContext = Array(ExpectedContext(autoCdcParams(sql), sql.indexOf("FROM"), sql.length - 1))
+    )
   }
 
   // ---------------------------------------------------------------------------
@@ -663,6 +669,27 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cdc.includeColumns.get.map(_.name) == Seq("id", "val", "ts"))
     assert(cdc.storedAsScdType == 2)
     assert(cdc.trackHistoryColumns.get.map(_.name) == Seq("val"))
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - clauses supplied in reversed order are honored") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |TRACK HISTORY ON (val)
+        |STORED AS SCD TYPE 2
+        |COLUMNS (id, val, ts)
+        |SEQUENCE BY ts
+        |APPLY AS DELETE WHEN is_deleted""".stripMargin)
+
+    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cmd.deleteCondition.isDefined)
+    assert(cmd.deleteCondition.get.sql.contains("is_deleted"))
+    assert(cmd.sequenceByExpr == UnresolvedAttribute("ts"))
+    assert(cmd.includeColumns.get.map(_.name) == Seq("id", "val", "ts"))
+    assert(cmd.storedAsScdType == 2)
+    assert(cmd.trackHistoryColumns.get.map(_.name) == Seq("val"))
   }
 
   // ---------------------------------------------------------------------------

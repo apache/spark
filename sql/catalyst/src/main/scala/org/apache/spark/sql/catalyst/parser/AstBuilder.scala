@@ -1433,10 +1433,10 @@ class AstBuilder extends DataTypeAstBuilder
       val deleteCondition = params.autoCdcDeleteClause().asScala.headOption
         .map(c => expression(c.deleteCondition))
 
-      // SEQUENCE BY is mandatory; the grammar no longer enforces its presence (the clauses are an
-      // unordered set), so require it explicitly here with a targeted error.
+      // SEQUENCE BY is mandatory, but the grammar accepts the clauses as an unordered set, so
+      // require it explicitly here.
       val sequenceByClause = params.autoCdcSequenceByClause().asScala.headOption.getOrElse {
-        operationNotAllowed("AUTO CDC requires a SEQUENCE BY clause.", params)
+        throw QueryParsingErrors.missingClausesForOperation(params, "SEQUENCE BY", "AUTO CDC")
       }
       val sequencing = expression(sequenceByClause.sequence)
 
