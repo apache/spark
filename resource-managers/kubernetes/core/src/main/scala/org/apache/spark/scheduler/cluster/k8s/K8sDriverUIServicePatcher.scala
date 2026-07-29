@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import scala.jdk.CollectionConverters._
+
 import io.fabric8.kubernetes.api.model.{IntOrString, ServiceBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.base.{PatchContext, PatchType}
@@ -31,7 +33,10 @@ import org.apache.spark.internal.Logging
 private[k8s] object K8sDriverUIServicePatcher extends Logging {
 
   /**
-   * Patch the targetPort of the given Service's `spark-ui` port entry to `actualPort`.
+   * Bring the endpointless placeholder Service online: set its `spark-ui` `targetPort` to the
+   * actual bound port and install the `selector` in the same patch, so it only starts routing
+   * once it points at the correct port. Called only for a pending port (`spark.ui.port=0`); a
+   * fixed-port Service is created complete and never patched.
    *
    * @param client       Kubernetes client to use (typically the one already held by the backend).
    * @param namespace    Namespace where the Service lives.
@@ -40,16 +45,19 @@ private[k8s] object K8sDriverUIServicePatcher extends Logging {
    * @param servicePort  The Service's stable `port` for the `spark-ui` entry (strategic merge key).
    * @param actualPort   The actual port the driver's Jetty server bound to
    *                     (typically `SparkUI.boundPort`).
+   * @param selector     Selector matching the driver pod, withheld at creation time.
    */
-  def patchTargetPort(
+  def patchTargetPortAndSelector(
       client: KubernetesClient,
       namespace: String,
       serviceName: String,
       servicePort: Int,
-      actualPort: Int): Unit = {
+      actualPort: Int,
+      selector: Map[String, String]): Unit = {
     try {
       val patch = new ServiceBuilder()
         .withNewSpec()
+          .withSelector(selector.asJava)
           .addNewPort()
             .withName(UI_PORT_NAME)
             .withPort(servicePort)
@@ -63,7 +71,8 @@ private[k8s] object K8sDriverUIServicePatcher extends Logging {
         .withName(serviceName)
         .patch(PatchContext.of(PatchType.STRATEGIC_MERGE), patch)
 
-      logInfo(s"Patched UI service '$serviceName' targetPort to $actualPort")
+      logInfo(s"Patched UI service '$serviceName' targetPort to $actualPort and" +
+        s" installed selector $selector")
     } catch {
       case e: Exception =>
         logError(s"Failed to patch UI service '$serviceName' targetPort to $actualPort", e)

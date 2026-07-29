@@ -124,29 +124,33 @@ private[spark] class KubernetesClusterSchedulerBackend(
     lifecycleManager.start(this)
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
-    maybePatchDriverUIServiceTargetPort()
+    maybePatchDriverUIService()
   }
 
   /**
-   * Patch the dedicated UI Service's `targetPort` to match the actual bound port of the driver's
-   * Jetty server. Only applies when the UI service feature is enabled. Requires `patch services`
-   * RBAC on the driver's ServiceAccount.
+   * Bring the dedicated UI Service online once the driver's Jetty server has bound: install its
+   * selector and patch its `targetPort` to the actual bound port. The internal properties driving
+   * this are only set for a pending port (`spark.ui.port=0`); a fixed-port Service is created
+   * complete, so this is a no-op. Requires `patch services` RBAC on the driver's ServiceAccount.
    */
-  private def maybePatchDriverUIServiceTargetPort(): Unit = {
-    if (!conf.get(KUBERNETES_DRIVER_UI_SERVICE_ENABLED)) return
+  private def maybePatchDriverUIService(): Unit = {
     for {
       svcName <- conf.getOption(
         DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL)
       servicePort <- conf.getOption(
         DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL).map(_.toInt)
+      selector <- conf.getOption(
+        DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_SELECTOR_INTERNAL)
+        .map(DriverUIServiceFeatureStep.decodeSelector)
       actualPort <- sc.ui.map(_.boundPort)
     } {
-      K8sDriverUIServicePatcher.patchTargetPort(
+      K8sDriverUIServicePatcher.patchTargetPortAndSelector(
         kubernetesClient,
         conf.get(KUBERNETES_NAMESPACE),
         svcName,
         servicePort,
-        actualPort)
+        actualPort,
+        selector)
     }
   }
 
