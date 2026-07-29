@@ -245,6 +245,41 @@ class PullUpProjectAliasThroughWindowSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), expected)
   }
 
+  test("no rewrite for a nondeterministic alias") {
+    // `spark_partition_id() AS pid` is a leaf with no references, so it would pass the input-
+    // survival check vacuously, but moving it above the window's exchange/sort would change its
+    // per-partition value. It must stay below.
+    val pid = Alias(SparkPartitionID(), "pid")()
+    val bottom = Project(Seq(pid, value, key), testRelation)
+    val window = windowOver(bottom, "w", key :: Nil)
+    val w = window.windowExpressions.head.toAttribute
+    val originalQuery = Project(Seq(pid.toAttribute, w), window)
+
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
+  }
+
+  test("rewrite preserves the top attribute's name when it differs from the lower alias") {
+    // The lookup is keyed by expr id only, so a resolved top attribute can carry a different
+    // cosmetic name than the lower alias (same expr id). The rebuilt alias must keep the top
+    // attribute's name so the output schema is unchanged.
+    val userid = Alias(key, "userid")()
+    val bottom = Project(Seq(userid, value, key), testRelation)
+    val window = windowOver(bottom, "w", key :: Nil)
+    val w = window.windowExpressions.head.toAttribute
+    // The top project references `userid` under a different (but expr-id-equivalent) name.
+    val renamed = userid.toAttribute.withName("external")
+    val originalQuery = Project(Seq(renamed, w), window)
+
+    val prunedBottom = Project(Seq(value, key), testRelation)
+    val expected = Project(
+      Seq(Alias(key, "external")(exprId = userid.exprId), w),
+      window.copy(child = prunedBottom))
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, expected)
+    // The output name must be preserved as `external`, not reverted to the lower alias's `userid`.
+    assert(optimized.output.head.name == "external")
+  }
+
   test("rewrite is idempotent") {
     val userid = Alias(key, "userid")()
     val bottom = Project(Seq(userid, value, key), testRelation)
