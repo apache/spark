@@ -705,6 +705,9 @@ private[v2] trait V2JDBCTest
   // `(a = 10000) IS NULL`. MsSqlServer has no boolean type, so it cannot and Spark evaluates it.
   protected def supportsIsNullOverPredicate: Boolean = true
 
+  // Whether this database rounds a fractional to integral cast rather than truncating like Spark.
+  protected def roundsIntegralCast: Boolean = false
+
   test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down") {
     val tbl = s"$catalogName.composite_is_null"
     withTable(tbl) {
@@ -1368,17 +1371,25 @@ private[v2] trait V2JDBCTest
       // label is a string so the result type is the same across dialects (a numeric column
       // comes back as BigDecimal on some engines such as Oracle).
       sql(s"CREATE TABLE $tbl (double_col DOUBLE, decimal_col DECIMAL(10, 2), label VARCHAR(8))")
-      sql(s"INSERT INTO $tbl VALUES (1.5, 1.5, 'a'), (2.5, 2.5, 'b'), (-1.5, -1.5, 'c')")
+      // .6 magnitudes make the result independent of tie-breaking: rounding gives 2, truncation 1.
+      sql(s"INSERT INTO $tbl VALUES (1.6, 1.6, 'a'), (2.6, 2.6, 'b'), (-1.6, -1.6, 'c')")
 
-      // Spark truncates toward zero, so 1.5, 2.5 and -1.5 become 1, 2 and -1. A database that
-      // rounds half away from zero would return 2, 3 and -2 instead.
+      // Spark truncates toward zero, so only 2.6 casts to 2.
       Seq("double_col", "decimal_col").foreach { col =>
-        val projected = sql(s"SELECT CAST($col AS INT) FROM $tbl ORDER BY $col")
-        assert(projected.collect().map(_.getInt(0)) === Array(-1, 1, 2))
-
         val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS INT) = 2")
         checkFilterPushed(filtered)
         assert(filtered.collect().map(_.getString(0)) === Array("b"))
+      }
+
+      // Legacy behavior: the conf disables the truncation, so a rounding database now matches 1.6.
+      if (roundsIntegralCast) {
+        withSQLConf("spark.sql.legacy.jdbc.roundIntegralCastPushdown.enabled" -> "true") {
+          Seq("double_col", "decimal_col").foreach { col =>
+            val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS INT) = 2")
+            checkFilterPushed(filtered)
+            assert(filtered.collect().map(_.getString(0)) === Array("a"))
+          }
+        }
       }
     }
   }
