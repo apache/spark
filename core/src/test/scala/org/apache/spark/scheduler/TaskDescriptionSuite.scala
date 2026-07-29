@@ -24,7 +24,7 @@ import java.util.Properties
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobArtifactSet, SparkFunSuite}
-import org.apache.spark.resource.ResourceAmountUtils
+import org.apache.spark.resource.{CpuAmount, ResourceAmountUtils}
 import org.apache.spark.resource.ResourceUtils.GPU
 
 class TaskDescriptionSuite extends SparkFunSuite {
@@ -103,6 +103,30 @@ class TaskDescriptionSuite extends SparkFunSuite {
     assert(decodedTaskDescription.cpus.equals(originalTaskDescription.cpus))
     assert(decodedTaskDescription.resources === originalTaskDescription.resources)
     assert(decodedTaskDescription.serializedTask.equals(taskBuffer))
+  }
+
+  test("SPARK-58192: fractional cpus survives the encode/decode round trip exactly") {
+    Seq("0.5", "1.5", "0.000000001", "2").foreach { amount =>
+      val cpus = CpuAmount.normalize(BigDecimal(amount))
+      val taskDescription = new TaskDescription(
+        taskId = 42,
+        attemptNumber = 0,
+        executorId = "testExecutor",
+        name = "task for test",
+        index = 1,
+        partitionId = 1,
+        new JobArtifactSet(None, Map.empty, Map.empty, Map.empty),
+        new Properties(),
+        cpus,
+        Map.empty,
+        ByteBuffer.wrap(Array[Byte](1, 2, 3, 4)))
+      val decoded = TaskDescription.decode(TaskDescription.encode(taskDescription))
+      // The decoded amount is what the executor echoes back in its status update and what the
+      // driver adds back to the executor's free cores, so it must be the identical normalized
+      // value -- same scale included -- not merely numerically close.
+      assert(decoded.cpus === cpus, s"for amount $amount")
+      assert(decoded.cpus.scale === cpus.scale, s"scale for amount $amount")
+    }
   }
 
 }

@@ -490,6 +490,8 @@ jobs:
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/docs/
+          build-contexts: |
+            root=./
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_docs_url }}
@@ -501,6 +503,8 @@ jobs:
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/lint/
+          build-contexts: |
+            root=./
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_lint_url }}

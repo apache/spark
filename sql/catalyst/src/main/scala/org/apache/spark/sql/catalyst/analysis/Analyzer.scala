@@ -67,6 +67,7 @@ import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.VersionUtils
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and
@@ -314,18 +315,17 @@ object Analyzer {
 
   /**
    * In case ANSI value wasn't persisted for a view or a UDF, we set it to `true` in case Spark
-   * version used to create the view is 4.0.0 or higher. We set it to `false` in case Spark version
-   * is lower than 4.0.0 or if the Spark version wasn't stored (in that case we assume that the
-   * value is `false`)
+   * version used to create the view is 4.0.0 or higher (ANSI SQL mode became the default in
+   * Spark 4.0, see SPARK-44444). We set it to `false` in case Spark version is lower than 4.0.0
+   * or if the Spark version wasn't stored / can't be parsed (in that case we assume that the
+   * value is `false`).
    */
   def trySetAnsiValue(sqlConf: SQLConf, createSparkVersion: String = ""): Unit = {
     if (conf.getConf(SQLConf.ASSUME_ANSI_FALSE_IF_NOT_PERSISTED) &&
       !sqlConf.settings.containsKey(SQLConf.ANSI_ENABLED.key)) {
-      if (createSparkVersion.startsWith("4.")) {
-        sqlConf.settings.put(SQLConf.ANSI_ENABLED.key, "true")
-      } else {
-        sqlConf.settings.put(SQLConf.ANSI_ENABLED.key, "false")
-      }
+      val assumeAnsiEnabled = VersionUtils.majorMinorPatchVersion(createSparkVersion)
+        .exists { case (major, _, _) => major >= 4 }
+      sqlConf.settings.put(SQLConf.ANSI_ENABLED.key, assumeAnsiEnabled.toString)
     }
   }
 
@@ -3930,11 +3930,11 @@ class Analyzer(
         val defaultValueFillMode =
           if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
           else FILL
-        // Only let TableOutputResolver see generation expression metadata if the catalog
+        // Only let TableOutputResolver see generation expression metadata if the table
         // supports auto-filling generated columns on write.
         val expected = v2Write.table match {
           case r: DataSourceV2Relation
-            if !GeneratedColumn.supportsGeneratedColumnsOnWrite(r.catalog) =>
+            if !GeneratedColumn.supportsGeneratedColumnsOnWrite(r.table) =>
             r.output.map(GeneratedColumn.removeGenerationExpressionMetadata)
           case _ => v2Write.table.output
         }

@@ -195,6 +195,8 @@ abstract class InMemoryBaseTable(
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
     .toBoolean
+  private val generateColumnValuesOnWrite =
+    properties.getOrDefault("generate-column-values-on-write", "true").toBoolean
 
   partitioning.foreach {
     case _: IdentityTransform =>
@@ -488,7 +490,10 @@ abstract class InMemoryBaseTable(
   override def capabilities(): util.Set[TableCapability] =
     (baseCapabiilities ++
       (if (acceptAnySchema) Seq(TableCapability.ACCEPT_ANY_SCHEMA) else Seq.empty) ++
-      (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty))
+      (if (autoSchemaEvolution) Seq(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION) else Seq.empty) ++
+      (if (generateColumnValuesOnWrite) {
+        Seq(TableCapability.GENERATE_COLUMN_VALUES_ON_WRITE)
+      } else Seq.empty))
       .asJava
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {

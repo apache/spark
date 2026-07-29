@@ -1244,7 +1244,8 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitDeleteFromTable(
       ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
     val table = createUnresolvedRelation(
-      ctx.identifierReference, writePrivileges = Set(TableWritePrivilege.DELETE))
+      ctx.identifierReference, Option(ctx.optionsClause()),
+      writePrivileges = Set(TableWritePrivilege.DELETE))
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "DELETE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val predicate = if (ctx.whereClause() != null) {
@@ -1283,10 +1284,6 @@ class AstBuilder extends DataTypeAstBuilder
     val withSchemaEvolution = ctx.EVOLUTION() != null
 
     // The target and source may each carry their own dynamic table options via `WITH (...)`.
-    // Known limitation: if the same table is used as both the target and the source
-    // (e.g. `MERGE INTO t WITH (a) USING t WITH (b) s`), the analyzer's relation cache is keyed
-    // without options and reuses the first resolved relation, so the target's options win and the
-    // source's are silently dropped.
     val sourceTableOrQuery = if (ctx.source != null) {
       createUnresolvedRelation(ctx.source, Option(ctx.sourceOptions))
     } else if (ctx.sourceQuery != null) {
@@ -7641,7 +7638,7 @@ class AstBuilder extends DataTypeAstBuilder
     // Extract original SQL text to preserve parameter markers
     val queryText = getOriginalText(ctx.query())
 
-    val asensitive = if (ctx.INSENSITIVE() != null) false else true
+    val asensitive = ctx.INSENSITIVE() == null
     DeclareCursor(cursorName, queryText, asensitive)
   }
 

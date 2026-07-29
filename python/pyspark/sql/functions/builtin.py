@@ -19892,9 +19892,9 @@ def array(
 @_try_remote_functions
 def array_contains(col: "ColumnOrName", value: Any) -> Column:
     """
-    Collection function: This function returns a boolean indicating whether the array
-    contains the given value, returning null if the array is null, true if the array
-    contains the given value, and false otherwise.
+    Collection function: Returns true if the array contains the value, false if not. Returns
+    null if the array or value is null, or if the value is not found and the array contains a
+    null element.
 
     .. versionadded:: 1.5.0
 
@@ -19971,6 +19971,17 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     |array_contains(data, a)|
     +-----------------------+
     |                   true|
+    +-----------------------+
+
+    Example 5: Value absent from an array that contains a null element returns NULL.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", None, "c"],)], ['data'])
+    >>> df.select(sf.array_contains(df.data, "b")).show()
+    +-----------------------+
+    |array_contains(data, b)|
+    +-----------------------+
+    |                   NULL|
     +-----------------------+
     """
     return _invoke_function_over_columns("array_contains", col, lit(value))
