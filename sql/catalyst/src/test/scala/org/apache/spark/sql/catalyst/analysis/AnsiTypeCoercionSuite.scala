@@ -1154,14 +1154,15 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
   test("SPARK-57811: ANSI string to nanosecond timestamp coercion in comparisons and predicates") {
     // PromoteStrings has no standalone rule id (it only runs inside AnsiCombinedTypeCoercionRule in
     // production), so wrap it the same way to get a runnable, id-registered rule for ruleTest.
-    val rule = new AnsiTypeCoercion.AnsiCombinedTypeCoercionRule(Seq(AnsiTypeCoercion.PromoteStrings))
+    val rule =
+      new AnsiTypeCoercion.AnsiCombinedTypeCoercionRule(Seq(AnsiTypeCoercion.PromoteStrings))
     // In ANSI mode the string operand is coerced to the nanosecond timestamp type for both the LTZ
     // and NTZ families, via AnsiStringPromotionTypeCoercion.findWiderTypeForString (the atomic-type
-    // fall-through). This is config-blind: ANSI coercion never reads castDatetimeToString, so unlike
-    // the non-ANSI range path there is no legacy string-promotion branch -- both families behave
-    // exactly like their micros counterparts (TimestampType / TimestampNTZType) in ANSI mode. The
-    // concrete operand type (family + precision) is preserved. Assert under both flag values to lock
-    // in that ANSI ignores it.
+    // fall-through). This is config-blind: ANSI coercion never reads castDatetimeToString, so
+    // unlike the non-ANSI range path there is no legacy string-promotion branch. Both families
+    // behave exactly like their micros counterparts (TimestampType / TimestampNTZType) in ANSI
+    // mode, and the concrete operand type (family + precision) is preserved. Assert under both
+    // flag values to lock in that ANSI ignores it.
     Seq("false", "true").foreach { legacy =>
       withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> legacy) {
         Seq(7, 8, 9).foreach { p =>
