@@ -38,9 +38,10 @@ import org.apache.spark.sql.types.StructType
  * declared schemas.
  *
  * For an AUTO CDC flow the inferred schema is the source's data columns plus an appended reserved
- * `__spark_autocdc_metadata` column, so a declared schema listing only the data columns is
- * incompatible (it is missing the metadata column) while one that also includes the metadata
- * column is compatible.
+ * `__spark_autocdc_metadata` column. The reserved column is engine-owned (SPARK-58118): a declared
+ * schema listing only the data columns is accepted, with the engine appending the reserved
+ * column(s) at materialization. A declared schema that also includes the metadata column stays
+ * accepted, and any mismatch in the data columns themselves is still rejected.
  */
 class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSession {
 
@@ -130,14 +131,22 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
 
   // AUTO CDC flows: the inferred schema appends a reserved metadata column to the data columns.
 
-  test("data-only user-specified schema is rejected for an implicit AUTO CDC flow") {
-    // Schema lists the data columns but omits the appended metadata column, so it is incompatible.
-    assertSchemaIncompatible(autoCdcGraph(flowName = "target", declaredSchema = Some(dataSchema)))
+  test("SPARK-58118: data-only user-specified schema is accepted for an implicit AUTO CDC flow") {
+    // Schema lists only the data columns; the reserved metadata column is engine-owned and may
+    // be omitted from the declared schema.
+    autoCdcGraph(flowName = "target", declaredSchema = Some(dataSchema)).validate()
   }
 
-  test("data-only user-specified schema is rejected for a named AUTO CDC flow") {
+  test("SPARK-58118: data-only user-specified schema is accepted for a named AUTO CDC flow") {
+    autoCdcGraph(flowName = "auto_cdc_flow", declaredSchema = Some(dataSchema)).validate()
+  }
+
+  test("SPARK-58118: user-specified schema with wrong data columns is still rejected " +
+    "for an AUTO CDC flow") {
+    // Omitting the reserved metadata column is allowed, but a mismatch in the data columns
+    // themselves (here: a missing data column) remains incompatible.
     assertSchemaIncompatible(
-      autoCdcGraph(flowName = "auto_cdc_flow", declaredSchema = Some(dataSchema)))
+      autoCdcGraph(flowName = "auto_cdc_flow", declaredSchema = Some(dataSchemaMissingColumn)))
   }
 
   test("full user-specified schema is accepted for an implicit AUTO CDC flow") {
