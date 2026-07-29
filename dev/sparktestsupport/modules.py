@@ -524,6 +524,7 @@ pyspark_core = Module(
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_non_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",

@@ -98,6 +98,7 @@ class NumPyCompatTestsMixin:
             (np.exp2, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
             (np.fabs, [np.iinfo(np.int64).min, -2, 0, 2]),
             (np.fabs, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (np.invert, [np.iinfo(np.int64).min, -2, -1, 0, 1, 2, np.iinfo(np.int64).max]),
             (np.negative, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
             (np.positive, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
             (np.rad2deg, [-np.inf, -64.0, -np.pi, 0.0, np.pi, 64.0, np.inf, np.nan]),

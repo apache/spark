@@ -25,11 +25,10 @@ import scala.jdk.CollectionConverters._
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
   GlobalTempView, LocalTempView, PersistedView,
-  PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
+  SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
   UnresolvedIdentifier, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedProcedure,
   UnresolvedTableOrViewSearchPathMode}
 import org.apache.spark.sql.catalyst.catalog._
@@ -311,25 +310,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       case _ =>
         throw QueryParsingErrors.invalidTempObjQualifierError(
           "VIEW", viewIdentifier.last, viewIdentifier.init.mkString("."), ctx)
-    }
-  }
-
-  private def withCatalogIdentClause(
-      ctx: CatalogIdentifierReferenceContext,
-      builder: Seq[String] => LogicalPlan): LogicalPlan = {
-    val exprCtx = ctx.expression
-    if (exprCtx != null) {
-      // resolve later in analyzer
-      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, Nil,
-        (ident, _) => builder(ident))
-    } else if (ctx.errorCapturingIdentifier() != null) {
-      // resolve immediately
-      builder.apply(Seq(getIdentifierText(ctx.errorCapturingIdentifier())))
-    } else if (ctx.stringLit() != null) {
-      // resolve immediately
-      builder.apply(Seq(string(visitStringLit(ctx.stringLit()))))
-    } else {
-      throw SparkException.internalError("Invalid catalog name")
     }
   }
 

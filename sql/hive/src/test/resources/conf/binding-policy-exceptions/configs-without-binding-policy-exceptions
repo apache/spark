@@ -786,7 +786,6 @@ spark.sql.optimizer.avoidCollapseUDFWithExpensiveExpr
 spark.sql.optimizer.avoidDoubleFilterEval
 spark.sql.optimizer.canChangeCachedPlanOutputPartitioning
 spark.sql.optimizer.collapseProjectAlwaysInline
-spark.sql.optimizer.datasourceV2ExprFolding
 spark.sql.optimizer.datasourceV2JoinPushdown
 spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled
 spark.sql.optimizer.decorrelateInnerQuery.enabled
@@ -811,7 +810,6 @@ spark.sql.optimizer.expression.nestedPruning.enabled
 spark.sql.optimizer.expressionProjectionCandidateLimit
 spark.sql.optimizer.inSetConversionThreshold
 spark.sql.optimizer.inSetSwitchThreshold
-spark.sql.optimizer.maxIterations
 spark.sql.optimizer.metadataOnly
 spark.sql.optimizer.nestedPredicatePushdown.supportedFileSources
 spark.sql.optimizer.nestedSchemaPruning.enabled
@@ -947,7 +945,6 @@ spark.sql.shuffle.partitions
 spark.sql.shuffleDependency.fileCleanup.enabled
 spark.sql.shuffleDependency.skipMigration.enabled
 spark.sql.shuffleExchange.maxThreadThreshold
-spark.sql.shuffledHashJoinFactor
 spark.sql.sort.enableRadixSort
 spark.sql.sortMergeJoinExec.buffer.in.memory.threshold
 spark.sql.sortMergeJoinExec.buffer.spill.size.threshold
@@ -1103,7 +1100,6 @@ spark.sql.transposeMaxValues
 spark.sql.truncateTable.ignorePermissionAcl.enabled
 spark.sql.tvf.allowMultipleTableArguments.enabled
 spark.sql.ui.explainMode
-spark.sql.ui.retainedExecutions
 spark.sql.unionOutputPartitioning
 spark.sql.useCommonExprIdForAlias
 spark.sql.variable.substitute

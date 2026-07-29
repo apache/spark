@@ -21,6 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
@@ -922,28 +923,12 @@ case class Scd2BatchProcessor(
    * the eligible user-data columns (those not in [[ChangeArgs.keys]] or the framework
    * reserved set) filtered through [[ChangeArgs.trackHistorySelection]].
    */
-  private def computeTrackedHistoryColumns(df: DataFrame): Seq[String] = {
-    val conf = df.sparkSession.sessionState.conf
-    val resolver = conf.resolver
-
-    val keyColNames = changeArgs.keys.map(_.name)
-    val reservedColNames = Scd2BatchProcessor.reservedFrameworkColNames
-
-    val eligibleSchema = StructType(df.schema.fields.filterNot { field =>
-      reservedColNames.exists(resolver(_, field.name)) ||
-        keyColNames.exists(resolver(_, field.name))
-    })
-
-    ColumnSelection
-      .applyToSchema(
-        schemaName = "trackHistorySelection",
-        schema = eligibleSchema,
-        columnSelection = changeArgs.trackHistorySelection,
-        caseSensitive = conf.caseSensitiveAnalysis
-      )
-      .fieldNames
-      .toImmutableArraySeq
-  }
+  private def computeTrackedHistoryColumns(df: DataFrame): Seq[String] =
+    Scd2BatchProcessor.computeTrackedHistoryColumns(
+      schema = df.schema,
+      changeArgs = changeArgs,
+      caseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    )
 
   /**
    * Tag each post-reconciliation row with [[Scd2BatchProcessor.shouldRouteToAuxTableColName]]:
@@ -1362,7 +1347,7 @@ object Scd2BatchProcessor {
    * idempotency, should a microbatch fail between a MERGE executed against the auxiliary
    * table and the MERGE executed against the target table.
    */
-  private[autocdc] val deletedByBatchIdColName: String =
+  private[pipelines] val deletedByBatchIdColName: String =
     s"${AutoCdcReservedNames.prefix}deleted_by_batch_id"
 
   /**
@@ -1379,7 +1364,7 @@ object Scd2BatchProcessor {
    * The invariant in both tables is: startAtColName <= recordStartAtFieldName. If an event was
    * generated at time X, it is active by time X, or earlier if it is not a run head.
    */
-  private[autocdc] val startAtColName: String = "__START_AT"
+  private[pipelines] val startAtColName: String = "__START_AT"
 
   /**
    * What this column represents depends on which AutoCDC artifact table it is read from.
@@ -1393,22 +1378,60 @@ object Scd2BatchProcessor {
    *    Else this row is a coalesced no-op row that is part of an upsert run, and by
    *    convention the value will always be null.
    */
-  private[autocdc] val endAtColName: String = "__END_AT"
+  private[pipelines] val endAtColName: String = "__END_AT"
 
   /**
-   * Column names reserved by AutoCDC that will be projected onto the microbatch and
-   * eventually persisted in the target table. If the user's source dataframe contains any of
-   * these columns, SCD2 reconciliation will fail.
+   * Column names reserved by AutoCDC that are projected onto the microbatch and persisted in the
+   * target table. A source dataframe must not contain any of them.
    *
-   * TODO(SPARK-57251): validate at [[AutoCdcMergeFlow]] construction time that the source
-   *   schema and column selection do not collide with these reserved names, so we fail fast
-   *   with a user-actionable error instead of silently overwriting them at preprocess time.
+   * [[startAtColName]] and [[endAtColName]] do NOT carry the reserved
+   * [[AutoCdcReservedNames.prefix]], so a source-column collision with them is not caught by the
+   * prefix-based guard; [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] validates the
+   * source schema against the non-prefixed names in this set at construction time, failing fast
+   * instead of silently overwriting them at preprocess time.
    */
-  private val reservedFrameworkColNames: Set[String] = Set(
+  private[pipelines] val reservedFrameworkColNames: Set[String] = Set(
     startAtColName,
     endAtColName,
     AutoCdcReservedNames.cdcMetadataColName
   )
+
+  /**
+   * Resolve [[ChangeArgs.trackHistorySelection]] against `schema` and return the field names of
+   * the history-tracking columns: the eligible user-data columns (those that are neither
+   * [[ChangeArgs.keys]] nor framework reserved columns) filtered through the selection.
+   *
+   * This is the single source of truth for which columns define an SCD2 run. It is called both
+   * per-microbatch (against the reconciled dataframe's schema) and at
+   * [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction time (against the
+   * user-selected source schema), so an unresolvable or ineligible selection fails fast with a
+   * user-actionable [[org.apache.spark.sql.AnalysisException]] instead of surfacing mid-stream.
+   *
+   * Throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` if the selection references a column that is not
+   * an eligible history-tracking column in `schema` (i.e. absent, or a key/framework column).
+   */
+  private[pipelines] def computeTrackedHistoryColumns(
+      schema: StructType,
+      changeArgs: ChangeArgs,
+      caseSensitive: Boolean): Seq[String] = {
+    val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+    val keyColNames = changeArgs.keys.map(_.name)
+
+    val eligibleSchema = StructType(schema.fields.filterNot { field =>
+      reservedFrameworkColNames.exists(resolver(_, field.name)) ||
+        keyColNames.exists(resolver(_, field.name))
+    })
+
+    ColumnSelection
+      .applyToSchema(
+        schemaName = "trackHistorySelection",
+        schema = eligibleSchema,
+        columnSelection = changeArgs.trackHistorySelection,
+        caseSensitive = caseSensitive
+      )
+      .fieldNames
+      .toImmutableArraySeq
+  }
 
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per
@@ -1519,7 +1542,7 @@ object Scd2BatchProcessor {
    * Construct the CDC metadata struct column for SCD2 rows, following the exact schema and
    * field ordering defined by [[cdcMetadataColSchema]].
    */
-  private def constructCdcMetadataCol(
+  private[pipelines] def constructCdcMetadataCol(
       recordStartAt: Column,
       sequencingType: DataType
   ): Column = {

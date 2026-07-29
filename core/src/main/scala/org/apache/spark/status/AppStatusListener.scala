@@ -23,12 +23,14 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.CPUS_PER_TASK
 import org.apache.spark.internal.config.Status._
+import org.apache.spark.resource.{CpuAmount, ResourceProfile}
 import org.apache.spark.resource.ResourceProfile.CPUS
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
@@ -53,7 +55,7 @@ private[spark] class AppStatusListener(
   private var sparkVersion = SPARK_VERSION
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
-  private var defaultCpusPerTask: Int = 1
+  private var defaultCpusPerTask: BigDecimal = CpuAmount.normalize(BigDecimal(1))
 
   // How often to update live entities. -1 means "never update" when replaying applications,
   // meaning only the last write will happen. For live applications, this avoids a few
@@ -183,8 +185,20 @@ private[spark] class AppStatusListener(
       details.getOrElse("Classpath Entries", Nil),
       Nil)
 
-    defaultCpusPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).map(_.toInt)
-      .getOrElse(defaultCpusPerTask)
+    // Parse the raw property string so the default cpus per task is exact (spark.task.cpus
+    // may be fractional, e.g. 0.2). The string comes from a persisted application environment
+    // and is untrusted -- parseUntrusted bounds the length and range before the costly parse
+    // and normalize steps can run inside the (shared) history server. A legitimate log always
+    // carries a value the live config parser validated, so malformed values keep the previous
+    // default instead of failing the replay.
+    envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).foreach { v =>
+      CpuAmount.parseUntrusted(v) match {
+        case Some(d) => defaultCpusPerTask = d
+        case None =>
+          logWarning(log"Ignoring invalid ${MDC(LogKeys.CONFIG, CPUS_PER_TASK.key)} value in " +
+            log"the application environment; keeping the previous default")
+      }
+    }
 
     kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
   }
@@ -222,10 +236,20 @@ private[spark] class AppStatusListener(
     exec.totalCores = event.executorInfo.totalCores
     val rpId = event.executorInfo.resourceProfileId
     val liveRP = liveResourceProfiles.get(rpId)
+    // Recover the exact BigDecimal from the Double amount via its string form (see
+    // ResourceProfile.getTaskCpus for why this must go through toString), then normalize.
+    // A replayed profile can carry any amount an earlier release accepted (e.g. a negative
+    // cpus): fall back to the default rather than letting the slot math's positivity
+    // assertion abort the replay.
     val cpusPerTask = liveRP.flatMap(_.taskResources.get(CPUS))
-      .map(_.amount.toInt).getOrElse(defaultCpusPerTask)
+      .flatMap(tr => Try(BigDecimal(tr.amount.toString)).toOption)
+      .filter(CpuAmount.isInRange)
+      .map(CpuAmount.normalize)
+      .getOrElse(defaultCpusPerTask)
     val maxTasksPerExec = liveRP.flatMap(_.maxTasksPerExecutor)
-    exec.maxTasks = maxTasksPerExec.getOrElse(event.executorInfo.totalCores / cpusPerTask)
+    exec.maxTasks = maxTasksPerExec.getOrElse(
+      ResourceProfile.numTasksBasedOnCores(
+        CpuAmount.normalize(BigDecimal(event.executorInfo.totalCores)), cpusPerTask))
     exec.executorLogs = event.executorInfo.logUrlMap
     exec.resources = event.executorInfo.resourcesInfo
     exec.attributes = event.executorInfo.attributes
