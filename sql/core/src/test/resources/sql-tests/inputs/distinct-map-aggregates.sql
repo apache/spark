@@ -42,3 +42,14 @@ HAVING COUNT(DISTINCT m) = 1
 ORDER BY g;
 
 SELECT COUNT(DISTINCT named_struct('m', m)) FROM distinct_map_data;
+
+SELECT COUNT(DISTINCT array(m)) FROM distinct_map_data;
+
+SELECT COUNT(DISTINCT map('m', m)) FROM distinct_map_data;
+
+SELECT COUNT(DISTINCT named_struct('m', m, 'n', n))
+FROM VALUES
+  (map('a', 1, 'b', 2), map('x', 1, 'y', 2)),
+  (map('b', 2, 'a', 1), map('y', 2, 'x', 1))
+AS grouped_distinct_map_data(m, n)
+GROUP BY m;

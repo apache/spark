@@ -114,3 +114,32 @@ SELECT COUNT(DISTINCT named_struct('m', m)) FROM distinct_map_data
 struct<count(DISTINCT named_struct(m, m)):bigint>
 -- !query output
 2
+
+
+-- !query
+SELECT COUNT(DISTINCT array(m)) FROM distinct_map_data
+-- !query schema
+struct<count(DISTINCT array(m)):bigint>
+-- !query output
+2
+
+
+-- !query
+SELECT COUNT(DISTINCT map('m', m)) FROM distinct_map_data
+-- !query schema
+struct<count(DISTINCT map(m, m)):bigint>
+-- !query output
+2
+
+
+-- !query
+SELECT COUNT(DISTINCT named_struct('m', m, 'n', n))
+FROM VALUES
+  (map('a', 1, 'b', 2), map('x', 1, 'y', 2)),
+  (map('b', 2, 'a', 1), map('y', 2, 'x', 1))
+AS grouped_distinct_map_data(m, n)
+GROUP BY m
+-- !query schema
+struct<count(DISTINCT named_struct(m, m, n, n)):bigint>
+-- !query output
+1

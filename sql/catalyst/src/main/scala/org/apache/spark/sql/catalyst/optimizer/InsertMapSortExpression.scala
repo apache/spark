@@ -44,60 +44,47 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
     if (!plan.containsPattern(AGGREGATE)) {
       return plan
     }
-    val shouldRewrite = plan.exists {
-      case agg: Aggregate if expressionsToNormalize(agg).exists(mapTypeExistsRecursively) => true
-      case _ => false
-    }
-    if (!shouldRewrite) {
-      return plan
-    }
 
     plan transformUpWithNewOutput {
       case agg @ Aggregate(groupingExprs, aggregateExpressions, child, hint) =>
-        val exprToMapSort = new mutable.HashMap[Expression, NamedExpression]
-        val groupingExprKeys = groupingExprs.map(_.canonicalized).toSet
-        expressionsToNormalize(agg).foreach { expr =>
-          val inserted = insertMapSortRecursively(expr)
-          if (expr.ne(inserted)) {
-            exprToMapSort.getOrElseUpdate(
-              expr.canonicalized,
-              Alias(inserted, "_groupingmapsort")()
-            )
+        val distinctExpressions =
+          if (conf.getConf(SQLConf.INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED)) {
+            distinctAggregateChildren(aggregateExpressions)
+          } else {
+            Seq.empty
           }
+        val expressionsToNormalize = groupingExprs ++ distinctExpressions
+        if (!expressionsToNormalize.exists(mapTypeExistsRecursively)) {
+          agg -> Nil
+        } else {
+          val groupingMapSortAliases = mapSortAliases(groupingExprs)
+          val distinctMapSortAliases = mapSortAliases(distinctExpressions, groupingMapSortAliases)
+          val newGroupingKeys = groupingExprs.map { expr =>
+            groupingMapSortAliases.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
+          }
+          val newAggregateExprs = aggregateExpressions.map {
+            case named if groupingMapSortAliases.contains(named.canonicalized) =>
+              // If we replace the top-level named expr, then should add back the original name
+              groupingMapSortAliases(named.canonicalized).toAttribute.withName(named.name)
+            case other =>
+              other.transformDown {
+                case ae: AggregateExpression if ae.isDistinct =>
+                  ae.copy(aggregateFunction = ae.aggregateFunction.withNewChildren(
+                    ae.aggregateFunction.children.map { child =>
+                      distinctMapSortAliases.get(child.canonicalized)
+                        .map(_.toAttribute).getOrElse(child)
+                    }).asInstanceOf[AggregateFunction])
+                case e =>
+                  groupingMapSortAliases.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
+              }.asInstanceOf[NamedExpression]
+          }
+          val newChild = Project(
+            child.output ++ (groupingMapSortAliases ++ distinctMapSortAliases).values,
+            child)
+          val newAgg = Aggregate(newGroupingKeys, newAggregateExprs, newChild, hint)
+          newAgg -> agg.output.zip(newAgg.output)
         }
-        val newGroupingKeys = groupingExprs.map { expr =>
-          exprToMapSort.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
-        }
-        val newAggregateExprs = aggregateExpressions.map {
-          case named if groupingExprKeys.contains(named.canonicalized) &&
-              exprToMapSort.contains(named.canonicalized) =>
-            // If we replace the top-level named expr, then should add back the original name
-            exprToMapSort(named.canonicalized).toAttribute.withName(named.name)
-          case other =>
-            other.transformUp {
-              case ae: AggregateExpression if ae.isDistinct =>
-                ae.copy(aggregateFunction = ae.aggregateFunction.withNewChildren(
-                  ae.aggregateFunction.children.map { child =>
-                    exprToMapSort.get(child.canonicalized).map(_.toAttribute).getOrElse(child)
-                  }).asInstanceOf[AggregateFunction])
-              case e if groupingExprKeys.contains(e.canonicalized) =>
-                exprToMapSort.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
-            }.asInstanceOf[NamedExpression]
-        }
-        val newChild = Project(child.output ++ exprToMapSort.values, child)
-        val newAgg = Aggregate(newGroupingKeys, newAggregateExprs, newChild, hint)
-        newAgg -> agg.output.zip(newAgg.output)
     }
-  }
-
-  private def expressionsToNormalize(agg: Aggregate): Seq[Expression] = {
-    val distinctExpressions =
-      if (conf.getConf(SQLConf.INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED)) {
-        distinctAggregateChildren(agg.aggregateExpressions)
-      } else {
-        Seq.empty
-      }
-    agg.groupingExpressions ++ distinctExpressions
   }
 
   private def distinctAggregateChildren(
@@ -107,6 +94,22 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
         case ae: AggregateExpression if ae.isDistinct => ae
       })
       .flatMap(_.aggregateFunction.children)
+  }
+
+  private def mapSortAliases(
+      expressions: Seq[Expression],
+      existingAliases: Map[Expression, NamedExpression] = Map.empty) = {
+    val aliases = new mutable.HashMap[Expression, NamedExpression]
+    expressions.foreach { expr =>
+      val inserted = insertMapSortRecursively(expr)
+      if (expr.ne(inserted)) {
+        val canonicalized = expr.canonicalized
+        aliases.getOrElseUpdate(
+          canonicalized,
+          existingAliases.getOrElse(canonicalized, Alias(inserted, "_groupingmapsort")()))
+      }
+    }
+    aliases.toMap
   }
 }
 

@@ -170,3 +170,40 @@ Aggregate [count(distinct named_struct(m, m#x)) AS count(DISTINCT named_struct(m
          +- Project [g#x, m#x, id#x, should_keep#x]
             +- SubqueryAlias distinct_map_data
                +- LocalRelation [g#x, m#x, id#x, should_keep#x]
+
+
+-- !query
+SELECT COUNT(DISTINCT array(m)) FROM distinct_map_data
+-- !query analysis
+Aggregate [count(distinct array(m#x)) AS count(DISTINCT array(m))#xL]
++- SubqueryAlias distinct_map_data
+   +- View (`distinct_map_data`, [g#x, m#x, id#x, should_keep#x])
+      +- Project [cast(g#x as int) AS g#x, cast(m#x as map<string,int>) AS m#x, cast(id#x as int) AS id#x, cast(should_keep#x as boolean) AS should_keep#x]
+         +- Project [g#x, m#x, id#x, should_keep#x]
+            +- SubqueryAlias distinct_map_data
+               +- LocalRelation [g#x, m#x, id#x, should_keep#x]
+
+
+-- !query
+SELECT COUNT(DISTINCT map('m', m)) FROM distinct_map_data
+-- !query analysis
+Aggregate [count(distinct map(m, m#x)) AS count(DISTINCT map(m, m))#xL]
++- SubqueryAlias distinct_map_data
+   +- View (`distinct_map_data`, [g#x, m#x, id#x, should_keep#x])
+      +- Project [cast(g#x as int) AS g#x, cast(m#x as map<string,int>) AS m#x, cast(id#x as int) AS id#x, cast(should_keep#x as boolean) AS should_keep#x]
+         +- Project [g#x, m#x, id#x, should_keep#x]
+            +- SubqueryAlias distinct_map_data
+               +- LocalRelation [g#x, m#x, id#x, should_keep#x]
+
+
+-- !query
+SELECT COUNT(DISTINCT named_struct('m', m, 'n', n))
+FROM VALUES
+  (map('a', 1, 'b', 2), map('x', 1, 'y', 2)),
+  (map('b', 2, 'a', 1), map('y', 2, 'x', 1))
+AS grouped_distinct_map_data(m, n)
+GROUP BY m
+-- !query analysis
+Aggregate [m#x], [count(distinct named_struct(m, m#x, n, n#x)) AS count(DISTINCT named_struct(m, m, n, n))#xL]
++- SubqueryAlias grouped_distinct_map_data
+   +- LocalRelation [m#x, n#x]
