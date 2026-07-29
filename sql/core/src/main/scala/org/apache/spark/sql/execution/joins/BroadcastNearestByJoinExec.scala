@@ -134,13 +134,25 @@ case class BroadcastNearestByJoinExec(
             val rankingRow = rankingProj(joinedRow)
             if (!rankingRow.isNullAt(0)) {
               val rawValue = rankingRow.get(0, rankExpr.dataType)
-              val rankingValue = if (rankingNeedsCopy) {
-                rankingRow.copy().get(0, rankExpr.dataType)
+              // Only insert if the heap has room or the candidate beats the current worst.
+              // This avoids unnecessary .copy() allocations for rows that would be
+              // immediately evicted, and reduces PriorityQueue churn.
+              // For distance (isDistance=true): smaller is better, worst=largest on peek.
+              // For similarity: larger is better, worst=smallest on peek.
+              val dominated = heap.size() < k || (if (isDistance) {
+                ordering.compare(rawValue, heap.peek().rankingValue) < 0
               } else {
-                rawValue
+                ordering.compare(rawValue, heap.peek().rankingValue) > 0
+              })
+              if (dominated) {
+                val rankingValue = if (rankingNeedsCopy) {
+                  rankingRow.copy().get(0, rankExpr.dataType)
+                } else {
+                  rawValue
+                }
+                heap.offer(HeapEntry(i, rankingValue))
+                if (heap.size() > k) heap.poll()
               }
-              heap.offer(HeapEntry(i, rankingValue))
-              if (heap.size() > k) heap.poll()
             }
             i += 1
           }
