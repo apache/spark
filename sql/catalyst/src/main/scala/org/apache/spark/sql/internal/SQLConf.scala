@@ -7242,7 +7242,7 @@ object SQLConf {
     .version("4.3.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED =
     buildConf("spark.sql.optimizer.mergeSubplans.filterPropagation.throughJoin.enabled")
