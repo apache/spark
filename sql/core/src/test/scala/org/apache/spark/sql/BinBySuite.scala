@@ -460,4 +460,37 @@ class BinBySuite extends QueryTest with SharedSparkSession {
         Row(2, null, null, null, null)))
     }
   }
+
+  test("ORDER BY on a column BIN BY re-outputs without its qualifier is rejected") {
+    // BIN BY re-outputs its input columns without the original qualifier, so `ORDER BY t.value`
+    // cannot resolve against them; hidden-output insertion appends the column to an operator whose
+    // child does not produce it, and analysis fails with MISSING_ATTRIBUTES.
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(
+            """SELECT * FROM VALUES
+              |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:05:00', 100.0D)
+              |  AS t(ts_start, ts_end, value)
+              |BIN BY (
+              |  RANGE ts_start TO ts_end
+              |  BIN WIDTH INTERVAL '5' MINUTE
+              |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00'
+              |  DISTRIBUTE UNIFORM (value))
+              |ORDER BY t.value""".stripMargin)
+        },
+        condition = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+        parameters = Map(
+          "missingAttributes" -> "\"value\"",
+          "input" -> ("\"ts_start\", \"ts_end\", \"value\", \"bin_start\", \"bin_end\", " +
+            "\"bin_distribute_ratio\""),
+          "operator" -> "!Sort \\[value#\\d+ ASC NULLS FIRST\\], true",
+          "operation" -> "\"value\""),
+        matchPVals = true,
+        queryContext =
+          Array(ExpectedContext(fragment = "ORDER BY t.value", start = 271, stop = 286)))
+    }
+  }
 }
