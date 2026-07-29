@@ -71,7 +71,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Rebuilds a single scan for a Spark-side scan merge (see
-   * [[org.apache.spark.sql.connector.read.SupportsScanMerging]]): runs this rule on a synthetic
+   * `TableCapability.SCAN_MERGING`): runs this rule on a synthetic
    * `Project(projectList, Filter(conditions, relation))` and returns the resulting
    * [[DataSourceV2ScanRelation]]. This lets `PlanMerger` fuse two scans of the same table by
    * expressing what the merged scan should project and filter, while the pushdown lifecycle (filter
@@ -131,7 +131,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // Compute the pushed filter expressions: the normalized filters that were fully pushed
       // down (i.e., not in postScanFilters). These are stored on the scan relation for potential
       // future use in constraint propagation, and are read by a Spark-side scan merge (see
-      // SupportsScanMerging) to compare and re-enforce a scan's filters.
+      // TableCapability.SCAN_MERGING) to compare and re-enforce a scan's filters.
       val postScanFilterSet = ExpressionSet(postScanFiltersWithoutSubquery)
       sHolder.pushedFilterExpressions = normalizedFiltersWithoutSubquery
         .filterNot(postScanFilterSet.contains)
@@ -847,7 +847,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Whether the plain-scan path ([[pruneColumns]]) carries a pushdown that a Spark-side scan merge
-   * (see [[org.apache.spark.sql.connector.read.SupportsScanMerging]]) cannot reproduce by
+   * (see `TableCapability.SCAN_MERGING`) cannot reproduce by
    * rebuilding the scan from a fresh `ScanBuilder` and re-applying the pushed filters and pruned
    * columns. Used only to decide the plain-scan `mergeableScan` flag (`!hasBlockingPushdown`).
    *

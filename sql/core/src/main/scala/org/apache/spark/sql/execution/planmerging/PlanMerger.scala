@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.connector.read.SupportsScanMerging
+import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -632,7 +632,7 @@ class PlanMerger(
    * The DSv2 scan merge: fuse two scans of the same table that differ only in projected columns
    * (and carry the same strict pushed filters) into a single scan reading the union of their
    * columns. The connector opts in via
-   * [[org.apache.spark.sql.connector.read.SupportsScanMerging]]; Spark runs the real DSv2 pushdown
+   * `TableCapability.SCAN_MERGING`; Spark runs the real DSv2 pushdown
    * ([[V2ScanRelationPushDown]]) on a synthetic `Filter` over the relation, extracts the merged
    * scan, and verifies the (equal) strict filters remain fully enforced. Eligibility gating
    * (`mergeable`) is read-only, inspecting only the two input scans.
@@ -669,8 +669,11 @@ class PlanMerger(
         // merging these can be added as a follow-up.
         np.keyGroupedPartitioning.isEmpty && cp.keyGroupedPartitioning.isEmpty &&
         np.ordering.isEmpty && cp.ordering.isEmpty &&
-        // Both scans opt in to Spark-side merging.
-        np.scan.isInstanceOf[SupportsScanMerging] && cp.scan.isInstanceOf[SupportsScanMerging] &&
+        // The table opts in to Spark-side merging (a table capability, so a V1-fallback source
+        // whose scan Spark wraps can still opt in). Both relations are the same table (canonically
+        // equal, checked above), but check each to be safe.
+        np.relation.table.capabilities().contains(TableCapability.SCAN_MERGING) &&
+        cp.relation.table.capabilities().contains(TableCapability.SCAN_MERGING) &&
         // Both pushed the same strict filters, so re-pushing reproduces both sides' row sets.
         samePushedFilters(np, cp)
 

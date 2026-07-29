@@ -164,9 +164,9 @@ case class DataSourceV2Relation(
  *                      (e.g. an unselected partition column the source enforces internally). This
  *                      complete set is what lets `PlanMerger` soundly compare and re-enforce a
  *                      scan's filters when fusing two scans via a Spark-side scan merge
- *                      ([[org.apache.spark.sql.connector.read.SupportsScanMerging]]).
+ *                      (`TableCapability.SCAN_MERGING`).
  * @param mergeableScan whether this scan may be fused with an equivalent scan by a Spark-side scan
- *                      merge (see [[org.apache.spark.sql.connector.read.SupportsScanMerging]]).
+ *                      merge (see `TableCapability.SCAN_MERGING`).
  *                      Default false (not mergeable): only the plain column-pruning + filter
  *                      pushdown path in `V2ScanRelationPushDown` sets this true, and only when the
  *                      scan carries nothing a rebuilt scan cannot reproduce. A scan with a

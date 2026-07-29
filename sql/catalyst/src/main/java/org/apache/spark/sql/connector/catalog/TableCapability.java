@@ -126,5 +126,33 @@ public enum TableCapability {
    *
    * @since 4.3.0
    */
-  GENERATE_COLUMN_VALUES_ON_WRITE
+  GENERATE_COLUMN_VALUES_ON_WRITE,
+
+  /**
+   * Signals that Spark may fuse two batch scans of this table that differ only in their projected
+   * columns and/or pushed filters into a single scan (Spark-side scan merging).
+   * <p>
+   * By returning this capability a table declares a determinism contract: holding the scan options
+   * constant, the rows and columns a scan reads are fully determined by the filters pushed via
+   * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters} and the columns pruned
+   * via {@link org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns}. Equivalently,
+   * obtaining a fresh {@link org.apache.spark.sql.connector.read.ScanBuilder} with the same options
+   * and re-applying the same pushed filters and pruned columns yields an equivalent scan.
+   * <p>
+   * Given that contract, Spark builds the merged scan itself: it prunes a fresh ScanBuilder to the
+   * union of both read schemas, re-pushes the (possibly OR-widened) filters, and builds. The merged
+   * scan reads the union of the two scans' columns and a superset of their rows; each original
+   * scan's result is recovered by a projection and filter applied above it. The connector supplies
+   * no merge logic of its own.
+   * <p>
+   * This capability lives on the table rather than on the scan so that a source using the V1 scan
+   * fallback (whose scan Spark wraps in an internal wrapper) can still opt in. A table need not
+   * reason about pushdowns that are not reproducible this way (a pushed aggregate, join, variant
+   * extraction, limit, offset, top-N, or table sample): Spark tracks those on its own side while
+   * building the scan and never merges a scan that carries one, whether or not the table returns
+   * this capability.
+   *
+   * @since 4.3.0
+   */
+  SCAN_MERGING
 }

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsScanMerging}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -1980,6 +1980,11 @@ class MergeSubplansSuite extends PlanTest {
   private val v2Table = new TestV2Table(StructType(Seq(
     StructField("a", IntegerType), StructField("b", IntegerType), StructField("c", StringType))))
 
+  /** Same shape as [[v2Table]] but does NOT declare the `SCAN_MERGING` capability. */
+  private val v2TableNoMerge = new TestV2Table(StructType(Seq(
+    StructField("a", IntegerType), StructField("b", IntegerType), StructField("c", StringType))),
+    supportsScanMerging = false)
+
   /** A `DataSourceV2ScanRelation` over `table` projecting only the given columns. */
   private def v2ScanReadingOn(table: TestV2Table, cols: Seq[String]): DataSourceV2ScanRelation = {
     val fullOutput = toAttributes(table.schema())
@@ -1995,11 +2000,9 @@ class MergeSubplansSuite extends PlanTest {
   private def v2ScanReading(cols: String*): DataSourceV2ScanRelation =
     v2ScanReadingOn(v2Table, cols)
 
-  /** Like [[v2ScanReading]] but the scan does NOT implement `SupportsScanMerging`. */
-  private def v2ScanReadingNoMerge(cols: String*): DataSourceV2ScanRelation = {
-    val s = v2ScanReading(cols: _*)
-    s.copy(scan = TestV2ScanNoMerge(s.scan.readSchema()))
-  }
+  /** A `DataSourceV2ScanRelation` over a table without the `SCAN_MERGING` capability. */
+  private def v2ScanReadingNoMerge(cols: String*): DataSourceV2ScanRelation =
+    v2ScanReadingOn(v2TableNoMerge, cols)
 
   private def v2Scans(plan: LogicalPlan): Seq[DataSourceV2ScanRelation] =
     plan.collectWithSubqueries { case s: DataSourceV2ScanRelation => s }
@@ -2265,12 +2268,12 @@ class MergeSubplansSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
   }
 
-  test("SPARK-40259: do not merge DSv2 scans that do not opt into SupportsScanMerging") {
+  test("SPARK-40259: do not merge DSv2 scans of a table without the SCAN_MERGING capability") {
     val sub1 = ScalarSubquery(v2ScanReadingNoMerge("a").groupBy()(sum($"a").as("sum_a")))
     val sub2 = ScalarSubquery(v2ScanReadingNoMerge("b").groupBy()(sum($"b").as("sum_b")))
     val originalQuery = testRelation.select(sub1, sub2)
 
-    // Scans that do not implement SupportsScanMerging decline the merge: plan left unchanged.
+    // A table without the SCAN_MERGING capability declines the merge: plan left unchanged.
     comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
   }
 
@@ -2696,12 +2699,16 @@ class MergeSubplansSuite extends PlanTest {
 private class TestV2Table(
     tableSchema: StructType,
     acceptsFilters: Boolean = true,
-    strictColumns: Set[String] = Set.empty)
+    strictColumns: Set[String] = Set.empty,
+    supportsScanMerging: Boolean = true)
   extends Table with SupportsRead {
   override def name(): String = "test_v2_table"
   override def schema(): StructType = tableSchema
-  override def capabilities(): java.util.Set[TableCapability] =
-    java.util.Collections.singleton(TableCapability.BATCH_READ)
+  override def capabilities(): java.util.Set[TableCapability] = {
+    val caps = java.util.EnumSet.of(TableCapability.BATCH_READ)
+    if (supportsScanMerging) caps.add(TableCapability.SCAN_MERGING)
+    caps
+  }
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new TestV2ScanBuilder(tableSchema, acceptsFilters, strictColumns)
 }
@@ -2751,10 +2758,6 @@ private class TestV2ScanBuilder(
 
 /** `pushed` records the `describe()` of the predicates pushed to the scan, for test assertions. */
 private case class TestV2Scan(schema: StructType, pushed: Seq[String] = Seq.empty)
-  extends Scan with SupportsScanMerging {
-  override def readSchema(): StructType = schema
-}
-
-private case class TestV2ScanNoMerge(schema: StructType) extends Scan {
+  extends Scan {
   override def readSchema(): StructType = schema
 }
