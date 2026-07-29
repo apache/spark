@@ -22,7 +22,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
 import org.apache.spark.sql.connector.catalog.InMemoryScanMergingPartitionFilterCatalog
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -55,6 +55,18 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
     df.queryExecution.optimizedPlan.collectWithSubqueries {
       case s: DataSourceV2ScanRelation => s
     }
+
+  // A successful DSv2 merge builds the scan and leaves NO bare DataSourceV2Relation in the plan.
+  // A leaked deferred scan (e.g. if a future recursion arm forwarded `deferredScan` without
+  // building it) would surface as an unbuilt placeholder relation the read path cannot plan --
+  // cheap guard so a regression fails loudly here, not as a silently-declined merge (see
+  // MergeContext).
+  private def assertNoPlaceholderRelation(df: DataFrame): Unit =
+    assert(
+      df.queryExecution.optimizedPlan.collectWithSubqueries {
+        case r: DataSourceV2Relation => r
+      }.isEmpty,
+      s"unbuilt placeholder DataSourceV2Relation left in plan:\n${df.queryExecution.optimizedPlan}")
 
   test("SPARK-40259: merge two DSv2 scans whose filter is strict only via the second pass") {
     withTable(tbl) {
@@ -92,6 +104,7 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
       assert(scan.pushedFilters.exists(_.references.exists(_.name == "part_col")),
         s"the part_col filter should be re-pushed strict onto the merged scan; " +
           s"got pushedFilters=${scan.pushedFilters.mkString("[", ", ", "]")}")
+      assertNoPlaceholderRelation(df)
     }
   }
 
@@ -152,6 +165,7 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
           s"the two scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
         assert(scans.head.output.map(_.name).toSet == Set("c1", "c2"),
           s"the merged scan should read the union of both columns; got ${scans.head.output}")
+        assertNoPlaceholderRelation(df)
       }
     }
   }
