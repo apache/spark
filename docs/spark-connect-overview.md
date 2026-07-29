@@ -286,16 +286,16 @@ from pyspark.sql import SparkSession
 spark = SparkSession.builder.remote("local[*]").getOrCreate()
 ```
 
-PySpark boots a fresh in-process Spark Connect server in **every** process. Each
-`python script.py` run (or each forked test JVM) therefore re-pays the one-time startup cost --
-JVM warmup, `SparkContext` construction, and Connect server boot -- which can take a few seconds and
-makes a quick edit/run loop feel slow.
+PySpark boots a fresh in-process Spark Connect server that lives only as long as that Python
+process. Every `python script.py` invocation (or every new test worker process) therefore re-pays
+the one-time startup cost -- JVM warmup, `SparkContext` construction, and Connect server boot --
+which can take a few seconds and makes a quick edit/run loop feel slow.
 
 To amortize that cost across runs, start one persistent local Spark Connect server and point
 every run at it:
 
 ```bash
-# Start once; it stays up across runs.
+# Start once; it stays up across runs. (--master is optional; it defaults to local[*].)
 $SPARK_HOME/sbin/start-connect-server.sh --master "local[*]"
 
 # Every run reconnects instead of booting a new server.
@@ -320,6 +320,12 @@ python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("lo
 # Stop the managed server when you are done.
 python -m pyspark.sql.connect.local_server --stop
 ```
+
+The managed server is an ordinary `spark-daemon.sh` daemon, but it runs with a per-user pid
+directory and ident string so it cannot collide with a server you started by hand -- which also
+means a plain `sbin/stop-connect-server.sh` does not find it. The `--stop` command signals the
+recorded server and cleans up the discovery file; killing the server's pid directly also works,
+and the next run notices the dead server and starts a fresh one.
 
 The connection details (host, port, auth token, pid, Spark version) are recorded in a discovery
 file in a private per-user directory; set `SPARK_LOCAL_CONNECT_DISCOVERY` to override its
