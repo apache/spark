@@ -1119,11 +1119,14 @@ private[spark] class TaskSetManager(
     // failure must fail the whole group even when the reason is normally not counted -- most
     // importantly executor loss not caused by the app (ExecutorLostFailure with
     // exitCausedByApp=false), which strands the transient output. But we must NOT force-count
-    // reasons that are benign by design: TaskKilled (a losing speculative/duplicate attempt after
-    // another attempt succeeded, or a deliberate kill) and TaskCommitDenied (a speculation commit
-    // race) are not real failures, and counting them would abort the group spuriously. So for a
-    // pipelined set we count everything EXCEPT those two benign reasons. Non-pipelined sets are
-    // unchanged.
+    // reasons that are benign: TaskKilled (a deliberate kill) and TaskCommitDenied. These are not
+    // normally even reachable for a pipelined group -- speculation is rejected up front for a
+    // pipelined job, and a group never does an in-place stage/task retry (a member failure aborts
+    // the whole group; the caller reruns as a fresh job), so the usual sources of these reasons do
+    // not arise. The exclusion is kept as a defensive guard: if one ever did reach a live member
+    // (e.g. a manual killTaskAttempt), it must be treated as benign rather than spuriously aborting
+    // the group. So for a pipelined set we count everything EXCEPT those two benign reasons.
+    // Non-pipelined sets are unchanged.
     val forceCountForPipelined = taskSet.isPipelined && (reason match {
       case _: TaskKilled | _: TaskCommitDenied => false
       case _ => true
