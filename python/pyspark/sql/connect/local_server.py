@@ -87,12 +87,11 @@ class Discovery:
             os.makedirs(path, mode=0o700, exist_ok=True)
             os.chmod(path, 0o700)
         except OSError as e:
-            e.strerror = (
-                "{}. Cannot claim the per-user runtime directory {} (was it created by "
+            raise PermissionError(
+                "Cannot claim the per-user runtime directory {} (was it created by "
                 "another user?); remove it or point SPARK_LOCAL_CONNECT_DISCOVERY at a "
-                "path you own".format(e.strerror, path)
-            )
-            raise
+                "path you own".format(path)
+            ) from e
         return path
 
     def __init__(self, path: Optional[str] = None):
