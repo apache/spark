@@ -494,3 +494,14 @@ class AutoCdcMergeFlow(
   }
 
 }
+
+object AutoCdcMergeFlow {
+
+  /** The engine-owned reserved AUTO CDC column(s) present in `schema`, if any. */
+  private[pipelines] def reservedFields(schema: StructType): Seq[StructField] =
+    schema.fields.toSeq.filter(_.name.startsWith(AutoCdcReservedNames.prefix))
+
+  /** `schema` with the engine-owned reserved AUTO CDC column(s) removed. */
+  private[pipelines] def stripReservedFields(schema: StructType): StructType =
+    StructType(schema.fields.filterNot(_.name.startsWith(AutoCdcReservedNames.prefix)))
+}
