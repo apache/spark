@@ -598,6 +598,25 @@ case class JsonTable(
 
   override def prettyName: String = "json_table"
 
+  // The default `Expression.sql` renders only children, i.e. `json_table(<json_expr>)`, dropping
+  // the row path, columns, and ON ERROR mode. Render the full `JSON_TABLE(...)` syntax so
+  // analysis/type-check diagnostics (e.g. INVALID_JSON_TABLE_PATH) point at the whole invocation.
+  override def sql: String = {
+    val columnsSQL = columns.map { c =>
+      val pathSQL = c.path.map(p => s" PATH '$p'").getOrElse("")
+      c.kind match {
+        case JsonTableColumnKind.Ordinality => s"${c.name} FOR ORDINALITY"
+        case JsonTableColumnKind.Exists => s"${c.name} ${c.dataType.sql} EXISTS$pathSQL"
+        case JsonTableColumnKind.Value => s"${c.name} ${c.dataType.sql}$pathSQL"
+      }
+    }.mkString(", ")
+    val errorSQL = errorMode match {
+      case JsonTableErrorMode.NullOnError => "NULL ON ERROR"
+      case JsonTableErrorMode.ErrorOnError => "ERROR ON ERROR"
+    }
+    s"JSON_TABLE(${child.sql}, '$rowPath' COLUMNS ($columnsSQL) $errorSQL)"
+  }
+
   override protected def withNewChildInternal(newChild: Expression): JsonTable =
     copy(child = newChild)
 }

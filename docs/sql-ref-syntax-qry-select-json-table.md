@@ -64,8 +64,11 @@ error_clause
 * **column_name data_type [ PATH json_path ]**
 
     A value column. The value at `json_path` (relative to a row item) is extracted and cast to
-    `data_type`. If `PATH` is omitted, the path defaults to `'$.<column_name>'`. If the path
-    matches nothing, the column is `NULL`.
+    `data_type`. If `PATH` is omitted, the path defaults to the column name read as a single
+    object key: a simple identifier maps like `$.name`, while a name containing special characters
+    such as a dot is treated as one literal key (for example a column named `a.b` reads the key
+    `"a.b"`, equivalent to `$['a.b']`, not the nested path `a` -> `b`). If the path matches nothing,
+    the column is `NULL`.
 
 * **column_name data_type EXISTS [ PATH json_path ]**
 

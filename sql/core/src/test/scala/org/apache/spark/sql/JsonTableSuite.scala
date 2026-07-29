@@ -360,6 +360,11 @@ class JsonTableSuite extends QueryTest with SharedSparkSession {
     assert(e1.getCondition == "DATATYPE_MISMATCH.INVALID_JSON_TABLE_PATH")
     assert(e1.getMessageParameters.get("location") == "row path")
     assert(e1.getMessageParameters.get("path") == "'$.items[*].x'")
+    // The rendered expression carries the full JSON_TABLE syntax (row path + columns + ON ERROR),
+    // not just the JSON input, so the diagnostic is actionable.
+    assert(e1.getMessage.contains(
+      "JSON_TABLE({\"items\":[{\"x\":1}]}, '$.items[*].x' " +
+        "COLUMNS (x INT PATH '$.x') NULL ON ERROR)"))
 
     val e2 = intercept[AnalysisException] {
       sql(
