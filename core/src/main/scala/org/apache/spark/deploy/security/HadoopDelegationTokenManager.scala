@@ -110,7 +110,8 @@ private[spark] class HadoopDelegationTokenManager(
   /** @return Whether delegation token renewal is enabled. */
   def renewalEnabled: Boolean = {
     hasKerberosCredentials ||
-      (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED) && delegationTokenProviders.nonEmpty)
+      (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED) &&
+        delegationTokenProviders.values.exists(_.delegationTokensRequired(sparkConf, hadoopConf)))
   }
 
   /**
