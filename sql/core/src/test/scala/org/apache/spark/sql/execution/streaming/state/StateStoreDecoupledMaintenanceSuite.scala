@@ -626,9 +626,13 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
 
   test("canProcess is false and maintenance is skipped " +
       "when provider has already been unloaded") {
-    val logAppender = new LogAppender("canProcess-log", maxEvents = 100)
+    val logAppender = new LogAppender("canProcess-log", maxEvents = 1000)
     logAppender.setThreshold(Level.INFO)
-    withLogAppender(logAppender, level = Some(Level.INFO)) {
+    // Scope to the StateStore logger so unrelated INFO logs (e.g. a streaming
+    // query leaked from a prior suite) cannot flood the appender and trip its cap.
+    val loggerName = StateStore.getClass.getName.stripSuffix("$")
+    withLogAppender(logAppender,
+        loggerNames = Seq(loggerName), level = Some(Level.INFO)) {
       withSparkContext { sc =>
         withCoordinatorRef(sc) { _ =>
           val storeConf = maintenanceStoreConf(
@@ -659,9 +663,13 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
 
   test("canProcess is false and maintenance is skipped " +
       "when provider instance differs") {
-    val logAppender = new LogAppender("canProcess-stale-log", maxEvents = 100)
+    val logAppender = new LogAppender("canProcess-stale-log", maxEvents = 1000)
     logAppender.setThreshold(Level.INFO)
-    withLogAppender(logAppender, level = Some(Level.INFO)) {
+    // Scope to the StateStore logger so unrelated INFO logs (e.g. a streaming
+    // query leaked from a prior suite) cannot flood the appender and trip its cap.
+    val loggerName = StateStore.getClass.getName.stripSuffix("$")
+    withLogAppender(logAppender,
+        loggerNames = Seq(loggerName), level = Some(Level.INFO)) {
       withSparkContext { sc =>
         withCoordinatorRef(sc) { _ =>
           // Long interval so we can block the cleanup pool before the
@@ -989,17 +997,15 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
         val logAppender = new LogAppender("triggerNow-warn", maxEvents = 100)
         logAppender.setThreshold(Level.WARN)
         withLogAppender(logAppender, level = Some(Level.WARN)) {
-          // Use WithoutLock to avoid deadlock from stopMaintenanceTask
-          // holding loadedProviders lock while awaiting pool termination, but
-          // pool threads needing to acquire the same lock.
-          StateStore.stopMaintenanceTaskWithoutLock()
-          // triggerPending may still be set by a concurrent/in-flight cycle at
-          // this point. Reset it so the compareAndSet in triggerNow is
-          // guaranteed to proceed and actually submit to the (now stopped)
-          // executor, exercising the rejection path this assertion verifies.
-          // Without this, triggerNow could no-op and the warning would never
-          // be logged.
-          triggerPending.set(false)
+          // Stop the captured task's scheduler directly so triggerNow below
+          // submits to the exact executor we just shut down. Going through
+          // StateStore.stopMaintenanceTaskWithoutLock() stops whatever is in the
+          // global maintenanceTask field, which a concurrent query in the same
+          // JVM can have replaced, leaving this task's executor alive so
+          // triggerNow never hits the rejection path this assertion verifies.
+          // Stopping the task directly also holds no lock, so there is no
+          // deadlock with pool threads awaiting the loadedProviders lock.
+          task.stopAndAwait()
           task.triggerNow()
           assert(!triggerPending.get(), "reset after rejection")
           assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage
