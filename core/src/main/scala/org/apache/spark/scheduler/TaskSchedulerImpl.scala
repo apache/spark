@@ -185,13 +185,14 @@ private[spark] class TaskSchedulerImpl(
 
   val rootPool: Pool = new Pool("", schedulingMode, 0, 0, rootPoolSchedulingAlgorithm())
 
-  // Resolves the ordering algorithm for the root pool. When a custom class is configured via
-  // spark.scheduler.rootPool.algorithm.class it is instantiated (reflectively, using its no-arg
-  // constructor); otherwise the built-in algorithm derived from the scheduling mode is used.
+  // Resolves the ordering algorithm for the root pool. When a custom comparator class is
+  // configured via spark.scheduler.rootPool.comparator.class it is instantiated (reflectively,
+  // using its no-arg constructor) and wrapped so it receives immutable SchedulableInfo snapshots;
+  // otherwise the built-in algorithm derived from the scheduling mode is used.
   private def rootPoolSchedulingAlgorithm(): SchedulingAlgorithm = {
-    conf.get(SCHEDULER_ROOT_POOL_ALGORITHM_CLASS) match {
+    conf.get(SCHEDULER_ROOT_POOL_COMPARATOR_CLASS) match {
       case Some(className) =>
-        Utils.classForName[SchedulingAlgorithm](className).getConstructor().newInstance()
+        Pool.schedulingAlgorithmFor(className)
       case None =>
         Pool.schedulingAlgorithmFor(schedulingMode)
     }

@@ -2487,13 +2487,13 @@ package object config {
       .enumConf(SchedulingMode)
       .createWithDefault(SchedulingMode.FIFO)
 
-  private[spark] val SCHEDULER_ROOT_POOL_ALGORITHM_CLASS =
-    ConfigBuilder("spark.scheduler.rootPool.algorithm.class")
+  private[spark] val SCHEDULER_ROOT_POOL_COMPARATOR_CLASS =
+    ConfigBuilder("spark.scheduler.rootPool.comparator.class")
       .doc("Fully qualified name of a class implementing " +
-        "org.apache.spark.scheduler.SchedulingAlgorithm, used to order the scheduler's root " +
-        "pool. The class must have a no-argument constructor. When unset, the ordering is " +
-        "derived from spark.scheduler.mode (FAIR or FIFO). In FAIR mode the root pool orders " +
-        "the top-level pools; in FIFO mode it orders the task sets directly.")
+        "java.util.Comparator<org.apache.spark.scheduler.SchedulableInfo>, used to order the " +
+        "scheduler's root pool. The class must have a no-argument constructor. When unset, " +
+        "the ordering is derived from spark.scheduler.mode (FAIR or FIFO). In FAIR mode the " +
+        "root pool orders the top-level pools; in FIFO mode it orders the task sets directly.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf

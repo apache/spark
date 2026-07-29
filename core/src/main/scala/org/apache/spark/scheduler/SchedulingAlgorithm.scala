@@ -17,21 +17,14 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.annotation.DeveloperApi
+import java.util.Comparator
 
 /**
- * :: DeveloperApi ::
- * An interface for the sort algorithm used to order schedulable entities (pools or task sets).
+ * An interface for sort algorithm
  * FIFO: FIFO algorithm between TaskSetManagers
  * FS: FS algorithm between Pools, and FIFO or FS within Pools
- *
- * `comparator` follows `sortWith` semantics: it returns `true` if `s1` should be scheduled before
- * `s2`. A custom implementation can be installed on the root pool via the configuration
- * `spark.scheduler.rootPool.algorithm.class`; the implementing class must have a no-argument
- * constructor.
  */
-@DeveloperApi
-trait SchedulingAlgorithm {
+private[spark] trait SchedulingAlgorithm {
   def comparator(s1: Schedulable, s2: Schedulable): Boolean
 }
 
@@ -82,3 +75,18 @@ private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm {
   }
 }
 
+/**
+ * A [[SchedulingAlgorithm]] that orders schedulables with a user-supplied
+ * `java.util.Comparator[SchedulableInfo]`. Each schedulable is captured as an immutable
+ * [[SchedulableInfo]] snapshot before being compared, so custom orderings never observe Spark's
+ * internal, mutable `Schedulable` hierarchy. Following `sortWith` semantics, `s1` is scheduled
+ * before `s2` when the comparator ranks its snapshot as strictly smaller.
+ */
+private[spark] class ComparatorBasedSchedulingAlgorithm(
+    infoComparator: Comparator[SchedulableInfo]) extends SchedulingAlgorithm {
+  override def comparator(s1: Schedulable, s2: Schedulable): Boolean = {
+    val left = SchedulableInfo(s1)
+    val right = SchedulableInfo(s2)
+    infoComparator.compare(left, right) < 0
+  }
+}

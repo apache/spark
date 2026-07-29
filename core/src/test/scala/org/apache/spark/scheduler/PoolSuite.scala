@@ -18,13 +18,13 @@
 package org.apache.spark.scheduler
 
 import java.io.FileNotFoundException
-import java.util.Properties
+import java.util.{Comparator, Properties}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
-import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE, SCHEDULER_ROOT_POOL_ALGORITHM_CLASS}
+import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE, SCHEDULER_ROOT_POOL_COMPARATOR_CLASS}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.Utils
@@ -300,13 +300,14 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("SPARK-58126: a custom SchedulingAlgorithm injected into a Pool overrides the ordering") {
+  test("SPARK-58126: a custom comparator injected into a Pool overrides the ordering") {
     sc = new SparkContext(LOCAL, APP_NAME)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
     // The root pool would order its children by ascending name in FAIR mode; the injected
-    // algorithm orders them by descending name instead.
-    val rootPool = new Pool("", FAIR, 0, 0, new DescendingNameSchedulingAlgorithm)
+    // comparator orders them by descending name instead.
+    val algorithm = Pool.schedulingAlgorithmFor(classOf[DescendingNameComparator].getName)
+    val rootPool = new Pool("", FAIR, 0, 0, algorithm)
     val pool1 = new Pool("1", FIFO, 0, 1)
     val pool2 = new Pool("2", FIFO, 0, 1)
     rootPool.addSchedulable(pool1)
@@ -320,15 +321,15 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     scheduleTaskAndVerifyId(1, rootPool, 1)
   }
 
-  test("SPARK-58126: spark.scheduler.rootPool.algorithm.class overrides the root pool ordering") {
+  test("SPARK-58126: spark.scheduler.rootPool.comparator.class overrides the root pool ordering") {
     val conf = new SparkConf()
       .set(SCHEDULER_MODE.key, "FAIR")
-      .set(SCHEDULER_ROOT_POOL_ALGORITHM_CLASS.key,
-        classOf[DescendingNameSchedulingAlgorithm].getName)
+      .set(SCHEDULER_ROOT_POOL_COMPARATOR_CLASS.key,
+        classOf[DescendingNameComparator].getName)
     sc = new SparkContext(LOCAL, APP_NAME, conf)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
-    // The root pool is created by TaskSchedulerImpl using the configured algorithm.
+    // The root pool is created by TaskSchedulerImpl using the configured comparator.
     val rootPool = taskScheduler.rootPool
     val pool1 = new Pool("1", FIFO, 0, 1)
     val pool2 = new Pool("2", FIFO, 0, 1)
@@ -342,11 +343,11 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
     scheduleTaskAndVerifyId(1, rootPool, 1)
   }
 
-  test("SPARK-58126: root pool algorithm class is applied in FIFO mode as well") {
+  test("SPARK-58126: root pool comparator class is applied in FIFO mode as well") {
     val conf = new SparkConf()
       .set(SCHEDULER_MODE.key, "FIFO")
-      .set(SCHEDULER_ROOT_POOL_ALGORITHM_CLASS.key,
-        classOf[DescendingNameSchedulingAlgorithm].getName)
+      .set(SCHEDULER_ROOT_POOL_COMPARATOR_CLASS.key,
+        classOf[DescendingNameComparator].getName)
     sc = new SparkContext(LOCAL, APP_NAME, conf)
     val taskScheduler = new TaskSchedulerImpl(sc)
 
@@ -481,11 +482,12 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
 }
 
 /**
- * A [[SchedulingAlgorithm]] that orders schedulables by descending name. It is deliberately the
- * opposite of the built-in ordering (which breaks ties by ascending name), so tests can
- * unambiguously detect that a custom algorithm was installed. It is a top-level class with a
- * no-argument constructor so it can be instantiated reflectively from configuration.
+ * A `java.util.Comparator[SchedulableInfo]` that orders schedulables by descending name. It is
+ * deliberately the opposite of the built-in ordering (which breaks ties by ascending name), so
+ * tests can unambiguously detect that a custom comparator was installed. It is a top-level class
+ * with a no-argument constructor so it can be instantiated reflectively from configuration.
  */
-class DescendingNameSchedulingAlgorithm extends SchedulingAlgorithm {
-  override def comparator(s1: Schedulable, s2: Schedulable): Boolean = s1.name > s2.name
+class DescendingNameComparator extends Comparator[SchedulableInfo] {
+  override def compare(left: SchedulableInfo, right: SchedulableInfo): Int =
+    right.name.compareTo(left.name)
 }

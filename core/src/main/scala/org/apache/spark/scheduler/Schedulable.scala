@@ -21,19 +21,16 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
- * :: DeveloperApi ::
- * An interface for schedulable entities (there are two types: Pools and TaskSetManagers).
- *
- * Only the read-only scheduling properties below are part of the public API surface; they are the
- * inputs a custom [[SchedulingAlgorithm]] can inspect in its `comparator`. The structural and
- * mutating members are Spark-internal (`private[spark]`) and must not be used by applications.
+ * An interface for schedulable entities.
+ * there are two type of Schedulable entities(Pools and TaskSetManagers)
  */
-@DeveloperApi
-trait Schedulable {
+private[spark] trait Schedulable {
+  var parent: Pool
+  // child queues
+  def schedulableQueue: ConcurrentLinkedQueue[Schedulable]
   def schedulingMode: SchedulingMode
   def weight: Int
   def minShare: Int
@@ -42,16 +39,12 @@ trait Schedulable {
   def stageId: Int
   def name: String
 
-  private[spark] var parent: Pool
-  // child queues
-  private[spark] def schedulableQueue: ConcurrentLinkedQueue[Schedulable]
-  private[spark] def isSchedulable: Boolean
-  private[spark] def addSchedulable(schedulable: Schedulable): Unit
-  private[spark] def removeSchedulable(schedulable: Schedulable): Unit
-  private[spark] def getSchedulableByName(name: String): Schedulable
-  private[spark] def executorLost(
-      executorId: String, host: String, reason: ExecutorLossReason): Unit
-  private[spark] def executorDecommission(executorId: String): Unit
-  private[spark] def checkSpeculatableTasks(minTimeToSpeculation: Long): Boolean
-  private[spark] def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager]
+  def isSchedulable: Boolean
+  def addSchedulable(schedulable: Schedulable): Unit
+  def removeSchedulable(schedulable: Schedulable): Unit
+  def getSchedulableByName(name: String): Schedulable
+  def executorLost(executorId: String, host: String, reason: ExecutorLossReason): Unit
+  def executorDecommission(executorId: String): Unit
+  def checkSpeculatableTasks(minTimeToSpeculation: Long): Boolean
+  def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager]
 }

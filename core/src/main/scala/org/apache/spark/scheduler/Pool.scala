@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.util.Comparator
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 import scala.collection.mutable.ArrayBuffer
@@ -24,6 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.util.Utils
 
 /**
  * A Schedulable entity that represents collection of Pools or TaskSetManagers
@@ -137,5 +139,16 @@ private[spark] object Pool {
         val msg = s"Unsupported scheduling mode: $schedulingMode. Use FAIR or FIFO instead."
         throw new IllegalArgumentException(msg)
     }
+  }
+
+  /**
+   * Instantiates the named `java.util.Comparator[SchedulableInfo]` (which must have a no-argument
+   * constructor) and wraps it in a [[SchedulingAlgorithm]] that orders schedulables by comparing
+   * their immutable snapshots.
+   */
+  def schedulingAlgorithmFor(className: String): SchedulingAlgorithm = {
+    val comparator =
+      Utils.classForName[Comparator[SchedulableInfo]](className).getConstructor().newInstance()
+    new ComparatorBasedSchedulingAlgorithm(comparator)
   }
 }
