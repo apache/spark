@@ -91,6 +91,9 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     if (simplifiedTraceback) {
       envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
     }
+    if (tracebackWithLocals) {
+      envVars.put("SPARK_TRACEBACK_WITH_LOCALS", "1")
+    }
     workerMemoryMb.foreach { memoryMb =>
       envVars.put("PYSPARK_PLANNER_MEMORY_MB", memoryMb.toString)
     }
