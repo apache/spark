@@ -45,7 +45,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Single MemoryStream reused across both pipeline runs so the streaming checkpoint can
@@ -87,7 +87,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Single MemoryStream reused across both runs so the streaming checkpoint can resume.
@@ -128,7 +128,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     // leading column.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(name STRING, id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(name STRING, id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(String, Int, Long)]
@@ -163,7 +163,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(value STRING, id INT NOT NULL, region STRING NOT NULL, " +
-      s"version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(String, Int, String, Long)]
@@ -188,7 +188,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, Long)]
@@ -213,7 +213,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Single MemoryStream reused across both runs so the streaming checkpoint can resume.
@@ -267,7 +267,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     // would have to be escaped by doubling, but none of these names contain one.
     val targetTableDdl = keyNames
       .map(name => s"`$name` STRING NOT NULL")
-      .mkString(", ") + s", version BIGINT NOT NULL, $cdcMetadataDdl"
+      .mkString(", ") + s", version BIGINT NOT NULL, $scd1MetadataDdl"
     spark.sql(s"CREATE TABLE $catalog.$namespace.target ($targetTableDdl)")
 
     // The AutoCDC API runs every key through `UnqualifiedColumnName.apply`, which calls

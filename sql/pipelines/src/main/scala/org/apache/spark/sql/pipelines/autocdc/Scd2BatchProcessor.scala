@@ -1335,7 +1335,7 @@ object Scd2BatchProcessor {
    * CDC metadata column field that represents the exact time (sequence) of the CDC event that
    * produced this row. Null only for synthetic decomposition tails.
    */
-  private[autocdc] val recordStartAtFieldName: String = "__RECORD_START_AT"
+  private[pipelines] val recordStartAtFieldName: String = "__RECORD_START_AT"
 
   /**
    * Aux-table only column that holds the microbatch id by which a row was logically
