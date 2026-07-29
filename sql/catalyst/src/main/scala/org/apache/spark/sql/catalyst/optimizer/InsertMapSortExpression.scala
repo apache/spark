@@ -40,25 +40,6 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
   import InsertMapSortExpression._
 
-  private def distinctAggregateChildren(
-      aggregateExpressions: Seq[NamedExpression]): Seq[Expression] = {
-    aggregateExpressions
-      .flatMap(_.collect {
-        case ae: AggregateExpression if ae.isDistinct => ae
-      })
-      .flatMap(_.aggregateFunction.children)
-  }
-
-  private def expressionsToNormalize(agg: Aggregate): Seq[Expression] = {
-    val distinctExpressions =
-      if (conf.getConf(SQLConf.INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED)) {
-        distinctAggregateChildren(agg.aggregateExpressions)
-      } else {
-        Seq.empty
-      }
-    agg.groupingExpressions ++ distinctExpressions
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.containsPattern(AGGREGATE)) {
       return plan
@@ -107,6 +88,25 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
         val newAgg = Aggregate(newGroupingKeys, newAggregateExprs, newChild, hint)
         newAgg -> agg.output.zip(newAgg.output)
     }
+  }
+
+  private def expressionsToNormalize(agg: Aggregate): Seq[Expression] = {
+    val distinctExpressions =
+      if (conf.getConf(SQLConf.INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED)) {
+        distinctAggregateChildren(agg.aggregateExpressions)
+      } else {
+        Seq.empty
+      }
+    agg.groupingExpressions ++ distinctExpressions
+  }
+
+  private def distinctAggregateChildren(
+      aggregateExpressions: Seq[NamedExpression]): Seq[Expression] = {
+    aggregateExpressions
+      .flatMap(_.collect {
+        case ae: AggregateExpression if ae.isDistinct => ae
+      })
+      .flatMap(_.aggregateFunction.children)
   }
 }
 
