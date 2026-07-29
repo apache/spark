@@ -982,7 +982,7 @@ The following options provides finer-grained control for this feature:
   <td>2.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.security.credentials.directProviders.enabled</code></td>
+  <td><code>spark.security.directCredentialProviders.enabled</code></td>
   <td><code>false</code></td>
   <td>
     When true, enables credential collection and renewal without Kerberos. Providers
