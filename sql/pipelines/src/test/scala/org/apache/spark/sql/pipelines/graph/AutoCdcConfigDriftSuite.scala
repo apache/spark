@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
-import org.apache.spark.sql.pipelines.utils.ExecutionTest
+import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -232,5 +232,217 @@ class AutoCdcConfigDriftSuite
       scdType = ScdType.Type2,
       trackHistorySelection = Some(ColumnSelection.IncludeColumns(
         Seq(UnqualifiedColumnName("amount"), UnqualifiedColumnName("name"))))))
+  }
+
+  test("an SCD2 flow with no TRACK HISTORY (default = all eligible columns) followed by an " +
+    "explicit selection of that same set does NOT trigger drift") {
+    createScd2Target("id INT NOT NULL, name STRING, amount INT, seq BIGINT")
+
+    // Pipeline #1 omits trackHistorySelection: the recorded set is the default, every eligible
+    // (non-key, non-framework) column, i.e. name, amount, seq.
+    val stream1 = MemoryStream[(Int, String, Int, Long)]
+    stream1.addData((1, "a", 10, 1L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v1",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "name", "amount", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2))
+
+    // Pipeline #2 explicitly lists that same default set: the drift check compares resolved sets,
+    // not user syntax, so an explicit restatement of the default must NOT drift.
+    val stream2 = MemoryStream[(Int, String, Int, Long)]
+    stream2.addData((1, "a", 20, 2L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v2",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "name", "amount", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2,
+      trackHistorySelection = Some(ColumnSelection.IncludeColumns(Seq(
+        UnqualifiedColumnName("name"),
+        UnqualifiedColumnName("amount"),
+        UnqualifiedColumnName("seq"))))))
+  }
+
+  test("an SCD2 flow with no TRACK HISTORY (default = all eligible columns) followed by an " +
+    "explicit subset triggers TRACK_HISTORY_DRIFT") {
+    createScd2Target("id INT NOT NULL, name STRING, amount INT, seq BIGINT")
+
+    // Pipeline #1 records the default set (name, amount, seq).
+    val stream1 = MemoryStream[(Int, String, Int, Long)]
+    stream1.addData((1, "a", 10, 1L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v1",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "name", "amount", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2))
+
+    // Pipeline #2 narrows to an explicit subset (name only): a real change to which transitions
+    // open a new record, so it must drift against the recorded default set.
+    val stream2 = MemoryStream[(Int, String, Int, Long)]
+    stream2.addData((1, "a", 20, 2L))
+    val ctx2 = singleAutoCdcFlowPipeline(
+      flowName = "flow_v2",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "name", "amount", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2,
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))))
+
+    val ex = intercept[RuntimeException] { runPipeline(ctx2) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "tableName" -> targetName,
+        "expectedTrackHistoryColumns" -> "name",
+        "recordedTrackHistoryColumns" -> "name, amount, seq"
+      )
+    )
+  }
+
+  test("an SCD2 flow's EXCEPT-based TRACK HISTORY followed by an equivalent explicit include " +
+    "set does NOT trigger drift") {
+    createScd2Target("id INT NOT NULL, name STRING, amount INT, seq BIGINT")
+
+    // Pipeline #1 uses TRACK HISTORY ON * EXCEPT (amount): the resolved set is the eligible
+    // columns minus `amount`, i.e. name, seq.
+    val stream1 = MemoryStream[(Int, String, Int, Long)]
+    stream1.addData((1, "a", 10, 1L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v1",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "name", "amount", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2,
+      trackHistorySelection = Some(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("amount"))))))
+
+    // Pipeline #2 states the same set as an explicit include list: EXCLUDE and INCLUDE that
+    // resolve to the same set must not drift, since only the resolved set is recorded.
+    val stream2 = MemoryStream[(Int, String, Int, Long)]
+    stream2.addData((1, "a", 20, 2L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v2",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "name", "amount", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2,
+      trackHistorySelection = Some(ColumnSelection.IncludeColumns(
+        Seq(UnqualifiedColumnName("name"), UnqualifiedColumnName("seq"))))))
+  }
+
+  test("SCD2 track-history drift validation is resolver-aware: a case-only difference does NOT " +
+    "trigger drift under the default (case-insensitive) resolver") {
+    createScd2Target("id INT NOT NULL, name STRING, amount INT, seq BIGINT")
+
+    // Pipeline #1 records track-history on `name`.
+    val stream1 = MemoryStream[(Int, String, Int, Long)]
+    stream1.addData((1, "a", 10, 1L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v1",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "name", "amount", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2,
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name"))))))
+
+    // Pipeline #2 selects `NAME` (different case). The source DF column is still lowercase `name`
+    // so it resolves against the schema; only the tracking-column casing differs. Under the
+    // default case-insensitive resolver the two sets are equal, so there must be no drift.
+    val stream2 = MemoryStream[(Int, String, Int, Long)]
+    stream2.addData((1, "a", 20, 2L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v2",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "name", "amount", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2,
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("NAME"))))))
+  }
+
+  test("an existing SCD2 aux table missing the trackHistoryColumnNames property requires a " +
+    "full refresh (AUXILIARY_TABLE_PROPERTY_MISSING)") {
+    // Back-compat guard: an SCD2 auxiliary table created before this change carries no
+    // trackHistoryColumnNames property. Track-history drift validation surfaces this as a
+    // structured AUXILIARY_TABLE_PROPERTY_MISSING (remedy: full refresh) rather than silently
+    // skipping the check. Simulate the pre-existing table by unsetting the property after the
+    // first run, then run again.
+    createScd2Target("id INT NOT NULL, name STRING, amount INT, seq BIGINT")
+
+    val stream = MemoryStream[(Int, String, Int, Long)]
+    def buildCtx(): TestGraphRegistrationContext =
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = stream.toDF().toDF("id", "name", "amount", "seq"),
+        keys = Seq("id"),
+        sequencing = $"seq",
+        scdType = ScdType.Type2)
+
+    stream.addData((1, "a", 10, 1L))
+    runPipeline(buildCtx())
+
+    // Drop the property to mimic an aux table materialized before this change.
+    spark.sql(
+      s"ALTER TABLE ${auxTableNameFor("target")} " +
+      s"UNSET TBLPROPERTIES ('${AutoCdcAuxiliaryTable.trackHistoryColumnNamesProperty}')"
+    )
+
+    stream.addData((1, "a", 20, 2L))
+    val ex = intercept[RuntimeException] { runPipeline(buildCtx()) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MISSING",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "tableName" -> targetName,
+        "propertyName" -> AutoCdcAuxiliaryTable.trackHistoryColumnNamesProperty
+      )
+    )
+  }
+
+  // ===========================================================================================
+  // Sequencing type: SCD2 expression-change symmetry with the SCD1 case above
+  // ===========================================================================================
+
+  test("an SCD2 flow that changes the sequencing expression but keeps the same type does NOT " +
+    "trigger drift") {
+    createScd2Target("id INT NOT NULL, seq BIGINT")
+
+    val stream1 = MemoryStream[(Int, Long)]
+    stream1.addData((1, 10L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v1",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2))
+
+    // A different expression over the same column, still yielding BIGINT: legal, no drift.
+    val stream2 = MemoryStream[(Int, Long)]
+    stream2.addData((1, 20L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v2",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq" + 1L,
+      scdType = ScdType.Type2))
   }
 }
