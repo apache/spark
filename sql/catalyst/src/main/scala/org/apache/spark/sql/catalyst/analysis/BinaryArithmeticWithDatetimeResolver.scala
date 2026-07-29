@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 import org.apache.spark.sql.types.{
   AnsiIntervalType,
+  AnyTimestampNanoType,
   AnyTimestampTypeExpression,
   CalendarIntervalType,
   DatetimeType,
@@ -74,6 +75,10 @@ object BinaryArithmeticWithDatetimeResolver {
         case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
           TimestampAddYMInterval(l, r)
         case (_: YearMonthIntervalType, TimestampType | TimestampNTZType) =>
+          TimestampAddYMInterval(r, l)
+        case (_: AnyTimestampNanoType, _: YearMonthIntervalType) =>
+          TimestampAddYMInterval(l, r)
+        case (_: YearMonthIntervalType, _: AnyTimestampNanoType) =>
           TimestampAddYMInterval(r, l)
         case (CalendarIntervalType, CalendarIntervalType) |
              (_: DayTimeIntervalType, _: DayTimeIntervalType) =>
@@ -111,6 +116,9 @@ object BinaryArithmeticWithDatetimeResolver {
         case (DateType, _: YearMonthIntervalType) =>
           DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, context.evalMode == EvalMode.ANSI)))
         case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
+          DatetimeSub(l, r, TimestampAddYMInterval(l,
+            UnaryMinus(r, context.evalMode == EvalMode.ANSI)))
+        case (_: AnyTimestampNanoType, _: YearMonthIntervalType) =>
           DatetimeSub(l, r, TimestampAddYMInterval(l,
             UnaryMinus(r, context.evalMode == EvalMode.ANSI)))
         case (CalendarIntervalType, CalendarIntervalType) |
