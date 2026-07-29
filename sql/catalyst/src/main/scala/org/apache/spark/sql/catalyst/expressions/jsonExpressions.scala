@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils,
-  JsonPathParser, JsonPathResult, JsonTableEvaluator, JsonToStructsEvaluator, JsonTupleEvaluator,
-  MultiGetJsonObjectEvaluator, PathInstruction, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
+  JsonPathParser, JsonPathResult, JsonTableEvaluator, JsonTablePathTrie, JsonToStructsEvaluator,
+  JsonTupleEvaluator, MultiGetJsonObjectEvaluator, PathInstruction, SchemaOfJsonEvaluator,
+  StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
@@ -509,6 +510,15 @@ case class JsonTable(
   @transient private lazy val columnPaths: Array[Seq[PathInstruction]] =
     columns.map(c => c.path.flatMap(JsonPathParser.parse).getOrElse(Nil)).toArray
 
+  // Prefix trie over the column paths, built once so every row's value/EXISTS columns are resolved
+  // in a single traversal of the item rather than one re-parse per column. Ordinality columns have
+  // no path and are excluded (their empty path must not be confused with a root path `$`, which is
+  // an included column reading the whole item).
+  @transient private lazy val columnTrie: JsonTablePathTrie = {
+    val include = columns.map(_.kind != JsonTableColumnKind.Ordinality).toArray
+    rowEvaluator.buildPathTrie(columnPaths, include)
+  }
+
   // One reusable Cast per non-ordinality column, evaluated against a single-slot mutable input
   // row. Building the Cast once (over a BoundReference) avoids allocating an expression tree per
   // row/column on the hot path. The source type is BooleanType for EXISTS, StringType otherwise.
@@ -534,6 +544,9 @@ case class JsonTable(
   }
 
   private def projectRow(item: UTF8String, ordinal: Long): InternalRow = {
+    // Resolve every value/EXISTS column in a single traversal of the item; ordinality slots are
+    // not in the trie and come back as Missing (filled below).
+    val resolved = rowEvaluator.navigateColumns(item, columnTrie, columns.length)
     val values = new Array[Any](columns.length)
     var i = 0
     while (i < columns.length) {
@@ -542,10 +555,10 @@ case class JsonTable(
           ordinal
         case JsonTableColumnKind.Exists =>
           // Present (including an explicit JSON null) counts as existing; only Missing is false.
-          val exists = rowEvaluator.navigate(item, columnPaths(i)) != JsonPathResult.Missing
+          val exists = resolved(i) != JsonPathResult.Missing
           castColumn(i, exists)
         case JsonTableColumnKind.Value =>
-          rowEvaluator.navigate(item, columnPaths(i)) match {
+          resolved(i) match {
             // `raw` is a re-parseable JSON fragment; unquote a scalar string so the column gets
             // its content (e.g. `"hi"` -> `hi`), then cast to the declared type.
             case JsonPathResult.Found(raw) => castColumn(i, rowEvaluator.unquotedString(raw))

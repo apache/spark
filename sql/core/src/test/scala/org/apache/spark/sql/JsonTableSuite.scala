@@ -220,6 +220,41 @@ class JsonTableSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Seq(Row(7), Row(8)))
   }
 
+  test("column path that is a prefix of another is resolved correctly") {
+    // `$.meta` both terminates a column and is a prefix of `$.meta.score` and `$.meta.name`, so
+    // all three (plus an EXISTS on the prefix) must resolve from the same item.
+    val json = """{"items":[{"meta":{"score":7,"name":"a"}},{"meta":{"score":8,"name":"b"}}]}"""
+    val df = sql(
+      s"""
+         |SELECT * FROM json_table(
+         |  '$json',
+         |  '$$.items[*]'
+         |  COLUMNS (
+         |    meta STRING PATH '$$.meta',
+         |    has_meta BOOLEAN EXISTS PATH '$$.meta',
+         |    score INT PATH '$$.meta.score',
+         |    name STRING PATH '$$.meta.name')
+         |) AS t
+       """.stripMargin)
+    checkAnswer(df, Seq(
+      Row("""{"score":7,"name":"a"}""", true, 7, "a"),
+      Row("""{"score":8,"name":"b"}""", true, 8, "b")))
+  }
+
+  test("ordinality-only table produces one numbered row per array element") {
+    // No path columns: every element still yields a row, numbered by ordinality, even when the
+    // element itself is a scalar (the item is never inspected for a value).
+    val df = sql(
+      """
+        |SELECT * FROM json_table(
+        |  '{"items":[10,20,30]}',
+        |  '$.items[*]'
+        |  COLUMNS (seq FOR ORDINALITY)
+        |) AS t
+      """.stripMargin)
+    checkAnswer(df, Seq(Row(1L), Row(2L), Row(3L)))
+  }
+
   test("column alias list from the table alias") {
     val json = """{"items":[{"id":1,"n":"a"}]}"""
     val df = sql(
