@@ -996,7 +996,13 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
         // After stop, triggerNow catches RejectedExecutionException and logs.
         val logAppender = new LogAppender("triggerNow-warn", maxEvents = 100)
         logAppender.setThreshold(Level.WARN)
-        withLogAppender(logAppender, level = Some(Level.WARN)) {
+        // Scope to the StateStore logger. Attaching to the root logger is unsafe
+        // here: concurrent suites in the same JVM mutate the root logger's level
+        // and appenders (each withLogAppender does setLevel/updateLoggers), which
+        // can drop the warning this assertion checks even though it was logged.
+        val loggerName = StateStore.getClass.getName.stripSuffix("$")
+        withLogAppender(logAppender,
+            loggerNames = Seq(loggerName), level = Some(Level.WARN)) {
           // Stop the captured task's scheduler directly so triggerNow below
           // submits to the exact executor we just shut down. Going through
           // StateStore.stopMaintenanceTaskWithoutLock() stops whatever is in the
