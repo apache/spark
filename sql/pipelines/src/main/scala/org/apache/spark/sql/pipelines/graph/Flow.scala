@@ -263,7 +263,7 @@ class AutoCdcMergeFlow(
       schemaName = "changeDataFeed",
       schema = df.schema,
       columnSelection = changeArgs.columnSelection,
-      caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
+      resolver = spark.sessionState.conf.resolver
     )
     // AutoCDC flows require all key columns to be present in the user-selected source schema,
     // so that they survive into the target table where SCD reconciliation needs them.
@@ -390,9 +390,7 @@ class AutoCdcMergeFlow(
       throw new AnalysisException(
         errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT",
         messageParameters = Map(
-          "caseSensitivity" -> CaseSensitivityLabels.of(
-            spark.sessionState.conf.caseSensitiveAnalysis
-          ),
+          "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
           "columnName" -> conflictingColumnName,
           "schemaName" -> "changeDataFeed",
           "reservedColumnNamePrefix" -> reservedPrefix
@@ -428,9 +426,7 @@ class AutoCdcMergeFlow(
         throw new AnalysisException(
           errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
           messageParameters = Map(
-            "caseSensitivity" -> CaseSensitivityLabels.of(
-              spark.sessionState.conf.caseSensitiveAnalysis
-            ),
+            "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
             "columnName" -> conflictingColumnName,
             "schemaName" -> "changeDataFeed",
             "scdType" -> changeArgs.storedAsScdType.label,
@@ -452,9 +448,7 @@ class AutoCdcMergeFlow(
         throw new AnalysisException(
           errorClass = "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA",
           messageParameters = Map(
-            "caseSensitivity" -> CaseSensitivityLabels.of(
-              spark.sessionState.conf.caseSensitiveAnalysis
-            ),
+            "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
             "keyColumnName" -> missingKey.name
           )
         )
@@ -478,7 +472,7 @@ class AutoCdcMergeFlow(
       Scd2BatchProcessor.computeTrackedHistoryColumns(
         schema = selectedSchema,
         changeArgs = changeArgs,
-        caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
+        resolver = spark.sessionState.conf.resolver
       )
     }
   }
