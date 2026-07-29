@@ -136,7 +136,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             case _ => false
           }
         }
-      case _ => false;
+      case _ => false
     }
   }
 
