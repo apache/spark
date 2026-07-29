@@ -77,21 +77,21 @@ private[spark] class HadoopDelegationTokenManager(
   require((principal == null) == (keytab == null),
     "Both principal and keytab must be defined, or neither.")
 
-  if (sparkConf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED)) {
+  if (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED)) {
     val hasEncryption = sparkConf.getBoolean("spark.ssl.rpc.enabled", false) ||
       (sparkConf.get(NETWORK_AUTH_ENABLED) &&
         (sparkConf.get(NETWORK_CRYPTO_ENABLED) || sparkConf.get(SASL_ENCRYPTION_ENABLED)))
     require(hasEncryption,
       "RPC channel encryption must be enabled when " +
-      "spark.security.credentials.directProviders.enabled is true: either " +
+      "spark.security.directCredentialProviders.enabled is true: either " +
       "spark.ssl.rpc.enabled=true, or spark.authenticate=true together with " +
       "spark.network.crypto.enabled or spark.authenticate.enableSaslEncryption. " +
       "Credential tokens must not be transmitted over unencrypted channels.")
   }
 
   private val delegationTokenProviders = loadProviders()
-  if (sparkConf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED) && delegationTokenProviders.isEmpty) {
-    logWarning("spark.security.credentials.directProviders.enabled is true but " +
+  if (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED) && delegationTokenProviders.isEmpty) {
+    logWarning("spark.security.directCredentialProviders.enabled is true but " +
       "no HadoopDelegationTokenProvider implementations were discovered. " +
       "Ensure provider JARs are on the classpath with META-INF/services registration.")
   }
@@ -110,7 +110,7 @@ private[spark] class HadoopDelegationTokenManager(
   /** @return Whether delegation token renewal is enabled. */
   def renewalEnabled: Boolean = {
     hasKerberosCredentials ||
-      (sparkConf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED) && delegationTokenProviders.nonEmpty)
+      (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED) && delegationTokenProviders.nonEmpty)
   }
 
   /**
@@ -177,7 +177,7 @@ private[spark] class HadoopDelegationTokenManager(
       if (!currentUser.equals(freshUGI)) {
         FileSystem.closeAllForUGI(freshUGI)
       }
-    } else if (sparkConf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED)) {
+    } else if (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED)) {
       val (newTokens, _, _) = obtainDelegationTokens(isolateFailures = true)
       creds.addAll(newTokens)
     }
@@ -272,18 +272,13 @@ private[spark] class HadoopDelegationTokenManager(
   private def obtainTokensAndScheduleRenewal(): Credentials = {
     val (creds, nextRenewal, failureCount) = if (hasKerberosCredentials) {
       val freshUGI = doLogin()
-      val currentUser = UserGroupInformation.getCurrentUser()
-      val result = freshUGI.doAs(
+      freshUGI.doAs(
         new PrivilegedExceptionAction[(Credentials, Long, Int)]() {
           override def run(): (Credentials, Long, Int) = {
             obtainDelegationTokens()
           }
         })
-      if (!currentUser.equals(freshUGI)) {
-        FileSystem.closeAllForUGI(freshUGI)
-      }
-      result
-    } else if (sparkConf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED)) {
+    } else if (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED)) {
       obtainDelegationTokens(isolateFailures = true)
     } else {
       // Reachable when ccache-based Kerberos credentials expired after start().
@@ -293,14 +288,19 @@ private[spark] class HadoopDelegationTokenManager(
         "credentials are available and direct credential providers are not enabled.")
     }
 
+    // If every direct provider failed and no tokens were obtained, throw so that
+    // updateTokensTask() skips distributing empty credentials and schedules a retry.
+    // This mirrors the Kerberos path, where a provider failure propagates instead of
+    // sending empty tokens to executors.
+    if (failureCount > 0 && nextRenewal == Long.MaxValue) {
+      throw new IllegalStateException(
+        "All direct credential providers failed to obtain delegation tokens.")
+    }
+
     // Scheduling does not require a privileged context (only token acquisition does).
     val now = System.currentTimeMillis
     val ratio = sparkConf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
-    val delay = if (failureCount > 0 && nextRenewal == Long.MaxValue) {
-      TimeUnit.SECONDS.toMillis(sparkConf.get(CREDENTIALS_RENEWAL_RETRY_WAIT))
-    } else {
-      (ratio * (nextRenewal - now)).toLong
-    }
+    val delay = (ratio * (nextRenewal - now)).toLong
     logInfo(log"Calculated delay on renewal is ${MDC(LogKeys.DELAY, delay)}," +
       log" based on next renewal ${MDC(LogKeys.NEXT_RENEWAL_TIME, nextRenewal)}" +
       log" and the ratio ${MDC(LogKeys.CREDENTIALS_RENEWAL_INTERVAL_RATIO, ratio)}," +

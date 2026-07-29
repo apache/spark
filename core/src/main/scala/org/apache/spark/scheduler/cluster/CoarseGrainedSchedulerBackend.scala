@@ -618,15 +618,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   override def start(): Unit = {
     setupTokenManager()
-    if (conf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED) && delegationTokenManager.isEmpty) {
-      logWarning("spark.security.credentials.directProviders.enabled is set but " +
+    if (conf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED) && delegationTokenManager.isEmpty) {
+      logWarning("spark.security.directCredentialProviders.enabled is set but " +
         "this cluster manager does not support credential distribution. " +
         "No tokens will be collected or renewed.")
     }
   }
 
   override protected def tokenManagerRequired(): Boolean = {
-    super.tokenManagerRequired() || conf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED)
+    super.tokenManagerRequired() || conf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED)
   }
 
   protected def createDriverEndpoint(): DriverEndpoint = new DriverEndpoint()

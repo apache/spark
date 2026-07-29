@@ -1730,8 +1730,8 @@ package object config {
       .checkValue(_ > 0, "The minimum renewal interval must be a positive time value.")
       .createWithDefaultString("30s")
 
-  private[spark] val CREDENTIALS_DIRECT_PROVIDERS_ENABLED =
-    ConfigBuilder("spark.security.credentials.directProviders.enabled")
+  private[spark] val DIRECT_CREDENTIAL_PROVIDERS_ENABLED =
+    ConfigBuilder("spark.security.directCredentialProviders.enabled")
       .doc(
         "When true, enables delegation token collection and renewal without Kerberos. " +
         "Providers are called directly (without doLogin/doAs) and participate in the " +

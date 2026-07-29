@@ -21,7 +21,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.Credentials
 import org.mockito.ArgumentCaptor
-import org.mockito.Mockito.{mock, verify}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, never, verify}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -36,7 +37,7 @@ private class TestNonKerberosTokenProvider extends HadoopDelegationTokenProvider
 
   override def delegationTokensRequired(
       sparkConf: SparkConf, hadoopConf: Configuration): Boolean =
-    sparkConf.getBoolean("spark.security.credentials.directProviders.enabled", false)
+    sparkConf.getBoolean("spark.security.directCredentialProviders.enabled", false)
 
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
@@ -68,7 +69,7 @@ private class TestFailingProvider extends HadoopDelegationTokenProvider {
 
   override def delegationTokensRequired(
       sparkConf: SparkConf, hadoopConf: Configuration): Boolean =
-    sparkConf.getBoolean("spark.security.credentials.directProviders.enabled", false)
+    sparkConf.getBoolean("spark.security.directCredentialProviders.enabled", false)
 
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
@@ -82,7 +83,7 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
   private val hadoopConf = new Configuration()
 
   private def baseConf: SparkConf = new SparkConf(false)
-    .set(CREDENTIALS_DIRECT_PROVIDERS_ENABLED, true)
+    .set(DIRECT_CREDENTIAL_PROVIDERS_ENABLED, true)
     .set(NETWORK_AUTH_ENABLED, true)
     .set(NETWORK_CRYPTO_ENABLED, true)
 
@@ -139,7 +140,7 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
 
   test("fails if no RPC encryption is enabled") {
     val sparkConf = new SparkConf(false)
-      .set(CREDENTIALS_DIRECT_PROVIDERS_ENABLED, true)
+      .set(DIRECT_CREDENTIAL_PROVIDERS_ENABLED, true)
 
     val e = intercept[IllegalArgumentException] {
       new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
@@ -149,7 +150,7 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
 
   test("accepts SASL encryption as sufficient") {
     val sparkConf = new SparkConf(false)
-      .set(CREDENTIALS_DIRECT_PROVIDERS_ENABLED, true)
+      .set(DIRECT_CREDENTIAL_PROVIDERS_ENABLED, true)
       .set(NETWORK_AUTH_ENABLED, true)
       .set(SASL_ENCRYPTION_ENABLED, true)
     val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
@@ -158,7 +159,7 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
 
   test("accepts SSL RPC encryption as sufficient") {
     val sparkConf = new SparkConf(false)
-      .set(CREDENTIALS_DIRECT_PROVIDERS_ENABLED, true)
+      .set(DIRECT_CREDENTIAL_PROVIDERS_ENABLED, true)
       .set("spark.ssl.rpc.enabled", "true")
     val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
     assert(manager.renewalEnabled)
@@ -179,6 +180,26 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
       val creds = SparkHadoopUtil.get.deserialize(msg.tokens)
       assert(creds.getSecretKey(new Text("test.direct.credential")) != null)
       assert(new String(creds.getSecretKey(new Text("test.direct.credential"))) === "test-token")
+    } finally {
+      manager.stop()
+    }
+  }
+
+  test("start() does not send empty credentials when all direct providers fail") {
+    val mockRef = mock(classOf[RpcEndpointRef])
+    // Disable the only succeeding provider so the failing provider is the sole active one,
+    // producing a total failure with no tokens obtained.
+    val sparkConf = baseConf
+      .set("spark.security.credentials.test-direct.enabled", "false")
+    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, mockRef)
+
+    try {
+      // On total failure, obtainTokensAndScheduleRenewal throws so updateTokensTask() skips
+      // distributing empty credentials and schedules a retry instead. start() returns null
+      // and no UpdateDelegationTokens message is ever sent to the executors.
+      val tokens = manager.start()
+      assert(tokens == null)
+      verify(mockRef, never()).send(any())
     } finally {
       manager.stop()
     }

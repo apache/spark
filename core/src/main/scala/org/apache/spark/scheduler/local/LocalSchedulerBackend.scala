@@ -130,7 +130,7 @@ private[spark] class LocalSchedulerBackend(
   }
 
   override protected def tokenManagerRequired(): Boolean = {
-    super.tokenManagerRequired() || conf.get(config.CREDENTIALS_DIRECT_PROVIDERS_ENABLED)
+    super.tokenManagerRequired() || conf.get(config.DIRECT_CREDENTIAL_PROVIDERS_ENABLED)
   }
 
   override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
