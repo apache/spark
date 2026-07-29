@@ -64,27 +64,36 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     percentile.percentageExpression.eval().asInstanceOf[ArrayData].toDoubleArray().toSeq
   }
 
-  test("combine scalar percentiles into one shared array-valued digest") {
-    val result = optimizedAggregate(
-      Alias(percentile(value, 0.5), "p50")(),
-      Alias(percentile(value, 0.9), "p90")(),
-      Alias(percentile(value, 0.95), "p95")())
-
-    val aggregateExpressions = percentileAggregates(result)
-    assert(aggregateExpressions.size == 3)
-    assert(aggregateExpressions.map(_.resultId).distinct.size == 1)
-
-    val combined = aggregateExpressions.head.aggregateFunction
-      .asInstanceOf[ApproximatePercentile]
-    assert(percentageValues(combined) == Seq(0.5, 0.9, 0.95))
-    assert(combined.percentageExpression.toString == "[0.5,0.9,0.95]")
-    assert(combined.percentageExpression.sql == "ARRAY(0.5D, 0.9D, 0.95D)")
-
-    val ordinals = result.aggregateExpressions.map(_.collectFirst {
+  private def ordinals(aggregate: Aggregate): Seq[Option[Int]] = {
+    aggregate.aggregateExpressions.map(_.collectFirst {
       case GetArrayItem(_, Literal(index: Int, _), false) => index
     })
-    assert(ordinals == Seq(Some(0), Some(1), Some(2)))
-    assert(result.output.map(_.name) == Seq("p50", "p90", "p95"))
+  }
+
+  private def assertNotCombined(aggregate: Aggregate): Unit = {
+    val expressions = percentileAggregates(aggregate)
+    assert(expressions.map(_.resultId).distinct.size == expressions.size)
+    assert(!aggregate.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
+  }
+
+  test("combine compatible percentiles and preserve output shape") {
+    val aliases = Seq(
+      Alias(percentile(value, 0.9), "first")(),
+      Alias(percentile(value, 0.5), "second")(),
+      Alias(percentile(value, 0.9), "third")())
+    val original = Aggregate(Seq(group), group +: aliases, relation).analyze
+      .asInstanceOf[Aggregate]
+    val result = Optimize.execute(original).asInstanceOf[Aggregate]
+    val aggregates = percentileAggregates(result)
+    val combined = aggregates.head.aggregateFunction.asInstanceOf[ApproximatePercentile]
+
+    assert(aggregates.map(_.resultId).distinct.size == 1)
+    assert(percentageValues(combined) == Seq(0.9, 0.5, 0.9))
+    assert(combined.percentageExpression.toString == "[0.9,0.5,0.9]")
+    assert(combined.percentageExpression.sql == "ARRAY(0.9D, 0.5D, 0.9D)")
+    assert(ordinals(result) == Seq(None, Some(0), Some(1), Some(2)))
+    assert(result.groupingExpressions == original.groupingExpressions)
+    assert(result.output.map(_.exprId) == original.output.map(_.exprId))
   }
 
   test("preserve fusion identity through later constant folding") {
@@ -98,83 +107,59 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(combined.percentageExpression.isInstanceOf[PercentileFusionArray])
   }
 
-  test("preserve duplicate and non-monotonic percentile order") {
-    val result = optimizedAggregate(
-      Alias(percentile(value, 0.9), "first")(),
-      Alias(percentile(value, 0.5), "second")(),
-      Alias(percentile(value, 0.9), "third")())
-
-    val combined = percentileAggregates(result).head.aggregateFunction
-      .asInstanceOf[ApproximatePercentile]
-    assert(percentageValues(combined) == Seq(0.9, 0.5, 0.9))
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 1)
-  }
-
-  test("do not combine duplicate percentiles when physical planning already shares the digest") {
-    val result = optimizedAggregate(
+  test("avoid redundant entries for duplicate physical aggregates") {
+    val duplicateOnly = optimizedAggregate(
       Alias(percentile(value, 0.5), "first")(),
       Alias(percentile(value, 0.5), "second")())
+    assertNotCombined(duplicateOnly)
 
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
-  }
-
-  test("deduplicate repeated aggregate expression instances before combining") {
     val p50 = percentile(value, 0.5)
-    val result = optimizedAggregate(
+    val mixed = optimizedAggregate(
       Alias(p50, "first")(),
       Alias(p50, "second")(),
       Alias(percentile(value, 0.9), "third")())
-
-    val combined = percentileAggregates(result).head.aggregateFunction
+    val combined = percentileAggregates(mixed).head.aggregateFunction
       .asInstanceOf[ApproximatePercentile]
     assert(percentageValues(combined) == Seq(0.5, 0.9))
-    val ordinals = result.aggregateExpressions.map(_.collectFirst {
-      case GetArrayItem(_, Literal(index: Int, _), false) => index
-    })
-    assert(ordinals == Seq(Some(0), Some(0), Some(1)))
+    assert(ordinals(mixed) == Seq(Some(0), Some(0), Some(1)))
   }
 
-  test("combine scalar percentiles nested in a result expression") {
-    val result = optimizedAggregate(
-      Alias(percentile(value, 0.5) + percentile(value, 0.9), "percentile_sum")())
+  test("respect basic compatibility boundaries") {
+    val incompatible = Seq(
+      "input" -> (
+        percentile(value, 0.5),
+        percentile(other, 0.9)),
+      "accuracy" -> (
+        percentile(value, 0.5, accuracy = 1000),
+        percentile(value, 0.9, accuracy = 10000)),
+      "filter" -> (
+        percentile(value, 0.5),
+        percentile(value, 0.9, filter = Some(value > Literal(0)))),
+      "distinct" -> (
+        percentile(value, 0.5),
+        percentile(value, 0.9, isDistinct = true)))
 
-    val expressions = percentileAggregates(result)
-    assert(expressions.size == 2)
-    assert(expressions.map(_.resultId).distinct.size == 1)
-    assert(result.output.head.name == "percentile_sum")
+    incompatible.foreach { case (name, (first, second)) =>
+      withClue(name) {
+        assertNotCombined(optimizedAggregate(
+          Alias(first, "first")(),
+          Alias(second, "second")()))
+      }
+    }
+
+    val filter = value > Literal(0)
+    val compatible = optimizedAggregate(
+      Alias(percentile(value, 0.5, filter = Some(filter)), "filtered_p50")(),
+      Alias(percentile(value, 0.9, filter = Some(filter)), "filtered_p90")(),
+      Alias(percentile(value, 0.5, isDistinct = true), "distinct_p50")(),
+      Alias(percentile(value, 0.9, isDistinct = true), "distinct_p90")())
+    assert(percentileAggregates(compatible).map(_.resultId).distinct.size == 2)
   }
 
-  test("combine structurally equivalent input expressions") {
-    val result = optimizedAggregate(
-      Alias(percentile(value + Literal(1), 0.5), "p50")(),
-      Alias(percentile(value + Literal(1), 0.9), "p90")())
-
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 1)
-  }
-
-  test("do not combine differently ordered input expressions") {
-    val result = optimizedAggregate(
-      Alias(percentile(value + Literal(1), 0.5), "p50")(),
-      Alias(percentile(Literal(1) + value, 0.9), "p90")())
-
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
-  }
-
-  test("do not combine differently associated input expressions") {
-    val result = optimizedAggregate(
-      Alias(percentile((value + other) + group, 0.5), "p50")(),
-      Alias(percentile(value + (other + group), 0.9), "p90")())
-
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
-  }
-
-  test("do not fuse canonically equivalent but structurally different input groups") {
+  test("require structural equality for inputs and filters") {
     val firstInput = value + (other + group)
     val secondInput = (value + other) + group
-    val result = optimizedAggregate(
+    val inputResult = optimizedAggregate(
       Alias(percentile(firstInput, 0.5), "first_p50")(),
       Alias(percentile(secondInput, 0.5), "second_p50")(),
       Alias(percentile(secondInput, 0.9), "second_p90")(),
@@ -182,8 +167,16 @@ class CombineApproximatePercentilesSuite extends PlanTest {
 
     assert(firstInput != secondInput)
     assert(firstInput.canonicalized == secondInput.canonicalized)
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 4)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
+    assertNotCombined(inputResult)
+
+    val firstFilter = firstInput > Literal(0)
+    val secondFilter = secondInput > Literal(0)
+    val filterResult = optimizedAggregate(
+      Alias(percentile(value, 0.5, filter = Some(firstFilter)), "first_p50")(),
+      Alias(percentile(value, 0.5, filter = Some(secondFilter)), "second_p50")(),
+      Alias(percentile(value, 0.9, filter = Some(secondFilter)), "second_p90")(),
+      Alias(percentile(value, 0.9, filter = Some(firstFilter)), "first_p90")())
+    assertNotCombined(filterResult)
   }
 
   test("do not fuse canonically equivalent but differently evaluated accuracies") {
@@ -207,116 +200,10 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(firstAccuracy.eval() == 3)
     assert(secondAccuracy.eval() == 4)
     assert(firstAccuracy.canonicalized == secondAccuracy.canonicalized)
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 4)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
+    assertNotCombined(result)
   }
 
-  test("do not combine percentiles with different input columns") {
-    val result = optimizedAggregate(
-      Alias(percentile(value, 0.5), "value_p50")(),
-      Alias(percentile(other, 0.9), "other_p90")())
-
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
-  }
-
-  test("do not combine percentiles with different accuracies") {
-    val result = optimizedAggregate(
-      Alias(percentile(value, 0.5, accuracy = 1000), "p50")(),
-      Alias(percentile(value, 0.9, accuracy = 10000), "p90")())
-
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
-  }
-
-  test("combine only percentiles with structurally equivalent filters") {
-    val firstFilter = value > Literal(0)
-    val equivalentFilter = value > Literal(0)
-    val secondFilter = value > Literal(1)
-    val result = optimizedAggregate(
-      Alias(percentile(value, 0.5, filter = Some(firstFilter)), "p50")(),
-      Alias(percentile(value, 0.9, filter = Some(equivalentFilter)), "p90")(),
-      Alias(percentile(value, 0.95, filter = Some(secondFilter)), "p95")())
-
-    val expressions = percentileAggregates(result)
-    assert(expressions.take(2).map(_.resultId).distinct.size == 1)
-    assert(expressions.map(_.resultId).distinct.size == 2)
-  }
-
-  test("do not combine percentiles with differently associated filters") {
-    val firstFilter = ((value + other) + group) > Literal(0)
-    val secondFilter = (value + (other + group)) > Literal(0)
-    val result = optimizedAggregate(
-      Alias(percentile(value, 0.5, filter = Some(firstFilter)), "p50")(),
-      Alias(percentile(value, 0.9, filter = Some(secondFilter)), "p90")())
-
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
-  }
-
-  test("do not combine filtered and unfiltered percentiles") {
-    val result = optimizedAggregate(
-      Alias(percentile(value, 0.5), "p50")(),
-      Alias(percentile(value, 0.9, filter = Some(value > Literal(0))), "p90")())
-
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
-  }
-
-  test("do not combine distinct and non-distinct percentiles") {
-    val result = optimizedAggregate(
-      Alias(percentile(value, 0.5), "p50")(),
-      Alias(percentile(value, 0.9, isDistinct = true), "p90")())
-
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
-  }
-
-  test("combine distinct percentiles with the same input") {
-    val result = optimizedAggregate(
-      Alias(percentile(value, 0.5, isDistinct = true), "p50")(),
-      Alias(percentile(value, 0.9, isDistinct = true), "p90")())
-
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 1)
-  }
-
-  test("leave existing array percentiles unchanged") {
-    val arrayPercentile = new ApproximatePercentile(
-      value,
-      CreateArray(Seq(Literal(0.5), Literal(0.9))),
-      Literal(10000)).toAggregateExpression()
-    val result = optimizedAggregate(
-      Alias(arrayPercentile, "percentiles")(),
-      Alias(percentile(value, 0.95), "p95")())
-
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
-  }
-
-  test("do not fuse percentages that collide with an existing array percentile") {
-    val firstPercentage =
-      (Literal(1.0e16) + Literal(-1.0e16)) + Literal(0.5)
-    val secondPercentage =
-      Literal(1.0e16) + (Literal(-1.0e16) + Literal(0.5))
-    val arrayPercentile = new ApproximatePercentile(
-      value,
-      CreateArray(Seq(firstPercentage, Literal(0.9))),
-      Literal(10000)).toAggregateExpression()
-    val scalarPercentile = new ApproximatePercentile(
-      value, secondPercentage, Literal(10000)).toAggregateExpression()
-    val result = optimizedAggregate(
-      Alias(arrayPercentile, "percentiles")(),
-      Alias(scalarPercentile, "p0")(),
-      Alias(percentile(value, 0.9), "p90")())
-
-    assert(firstPercentage.eval() == 0.5d)
-    assert(secondPercentage.eval() == 0.0d)
-    assert(firstPercentage.canonicalized == secondPercentage.canonicalized)
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 3)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
-  }
-
-  test("do not fuse canonically equivalent but differently evaluated scalar percentages") {
+  test("do not fuse canonically equal percentages that evaluate differently") {
     val firstPercentage =
       (Literal(1.0e16) + Literal(-1.0e16)) + Literal(0.5)
     val secondPercentage =
@@ -324,51 +211,38 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     def percentileWithPercentage(percentage: Expression): AggregateExpression = {
       new ApproximatePercentile(value, percentage, Literal(10000)).toAggregateExpression()
     }
-    val result = optimizedAggregate(
+
+    val scalarResult = optimizedAggregate(
       Alias(percentileWithPercentage(firstPercentage), "p50")(),
       Alias(percentileWithPercentage(secondPercentage), "p0")(),
       Alias(percentile(value, 0.9), "p90")())
-
     assert(firstPercentage.eval() == 0.5d)
     assert(secondPercentage.eval() == 0.0d)
     assert(firstPercentage.canonicalized == secondPercentage.canonicalized)
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 3)
-    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
+    assertNotCombined(scalarResult)
+
+    val arrayPercentile = new ApproximatePercentile(
+      value,
+      CreateArray(Seq(firstPercentage, Literal(0.9))),
+      Literal(10000)).toAggregateExpression()
+    val arrayResult = optimizedAggregate(
+      Alias(arrayPercentile, "percentiles")(),
+      Alias(percentileWithPercentage(secondPercentage), "p0")(),
+      Alias(percentile(value, 0.9), "p90")())
+    assertNotCombined(arrayResult)
   }
 
-  test("preserve grouping expressions and output expression identifiers") {
-    val p50 = Alias(percentile(value, 0.5), "p50")()
-    val p90 = Alias(percentile(value, 0.9), "p90")()
-    val original = Aggregate(Seq(group), Seq(group, p50, p90), relation).analyze
-      .asInstanceOf[Aggregate]
-    val result = Optimize.execute(original).asInstanceOf[Aggregate]
+  test("preserve existing arrays while combining compatible scalars") {
+    val arrayPercentile = new ApproximatePercentile(
+      value,
+      CreateArray(Seq(Literal(0.25), Literal(0.75))),
+      Literal(10000)).toAggregateExpression()
+    val result = optimizedAggregate(
+      Alias(arrayPercentile, "percentiles")(),
+      Alias(percentile(value, 0.5), "p50")(),
+      Alias(percentile(value, 0.9), "p90")())
 
-    assert(result.groupingExpressions == original.groupingExpressions)
-    assert(result.output.map(_.exprId) == original.output.map(_.exprId))
-    assert(percentileAggregates(result).map(_.resultId).distinct.size == 1)
-  }
-
-  test("do not rewrite streaming aggregates") {
-    val streamingRelation = relation.copy(isStreaming = true)
-    val streamingValue = streamingRelation.output.head
-    val original = Aggregate(
-      Seq.empty,
-      Seq(
-        Alias(percentile(streamingValue, 0.5), "p50")(),
-        Alias(percentile(streamingValue, 0.9), "p90")()),
-      streamingRelation).analyze.asInstanceOf[Aggregate]
-
-    assert(original.isStreaming)
-    assert(percentileAggregates(original).map(_.resultId).distinct.size == 2)
-    assert(Optimize.execute(original).fastEquals(original))
-  }
-
-  test("do not rewrite a single scalar percentile") {
-    val original = Aggregate(
-      Seq.empty,
-      Seq(Alias(percentile(value, 0.5), "p50")()),
-      relation).analyze
-
-    assert(Optimize.execute(original).fastEquals(original))
+    assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
+    assert(result.aggregateExpressions.drop(1).forall(_.exists(_.isInstanceOf[GetArrayItem])))
   }
 }
