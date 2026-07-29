@@ -4863,6 +4863,7 @@ object functions {
    * }}}
    *
    * @group normal_funcs
+   * @since 1.5.0
    */
   def expr(expr: String): Column = Column(internal.SqlExpression(expr))
 
@@ -8371,6 +8372,7 @@ object functions {
    * @param count
    *   number of occurrences. A column that evaluates to an integral. Must be a constant.
    * @group string_funcs
+   * @since 1.5.0
    * @return
    *   Returns a column that evaluates to a string.
    */
@@ -16937,6 +16939,7 @@ object functions {
    *   a UserDefinedFunction that can be used as an aggregating expression.
    *
    * @group udf_funcs
+   * @since 3.0.0
    * @note
    *   The input encoder is inferred from the input type IN.
    */
@@ -16975,6 +16978,7 @@ object functions {
    *   a UserDefinedFunction that can be used as an aggregating expression
    *
    * @group udf_funcs
+   * @since 3.0.0
    * @note
    *   This overloading takes an explicit input encoder, to support UDAF declarations in Java.
    */
