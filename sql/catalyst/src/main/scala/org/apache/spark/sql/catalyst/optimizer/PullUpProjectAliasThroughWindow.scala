@@ -48,6 +48,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.WINDOW
  * An entry of the bottom project is pulled up only when:
  *   - it is an [[Alias]] (bare pass-through attributes stay below so the windows keep producing
  *     them for the top project to reference);
+ *   - it is deterministic: a nondeterministic alias (e.g. `rand()`, `spark_partition_id()`)
+ *     evaluated above the window's exchange/sort instead of below it could produce different
+ *     values, so it must stay below;
  *   - no window in the chain references it, so window semantics are unaffected;
  *   - all of its input attributes remain produced by the pruned bottom project (i.e. they are
  *     referenced by some window and thus retained), so a computed alias whose inputs would be
@@ -91,12 +94,15 @@ object PullUpProjectAliasThroughWindow extends Rule[LogicalPlan] {
         case _: Attribute => Nil
         case other => other.references
       })
-      // Pull up an alias only when: its inputs survive in the pruned bottom project, the top
-      // project passes its output through as a bare attribute, and the top project does not also
-      // consume that output inside an expression (which would require the windows to keep it).
+      // Pull up an alias only when: it is deterministic (a nondeterministic alias must not move
+      // across the window's exchange/sort, which would change its per-partition/per-row values);
+      // its inputs survive in the pruned bottom project; the top project passes its output through
+      // as a bare attribute; and the top project does not also consume that output inside an
+      // expression (which would require the windows to keep it).
       val pullUp = candidates.collect {
         case a: Alias
-            if a.references.subsetOf(retainedAttrs) &&
+            if a.deterministic &&
+              a.references.subsetOf(retainedAttrs) &&
               bareAttrs.contains(a.toAttribute) &&
               !referencedByExpr.contains(a.toAttribute) => a
       }
@@ -109,7 +115,15 @@ object PullUpProjectAliasThroughWindow extends Rule[LogicalPlan] {
         // carries below (e.g. across a subquery alias).
         val pullUpMap = AttributeMap(pullUp.map(a => a.toAttribute -> a))
         val newProjectList = projectList.map {
-          case attr: Attribute => pullUpMap.getOrElse(attr, attr)
+          // Rename the pulled-up alias to the top attribute's name: the lookup is keyed by expr id
+          // only, so a resolved top attribute may carry a different (but equivalent) cosmetic name
+          // than the lower alias. `withName` keeps the alias's child and expr id, so the output
+          // schema stays byte-for-byte identical.
+          case attr: Attribute =>
+            pullUpMap.get(attr) match {
+              case Some(a) => a.withName(attr.name)
+              case None => attr
+            }
           case other => other
         }
         val newLower = lower.copy(projectList = lower.projectList.filterNot(pullUpSet.contains))

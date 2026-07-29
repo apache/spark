@@ -32,8 +32,6 @@ class ProjectedOrderingAndPartitioningSuite
   extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
-  setupTestData()
-
   test("SPARK-42049: Improve AliasAwareOutputExpression - ordering - multi-alias") {
     Seq(0, 1, 2, 5).foreach { limit =>
       withSQLConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT.key -> limit.toString) {
@@ -707,6 +705,8 @@ class ProjectedOrderingAndPartitioningSuite
 
   test("SPARK-58405: eliminate redundant shuffle when aggregate groups by an alias of " +
     "the window partition key") {
+    // Register the `testData` view (scoped to just these tests that need it).
+    testData
     // The window output `vset` is consumed downstream so the window is not eliminated.
     // The window is hash-partitioned by `key`; the outer aggregate groups by `userid`, which is
     // an alias of `key`. Since `key` is already a partition key of the window, the outer
@@ -745,6 +745,8 @@ class ProjectedOrderingAndPartitioningSuite
 
   test("SPARK-58405: eliminate redundant shuffle for a repartition consumer of a window " +
     "partitioned by an aliased key") {
+    // Register the `testData` view (scoped to just these tests that need it).
+    testData
     // Consumer-agnostic: a repartition on `userid` (an alias of the window key `key`) reuses the
     // window's shuffle rather than adding its own.
     val df = sql(
@@ -766,6 +768,8 @@ class ProjectedOrderingAndPartitioningSuite
 
   test("SPARK-58405: eliminate redundant shuffle and sort for a window consumer partitioned " +
     "and ordered by aliased keys") {
+    // Register the `testData` view (scoped to just these tests that need it).
+    testData
     // Stacked windows: the outer window is PARTITION BY userid ORDER BY tstamp, where `userid`
     // and `tstamp` are aliases of the inner window's partition key `key` and order key `value`.
     // The inner window's child is already partitioned by `key` and ordered by `[key, value]`;
@@ -796,6 +800,8 @@ class ProjectedOrderingAndPartitioningSuite
   }
 
   test("SPARK-58405: eliminate redundant shuffle across a chain of windows over an aliased key") {
+    // Register the `testData` view (scoped to just these tests that need it).
+    testData
     // Two adjacent windows (different order specs, so they are not collapsed and leave no Project
     // between them) both partition by `key`; the aggregate downstream groups by `userid`, an alias
     // of `key`. Pulling `key AS userid` up across the whole window chain lets the parent project's
