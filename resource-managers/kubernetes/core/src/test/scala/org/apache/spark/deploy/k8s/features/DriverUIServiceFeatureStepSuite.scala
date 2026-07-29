@@ -57,18 +57,12 @@ class DriverUIServiceFeatureStepSuite extends SparkFunSuite {
     assert(uiSvc.getSpec.getPorts.get(0).getName === UI_PORT_NAME)
     assert(uiSvc.getSpec.getPorts.get(0).getPort.intValue() === 4080)
     assert(uiSvc.getSpec.getPorts.get(0).getTargetPort.getIntVal === 4080)
-
-    assert(step.getAdditionalPodSystemProperties()
-      .get(DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL)
-      === Some(s"${kconf.resourceNamePrefix}${DRIVER_UI_SVC_POSTFIX}"))
-    assert(step.getAdditionalPodSystemProperties()
-      .get(DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL)
-      === Some("4080"))
+    assert(step.getAdditionalPodSystemProperties().isEmpty)
   }
 
-  test("SPARK-58203: UI service honors explicit name and type overrides") {
+  test("SPARK-58203: spark.ui.port=0 defers the selector and honors name/type overrides") {
     val sparkConf = new SparkConf(false)
-      .set(UI_PORT, 4080)
+      .set(UI_PORT, 0)
       .set(KUBERNETES_DRIVER_UI_SERVICE_ENABLED, true)
       .set(KUBERNETES_DRIVER_UI_SERVICE_TYPE, "NodePort")
       .set(KUBERNETES_DRIVER_UI_SERVICE_NAME, "my-app-ui-svc")
@@ -76,29 +70,37 @@ class DriverUIServiceFeatureStepSuite extends SparkFunSuite {
     val step = new DriverUIServiceFeatureStep(kconf)
 
     val uiSvc = step.getAdditionalKubernetesResources().head.asInstanceOf[Service]
+    // Explicit name and type overrides are honored.
     assert(uiSvc.getMetadata.getName === "my-app-ui-svc")
     assert(uiSvc.getSpec.getType === "NodePort")
-
-    assert(step.getAdditionalPodSystemProperties()
-      .get(DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL)
-      === Some("my-app-ui-svc"))
-  }
-
-  test("SPARK-58203: spark.ui.port=0 substitutes the default UI port as Service placeholder") {
-    val sparkConf = new SparkConf(false)
-      .set(UI_PORT, 0)
-      .set(KUBERNETES_DRIVER_UI_SERVICE_ENABLED, true)
-    val kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
-    val step = new DriverUIServiceFeatureStep(kconf)
-
-    val uiSvc = step.getAdditionalKubernetesResources().head.asInstanceOf[Service]
+    // The default UI port stands in as a placeholder until the real bound port is patched.
     val expectedPlaceholder = UI_PORT.defaultValue.get
     assert(uiSvc.getSpec.getPorts.size === 1)
     assert(uiSvc.getSpec.getPorts.get(0).getPort.intValue() === expectedPlaceholder)
     assert(uiSvc.getSpec.getPorts.get(0).getTargetPort.getIntVal === expectedPlaceholder)
+    // The Service is created endpointless so it cannot route the placeholder port anywhere.
+    assert(uiSvc.getSpec.getSelector === null || uiSvc.getSpec.getSelector.isEmpty)
 
-    assert(step.getAdditionalPodSystemProperties()
-      .get(DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL)
+    // The name, placeholder port, and withheld selector are carried to the driver runtime for
+    // the patcher to resolve once the UI has bound.
+    val props = step.getAdditionalPodSystemProperties()
+    assert(props.get(DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL)
+      === Some("my-app-ui-svc"))
+    assert(props.get(DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL)
       === Some(expectedPlaceholder.toString))
+    val encoded = props.get(
+      DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_SELECTOR_INTERNAL)
+    assert(encoded.isDefined)
+    assert(DriverUIServiceFeatureStep.decodeSelector(encoded.get) === kconf.labels)
+  }
+
+  test("SPARK-58203: selector encode/decode round-trips label maps") {
+    val selector = Map(
+      "spark-app-selector" -> "spark-abc123",
+      "spark-role" -> "driver",
+      "app.kubernetes.io/name" -> "my.app-1")
+    val encoded = DriverUIServiceFeatureStep.encodeSelector(selector)
+    assert(DriverUIServiceFeatureStep.decodeSelector(encoded) === selector)
+    assert(DriverUIServiceFeatureStep.decodeSelector("") === Map.empty)
   }
 }
