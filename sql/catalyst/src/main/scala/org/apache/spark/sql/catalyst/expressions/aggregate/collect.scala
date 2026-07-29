@@ -365,7 +365,7 @@ case class CollectUnion(
   // The result array contains a null only when null elements are respected (RESPECT NULLS).
   override protected def bufferContainsNull: Boolean = !ignoreNulls
 
-  // Result is array<elementType>; nullable iff null elements are kept.
+  // Result is array<elementType>; containsNull is true iff null elements are kept.
   override def dataType: DataType = ArrayType(elementType, containsNull = bufferContainsNull)
 
   // The buffer stores distinct elements. Mirror CollectSet's keying so equality is correct
