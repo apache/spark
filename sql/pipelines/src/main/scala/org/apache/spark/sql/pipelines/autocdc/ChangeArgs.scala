@@ -133,8 +133,7 @@ private[pipelines] object CaseSensitivityLabels {
 
   /**
    * Maps a [[Resolver]] to its user-facing label. Classifies by reference identity against the
-   * two session resolver singletons, matching `SchemaUtils.isCaseSensitiveAnalysis`;
-   * `conf.resolver` only ever returns one of these two.
+   * two session resolver singletons, matching `SchemaUtils.isCaseSensitiveAnalysis`.
    */
   def of(resolver: Resolver): String = {
     if (resolver == caseSensitiveResolution) {
@@ -142,6 +141,7 @@ private[pipelines] object CaseSensitivityLabels {
     } else if (resolver == caseInsensitiveResolution) {
       CaseInsensitive
     } else {
+      // this should be unreachable because `conf.resolver` only ever returns one of these two.
       throw SparkException.internalError(s"Unknown resolver: $resolver")
     }
   }
