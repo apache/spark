@@ -30,6 +30,7 @@ import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, PYTHON_PACKAGES, PYTHON_VERSION}
+import org.apache.spark.internal.config._
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 import org.apache.spark.util.Utils
 
@@ -86,23 +87,23 @@ private[spark] object PythonUtils extends Logging {
   }
 
   def isEncryptionEnabled(sc: JavaSparkContext): Boolean = {
-    sc.conf.get(org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED)
+    sc.conf.get(IO_ENCRYPTION_ENABLED)
   }
 
   def getBroadcastThreshold(sc: JavaSparkContext): Long = {
-    sc.conf.get(org.apache.spark.internal.config.BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD)
+    sc.conf.get(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD)
   }
 
   def getPythonAuthSocketTimeout(sc: JavaSparkContext): Long = {
-    sc.conf.get(org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT)
+    sc.conf.get(Python.PYTHON_AUTH_SOCKET_TIMEOUT)
   }
 
   def getSparkBufferSize(sc: JavaSparkContext): Int = {
-    sc.conf.get(org.apache.spark.internal.config.BUFFER_SIZE)
+    sc.conf.get(BUFFER_SIZE)
   }
 
   def logPythonInfo(pythonExec: String): Unit = {
-    if (SparkEnv.get.conf.get(org.apache.spark.internal.config.Python.PYTHON_LOG_INFO)) {
+    if (SparkEnv.get.conf.get(Python.PYTHON_LOG_INFO)) {
       import scala.sys.process._
       def runCommand(process: ProcessBuilder): Option[String] = {
         try {

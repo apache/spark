@@ -80,7 +80,7 @@ def get_used_memory() -> int:
 
     else:
         if platform.system() == "Linux":
-            for line in open("/proc/self/status"):
+            for line in open("/proc/self/status", encoding="utf-8"):
                 if line.startswith("VmRSS:"):
                     return int(line.split()[1]) >> 10
 

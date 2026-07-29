@@ -118,11 +118,6 @@ object LiteralValueProtoConverter {
       case v: Date => builder.setDate(SparkDateTimeUtils.fromJavaDate(v))
       case v: Duration => builder.setDayTimeInterval(SparkIntervalUtils.durationToMicros(v))
       case v: Period => builder.setYearMonthInterval(SparkIntervalUtils.periodToMonths(v))
-      case v: LocalTime =>
-        builder.setTime(
-          builder.getTimeBuilder
-            .setNano(SparkDateTimeUtils.localTimeToNanos(v))
-            .setPrecision(TimeType.DEFAULT_PRECISION))
       case v: Array[_] => builder.setArray(arrayBuilder(v))
       case v: CalendarInterval =>
         builder.setCalendarInterval(calendarIntervalBuilder(v.months, v.days, v.microseconds))
@@ -235,11 +230,6 @@ object LiteralValueProtoConverter {
         builder.setMap(mapBuilder(v, keyType, valueType))
       case (v, structType: StructType) =>
         builder.setStruct(structBuilder(v, structType))
-      case (v: LocalTime, timeType: TimeType) =>
-        builder.setTime(
-          builder.getTimeBuilder
-            .setNano(SparkDateTimeUtils.localTimeToNanos(v))
-            .setPrecision(timeType.precision))
       case _ => toLiteralProtoBuilderInternal(literal, options)
     }
 
@@ -430,8 +420,6 @@ object LiteralValueProtoConverter {
         v => SparkIntervalUtils.microsToDuration(v.getDayTimeInterval)
       case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
         v => SparkIntervalUtils.monthsToPeriod(v.getYearMonthInterval)
-      case proto.DataType.KindCase.TIME =>
-        v => SparkDateTimeUtils.nanosToLocalTime(v.getTime.getNano)
       case proto.DataType.KindCase.DECIMAL => v => Decimal(v.getDecimal.getValue)
       case proto.DataType.KindCase.CALENDAR_INTERVAL =>
         v =>
@@ -594,12 +582,6 @@ object LiteralValueProtoConverter {
         builder.setYearMonthInterval(proto.DataType.YearMonthInterval.newBuilder().build())
       case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
         builder.setDayTimeInterval(proto.DataType.DayTimeInterval.newBuilder().build())
-      case proto.Expression.Literal.LiteralTypeCase.TIME =>
-        val timeBuilder = proto.DataType.Time.newBuilder()
-        if (literal.getTime.hasPrecision) {
-          timeBuilder.setPrecision(literal.getTime.getPrecision)
-        }
-        builder.setTime(timeBuilder.build())
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         if (literal.getArray.hasElementType) {
           builder.setArray(

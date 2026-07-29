@@ -321,7 +321,7 @@ class SeriesPlotMatplotlibTestsMixin:
             check_box_plot(p, k, showfliers=True)
             check_box_plot(p, k, sym="")
             check_box_plot(p, k, sym=".", color="r")
-            check_box_plot(p, k, use_index=False, labels=["Test"])
+            check_box_plot(p, k, use_index=False)
             check_box_plot(p, k, usermedians=[2.0])
             check_box_plot(p, k, conf_intervals=[(1.0, 3.0)])
 

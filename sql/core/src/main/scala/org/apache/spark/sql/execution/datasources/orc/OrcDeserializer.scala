@@ -149,6 +149,16 @@ class OrcDeserializer(
 
       case TimestampType => (ordinal, value) =>
         updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
+      case t: TimestampLTZNanosType => (ordinal, value) =>
+        val ts = value.asInstanceOf[OrcTimestamp]
+        val instant = ts.toInstant
+        updater.set(ordinal, DateTimeUtils.instantToTimestampNanos(instant, t.precision))
+      case t: TimestampNTZNanosType => (ordinal, value) =>
+        val ts = value.asInstanceOf[OrcTimestamp]
+        val localDateTime = ts.toLocalDateTime
+        updater.set(
+          ordinal,
+          DateTimeUtils.localDateTimeToTimestampNanos(localDateTime, t.precision))
 
       case DecimalType.Fixed(precision, scale) => (ordinal, value) =>
         val v = OrcShimUtils.getDecimal(value)

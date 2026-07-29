@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
@@ -31,6 +32,14 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
+
+/**
+ * Test helper trait mixed into the in-memory row-level operations so tests can verify that
+ * per-statement SQL options reach the operation via [[RowLevelOperationInfo#options]].
+ */
+trait RowLevelOperationWithOptions {
+  def options: CaseInsensitiveStringMap
+}
 
 class InMemoryRowLevelOperationTable private (
     name: String,
@@ -78,6 +87,14 @@ class InMemoryRowLevelOperationTable private (
   // used in row-level operation tests to verify passed records
   // (operation, id, metadata, row)
   var lastWriteLog: Seq[InternalRow] = Seq.empty
+  // used in delete-with-options tests to verify options reach the connector on the deleteWhere path
+  var lastDeleteOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+
+  override def deleteWhere(
+      predicates: Array[Predicate], options: CaseInsensitiveStringMap): Unit = {
+    lastDeleteOptions = options
+    deleteWhere(predicates)
+  }
 
   override def copy(): Table = {
     val copied = InMemoryRowLevelOperationTable.withColumns(
@@ -108,13 +125,14 @@ class InMemoryRowLevelOperationTable private (
   override def newRowLevelOperationBuilder(
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
     if (properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true") {
-      () => DeltaBasedOperation(info.command)
+      () => DeltaBasedOperation(info.command, info.options)
     } else {
-      () => PartitionBasedOperation(info.command)
+      () => PartitionBasedOperation(info.command, info.options)
     }
   }
 
-  case class PartitionBasedOperation(command: Command) extends RowLevelOperation {
+  case class PartitionBasedOperation(command: Command, options: CaseInsensitiveStringMap)
+    extends RowLevelOperation with RowLevelOperationWithOptions {
     var configuredScan: InMemoryBatchScan = _
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
@@ -183,7 +201,8 @@ class InMemoryRowLevelOperationTable private (
     }
   }
 
-  case class DeltaBasedOperation(command: Command) extends RowLevelOperation with SupportsDelta {
+  case class DeltaBasedOperation(command: Command, options: CaseInsensitiveStringMap)
+    extends RowLevelOperation with SupportsDelta with RowLevelOperationWithOptions {
     private final val PK_COLUMN_REF = FieldReference("pk")
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
@@ -311,5 +330,47 @@ object InMemoryRowLevelOperationTable {
       tableId: String = java.util.UUID.randomUUID().toString): InMemoryRowLevelOperationTable = {
     new InMemoryRowLevelOperationTable(
       name, columns, partitioning, properties, constraints, tableId)
+  }
+}
+
+/**
+ * An in-memory table that implements only [[TruncatableTable]] (NOT [[SupportsDeleteV2]]).
+ * Used to exercise the [[TruncateTableExec]] planning path for DELETE statements with no WHERE.
+ */
+class InMemoryTruncatableOnlyTable(
+    name: String,
+    columns: Array[Column],
+    partitioning: Array[Transform],
+    properties: util.Map[String, String],
+    constraints: Array[Constraint])
+  extends InMemoryBaseTable(name, columns, partitioning, properties, constraints)
+  with TruncatableTable {
+
+  var lastTruncateOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    InMemoryBaseTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
+    InMemoryBaseTable.maybeSimulateFailedTableWrite(info.options)
+    new InMemoryWriterBuilder(info) {
+      override def truncate(): WriteBuilder = {
+        writer = new TruncateAndAppend(this.info)
+        streamingWriter = new StreamingTruncateAndAppend(this.info)
+        this
+      }
+    }
+  }
+
+  override def truncateTable(): Boolean = {
+    lastTruncateOptions = CaseInsensitiveStringMap.empty()
+    dataMap.synchronized { dataMap.clear() }
+    increaseVersion()
+    true
+  }
+
+  override def truncateTable(options: CaseInsensitiveStringMap): Boolean = {
+    lastTruncateOptions = options
+    dataMap.synchronized { dataMap.clear() }
+    increaseVersion()
+    true
   }
 }

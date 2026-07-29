@@ -1859,6 +1859,7 @@ private[history] class AppListingListener(
     attempt.lastUpdated = new Date(reader.modificationTime)
     attempt.duration = event.time - attempt.startTime.getTime()
     attempt.completed = true
+    attempt.exitCode = event.exitCode
   }
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
@@ -1926,6 +1927,7 @@ private[history] class AppListingListener(
     var duration = 0L
     var sparkUser: String = null
     var completed = false
+    var exitCode = Option.empty[Int]
     var appSparkVersion = ""
 
     var adminAcls: Option[String] = None
@@ -1944,6 +1946,7 @@ private[history] class AppListingListener(
         sparkUser,
         completed,
         appSparkVersion,
+        exitCode,
         Some(logSourceName),
         Some(logSourceFullPath))
       new AttemptInfoWrapper(

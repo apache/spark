@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util.geo;
 
+import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.sql.catalyst.util.Geometry;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -116,6 +118,50 @@ public class WkbErrorHandlingTest extends WkbTestBase {
     WkbParseException ex = Assertions.assertThrows(
       WkbParseException.class, () -> reader.read(truncated));
     Assertions.assertSame(truncated, ex.getWkb());
+  }
+
+  @Test
+  public void testNegativeElementCounts() {
+    String[] invalidCounts = new String[] {
+      "0102000000ffffffff",          // LineString with -1 points
+      "010300000001000000ffffffff",  // Polygon ring with -1 points
+      "0103000000ffffffff",          // Polygon with -1 rings
+      "0104000000ffffffff",          // MultiPoint with -1 points
+      "0105000000ffffffff",          // MultiLineString with -1 linestrings
+      "0106000000ffffffff",          // MultiPolygon with -1 polygons
+      "0107000000ffffffff"           // GeometryCollection with -1 geometries
+    };
+
+    for (String invalidCount : invalidCounts) {
+      assertParseError(invalidCount, "Invalid count");
+    }
+  }
+
+  @Test
+  public void testElementCountsExceedRemainingBytes() {
+    String[] invalidCounts = new String[] {
+      "0102000000ffffff7f",          // LineString with too many points
+      "010300000001000000ffffff7f",  // Polygon ring with too many points
+      "0103000000ffffff7f",          // Polygon with too many rings
+      "0104000000ffffff7f",          // MultiPoint with too many points
+      "0105000000ffffff7f",          // MultiLineString with too many linestrings
+      "0106000000ffffff7f",          // MultiPolygon with too many polygons
+      "0107000000ffffff7f"           // GeometryCollection with too many geometries
+    };
+
+    for (String invalidCount : invalidCounts) {
+      assertParseError(invalidCount, "Invalid count");
+    }
+  }
+
+  @Test
+  public void testGeometryFromWkbRejectsInvalidCount() {
+    byte[] wkb = hexToBytes("0102000000ffffffff");
+    SparkIllegalArgumentException ex = Assertions.assertThrows(
+      SparkIllegalArgumentException.class, () -> Geometry.fromWkb(wkb));
+
+    Assertions.assertEquals("WKB_PARSE_ERROR", ex.getCondition());
+    Assertions.assertTrue(ex.getMessage().contains("Invalid count"));
   }
 
   @Test

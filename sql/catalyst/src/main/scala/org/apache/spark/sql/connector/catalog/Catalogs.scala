@@ -64,7 +64,7 @@ private[sql] object Catalogs {
       }
       val plugin = pluginClass.getDeclaredConstructor().newInstance().asInstanceOf[CatalogPlugin]
       plugin.initialize(name, catalogOptions(name, conf))
-      validateTableViewCatalog(name, plugin)
+      validateRelationCatalog(name, plugin)
       plugin
     } catch {
       case e: ClassNotFoundException =>
@@ -110,17 +110,17 @@ private[sql] object Catalogs {
 
   /**
    * Reject catalogs that implement both [[TableCatalog]] and [[ViewCatalog]] without
-   * extending [[TableViewCatalog]]. The combined case has cross-cutting rules (single namespace,
-   * cross-type collision rejection, perf opt-ins) that live on [[TableViewCatalog]]; implementing
+   * extending [[RelationCatalog]]. The combined case has cross-cutting rules (single namespace,
+   * cross-type collision rejection, perf opt-ins) that live on [[RelationCatalog]]; implementing
    * the two interfaces directly would skip that contract.
    */
-  private def validateTableViewCatalog(name: String, plugin: CatalogPlugin): Unit = {
+  private def validateRelationCatalog(name: String, plugin: CatalogPlugin): Unit = {
     if (plugin.isInstanceOf[TableCatalog] && plugin.isInstanceOf[ViewCatalog] &&
-        !plugin.isInstanceOf[TableViewCatalog]) {
+        !plugin.isInstanceOf[RelationCatalog]) {
       throw new IllegalArgumentException(
         s"Catalog '$name' (${plugin.getClass.getName}) implements both TableCatalog and " +
           s"ViewCatalog directly. Catalogs that expose both tables and views must implement " +
-          s"TableViewCatalog instead, which centralizes the cross-cutting rules (shared " +
+          s"RelationCatalog instead, which centralizes the cross-cutting rules (shared " +
           s"identifier namespace, cross-type collision rejection, single-RPC perf entry " +
           s"points).")
     }

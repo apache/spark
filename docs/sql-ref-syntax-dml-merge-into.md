@@ -27,12 +27,12 @@ updated or deleted, and new rows are inserted from the source, according to the 
 apply. All of these row-level changes are performed as a single atomic operation.
 
 `MERGE INTO` is supported on tables backed by
-[Data Source V2](sql-data-sources-v2.html#row-level-dml) connectors that support row-level operations.
+[Data Source V2](sql-v2-data-sources.html#row-level-dml) connectors that support row-level operations.
 
 ### Syntax
 
 ```sql
-MERGE INTO target_table [ [ AS ] target_alias ]
+MERGE [ WITH SCHEMA EVOLUTION ] INTO target_table [ [ AS ] target_alias ]
     USING { source_table | ( source_query ) } [ [ AS ] source_alias ]
     ON merge_condition
     [ WHEN MATCHED [ AND matched_condition ] THEN matched_action ] [ ... ]
@@ -50,6 +50,12 @@ not_matched_by_source_action
 ```
 
 ### Parameters
+
+* **WITH SCHEMA EVOLUTION**
+
+    Enables automatic schema evolution for this `MERGE` operation. When enabled, the schema
+    of the target table is automatically evolved to add new columns and widen data types based
+    on the source table or query, subject to the capabilities of the underlying connector.
 
 * **target_table**
 
@@ -111,6 +117,12 @@ not_matched_by_source_action
   once. This check is skipped when there are no `WHEN MATCHED` clauses, or when the only `WHEN MATCHED`
   action is an unconditional `DELETE`, because in those cases the outcome does not depend on the number
   of matching source rows.
+- When `WITH SCHEMA EVOLUTION` is specified, only the columns that are referenced in the merge clauses
+  by a direct assignment are added or have their data type widened.
+- `UPDATE SET *` and `INSERT *` count as direct assignments of every target column, so schema
+  evolution is triggered for all of them.
+- An `UPDATE` or `INSERT` that directly assigns a struct column counts as a direct assignment of every
+  nested field in that struct, so schema evolution is triggered for all of those fields.
 
 ### Examples
 
@@ -215,6 +227,262 @@ SELECT * FROM target;
 | 2|   160|       eng|
 | 5|   100|unassigned|
 +--+------+----------+
+```
+
+#### Schema Evolution
+
+```sql
+SELECT * FROM students;
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|    Amy Smith|    123 Park Ave, San Jose|    111111|
+|    Bob Brown|  456 Taylor St, Cupertino|    222222|
+|  Helen Davis| 469 Mission St, San Diego|    999999|
++-------------+--------------------------+----------+
+
+-- This example uses a source table that has an extra "email" column not present in the target.
+SELECT * FROM new_students;
++-------------+--------------------------+----------+-----------------+
+|         name|                   address|student_id|            email|
++-------------+--------------------------+----------+-----------------+
+|    Amy Smith|    123 Park Ave, San Jose|    111111|  amy@example.com|
+|Cathy Johnson|   789 Race Ave, Palo Alto|    333333|cathy@example.com|
++-------------+--------------------------+----------+-----------------+
+
+-- Evolve the students table schema to add the new email column from the source.
+MERGE WITH SCHEMA EVOLUTION INTO students t
+    USING new_students s
+    ON t.student_id = s.student_id
+    WHEN MATCHED THEN UPDATE SET *
+    WHEN NOT MATCHED THEN INSERT *;
+
+SELECT * FROM students;
++-------------+--------------------------+----------+-----------------+
+|         name|                   address|student_id|            email|
++-------------+--------------------------+----------+-----------------+
+|    Amy Smith|    123 Park Ave, San Jose|    111111|  amy@example.com|
+|    Bob Brown|  456 Taylor St, Cupertino|    222222|             NULL|
+|Cathy Johnson|   789 Race Ave, Palo Alto|    333333|cathy@example.com|
+|  Helen Davis| 469 Mission St, San Diego|    999999|             NULL|
++-------------+--------------------------+----------+-----------------+
+```
+
+Schema evolution also applies to nested fields. In the following example the source's `address`
+struct has an extra `zip` field that is added to the target's `address` struct.
+
+```sql
+SELECT * FROM student_addresses;
++----------+-----------+
+|student_id|    address|
++----------+-----------+
+|    111111| {San Jose}|
+|    222222|{Cupertino}|
++----------+-----------+
+
+SELECT * FROM address_updates;
++----------+------------------+
+|student_id|           address|
++----------+------------------+
+|    111111| {San Jose, 95110}|
+|    333333|{Palo Alto, 94301}|
++----------+------------------+
+
+-- Evolve the address struct to add the new nested zip field.
+MERGE WITH SCHEMA EVOLUTION INTO student_addresses t
+    USING address_updates s
+    ON t.student_id = s.student_id
+    WHEN MATCHED THEN UPDATE SET *
+    WHEN NOT MATCHED THEN INSERT *;
+
+SELECT * FROM student_addresses;
++----------+------------------+
+|student_id|           address|
++----------+------------------+
+|    111111| {San Jose, 95110}|
+|    222222| {Cupertino, NULL}|
+|    333333|{Palo Alto, 94301}|
++----------+------------------+
+```
+
+Schema evolution can also widen the data type of an existing column. In the following example the
+source's `credits` column is a `BIGINT` that holds a value too large for the target's `INT` column,
+so the target's `credits` column is widened from `INT` to `BIGINT`.
+
+```sql
+SELECT * FROM student_credits;
++----------+-------+
+|student_id|credits|
++----------+-------+
+|    111111|     30|
+|    222222|     45|
++----------+-------+
+
+-- The source's credits column is a BIGINT and contains a value that does not fit in an INT.
+SELECT * FROM credit_updates;
++----------+-----------+
+|student_id|    credits|
++----------+-----------+
+|    111111|10000000000|
+|    333333|         60|
++----------+-----------+
+
+-- Widen the target's credits column from INT to BIGINT to accommodate the source values.
+MERGE WITH SCHEMA EVOLUTION INTO student_credits t
+    USING credit_updates s
+    ON t.student_id = s.student_id
+    WHEN MATCHED THEN UPDATE SET *
+    WHEN NOT MATCHED THEN INSERT *;
+
+SELECT * FROM student_credits;
++----------+-----------+
+|student_id|    credits|
++----------+-----------+
+|    111111|10000000000|
+|    222222|         45|
+|    333333|         60|
++----------+-----------+
+```
+
+#### Schema Evolution Triggers
+
+Schema evolution adds or widens a column only when a source column is referenced by a direct
+assignment to a target column. Referencing a source column only inside an expression does not evolve
+the target. Conversely, directly assigning a whole struct counts as referencing it, so all of its
+new nested fields are added.
+
+In the following example the source has an extra `bonus` column that is only used in an expression,
+so the target table is not evolved and no `bonus` column is added.
+
+```sql
+SELECT * FROM student_credits;
++----------+-------+
+|student_id|credits|
++----------+-------+
+|    111111|     30|
+|    222222|     45|
++----------+-------+
+
+-- The source has an extra bonus column not present in the target.
+SELECT * FROM credit_transfers;
++----------+-------+-----+
+|student_id|credits|bonus|
++----------+-------+-----+
+|    111111|     30|   12|
+|    333333|     60|    5|
++----------+-------+-----+
+
+-- bonus is only referenced inside an expression, so the target schema is left unchanged.
+MERGE WITH SCHEMA EVOLUTION INTO student_credits t
+    USING credit_transfers s
+    ON t.student_id = s.student_id
+    WHEN MATCHED THEN UPDATE SET credits = s.credits + s.bonus
+    WHEN NOT MATCHED THEN INSERT (student_id, credits) VALUES (s.student_id, s.credits + s.bonus);
+
+-- The target schema is unchanged: no bonus column is added.
+SELECT * FROM student_credits;
++----------+-------+
+|student_id|credits|
++----------+-------+
+|    111111|     42|
+|    222222|     45|
+|    333333|     65|
++----------+-------+
+```
+
+Type widening follows the same rule. If a wider value is produced by an expression instead of a
+direct assignment, the target column keeps its type, so a value that does not fit can no longer be
+stored and the statement fails. The example below reuses the `credit_updates` table, whose `credits`
+column is a `BIGINT` value too large for an `INT`.
+
+```sql
+-- credits is produced by an expression, so the target column is not widened from INT to BIGINT.
+MERGE WITH SCHEMA EVOLUTION INTO student_credits t
+    USING credit_updates s
+    ON t.student_id = s.student_id
+    WHEN MATCHED THEN UPDATE SET credits = s.credits + 100;
+Error: CAST_OVERFLOW_IN_TABLE_INSERT
+```
+
+Directly assigning a struct column from the source, on the other hand, counts as referencing it, so
+its new nested fields are added even though they are not named individually. In the following example
+assigning the whole struct with `UPDATE SET address = s.address` adds the source's new `zip` field to
+the target's `address` struct.
+
+```sql
+SELECT * FROM student_addresses;
++----------+-----------+
+|student_id|    address|
++----------+-----------+
+|    111111| {San Jose}|
+|    222222|{Cupertino}|
++----------+-----------+
+
+-- The source's address struct has an extra zip field not present in the target.
+SELECT * FROM address_changes;
++----------+------------------+
+|student_id|           address|
++----------+------------------+
+|    222222|{Cupertino, 95014}|
++----------+------------------+
+
+-- Assigning the whole struct directly adds the new zip nested field.
+MERGE WITH SCHEMA EVOLUTION INTO student_addresses t
+    USING address_changes s
+    ON t.student_id = s.student_id
+    WHEN MATCHED THEN UPDATE SET address = s.address;
+
+SELECT * FROM student_addresses;
++----------+------------------+
+|student_id|           address|
++----------+------------------+
+|    111111|  {San Jose, NULL}|
+|    222222|{Cupertino, 95014}|
++----------+------------------+
+```
+
+#### Schema Evolution When the Source Omits Columns
+
+With schema evolution enabled, `UPDATE SET *` and `INSERT *` also tolerate a source that is missing
+some of the target's columns. A missing column keeps its existing value on an update and is set to
+its default value (or `NULL`) on an insert. Without schema evolution the same statement fails,
+because `*` requires the source to provide every target column.
+
+```sql
+SELECT * FROM students;
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|    Amy Smith|    123 Park Ave, San Jose|    111111|
+|    Bob Brown|  456 Taylor St, Cupertino|    222222|
+|  Helen Davis| 469 Mission St, San Diego|    999999|
++-------------+--------------------------+----------+
+
+-- The source is missing the address column that exists in the target.
+SELECT * FROM name_updates;
++-------------+----------+
+|         name|student_id|
++-------------+----------+
+|    Amy Smith|    111111|
+|Cathy Johnson|    333333|
++-------------+----------+
+
+MERGE WITH SCHEMA EVOLUTION INTO students t
+    USING name_updates s
+    ON t.student_id = s.student_id
+    WHEN MATCHED THEN UPDATE SET *
+    WHEN NOT MATCHED THEN INSERT *;
+
+-- Student 111111 keeps its address on update; student 333333 is inserted with a NULL address.
+SELECT * FROM students;
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|    Amy Smith|    123 Park Ave, San Jose|    111111|
+|    Bob Brown|  456 Taylor St, Cupertino|    222222|
+|Cathy Johnson|                      NULL|    333333|
+|  Helen Davis| 469 Mission St, San Diego|    999999|
++-------------+--------------------------+----------+
 ```
 
 ### Related Statements

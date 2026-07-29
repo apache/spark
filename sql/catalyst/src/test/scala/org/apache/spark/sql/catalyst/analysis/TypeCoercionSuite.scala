@@ -652,6 +652,39 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     widenTest(IntegerType, TimestampType, None)
     widenTest(StringType, TimestampType, None)
 
+    // Nanosecond-precision timestamp types (SPARK-57454).
+    // nanos(p1) <-> nanos(p2) within the same family widen to the max precision.
+    widenTest(TimestampLTZNanosType(7), TimestampLTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    widenTest(TimestampLTZNanosType(8), TimestampLTZNanosType(8), Some(TimestampLTZNanosType(8)))
+    widenTest(TimestampNTZNanosType(7), TimestampNTZNanosType(9), Some(TimestampNTZNanosType(9)))
+    // micro <-> nanos within the same family widen to the nanos type.
+    widenTest(TimestampType, TimestampLTZNanosType(7), Some(TimestampLTZNanosType(7)))
+    widenTest(TimestampNTZType, TimestampNTZNanosType(8), Some(TimestampNTZNanosType(8)))
+    // Mixed time-zone families widen to the LTZ family (mirrors TIMESTAMP + TIMESTAMP_NTZ).
+    widenTest(TimestampLTZNanosType(7), TimestampNTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    widenTest(TimestampLTZNanosType(7), TimestampNTZType, Some(TimestampLTZNanosType(7)))
+    widenTest(TimestampType, TimestampNTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    // nanos <-> date widen to the nanos type of the same family.
+    widenTest(DateType, TimestampLTZNanosType(8), Some(TimestampLTZNanosType(8)))
+    widenTest(DateType, TimestampNTZNanosType(7), Some(TimestampNTZNanosType(7)))
+    // nanos <-> TIME has no common datetime type.
+    widenTest(TimestampLTZNanosType(9), TimeType(6), None)
+    widenTest(TimestampNTZNanosType(9), TimeType(6), None)
+
+    // TIME(p) types (SPARK-57585).
+    // Two TIME operands widen to the larger fractional-seconds precision.
+    widenTest(TimeType(3), TimeType(6), Some(TimeType(6)))
+    widenTest(TimeType(6), TimeType(3), Some(TimeType(6)))
+    widenTest(TimeType(0), TimeType(9), Some(TimeType(9)))
+    widenTest(TimeType(6), TimeType(6), Some(TimeType(6)))
+    // TIME has no common datetime type with DATE or the TIMESTAMP families.
+    widenTest(TimeType(6), DateType, None)
+    widenTest(TimeType(6), TimestampType, None)
+    widenTest(TimeType(6), TimestampNTZType, None)
+    // No common type with non-datetime types.
+    widenTest(IntegerType, TimestampLTZNanosType(9), None)
+    widenTest(StringType, TimestampNTZNanosType(9), None)
+
     // ComplexType
     widenTest(NullType,
       MapType(IntegerType, StringType, false),
@@ -962,6 +995,22 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       new StructType().add("a", StringType),
       new StructType().add("a", IntegerType),
       Some(new StructType().add("a", StringType)))
+
+    // Nanosecond-precision timestamp types (SPARK-57454).
+    widenTestWithStringPromotion(
+      TimestampType, TimestampLTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    widenTestWithStringPromotion(
+      TimestampLTZNanosType(7), TimestampNTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    widenTestWithStringPromotion(
+      DateType, TimestampNTZNanosType(7), Some(TimestampNTZNanosType(7)))
+    widenTestWithoutStringPromotion(
+      TimestampType, TimestampLTZNanosType(9), Some(TimestampLTZNanosType(9)))
+    widenTestWithoutStringPromotion(
+      ArrayType(TimestampType), ArrayType(TimestampNTZNanosType(8)),
+      Some(ArrayType(TimestampLTZNanosType(8))))
+    // nanos <-> string promotes to string with promotion, no common type without it.
+    widenTestWithStringPromotion(StringType, TimestampLTZNanosType(9), Some(StringType))
+    widenTestWithoutStringPromotion(StringType, TimestampNTZNanosType(9), None)
   }
 
   test("cast NullType for expressions that implement ExpectsInputTypes") {

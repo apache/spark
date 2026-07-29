@@ -276,7 +276,7 @@ class GBTClassificationModel private[ml](
   private[ml] def this() = this("",
     Array(new DecisionTreeRegressionModel), Array(Double.NaN), -1, -1)
 
-  private[spark] override def estimatedSize: Long = getEstimatedSize()
+  private[spark] override def estimatedSize: Long = estimateMatadataSize + getEstimatedSize()
 
   @Since("1.4.0")
   override def trees: Array[DecisionTreeRegressionModel] = _trees

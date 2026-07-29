@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, USER_DEFINED_AGGREGATION}
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types._
 
@@ -337,6 +338,8 @@ private[hive] case class HiveUDAFFunction(
   with HiveInspectors
   with UserDefinedExpression {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(USER_DEFINED_AGGREGATION)
+
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
@@ -451,14 +454,7 @@ private[hive] case class HiveUDAFFunction(
     // implementation can't mix the `update` and `merge` calls during its life cycle. To work
     // around it, here we create a fresh buffer with final evaluator, and merge the existing buffer
     // to it, and replace the existing buffer with it.
-    val mergeableBuf = if (!nonNullBuffer.canDoMerge) {
-      val newBuf = finalHiveEvaluator.evaluator.getNewAggregationBuffer
-      finalHiveEvaluator.evaluator.merge(
-        newBuf, partial1HiveEvaluator.evaluator.terminatePartial(nonNullBuffer.buf))
-      HiveUDAFBuffer(newBuf, true)
-    } else {
-      nonNullBuffer
-    }
+    val mergeableBuf = toFinalBuffer(nonNullBuffer)
 
     // The 2nd argument of the Hive `GenericUDAFEvaluator.merge()` method is an input aggregation
     // buffer in the 3rd format mentioned in the ScalaDoc of this class. Originally, Hive converts
@@ -469,12 +465,30 @@ private[hive] case class HiveUDAFFunction(
     mergeableBuf
   }
 
+  // Convert a buffer to a FINAL-mode buffer if it is a PARTIAL1-mode buffer created by `update`
+  // (or deserialized). Some Hive UDAFs legally use different buffer classes per mode, so a
+  // PARTIAL1 buffer cannot be passed directly to the FINAL evaluator's `terminate`. This mirrors
+  // the on-demand conversion `merge` performs, and is also needed by `eval` for the Complete-mode
+  // path (enabled by `CombineAdjacentAggregation`), where `update` is called but `merge` is not.
+  private def toFinalBuffer(buffer: HiveUDAFBuffer): HiveUDAFBuffer = {
+    if (!buffer.canDoMerge) {
+      val newBuf = finalHiveEvaluator.evaluator.getNewAggregationBuffer
+      finalHiveEvaluator.evaluator.merge(
+        newBuf, partial1HiveEvaluator.evaluator.terminatePartial(buffer.buf))
+      HiveUDAFBuffer(newBuf, true)
+    } else {
+      buffer
+    }
+  }
+
   override def eval(buffer: HiveUDAFBuffer): Any = {
     resultUnwrapper(finalHiveEvaluator.evaluator.terminate(
       if (buffer == null) {
         finalHiveEvaluator.evaluator.getNewAggregationBuffer
       } else {
-        buffer.buf
+        // A buffer that only went through `update` (Complete mode) is a PARTIAL1-mode buffer; turn
+        // it into a FINAL-mode buffer before terminating so mode-aware UDAFs see the right class.
+        toFinalBuffer(buffer).buf
       }
     ))
   }

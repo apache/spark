@@ -26,7 +26,6 @@ import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDel
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A rule that rewrites UPDATE operations using plans that operate on individual or groups of rows.
@@ -41,7 +40,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
-          val table = buildOperationTable(tbl, UPDATE, CaseInsensitiveStringMap.empty())
+          checkNoGeneratedColumns(r, UPDATE)
+          val table = buildOperationTable(tbl, UPDATE, r.options)
           val updateCond = cond.getOrElse(TrueLiteral)
           table.operation match {
             case _: SupportsDelta =>

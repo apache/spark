@@ -90,7 +90,7 @@ object CollationTypeCoercion extends SQLConfHelper {
         _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr | _: ToNumber |
         _: TryToNumber | _: StringToMap | _: Levenshtein  | _: StringSplitSQL | _: SplitPart |
         _: Lag | _: Lead | _: RegExpReplace | _: StringRPad | _: StringLPad | _: Overlay |
-        _: Elt | _: SubstringIndex | _: StringLocate | _: If) =>
+        _: Elt | _: SubstringIndex | _: StringLocate | _: If | _: StringInstrWithOccurrence) =>
       val newChildren = collateToSingleType(otherExpr, otherExpr.children)
       otherExpr.withNewChildren(newChildren)
 
@@ -494,7 +494,8 @@ object CollationTypeCoercion extends SQLConfHelper {
     case _: BinaryComparison | _: StringPredicate | _: Upper | _: Lower | _: InitCap |
          _: FindInSet | _: StringInstr | _: StringReplace | _: StringLocate | _: SubstringIndex |
          _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: StringTranslate |
-         _: StringSplitSQL | _: In | _: InSubquery | _: FindInSet => false
+         _: StringSplitSQL | _: In | _: InSubquery | _: FindInSet |
+         _: StringInstrWithOccurrence => false
     case _ => true
   }
 

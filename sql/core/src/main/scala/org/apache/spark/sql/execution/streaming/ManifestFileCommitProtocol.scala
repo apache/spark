@@ -78,7 +78,19 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
     if (fileLog.add(batchId, fileStatuses)) {
       logInfo(log"Committed batch ${MDC(BATCH_ID, batchId)}")
     } else {
-      throw new IllegalStateException(s"Race while writing batch $batchId")
+      // Reaching here means `fileLog.add` found this batchId already committed to the sink
+      // metadata log at `path`. This is almost always two concurrent streaming queries writing
+      // to the same output path: they share a single `_spark_metadata` log and cannot coexist.
+      // Log the path + batchId at ERROR so a recurrence in scheduled jobs is diagnosable from the
+      // logs alone, without re-reproducing the race.
+      // Build the message once and reuse it for both the log and the exception so they stay in
+      // sync (see review on SPARK-57651).
+      val errorMsg = log"Race while writing batch ${MDC(BATCH_ID, batchId)} to the file sink " +
+        log"metadata log at ${MDC(PATH, path)}: another writer already committed this batch. " +
+        log"This usually means multiple concurrent streaming queries are writing to the same " +
+        log"output path (they share one _spark_metadata log)."
+      logError(errorMsg)
+      throw new IllegalStateException(errorMsg.message)
     }
   }
 

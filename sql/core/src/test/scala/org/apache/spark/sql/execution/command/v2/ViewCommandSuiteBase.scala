@@ -18,21 +18,21 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.connector.catalog.InMemoryTableViewCatalog
+import org.apache.spark.sql.connector.catalog.InMemoryRelationCatalog
 
 /**
  * Settings for v2 view command test suites. Extends v2 [[CommandSuiteBase]] (so view tests
  * inherit `checkLocation` and the standard v2 `test_catalog` configuration), and additionally
- * wires `test_view_catalog` to [[InMemoryTableViewCatalog]] -- the catalog that the unified
+ * wires `test_view_catalog` to [[InMemoryRelationCatalog]] -- the catalog that the unified
  * `*SuiteBase` view tests under `command/` target via the `$catalog` placeholder.
  */
 trait ViewCommandSuiteBase extends CommandSuiteBase {
   override def catalog: String = "test_view_catalog"
 
   override def sparkConf: SparkConf = super.sparkConf
-    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableViewCatalog].getName)
+    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryRelationCatalog].getName)
 
-  /** Helper: returns the configured `InMemoryTableViewCatalog`. */
-  protected def viewCatalog: InMemoryTableViewCatalog =
-    spark.sessionState.catalogManager.catalog(catalog).asInstanceOf[InMemoryTableViewCatalog]
+  /** Helper: returns the configured `InMemoryRelationCatalog`. */
+  protected def viewCatalog: InMemoryRelationCatalog =
+    spark.sessionState.catalogManager.catalog(catalog).asInstanceOf[InMemoryRelationCatalog]
 }

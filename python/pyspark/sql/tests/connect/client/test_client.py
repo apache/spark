@@ -425,20 +425,79 @@ class SparkConnectClientTestCase(unittest.TestCase):
         session = (
             RemoteSparkSession.builder.remote("sc://foo")._registerHook(TestHook).getOrCreate()
         )
-        self.assertEqual(inits, 1)
-        self.assertEqual(calls, 0)
-        session.client._stub = MockService(session.client._session_id)
-        session.client.disable_reattachable_execute()
+        try:
+            self.assertEqual(inits, 1)
+            self.assertEqual(calls, 0)
+            session.client._stub = MockService(session.client._session_id)
+            session.client.disable_reattachable_execute()
 
-        # Called from _execute_and_fetch_as_iterator
-        session.range(1).collect()
-        self.assertEqual(inits, 1)
-        self.assertEqual(calls, 1)
+            # Called from _execute_and_fetch_as_iterator
+            session.range(1).collect()
+            self.assertEqual(inits, 1)
+            self.assertEqual(calls, 1)
 
-        # Called from _execute
-        session.udf.register("test_func", lambda x: x + 1)
-        self.assertEqual(inits, 1)
-        self.assertEqual(calls, 2)
+            # Called from _execute
+            session.udf.register("test_func", lambda x: x + 1)
+            self.assertEqual(inits, 1)
+            self.assertEqual(calls, 2)
+        finally:
+            # Close the session to avoid leaking dummy session inter-test
+            session.stop()
+
+    def test_session_hook_preserved_after_new_session(self):
+        calls = 0
+
+        class TestHook(RemoteSparkSession.Hook):
+            def __init__(self, _session):
+                pass
+
+            def on_execute_plan(self, req):
+                nonlocal calls
+                calls += 1
+                return req
+
+        # Use create() instead of getOrCreate() to avoid picking up a session (and hooks)
+        # left active by other tests.
+        session = RemoteSparkSession.builder.remote("sc://foo")._registerHook(TestHook).create()
+        new_session = session.newSession()
+        try:
+            # Client-side behavior carries over to the fresh session, as in clone().
+            self.assertEqual(new_session.client._session_hooks, session.client._session_hooks)
+            self.assertEqual(new_session.client._rpc_deadlines, session.client._rpc_deadlines)
+
+            new_session.client._stub = MockService(new_session.client._session_id)
+            new_session.client.disable_reattachable_execute()
+
+            # The hook still observes ExecutePlanRequests issued through the new session.
+            self.assertEqual(calls, 0)
+            new_session.range(1).collect()
+            self.assertEqual(calls, 1)
+        finally:
+            # Close the clients so their atexit hooks do not try to release sessions
+            # against the unreachable endpoint at interpreter shutdown.
+            new_session.client.close()
+            session.client.close()
+            session.stop()
+
+    def test_new_session_preserves_custom_channel_builder(self):
+        class CustomChannelBuilder(DefaultChannelBuilder):
+            pass
+
+        client = SparkConnectClient(
+            CustomChannelBuilder("sc://foo/"), use_reattachable_execute=False
+        )
+        new_client = client.newSession()
+        try:
+            # newSession() deep-copies the connection configuration, so the builder
+            # subclass is preserved and the original builder is left untouched.
+            self.assertIsInstance(new_client._builder, CustomChannelBuilder)
+            self.assertIsNot(new_client._builder, client._builder)
+            # The session id is dropped from the copied parameters and regenerated.
+            self.assertIsNone(new_client._builder.session_id)
+            self.assertNotEqual(new_client._session_id, client._session_id)
+        finally:
+            new_client.close()
+            client.close()
 
     def test_custom_operation_id(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)

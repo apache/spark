@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils
@@ -153,23 +154,34 @@ object ScdType {
 /**
  * Configuration for an AutoCDC flow.
  *
- * @param keys            The column(s) that uniquely identify a row in the source data.
- * @param sequencing      Expression ordering CDC events to correctly resolve out-of-order
- *                        arrivals. Must be a sortable type.
- * @param deleteCondition Expression that marks a source row as a DELETE. When None, all
- *                        rows are treated as upserts.
- * @param storedAsScdType The SCD strategy these args should be applied to.
- * @param columnSelection Which source columns to select in the target table. None means
- *                        all columns.
+ * @param keys                   The column(s) that uniquely identify a row in the source data.
+ * @param sequencing             Expression ordering CDC events to correctly resolve out-of-order
+ *                               arrivals. Must be a sortable type.
+ * @param deleteCondition        Expression that marks a source row as a DELETE. When None, all
+ *                               rows are treated as upserts.
+ * @param storedAsScdType        The SCD strategy these args should be applied to.
+ * @param columnSelection        Which source columns to select in the target table. None means
+ *                               all columns.
+ * @param trackHistorySelection  SCD2 only. Selects the selected user-data columns whose values
+ *                               define a run: two consecutive upsert events for the same key are
+ *                               coalesced into the same run iff they agree on every selected
+ *                               tracking column. None means every eligible selected user column
+ *                               (i.e. every selected source column that is neither a key nor a
+ *                               framework column) is considered tracked. Must be None under SCD1,
+ *                               which has no run concept and therefore no history-tracking columns.
+ *                               See the "run of upsert events" concept in the `Scd2BatchProcessor`
+ *                               scaladoc for the precise definition of a run.
  */
 case class ChangeArgs(
     keys: Seq[UnqualifiedColumnName],
     sequencing: Column,
     storedAsScdType: ScdType,
     deleteCondition: Option[Column] = None,
-    columnSelection: Option[ColumnSelection] = None
+    columnSelection: Option[ColumnSelection] = None,
+    trackHistorySelection: Option[ColumnSelection] = None
 ) {
   ChangeArgs.validateNonEmptyKeys(keys)
+  ChangeArgs.validateTrackHistoryOnlyForScd2(storedAsScdType, trackHistorySelection)
 }
 
 object ChangeArgs {
@@ -183,6 +195,24 @@ object ChangeArgs {
       throw new AnalysisException(
         errorClass = "AUTOCDC_EMPTY_KEYS",
         messageParameters = Map.empty
+      )
+    }
+  }
+
+  /**
+   * Validates that [[ChangeArgs.trackHistorySelection]] is only set under SCD2. SCD1 has no run
+   * concept and therefore no history-tracking columns, so a non-None selection is meaningless.
+   *
+   * User-facing validation is expected to reject this at the API (GraphRegistration) layer; this
+   * is a defensive internal guard so downstream SCD1 code can assume the selection is None. Hence
+   * it raises an internal error rather than a user-facing [[AnalysisException]].
+   */
+  private def validateTrackHistoryOnlyForScd2(
+      storedAsScdType: ScdType,
+      trackHistorySelection: Option[ColumnSelection]): Unit = {
+    if (storedAsScdType == ScdType.Type1 && trackHistorySelection.isDefined) {
+      throw SparkException.internalError(
+        "trackHistorySelection must be None under SCD1; it has no history-tracking columns."
       )
     }
   }

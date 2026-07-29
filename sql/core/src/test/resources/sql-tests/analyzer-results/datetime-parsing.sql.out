@@ -179,3 +179,45 @@ select to_timestamp('2020-12-31-366', 'yyyy-MM-dd-DDD')
 -- !query analysis
 Project [to_timestamp(2020-12-31-366, Some(yyyy-MM-dd-DDD), TimestampType, Some(America/Los_Angeles), true) AS to_timestamp(2020-12-31-366, yyyy-MM-dd-DDD)#x]
 +- OneRowRelation
+
+
+-- !query
+select to_time('00:00:00')
+-- !query analysis
+Project [to_time(00:00:00, None) AS to_time(00:00:00)#x]
++- OneRowRelation
+
+
+-- !query
+select to_time('12', 'HH')
+-- !query analysis
+Project [to_time(12, Some(HH)) AS to_time(12, HH)#x]
++- OneRowRelation
+
+
+-- !query
+select to_time('12:34', 'HH:mm')
+-- !query analysis
+Project [to_time(12:34, Some(HH:mm)) AS to_time(12:34, HH:mm)#x]
++- OneRowRelation
+
+
+-- !query
+select to_time('12:34:56', 'HH:mm:ss')
+-- !query analysis
+Project [to_time(12:34:56, Some(HH:mm:ss)) AS to_time(12:34:56, HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+select to_time('12:34:56.123456', 'HH:mm:ss.SSSSSS')
+-- !query analysis
+Project [to_time(12:34:56.123456, Some(HH:mm:ss.SSSSSS)) AS to_time(12:34:56.123456, HH:mm:ss.SSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+select to_time('01:02:03 PM', 'hh:mm:ss a')
+-- !query analysis
+Project [to_time(01:02:03 PM, Some(hh:mm:ss a)) AS to_time(01:02:03 PM, hh:mm:ss a)#x]
++- OneRowRelation

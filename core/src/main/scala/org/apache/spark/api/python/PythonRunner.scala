@@ -21,9 +21,8 @@ import java.io._
 import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousCloseException, Channels, SelectionKey, ServerSocketChannel, SocketChannel}
-import java.nio.file.{Files => JavaFiles, Path}
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.{CancellationException, ConcurrentHashMap, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
@@ -38,7 +37,8 @@ import org.apache.spark.internal.LogKeys.{COUNT, PYTHON_WORKER_IDLE_TIMEOUT, SIZ
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
-import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
+import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util._
 
@@ -121,22 +121,49 @@ private[spark] object PythonEvalType {
 
 private[spark] object BasePythonRunner extends Logging {
 
-  private[spark] lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
-
-  private[spark] def faultHandlerLogPath(pid: Int): Path = {
-    new File(faultHandlerLogDir, pid.toString).toPath
+  /**
+   * Shared thread pool for pipelined writer tasks. Using a cached thread pool ensures that
+   * writer threads are reused across tasks, which keeps JIT-compiled code, branch prediction
+   * history, and CPU caches warm.
+   */
+  private[python] lazy val pipelinedWriterThreadPool = {
+    // Each running task uses at most one writer thread, so the pool size is naturally capped
+    // by the scheduler's task concurrency -- which a fractional spark.task.cpus can push above
+    // the host's processor count. Leave the pool unbounded: a cap below the concurrent task
+    // count would queue writers behind running ones, which can deadlock a barrier stage (the
+    // tasks whose workers already started wait at the barrier while the remaining tasks'
+    // writers never run). Idle threads are still reused and reaped after the keep-alive.
+    ThreadUtils.newDaemonCachedThreadPool("python-udf-pipelined-writer")
   }
 
-  private[spark] def tryReadFaultHandlerLog(
-      faultHandlerEnabled: Boolean, pid: Option[Int]): Option[String] = {
-    if (faultHandlerEnabled) {
-      pid.map(faultHandlerLogPath).collect {
-        case path if JavaFiles.exists(path) =>
-          val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
-          JavaFiles.deleteIfExists(path)
-          error
+  private[spark] lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
+
+  /**
+   * Splits the executor-wide pyspark memory allocation evenly across the executor's task slots.
+   * The Python worker pool can grow to the number of tasks that run concurrently on the executor
+   * (`maxConcurrentTasks`, the limiting resource across cores and custom resources), which a
+   * fractional `spark.task.cpus` can push above the core count; dividing by the core count alone
+   * would let the workers' aggregate limits exceed the executor-wide allocation.
+   */
+  private[spark] def getWorkerMemoryMb(
+      mem: Option[Long],
+      maxConcurrentTasks: Int): Option[Long] = {
+    val taskSlots = math.max(1, maxConcurrentTasks)
+    mem.map { m =>
+      val perWorkerMb = m / taskSlots
+      // An explicit spark.executor.pyspark.memory=0 means the limit is disabled
+      // (setup_memory_limits treats a non-positive value as "no limit"). Only a *positive*
+      // budget that rounds down to 0 MiB per worker is a problem: it would silently drop the
+      // configured cap and let the workers' aggregate memory blow past it, so fail fast on
+      // that unsatisfiable case rather than removing the limit.
+      if (m > 0 && perWorkerMb <= 0) {
+        throw new SparkException(
+          s"Cannot honor spark.executor.pyspark.memory=${m}m split across $taskSlots concurrent " +
+            "task slots: each worker would get less than 1 MiB. Increase " +
+            "spark.executor.pyspark.memory, or reduce the executor's concurrent task capacity.")
       }
-    } else None
+      perWorkerMb
+    }
   }
 
   /**
@@ -149,11 +176,11 @@ private[spark] object BasePythonRunner extends Logging {
   }
 
   private[spark] def pythonWorkerStatusMessageWithContext(
-      handle: Option[ProcessHandle],
+      handle: Option[PythonWorkerHandle],
       worker: PythonWorker,
       hasInputs: Boolean): MessageWithContext = {
     log"handle.map(_.isAlive) = " +
-    log"${MDC(LogKeys.PYTHON_WORKER_IS_ALIVE, handle.map(_.isAlive))}, " +
+    log"${MDC(LogKeys.PYTHON_WORKER_IS_ALIVE, handle.map(_.isAlive()))}, " +
     log"channel.isConnected = " +
     log"${MDC(LogKeys.PYTHON_WORKER_CHANNEL_IS_CONNECTED, worker.channel.isConnected)}, " +
     log"channel.isBlocking = " +
@@ -207,12 +234,19 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val faultHandlerEnabled: Boolean = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
   protected val idleTimeoutSeconds: Long = conf.get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
   protected val killOnIdleTimeout: Boolean = conf.get(PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
+  // Unix domain socket channels have no java.net.Socket adapter, so socket()-based APIs
+  // (setSoTimeout / getInputStream) are unavailable and SO_TIMEOUT-based idle detection
+  // does not apply. See createPipelinedDataIn.
+  private val isUnixDomainSock: Boolean = conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
   protected val tracebackDumpIntervalSeconds: Long =
     conf.get(PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
   protected val killWorkerOnFlushFailure: Boolean =
      conf.get(PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
+  protected val pipelinedEnabled: Boolean = conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
+  protected val pipelinedQueueDepth: Int = conf.get(PYTHON_UDF_PIPELINED_QUEUE_DEPTH)
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
+  protected val tracebackWithLocals: Boolean = false
 
   protected def runnerConf: Map[String, String] = Map.empty
   protected def evalConf: Map[String, String] = Map.empty
@@ -266,12 +300,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   // Authentication helper used when serving method calls via socket from Python side.
   private lazy val authHelper = new SocketAuthHelper(conf)
 
-  // each python worker gets an equal part of the allocation. the worker pool will grow to the
-  // number of concurrent tasks, which is determined by the number of cores in this executor.
-  private def getWorkerMemoryMb(mem: Option[Long], cores: Int): Option[Long] = {
-    mem.map(_ / cores)
-  }
-
   def compute(
       inputIterator: Iterator[IN],
       partitionIndex: Int,
@@ -288,9 +316,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     val memoryMb = Option(context.getLocalProperty(PYSPARK_MEMORY_LOCAL_PROPERTY)).map(_.toLong)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     // If OMP_NUM_THREADS is not explicitly set, override it with the number of task cpus.
-    // See SPARK-42613 for details.
+    // See SPARK-42613 for details. Use the task's own cpu amount rather than the global
+    // `spark.task.cpus` so stage-level resource profiles are honored; the amount may be
+    // fractional, and `cpus()` returns its ceiling (always >= 1 since the amount is
+    // validated to be positive).
     if (conf.getOption("spark.executorEnv.OMP_NUM_THREADS").isEmpty) {
-      envVars.put("OMP_NUM_THREADS", conf.get("spark.task.cpus", "1"))
+      envVars.put("OMP_NUM_THREADS", context.cpus().toString)
     }
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {
@@ -302,10 +333,20 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (simplifiedTraceback) {
       envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
     }
+    if (tracebackWithLocals) {
+      envVars.put("SPARK_TRACEBACK_WITH_LOCALS", "1")
+    }
     // SPARK-30299 this could be wrong with standalone mode when executor
     // cores might not be correct because it defaults to all cores on the box.
     val execCores = execCoresProp.map(_.toInt).getOrElse(conf.get(EXECUTOR_CORES))
-    val workerMemoryMb = getWorkerMemoryMb(memoryMb, execCores)
+    // The Python worker pool grows to the number of tasks that run concurrently on this executor.
+    // Prefer the resource profile's max concurrent tasks (the limiting resource across cores and
+    // custom resources, e.g. GPUs); fall back to the cpu-based slot count when it isn't known
+    // (standalone/local without an explicit spark.executor.cores).
+    val maxConcurrentTasks = Option(context.getLocalProperty(MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY))
+      .map(_.toInt)
+      .getOrElse(ResourceProfile.numTasksBasedOnCores(BigDecimal(execCores), context.cpuAmount()))
+    val workerMemoryMb = BasePythonRunner.getWorkerMemoryMb(memoryMb, maxConcurrentTasks)
     if (workerMemoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", workerMemoryMb.get.toString)
     }
@@ -325,8 +366,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
     envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
+    // Pipelined mode is only for UDF eval types, not NON_UDF (mapPartitions/RDD path).
+    val usePipelined = pipelinedEnabled && evalType != PythonEvalType.NON_UDF
+    if (usePipelined) {
+      envVars.put("SPARK_PIPELINED_UDF", "1")
+      envVars.put("SPARK_PIPELINED_UDF_QUEUE_DEPTH", pipelinedQueueDepth.toString)
+    }
 
-    val (worker: PythonWorker, handle: Option[ProcessHandle]) = env.createPythonWorker(
+    val (worker: PythonWorker, handle: Option[PythonWorkerHandle]) = env.createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars.asScala.toMap, useDaemon)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
@@ -359,13 +406,140 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     // Return an iterator that read lines from the process's stdout
-    val dataIn = new DataInputStream(new BufferedInputStream(
-      new ReaderInputStream(worker, writer, handle,
-        faultHandlerEnabled, idleTimeoutSeconds, killOnIdleTimeout, context),
-      bufferSize))
+    val dataIn = if (usePipelined) {
+      createPipelinedDataIn(worker, writer, handle, context)
+    } else {
+      new DataInputStream(new BufferedInputStream(
+        new ReaderInputStream(worker, writer, handle,
+          idleTimeoutSeconds, killOnIdleTimeout, context),
+        bufferSize))
+    }
     val stdoutIterator = newReaderIterator(
-      dataIn, writer, startTime, env, worker, handle.map(_.pid.toInt), releasedOrClosed, context)
+      dataIn, writer, startTime, env, worker, handle, releasedOrClosed, context)
     new InterruptibleIterator(context, stdoutIterator)
+  }
+
+  /**
+   * Sets up pipelined mode: switches the socket to blocking mode, starts the writer
+   * thread, configures idle timeout, and returns a DataInputStream for reading output.
+   */
+  private def createPipelinedDataIn(
+      worker: PythonWorker,
+      writer: Writer,
+      handle: Option[PythonWorkerHandle],
+      context: TaskContext): DataInputStream = {
+    // Switch the channel to blocking mode for true full-duplex I/O.
+    // The channel is left in blocking mode after the task completes; with worker reuse
+    // enabled the worker is returned to the idle pool, so PythonWorkerFactory.create()
+    // normalizes it back to non-blocking before handing it to the next task
+    // (SPARK-57931). Without that, a later task on the non-pipelined selector path would
+    // NPE on worker.selector because refresh() only opens a selector in non-blocking mode.
+    // Must close the selector first because configureBlocking() fails
+    // if the channel is registered with a selector (IllegalBlockingModeException).
+    if (worker.selectionKey != null) {
+      worker.selectionKey.cancel()
+    }
+    if (worker.selector != null) {
+      worker.selector.close()
+    }
+    worker.channel.configureBlocking(true)
+    worker.refresh() // re-initializes (no selector in blocking mode)
+
+    val writerRunnable = new PipelinedWriterRunnable(worker, writer, bufferSize, context)
+    val writerFuture = BasePythonRunner.pipelinedWriterThreadPool.submit(writerRunnable)
+
+    // Wait for the writer to actually exit before letting subsequent task completion listeners
+    // run. Subsequent listeners (registered earlier, executed later under LIFO) free off-heap
+    // memory backing the input rows; if the writer is still serializing such a row when free
+    // happens, we get a use-after-free segfault (SPARK-33277). cancel(true) is enough to unblock
+    // a writer stuck on channel.write (JDK closes the SocketChannel and throws
+    // ClosedByInterruptException on interrupt), so this get() returns promptly in normal cases;
+    // the worst case is a bounded wait for the writer to finish serializing the current row or
+    // batch and observe the interrupt flag at the top of its loop.
+    context.addTaskCompletionListener[Unit] { _ =>
+      writerFuture.cancel(true)
+      try {
+        writerFuture.get()
+      } catch {
+        case _: CancellationException | _: ExecutionException | _: InterruptedException =>
+          // Expected: cancel(true) raced ahead, or writer exited via _exception path.
+      }
+    }
+
+    // Unix domain socket channels expose no java.net.Socket, so socket() throws
+    // UnsupportedOperationException and SO_TIMEOUT-based idle detection is unavailable.
+    // Fall back to reading straight from the channel (no idle timeout), matching how sync
+    // mode also guards its setSoTimeout calls behind !isUnixDomainSock.
+    if (isUnixDomainSock) {
+      return new DataInputStream(
+        new BufferedInputStream(Channels.newInputStream(worker.channel), bufferSize))
+    }
+
+    // Set socket read timeout for idle timeout detection in pipelined mode.
+    // Always set explicitly (including 0 = no timeout) because reused workers may
+    // retain a stale SO_TIMEOUT from a previous task that had a different setting.
+    worker.channel.socket().setSoTimeout(
+      if (idleTimeoutSeconds > 0) idleTimeoutSeconds.toInt * 1000 else 0)
+
+    // Wrap the socket InputStream to handle idle timeout, matching sync mode behavior:
+    // - Log warning on each timeout
+    // - If killOnIdleTimeout=true: kill worker, then throw PythonWorkerException
+    // - If killOnIdleTimeout=false: log only, retry read (continue waiting)
+    val socketInput = new InputStream {
+      private val inner = worker.channel.socket().getInputStream
+      private var pythonWorkerKilled = false
+      override def read(): Int = doRead(() => inner.read())
+      override def read(b: Array[Byte], off: Int, len: Int): Int =
+        doRead(() => inner.read(b, off, len))
+      private def doRead(op: () => Int): Int = {
+        var result = 0
+        var retry = true
+        while (retry) {
+          try {
+            result = op()
+            retry = false
+          } catch {
+            case _: java.net.SocketTimeoutException =>
+              if (pythonWorkerKilled) {
+                logWarning(
+                  log"Waiting for Python worker process to terminate after idle timeout: " +
+                  pythonWorkerStatusMessageWithContext(
+                    handle, worker, hasInputs = true))
+              } else {
+                logWarning(
+                  log"Idle timeout reached for Python worker (timeout: " +
+                  log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
+                  log"No data received from the worker process - " +
+                  pythonWorkerStatusMessageWithContext(
+                    handle, worker, hasInputs = true) +
+                  log" - ${MDC(TASK_NAME, taskIdentifier(context))}")
+                if (killOnIdleTimeout) {
+                  handle.foreach { h =>
+                    if (h.isAlive()) {
+                      logWarning(
+                        log"Terminating Python worker process due to idle timeout " +
+                        log"(timeout: " +
+                        log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} " +
+                        log"seconds) - ${MDC(TASK_NAME, taskIdentifier(context))}")
+                      pythonWorkerKilled = h.destroy()
+                    }
+                  }
+                }
+              }
+          }
+        }
+        if (result == -1 && pythonWorkerKilled) {
+          val base = "Python worker process terminated due to idle timeout " +
+            s"(timeout: $idleTimeoutSeconds seconds)"
+          val msg = handle.flatMap(_.terminationDiagnostics())
+            .map(error => s"$base: $error")
+            .getOrElse(base)
+          throw new PythonWorkerException(msg)
+        }
+        result
+      }
+    }
+    new DataInputStream(new BufferedInputStream(socketInput, bufferSize))
   }
 
   protected def newWriter(
@@ -381,7 +555,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Int],
+      handle: Option[PythonWorkerHandle],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[OUT]
 
@@ -403,6 +577,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     /** Contains the throwable thrown while writing the parent iterator to the Python process. */
     def exception: Option[Throwable] = Option(_exception)
+
+    /** Records a throwable observed by an external collaborator (e.g. the pipelined writer). */
+    private[python] def setException(t: Throwable): Unit = {
+      _exception = t
+    }
 
     /**
      * Writes a command section to the stream connected to the Python worker.
@@ -596,7 +775,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Int],
+      handle: Option[PythonWorkerHandle],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext)
     extends Iterator[OUT] {
@@ -716,7 +895,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
       case e: IOException =>
         val base = "Python worker exited unexpectedly (crashed)"
-        val msg = tryReadFaultHandlerLog(faultHandlerEnabled, pid)
+        val msg = handle.flatMap(_.terminationDiagnostics())
           .map(error => s"$base: $error")
           .getOrElse(base)
         throw new SparkException(msg, e)
@@ -778,8 +957,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   class ReaderInputStream(
       worker: PythonWorker,
       writer: Writer,
-      handle: Option[ProcessHandle],
-      faultHandlerEnabled: Boolean,
+      handle: Option[PythonWorkerHandle],
       idleTimeoutSeconds: Long,
       killOnIdleTimeout: Boolean,
       context: TaskContext) extends InputStream {
@@ -865,7 +1043,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
               log" - ${MDC(TASK_NAME, taskIdentifier(context))}")
             if (killOnIdleTimeout) {
               handle.foreach { handle =>
-                if (handle.isAlive) {
+                if (handle.isAlive()) {
                   logWarning(log"Terminating Python worker process due to idle timeout " +
                     log"(timeout: ${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} " +
                     log"seconds) - ${MDC(TASK_NAME, taskIdentifier(context))}")
@@ -922,7 +1100,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       if (n == -1 && pythonWorkerKilled) {
         val base = "Python worker process terminated due to idle timeout " +
           s"(timeout: $idleTimeoutSeconds seconds)"
-        val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
+        val msg = handle.flatMap(_.terminationDiagnostics())
           .map(error => s"$base: $error")
           .getOrElse(base)
         throw new PythonWorkerException(msg)
@@ -996,6 +1174,112 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
   }
 
+  /**
+   * A dedicated thread that serializes input data and writes it directly to the Python worker
+   * socket in blocking mode. The task main thread simultaneously reads output from the same
+   * socket. TCP sockets are full-duplex, so concurrent read() and write() from different
+   * threads is safe -- they operate on independent OS-level buffers.
+   *
+   * This design achieves true pipeline parallelism without any inter-thread queues or locks:
+   *   Writer Thread:  serialize batch N  ->  channel.write(batch N)    [blocking]
+   *   Reader Thread:  channel.read(output N-1)                        [blocking]
+   *   Python:         read batch N-1  ->  compute  ->  write output  ->  read batch N
+   *
+   * Deadlock safety: Python's UDF loop is "read input -> compute -> write output -> repeat".
+   * As long as the reader thread is consuming Python's output (freeing Python's send buffer),
+   * Python will eventually consume input from the socket (freeing the JVM's send buffer for
+   * the writer thread). The reader thread is always actively reading because the task's
+   * downstream operators pull output on demand.
+   *
+   * Unlike the old WriterThread (removed in SPARK-44705), this design uses a blocking socket
+   * in full-duplex mode rather than two threads competing on the same blocking socket with
+   * shared mutable state. The old design's deadlocks were caused by complex interactions
+   * with vectorized readers and monitor threads, not by the fundamental read/write split.
+   */
+  class PipelinedWriterRunnable(
+      worker: PythonWorker,
+      writer: Writer,
+      bufferSize: Int,
+      context: TaskContext)
+    extends Runnable {
+
+    // Capture InputFileBlockHolder from the task thread so we can propagate it
+    // to the writer pool thread. This is needed because upstream scan operators
+    // set InputFileBlockHolder via InheritableThreadLocal, but pool threads
+    // don't inherit from the task thread.
+    private val parentInputFileBlockHolder = InputFileBlockHolder.getThreadLocalValue()
+
+    override def run(): Unit = {
+      // Propagate TaskContext and InputFileBlockHolder to the pool thread so that
+      // upstream operators work correctly.
+      TaskContext.setTaskContext(context)
+      InputFileBlockHolder.setThreadLocalValue(parentInputFileBlockHolder)
+      val bufferStream = new DirectByteBufferOutputStream(bufferSize)
+      val dataOut = new DataOutputStream(bufferStream)
+      try {
+        // Write command/metadata (partition index, task context, broadcasts, UDF definition).
+        writer.open(dataOut)
+        flushToSocket(bufferStream)
+
+        // Write input data in a loop, batching into buffers of ~bufferSize.
+        var hasInput = true
+        while (hasInput && !Thread.currentThread().isInterrupted) {
+          hasInput = writer.writeNextInputToStream(dataOut)
+          if (bufferStream.size() >= bufferSize || !hasInput) {
+            if (!hasInput) {
+              writer.close(dataOut)
+            }
+            flushToSocket(bufferStream)
+          }
+        }
+      } catch {
+        case _: InterruptedException =>
+          // Task cancelled via Future.cancel(true)
+          Thread.currentThread().interrupt()
+        case _: java.nio.channels.ClosedByInterruptException =>
+          // Task cancelled while blocked in channel.write(). The channel is
+          // automatically closed by the JVM, which will cause Python to receive
+          // EOF and the reader thread to get IOException.
+          Thread.currentThread().interrupt()
+        case NonFatal(t) =>
+          // InterruptedException and ClosedByInterruptException are matched above; what
+          // remains here is genuine non-fatal failure that needs to be propagated to the
+          // reader through writer.exception + a socket EOF.
+          writer.setException(t)
+          // Shut down the socket output so Python receives EOF and terminates.
+          // This unblocks the reader thread which is waiting on socket input:
+          // Python will exit, closing its end of the socket, causing the reader's
+          // read() to return -1. The ReaderIterator will then check writer.exception
+          // and propagate the failure.
+          if (worker.channel.isConnected) {
+            Utils.tryLog(worker.channel.shutdownOutput())
+          }
+      } finally {
+        TaskContext.unset()
+        InputFileBlockHolder.unset()
+        try {
+          bufferStream.close()
+        } catch {
+          case _: Exception => // ignore
+        }
+      }
+    }
+
+    /**
+     * Writes all buffered data to the socket and resets the buffer for reuse.
+     * Uses the DirectByteBufferOutputStream's direct buffer view for zero-copy
+     * socket writes. The write() call is blocking -- it will wait until the OS
+     * socket send buffer has room, which provides natural backpressure.
+     */
+    private def flushToSocket(bufferStream: DirectByteBufferOutputStream): Unit = {
+      val buf = bufferStream.toByteBuffer
+      while (buf.hasRemaining) {
+        worker.channel.write(buf) // blocking write
+      }
+      bufferStream.reset()
+    }
+  }
+
 }
 
 private[spark] object PythonRunner {
@@ -1050,11 +1334,11 @@ private[spark] class PythonRunner(
       startTime: Long,
       env: SparkEnv,
       worker: PythonWorker,
-      pid: Option[Int],
+      handle: Option[PythonWorkerHandle],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
     new ReaderIterator(
-      stream, writer, startTime, env, worker, pid, releasedOrClosed, context) {
+      stream, writer, startTime, env, worker, handle, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
         if (writer.exception.isDefined) {

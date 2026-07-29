@@ -41,7 +41,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.util.{SQLKeywordUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver.closeHiveSessionStateIfStarted
@@ -239,7 +239,15 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     var ret = 0
-    var prefix = ""
+    // Accumulated input that has not yet formed a complete statement. The
+    // interactive loop is line-level: we buffer input until the user types a
+    // line ending with `;`, then ask the parser-based [[SqlStatementSplitter]]
+    // to split the buffered text into statements. Line-level buffering keeps
+    // multi-line input accumulating until the user signals end-of-statement
+    // with `;`, so constructs that span several lines -- an un-closed
+    // bracketed comment (SPARK-33100, SPARK-37471) or a `BEGIN ... END`
+    // scripting block -- are assembled in full before being split.
+    var buffer = ""
 
     def currentDB = {
       if (!SparkSQLEnv.sparkSession.sessionState.conf
@@ -255,6 +263,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
       classOf[CliDriver], "spacesForString", classOf[String] -> currentDB)
 
+    val sqlParser = SparkSQLEnv.sparkSession.sessionState.sqlParser
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
 
@@ -262,21 +271,47 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       // SPARK-55198: call line.trim to also skip comment line with leading whitespaces,
       // this keeps the behavior align with HIVE-8396
       if (!line.trim.startsWith("--")) {
-        if (prefix.nonEmpty) {
-          prefix += '\n'
-        }
-
-        if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
-          line = prefix + line
-          ret = cli.processLine(line, true)
-          prefix = ""
-          currentPrompt = promptWithCurrentDB
+        val trimmed = line.trim
+        if (trimmed.endsWith(";") && !trimmed.endsWith("\\;")) {
+          // The line ends with `;` (and not the Hive-compat `\;` continuation
+          // escape) -- the user signaled end of statement. Ask the splitter
+          // to split the accumulated buffer into statements. The splitter
+          // correctly handles `;` inside quoted strings, comments, and SQL
+          // scripting compound blocks (`BEGIN ... END`).
+          val candidate = if (buffer.isEmpty) line else buffer + "\n" + line
+          val splitResult = sqlParser.splitStatements(candidate)
+          // An un-terminated bracketed comment cannot be completed by
+          // appending more SQL; flush it to the backend so the user sees a
+          // parse error rather than staying stuck on the continuation prompt
+          // forever (SPARK-37555).
+          val flushPartial =
+            splitResult.hasUnclosedComment && splitResult.partialStatement.nonEmpty
+          if (splitResult.completeStatements.nonEmpty || flushPartial) {
+            val parts =
+              splitResult.completeStatements.iterator.map(s => s.statement + s.terminator).toBuffer
+            if (flushPartial) parts += splitResult.partialStatement
+            ret = cli.processLine(parts.mkString("\n"), true)
+          }
+          buffer = if (flushPartial) "" else splitResult.partialStatement
+          currentPrompt =
+            if (buffer.isEmpty) promptWithCurrentDB else continuedPromptWithDBSpaces
         } else {
-          prefix = prefix + line
+          // The line does not signal end of statement (no trailing `;`, or
+          // the trailing `;` is escaped as `\;`). Accumulate and wait for
+          // more input. The `\;` escape survives into the buffer and is
+          // reattached at execution time by `processLine` (via its
+          // `oneCmd.endsWith("\\")` branch).
+          buffer = if (buffer.isEmpty) line else buffer + "\n" + line
           currentPrompt = continuedPromptWithDBSpaces
         }
       }
       line = reader.readLine(currentPrompt + "> ")
+    }
+
+    // Stdin closed with un-terminated trailing input. Pass it to the backend so the
+    // user gets a parse error rather than silently dropping their input.
+    if (buffer.nonEmpty) {
+      ret = cli.processLine(buffer, true)
     }
 
     closeHiveSessionStateIfStarted(sessionState)
@@ -583,7 +618,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       var lastRet: Int = 0
 
       // we can not use "split" function directly as ";" may be quoted
-      val commands = splitSemiColon(line).asScala
+      val commands = splitStatements(line)
       var command: String = ""
       for (oneCmd <- commands) {
         if (oneCmd.endsWith("\\")) {
@@ -613,9 +648,15 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     }
   }
 
-  // Splits SQL into individual statements by top-level semicolons. See
-  // [[StringUtils.splitSemiColon]] for the implementation.
+  // Splits SQL into individual statements via the parser-based
+  // [[org.apache.spark.sql.catalyst.parser.SqlStatementSplitter]]. The returned
+  // list contains the text of every complete statement (without its terminator)
+  // followed by the trailing partial statement, if any -- the shape that
+  // [[processLine]] consumes.
   // Note: [SPARK-31595], [SPARK-33100], [SPARK-54876]
-  private[hive] def splitSemiColon(line: String): JList[String] =
-    StringUtils.splitSemiColon(line, enableSqlScripting = false).asJava
+  private[hive] def splitStatements(line: String): List[String] = {
+    val result = SparkSQLEnv.sparkSession.sessionState.sqlParser.splitStatements(line)
+    val complete = result.completeStatements.iterator.map(_.statement).toList
+    if (result.partialStatement.isEmpty) complete else complete :+ result.partialStatement
+  }
 }

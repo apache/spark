@@ -176,7 +176,9 @@ class HandleWorkerExceptionTests(unittest.TestCase):
         from pyspark.util import handle_worker_exception
 
         try:
-            raise ValueError("test_message")
+            local_marker = "marker_value_42"
+            if local_marker:
+                raise ValueError("test_message")
         except Exception as e:
             with io.BytesIO() as stream:
                 handle_worker_exception(e, stream, hide_traceback)
@@ -205,6 +207,22 @@ class HandleWorkerExceptionTests(unittest.TestCase):
         result = self.run_handle_worker_exception(True)
         self.assertIn(self.exception_bytes, result)
         self.assertNotIn(self.traceback_bytes, result)
+
+    @patch.dict(os.environ, {"SPARK_TRACEBACK_WITH_LOCALS": "1"})
+    def test_env_traceback_with_locals(self):
+        result = self.run_handle_worker_exception()
+        self.assertIn(self.exception_bytes, result)
+        self.assertIn(self.traceback_bytes, result)
+        # The local variable's value should be captured in the traceback.
+        self.assertIn(b"marker_value_42", result)
+
+    @patch.dict(os.environ, {"SPARK_TRACEBACK_WITH_LOCALS": ""})
+    def test_env_no_traceback_with_locals(self):
+        result = self.run_handle_worker_exception()
+        self.assertIn(self.exception_bytes, result)
+        self.assertIn(self.traceback_bytes, result)
+        # Without the environment variable, locals must not be captured.
+        self.assertNotIn(b"marker_value_42", result)
 
 
 if __name__ == "__main__":

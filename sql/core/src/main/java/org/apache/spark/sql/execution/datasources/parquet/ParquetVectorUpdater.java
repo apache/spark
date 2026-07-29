@@ -58,6 +58,14 @@ public interface ParquetVectorUpdater {
    * should have already been filled, and fills the non-null slots using dictionary IDs from
    * `dictionaryIds`, together with Parquet `dictionary`.
    *
+   * <p>The default implementation delegates to {@link #decodeBatch}, which calls
+   * {@link #decodeSingleDictionaryId} per non-null element. Because this default method's
+   * bytecode is shared by every implementor, C2 sees a megamorphic call site for
+   * {@code decodeSingleDictionaryId} and cannot inline the per-element decode. Hot-path
+   * updaters (e.g. {@code IntegerUpdater}) override this method with an identical one-line
+   * delegation to {@code decodeBatch}; the per-class bytecode gives C2 a monomorphic call
+   * site, enabling full inlining of the decode expression.
+   *
    * @param total total number slots to process in `values`
    * @param offset starting offset in `values`
    * @param values destination value vector
@@ -70,11 +78,7 @@ public interface ParquetVectorUpdater {
       WritableColumnVector values,
       WritableColumnVector dictionaryIds,
       Dictionary dictionary) {
-    for (int i = offset; i < offset + total; i++) {
-      if (!values.isNullAt(i)) {
-        decodeSingleDictionaryId(i, values, dictionaryIds, dictionary);
-      }
-    }
+    decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
   }
 
   /**
@@ -91,4 +95,33 @@ public interface ParquetVectorUpdater {
       WritableColumnVector values,
       WritableColumnVector dictionaryIds,
       Dictionary dictionary);
+
+  /**
+   * Batch-decodes dictionary IDs with a no-null fast path.
+   *
+   * <p>When {@code values.hasNull()} is false the per-element {@code isNullAt} check is
+   * skipped entirely. The loop body calls {@code updater.decodeSingleDictionaryId}, which
+   * C2 can devirtualize and inline when the {@code updater} reference has a known concrete
+   * type -- i.e. when this helper is called from a per-class override of
+   * {@link #decodeDictionaryIds} rather than from the shared default method.
+   */
+  static void decodeBatch(
+      int total,
+      int offset,
+      WritableColumnVector values,
+      WritableColumnVector dictionaryIds,
+      Dictionary dictionary,
+      ParquetVectorUpdater updater) {
+    if (!values.hasNull()) {
+      for (int i = offset; i < offset + total; i++) {
+        updater.decodeSingleDictionaryId(i, values, dictionaryIds, dictionary);
+      }
+    } else {
+      for (int i = offset; i < offset + total; i++) {
+        if (!values.isNullAt(i)) {
+          updater.decodeSingleDictionaryId(i, values, dictionaryIds, dictionary);
+        }
+      }
+    }
+  }
 }

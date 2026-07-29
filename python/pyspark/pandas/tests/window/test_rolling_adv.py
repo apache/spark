@@ -15,6 +15,9 @@
 # limitations under the License.
 #
 
+import pandas as pd
+
+from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.window.test_rolling import RollingTestingFuncMixin
 
@@ -35,6 +38,15 @@ class RollingAdvMixin(RollingTestingFuncMixin):
     def test_rolling_sem(self):
         self._test_rolling_func("sem")
         self._test_rolling_func(lambda x: x.sem(ddof=0), lambda x: x.sem(ddof=0))
+        # A single-element window with ddof=0: the population std of one element is 0, so
+        # pandas 3 returns 0.0 (not null); pandas < 3 returns nan. Both are matched here.
+        # Guards against a var_samp-based sem, which is null at count == 1.
+        pser = pd.Series([5.0, 6.0, 7.0])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            psser.rolling(1, min_periods=1).sem(ddof=0),
+            pser.rolling(1, min_periods=1).sem(ddof=0),
+        )
 
     def test_rolling_skew(self):
         self._test_rolling_func("skew")

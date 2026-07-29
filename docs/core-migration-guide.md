@@ -24,7 +24,23 @@ license: |
 
 ## Upgrading from Core 4.2 to 4.3
 
+- Since Spark 4.3, Spark compresses serialized RDD partitions by default. To restore the legacy behavior, you can set `spark.rdd.compress` to `false`.
+
 - Since Spark 4.3, Spark executor pods connect to the driver via the driver pod IP directly instead of the driver's Kubernetes Service. To restore the legacy behavior, you can set `spark.kubernetes.executor.useDriverPodIP` to `false`.
+
+- Since Spark 4.3, Spark sets `allowPrivilegeEscalation` to `false` on the driver and executor containers' security context by default. To restore the legacy behavior, you can set `spark.kubernetes.securityContext.allowPrivilegeEscalation` to `true`.
+
+- Since Spark 4.3, Spark sets the HTTP `Content-Security-Policy` (CSP) response header for the Spark UI by default, restricting the sources from which the browser is allowed to load resources. To restore the legacy behavior, you can set `spark.ui.contentSecurityPolicy.enabled` to `false`.
+
+- Since Spark 4.3, the default value of `spark.ui.xXssProtection` has been changed from `1; mode=block` to `0`. The XSS Auditor has been removed from Chrome and Edge, and was never implemented in Firefox. It can introduce side-channel vulnerabilities in browsers that still support it (Safari). To restore the legacy behavior, you can set `spark.ui.xXssProtection` to `1; mode=block`.
+
+- Since Spark 4.3, `spark.ui.allowFramingFrom` now uses CSP `frame-ancestors` instead of the deprecated `X-Frame-Options: ALLOW-FROM` (which was ignored by all modern browsers). This setting only takes effect when `spark.ui.contentSecurityPolicy.enabled=true` (the default). When CSP is disabled, `X-Frame-Options: SAMEORIGIN` is always used regardless of the `allowFramingFrom` value.
+
+- Since Spark 4.3, the Spark Master REST API rejects a submission whose request body exceeds `spark.master.rest.maxRequestBodySize` (default `100m`) with HTTP 413. To allow larger request bodies, increase `spark.master.rest.maxRequestBodySize`.
+
+- Since Spark 4.3, `spark.task.cpus` accepts fractional values, and the executor-wide `spark.executor.pyspark.memory` allocation is split across the executor's concurrent task capacity instead of its raw core count. Each Python worker's memory limit can therefore change for existing configurations: with `spark.task.cpus` greater than 1 each worker receives a proportionally larger share, and with dynamic allocation enabled, when a custom resource (e.g. GPUs) limits concurrency the fewer concurrently running workers share the whole allocation. With dynamic allocation disabled, shares stay proportional to each task's cpus so that mixed workloads sharing one executor stay within the budget. In addition, a stage whose resource profile does not request `pysparkMemory` explicitly now inherits the default profile's allocation, matching how its executors are sized; Python workers that previously ran without any memory limit under such profiles are now capped. The aggregate limit across concurrently running workers stays within the configured allocation.
+
+- Since Spark 4.3, a positive `spark.executor.pyspark.memory` allocation that is too small to give each concurrent task slot at least 1 MiB fails the Python task with an error instead of silently running the workers without any memory limit. Setting `spark.executor.pyspark.memory=0` still disables the limit. To restore a working memory limit, increase `spark.executor.pyspark.memory` or reduce the executor's concurrent task capacity.
 
 ## Upgrading from Core 4.1 to 4.2
 

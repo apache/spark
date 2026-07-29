@@ -18,7 +18,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS TINYINT)\"",
     "inputType" : "\"TINYINT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS TINYINT) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -42,7 +42,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS SMALLINT)\"",
     "inputType" : "\"SMALLINT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS SMALLINT) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -66,7 +66,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS INT)\"",
     "inputType" : "\"INT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS INT) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -90,7 +90,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS BIGINT)\"",
     "inputType" : "\"BIGINT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS BIGINT) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -114,7 +114,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS FLOAT)\"",
     "inputType" : "\"FLOAT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS FLOAT) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -138,7 +138,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DOUBLE)\"",
     "inputType" : "\"DOUBLE\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS DOUBLE) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -162,7 +162,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DECIMAL(10,0))\"",
     "inputType" : "\"DECIMAL(10,0)\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS DECIMAL(10,0)) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -200,7 +200,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS BINARY)\"",
     "inputType" : "\"BINARY\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS BINARY) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -224,7 +224,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS BOOLEAN)\"",
     "inputType" : "\"BOOLEAN\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS BOOLEAN) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -262,7 +262,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS TINYINT)\"",
     "inputType" : "\"TINYINT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS TINYINT) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -286,7 +286,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS SMALLINT)\"",
     "inputType" : "\"SMALLINT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS SMALLINT) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -310,7 +310,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS INT)\"",
     "inputType" : "\"INT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS INT) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -334,7 +334,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS BIGINT)\"",
     "inputType" : "\"BIGINT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS BIGINT) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -358,7 +358,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS FLOAT)\"",
     "inputType" : "\"FLOAT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS FLOAT) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -382,7 +382,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DOUBLE)\"",
     "inputType" : "\"DOUBLE\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS DOUBLE) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -406,7 +406,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DECIMAL(10,0))\"",
     "inputType" : "\"DECIMAL(10,0)\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS DECIMAL(10,0)) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -444,7 +444,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS BINARY)\"",
     "inputType" : "\"BINARY\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS BINARY) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -468,7 +468,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS BOOLEAN)\"",
     "inputType" : "\"BOOLEAN\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS BOOLEAN) + INTERVAL '2' DAY\""
   },
   "queryContext" : [ {
@@ -506,7 +506,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS TINYINT)\"",
     "inputType" : "\"TINYINT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS TINYINT) + (- INTERVAL '2' DAY)\""
   },
   "queryContext" : [ {
@@ -530,7 +530,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS SMALLINT)\"",
     "inputType" : "\"SMALLINT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS SMALLINT) + (- INTERVAL '2' DAY)\""
   },
   "queryContext" : [ {
@@ -554,7 +554,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS INT)\"",
     "inputType" : "\"INT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS INT) + (- INTERVAL '2' DAY)\""
   },
   "queryContext" : [ {
@@ -578,7 +578,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS BIGINT)\"",
     "inputType" : "\"BIGINT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS BIGINT) + (- INTERVAL '2' DAY)\""
   },
   "queryContext" : [ {
@@ -602,7 +602,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS FLOAT)\"",
     "inputType" : "\"FLOAT\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS FLOAT) + (- INTERVAL '2' DAY)\""
   },
   "queryContext" : [ {
@@ -626,7 +626,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DOUBLE)\"",
     "inputType" : "\"DOUBLE\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS DOUBLE) + (- INTERVAL '2' DAY)\""
   },
   "queryContext" : [ {
@@ -650,7 +650,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS DECIMAL(10,0))\"",
     "inputType" : "\"DECIMAL(10,0)\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS DECIMAL(10,0)) + (- INTERVAL '2' DAY)\""
   },
   "queryContext" : [ {
@@ -688,7 +688,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS BINARY)\"",
     "inputType" : "\"BINARY\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS BINARY) + (- INTERVAL '2' DAY)\""
   },
   "queryContext" : [ {
@@ -712,7 +712,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"CAST(1 AS BOOLEAN)\"",
     "inputType" : "\"BOOLEAN\"",
     "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"CAST(1 AS BOOLEAN) + (- INTERVAL '2' DAY)\""
   },
   "queryContext" : [ {
@@ -736,4 +736,32 @@ Project [cast(cast(2017-12-11 09:30:00.0 as timestamp) - INTERVAL '2' DAY as tim
 select cast('2017-12-11 09:30:00' as date) - interval 2 day
 -- !query analysis
 Project [date_add(cast(2017-12-11 09:30:00 as date), -extractansiintervaldays(INTERVAL '2' DAY)) AS date_add(CAST(2017-12-11 09:30:00 AS DATE), (- extractansiintervaldays(INTERVAL '2' DAY)))#x]
++- OneRowRelation
+
+
+-- !query
+select cast('12:34:56' as time) + interval '02:00:00' hour to second
+-- !query analysis
+Project [cast(12:34:56 as time(6)) + INTERVAL '02:00:00' HOUR TO SECOND AS CAST(12:34:56 AS TIME(6)) + INTERVAL '02:00:00' HOUR TO SECOND#x]
++- OneRowRelation
+
+
+-- !query
+select interval '02:00:00' hour to second + cast('12:34:56' as time)
+-- !query analysis
+Project [cast(12:34:56 as time(6)) + INTERVAL '02:00:00' HOUR TO SECOND AS CAST(12:34:56 AS TIME(6)) + INTERVAL '02:00:00' HOUR TO SECOND#x]
++- OneRowRelation
+
+
+-- !query
+select cast('12:34:56' as time) - interval '02:00:00' hour to second
+-- !query analysis
+Project [cast(12:34:56 as time(6)) - INTERVAL '02:00:00' HOUR TO SECOND AS CAST(12:34:56 AS TIME(6)) - INTERVAL '02:00:00' HOUR TO SECOND#x]
++- OneRowRelation
+
+
+-- !query
+select cast('12:34:56' as time) - cast('10:00:00' as time)
+-- !query analysis
+Project [cast(12:34:56 as time(6)) - cast(10:00:00 as time(6)) AS CAST(12:34:56 AS TIME(6)) - CAST(10:00:00 AS TIME(6))#x]
 +- OneRowRelation

@@ -705,7 +705,7 @@ class CodegenContext extends Logging {
     case CalendarIntervalType => s"$c1.compareTo($c2)"
     // TimestampNanosVal exposes only `compareTo`; the AtomicType fallback below emits
     // `$c1.compare($c2)`, which would not resolve as a Java method call.
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => s"$c1.compareTo($c2)"
+    case _: AnyTimestampNanoType => s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
@@ -1980,7 +1980,7 @@ object CodeGenerator extends Logging {
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
     case IntegerType | DateType | _: YearMonthIntervalType => java.lang.Integer.TYPE
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
       java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE

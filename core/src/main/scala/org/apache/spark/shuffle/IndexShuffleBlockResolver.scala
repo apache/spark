@@ -576,22 +576,21 @@ private[spark] class IndexShuffleBlockResolver(
 
   private[shuffle] def getChecksums(checksumFile: File, blockNum: Int): Array[Long] = {
     if (!checksumFile.exists()) return null
-    val checksums = new ArrayBuffer[Long]
     // Read the checksums of blocks
-    var in: DataInputStream = null
     try {
-      in = new DataInputStream(new NioBufferedFileInputStream(checksumFile))
-      while (checksums.size < blockNum) {
-        checksums += in.readLong()
+      Utils.tryWithResource {
+        new DataInputStream(new NioBufferedFileInputStream(checksumFile))
+      } { in =>
+        val checksums = new ArrayBuffer[Long]
+        while (checksums.size < blockNum) {
+          checksums += in.readLong()
+        }
+        checksums.toArray
       }
     } catch {
       case _: IOException | _: EOFException =>
-        return null
-    } finally {
-      in.close()
+        null
     }
-
-    checksums.toArray
   }
 
   /**

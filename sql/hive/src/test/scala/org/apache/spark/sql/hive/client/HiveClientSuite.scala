@@ -37,8 +37,10 @@ import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveVersion
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
+@SlowHiveTest
 class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
 
   private var versionSpark: TestHiveVersion = null

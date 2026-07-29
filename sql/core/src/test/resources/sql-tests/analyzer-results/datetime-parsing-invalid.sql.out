@@ -200,3 +200,38 @@ select cast("Unparseable" as date)
 -- !query analysis
 Project [cast(Unparseable as date) AS CAST(Unparseable AS DATE)#x]
 +- OneRowRelation
+
+
+-- !query
+select to_time("24", "HH")
+-- !query analysis
+Project [to_time(24, Some(HH)) AS to_time(24, HH)#x]
++- OneRowRelation
+
+
+-- !query
+select to_time("12:60", "HH:mm")
+-- !query analysis
+Project [to_time(12:60, Some(HH:mm)) AS to_time(12:60, HH:mm)#x]
++- OneRowRelation
+
+
+-- !query
+select to_time("12:00:60", "HH:mm:ss")
+-- !query analysis
+Project [to_time(12:00:60, Some(HH:mm:ss)) AS to_time(12:00:60, HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+select to_time("Unparseable", "HH:mm:ss")
+-- !query analysis
+Project [to_time(Unparseable, Some(HH:mm:ss)) AS to_time(Unparseable, HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+select cast("Unparseable" as time)
+-- !query analysis
+Project [cast(Unparseable as time(6)) AS CAST(Unparseable AS TIME(6))#x]
++- OneRowRelation

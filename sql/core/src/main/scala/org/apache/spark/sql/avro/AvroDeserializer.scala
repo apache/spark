@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.Conversions.DecimalConversion
-import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, LocalTimestampNanos, TimestampMicros, TimestampMillis, TimestampNanos}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
@@ -204,11 +204,35 @@ private[sql] class AvroDeserializer(
       }
 
       case (LONG, _: TimeType) => avroType.getLogicalType match {
+        // The time-micros logical type stores microseconds-since-midnight, while TimeType
+        // is represented internally as nanoseconds-since-midnight, so convert micros to nanos.
         case _: LogicalTypes.TimeMicros => (updater, ordinal, value) =>
           val micros = value.asInstanceOf[Long]
-          updater.setLong(ordinal, micros)
+          updater.setLong(ordinal, DateTimeUtils.microsToNanos(micros))
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"Avro logical type $other cannot be converted to SQL type ${TimeType().sql}.")
+      }
+
+      case (LONG, t: TimestampLTZNanosType) => avroType.getLogicalType match {
+        // The timestamp-nanos logical type stores epoch-nanoseconds (Long), while the value is
+        // represented internally as (epochMicros, nanosWithinMicro). Floor semantics keep
+        // nanosWithinMicro in [0, 999] for pre-epoch values. Nanos timestamps are always proleptic
+        // Gregorian, so they are exempt from datetime rebasing.
+        case _: TimestampNanos => (updater, ordinal, value) =>
+          updater.set(ordinal,
+            DateTimeUtils.epochNanosToTimestampNanos(value.asInstanceOf[Long], t.precision))
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"Avro logical type $other cannot be converted to SQL type " +
+          s"${TimestampLTZNanosType().sql}.")
+      }
+
+      case (LONG, t: TimestampNTZNanosType) => avroType.getLogicalType match {
+        case _: LocalTimestampNanos => (updater, ordinal, value) =>
+          updater.set(ordinal,
+            DateTimeUtils.epochNanosToTimestampNanos(value.asInstanceOf[Long], t.precision))
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"Avro logical type $other cannot be converted to SQL type " +
+          s"${TimestampNTZNanosType().sql}.")
       }
 
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.

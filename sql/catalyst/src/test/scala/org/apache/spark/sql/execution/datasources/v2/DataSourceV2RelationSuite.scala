@@ -17,11 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
 import org.apache.spark.sql.catalyst.plans.logical.{Histogram, HistogramBin}
+import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
+import org.apache.spark.sql.catalyst.util.INTERNAL_METADATA_KEYS
+import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.FieldReference
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2RelationSuite extends SparkFunSuite {
 
@@ -106,5 +112,38 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     // When no histogram: histogram() should be empty
     val idV2NoHist = colStats.get(FieldReference.column("id"))
     assert(!idV2NoHist.histogram().isPresent)
+  }
+
+  test("create strips leaked internal metadata but preserves column IDs") {
+    // A column carrying both a column ID (surfaced on purpose) and every internal metadata key
+    // (listed in INTERNAL_METADATA_KEYS), simulating a v2 source that leaks internal metadata.
+    // The column ID key is excluded here since it is set via `.id(...)` below.
+    val leakedBuilder = new MetadataBuilder()
+    INTERNAL_METADATA_KEYS.filter(_ != FIELD_ID_METADATA_KEY).foreach { key =>
+      leakedBuilder.putString(key, "leaked")
+    }
+    val leakedMetadata = leakedBuilder.build()
+    val table = new Table {
+      override def name(): String = "t"
+      override def columns(): Array[Column] = Array(
+        Column.builderFor("id", IntegerType)
+          .id("1")
+          .metadata(leakedMetadata.json)
+          .build())
+      override def capabilities(): util.Set[TableCapability] =
+        util.Set.of[TableCapability]()
+    }
+
+    val relation =
+      DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+    val field = relation.schema.head
+
+    // All leaked internal metadata keys are stripped from the relation output ...
+    INTERNAL_METADATA_KEYS.filter(_ != FIELD_ID_METADATA_KEY).foreach { key =>
+      assert(!field.metadata.contains(key), s"internal metadata key $key should be stripped")
+    }
+    // ... but the column ID is preserved.
+    assert(field.id.contains("1"))
+    assert(field.metadata.contains(FIELD_ID_METADATA_KEY))
   }
 }

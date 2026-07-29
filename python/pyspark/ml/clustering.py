@@ -36,6 +36,7 @@ from pyspark.ml.param.shared import (
     HasCheckpointInterval,
     HasSolver,
     HasMaxBlockSizeInMB,
+    HasIntermediateStorageLevel,
     Param,
     Params,
     TypeConverters,
@@ -582,6 +583,7 @@ class _KMeansParams(
     HasWeightCol,
     HasSolver,
     HasMaxBlockSizeInMB,
+    HasIntermediateStorageLevel,
 ):
     """
     Params for :py:class:`KMeans` and :py:class:`KMeansModel`.
@@ -920,6 +922,13 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         Sets the value of :py:attr:`maxBlockSizeInMB`.
         """
         return self._set(maxBlockSizeInMB=value)
+
+    @since("5.0.0")
+    def setIntermediateStorageLevel(self, value: str) -> "KMeans":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 @inherit_doc

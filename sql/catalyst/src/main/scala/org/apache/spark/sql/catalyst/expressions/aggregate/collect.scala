@@ -387,10 +387,13 @@ private[aggregate] object CollectTopK {
   arguments = """
     Arguments:
       * expr - a string or binary expression to be concatenated.
+        An expression that evaluates to a string or binary.
       * delimiter - an optional string or binary foldable expression used to separate the input values.
         If NULL, the concatenation will be performed without a delimiter. Default is NULL.
+        An expression that evaluates to a string, binary, or null. Must be a constant.
       * key - an optional expression for ordering the input values. Multiple keys can be specified.
         If none are specified, the order of the rows in the result is non-deterministic.
+        An expression of any type.
   """,
   examples = """
     Examples:
@@ -747,7 +750,7 @@ case class ListAgg(
   private def isCastEqualityPreserving(dt: DataType): Boolean = dt match {
     case _: IntegerType | LongType | ShortType | ByteType => true
     case _: DecimalType => true
-    case _: DateType | TimestampNTZType => true
+    case _: DateType | TimestampNTZType | _: TimestampNTZNanosType => true
     case _: TimeType => true
     case _: CalendarIntervalType => true
     case _: YearMonthIntervalType => true
@@ -757,8 +760,8 @@ case class ListAgg(
     case st: StringType => st.isUTF8BinaryCollation
     case _: DoubleType | FloatType => false
     // During DST fall-back, two distinct UTC epochs can format to the same local time string
-    // because the default format omits the timezone offset. TimestampNTZType is safe (uses UTC).
-    case _: TimestampType => false
+    // because the default format omits the timezone offset. NTZ types are safe (use UTC).
+    case _: TimestampType | _: TimestampLTZNanosType => false
     case _ => false
   }
 

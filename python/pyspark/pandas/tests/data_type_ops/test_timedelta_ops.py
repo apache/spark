@@ -17,10 +17,12 @@
 
 from datetime import timedelta
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
@@ -72,6 +74,47 @@ class TimedeltaOpsTestsMixin:
 
         pdf, psdf = self.timedelta_pdf, self.timedelta_psdf
         self.assert_eq(pdf["that"] - pdf["this"], psdf["that"] - psdf["this"])
+
+    def test_sub_unit(self):
+        # pandas 3.0.0+ takes the finer resolution of the operands instead of always
+        # microseconds (SPARK-55299); before that timedelta64 is always nanoseconds.
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return
+
+        for left_unit, right_unit in [("s", "s"), ("ms", "ms"), ("us", "us"), ("s", "ms")]:
+            pser1 = pd.Series(np.array([3, 5, 8], dtype=f"timedelta64[{left_unit}]"))
+            pser2 = pd.Series(np.array([1, 2, 3], dtype=f"timedelta64[{right_unit}]"))
+            psser1, psser2 = ps.from_pandas(pser1), ps.from_pandas(pser2)
+            self.assert_eq(pser1 - pser2, psser1 - psser2)
+            self.assert_eq(pser1 - timedelta(seconds=1), psser1 - timedelta(seconds=1))
+            self.assert_eq(timedelta(seconds=1) - pser1, timedelta(seconds=1) - psser1)
+
+            # pd.Timedelta is a datetime.timedelta subclass that carries its own resolution.
+            for unit in ["s", "ms"]:
+                scalar = pd.Timedelta(1, unit=unit)
+                self.assert_eq(pser1 - scalar, psser1 - scalar)
+                self.assert_eq(scalar - pser1, scalar - psser1)
+
+        pidx = pd.Index(np.array([3, 5, 8], dtype="timedelta64[s]"))
+        psidx = ps.from_pandas(pidx)
+        self.assert_eq(pidx - pidx, psidx - psidx)
+
+        # DayTimeIntervalType cannot represent nanoseconds, so nanosecond operands are
+        # capped at microseconds rather than matching pandas' nanosecond result.
+        pser_ns = pd.Series(np.array([3, 5, 8], dtype="timedelta64[ns]"))
+        pser_s = pd.Series(np.array([3, 5, 8], dtype="timedelta64[s]"))
+        psser_ns, psser_s = ps.from_pandas(pser_ns), ps.from_pandas(pser_s)
+        self.assertEqual((psser_ns - psser_ns)._to_pandas().dtype, np.dtype("timedelta64[us]"))
+        self.assertEqual(
+            (psser_s - pd.Timedelta(1, unit="ns"))._to_pandas().dtype, np.dtype("timedelta64[us]")
+        )
+
+        # object-backed interval columns carry no numpy resolution; must not fail.
+        pser_obj = pd.Series([timedelta(days=1), timedelta(seconds=2)], dtype=object)
+        psser_obj = ps.from_pandas(pser_obj)
+        expected = pser_obj.astype("timedelta64[us]")
+        self.assert_eq(expected - timedelta(0), psser_obj - timedelta(0))
+        self.assert_eq(expected - expected, psser_obj - psser_obj)
 
     def test_mul(self):
         self.assertRaises(TypeError, lambda: self.psser * "x")

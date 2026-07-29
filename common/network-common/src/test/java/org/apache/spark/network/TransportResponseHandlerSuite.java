@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.local.LocalChannel;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -169,6 +170,30 @@ public class TransportResponseHandlerSuite {
     handler.exceptionCaught(new IOException("Oops!"));
 
     verify(cb).onFailure(eq("stream-1"), isA(IOException.class));
+  }
+
+  @Test
+  public void failStreamCallbackWhenInstallingInterceptorFails() throws Exception {
+    // With no TransportFrameDecoder in the pipeline, the decoder lookup in the StreamResponse
+    // branch returns null and installing the interceptor throws. The handler must fail the
+    // callback (so the caller does not hang) and close the channel rather than reuse a
+    // connection it can no longer decode.
+    Channel c = mock(Channel.class);
+    ChannelPipeline pipeline = mock(ChannelPipeline.class);
+    when(c.pipeline()).thenReturn(pipeline);
+    when(pipeline.get(TransportFrameDecoder.HANDLER_NAME)).thenReturn(null);
+    TransportResponseHandler handler = new TransportResponseHandler(c);
+
+    StreamCallback cb = mock(StreamCallback.class);
+    handler.addStreamCallback("stream", cb);
+    assertEquals(1, handler.numOutstandingRequests());
+
+    // byteCount > 0 so the handler takes the interceptor-installation path.
+    handler.handle(new StreamResponse("stream", 1234L, null));
+
+    verify(cb, times(1)).onFailure(eq("stream"), isA(NullPointerException.class));
+    verify(c, times(1)).close();
+    assertEquals(0, handler.numOutstandingRequests());
   }
 
   @Test

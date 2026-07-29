@@ -25,9 +25,9 @@ import scala.concurrent.duration.Duration
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException, TaskContext}
-import org.apache.spark.sql.execution.streaming.{LowLatencyMemoryStream, RealTimeTrigger}
+import org.apache.spark.sql.execution.streaming.RealTimeTrigger
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.sources.ContinuousMemorySink
+import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
 
@@ -145,22 +145,6 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
         "interval" -> (minBatchDuration - 1).toString,
         "minBatchDuration" -> minBatchDuration.toString
       )
-    )
-  }
-
-  test("environment check for real-time mode throws when the valid configurations aren't set") {
-    val inputData = LowLatencyMemoryStream.singlePartition[Int]
-    val mapped = inputData.toDS().map(_ + 1)
-
-    checkError(
-      intercept[SparkIllegalArgumentException] {
-        testStream(mapped, OutputMode.Update, Map(
-          "asyncProgressTrackingEnabled" -> "true"
-        ), new ContinuousMemorySink())(
-          StartStream()
-        )
-      },
-      "STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED"
     )
   }
 

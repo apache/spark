@@ -56,6 +56,16 @@ on:
         description: 'Commit the benchmark results to the current branch'
         required: true
         default: false
+      generate-tpcds:
+        type: boolean
+        description: 'Generate TPC-DS data (required for TPC-DS benchmarks and all-benchmark runs)'
+        required: true
+        default: true
+      expected-cpu:
+        type: string
+        description: 'Expected CPU model (e.g. "AMD EPYC 7763"). If set, the job fails early when the runner CPU does not match.'
+        required: false
+        default: ''
 
 jobs:
   matrix-gen:
@@ -73,7 +83,7 @@ jobs:
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g job of build_and_test.yml as well
   tpcds-1g-gen:
     name: "Generate an TPC-DS dataset with SF=1"
-    if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'LZ4TPCDSDataBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
+    if: inputs.generate-tpcds
     runs-on: ubuntu-latest
     env:
       SPARK_LOCAL_IP: localhost
@@ -156,6 +166,21 @@ jobs:
       # In order to get diff files
       with:
         fetch-depth: 0
+    - name: Check CPU model
+      env:
+        EXPECTED_CPU: ${{ inputs.expected-cpu }}
+      run: |
+        CPU_MODEL=$(grep "model name" /proc/cpuinfo | head -1 | sed 's/model name\s*:\s*//')
+        echo "Runner CPU: $CPU_MODEL"
+        echo "::notice::Runner CPU: $CPU_MODEL"
+        if [ -n "$EXPECTED_CPU" ]; then
+          if echo "$CPU_MODEL" | grep -qF "$EXPECTED_CPU"; then
+            echo "CPU matches expected: $EXPECTED_CPU"
+          else
+            echo "::error::CPU mismatch! Expected '$EXPECTED_CPU' but got '$CPU_MODEL'"
+            exit 1
+          fi
+        fi
     - name: Cache SBT and Maven
       uses: actions/cache@v5
       with:
@@ -179,7 +204,7 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.jdk }}
     - name: Cache TPC-DS generated data
-      if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'LZ4TPCDSDataBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
+      if: inputs.generate-tpcds
       id: cache-tpcds-sf-1
       uses: actions/cache@v5
       with:

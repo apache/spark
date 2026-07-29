@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{functions => F, AnalysisException, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
@@ -375,6 +375,46 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
       sqlState = "22023",
       parameters = Map.empty
     )
+  }
+
+  test("ChangeArgs rejects trackHistorySelection under SCD1") {
+    // SCD1 has no run concept, so a non-None trackHistorySelection is meaningless. User-facing
+    // validation is expected at the API layer; this defensive internal guard raises an internal
+    // error so downstream SCD1 code can assume the selection is None.
+    val ex = intercept[SparkException] {
+      ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1,
+        trackHistorySelection = Some(
+          ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("Name")))
+        )
+      )
+    }
+    assert(ex.getCondition == "INTERNAL_ERROR")
+  }
+
+  test("ChangeArgs allows trackHistorySelection under SCD2") {
+    // The same selection is valid under SCD2, where tracking columns define a run.
+    val args = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type2,
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("Name")))
+      )
+    )
+    assert(args.trackHistorySelection.isDefined)
+  }
+
+  test("ChangeArgs allows None trackHistorySelection under SCD1") {
+    // The default None selection is always valid under SCD1.
+    val args = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
+    )
+    assert(args.trackHistorySelection.isEmpty)
   }
 
   test("UnqualifiedColumnName lets a ParseException from the SQL parser propagate") {

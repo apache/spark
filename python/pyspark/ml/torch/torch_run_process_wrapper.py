@@ -69,7 +69,7 @@ if __name__ == "__main__":
     task.stdin.close()  # type: ignore[union-attr]
     try:
         for line in task.stdout:  # type: ignore[union-attr]
-            decoded = line.decode()
+            decoded = line.decode("utf-8")
             print(decoded.rstrip())
         task.wait()
     finally:

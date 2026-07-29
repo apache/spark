@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_HINT}
 
@@ -128,6 +130,13 @@ object JoinStrategyHint {
     SHUFFLE_MERGE,
     SHUFFLE_HASH,
     SHUFFLE_REPLICATE_NL)
+
+  private lazy val allHintAliasesUpperCase: Set[String] =
+    strategies.flatMap(_.hintAliases).map(_.toUpperCase(Locale.ROOT))
+
+  def isJoinStrategyHintName(hintName: String): Boolean = {
+    allHintAliasesUpperCase.contains(hintName.toUpperCase(Locale.ROOT))
+  }
 }
 
 /**
@@ -176,14 +185,6 @@ case object SHUFFLE_REPLICATE_NL extends JoinStrategyHint {
  */
 case object NO_BROADCAST_HASH extends JoinStrategyHint {
   override def displayName: String = "no_broadcast_hash"
-  override def hintAliases: Set[String] = Set.empty
-}
-
-/**
- * An internal hint to encourage shuffle hash join, used by adaptive query execution.
- */
-case object PREFER_SHUFFLE_HASH extends JoinStrategyHint {
-  override def displayName: String = "prefer_shuffle_hash"
   override def hintAliases: Set[String] = Set.empty
 }
 

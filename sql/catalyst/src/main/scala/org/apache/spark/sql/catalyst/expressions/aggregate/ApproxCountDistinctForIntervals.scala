@@ -67,7 +67,7 @@ case class ApproxCountDistinctForIntervals(
 
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(TypeCollection(NumericType, TimestampType, DateType, TimestampNTZType,
-      YearMonthIntervalType, DayTimeIntervalType), ArrayType)
+      YearMonthIntervalType, DayTimeIntervalType, AnyTimeType), ArrayType)
   }
 
   // Mark as lazy so that endpointsExpression is not evaluated during tree transformation.
@@ -90,7 +90,7 @@ case class ApproxCountDistinctForIntervals(
     } else {
       endpointsExpression.dataType match {
         case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType |
-           _: AnsiIntervalType, _) =>
+           _: AnsiIntervalType | _: AnyTimeType, _) =>
           if (endpoints.length < 2) {
             DataTypeMismatch(
               errorSubClass = "WRONG_NUM_ENDPOINTS",
@@ -100,7 +100,7 @@ case class ApproxCountDistinctForIntervals(
           }
         case inputType =>
           val requiredElemTypes = toSQLType(TypeCollection(
-            NumericType, DateType, TimestampType, TimestampNTZType, AnsiIntervalType))
+            NumericType, DateType, TimestampType, TimestampNTZType, AnsiIntervalType, AnyTimeType))
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
@@ -144,7 +144,7 @@ case class ApproxCountDistinctForIntervals(
             .toDouble(value.asInstanceOf[PhysicalNumericType#InternalType])
         case _: DateType | _: YearMonthIntervalType =>
           value.asInstanceOf[Int].toDouble
-        case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+        case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: AnyTimeType =>
           value.asInstanceOf[Long].toDouble
       }
 

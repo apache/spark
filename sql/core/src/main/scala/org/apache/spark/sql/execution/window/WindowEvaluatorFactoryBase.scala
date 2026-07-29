@@ -281,11 +281,55 @@ trait WindowEvaluatorFactoryBase {
 
           // Shrinking Frame.
           case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
-            target: InternalRow => {
-              new UnboundedFollowingWindowFunctionFrame(
-                target,
-                processor,
-                createBoundOrdering(frameType, lower, timeZone))
+            if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
+              val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
+              // Shrinking-frame queries `[lower, n)` on `WindowSegmentTree` touch the LRU
+              // for exactly two blocks per query: (1) the lower-edge partial block, and
+              // (2) the partition's last block (the right-partial `mergeBlockRange(bhi, 0,
+              // ...)` calls `ensureBlockLevels(bhi)` on every multi-block query). Middle
+              // blocks of `[lower, n)` are answered directly from `blockAggregates` and
+              // never go through the LRU. The lower-edge block advances monotonically with
+              // the output row, so once the cursor crosses a boundary the previous block
+              // is never revisited; the last block stays hot because every query touches
+              // it. Hint = 2 keeps both resident; routing through `estimateMaxCachedBlocks`
+              // would produce 8 by default (no `IntegerLiteral` upper match) -- correct
+              // numerically but misleading about what the shrinking path actually needs.
+              // Note: tuning this down to 1 would thrash, evicting the last block on every
+              // query and forcing it to be rebuilt.
+              val cacheHint = Some(2)
+              target: InternalRow => {
+                val tc = TaskContext.get()
+                if (tc == null) {
+                  throw SparkException.internalError(
+                    "WindowEvaluatorFactoryBase.shrinkingSegTreeFrameFactory requires " +
+                      "an active TaskContext")
+                }
+                val tmm = tc.taskMemoryManager()
+                val lb = createBoundOrdering(frameType, lower, timeZone)
+                new SegmentTreeWindowFunctionFrame(
+                  target,
+                  processor,
+                  segFns,
+                  childOutput,
+                  frameType,
+                  lb,
+                  ubound = None,
+                  fallbackFactory = () =>
+                    new UnboundedFollowingWindowFunctionFrame(target, processor, lb),
+                  (e, s) => MutableProjection.create(e, s),
+                  conf,
+                  cacheHint,
+                  tmm,
+                  numSegmentTreeFrames,
+                  numSegmentTreeFallbackFrames)
+              }
+            } else {
+              target: InternalRow => {
+                new UnboundedFollowingWindowFunctionFrame(
+                  target,
+                  processor,
+                  createBoundOrdering(frameType, lower, timeZone))
+              }
             }
 
           // Moving Frame.
@@ -305,14 +349,18 @@ trait WindowEvaluatorFactoryBase {
                       "an active TaskContext")
                 }
                 val tmm = tc.taskMemoryManager()
+                val lb = createBoundOrdering(frameType, lower, timeZone)
+                val ub = createBoundOrdering(frameType, upper, timeZone)
                 new SegmentTreeWindowFunctionFrame(
                   target,
                   processor,
                   segFns,
                   childOutput,
                   frameType,
-                  createBoundOrdering(frameType, lower, timeZone),
-                  createBoundOrdering(frameType, upper, timeZone),
+                  lb,
+                  ubound = Some(ub),
+                  fallbackFactory = () =>
+                    new SlidingWindowFunctionFrame(target, processor, lb, ub),
                   (e, s) => MutableProjection.create(e, s),
                   conf,
                   cacheHint,

@@ -244,6 +244,31 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
     }
   }
 
+  test("SPARK-57463: nanosecond-precision timestamp types over JDBC") {
+    withJdbcStatement() { statement =>
+      statement.execute("SET spark.sql.timestampNanosTypes.enabled=true")
+      // Fix the session zone so the LTZ wall-clock value is deterministic.
+      statement.execute("SET spark.sql.session.timeZone=UTC")
+
+      // The cast truncates the 9-digit fraction to the column precision (SPARK-57256), matching
+      // the cast-to-string / HiveResult rendering.
+      val expectedFractions = Map(7 -> ".1234567", 8 -> ".12345678", 9 -> ".123456789")
+      val base = "2019-07-22 18:14:00"
+      Seq("TIMESTAMP_NTZ", "TIMESTAMP_LTZ").foreach { typeName =>
+        for (p <- 7 to 9) {
+          val resultSet = statement.executeQuery(
+            s"SELECT CAST('$base.123456789' AS $typeName($p))")
+          assert(resultSet.next())
+          assert(resultSet.getString(1) === s"$base${expectedFractions(p)}")
+          val metaData = resultSet.getMetaData
+          // The nanosecond timestamp column is mapped to STRING_TYPE in the Thrift server.
+          assert(metaData.getColumnTypeName(1) === "string")
+          assert(metaData.getColumnType(1) === java.sql.Types.VARCHAR)
+        }
+      }
+    }
+  }
+
   test("SPARK-4407 regression: Complex type support") {
     withJdbcStatement("test_map") { statement =>
       val queries = Seq(

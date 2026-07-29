@@ -220,7 +220,11 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def explain(mode: String): Unit = {
-    val protoMode = mode.trim.toLowerCase(util.Locale.ROOT) match {
+    explain(parseExplainMode(mode))
+  }
+
+  private def parseExplainMode(mode: String): proto.AnalyzePlanRequest.Explain.ExplainMode = {
+    mode.trim.toLowerCase(util.Locale.ROOT) match {
       case "simple" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE
       case "extended" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED
       case "codegen" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN
@@ -228,7 +232,6 @@ class Dataset[T] private[sql] (
       case "formatted" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED
       case _ => throw new IllegalArgumentException("Unsupported explain mode: " + mode)
     }
-    explain(protoMode)
   }
 
   private def explain(mode: proto.AnalyzePlanRequest.Explain.ExplainMode): Unit = {
@@ -239,6 +242,19 @@ class Dataset[T] private[sql] (
         .getExplain
         .getExplainString)
     // scalastyle:on println
+  }
+
+  private[connect] def explainString(mode: String): String = {
+    sparkSession
+      .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN, Some(parseExplainMode(mode)))
+      .getExplain
+      .getExplainString
+  }
+
+  private[connect] def explainString(extended: Boolean): String = if (extended) {
+    explainString("extended")
+  } else {
+    explainString("simple")
   }
 
   /** @inheritdoc */

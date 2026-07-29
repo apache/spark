@@ -22,15 +22,15 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, TableViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, RelationCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.execution.LeafExecNode
 
 /**
  * Physical plan node for showing tables.
  *
- * For a [[TableViewCatalog]] (one that exposes both tables and views in a shared identifier
- * namespace), this routes through [[TableViewCatalog#listTableAndViewSummaries]] so that views are
+ * For a [[RelationCatalog]] (one that exposes both tables and views in a shared identifier
+ * namespace), this routes through [[RelationCatalog#listRelationSummaries]] so that views are
  * included in the listing -- matching the v1 `SHOW TABLES` semantics where views appear
  * alongside tables. Pure [[TableCatalog]] catalogs continue to use `listTables` and return
  * tables only.
@@ -44,8 +44,8 @@ case class ShowTablesExec(
     val rows = new ArrayBuffer[InternalRow]()
 
     val identifiers: Array[Identifier] = catalog match {
-      case mc: TableViewCatalog =>
-        mc.listTableAndViewSummaries(namespace.toArray).map(_.identifier())
+      case mc: RelationCatalog =>
+        mc.listRelationSummaries(namespace.toArray).map(_.identifier())
       case _ => catalog.listTables(namespace.toArray)
     }
     identifiers.foreach { ident =>

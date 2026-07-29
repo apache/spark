@@ -397,7 +397,13 @@ Spark supports the writing of all Spark SQL types into Protobuf. For most types,
     <td>MapType</td>
     <td>map</td>
   </tr>
+  <tr>
+    <td>TimeType</td>
+    <td>int64 (nanoseconds-of-day)</td>
+  </tr>
 </table>
+
+`TimeType` is written as a plain Protobuf `int64` holding the number of nanoseconds since midnight. Because a bare `int64` carries no logical-type marker, `from_protobuf` reads such a field back as `LongType` (the nanoseconds-of-day value), which can be cast back to a TIME value with `cast(... AS TIME)` if needed.
 
 ## Handling circular references protobuf fields
 

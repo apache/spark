@@ -58,6 +58,13 @@ case class TryEval(child: Expression) extends UnaryExpression {
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the sum of `expr1`and `expr2` and the result is null on overflow. " +
     "The acceptable input types are the same with the `+` operator.",
+  arguments = """
+    Arguments:
+      * expr1 - The first addend.
+        An expression that evaluates to a numeric, interval, date, timestamp, or time.
+      * expr2 - The second addend.
+        An expression that evaluates to a numeric, interval, date, timestamp, or time.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1, 2);
@@ -70,6 +77,10 @@ case class TryEval(child: Expression) extends UnaryExpression {
        2022-01-01
       > SELECT _FUNC_(timestamp'2021-01-01 00:00:00', interval 1 day);
        2021-01-02 00:00:00
+      > SELECT _FUNC_(time'09:00:00', interval 1 hour);
+       10:00:00
+      > SELECT _FUNC_(time'23:00:00', interval 2 hour);
+       NULL
       > SELECT _FUNC_(interval 1 year, interval 2 year);
        3-0
   """,
@@ -98,6 +109,13 @@ case class TryAdd(left: Expression, right: Expression, replacement: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(dividend, divisor) - Returns `dividend`/`divisor`. It always performs floating point division. Its result is always null if `expr2` is 0. " +
     "`dividend` must be a numeric or an interval. `divisor` must be a numeric.",
+  arguments = """
+    Arguments:
+      * dividend - The expression to be divided.
+        An expression that evaluates to a numeric or interval.
+      * divisor - The expression to divide by.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(3, 2);
@@ -137,6 +155,13 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
 @ExpressionDescription(
   usage = "_FUNC_(dividend, divisor) - Returns the remainder after `expr1`/`expr2`. " +
     "`dividend` must be a numeric. `divisor` must be a numeric.",
+  arguments = """
+    Arguments:
+      * dividend - The expression to be divided.
+        An expression that evaluates to a numeric.
+      * divisor - The expression to divide by.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(3, 2);
@@ -173,6 +198,13 @@ case class TryMod(left: Expression, right: Expression, replacement: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr1`-`expr2` and the result is null on overflow. " +
     "The acceptable input types are the same with the `-` operator.",
+  arguments = """
+    Arguments:
+      * expr1 - The minuend to subtract from.
+        An expression that evaluates to a numeric, interval, date, timestamp, or time.
+      * expr2 - The subtrahend to subtract.
+        An expression that evaluates to a numeric, interval, date, timestamp, or time.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(2, 1);
@@ -185,6 +217,10 @@ case class TryMod(left: Expression, right: Expression, replacement: Expression)
        2020-01-01
       > SELECT _FUNC_(timestamp'2021-01-02 00:00:00', interval 1 day);
        2021-01-01 00:00:00
+      > SELECT _FUNC_(time'09:00:00', interval 1 hour);
+       08:00:00
+      > SELECT _FUNC_(time'00:30:00', interval 1 hour);
+       NULL
       > SELECT _FUNC_(interval 2 year, interval 1 year);
        1-0
   """,
@@ -211,6 +247,13 @@ case class TrySubtract(left: Expression, right: Expression, replacement: Express
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr1`*`expr2` and the result is null on overflow. " +
     "The acceptable input types are the same with the `*` operator.",
+  arguments = """
+    Arguments:
+      * expr1 - The first factor.
+        An expression that evaluates to a numeric or interval.
+      * expr2 - The second factor.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(2, 3);
@@ -243,6 +286,13 @@ case class TryMultiply(left: Expression, right: Expression, replacement: Express
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str[, fmt]) - This is a special version of `to_binary` that performs the same operation, but returns a NULL value instead of raising an error if the conversion cannot be performed.",
+  arguments = """
+    Arguments:
+      * str - The string to convert to a binary value.
+        An expression that evaluates to a string.
+      * fmt - The format of the input string.
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('abc', 'utf-8');

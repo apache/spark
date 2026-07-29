@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFu
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, TimestampType}
 
 class ProjectedOrderingAndPartitioningSuite
   extends SharedSparkSession with AdaptiveSparkPlanHelper {
@@ -82,6 +82,32 @@ class ProjectedOrderingAndPartitioningSuite
             assert(outputPartitioning.isInstanceOf[UnknownPartitioning])
         }
       }
+    }
+  }
+
+  test("SPARK-58323: AliasAware output ordering and partitioning are strict, not lazy") {
+    // A multi-alias projection makes `sameOrderExpressions` and the projected
+    // `PartitioningCollection` non-trivial. Both must be strict collections: the underlying
+    // `multiTransform` produces a `LazyList`, and storing it unforced lets each plan node re-wrap
+    // the child's lazy list. Across a deep projection chain that nesting overflows the stack when
+    // the ordering/partitioning is later serialized or deeply traversed.
+    withSQLConf(SQLConf.EXPRESSION_PROJECTION_CANDIDATE_LIMIT.key -> "5") {
+      // Ordering (AliasAwareQueryOutputOrdering): id -> {x, y, z} gives sameOrderExpressions.
+      val orderDf = spark.range(2).orderBy($"id").selectExpr("id as x", "id as y", "id as z")
+      val outputOrdering = orderDf.queryExecution.optimizedPlan.outputOrdering
+      assert(outputOrdering.head.sameOrderExpressions.nonEmpty)
+      outputOrdering.foreach { so =>
+        assert(!so.sameOrderExpressions.isInstanceOf[LazyList[_]],
+          s"sameOrderExpressions must be strict, was ${so.sameOrderExpressions.getClass.getName}")
+      }
+
+      // Partitioning (PartitioningPreservingUnaryExecNode): repartition(id) -> {x, y, z}.
+      val partDf = spark.range(2).repartition($"id").selectExpr("id as x", "id as y", "id as z")
+      val outputPartitioning = stripAQEPlan(partDf.queryExecution.executedPlan).outputPartitioning
+      val partitionings = outputPartitioning.asInstanceOf[PartitioningCollection].partitionings
+      assert(partitionings.size == 3)
+      assert(!partitionings.isInstanceOf[LazyList[_]],
+        s"partitionings must be strict, was ${partitionings.getClass.getName}")
     }
   }
 
@@ -601,6 +627,79 @@ class ProjectedOrderingAndPartitioningSuite
         KeyedPartitioning(Seq(x), keys1d)))
     }
     assert(e.getMessage.contains("partitionKeys"))
+  }
+
+  test("SPARK-58138: BIN BY preserves a child partitioning on a pass-through column") {
+    val tsStart = AttributeReference("ts_start", TimestampType)()
+    val tsEnd = AttributeReference("ts_end", TimestampType)()
+    val value = AttributeReference("value", DoubleType)()
+    val host = AttributeReference("host", IntegerType)()
+    val binBy = BinByExec(
+      binWidthMicros = 300000000L, originMicros = 0L, rangeStart = tsStart, rangeEnd = tsEnd,
+      distributeColumns = Seq(value),
+      scaledDistributeColumns = Seq(AttributeReference("value", DoubleType)()),
+      appendedAttributes = Seq(
+        AttributeReference("bin_start", TimestampType)(),
+        AttributeReference("bin_end", TimestampType)(),
+        AttributeReference("bin_distribute_ratio", DoubleType)()),
+      timeZoneId = None,
+      child = DummyLeafExecWithPartitioning(
+        output = Seq(tsStart, tsEnd, value, host),
+        partitioning = HashPartitioning(Seq(host), 4)))
+
+    binBy.outputPartitioning match {
+      case p: HashPartitioning =>
+        assert(p.expressions === Seq(host))
+        assert(p.numPartitions === 4)
+      case other => fail(s"Expected HashPartitioning, got $other")
+    }
+  }
+
+  test("SPARK-58138: BIN BY drops a child partitioning on a scaled DISTRIBUTE column") {
+    val tsStart = AttributeReference("ts_start", TimestampType)()
+    val tsEnd = AttributeReference("ts_end", TimestampType)()
+    val value = AttributeReference("value", DoubleType)()
+    val binBy = BinByExec(
+      binWidthMicros = 300000000L, originMicros = 0L, rangeStart = tsStart, rangeEnd = tsEnd,
+      distributeColumns = Seq(value),
+      scaledDistributeColumns = Seq(AttributeReference("value", DoubleType)()),
+      appendedAttributes = Seq(
+        AttributeReference("bin_start", TimestampType)(),
+        AttributeReference("bin_end", TimestampType)(),
+        AttributeReference("bin_distribute_ratio", DoubleType)()),
+      timeZoneId = None,
+      child = DummyLeafExecWithPartitioning(
+        output = Seq(tsStart, tsEnd, value),
+        partitioning = HashPartitioning(Seq(value), 4)))
+
+    binBy.outputPartitioning match {
+      case p: UnknownPartitioning => assert(p.numPartitions === 4)
+      case other => fail(s"Expected UnknownPartitioning, got $other")
+    }
+  }
+
+  test("SPARK-58138: BIN BY drops a mixed pass-through and DISTRIBUTE partitioning whole") {
+    val tsStart = AttributeReference("ts_start", TimestampType)()
+    val tsEnd = AttributeReference("ts_end", TimestampType)()
+    val value = AttributeReference("value", DoubleType)()
+    val host = AttributeReference("host", IntegerType)()
+    val binBy = BinByExec(
+      binWidthMicros = 300000000L, originMicros = 0L, rangeStart = tsStart, rangeEnd = tsEnd,
+      distributeColumns = Seq(value),
+      scaledDistributeColumns = Seq(AttributeReference("value", DoubleType)()),
+      appendedAttributes = Seq(
+        AttributeReference("bin_start", TimestampType)(),
+        AttributeReference("bin_end", TimestampType)(),
+        AttributeReference("bin_distribute_ratio", DoubleType)()),
+      timeZoneId = None,
+      child = DummyLeafExecWithPartitioning(
+        output = Seq(tsStart, tsEnd, value, host),
+        partitioning = HashPartitioning(Seq(value, host), 4)))
+
+    binBy.outputPartitioning match {
+      case p: UnknownPartitioning => assert(p.numPartitions === 4)
+      case other => fail(s"Expected UnknownPartitioning, got $other")
+    }
   }
 }
 

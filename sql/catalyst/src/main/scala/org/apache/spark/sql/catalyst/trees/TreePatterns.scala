@@ -41,6 +41,7 @@ object TreePattern extends Enumeration  {
   val BINARY_COMPARISON: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
+  val CAST_TO_TIMESTAMP: Value = Value
   val COALESCE: Value = Value
   val COMMON_EXPR_REF: Value = Value
   val CONCAT: Value = Value
@@ -58,6 +59,7 @@ object TreePattern extends Enumeration  {
   val FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION: Value = Value
   val GENERATOR: Value = Value
   val GROUPING_ANALYTICS: Value = Value
+  val GET_JSON_OBJECT: Value = Value
   val HIGH_ORDER_FUNCTION: Value = Value
   val IF: Value = Value
   val IN: Value = Value
@@ -105,6 +107,7 @@ object TreePattern extends Enumeration  {
   val TIME_WINDOW: Value = Value
   val TIME_ZONE_AWARE_EXPRESSION: Value = Value
   val TRUE_OR_FALSE_LITERAL: Value = Value
+  val USER_DEFINED_AGGREGATION: Value = Value
   val VARIANT_GET: Value = Value
   val WINDOW_EXPRESSION: Value = Value
   val WINDOW_TIME: Value = Value
@@ -138,6 +141,7 @@ object TreePattern extends Enumeration  {
   val AGGREGATE: Value = Value
   val APPEND_COLUMNS: Value = Value
   val AS_OF_JOIN: Value = Value
+  val BIN_BY: Value = Value
   val COLLECT_METRICS: Value = Value
   val COMMAND: Value = Value
   val CTE: Value = Value
@@ -195,6 +199,8 @@ object TreePattern extends Enumeration  {
   // Unresolved Plan patterns (Alphabetically ordered)
   val NAMED_STREAMING_RELATION: Value = Value
   val PLAN_WITH_UNRESOLVED_IDENTIFIER: Value = Value
+  val UNRESOLVED_BIN_BY: Value = Value
+  val UNRESOLVED_DEDUPLICATE: Value = Value
   val UNRESOLVED_EVENT_TIME_WATERMARK: Value = Value
   val UNRESOLVED_HAVING: Value = Value
   val UNRESOLVED_HINT: Value = Value

@@ -55,6 +55,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.util.PartitionKeyedAccumulator
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
 import org.apache.spark.tags.SlowSQLTest
@@ -474,12 +475,12 @@ class CachedTableSuite extends SharedSparkSession
       val toBeCleanedAccIds = new HashSet[Long]
 
       val accId1 = spark.table("t1").queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+        case i: InMemoryRelation => i.cacheBuilder.materializationAccumulatorId
       }.head
       toBeCleanedAccIds += accId1
 
       val accId2 = spark.table("t1").queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+        case i: InMemoryRelation => i.cacheBuilder.materializationAccumulatorId
       }.head
       toBeCleanedAccIds += accId2
 
@@ -506,6 +507,52 @@ class CachedTableSuite extends SharedSparkSession
 
       assert(AccumulatorContext.get(accId1).isEmpty)
       assert(AccumulatorContext.get(accId2).isEmpty)
+    }
+  }
+
+  test("SPARK-57547: clearCache isolates materialization bookkeeping by cache generation") {
+    val df = spark.range(0, 100, 1, numPartitions = 4).filter($"id" >= 0)
+    df.cache()
+    try {
+      val cacheRelations = df.queryExecution.withCachedData.collect {
+        case i: InMemoryRelation => i
+      }
+      assert(cacheRelations.length == 1)
+      val builder = cacheRelations.head.cacheBuilder
+      // Force the cache build directly (a plain df action can be served from the query-result
+      // cache and skip the rebuild after clearCache).
+      builder.cachedColumnBuffers.count()
+      assert(builder.isCachedColumnBuffersLoaded)
+      assert(builder.materializedRowCount == 100L)
+      val oldAccumulatorId = builder.materializationAccumulatorId
+      val oldAccumulator = AccumulatorContext.get(oldAccumulatorId).get
+        .asInstanceOf[PartitionKeyedAccumulator[(Long, Long)]]
+
+      builder.clearCache()
+      assert(builder.materializationAccumulatorId != oldAccumulatorId)
+      assert(!builder.isCachedColumnBuffersLoaded)
+      assert(builder.materializedRowCount == 0L)
+      assert(builder.materializedSizeInBytes == 0L)
+
+      // Simulate tasks from the previous cache generation completing after clearCache. Their
+      // updates must remain isolated from the new generation.
+      (0 until 4).foreach(partitionId => oldAccumulator.add((partitionId, (1L, 1L))))
+      assert(builder.materializedRowCount == 0L)
+      assert(builder.materializedSizeInBytes == 0L)
+      val rebuiltBuffers = builder.cachedColumnBuffers
+      assert(!builder.isCachedColumnBuffersLoaded)
+
+      rebuiltBuffers.count()
+      assert(builder.isCachedColumnBuffersLoaded)
+      assert(builder.materializedRowCount == 100L)
+      val rebuiltSizeInBytes = builder.materializedSizeInBytes
+      assert(rebuiltSizeInBytes > 0L)
+
+      oldAccumulator.add((0, (999L, 999L)))
+      assert(builder.materializedRowCount == 100L)
+      assert(builder.materializedSizeInBytes == rebuiltSizeInBytes)
+    } finally {
+      df.unpersist(blocking = true)
     }
   }
 

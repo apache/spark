@@ -34,7 +34,7 @@ import org.apache.spark.sql.errors.DataTypeErrors
  * @since 4.2.0
  */
 @Unstable
-case class TimestampLTZNanosType(precision: Int) extends DatetimeType {
+case class TimestampLTZNanosType(precision: Int) extends AnyTimestampNanoType {
 
   if (precision < TimestampLTZNanosType.MIN_PRECISION ||
     precision > TimestampLTZNanosType.MAX_PRECISION) {

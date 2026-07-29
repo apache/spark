@@ -21,8 +21,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.concurrent.duration.DurationInt
-
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
@@ -675,12 +673,21 @@ abstract class KafkaRelationSuiteBase extends SharedSparkSession with KafkaTest 
   test("resolved start offset greater than end offset (without latest)") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
-    val timestamp1 =
-      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(0))(1)._2.timestamp()
-    val timestamp2 =
-      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(1))(1)._2.timestamp()
-    val timestamp3 =
-      testUtils.sendMessages(topic, Seq("0", "0").toArray, Some(2))(1)._2.timestamp()
+    // Two messages per partition with explicit, increasing timestamps so the second message
+    // (offset 1) is deterministically resolved by offsetsForTimes. Without explicit timestamps
+    // both messages can share a CreateTime millisecond and resolve to offset 0, making the test
+    // flaky (produced timestamps are fixed at produce time, so retrying always resolves the same
+    // wrong offset). Returns base + 1 directly; broker echoes the producer timestamp unchanged
+    // under the default CreateTime semantics.
+    def sendTwoWithDistinctTs(part: Int): Long = {
+      val base = System.currentTimeMillis()
+      testUtils.sendMessages(Seq(
+        new RecordBuilder(topic, "0").partition(part).timestamp(base).build(),
+        new RecordBuilder(topic, "0").partition(part).timestamp(base + 1).build()
+      ))
+      base + 1
+    }
+    val Seq(timestamp1, timestamp2, timestamp3) = (0 to 2).map(sendTwoWithDistinctTs)
     val df = spark.read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -699,13 +706,11 @@ abstract class KafkaRelationSuiteBase extends SharedSparkSession with KafkaTest 
       )
       .load()
 
-    eventually(timeout(60.seconds)) {
-      val e = intercept[IllegalStateException] {
-        df.collect()
-      }
-      assert(e.getMessage.contains(
-        "The resolved start offset 3 is greater than the resolved end offset 1 for"))
+    val e = intercept[IllegalStateException] {
+      df.collect()
     }
+    assert(e.getMessage.contains(
+      "The resolved start offset 3 is greater than the resolved end offset 1 for"))
   }
 }
 

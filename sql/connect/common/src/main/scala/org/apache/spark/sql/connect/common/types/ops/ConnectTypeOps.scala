@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
 import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer, ArrowVectorReader}
 import org.apache.spark.sql.connect.client.arrow.types.ops.TimeTypeConnectOps
-import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{DataType, TimeType}
 
 /**
@@ -89,50 +88,42 @@ trait ConnectTypeOps extends Serializable {
 /**
  * Factory object for ConnectTypeOps lookup.
  *
- * Provides separate factory methods for proto (server-side, feature-flag-gated) and Arrow
- * (client-side, no flag) dispatch.
+ * Provides separate factory methods for proto conversion and Arrow serde dispatch.
  */
 object ConnectTypeOps {
 
-  // ==================== Proto Dispatch (server-side, flag-gated) ====================
+  // ==================== Proto Dispatch ====================
 
-  /** DataType-keyed dispatch for proto conversions. Checks feature flag. */
-  def apply(dt: DataType): Option[ConnectTypeOps] = {
-    if (!SqlApiConf.get.typesFrameworkEnabled) return None
-    dt match {
-      case tt: TimeType => Some(new TimeTypeConnectOps(tt))
-      // Add new framework types here
-      case _ => None
-    }
+  /** DataType-keyed dispatch for proto conversions. */
+  def apply(dt: DataType): Option[ConnectTypeOps] = dt match {
+    case tt: TimeType => Some(new TimeTypeConnectOps(tt))
+    // Add new framework types here
+    case _ => None
   }
 
-  /** Reverse lookup by value class for the generic literal builder. Checks feature flag. */
+  /** Reverse lookup by value class for the generic literal builder. */
   def toLiteralProtoForValue(
       value: Any,
-      builder: proto.Expression.Literal.Builder): Option[proto.Expression.Literal.Builder] = {
-    if (!SqlApiConf.get.typesFrameworkEnabled) return None
+      builder: proto.Expression.Literal.Builder): Option[proto.Expression.Literal.Builder] =
     value match {
       case v: java.time.LocalTime =>
         Some(new TimeTypeConnectOps(TimeType()).toLiteralProto(v, builder))
       // Add new framework value types here
       case _ => None
     }
-  }
 
   /**
    * Shared KindCase -> ConnectTypeOps lookup. All reverse lookups by proto enum case dispatch
-   * through this single registration point. Checks feature flag.
+   * through this single registration point.
    */
-  private def opsForKindCase(kindCase: proto.DataType.KindCase): Option[ConnectTypeOps] = {
-    if (!SqlApiConf.get.typesFrameworkEnabled) return None
+  private def opsForKindCase(kindCase: proto.DataType.KindCase): Option[ConnectTypeOps] =
     kindCase match {
       case proto.DataType.KindCase.TIME => Some(new TimeTypeConnectOps(TimeType()))
       // Add new framework proto kinds here - single registration for all KindCase lookups
       case _ => None
     }
-  }
 
-  /** Reverse lookup: converts a proto DataType to a Spark DataType. Checks feature flag. */
+  /** Reverse lookup: converts a proto DataType to a Spark DataType. */
   def toCatalystType(t: proto.DataType): Option[DataType] =
     opsForKindCase(t.getKindCase).map(_.toCatalystTypeFromProto(t))
 
@@ -155,9 +146,9 @@ object ConnectTypeOps {
       case _ => proto.DataType.KindCase.KIND_NOT_SET
     }
 
-  // ==================== Arrow Dispatch (client-side, NO flag check) ====================
+  // ==================== Arrow Dispatch ====================
 
-  /** Encoder-keyed dispatch for Arrow serialization. No feature flag check. */
+  /** Encoder-keyed dispatch for Arrow serialization. */
   def forEncoder(enc: AgnosticEncoder[_]): Option[ConnectTypeOps] =
     enc match {
       case LocalTimeEncoder => Some(new TimeTypeConnectOps(TimeType()))
@@ -165,7 +156,7 @@ object ConnectTypeOps {
       case _ => None
     }
 
-  /** DataType-keyed dispatch for ArrowVectorReader. No feature flag check. */
+  /** DataType-keyed dispatch for ArrowVectorReader. */
   def forDataType(dt: DataType): Option[ConnectTypeOps] =
     dt match {
       case tt: TimeType => Some(new TimeTypeConnectOps(tt))

@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.{Locale, Properties}
 
+import scala.util.matching.Regex
+
 import org.apache.commons.io.FilenameUtils
 
 import org.apache.spark.SparkFiles
@@ -268,7 +270,7 @@ class JDBCOptions(
     case _ => false
   }
 
-  def getRedactUrl(): String = Utils.redact(SQLConf.get.stringRedactionPattern, url)
+  def getRedactUrl(): String = JDBCOptions.redactUrl(url, SQLConf.get.stringRedactionPattern)
 }
 
 class JdbcOptionsInWrite(
@@ -300,6 +302,37 @@ object JDBCOptions {
   private def newOption(name: String): String = {
     jdbcOptionNames += name.toLowerCase(Locale.ROOT)
     name
+  }
+
+  /**
+   * Redacts a JDBC URL so it is safe to surface in logs and error messages.
+   *
+   * A JDBC URL has the form `jdbc:<subprotocol>:<subname>`, where `<subprotocol>` is a registered
+   * driver name (`mysql`, `oracle`, `postgresql`, ...) and `<subname>` is entirely driver-specific.
+   * Credentials can appear anywhere in `<subname>` and in arbitrary syntaxes -- userinfo in a
+   * `//user:pwd@host` authority, Oracle Thin's `user/pwd@host`, `?`/`;` connection properties, etc.
+   * Rather than enumerate every driver's syntax (and inevitably miss one and leak), we keep only
+   * the `jdbc:<subprotocol>:` prefix -- which is credential-free by construction -- and redact
+   * everything after it. The driver type stays visible for debugging; nothing else does.
+   *
+   * This redaction is unconditional, unlike the optional, user-configured
+   * `spark.sql.redaction.string.regex` (which is unset by default and would leave the URL in the
+   * clear). The configured `regex` is still applied on top, preserving existing behavior.
+   */
+  def redactUrl(url: String, regex: Option[Regex]): String = {
+    if (url == null || url.isEmpty) {
+      url
+    } else {
+      // The second colon terminates the subprotocol: "jdbc" ':' "<subprotocol>" ':' "<subname>".
+      val subprotocolEnd = url.indexOf(':', url.indexOf(':') + 1)
+      val redacted = if (subprotocolEnd < 0) {
+        // No subname delimiter -- the URL is malformed, so don't trust any of it.
+        Utils.REDACTION_REPLACEMENT_TEXT
+      } else {
+        url.substring(0, subprotocolEnd + 1) + Utils.REDACTION_REPLACEMENT_TEXT
+      }
+      Utils.redact(regex, redacted)
+    }
   }
 
   val JDBC_URL = newOption("url")

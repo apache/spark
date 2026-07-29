@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
@@ -313,6 +313,36 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("cast(a as timestamp)", $"a".cast(TimestampType))
     assertEqual("cast(a as array<int>)", $"a".cast(ArrayType(IntegerType)))
     assertEqual("cast(cast(a as int) as long)", $"a".cast(IntegerType).cast(LongType))
+  }
+
+  test("SPARK-57164: CAST / TRY_CAST to nanos timestamp types") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            assertEqual(s"cast(a as $spelling)", $"a".cast(expected))
+            assertEqual(s"try_cast(a as $spelling)",
+              Cast($"a", expected, evalMode = EvalMode.TRY))
+        }
+      }
+    }
+    // With the preview flag off, a nanos data type in a cast target is rejected.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      Seq("cast(a as TIMESTAMP_NTZ(9))", "try_cast(a as TIMESTAMP_LTZ(7))").foreach { sql =>
+        checkError(
+          exception = intercept[SparkException](defaultParser.parseExpression(sql)),
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"))
+      }
+    }
   }
 
   test("function expressions") {
@@ -1292,12 +1322,14 @@ class ExpressionParserSuite extends AnalysisTest {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
       assertEqual("current_time", CurrentTime())
+      assertEqual("localtime", CurrentTime())
     }
 
     def testNonAnsiBehavior(): Unit = {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
       assertEqual("current_time", UnresolvedAttribute.quoted("current_time"))
+      assertEqual("localtime", UnresolvedAttribute.quoted("localtime"))
     }
     withSQLConf(
       SQLConf.ANSI_ENABLED.key -> "false",
@@ -1337,6 +1369,18 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("tIme '12:13:14'", Literal(LocalTime.parse("12:13:14")))
     assertEqual("TIME'23:59:59.999999'", Literal(LocalTime.parse("23:59:59.999999")))
 
+    // ANSI SQL: the literal precision is the number of fractional-second digits. 7-9 digits
+    // produce a nanosecond-precision TIME literal; <= 6 digits keep the default precision (6).
+    assertEqual(
+      "TIME '12:34:56.1234567'",
+      Literal.create(LocalTime.parse("12:34:56.123456700"), TimeType(7)))
+    assertEqual(
+      "TIME '12:34:56.12345678'",
+      Literal.create(LocalTime.parse("12:34:56.123456780"), TimeType(8)))
+    assertEqual(
+      "TIME '23:59:59.999999999'",
+      Literal.create(LocalTime.parse("23:59:59.999999999"), TimeType(9)))
+
     checkError(
       exception = parseException("time '12-13.14'"),
       condition = "INVALID_TYPED_LITERAL",
@@ -1346,6 +1390,17 @@ class ExpressionParserSuite extends AnalysisTest {
         fragment = "time '12-13.14'",
         start = 0,
         stop = 14))
+
+    // More than 9 fractional-second digits is rejected.
+    checkError(
+      exception = parseException("TIME '12:34:56.1234567890'"),
+      condition = "INVALID_TIME_LITERAL_PRECISION",
+      sqlState = "22023",
+      parameters = Map("value" -> "'12:34:56.1234567890'"),
+      context = ExpectedContext(
+        fragment = "TIME '12:34:56.1234567890'",
+        start = 0,
+        stop = 25))
   }
 
   test("collate expression origin") {

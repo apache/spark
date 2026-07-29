@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.time.ZoneOffset;
 
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.column.values.ValuesReader;
@@ -27,7 +26,6 @@ import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.io.ParquetDecodingException;
 
 import org.apache.spark.SparkUnsupportedOperationException;
-import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -203,19 +201,6 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     // in `readIntegersAsLongs`.
     for (int i = 0; i < total; i += 1) {
       c.putInt(rowId + i, (int) buffer.getLong());
-    }
-  }
-
-  @Override
-  public final void readIntegersAsTimestampMicros(
-      int total, WritableColumnVector c, int rowId) {
-    int requiredBytes = total * 4;
-    ByteBuffer buffer = getBuffer(requiredBytes);
-    // Per-element conversion calls into `DateTimeUtils.daysToMicros`, which is `days *
-    // MICROS_PER_DAY` for UTC plus an overflow check via `Math.multiplyExact`. No
-    // `hasArray` bulk-copy path because source and target have different widths.
-    for (int i = 0; i < total; i += 1) {
-      c.putLong(rowId + i, DateTimeUtils.daysToMicros(buffer.getInt(), ZoneOffset.UTC));
     }
   }
 
@@ -563,6 +548,18 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       byte[] bytes = new byte[len];
       buffer.get(bytes);
       return Binary.fromConstantByteArray(bytes);
+    }
+  }
+
+  @Override
+  public final void readFixedLenByteArray(int total, int len, WritableColumnVector v, int rowId) {
+    for (int i = 0; i < total; i++) {
+      ByteBuffer buffer = getBuffer(len);
+      if (buffer.hasArray()) {
+        v.putByteArray(rowId + i, buffer.array(), buffer.arrayOffset() + buffer.position(), len);
+      } else {
+        v.putByteArray(rowId + i, buffer, buffer.position(), len);
+      }
     }
   }
 

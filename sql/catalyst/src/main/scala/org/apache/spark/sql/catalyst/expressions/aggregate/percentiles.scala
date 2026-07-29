@@ -65,6 +65,7 @@ abstract class PercentileBase
     val resultType = child.dataType match {
       case _: YearMonthIntervalType => YearMonthIntervalType()
       case _: DayTimeIntervalType => DayTimeIntervalType()
+      case t: TimeType => t
       case _ => DoubleType
     }
     if (returnPercentileArray) ArrayType(resultType, false) else resultType
@@ -75,7 +76,7 @@ abstract class PercentileBase
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
-    Seq(NumericAndAnsiInterval, percentageExpType, IntegralType)
+    Seq(TypeCollection(NumericAndAnsiInterval, AnyTimeType), percentageExpType, IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -175,6 +176,7 @@ abstract class PercentileBase
     val results = child.dataType match {
       case _: YearMonthIntervalType => percentiles.map(_.toInt)
       case _: DayTimeIntervalType => percentiles.map(_.toLong)
+      case _: TimeType => percentiles.map(_.toLong)
       case _ => percentiles
     }
     if (percentiles.isEmpty) {
@@ -221,8 +223,12 @@ abstract class PercentileBase
       // We end up here only if spark.sql.legacy.percentileDiscCalculation=true
       toDoubleValue(lowerKey)
     } else {
-      // Linear interpolation to get the exact percentile
-      (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
+      // Linear interpolation to get the exact percentile. Computed as lower + fraction *
+      // (higher - lower) to stay monotonic; the delta can overflow to Infinity only for adjacent
+      // values straddling zero near Double.MaxValue, an extreme case where the old form was also
+      // inaccurate.
+      toDoubleValue(lowerKey) +
+        (position - lower) * (toDoubleValue(higherKey) - toDoubleValue(lowerKey))
     }
   }
 
@@ -255,8 +261,8 @@ abstract class PercentileBase
 @ExpressionDescription(
   usage =
     """
-      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
-       or ANSI interval column `col` at the given percentage. The value of percentage must be
+      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric,
+       ANSI interval or TIME column `col` at the given percentage. The value of percentage must be
        between 0.0 and 1.0. The value of frequency should be positive integral
 
       _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
@@ -328,7 +334,12 @@ case class Percentile(
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(col) - Returns the median of numeric or ANSI interval column `col`.",
+  usage = "_FUNC_(col) - Returns the median of numeric, ANSI interval or TIME column `col`.",
+  arguments = """
+    Arguments:
+      * col - The column to compute the median of.
+        An expression that evaluates to a numeric, interval, or time.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10) AS tab(col);
@@ -353,7 +364,7 @@ case class Median(child: Expression)
 
 /**
  * Return a percentile value based on a continuous distribution of
- * numeric or ANSI interval column at the given percentage (specified in ORDER BY clause).
+ * numeric, ANSI interval or TIME column at the given percentage (specified in ORDER BY clause).
  * The value of percentage must be between 0.0 and 1.0.
  */
 case class PercentileCont(left: Expression, right: Expression, reverse: Boolean = false)
@@ -480,7 +491,7 @@ case class PercentileDisc(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
-    "a continuous distribution of numeric or ANSI interval column `col` at the given " +
+    "a continuous distribution of numeric, ANSI interval or TIME column `col` at the given " +
     "`percentage` (specified in ORDER BY clause).",
   examples = """
     Examples:
@@ -506,7 +517,7 @@ object PercentileContBuilder extends ExpressionBuilder {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
-    "a discrete distribution of numeric or ANSI interval column `col` at the given " +
+    "a discrete distribution of numeric, ANSI interval or TIME column `col` at the given " +
     "`percentage` (specified in ORDER BY clause).",
   examples = """
     Examples:

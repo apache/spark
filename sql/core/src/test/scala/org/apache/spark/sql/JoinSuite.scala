@@ -46,6 +46,9 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
 
   setupTestData()
 
+  override protected def sparkConf =
+    super.sparkConf.set(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key, "0")
+
   def statisticSizeInByte(df: classic.DataFrame): BigInt = {
     df.queryExecution.optimizedPlan.stats.sizeInBytes
   }
@@ -1834,6 +1837,10 @@ class ThreadLeakInSortMergeJoinSuite
     with AdaptiveSparkPlanHelper {
 
   setupTestData()
+
+  override protected def sparkConf =
+    super.sparkConf.set(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key, "0")
+
   override protected def createSparkSession: TestSparkSession = {
     classic.SparkSession.cleanupAnyExistingSession()
     new TestSparkSession(

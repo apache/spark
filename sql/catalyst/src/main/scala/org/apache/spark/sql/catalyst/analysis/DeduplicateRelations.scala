@@ -48,7 +48,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           if right.resolved && !j.duplicateResolved && noMissingInput(right.plan) =>
         j.copy(right = right.withNewPlan(dedupRight(left, right.plan)))
       // Resolve duplicate output for AsOfJoin.
-      case j @ AsOfJoin(left, right, _, _, _, _, _)
+      case j @ AsOfJoin(left, right, _, _, _, _, _, _, _, _, _, _, _, _)
           if !j.duplicateResolved && noMissingInput(right) =>
         j.copy(right = dedupRight(left, right))
       // Resolve duplicate output for NearestByJoin.
@@ -196,6 +196,15 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         g,
         _.generatorOutput.map(_.exprId.id), newGenerate =>
           newGenerate.copy(generatorOutput = newGenerate.generatorOutput.map(_.newInstance())))
+
+    case b: BinBy =>
+      deduplicateAndRenew[BinBy](
+        existingRelations,
+        b,
+        _.producedAttributes.map(_.exprId.id).toSeq,
+        newBinBy => newBinBy.copy(
+          scaledDistributeColumns = newBinBy.scaledDistributeColumns.map(_.newInstance()),
+          appendedAttributes = newBinBy.appendedAttributes.map(_.newInstance())))
 
     case e: Expand =>
       deduplicateAndRenew[Expand](
@@ -456,6 +465,14 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
         val newOutput = oldVersion.generatorOutput.map(_.newInstance())
         val newVersion = oldVersion.copy(generatorOutput = newOutput)
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
+      case oldVersion: BinBy
+          if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(
+          scaledDistributeColumns = oldVersion.scaledDistributeColumns.map(_.newInstance()),
+          appendedAttributes = oldVersion.appendedAttributes.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 

@@ -153,7 +153,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.comment).thenReturn(None)
     when(t.collation).thenReturn(None)
     if (tableType == CatalogTableType.VIEW) {
-      // Stub the view-only fields that resolution reads through `V1ViewInfo.builderFrom`.
+      // Stub the view-only fields that resolution reads through `V1View.builderFrom`.
       // Mockito returns `null` for unstubbed Object methods, which would NPE the moment
       // builderFrom calls `.getOrElse` / `.asJava` / `.toArray` on a null Option/Seq/Map.
       when(t.viewText).thenReturn(None)
@@ -1397,6 +1397,23 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     )
   }
 
+  test("INSERT INTO REPLACE WHERE with column list") {
+    val parsed = parseAndResolve(
+      """INSERT INTO testcat.tab (i, s)
+        |REPLACE WHERE i = 1
+        |SELECT * FROM v2Table""".stripMargin)
+    parsed match {
+      case overwriteByExpression: OverwriteByExpression =>
+        // ResolveInsertInto resolves the column list into a Project and converts the statement
+        // into a by-name OverwriteByExpression whose delete expression is the REPLACE WHERE
+        // condition, resolved against the target table.
+        assert(overwriteByExpression.isByName)
+        assert(overwriteByExpression.deleteExpr.resolved)
+      case other =>
+        fail(s"Expected OverwriteByExpression, but got: $other")
+    }
+  }
+
   test("INSERT INTO REPLACE ON is blocked when feature flag is disabled") {
     withSQLConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED.key -> "false") {
       val ex = intercept[ParseException] {
@@ -1513,7 +1530,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   None,
                   None,
                   None,
-                  false))) =>
+                  false,
+                  false)),
+                _) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterColumns")
           }
@@ -1528,7 +1547,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   Some("new comment"),
                   None,
                   None,
-                  false))) =>
+                  false,
+                  false)),
+                _) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterColumns")
           }
@@ -1545,6 +1566,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                     None,
                     None,
                     None,
+                    false,
                     false),
                   AlterColumnSpec(
                     column2: ResolvedFieldName,
@@ -1553,7 +1575,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                     None,
                     None,
                     Some(DefaultValueExpression(_, _, _)),
-                    false))) =>
+                    false,
+                    false)),
+                _) =>
               assert(column1.name == Seq("i"))
               assert(column2.name == Seq("s"))
             case _ => fail("expect AlterColumns")
@@ -1641,7 +1665,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Some(comment),
               None,
               None,
-              false))) =>
+              false,
+              false)),
+            _) =>
           assert(comment == "an index")
         case _ => fail("expect AlterTableAlterColumn with comment change only")
       }
@@ -1656,7 +1682,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Some(comment),
               None,
               None,
-              false))) =>
+              false,
+              false)),
+            _) =>
           assert(comment == "an index")
           assert(dataType == LongType)
         case _ => fail("expect AlterTableAlterColumn with type and comment changes")
@@ -1691,7 +1719,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val catalog = if (isSessionCatalog) v2SessionCatalog else testCat
       val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
-        case AlterColumns(r: ResolvedTable, _) =>
+        case AlterColumns(r: ResolvedTable, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case Project(_, AsDataSourceV2Relation(r)) =>

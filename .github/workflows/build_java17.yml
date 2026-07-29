@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Java17 (Scala 2.13, Hadoop 3, JDK 17)"
+name: "Build / Java17 (Scala 2.13, JDK 17)"
 
 on:
   workflow_dispatch:
@@ -36,8 +36,7 @@ jobs:
         {
           "SCALA_PROFILE": "scala2.13",
           "PYSPARK_IMAGE_TO_TEST": "",
-          "PYTHON_TO_TEST": "",
-          "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-free:23.7-slim"
+          "PYTHON_TO_TEST": ""
         }
       jobs: >-
         {

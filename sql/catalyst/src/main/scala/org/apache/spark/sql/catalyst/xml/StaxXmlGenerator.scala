@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.xml
 import java.io.Writer
 import java.sql.Timestamp
 import java.util.Base64
-import javax.xml.stream.XMLOutputFactory
 
 import scala.collection.Map
 
 import org.apache.hadoop.shaded.com.ctc.wstx.api.WstxOutputProperties
+import org.apache.hadoop.shaded.com.ctc.wstx.stax.WstxOutputFactory
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUti
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.VariantUtil
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String, VariantVal}
 
 class StaxXmlGenerator(
     schema: DataType,
@@ -72,7 +72,13 @@ class StaxXmlGenerator(
   private val binaryFormatter = ToStringBase.getBinaryFormatter
 
   private val gen = {
-    val factory = XMLOutputFactory.newInstance()
+    // Instantiate the Woodstox factory directly from the shaded Hadoop classes instead of
+    // using XMLOutputFactory.newInstance(). The latter resolves an implementation via the
+    // service-loader mechanism, which could pick up a different (unshaded) StAX provider on the
+    // classpath. Such a provider would not understand the shaded WstxOutputProperties keys set
+    // below and would throw IllegalArgumentException. Constructing the shaded factory directly
+    // guarantees the properties and the implementation always match.
+    val factory = new WstxOutputFactory()
     // to_xml disables structure validation to allow multiple root tags
     factory.setProperty(WstxOutputProperties.P_OUTPUT_VALIDATE_STRUCTURE, validateStructure)
     factory.setProperty(WstxOutputProperties.P_OUTPUT_VALIDATE_NAMES, options.validateName)
@@ -194,6 +200,10 @@ class StaxXmlGenerator(
       gen.writeCharacters(timestampFormatter.format(v))
     case (TimestampNTZType, v: Long) =>
       gen.writeCharacters(timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(v)))
+    case (t: TimestampLTZNanosType, v: TimestampNanosVal) =>
+      gen.writeCharacters(timestampFormatter.formatNanos(v, t.precision))
+    case (t: TimestampNTZNanosType, v: TimestampNanosVal) =>
+      gen.writeCharacters(timestampNTZFormatter.formatWithoutTimeZoneNanos(v, t.precision))
     case (DateType, v: Int) =>
       gen.writeCharacters(dateFormatter.format(v))
     case (_: TimeType, v: Long) => gen.writeCharacters(timeFormatter.format(v))
