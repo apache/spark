@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, REPARTITION_OPERATION}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
@@ -49,7 +50,13 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
   }
 
   private def expressionsToNormalize(agg: Aggregate): Seq[Expression] = {
-    agg.groupingExpressions ++ distinctAggregateChildren(agg.aggregateExpressions)
+    val distinctExpressions =
+      if (conf.getConf(SQLConf.INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED)) {
+        distinctAggregateChildren(agg.aggregateExpressions)
+      } else {
+        Seq.empty
+      }
+    agg.groupingExpressions ++ distinctExpressions
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
