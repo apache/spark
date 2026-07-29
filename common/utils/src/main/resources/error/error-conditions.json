@@ -343,12 +343,6 @@
     ],
     "sqlState" : "42710"
   },
-  "AUTOCDC_SCD2_NOT_SUPPORTED" : {
-    "message" : [
-      "AutoCDC flows do not currently support SCD Type 2 transformations."
-    ],
-    "sqlState" : "0A000"
-  },
   "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE" : {
     "message" : [
       "Cannot start AutoCDC flow: the target table <tableName> (format: <format>) does not support row-level operations. AutoCDC requires a target backed by a connector that supports MERGE."
