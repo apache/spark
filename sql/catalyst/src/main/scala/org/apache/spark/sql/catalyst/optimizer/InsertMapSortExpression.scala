@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, CreateNamedStruct, Expression, GetStructField, If, IsNull, LambdaFunction, Literal, MapFromArrays, MapKeys, MapSort, MapValues, NamedExpression, NamedLambdaVariable}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, REPARTITION_OPERATION}
@@ -74,6 +74,7 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
     plan transformUpWithNewOutput {
       case agg @ Aggregate(groupingExprs, aggregateExpressions, child, hint) =>
         val exprToMapSort = new mutable.HashMap[Expression, NamedExpression]
+        val groupingExprKeys = groupingExprs.map(_.canonicalized).toSet
         expressionsToNormalize(agg).foreach { expr =>
           val inserted = insertMapSortRecursively(expr)
           if (expr.ne(inserted)) {
@@ -87,12 +88,19 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
           exprToMapSort.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
         }
         val newAggregateExprs = aggregateExpressions.map {
-          case named if exprToMapSort.contains(named.canonicalized) =>
+          case named if groupingExprKeys.contains(named.canonicalized) &&
+              exprToMapSort.contains(named.canonicalized) =>
             // If we replace the top-level named expr, then should add back the original name
             exprToMapSort(named.canonicalized).toAttribute.withName(named.name)
           case other =>
             other.transformUp {
-              case e => exprToMapSort.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
+              case ae: AggregateExpression if ae.isDistinct =>
+                ae.copy(aggregateFunction = ae.aggregateFunction.withNewChildren(
+                  ae.aggregateFunction.children.map { child =>
+                    exprToMapSort.get(child.canonicalized).map(_.toAttribute).getOrElse(child)
+                  }).asInstanceOf[AggregateFunction])
+              case e if groupingExprKeys.contains(e.canonicalized) =>
+                exprToMapSort.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
             }.asInstanceOf[NamedExpression]
         }
         val newChild = Project(child.output ++ exprToMapSort.values, child)

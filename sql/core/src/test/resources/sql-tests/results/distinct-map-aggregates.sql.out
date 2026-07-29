@@ -13,14 +13,6 @@ struct<>
 
 
 -- !query
-SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=true
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled	true
-
-
--- !query
 SELECT COUNT(DISTINCT m) FROM distinct_map_data
 -- !query schema
 struct<count(DISTINCT m):bigint>
@@ -73,6 +65,26 @@ struct<count(DISTINCT m) FILTER (WHERE should_keep):bigint>
 
 
 -- !query
+SELECT MAX(map_values(m)[0])
+FROM distinct_map_data
+WHERE id = 1
+-- !query schema
+struct<max(map_values(m)[0]):int>
+-- !query output
+2
+
+
+-- !query
+SELECT MAX(map_values(m)[0]), COUNT(DISTINCT m)
+FROM distinct_map_data
+WHERE id = 1
+-- !query schema
+struct<max(map_values(m)[0]):int,count(DISTINCT m):bigint>
+-- !query output
+2	1
+
+
+-- !query
 SELECT g
 FROM distinct_map_data
 GROUP BY g
@@ -102,111 +114,3 @@ SELECT COUNT(DISTINCT named_struct('m', m)) FROM distinct_map_data
 struct<count(DISTINCT named_struct(m, m)):bigint>
 -- !query output
 2
-
-
--- !query
-SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=false
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled	false
-
-
--- !query
-SELECT COUNT(DISTINCT m) FROM distinct_map_data
--- !query schema
-struct<count(DISTINCT m):bigint>
--- !query output
-3
-
-
--- !query
-SELECT SIZE(COLLECT_LIST(DISTINCT m)) FROM distinct_map_data
--- !query schema
-struct<size(collect_list(DISTINCT m)):int>
--- !query output
-3
-
-
--- !query
-SELECT COUNT(DISTINCT m, id) FROM distinct_map_data
--- !query schema
-struct<count(DISTINCT m, id):bigint>
--- !query output
-3
-
-
--- !query
-SELECT COUNT(DISTINCT m), COUNT(DISTINCT id) FROM distinct_map_data
--- !query schema
-struct<count(DISTINCT m):bigint,count(DISTINCT id):bigint>
--- !query output
-3	2
-
-
--- !query
-SELECT g, COUNT(DISTINCT m)
-FROM distinct_map_data
-GROUP BY g
-ORDER BY g
--- !query schema
-struct<g:int,count(DISTINCT m):bigint>
--- !query output
-1	2
-2	2
-
-
--- !query
-SELECT COUNT(DISTINCT m) FILTER (WHERE should_keep) FROM distinct_map_data
--- !query schema
-struct<count(DISTINCT m) FILTER (WHERE should_keep):bigint>
--- !query output
-2
-
-
--- !query
-SELECT g
-FROM distinct_map_data
-GROUP BY g
-ORDER BY COUNT(DISTINCT m), g
--- !query schema
-struct<g:int>
--- !query output
-1
-2
-
-
--- !query
-SELECT g
-FROM distinct_map_data
-GROUP BY g
-HAVING COUNT(DISTINCT m) = 1
-ORDER BY g
--- !query schema
-struct<g:int>
--- !query output
-
-
-
--- !query
-SELECT COUNT(DISTINCT named_struct('m', m)) FROM distinct_map_data
--- !query schema
-struct<count(DISTINCT named_struct(m, m)):bigint>
--- !query output
-3
-
-
--- !query
-RESET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled	true
