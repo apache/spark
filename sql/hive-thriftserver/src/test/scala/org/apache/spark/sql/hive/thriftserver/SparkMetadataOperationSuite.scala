@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.{DatabaseMetaData, ResultSet, SQLFeatureNotSupportedException}
 
 import org.apache.hive.common.util.HiveVersionInfo
-import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -52,27 +51,36 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       dbs.foreach( db => statement.execute(s"CREATE DATABASE IF NOT EXISTS $db"))
       val metaData = statement.getConnection.getMetaData
 
-      Seq("", "%", null, ".*", "_*", "_%", ".%") foreach { pattern =>
+      Seq("", "%", null, "_%") foreach { pattern =>
         checkResult(metaData.getSchemas(null, pattern), dbs ++ dbDflts)
       }
 
-      // Note: "db*" was removed because `*` is not a valid JDBC wildcard character
-      // (only `%` and `_` are); on the DSv2 SupportsNamespaces path it is treated as a
-      // literal and matches nothing.
       Seq("db%") foreach { pattern =>
         checkResult(metaData.getSchemas(null, pattern), dbs)
       }
 
-      Seq("db_", "db.") foreach { pattern =>
+      // Only '_' is a single-char wildcard per JDBC spec; '.' is now treated as a literal
+      // and matches nothing (no database is literally named "db.").
+      Seq("db_") foreach { pattern =>
         checkResult(metaData.getSchemas(null, pattern), dbs.take(2))
       }
 
       checkResult(metaData.getSchemas(null, "db1"), Seq("db1"))
       checkResult(metaData.getSchemas(null, "db_not_exist"), Seq.empty)
 
-      val e = intercept[HiveSQLException](metaData.getSchemas(null, "*"))
-      assert(e.getCause.getMessage ===
-        "Error operating GET_SCHEMAS Dangling meta character '*' near index 0\n*\n^")
+      // Regex metacharacters are now treated as literals per JDBC spec:
+      // '*' is NOT a JDBC wildcard and must not throw or act as a regex quantifier.
+      checkResult(metaData.getSchemas(null, "*"), Seq.empty)
+      // 'db*' is a literal -- no schema named "db*" exists.
+      checkResult(metaData.getSchemas(null, "db*"), Seq.empty)
+      // '.*' is a literal -- no schema named ".*" exists.
+      checkResult(metaData.getSchemas(null, ".*"), Seq.empty)
+      // 'db.' is a literal -- no schema named "db." exists.
+      checkResult(metaData.getSchemas(null, "db."), Seq.empty)
+      // '_*' is treated as: '_' (single-char wildcard) + '*' (literal); no schema matches.
+      checkResult(metaData.getSchemas(null, "_*"), Seq.empty)
+      // '.%' is treated as: '.' (literal) + '%' (any substring wildcard); no schema matches.
+      checkResult(metaData.getSchemas(null, ".%"), Seq.empty)
     }
   }
 
