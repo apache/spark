@@ -1285,3 +1285,159 @@ SELECT date_trunc('NANOSECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC
 struct<date_trunc(NANOSECOND, TIMESTAMP_LTZ '2020-01-01 04:34:56.123456789'):timestamp_ltz(9)>
 -- !query output
 NULL
+
+
+-- !query
+SELECT c FROM (SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' AS c
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC')
+  INTERSECT SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' ORDER BY c
+-- !query schema
+struct<c:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000001
+
+
+-- !query
+SELECT c FROM (SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' AS c
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC')
+  EXCEPT SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC' ORDER BY c
+-- !query schema
+struct<c:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000999
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    (SELECT '2020-01-01 00:00:00.0000009 UTC' :: timestamp_ltz(7) AS c)
+     INTERSECT (SELECT '2020-01-01 00:00:00.000000900 UTC' :: timestamp_ltz(9))) ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2019-12-31 16:00:00.0000009
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC'
+    BETWEEN TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'
+        AND TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'
+-- !query schema
+struct<between(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000500', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999'):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000001000 UTC'
+    BETWEEN TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'
+        AND TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'
+-- !query schema
+struct<between(TIMESTAMP_LTZ '2019-12-31 16:00:00.000001000', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999'):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT '2020-01-01 00:00:00.000000500 UTC' :: timestamp_ltz(9)
+    BETWEEN '2020-01-01 00:00:00.0000001 UTC' :: timestamp_ltz(7)
+        AND TIMESTAMP_LTZ '2020-01-01 00:00:00.000001 UTC'
+-- !query schema
+struct<between(CAST(2020-01-01 00:00:00.000000500 UTC AS TIMESTAMP_LTZ(9)), CAST(2020-01-01 00:00:00.0000001 UTC AS TIMESTAMP_LTZ(7)), TIMESTAMP '2019-12-31 16:00:00.000001'):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT if(true,
+    '2020-01-01 00:00:00.0000001 UTC' :: timestamp_ltz(7),
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC') AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2019-12-31 16:00:00.0000001
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT nvl(
+    CAST(NULL AS timestamp_ltz(9)),
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2019-12-31 16:00:00.000000999
+
+
+-- !query
+SELECT ifnull(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', CAST(NULL AS timestamp_ltz(9)))
+-- !query schema
+struct<ifnull(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', CAST(NULL AS TIMESTAMP_LTZ(9))):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000001
+
+
+-- !query
+SELECT k FROM VALUES
+    (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+    (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') AS t(k)
+  WHERE k IN (SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC') ORDER BY k
+-- !query schema
+struct<k:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000999
+
+
+-- !query
+SELECT typeof(col), col FROM (SELECT explode(array(
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'))) ORDER BY col
+-- !query schema
+struct<typeof(col):string,col:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2019-12-31 16:00:00.000000001
+timestamp_ltz(9)	2019-12-31 16:00:00.000000999
+
+
+-- !query
+SELECT element_at(array(
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC',
+    TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'), 2)
+-- !query schema
+struct<element_at(array(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999'), 2):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000999
+
+
+-- !query
+SELECT (named_struct('f', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC')).f
+-- !query schema
+struct<named_struct(f, TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789').f:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.123456789
+
+
+-- !query
+SELECT map('k', TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC')['k']
+-- !query schema
+struct<map(k, TIMESTAMP_LTZ '2019-12-31 16:00:00.123456789')[k]:timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.123456789
+
+
+-- !query
+SELECT map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
+           TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 'b')[
+       TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC']
+-- !query schema
+struct<map(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', a, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999', b)[TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999']:string>
+-- !query output
+b
+
+
+-- !query
+SELECT element_at(map(TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 'a',
+           TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 'b'),
+       TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC')
+-- !query schema
+struct<element_at(map(TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001', a, TIMESTAMP_LTZ '2019-12-31 16:00:00.000000999', b), TIMESTAMP_LTZ '2019-12-31 16:00:00.000000001'):string>
+-- !query output
+a

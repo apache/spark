@@ -29,7 +29,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData, TimestampNanosTestUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
@@ -2130,6 +2130,47 @@ class CollectionExpressionsSuite
         val dupTimeMap = Literal.create(dupTimeMapData, MapType(timeType, IntegerType))
         checkEvaluation(ElementAt(dupTimeMap, Literal(t1, timeType)), 10)
         checkEvaluation(ElementAt(dupTimeMap, Literal(t2, timeType)), 20)
+
+        // Nanosecond timestamp keys (SPARK-57841). element_at routes through the same
+        // GetMapValueUtil map-lookup path as GetMapValue, so it must also distinguish keys that
+        // share epochMicros and differ only in nanosWithinMicro, on both the hash (threshold 0) and
+        // linear (threshold Int.MaxValue) paths. Physical TimestampNanosVal objects use the
+        // hashCode()/equals() fall-through arm (not the primitive-long arm). Built from internal
+        // values via ArrayBasedMapData (Literal.create of a Scala nanos-keyed Map would route
+        // through the schema-aware converter, which only accepts LocalDateTime / Instant keys).
+        val ntz9 = TimestampNTZNanosType(9)
+        val micros = 1577836800000000L // 2020-01-01T00:00:00Z
+        val n1 = TimestampNanosTestUtils.nanosVal(micros, 1)
+        val n2 = TimestampNanosTestUtils.nanosVal(micros, 999) // same micro as n1, must not alias
+        val n3 = TimestampNanosTestUtils.nanosVal(micros + 1, 0)
+        val ntzNanosMap = Literal.create(
+          new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](n1, n2, n3)),
+            new GenericArrayData(Array[Any](10, 20, 30))),
+          MapType(ntz9, IntegerType))
+        checkEvaluation(ElementAt(ntzNanosMap, Literal(n1, ntz9)), 10)
+        checkEvaluation(ElementAt(ntzNanosMap, Literal(n2, ntz9)), 20)
+        checkEvaluation(ElementAt(ntzNanosMap, Literal(n3, ntz9)), 30)
+        checkEvaluation(ElementAt(ntzNanosMap,
+          Literal(TimestampNanosTestUtils.nanosVal(micros, 500), ntz9)), null)
+
+        // LTZ family + null value + duplicate-key first-wins.
+        val ltz9 = TimestampLTZNanosType(9)
+        val l1 = TimestampNanosTestUtils.nanosVal(micros, 100)
+        val l2 = TimestampNanosTestUtils.nanosVal(micros, 900)
+        val ltzNanosMap = Literal.create(
+          new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](l1, l2)),
+            new GenericArrayData(Array[Any](10, null))),
+          MapType(ltz9, IntegerType))
+        checkEvaluation(ElementAt(ltzNanosMap, Literal(l1, ltz9)), 10)
+        checkEvaluation(ElementAt(ltzNanosMap, Literal(l2, ltz9)), null) // present, null value
+        val dupNanosMap = Literal.create(
+          new ArrayBasedMapData(
+            new GenericArrayData(Array[Any](n1, n2, n1)),
+            new GenericArrayData(Array[Any](10, 20, 30))),
+          MapType(ntz9, IntegerType))
+        checkEvaluation(ElementAt(dupNanosMap, Literal(n1, ntz9)), 10)
 
         // Array Keys
         val arrayType = ArrayType(IntegerType)
