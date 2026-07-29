@@ -543,6 +543,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param expr The SQL string of the value being cast.
    * @return The SQL string to cast instead of `expr`.
    */
+  @Since("4.3.0")
   def truncateFractionalValue(expr: String): String = expr
 
   /**
