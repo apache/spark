@@ -255,6 +255,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Eliminate Sorts", Once,
       EliminateSorts,
       RemoveRedundantSorts),
+    // Run after operator optimization normally folds accuracy expressions and before
+    // RewriteDistinctAggregates so fused distinct percentiles are rewritten correctly.
     Batch("Combine Approximate Percentiles", Once,
       CombineApproximatePercentiles),
     Batch("Decimal Optimizations", fixedPoint,

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.IntegerType
 
 class CombineApproximatePercentilesSuite extends PlanTest {
@@ -59,6 +60,10 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     })
   }
 
+  private def percentageValues(percentile: ApproximatePercentile): Seq[Double] = {
+    percentile.percentageExpression.eval().asInstanceOf[ArrayData].toDoubleArray().toSeq
+  }
+
   test("combine scalar percentiles into one shared array-valued digest") {
     val result = optimizedAggregate(
       Alias(percentile(value, 0.5), "p50")(),
@@ -71,14 +76,26 @@ class CombineApproximatePercentilesSuite extends PlanTest {
 
     val combined = aggregateExpressions.head.aggregateFunction
       .asInstanceOf[ApproximatePercentile]
-    assert(combined.percentageExpression ==
-      CreateArray(Seq(Literal(0.5), Literal(0.9), Literal(0.95))))
+    assert(percentageValues(combined) == Seq(0.5, 0.9, 0.95))
+    assert(combined.percentageExpression.toString == "[0.5,0.9,0.95]")
+    assert(combined.percentageExpression.sql == "ARRAY(0.5D, 0.9D, 0.95D)")
 
     val ordinals = result.aggregateExpressions.map(_.collectFirst {
       case GetArrayItem(_, Literal(index: Int, _), false) => index
     })
     assert(ordinals == Seq(Some(0), Some(1), Some(2)))
     assert(result.output.map(_.name) == Seq("p50", "p90", "p95"))
+  }
+
+  test("preserve fusion identity through later constant folding") {
+    val result = optimizedAggregate(
+      Alias(percentile(value, 0.5), "p50")(),
+      Alias(percentile(value, 0.9), "p90")())
+    val folded = ConstantFolding(result).asInstanceOf[Aggregate]
+    val combined = percentileAggregates(folded).head.aggregateFunction
+      .asInstanceOf[ApproximatePercentile]
+
+    assert(combined.percentageExpression.isInstanceOf[PercentileFusionArray])
   }
 
   test("preserve duplicate and non-monotonic percentile order") {
@@ -89,9 +106,33 @@ class CombineApproximatePercentilesSuite extends PlanTest {
 
     val combined = percentileAggregates(result).head.aggregateFunction
       .asInstanceOf[ApproximatePercentile]
-    assert(combined.percentageExpression ==
-      CreateArray(Seq(Literal(0.9), Literal(0.5), Literal(0.9))))
+    assert(percentageValues(combined) == Seq(0.9, 0.5, 0.9))
     assert(percentileAggregates(result).map(_.resultId).distinct.size == 1)
+  }
+
+  test("do not combine duplicate percentiles when physical planning already shares the digest") {
+    val result = optimizedAggregate(
+      Alias(percentile(value, 0.5), "first")(),
+      Alias(percentile(value, 0.5), "second")())
+
+    assert(percentileAggregates(result).map(_.resultId).distinct.size == 2)
+    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
+  }
+
+  test("deduplicate repeated aggregate expression instances before combining") {
+    val p50 = percentile(value, 0.5)
+    val result = optimizedAggregate(
+      Alias(p50, "first")(),
+      Alias(p50, "second")(),
+      Alias(percentile(value, 0.9), "third")())
+
+    val combined = percentileAggregates(result).head.aggregateFunction
+      .asInstanceOf[ApproximatePercentile]
+    assert(percentageValues(combined) == Seq(0.5, 0.9))
+    val ordinals = result.aggregateExpressions.map(_.collectFirst {
+      case GetArrayItem(_, Literal(index: Int, _), false) => index
+    })
+    assert(ordinals == Seq(Some(0), Some(0), Some(1)))
   }
 
   test("combine scalar percentiles nested in a result expression") {
@@ -266,6 +307,26 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     val result = optimizedAggregate(
       Alias(arrayPercentile, "percentiles")(),
       Alias(scalarPercentile, "p0")(),
+      Alias(percentile(value, 0.9), "p90")())
+
+    assert(firstPercentage.eval() == 0.5d)
+    assert(secondPercentage.eval() == 0.0d)
+    assert(firstPercentage.canonicalized == secondPercentage.canonicalized)
+    assert(percentileAggregates(result).map(_.resultId).distinct.size == 3)
+    assert(!result.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
+  }
+
+  test("do not fuse canonically equivalent but differently evaluated scalar percentages") {
+    val firstPercentage =
+      (Literal(1.0e16) + Literal(-1.0e16)) + Literal(0.5)
+    val secondPercentage =
+      Literal(1.0e16) + (Literal(-1.0e16) + Literal(0.5))
+    def percentileWithPercentage(percentage: Expression): AggregateExpression = {
+      new ApproximatePercentile(value, percentage, Literal(10000)).toAggregateExpression()
+    }
+    val result = optimizedAggregate(
+      Alias(percentileWithPercentage(firstPercentage), "p50")(),
+      Alias(percentileWithPercentage(secondPercentage), "p0")(),
       Alias(percentile(value, 0.9), "p90")())
 
     assert(firstPercentage.eval() == 0.5d)

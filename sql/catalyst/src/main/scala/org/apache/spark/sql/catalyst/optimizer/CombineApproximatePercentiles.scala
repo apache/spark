@@ -19,12 +19,44 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, Expression, ExprId, GetArrayItem, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CreateArray, Expression, ExprId, GetArrayItem, LeafExpression, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateMode, ApproximatePercentile}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.types.{ArrayType, DoubleType}
+
+private[optimizer] case class PercentileFusionIdentity(
+    aggregateFunctions: Seq[Expression],
+    mode: AggregateMode,
+    isDistinct: Boolean,
+    filter: Option[Expression],
+    percentageBits: Seq[Long])
+
+/**
+ * Foldable percentage array that retains the original scalar aggregate structures in equality.
+ *
+ * Fusion removes those structures from the physical aggregate. Keeping them here prevents
+ * subquery or exchange reuse from equating plans that were distinct before fusion.
+ */
+private[optimizer] case class PercentileFusionArray(identity: PercentileFusionIdentity)
+    extends LeafExpression with CodegenFallback {
+  override def foldable: Boolean = true
+  override def contextIndependentFoldable: Boolean = true
+  override def nullable: Boolean = false
+  override def dataType: ArrayType = ArrayType(DoubleType, containsNull = false)
+
+  private lazy val value = new GenericArrayData(
+    identity.percentageBits.map(java.lang.Double.longBitsToDouble))
+  private lazy val literal = Literal(value, dataType)
+
+  override def eval(input: InternalRow): Any = value
+  override def toString: String = literal.toString
+  override def sql: String = literal.sql
+}
 
 /**
  * Combines scalar approximate percentiles that can share the same percentile digest.
@@ -54,14 +86,42 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
       isDistinct: Boolean,
       filter: Option[Expression])
 
+  private def structurallyNormalize(
+      expression: Expression,
+      input: Seq[Attribute]): Expression = expression.transformUp {
+    case attribute: AttributeReference =>
+      val ordinal = input.indexWhere(_.exprId == attribute.exprId)
+      if (ordinal < 0) {
+        attribute
+      } else {
+        AttributeReference("none", attribute.dataType)(ExprId(ordinal))
+      }
+  }
+
   private def physicalCompatibilityKey(
       key: CompatibilityKey,
       accuracy: Expression): PhysicalCompatibilityKey = PhysicalCompatibilityKey(
     key.child.canonicalized,
     accuracy.canonicalized,
     key.mode,
-    key.isDistinct,
+    // OptimizeOneRowPlan can remove DISTINCT later, including during AQE.
+    isDistinct = false,
     key.filter.map(_.canonicalized))
+
+  private def hasSafePhysicalFusion(
+      expressions: scala.collection.Iterable[AggregateExpression]): Boolean = {
+    val physicalGroups = expressions.groupBy(_.canonicalized)
+    // PhysicalAggregation already shares a digest within each canonical group. Fusion must both
+    // remove a digest and preserve cases where canonical percentages evaluate differently.
+    physicalGroups.sizeCompare(1) > 0 && physicalGroups.values.forall { group =>
+      group.iterator.map { expression =>
+        expression.aggregateFunction
+          .asInstanceOf[ApproximatePercentile]
+          .percentageExpression
+          .eval()
+      }.toSet.sizeCompare(1) == 0
+    }
+  }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(AGGREGATE), ruleId) {
@@ -72,6 +132,8 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
   private def combine(aggregate: Aggregate): Aggregate = {
     val compatible = mutable.LinkedHashMap.empty[
       CompatibilityKey, mutable.ArrayBuffer[AggregateExpression]]
+    // PhysicalAggregation deduplicates semantically equivalent aggregates. Track every logical
+    // key that shares a physical key so fusion does not change that existing deduplication.
     val physicalCompatibilityKeys = mutable.HashMap.empty[
       PhysicalCompatibilityKey, mutable.HashSet[CompatibilityKey]]
     val arrayPercentiles = mutable.ArrayBuffer.empty[AggregateExpression]
@@ -83,6 +145,7 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
             filter.forall(_.deterministic) =>
         val key = CompatibilityKey(
           percentile.child,
+          // Analysis already validates that accuracy is foldable, non-null, and in range.
           percentile.accuracyExpression.eval().asInstanceOf[Number].longValue,
           mode,
           isDistinct,
@@ -99,13 +162,15 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
     })
 
     val replacements = mutable.HashMap.empty[ExprId, (AggregateExpression, Int)]
-    compatible.iterator.filter { case (key, expressions) =>
-      expressions.sizeCompare(1) > 0 && expressions.forall { expression =>
+    compatible.iterator.map { case (key, expressions) =>
+      key -> expressions.distinctBy(_.resultId)
+    }.filter { case (key, expressions) =>
+      hasSafePhysicalFusion(expressions) && expressions.forall { expression =>
         val percentile = expression.aggregateFunction.asInstanceOf[ApproximatePercentile]
         physicalCompatibilityKeys(
           physicalCompatibilityKey(key, percentile.accuracyExpression)).sizeCompare(1) == 0
       }
-    }.foreach { case (_, expressions) =>
+    }.foreach { case (key, expressions) =>
       val first = expressions.head
       val percentile = first.aggregateFunction.asInstanceOf[ApproximatePercentile]
       val percentages = expressions.map { expression =>
@@ -113,12 +178,24 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
           .asInstanceOf[ApproximatePercentile]
           .percentageExpression
       }
-      val combined = first.copy(
-        aggregateFunction = percentile.copy(
-          percentageExpression = CreateArray(percentages.toSeq)))
+      val percentageValues = percentages.map(_.eval().asInstanceOf[Double]).toSeq
+      val combinedPercentile = percentile.copy(
+        percentageExpression = CreateArray(percentages.toSeq))
+      val combined = first.copy(aggregateFunction = combinedPercentile)
       if (!arrayPercentiles.exists(_.semanticEquals(combined))) {
+        val identity = PercentileFusionIdentity(
+          expressions.map { expression =>
+            structurallyNormalize(expression.aggregateFunction, aggregate.child.output)
+          }.toSeq,
+          key.mode,
+          key.isDistinct,
+          key.filter.map(structurallyNormalize(_, aggregate.child.output)),
+          percentageValues.map(java.lang.Double.doubleToRawLongBits))
+        val identifiedCombined = combined.copy(
+          aggregateFunction = combinedPercentile.copy(
+            percentageExpression = PercentileFusionArray(identity)))
         expressions.zipWithIndex.foreach { case (expression, index) =>
-          replacements.put(expression.resultId, (combined, index))
+          replacements.put(expression.resultId, (identifiedCombined, index))
         }
       }
     }
