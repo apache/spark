@@ -401,7 +401,7 @@ object SupportsArchiveFormat {
             done = true
             cleanup()
           } else {
-            // the entry stream; any unread remainder is skipped when the archive advances.
+            // Parse the entry stream; any unread remainder is skipped when the archive advances.
             currentIter = parseEntry(next._1, CloseShieldInputStream.wrap(next._2))
           }
         }
