@@ -1,0 +1,31 @@
+test case	pyarrow array	zero_copy_only=True	numpy shares arrow buffer
+int8:no-null	[0, 1, -1]@int8	[0, 1, -1]@Series[int8]	shared
+int16:no-null	[0, 1, -1]@int16	[0, 1, -1]@Series[int16]	shared
+int32:no-null	[0, 1, -1]@int32	[0, 1, -1]@Series[int32]	shared
+int64:no-null	[0, 1, -1]@int64	[0, 1, -1]@Series[int64]	shared
+uint32:no-null	[0, 1, 2]@uint32	[0, 1, 2]@Series[uint32]	shared
+float32:no-null	[0.0, 1.5, -1.5]@float32	[0.0, 1.5, -1.5]@Series[float32]	shared
+float64:no-null	[0.0, 1.5, -1.5]@float64	[0.0, 1.5, -1.5]@Series[float64]	shared
+int32:with-null	[0, 1, None]@int32	ERR@ArrowInvalid	not-shared
+int64:with-null	[0, 1, None]@int64	ERR@ArrowInvalid	not-shared
+float64:with-null	[0.0, 1.5, None]@float64	ERR@ArrowInvalid	not-shared
+bool:no-null	[True, False, True]@bool	ERR@ArrowInvalid	not-shared
+bool:with-null	[True, None, False]@bool	ERR@ArrowInvalid	not-shared
+string:no-null	[hello, world, ]@string	ERR@ArrowInvalid	not-shared
+binary:no-null	[b'hello', b'world']@binary	ERR@ArrowInvalid	not-shared
+timestamp[s]:no-null	[2024-01-01 12:00:00, 2024-01-01 12:00:00]@timestamp[s]	[Timestamp('2024-01-01 12:00:00'), Timestamp('2024-01-01 12:00:00')]@Series[datetime64[s]]	shared
+timestamp[ms]:no-null	[2024-01-01 12:00:00, 2024-01-01 12:00:00]@timestamp[ms]	[Timestamp('2024-01-01 12:00:00'), Timestamp('2024-01-01 12:00:00')]@Series[datetime64[ms]]	shared
+timestamp[us]:no-null	[2024-01-01 12:00:00, 2024-01-01 12:00:00]@timestamp[us]	[Timestamp('2024-01-01 12:00:00'), Timestamp('2024-01-01 12:00:00')]@Series[datetime64[us]]	shared
+timestamp[ns]:no-null	[2024-01-01 12:00:00, 2024-01-01 12:00:00]@timestamp[ns]	[Timestamp('2024-01-01 12:00:00'), Timestamp('2024-01-01 12:00:00')]@Series[datetime64[ns]]	shared
+timestamp[us]:with-null	[2024-01-01 12:00:00, None]@timestamp[us]	ERR@ArrowInvalid	not-shared
+duration[us]:no-null	[1 day, 0:00:00, 1 day, 0:00:00]@duration[us]	[Timedelta('1 days 00:00:00'), Timedelta('1 days 00:00:00')]@Series[timedelta64[us]]	shared
+date32:no-null	[2024-01-01, 2024-06-15]@date32[day]	ERR@ArrowInvalid	not-shared
+time64[us]:no-null	[12:30:00, 18:45:00]@time64[us]	ERR@ArrowInvalid	not-shared
+int64:sliced	[2, 3, 4]@int64	[2, 3, 4]@Series[int64]	shared
+int64:sliced-with-null	[2, None, 4]@int64	ERR@ArrowInvalid	not-shared
+int64:single-chunk	[1, 2, 3]@int64	[1, 2, 3]@Series[int64]	shared
+int64:multi-chunk	[1, 2, 3, 4]@int64	ERR@ArrowInvalid	not-shared
+int64:empty	[]@int64	[]@Series[int64]	n/a (empty)
+string:empty	[]@string	ERR@ArrowInvalid	n/a (empty)
+list<int64>:no-null	[[1, 2], [3]]@list<item: int64>	ERR@ArrowInvalid	not-shared
+struct:no-null	[[('x', 1)], [('x', 2)]]@struct<x: int64>	ERR@ArrowInvalid	not-shared
