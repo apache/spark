@@ -309,9 +309,12 @@ class PlanMerger(
     // A DSv2 scan pair is handled here in one place, rather than split between this leading check
     // and the structural match below. Under a Filter, merging DEFERS the scan build so the
     // enclosing Filter's row-group pruning is pushed in a single rebuild -- so try the merge first
-    // and fall back to plain reuse if the scans cannot merge. Without a Filter there is no pruning
-    // to recover, so reuse an identical scan as-is (no rebuild) and only merge scans that differ
-    // (projected columns / strict filters). Any other plan pair uses the general identical reuse.
+    // and fall back to plain reuse if the scans cannot merge. This holds even when the two scans
+    // are identical: the deferred rebuild re-pushes the enclosing Filter's condition as best-effort
+    // pruning, which plain reuse would leave as a post-scan Filter -- so do NOT short-circuit
+    // identical scans to reuse here, it would forfeit that pruning. Without a Filter there is no
+    // pruning to recover, so reuse an identical scan as-is (no rebuild) and only merge scans that
+    // differ (projected columns / strict filters). Any other plan pair uses the general reuse.
     val earlyResult = (newPlan, cachedPlan) match {
       case (np: DataSourceV2ScanRelation, cp: DataSourceV2ScanRelation) =>
         if (context.filterAboveScan) {
