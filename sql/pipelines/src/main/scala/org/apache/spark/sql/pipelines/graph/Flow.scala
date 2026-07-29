@@ -390,9 +390,7 @@ class AutoCdcMergeFlow(
       throw new AnalysisException(
         errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT",
         messageParameters = Map(
-          "caseSensitivity" -> CaseSensitivityLabels.of(
-            spark.sessionState.conf.caseSensitiveAnalysis
-          ),
+          "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
           "columnName" -> conflictingColumnName,
           "schemaName" -> "changeDataFeed",
           "reservedColumnNamePrefix" -> reservedPrefix
@@ -428,9 +426,7 @@ class AutoCdcMergeFlow(
         throw new AnalysisException(
           errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
           messageParameters = Map(
-            "caseSensitivity" -> CaseSensitivityLabels.of(
-              spark.sessionState.conf.caseSensitiveAnalysis
-            ),
+            "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
             "columnName" -> conflictingColumnName,
             "schemaName" -> "changeDataFeed",
             "scdType" -> changeArgs.storedAsScdType.label,
@@ -452,9 +448,7 @@ class AutoCdcMergeFlow(
         throw new AnalysisException(
           errorClass = "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA",
           messageParameters = Map(
-            "caseSensitivity" -> CaseSensitivityLabels.of(
-              spark.sessionState.conf.caseSensitiveAnalysis
-            ),
+            "caseSensitivity" -> CaseSensitivityLabels.of(resolver),
             "keyColumnName" -> missingKey.name
           )
         )

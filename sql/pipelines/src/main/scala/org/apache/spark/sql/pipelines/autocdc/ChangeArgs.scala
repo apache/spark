@@ -131,15 +131,13 @@ private[pipelines] object CaseSensitivityLabels {
   val CaseSensitive: String = "case-sensitive"
   val CaseInsensitive: String = "case-insensitive"
 
-  def of(caseSensitive: Boolean): String =
-    if (caseSensitive) CaseSensitive else CaseInsensitive
-
   /**
    * Maps a [[Resolver]] to its user-facing label. Classifies by reference identity against the
    * two session resolver singletons, matching `SchemaUtils.isCaseSensitiveAnalysis`;
    * `conf.resolver` only ever returns one of these two.
    */
-  def of(resolver: Resolver): String = of(caseSensitive = resolver == caseSensitiveResolution)
+  def of(resolver: Resolver): String =
+    if (resolver == caseSensitiveResolution) CaseSensitive else CaseInsensitive
 }
 
 /** The SCD (Slowly Changing Dimension) strategy for a CDC flow. */
