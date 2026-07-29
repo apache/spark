@@ -676,6 +676,22 @@ class IncrementalExecution(
    * Real-Time Mode is detected structurally by a RealTimeStreamScanExec leaf (there is no
    * RTM-specific plan flag). Inert for a non-RTM batch, so the ordinary microbatch path is
    * unchanged.
+   *
+   * Marks EVERY shuffle exchange, so a plan with several pipelined shuffles in a chain (e.g. two
+   * repartitions, or a repartition feeding a keyed stateful operator) is handled: each becomes a
+   * PipelinedShuffleDependency and the whole all-pipelined job is co-scheduled as one pipelined
+   * group (the DAGScheduler treats an all-pipelined job's stage graph as a single group). No
+   * shuffle-count restriction is needed here.
+   *
+   * transformUp does not descend into a ReusedExchangeExec (a leaf whose wrapped exchange is a
+   * field, not a tree child), so a REUSED shuffle exchange would keep pipelined=false while its
+   * standalone twin flips to true. That divergence is not reachable: a reused shuffle requires
+   * referencing the same streaming source more than once (self-join / self-union / CTE read twice),
+   * which Real-Time Mode rejects up front (MicroBatchExecution, IDENTICAL_SOURCES_IN_UNION_NOT_
+   * SUPPORTED) before this rule runs. The only ReusedExchangeExec that reaches an RTM plan wraps a
+   * BROADCAST exchange (multiple broadcast joins on the same static table, SC-209926), which this
+   * rule does not match. A pipelined shuffle read by more than one consumer (fan-out) is likewise
+   * rejected up front by the DAGScheduler (checkPipelinedGroupsSupportedInRDDGraph).
    */
   object MarkPipelinedShuffleForRealTimeMode extends Rule[SparkPlan] {
     override def apply(plan: SparkPlan): SparkPlan = {
