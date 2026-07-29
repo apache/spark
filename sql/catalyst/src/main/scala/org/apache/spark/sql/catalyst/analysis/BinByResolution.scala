@@ -168,9 +168,10 @@ object BinByResolution {
     AttributeReference(aliases.effectiveBinRatio, DoubleType, nullable = true)())
 
   /**
-   * Mints a produced output attribute for each DISTRIBUTE input column: same name, type, and
-   * nullability, but a fresh `ExprId` so the rescaled value is a distinct attribute from the input.
+   * Mints a produced output attribute for each DISTRIBUTE input column: same name, type, and a
+   * fresh `ExprId` so the rescaled value is a distinct attribute from the input. Always nullable:
+   * a NULL range column produces a NULL scaled value regardless of the input column's nullability.
    */
   def scaledDistributeAttributes(distributeColumns: Seq[Attribute]): Seq[Attribute] =
-    distributeColumns.map(a => AttributeReference(a.name, a.dataType, a.nullable)())
+    distributeColumns.map(a => AttributeReference(a.name, a.dataType, nullable = true)())
 }

@@ -28,6 +28,7 @@ import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
 import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.resource.CpuAmount
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
@@ -736,9 +737,19 @@ package object config {
   private[spark] val CPUS_PER_TASK =
     ConfigBuilder("spark.task.cpus")
       .version("0.5.0")
-      .intConf
-      .checkValue(_ > 0, "Number of cores to allocate for each task should be positive.")
-      .createWithDefault(1)
+      .decimalConf
+      // Validate before normalizing: bounding first keeps the setScale in the normalize step
+      // from materializing enormous unscaled values for extreme exponents (e.g. 1e100000000),
+      // and rejecting excess precision is clearer than silently rounding it away.
+      .checkValue(v => v >= CpuAmount.MIN_AMOUNT && v <= CpuAmount.MAX_AMOUNT,
+        "Number of cores to allocate for each task must be a positive value between " +
+          s"${CpuAmount.MIN_AMOUNT} and ${CpuAmount.MAX_AMOUNT} (inclusive).")
+      .checkValue(CpuAmount.stripTrailingZeros(_).scale <= CpuAmount.SCALE,
+        s"Number of cores to allocate for each task supports at most ${CpuAmount.SCALE} " +
+          "decimal places.")
+      // normalize to the fixed CPU accounting scale so every read is a uniform, compact BigDecimal
+      .transform(CpuAmount.normalize)
+      .createWithDefault(BigDecimal(1))
 
   private[spark] val DYN_ALLOCATION_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.enabled")
@@ -1679,6 +1690,46 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
 
+  private[spark] val SECURITY_OIDC_ENABLED =
+    ConfigBuilder("spark.security.oidc.enabled")
+      .doc("Whether to enable OIDC credential propagation. When enabled, the driver reads an " +
+        "identity token from a file, exchanges it for short-lived service credentials via " +
+        "CredentialProvider implementations, and propagates those credentials to executors.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SECURITY_OIDC_IDENTITY_TOKEN_FILE =
+    ConfigBuilder("spark.security.oidc.identityToken.file")
+      .doc("Path to the OIDC identity token file on the driver. Required when " +
+        "spark.security.oidc.enabled is true. The file should contain a JWT token " +
+        "(e.g., a Kubernetes projected service account token).")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .createOptional
+
+  private[spark] val SECURITY_OIDC_RENEWAL_SAFETY_MARGIN =
+    ConfigBuilder("spark.security.oidc.renewal.safetyMargin")
+      .doc("How long before credential expiry to trigger renewal. Credentials are refreshed " +
+        "at min(identity token expiry, service credential expiry) minus this margin.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "The safety margin must be a positive time value.")
+      .createWithDefaultString("60s")
+
+  private[spark] val SECURITY_OIDC_RENEWAL_MIN_INTERVAL =
+    ConfigBuilder("spark.security.oidc.renewal.minInterval")
+      .doc("Minimum interval between credential renewal attempts. This prevents tight renewal " +
+        "loops when credentials have very short TTLs or when failures cause rapid retries.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "The minimum renewal interval must be a positive time value.")
+      .createWithDefaultString("30s")
+
   private[spark] val SHUFFLE_SORT_INIT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.sort.initialBufferSize")
       .internal()
@@ -1773,6 +1824,21 @@ package object config {
       .version("1.1.0")
       .stringConf
       .createWithDefault("sort")
+
+  private[spark] val SHUFFLE_MANAGER_INCREMENTAL =
+    ConfigBuilder("spark.shuffle.manager.incremental")
+      .doc("The ShuffleManager implementation used for pipelined (incrementally-readable) " +
+        "shuffle dependencies, whose consumer stage may begin reading output while the producer " +
+        "stage is still running. Regular shuffle dependencies continue to use " +
+        "spark.shuffle.manager. The two managers coexist in the same JVM and each shuffle is " +
+        "routed by its dependency type, so a cluster can run both regular and pipelined (e.g. " +
+        "real-time mode) queries. Defaults to the built-in streaming shuffle manager; accepts " +
+        "the short alias \"streaming\" (the default) or a fully-qualified " +
+        "PipelinedShuffleManager class name.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .createWithDefault("streaming")
 
   private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
     ConfigBuilder("spark.shuffle.reduceLocality.enabled")
@@ -1990,6 +2056,21 @@ package object config {
       .intConf
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
+
+  private[spark] val PIPELINED_GROUP_SLOT_CHECK_ENABLED =
+    ConfigBuilder("spark.scheduler.pipelinedGroup.slotCheck.enabled")
+      .internal()
+      .doc("When true, before co-scheduling a pipelined-shuffle stage group the DAGScheduler " +
+        "checks that the group's total task demand fits in the currently free slots of its " +
+        "resource profile (total capacity minus the outstanding -- running plus enqueued -- " +
+        "tasks of other work), and fails the job with CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT " +
+        "rather than co-scheduling a group that cannot fit and deadlocking. Set to false for " +
+        "deployments that admit capacity out-of-band (e.g. a slot reservation), which then own " +
+        "admission. Only applies to jobs that use a pipelined shuffle dependency.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val NUM_CANCELLED_JOB_GROUPS_TO_TRACK =
     ConfigBuilder("spark.scheduler.numCancelledJobGroupsToTrack")
@@ -2551,16 +2632,18 @@ package object config {
         "longer time than the threshold. This config helps speculate stage with very few " +
         "tasks. Regular speculation configs may also apply if the executor slots are " +
         "large enough. E.g. tasks might be re-launched if there are enough successful runs " +
-        "even though the threshold hasn't been reached. The number of slots is computed based " +
-        "on the conf values of spark.executor.cores and spark.task.cpus minimum 1.")
+        "even though the threshold hasn't been reached. The number of slots is the maximum " +
+        "number of concurrent tasks per executor for the stage's resource profile, computed " +
+        "from the executor cores and the task cpus amount (which may be fractional), or 1 " +
+        "when the executor cores are not known.")
       .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER =
     ConfigBuilder("spark.speculation.efficiency.processRateMultiplier")
-      .doc("A multiplier that used when evaluating inefficient tasks. The higher the multiplier " +
-        "is, the more tasks will be possibly considered as inefficient.")
+      .doc("A multiplier that is used when evaluating inefficient tasks. The higher the " +
+        "multiplier is, the more tasks will be possibly considered as inefficient.")
       .version("3.4.0")
       .doubleConf
       .checkValue(v => v > 0.0 && v <= 1.0, "multiplier must be in (0.0, 1.0]")
@@ -2962,6 +3045,75 @@ package object config {
         " marked as visible only when one of the tasks generating the cache block finished" +
         " successfully. This is relevant in context of consistent accumulator status.")
       .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STORAGE_RDD_BLOCK_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.storage.rddBlockChecksum.enabled")
+      .internal()
+      .doc("When true, the BlockManager computes a content checksum over the serialized bytes " +
+        "of every serialized RDD cache block at store time and reports it to the driver. Only " +
+        "serialized blocks are covered; deserialized in-memory blocks are not checksummed.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STORAGE_RDD_BLOCK_CHECKSUM_ALGORITHM =
+    ConfigBuilder("spark.storage.rddBlockChecksum.algorithm")
+      .internal()
+      .doc("The checksum algorithm used for RDD block content checksums (e.g. local-checkpoint " +
+        "verification). Only built-in JDK algorithms are supported.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(Set("ADLER32", "CRC32", "CRC32C"))
+      .createWithDefault("CRC32C")
+
+  private[spark] val STORAGE_RDD_BLOCK_CHECKSUM_VERIFY_ON_REPLICATION =
+    ConfigBuilder("spark.storage.rddBlockChecksum.verifyOnReplication")
+      .internal()
+      .doc("When true, a replica of a checksummed RDD block recomputes the content checksum over " +
+        "the received bytes to verify the transfer, instead of trusting the checksum sent by the " +
+        "source. Off by default: the source's checksum is recorded directly, since the transport " +
+        "layer already provides integrity.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.checkpoint.local.verifyChecksum.enabled")
+      .internal()
+      .doc("When true, Spark fingerprints the serialized bytes of locally-checkpointed RDD " +
+        "partitions at store time and, at the checkpoint commit point, detects partitions that " +
+        "were materialized inconsistently by more than one task attempt (Spark non-determinism " +
+        "combined with retries/speculation) and seals each partition to a single version. Guards " +
+        "against silently inconsistent local checkpoints. This implies checksum computation for " +
+        "the checkpointed RDD regardless of spark.storage.rddBlockChecksum.enabled. Only applied " +
+        "to a localCheckpoint with a SERIALIZED storage level (e.g. DISK_ONLY); a deserialized " +
+        "level (the default MEMORY_AND_DISK) has no checksummable bytes and is left unverified - " +
+        "see spark.checkpoint.local.verifyChecksum.forceSerialized to opt a default checkpoint " +
+        "into a serialized level. Sealing runs at checkpoint finalization: an eager checkpoint " +
+        "is sealed before any consumer reads it, while a lazy one is sealed after its first job " +
+        "materializes it (so reads within that job, before finalization, may still see an " +
+        "unsealed copy).")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val LOCAL_CHECKPOINT_VERIFY_CHECKSUM_FORCE_SERIALIZED =
+    ConfigBuilder("spark.checkpoint.local.verifyChecksum.forceSerialized")
+      .internal()
+      .doc("When true (and verifyChecksum.enabled is true), localCheckpoint adapts a " +
+        "deserialized storage level to its serialized equivalent so the checkpoint's blocks " +
+        "can be checksummed and sealed. Off by default so localCheckpoint's storage level is " +
+        "not silently changed; enable it to verify checkpoints that would otherwise use the " +
+        "deserialized default.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 

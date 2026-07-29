@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{
-  AutoCdcIntoCommand,
+  AutoCdcInto,
   CreateFlowCommand,
   CreateStreamingTableAutoCdc,
   LogicalPlan,
@@ -39,9 +39,10 @@ import org.apache.spark.sql.types.IntegerType
  *   1. CREATE FLOW <name> [COMMENT ...] AS AUTO CDC INTO <target> ...
  *   2. CREATE STREAMING TABLE <name> FLOW AUTO CDC ...
  *
- * Snapshot CDC, SCD Type 2, IGNORE NULL UPDATES, and APPLY AS TRUNCATE WHEN are not
- * supported and should fail to parse. The standalone AUTO CDC INTO form (without CREATE FLOW
- * or CREATE STREAMING TABLE) is also not supported.
+ * Both forms support `STORED AS SCD TYPE 1|2` and, under SCD Type 2, `TRACK HISTORY ON ...`.
+ * Snapshot CDC, IGNORE NULL UPDATES, and APPLY AS TRUNCATE WHEN are not supported and should
+ * fail to parse. The standalone AUTO CDC INTO form (without CREATE FLOW or CREATE STREAMING
+ * TABLE) is also not supported.
  */
 class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   protected lazy val parser = new SparkSqlParser()
@@ -71,7 +72,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cmd.name.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("myflow"))
     assert(cmd.comment.isEmpty)
 
-    val cdc = cmd.flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = cmd.flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("target"))
     val source = streamSource(cdc.source)
     assert(source.multipartIdentifier == Seq("source"))
@@ -80,6 +81,10 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cdc.sequenceByExpr == UnresolvedAttribute("timestamp"))
     assert(cdc.includeColumns.isEmpty)
     assert(cdc.excludeColumns.isEmpty)
+    // No STORED AS clause defaults to SCD Type 1 with no history tracking.
+    assert(cdc.storedAsScdType == 1)
+    assert(cdc.trackHistoryColumns.isEmpty)
+    assert(cdc.trackHistoryExceptColumns.isEmpty)
   }
 
   test("CREATE FLOW AS AUTO CDC INTO - multipart source name") {
@@ -89,7 +94,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     val source = streamSource(cdc.source)
     assert(source.multipartIdentifier == Seq("mycat", "myschema", "source"))
   }
@@ -124,7 +129,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |KEYS (k)
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts ==
       Seq("myschema", "mytable"))
   }
@@ -136,7 +141,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |KEYS (k)
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts ==
       Seq("mycat", "myschema", "mytable"))
   }
@@ -149,7 +154,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |APPLY AS DELETE WHEN op = 'DELETE'
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.deleteCondition.isDefined)
     assert(cdc.deleteCondition.get.sql.contains("op"))
   }
@@ -162,7 +167,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |SEQUENCE BY ts
         |COLUMNS (id, name, value)""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.includeColumns.get.map(_.name) == Seq("id", "name", "value"))
     assert(cdc.excludeColumns.isEmpty)
   }
@@ -175,7 +180,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |SEQUENCE BY ts
         |COLUMNS * EXCEPT (op, ts)""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.includeColumns.isEmpty)
     assert(cdc.excludeColumns.get.map(_.name) == Seq("op", "ts"))
   }
@@ -189,11 +194,169 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |SEQUENCE BY timestamp
         |COLUMNS (key1, key2, key3, timestamp)""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.keys.map(_.name) == Seq("key1", "key2"))
     assert(cdc.deleteCondition.isDefined)
     assert(cdc.sequenceByExpr == UnresolvedAttribute("timestamp"))
     assert(cdc.includeColumns.get.map(_.name) == Seq("key1", "key2", "key3", "timestamp"))
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO - STORED AS SCD TYPE 1") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |STORED AS SCD TYPE 1""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.storedAsScdType == 1)
+    assert(cdc.trackHistoryColumns.isEmpty)
+    assert(cdc.trackHistoryExceptColumns.isEmpty)
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO - STORED AS SCD TYPE 2") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |STORED AS SCD TYPE 2""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.storedAsScdType == 2)
+    assert(cdc.trackHistoryColumns.isEmpty)
+    assert(cdc.trackHistoryExceptColumns.isEmpty)
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO - STORED AS SCD TYPE 2 with TRACK HISTORY ON") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |STORED AS SCD TYPE 2
+        |TRACK HISTORY ON (val1, val2)""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.storedAsScdType == 2)
+    assert(cdc.trackHistoryColumns.get.map(_.name) == Seq("val1", "val2"))
+    assert(cdc.trackHistoryExceptColumns.isEmpty)
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO - STORED AS SCD TYPE 2 with TRACK HISTORY ON * EXCEPT") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |STORED AS SCD TYPE 2
+        |TRACK HISTORY ON * EXCEPT (op, ts)""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.storedAsScdType == 2)
+    assert(cdc.trackHistoryColumns.isEmpty)
+    assert(cdc.trackHistoryExceptColumns.get.map(_.name) == Seq("op", "ts"))
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO - all clauses combined including SCD2 and TRACK HISTORY") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (key1, key2)
+        |APPLY AS DELETE WHEN key3 = 3
+        |SEQUENCE BY timestamp
+        |COLUMNS (key1, key2, key3, timestamp)
+        |STORED AS SCD TYPE 2
+        |TRACK HISTORY ON (key3)""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.deleteCondition.isDefined)
+    assert(cdc.includeColumns.get.map(_.name) == Seq("key1", "key2", "key3", "timestamp"))
+    assert(cdc.storedAsScdType == 2)
+    assert(cdc.trackHistoryColumns.get.map(_.name) == Seq("key3"))
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - STORED AS SCD TYPE 2 with TRACK HISTORY ON") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE st FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |STORED AS SCD TYPE 2
+        |TRACK HISTORY ON (val1, val2)""".stripMargin)
+
+    val cst = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cst.storedAsScdType == 2)
+    assert(cst.trackHistoryColumns.get.map(_.name) == Seq("val1", "val2"))
+    assert(cst.trackHistoryExceptColumns.isEmpty)
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - STORED AS SCD TYPE 2 with TRACK HISTORY EXCEPT") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE st FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |STORED AS SCD TYPE 2
+        |TRACK HISTORY ON * EXCEPT (op)""".stripMargin)
+
+    val cst = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cst.storedAsScdType == 2)
+    assert(cst.trackHistoryColumns.isEmpty)
+    assert(cst.trackHistoryExceptColumns.get.map(_.name) == Seq("op"))
+  }
+
+  test("AUTO CDC - TRACK HISTORY before STORED AS is not allowed") {
+    intercept[ParseException] {
+      parser.parsePlan(
+        """CREATE FLOW f AS AUTO CDC INTO target
+          |FROM STREAM(source)
+          |KEYS (id)
+          |SEQUENCE BY ts
+          |TRACK HISTORY ON (val)
+          |STORED AS SCD TYPE 2""".stripMargin)
+    }
+  }
+
+  test("AUTO CDC - STORED AS SCD TYPE 3 is not allowed") {
+    val ex = intercept[ParseException] {
+      parser.parsePlan(
+        """CREATE FLOW f AS AUTO CDC INTO target
+          |FROM STREAM(source)
+          |KEYS (id)
+          |SEQUENCE BY ts
+          |STORED AS SCD TYPE 3""".stripMargin)
+    }
+    assert(ex.getMessage.contains("Unsupported SCD type: 3"))
+  }
+
+  test("AUTO CDC - STORED AS SCD TYPE with an overflowing number is rejected cleanly") {
+    // The number is INTEGER_VALUE (DIGIT+), so an oversized literal must route through the
+    // clear "Unsupported SCD type" error rather than throwing a NumberFormatException.
+    val ex = intercept[ParseException] {
+      parser.parsePlan(
+        """CREATE FLOW f AS AUTO CDC INTO target
+          |FROM STREAM(source)
+          |KEYS (id)
+          |SEQUENCE BY ts
+          |STORED AS SCD TYPE 99999999999999999999""".stripMargin)
+    }
+    assert(ex.getMessage.contains("Unsupported SCD type: 99999999999999999999"))
+  }
+
+  test("AUTO CDC - STORED AS SCD TYPE tolerates extra whitespace between words") {
+    // SCD, TYPE and the number are separate tokens, so any whitespace between them is accepted.
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |STORED AS SCD   TYPE
+        |    2""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.storedAsScdType == 2)
   }
 
   // ---------------------------------------------------------------------------
@@ -523,7 +686,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     val source = streamSource(cdc.source)
     assert(source.multipartIdentifier == Seq("source"))
   }
@@ -535,7 +698,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.source.isStreaming)
     val alias = cdc.source.asInstanceOf[SubqueryAlias]
     assert(alias.alias == "s")
@@ -550,7 +713,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
 
     // The subquery wraps the STREAM read in Project/Filter/SubqueryAlias nodes; isStreaming
     // propagates up through them, so the whole source is recognized as streaming.
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.source.isStreaming)
     assert(cdc.source.isInstanceOf[SubqueryAlias])
   }
@@ -810,35 +973,39 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     )
   }
 
-  test("STORED AS SCD TYPE 2 is not supported") {
-    checkError(
-      intercept[ParseException] {
-        parser.parsePlan(
-          """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM STREAM(source)
-            |KEYS (id)
-            |SEQUENCE BY ts
-            |STORED AS SCD TYPE 2""".stripMargin)
-      },
-      condition = "PARSE_SYNTAX_ERROR",
-      sqlState = "42601",
-      parameters = Map("error" -> "'STORED'", "hint" -> "")
-    )
+  test("TRACK HISTORY ON without parentheses is not allowed") {
+    // The grammar requires a parenthesized column list or `* EXCEPT (...)`, so a bare column
+    // list after TRACK HISTORY ON fails to parse.
+    intercept[ParseException] {
+      parser.parsePlan(
+        """CREATE FLOW f AS AUTO CDC INTO target
+          |FROM STREAM(source)
+          |KEYS (id)
+          |SEQUENCE BY ts
+          |STORED AS SCD TYPE 2
+          |TRACK HISTORY ON value1, value2""".stripMargin)
+    }
   }
 
-  test("TRACK HISTORY ON is not supported") {
-    checkError(
-      intercept[ParseException] {
-        parser.parsePlan(
-          """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM STREAM(source)
-            |KEYS (id)
-            |SEQUENCE BY ts
-            |TRACK HISTORY ON value1, value2""".stripMargin)
-      },
-      condition = "PARSE_SYNTAX_ERROR",
-      sqlState = "42601",
-      parameters = Map("error" -> "'TRACK'", "hint" -> "")
-    )
+  test("new keywords history, track, scd remain usable as identifiers") {
+    // history / track / scd are non-reserved, so they must still parse as ordinary table and
+    // column identifiers. This guards their non-reserved classification against regressions.
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO track
+        |FROM STREAM(scd)
+        |KEYS (history)
+        |SEQUENCE BY track
+        |COLUMNS (history, track, scd)
+        |STORED AS SCD TYPE 2
+        |TRACK HISTORY ON (history, scd)""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("track"))
+    assert(streamSource(cdc.source).multipartIdentifier == Seq("scd"))
+    assert(cdc.keys.map(_.name) == Seq("history"))
+    assert(cdc.sequenceByExpr == UnresolvedAttribute("track"))
+    assert(cdc.includeColumns.get.map(_.name) == Seq("history", "track", "scd"))
+    assert(cdc.storedAsScdType == 2)
+    assert(cdc.trackHistoryColumns.get.map(_.name) == Seq("history", "scd"))
   }
 }

@@ -524,6 +524,7 @@ pyspark_core = Module(
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_non_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
@@ -593,6 +594,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map_misc",
         "pyspark.sql.tests.arrow.test_arrow_grouped_map",
         "pyspark.sql.tests.arrow.test_arrow_python_udf",
+        "pyspark.sql.tests.arrow.test_arrow_python_udf_cached",
         "pyspark.sql.tests.arrow.test_arrow_udf",
         "pyspark.sql.tests.arrow.test_arrow_udf_grouped_agg",
         "pyspark.sql.tests.arrow.test_arrow_udf_scalar",
@@ -637,6 +639,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.coercion.test_python_udf_input_type",
         "pyspark.sql.tests.coercion.test_pandas_udf_return_type",
         "pyspark.sql.tests.coercion.test_python_udf_return_type",
+        "pyspark.sql.tests.df_golden.test_df_golden",
+        "pyspark.sql.tests.df_golden.test_df_golden_framework",
     ],
 )
 

@@ -23,6 +23,7 @@ ARRAY	false
 AS	true
 ASC	false
 ASENSITIVE	false
+ASOF	false
 AT	false
 ATOMIC	false
 AUTHORIZATION	true
@@ -175,6 +176,7 @@ GROUP	true
 GROUPING	false
 HANDLER	false
 HAVING	true
+HISTORY	false
 HOUR	false
 HOURS	false
 IDENTIFIED	false
@@ -234,6 +236,7 @@ LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
+MATCH_CONDITION	false
 MATERIALIZED	false
 MAX	false
 MEASURE	false
@@ -330,6 +333,7 @@ ROLLBACK	false
 ROLLUP	false
 ROW	false
 ROWS	false
+SCD	false
 SCHEMA	false
 SCHEMAS	false
 SECOND	false
@@ -390,6 +394,7 @@ TIMESTAMP_NTZ	false
 TINYINT	false
 TO	true
 TOUCH	false
+TRACK	false
 TRAILING	true
 TRANSACTION	false
 TRANSACTIONS	false

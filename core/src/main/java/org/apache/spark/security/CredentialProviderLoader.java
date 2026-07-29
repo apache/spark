@@ -20,6 +20,7 @@ package org.apache.spark.security;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -29,6 +30,8 @@ import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.annotation.Private;
 
@@ -42,7 +45,7 @@ import org.apache.spark.annotation.Private;
  * with the configuration from the first call that selects it (first-conf-wins semantics);
  * subsequent resolutions reuse the already-initialized instance without re-calling {@code init}.
  * <p>
- * When the configuration key {@code spark.security.credentials.provider.<scheme>} is set
+ * When the configuration key {@code spark.security.oidc.provider.<scheme>} is set
  * (non-empty), the loader validates the configured fully-qualified class name against the
  * discovered candidates for that scheme regardless of candidate count. If the configured class
  * does not match any candidate, an {@link IllegalArgumentException} is thrown listing the
@@ -51,9 +54,10 @@ import org.apache.spark.annotation.Private;
  * multiple candidates produce an ambiguity error; no candidates produce {@code Optional.empty()}.
  * <p>
  * <b>Thread-safety:</b> This class uses synchronized access to the cached provider list and
- * initialization tracking. Callers may invoke {@link #providerFor(String, Map)} from multiple
- * threads. However, the returned {@link CredentialProvider} instances are not guaranteed to be
- * thread-safe; callers should synchronize on the provider or confine it to a single thread.
+ * initialization tracking, and callers may invoke {@link #providerFor(String, Map)} from
+ * multiple threads. A provider instance is cached and shared across callers; per the
+ * {@link CredentialProvider} contract, implementations must be thread-safe, so a returned
+ * instance may be used concurrently.
  *
  * @since 4.3.0
  */
@@ -65,14 +69,14 @@ public final class CredentialProviderLoader {
    * When set (non-empty), the configured fully-qualified class name must match a discovered
    * provider that supports the scheme; a mismatch results in an {@link IllegalArgumentException}.
    */
-  private static final String CONF_PREFIX = "spark.security.credentials.provider.";
+  private static final String CONF_PREFIX = "spark.security.oidc.provider.";
 
   /**
    * Configuration key prefix used to scope the configuration passed to
    * {@link CredentialProvider#init(Map)}. Only keys starting with this prefix are forwarded,
    * preventing unrelated secrets from leaking to third-party provider implementations.
    */
-  private static final String CREDENTIALS_CONF_PREFIX = "spark.security.credentials.";
+  private static final String OIDC_CONF_PREFIX = "spark.security.oidc.";
 
   private static volatile List<CredentialProvider> cachedProviders;
 
@@ -91,7 +95,7 @@ public final class CredentialProviderLoader {
    * Returns the {@link CredentialProvider} for the given URI scheme, applying Binding Policy A:
    * <ol>
    *   <li>If no candidate supports the scheme, {@link Optional#empty()} is returned.</li>
-   *   <li>If {@code spark.security.credentials.provider.<scheme>} is set (non-empty) in
+   *   <li>If {@code spark.security.oidc.provider.<scheme>} is set (non-empty) in
    *       {@code conf}, the provider whose fully-qualified class name matches is selected
    *       regardless of candidate count. If the configured class does not match any candidate,
    *       an {@link IllegalArgumentException} is thrown naming the scheme, the configured class,
@@ -103,7 +107,7 @@ public final class CredentialProviderLoader {
    * The selected provider is initialized exactly once per provider instance via
    * {@link CredentialProvider#init(Map)} (first-conf-wins semantics); later resolutions reuse
    * the initialized instance without re-calling {@code init}. The configuration passed to
-   * {@code init()} is scoped to {@code spark.security.credentials.*} keys only; keys from
+   * {@code init()} is scoped to {@code spark.security.oidc.*} keys only; keys from
    * other subsystems are filtered out to prevent secret leakage to third-party providers.
    * <p>
    * Spark-internal callers pass their configuration as a {@code Map<String, String>} for
@@ -170,7 +174,7 @@ public final class CredentialProviderLoader {
     }
 
     // Initialize exactly once under the lock (first-conf-wins).
-    // Only pass spark.security.credentials.* keys to init() to avoid leaking secrets
+    // Only pass spark.security.oidc.* keys to init() to avoid leaking secrets
     // from other subsystems to third-party ServiceLoader providers. This follows the
     // precedent of DataSourceV2Utils.extractSessionConfigs() which scopes configuration
     // to a specific prefix. We keep the full key (unlike extractSessionConfigs which
@@ -179,7 +183,7 @@ public final class CredentialProviderLoader {
       if (!initializedProviders.contains(selected)) {
         Map<String, String> filteredConf = new HashMap<>();
         for (Map.Entry<String, String> entry : conf.entrySet()) {
-          if (entry.getKey().startsWith(CREDENTIALS_CONF_PREFIX)) {
+          if (entry.getKey().startsWith(OIDC_CONF_PREFIX)) {
             filteredConf.put(entry.getKey(), entry.getValue());
           }
         }
@@ -221,9 +225,37 @@ public final class CredentialProviderLoader {
   }
 
   /**
+   * Discovers all URI schemes supported by providers on the classpath.
+   * <p>
+   * This method queries all discovered {@link CredentialProvider} instances and collects
+   * their {@link CredentialProvider#supportedSchemes()} into a single set. Unlike
+   * {@link #providerFor(String, Map)}, this does not initialize providers or apply
+   * explicit selection rules -- it only reports what schemes are potentially available.
+   * <p>
+   * Intended for use by {@code UserCredentialManager} when no explicit scheme configuration
+   * (e.g., {@code spark.security.oidc.provider.<scheme>}) is provided.
+   *
+   * @return a set of all supported scheme names (lowercased), possibly empty
+   */
+  public static Set<String> discoverAllSchemes() {
+    List<CredentialProvider> providers = getProviders();
+    Set<String> schemes = new HashSet<>();
+    for (CredentialProvider provider : providers) {
+      Set<String> providerSchemes = provider.supportedSchemes();
+      if (providerSchemes != null) {
+        for (String s : providerSchemes) {
+          schemes.add(s.toLowerCase(Locale.ROOT));
+        }
+      }
+    }
+    return schemes;
+  }
+
+  /**
    * Resets the cached provider list and initialization tracking. Intended for testing only.
    */
-  static void resetForTesting() {
+  @VisibleForTesting
+  public static void resetForTesting() {
     synchronized (CredentialProviderLoader.class) {
       cachedProviders = null;
       initializedProviders.clear();

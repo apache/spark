@@ -55,9 +55,6 @@ markupsafe
 jira>=3.5.2
 PyGithub
 
-# pandas API on Spark Code formatter.
-black==26.3.1
-
 # Spark Connect (required)
 grpcio>=1.76.0
 grpcio-status>=1.76.0
@@ -71,7 +68,7 @@ googleapis-common-protos-stubs==2.2.0
 grpc-stubs==1.24.11
 
 # Debug for Spark and Spark Connect
-graphviz==0.20.3
+graphviz>=0.20
 flameprof==0.4
 viztracer
 debugpy

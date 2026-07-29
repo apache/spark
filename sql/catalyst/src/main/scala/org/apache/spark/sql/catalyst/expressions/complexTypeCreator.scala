@@ -299,6 +299,13 @@ object CreateMap {
   usage = """
     _FUNC_(keys, values) - Creates a map with a pair of the given key/value arrays. All elements
       in keys should not be null""",
+  arguments = """
+    Arguments:
+      * keys - The array providing the keys of the map.
+        An expression that evaluates to an array.
+      * values - The array providing the values of the map.
+        An expression that evaluates to an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1.0, 3.0), array('2', '4'));
@@ -566,6 +573,15 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`. Both `pairDelim` and `keyValueDelim` are treated as regular expressions.",
+  arguments = """
+    Arguments:
+      * text - The text to split into key/value pairs.
+        An expression that evaluates to a string.
+      * pairDelim - The delimiter regular expression separating pairs, defaults to ','.
+        An expression that evaluates to a string.
+      * keyValueDelim - The delimiter regular expression separating key and value, defaults to ':'.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');

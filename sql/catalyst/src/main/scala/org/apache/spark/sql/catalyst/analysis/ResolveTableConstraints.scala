@@ -88,7 +88,7 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
   private def buildGeneratedColumnConstraints(
       r: DataSourceV2Relation,
       v2Write: V2WriteCommand): Seq[Expression] = {
-    if (!GeneratedColumn.supportsGeneratedColumnsOnWrite(r.catalog, r.table.columns())) {
+    if (!GeneratedColumn.supportsGeneratedColumnsOnWrite(r.table, r.table.columns())) {
       return Seq.empty
     }
 

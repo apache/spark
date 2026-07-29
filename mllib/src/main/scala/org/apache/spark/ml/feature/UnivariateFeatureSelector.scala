@@ -35,6 +35,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 
 
 /**
@@ -293,6 +294,11 @@ class UnivariateFeatureSelectorModel private[ml](
 
   // For ml connect only
   private[ml] def this() = this("", Array.emptyIntArray)
+
+  private[spark] override def estimatedSize: Long = {
+    // selectedFeatures: Array[Int]
+    estimateMatadataSize + SizeEstimator.estimate(selectedFeatures)
+  }
 
   /** @group setParam */
   @Since("3.1.1")

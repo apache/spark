@@ -30,6 +30,7 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.zip.CRC32;
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -179,6 +180,42 @@ public class ExpressionImplUtils {
             null,
             aad
     );
+  }
+
+  /**
+   * Computes a keyed-hash message authentication code (HMAC) of the given message using the
+   * given key and hash algorithm.
+   * @param key The secret key.
+   * @param message The message to authenticate.
+   * @param algorithm The hash algorithm. Supported values (case-insensitive):
+   *                  SHA-224, SHA-256, SHA-384, SHA-512, SHA-1, MD5.
+   * @return The raw HMAC bytes.
+   */
+  public static byte[] hmac(byte[] key, byte[] message, UTF8String algorithm) {
+    String macName = hmacName(algorithm.toString());
+    try {
+      Mac mac = Mac.getInstance(macName);
+      mac.init(new SecretKeySpec(key, macName));
+      return mac.doFinal(message);
+    } catch (GeneralSecurityException | IllegalArgumentException e) {
+      throw QueryExecutionErrors.hmacCryptoError(e.getMessage());
+    }
+  }
+
+  /**
+   * Maps a user-facing hash algorithm name to its JCA {@link Mac} algorithm name. Supported
+   * algorithms are SHA-224, SHA-256, SHA-384, SHA-512, SHA-1 and MD5 (case-insensitive).
+   */
+  private static String hmacName(String algorithm) {
+    return switch (algorithm.toUpperCase(Locale.ROOT)) {
+      case "SHA-224", "SHA224" -> "HmacSHA224";
+      case "SHA-256", "SHA256" -> "HmacSHA256";
+      case "SHA-384", "SHA384" -> "HmacSHA384";
+      case "SHA-512", "SHA512" -> "HmacSHA512";
+      case "SHA-1", "SHA1" -> "HmacSHA1";
+      case "MD5" -> "HmacMD5";
+      default -> throw QueryExecutionErrors.hmacUnsupportedAlgorithmError(algorithm);
+    };
   }
 
   /**

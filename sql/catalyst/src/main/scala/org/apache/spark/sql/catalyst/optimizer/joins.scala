@@ -323,20 +323,16 @@ trait JoinSelectionHelper extends Logging {
       if (hintOnly) {
         hintToShuffleHashJoinLeft(join.hint)
       } else {
-        hintToPreferShuffleHashJoinLeft(join.hint) ||
-          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
-            muchSmaller(join.left, join.right, conf)) ||
-          forceApplyShuffledHashJoin(conf)
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
+          muchSmaller(join.left, join.right, conf)) || forceApplyShuffledHashJoin(conf)
       }
     }
     def shouldBuildRight(): Boolean = {
       if (hintOnly) {
         hintToShuffleHashJoinRight(join.hint)
       } else {
-        hintToPreferShuffleHashJoinRight(join.hint) ||
-          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
-            muchSmaller(join.right, join.left, conf)) ||
-          forceApplyShuffledHashJoin(conf)
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
+          muchSmaller(join.right, join.left, conf)) || forceApplyShuffledHashJoin(conf)
       }
     }
     getBuildSide(
@@ -471,18 +467,6 @@ trait JoinSelectionHelper extends Logging {
 
   def hintToShuffleHashJoinRight(hint: JoinHint): Boolean = {
     hint.rightHint.exists(_.strategy.contains(SHUFFLE_HASH))
-  }
-
-  def hintToPreferShuffleHashJoinLeft(hint: JoinHint): Boolean = {
-    hint.leftHint.exists(_.strategy.contains(PREFER_SHUFFLE_HASH))
-  }
-
-  def hintToPreferShuffleHashJoinRight(hint: JoinHint): Boolean = {
-    hint.rightHint.exists(_.strategy.contains(PREFER_SHUFFLE_HASH))
-  }
-
-  def hintToPreferShuffleHashJoin(hint: JoinHint): Boolean = {
-    hintToPreferShuffleHashJoinLeft(hint) || hintToPreferShuffleHashJoinRight(hint)
   }
 
   def hintToShuffleHashJoin(hint: JoinHint): Boolean = {

@@ -28,7 +28,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
-import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.{CpuAmount, ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{TaskThreadDump, UpdateDelegationTokens}
@@ -57,7 +57,7 @@ private[spark] class LocalEndpoint(
     private val totalCores: Int)
   extends ThreadSafeRpcEndpoint with Logging {
 
-  private var freeCores = totalCores
+  private var freeCores: BigDecimal = CpuAmount.normalize(BigDecimal(totalCores))
 
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER
   val localExecutorHostname = Utils.localCanonicalHostName()
@@ -189,7 +189,7 @@ private[spark] class LocalSchedulerBackend(
   // so we expect all executors to be of same ResourceProfile
   override def maxNumConcurrentTasks(rp: ResourceProfile): Int = {
     val cpusPerTask = ResourceProfile.getTaskCpusOrDefaultForProfile(rp, conf)
-    totalCores / cpusPerTask
+    ResourceProfile.numTasksBasedOnCores(CpuAmount.normalize(BigDecimal(totalCores)), cpusPerTask)
   }
 
   private def stop(finalState: SparkAppHandle.State): Unit = {

@@ -851,6 +851,7 @@ object FunctionRegistry {
     expression[Sha2]("sha2"),
     expression[AesEncrypt]("aes_encrypt"),
     expression[AesDecrypt]("aes_decrypt"),
+    expression[Hmac]("hmac"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[InputFileBlockStart]("input_file_block_start"),
@@ -988,6 +989,10 @@ object FunctionRegistry {
     expression[VariantDelete]("variant_delete"),
     expressionBuilder("variant_insert", VariantInsertExpressionBuilder),
     expressionBuilder("try_variant_insert", TryVariantInsertExpressionBuilder),
+    expressionBuilder("variant_set", VariantSetExpressionBuilder),
+    expressionBuilder("try_variant_set", TryVariantSetExpressionBuilder),
+    expressionBuilder("variant_array_append", VariantArrayAppendExpressionBuilder),
+    expressionBuilder("try_variant_array_append", TryVariantArrayAppendExpressionBuilder),
 
     // Spatial
     expression[ST_AsBinary]("st_asbinary"),

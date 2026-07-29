@@ -83,6 +83,30 @@ private[storage] class BlockInfo(
   }
   private[this] var _writerTask: Long = BlockInfo.NO_WRITER
 
+  // The three checksum fields below are `@volatile`: unlike the lock-guarded fields above, they are
+  // read/written across threads outside the block lock (e.g. a lockless `reportAllBlocks` heartbeat
+  // read, and a write under only a shared read lock in `localCopyMatchesSealedChecksum`), so they
+  // need their own visibility guarantee.
+
+  /**
+   * Content checksum of this block's serialized+compressed (pre-encryption) bytes, computed at
+   * store time when a checksum was requested for it. `None` when no checksum was computed.
+   */
+  @volatile var checksum: Option[Long] = None
+
+  /**
+   * Whether this block is subject to the read-side seal self-check (see `getLocalValues`). Set for
+   * blocks of RDDs with `verifyCheckpointChecksums` set; a block merely checksummed for observation
+   * is not.
+   */
+  @volatile var verifySealedChecksum: Boolean = false
+
+  /**
+   * Cached sealed checksum for this block, pulled from the master once on first read and reused.
+   * `None` until pulled, or if the block is not sealed.
+   */
+  @volatile var sealedChecksum: Option[Long] = None
+
   private def checkInvariants(): Unit = {
     // A block's reader count must be non-negative:
     assert(_readerCount >= 0)

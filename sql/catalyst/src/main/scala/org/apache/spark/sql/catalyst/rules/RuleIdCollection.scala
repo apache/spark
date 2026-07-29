@@ -101,6 +101,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveCursors" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveFetchCursor" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveBinBy" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveAsOfJoin" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveSetVariable" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableConstraints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableSpec" ::

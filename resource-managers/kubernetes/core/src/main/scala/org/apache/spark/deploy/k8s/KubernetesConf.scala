@@ -98,6 +98,20 @@ class KubernetesDriverConf(
     clock: Clock = new SystemClock())
   extends KubernetesConf(sparkConf) with Logging {
 
+  /**
+   * Java-friendly constructor that accepts a nullable String for proxyUser
+   * instead of Option[String].
+   */
+  @Since("4.3.0")
+  def this(
+      sparkConf: SparkConf,
+      appId: String,
+      mainAppResource: MainAppResource,
+      mainClass: String,
+      appArgs: Array[String],
+      proxyUser: String) =
+    this(sparkConf, appId, mainAppResource, mainClass, appArgs, Option(proxyUser))
+
   def driverNodeSelector: Map[String, String] =
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX)
 

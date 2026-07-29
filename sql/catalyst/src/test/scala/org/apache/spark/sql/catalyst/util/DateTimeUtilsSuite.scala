@@ -2051,6 +2051,54 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("timeBucketFromIndexDTInterval / timeBucketFromTimestampDTInterval") {
+    val utc = ZoneOffset.UTC
+    val la = DateTimeUtils.getZoneId("America/Los_Angeles")
+
+    // The containing bucket agrees with timeBucketDTInterval and encloses ts:
+    // boundary(k) == start <= ts < boundary(k + 1).
+    def checkContaining(bucket: Long, ts: Long, origin: Long, zone: ZoneId): Unit = {
+      val (k, start) = timeBucketFromTimestampDTInterval(bucket, ts, origin, zone)
+      assert(start === timeBucketFromIndexDTInterval(bucket, k, origin, zone))
+      assert(start === timeBucketDTInterval(bucket, ts, origin, zone))
+      assert(start <= ts)
+      assert(ts < timeBucketFromIndexDTInterval(bucket, k + 1, origin, zone))
+    }
+    // Sub-day, sub-day with custom origin, and multi-day (36h) across both LA DST transitions.
+    checkContaining(15 * MICROS_PER_MINUTE, date(2024, 1, 1, 11, 27, 0), 0L, la)
+    checkContaining(MICROS_PER_HOUR, date(2024, 1, 1, 11, 27, 0), date(1970, 1, 1, 0, 5, 0), utc)
+    val laOrigin = date(2024, 3, 9, 8, 0, 0)  // 08:00 UTC = 2024-03-09 00:00 PST
+    checkContaining(36 * MICROS_PER_HOUR, date(2024, 3, 12, 9, 0, 0), laOrigin, la)
+    checkContaining(MICROS_PER_DAY, date(2024, 11, 4, 2, 0, 0), date(2024, 11, 1, 7, 0, 0), la)
+
+    // Pacific/Apia's 2011 date-line shift throws the 1-day estimate off by one bucket (epoch
+    // origin) or two (1900 origin), so the search must step more than once.
+    val apiaZone = DateTimeUtils.getZoneId("Pacific/Apia")
+    checkContaining(MICROS_PER_DAY, date(2012, 1, 2, 0, 0, 0, 0, apiaZone),
+      date(1970, 1, 1), apiaZone)
+    checkContaining(MICROS_PER_DAY, date(2012, 1, 2, 0, 0, 0, 0, apiaZone),
+      date(1900, 1, 1, 0, 0, 0, 0, apiaZone), apiaZone)
+
+    // Boundaries land on the grid across the spring-forward, not 1h off as a walk would drift.
+    val (idx, _) = timeBucketFromTimestampDTInterval(36 * MICROS_PER_HOUR,
+      date(2024, 3, 12, 9, 0, 0), laOrigin, la)
+    assert(timeBucketFromIndexDTInterval(36 * MICROS_PER_HOUR, idx, laOrigin, la)
+      === date(2024, 3, 12, 7, 0, 0))       // 2024-03-12 00:00 PDT, the grid (not walked) value
+    assert(timeBucketFromIndexDTInterval(36 * MICROS_PER_HOUR, idx + 1, laOrigin, la)
+      === date(2024, 3, 13, 19, 0, 0))      // 2024-03-13 12:00 PDT
+
+    // Whole-day zone skip: Apia skipped 2011-12-30, so two consecutive 1-day grid boundaries
+    // collapse to the same instant (civil "2011-12-30 00:00" and "2011-12-31 00:00" are identical).
+    val apia = DateTimeUtils.getZoneId("Pacific/Apia")
+    val apiaOrigin = date(2011, 12, 25, 10, 0, 0)  // 2011-12-25 00:00 Apia (UTC-11 -> 10:00 UTC)
+    // This ts lands in the bucket whose start collapsed onto the previous one's, so
+    // boundary(k - 1) == boundary(k).
+    val (collapsed, _) = timeBucketFromTimestampDTInterval(MICROS_PER_DAY,
+      date(2011, 12, 30, 12, 0, 0), apiaOrigin, apia)
+    assert(timeBucketFromIndexDTInterval(MICROS_PER_DAY, collapsed - 1, apiaOrigin, apia)
+      === timeBucketFromIndexDTInterval(MICROS_PER_DAY, collapsed, apiaOrigin, apia))
+  }
+
   test("timeBucketYMInterval") {
     val utc = ZoneOffset.UTC
     // 1-month bucket default origin
