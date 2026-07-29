@@ -307,16 +307,18 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cst.trackHistoryExceptColumns.get.map(_.name) == Seq("op"))
   }
 
-  test("AUTO CDC - TRACK HISTORY before STORED AS is not allowed") {
-    intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE FLOW f AS AUTO CDC INTO target
-          |FROM STREAM(source)
-          |KEYS (id)
-          |SEQUENCE BY ts
-          |TRACK HISTORY ON (val)
-          |STORED AS SCD TYPE 2""".stripMargin)
-    }
+  test("AUTO CDC - TRACK HISTORY before STORED AS is allowed") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |TRACK HISTORY ON (val)
+        |STORED AS SCD TYPE 2""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.storedAsScdType == 2)
+    assert(cdc.trackHistoryColumns.get.map(_.name) == Seq("val"))
   }
 
   test("AUTO CDC - STORED AS SCD TYPE 3 is not allowed") {
@@ -592,68 +594,176 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   // ---------------------------------------------------------------------------
 
   test("CREATE FLOW AS AUTO CDC INTO - SEQUENCE BY is required") {
+    val sql =
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)""".stripMargin
     checkError(
-      intercept[ParseException] {
-        parser.parsePlan(
-          """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM STREAM(source)
-            |KEYS (id)""".stripMargin)
-      },
-      condition = "PARSE_SYNTAX_ERROR",
-      sqlState = "42601",
-      parameters = Map("error" -> "end of input", "hint" -> "")
+      intercept[ParseException] { parser.parsePlan(sql) },
+      condition = "MISSING_CLAUSES_FOR_OPERATION",
+      parameters = Map("clauses" -> "SEQUENCE BY", "operation" -> "AUTO CDC"),
+      queryContext = Array(ExpectedContext(autoCdcParams(sql), sql.indexOf("FROM"), sql.length - 1))
     )
   }
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC - SEQUENCE BY is required") {
+    val sql =
+      """CREATE STREAMING TABLE target
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)""".stripMargin
     checkError(
-      intercept[ParseException] {
-        parser.parsePlan(
-          """CREATE STREAMING TABLE target
-            |FLOW AUTO CDC
-            |FROM STREAM(source)
-            |KEYS (id)""".stripMargin)
-      },
-      condition = "PARSE_SYNTAX_ERROR",
-      sqlState = "42601",
-      parameters = Map("error" -> "end of input", "hint" -> "")
+      intercept[ParseException] { parser.parsePlan(sql) },
+      condition = "MISSING_CLAUSES_FOR_OPERATION",
+      parameters = Map("clauses" -> "SEQUENCE BY", "operation" -> "AUTO CDC"),
+      queryContext = Array(ExpectedContext(autoCdcParams(sql), sql.indexOf("FROM"), sql.length - 1))
     )
   }
 
   // ---------------------------------------------------------------------------
-  // Error cases: wrong clause order
+  // Clause ordering: the optional clauses may appear in any order
   // ---------------------------------------------------------------------------
 
-  test("SEQUENCE BY before APPLY AS DELETE is not allowed") {
+  test("AUTO CDC - SEQUENCE BY before APPLY AS DELETE is allowed") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |APPLY AS DELETE WHEN a = 1""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.sequenceByExpr == UnresolvedAttribute("ts"))
+    assert(cdc.deleteCondition.isDefined)
+    assert(cdc.deleteCondition.get.sql.contains("a"))
+  }
+
+  test("AUTO CDC - COLUMNS before SEQUENCE BY is allowed") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |COLUMNS (a, b)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.includeColumns.get.map(_.name) == Seq("a", "b"))
+    assert(cdc.sequenceByExpr == UnresolvedAttribute("ts"))
+  }
+
+  test("AUTO CDC - clauses supplied in fully reversed order are all honored") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |TRACK HISTORY ON (val)
+        |STORED AS SCD TYPE 2
+        |COLUMNS (id, val, ts)
+        |SEQUENCE BY ts
+        |APPLY AS DELETE WHEN is_deleted""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
+    assert(cdc.deleteCondition.isDefined)
+    assert(cdc.deleteCondition.get.sql.contains("is_deleted"))
+    assert(cdc.sequenceByExpr == UnresolvedAttribute("ts"))
+    assert(cdc.includeColumns.get.map(_.name) == Seq("id", "val", "ts"))
+    assert(cdc.storedAsScdType == 2)
+    assert(cdc.trackHistoryColumns.get.map(_.name) == Seq("val"))
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - clauses supplied in reversed order are honored") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |TRACK HISTORY ON (val)
+        |STORED AS SCD TYPE 2
+        |COLUMNS (id, val, ts)
+        |SEQUENCE BY ts
+        |APPLY AS DELETE WHEN is_deleted""".stripMargin)
+
+    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cmd.deleteCondition.isDefined)
+    assert(cmd.deleteCondition.get.sql.contains("is_deleted"))
+    assert(cmd.sequenceByExpr == UnresolvedAttribute("ts"))
+    assert(cmd.includeColumns.get.map(_.name) == Seq("id", "val", "ts"))
+    assert(cmd.storedAsScdType == 2)
+    assert(cmd.trackHistoryColumns.get.map(_.name) == Seq("val"))
+  }
+
+  // ---------------------------------------------------------------------------
+  // Error cases: a clause supplied more than once
+  // ---------------------------------------------------------------------------
+
+  /** Assert a statement fails with DUPLICATE_CLAUSES naming `clauseName`. */
+  private def assertDuplicateClause(sql: String, clauseName: String): Unit = {
     checkError(
       intercept[ParseException] {
-        parser.parsePlan(
-          """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM STREAM(source)
-            |KEYS (id)
-            |SEQUENCE BY ts
-            |APPLY AS DELETE WHEN a = 1""".stripMargin)
+        parser.parsePlan(sql)
       },
-      condition = "PARSE_SYNTAX_ERROR",
-      sqlState = "42601",
-      parameters = Map("error" -> "'APPLY'", "hint" -> "")
+      condition = "DUPLICATE_CLAUSES",
+      parameters = Map("clauseName" -> clauseName),
+      queryContext = Array(ExpectedContext(autoCdcParams(sql), sql.indexOf("FROM"), sql.length - 1))
     )
   }
 
-  test("COLUMNS before SEQUENCE BY is not allowed") {
-    checkError(
-      intercept[ParseException] {
-        parser.parsePlan(
-          """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM STREAM(source)
-            |KEYS (id)
-            |COLUMNS a, b
-            |SEQUENCE BY ts""".stripMargin)
-      },
-      condition = "PARSE_SYNTAX_ERROR",
-      sqlState = "42601",
-      parameters = Map("error" -> "'COLUMNS'", "hint" -> "")
-    )
+  /** The `autoCdcParameters` fragment of `sql`: from `FROM` to the end of the statement. */
+  private def autoCdcParams(sql: String): String = sql.substring(sql.indexOf("FROM"))
+
+  test("AUTO CDC - duplicate SEQUENCE BY is rejected") {
+    assertDuplicateClause(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |SEQUENCE BY ts2""".stripMargin,
+      "SEQUENCE BY")
+  }
+
+  test("AUTO CDC - duplicate COLUMNS is rejected") {
+    assertDuplicateClause(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |COLUMNS (a)
+        |COLUMNS (b)""".stripMargin,
+      "COLUMNS")
+  }
+
+  test("AUTO CDC - duplicate APPLY AS DELETE WHEN is rejected") {
+    assertDuplicateClause(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |APPLY AS DELETE WHEN a = 1
+        |APPLY AS DELETE WHEN b = 2
+        |SEQUENCE BY ts""".stripMargin,
+      "APPLY AS DELETE WHEN")
+  }
+
+  test("AUTO CDC - duplicate STORED AS SCD TYPE is rejected") {
+    assertDuplicateClause(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |STORED AS SCD TYPE 1
+        |STORED AS SCD TYPE 2""".stripMargin,
+      "STORED AS SCD TYPE")
+  }
+
+  test("AUTO CDC - duplicate TRACK HISTORY ON is rejected") {
+    assertDuplicateClause(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts
+        |STORED AS SCD TYPE 2
+        |TRACK HISTORY ON (a)
+        |TRACK HISTORY ON (b)""".stripMargin,
+      "TRACK HISTORY ON")
   }
 
   // ---------------------------------------------------------------------------
