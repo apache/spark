@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.pipelines.autocdc.ScdType
 
@@ -155,5 +156,130 @@ class AutoCdcAuxiliaryTableSuite extends SparkFunSuite {
       parameters = Map(
         "tableName" -> TableIdentifier("target", Some("ns"), Some("cat")).unquotedString,
         "propertyName" -> AutoCdcAuxiliaryTable.scdTypePropertyKey))
+  }
+
+  private val targetIdent = TableIdentifier("target", Some("ns"), Some("cat"))
+
+  /** An auxiliary table stub recording the given track-history column names as JSON. */
+  private def auxTableWithTrackHistory(names: Seq[String]): Table =
+    auxTableWithProperties(Map(
+      AutoCdcAuxiliaryTable.trackHistoryColumnNamesProperty ->
+        AutoCdcAuxiliaryTable.serializeKeyColumnNames(names)))
+
+  test("validateNoTrackHistoryDrift is a no-op when the expected column set is None") {
+    // A None expected set means the flow does not constrain track-history (SCD1, or an SCD2 flow
+    // whose default resolution has not been computed here); the validator must not even read the
+    // property. Passing an empty-properties table proves nothing is dereferenced.
+    AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift(
+      existingAuxiliaryTable = auxTableWithProperties(Map.empty),
+      targetTableIdentifier = targetIdent,
+      expectedTrackHistoryColumnNames = None,
+      resolver = caseInsensitiveResolution)
+  }
+
+  test("validateNoTrackHistoryDrift accepts a recorded set that matches regardless of order") {
+    val existing = auxTableWithTrackHistory(Seq("name", "amount", "seq"))
+    // Same set, different order: must not throw.
+    AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift(
+      existingAuxiliaryTable = existing,
+      targetTableIdentifier = targetIdent,
+      expectedTrackHistoryColumnNames = Some(Seq("seq", "name", "amount")),
+      resolver = caseInsensitiveResolution)
+  }
+
+  test("validateNoTrackHistoryDrift compares case-insensitively under the default resolver, " +
+    "even when the stored property names differ only in case") {
+    // Isolates the resolver-aware comparison: the stored property holds `Name`/`AMOUNT` while the
+    // expected set holds `name`/`amount`. In the end-to-end path both sides are normalized to
+    // actual schema field names before comparison, so only a direct unit test can exercise a
+    // genuine case difference reaching the resolver. Under the default resolver, no drift.
+    val existing = auxTableWithTrackHistory(Seq("Name", "AMOUNT"))
+    AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift(
+      existingAuxiliaryTable = existing,
+      targetTableIdentifier = targetIdent,
+      expectedTrackHistoryColumnNames = Some(Seq("name", "amount")),
+      resolver = caseInsensitiveResolution)
+  }
+
+  test("validateNoTrackHistoryDrift throws TRACK_HISTORY_DRIFT under the case-sensitive resolver " +
+    "when the stored property names differ only in case") {
+    // The mirror of the case-insensitive test: with the case-sensitive resolver, `Name` and
+    // `name` are distinct, so the same-cardinality sets do not match and the validator drifts.
+    val existing = auxTableWithTrackHistory(Seq("Name", "amount"))
+    val ex = intercept[AnalysisException] {
+      AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift(
+        existingAuxiliaryTable = existing,
+        targetTableIdentifier = targetIdent,
+        expectedTrackHistoryColumnNames = Some(Seq("name", "amount")),
+        resolver = caseSensitiveResolution)
+    }
+    checkError(
+      exception = ex,
+      condition = "AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT",
+      sqlState = "42000",
+      parameters = Map(
+        "tableName" -> targetIdent.unquotedString,
+        "expectedTrackHistoryColumns" -> "name, amount",
+        "recordedTrackHistoryColumns" -> "Name, amount"))
+  }
+
+  test("validateNoTrackHistoryDrift throws TRACK_HISTORY_DRIFT when the recorded set differs") {
+    val existing = auxTableWithTrackHistory(Seq("name"))
+    val ex = intercept[AnalysisException] {
+      AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift(
+        existingAuxiliaryTable = existing,
+        targetTableIdentifier = targetIdent,
+        expectedTrackHistoryColumnNames = Some(Seq("amount")),
+        resolver = caseInsensitiveResolution)
+    }
+    checkError(
+      exception = ex,
+      condition = "AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT",
+      sqlState = "42000",
+      parameters = Map(
+        "tableName" -> targetIdent.unquotedString,
+        "expectedTrackHistoryColumns" -> "amount",
+        "recordedTrackHistoryColumns" -> "name"))
+  }
+
+  test("validateNoTrackHistoryDrift throws AUXILIARY_TABLE_PROPERTY_MISSING when the " +
+    "track-history property is absent") {
+    // An SCD2 aux table created before this property existed: the validator must surface a
+    // structured error (remedy: full refresh) rather than skipping the check.
+    val ex = intercept[AnalysisException] {
+      AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift(
+        existingAuxiliaryTable = auxTableWithProperties(Map.empty),
+        targetTableIdentifier = targetIdent,
+        expectedTrackHistoryColumnNames = Some(Seq("name")),
+        resolver = caseInsensitiveResolution)
+    }
+    checkError(
+      exception = ex,
+      condition = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MISSING",
+      sqlState = "42000",
+      parameters = Map(
+        "tableName" -> targetIdent.unquotedString,
+        "propertyName" -> AutoCdcAuxiliaryTable.trackHistoryColumnNamesProperty))
+  }
+
+  test("validateNoTrackHistoryDrift throws AUXILIARY_TABLE_PROPERTY_MALFORMED when the " +
+    "track-history property is not a JSON array of strings") {
+    val existing = auxTableWithProperties(Map(
+      AutoCdcAuxiliaryTable.trackHistoryColumnNamesProperty -> "not-a-json-array"))
+    val ex = intercept[AnalysisException] {
+      AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift(
+        existingAuxiliaryTable = existing,
+        targetTableIdentifier = targetIdent,
+        expectedTrackHistoryColumnNames = Some(Seq("name")),
+        resolver = caseInsensitiveResolution)
+    }
+    checkError(
+      exception = ex,
+      condition = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MALFORMED",
+      sqlState = "42000",
+      parameters = Map(
+        "tableName" -> targetIdent.unquotedString,
+        "propertyName" -> AutoCdcAuxiliaryTable.trackHistoryColumnNamesProperty,
+        "rawValue" -> "not-a-json-array"))
   }
 }
