@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Column}
-import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Resolver}
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution, Resolver}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.types.StructType
@@ -136,8 +136,15 @@ private[pipelines] object CaseSensitivityLabels {
    * two session resolver singletons, matching `SchemaUtils.isCaseSensitiveAnalysis`;
    * `conf.resolver` only ever returns one of these two.
    */
-  def of(resolver: Resolver): String =
-    if (resolver == caseSensitiveResolution) CaseSensitive else CaseInsensitive
+  def of(resolver: Resolver): String = {
+    if (resolver == caseSensitiveResolution) {
+      CaseSensitive
+    } else if (resolver == caseInsensitiveResolution) {
+      CaseInsensitive
+    } else {
+      throw SparkException.internalError(s"Unknown resolver: $resolver")
+    }
+  }
 }
 
 /** The SCD (Slowly Changing Dimension) strategy for a CDC flow. */
