@@ -61,6 +61,7 @@ private[spark] class TaskDescription(
     // Eg, Map("gpu" -> Map("0" -> ResourceAmountUtils.toInternalResource(0.7))):
     // assign 0.7 of the gpu address "0" to this task
     val resources: immutable.Map[String, immutable.Map[String, Long]],
+    val userCredentials: Option[Array[Byte]],
     val serializedTask: ByteBuffer) {
 
   assert(cpus > 0, "CPUs per task should be > 0")
@@ -120,6 +121,16 @@ private[spark] object TaskDescription {
 
     // Write resources.
     serializeResources(taskDescription.resources, dataOut)
+
+    // Write user credentials (OIDC).
+    taskDescription.userCredentials match {
+      case Some(creds) =>
+        dataOut.writeBoolean(true)
+        dataOut.writeInt(creds.length)
+        dataOut.write(creds)
+      case None =>
+        dataOut.writeBoolean(false)
+    }
 
     // Write the task. The task is already serialized, so write it directly to the byte buffer.
     Utils.writeByteBuffer(taskDescription.serializedTask, bytesOut)
@@ -228,10 +239,20 @@ private[spark] object TaskDescription {
     // Read resources.
     val resources = deserializeResources(dataIn)
 
+    // Read user credentials (OIDC).
+    val userCredentials = if (dataIn.readBoolean()) {
+      val length = dataIn.readInt()
+      val creds = new Array[Byte](length)
+      dataIn.readFully(creds)
+      Some(creds)
+    } else {
+      None
+    }
+
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
 
     new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, artifacts,
-      properties, cpus, resources, serializedTask)
+      properties, cpus, resources, userCredentials, serializedTask)
   }
 }

@@ -128,6 +128,11 @@ private[spark] object KubernetesExecutorBackend extends Logging {
       val env = SparkEnv.createExecutorEnv(driverConf, execId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
+      // Apply initial user credentials to the executor credential store.
+      cfg.userCredentials.foreach { credentials =>
+        env.userCredentials.set(credentials)
+      }
+
       val backend = backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile, execId)
       env.rpcEnv.setupEndpoint("Executor", backend)
       arguments.workerUrl.foreach { url =>

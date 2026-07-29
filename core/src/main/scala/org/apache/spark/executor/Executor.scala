@@ -847,6 +847,15 @@ private[spark] class Executor(
         // requires access to properties contained within (e.g. for access control).
         Executor.taskDeserializationProps.set(taskDescription.properties)
 
+        // Apply user credentials from TaskDescription to the executor credential store.
+        // This ensures credentials are available before any task code runs, avoiding
+        // the race between RPC broadcast and task dispatch.
+        // All tasks in a Spark application belong to the same user, so last-writer-wins
+        // is acceptable when multiple task threads update concurrently.
+        taskDescription.userCredentials.foreach { creds =>
+          env.userCredentials.set(creds)
+        }
+
         updateDependencies(
           taskDescription.artifacts.files,
           taskDescription.artifacts.jars,

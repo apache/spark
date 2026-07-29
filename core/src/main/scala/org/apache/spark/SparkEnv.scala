@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.File
 import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.concurrent
 import scala.collection.mutable
@@ -267,6 +268,15 @@ class SparkEnv (
   private[spark] var driverTmpDir: Option[String] = None
 
   private[spark] var executorBackend: Option[ExecutorBackend] = None
+
+  /**
+   * Credential store for OIDC-based user credentials on executors.
+   * Updated via `UpdateUserCredentials` RPC and `TaskDescription` credential delivery.
+   * Read by connector-specific credential providers (e.g., SparkOidcAwsCredentialsProvider).
+   * Contains serialized `UserCredentials` (no raw identity token).
+   */
+  private[spark] val userCredentials: AtomicReference[Array[Byte]] =
+    new AtomicReference[Array[Byte]]()
 
   private[spark] def stop(): Unit = {
 

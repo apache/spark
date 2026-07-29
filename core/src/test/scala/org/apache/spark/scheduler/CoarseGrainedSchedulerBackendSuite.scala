@@ -348,7 +348,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, taskResources, bytebuffer)))
+      taskCpus, taskResources, None, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -455,7 +455,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, taskResources, bytebuffer)))
+      taskCpus, taskResources, None, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -548,7 +548,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskCpus = 2
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, Map.empty, bytebuffer)))
+      taskCpus, Map.empty, None, bytebuffer)))
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
     backend.driverEndpoint.send(ReviveOffers)
@@ -604,6 +604,76 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
     assert(mockEndpointRef.decommissionReceived)
+  }
+
+  test("UpdateUserCredentials is broadcast to all registered executors") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    // Register two mock executors
+    val mockEndpointRef1 = new MockExecutorRpcEndpointRef(conf)
+    val mockEndpointRef2 = new MockExecutorRpcEndpointRef(conf)
+    val mockAddress = mock[RpcAddress]
+
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef1, mockAddress.host, 1, Map(), Map(),
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("2", mockEndpointRef2, mockAddress.host, 1, Map(), Map(),
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+
+    // Neither executor should have received credentials yet
+    assert(mockEndpointRef1.receivedUserCredentials.isEmpty)
+    assert(mockEndpointRef2.receivedUserCredentials.isEmpty)
+
+    // Send UpdateUserCredentials via DriverEndpoint
+    val testCredentials = Array[Byte](1, 2, 3, 4, 5)
+    backend.driverEndpoint.send(UpdateUserCredentials(testCredentials))
+
+    // Wait for the message to be processed
+    eventually(timeout(5 seconds)) {
+      assert(mockEndpointRef1.receivedUserCredentials.isDefined)
+      assert(mockEndpointRef2.receivedUserCredentials.isDefined)
+    }
+
+    assert(mockEndpointRef1.receivedUserCredentials.get === testCredentials)
+    assert(mockEndpointRef2.receivedUserCredentials.get === testCredentials)
+
+    // Verify SparkEnv credential store is also updated
+    assert(SparkEnv.get.userCredentials.get() === testCredentials)
+  }
+
+  test("SparkAppConfig includes current user credentials for late-registering executors") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    // Simulate credential acquisition by setting credentials before any executor registers
+    val testCredentials = Array[Byte](10, 20, 30, 40, 50)
+    backend.driverEndpoint.send(UpdateUserCredentials(testCredentials))
+
+    // Wait for the message to be processed
+    eventually(timeout(5 seconds)) {
+      assert(SparkEnv.get.userCredentials.get() != null)
+    }
+
+    // Now retrieve SparkAppConfig as a late-registering executor would
+    val appConfig = backend.driverEndpoint.askSync[SparkAppConfig](
+      RetrieveSparkAppConfig(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    // Verify that userCredentials is present in the response
+    assert(appConfig.userCredentials.isDefined,
+      "SparkAppConfig should include user credentials for late-registering executors")
+    assert(appConfig.userCredentials.get === testCredentials)
   }
 
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {
@@ -667,12 +737,15 @@ private[spark] class MockExecutorRpcEndpointRef(conf: SparkConf) extends RpcEndp
   // scalastyle:on executioncontextglobal
 
   var decommissionReceived = false
+  var receivedUserCredentials: Option[Array[Byte]] = None
 
   override def address: RpcAddress = null
   override def name: String = "executor"
   override def send(message: Any): Unit =
     message match {
       case DecommissionExecutor => decommissionReceived = true
+      case UpdateUserCredentials(creds) => receivedUserCredentials = Some(creds)
+      case _ =>
     }
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
     Future{true.asInstanceOf[T]}

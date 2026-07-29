@@ -604,6 +604,7 @@ private[spark] class TaskSetManager(
       task.localProperties,
       taskCpus,
       taskResourceAssignments,
+      Option(SparkEnv.get.userCredentials.get()),
       serializedTask)
   }
 
