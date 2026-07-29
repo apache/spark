@@ -2166,6 +2166,41 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
+  test("SPARK-40259: DSv2 merge fact propagates to an outer stacked Filter pair") {
+    // Stacked Filters over each DSv2 scan (inner a>1/b>2, outer a<100/b<200). The leaf scans merge
+    // and the deferral is consumed at the INNER (Filter, Filter) pair; the OUTER pair sees
+    // deferredScan = None. The merge only fuses if the "a DSv2 merge happened below" fact
+    // (TryMergeResult.dsv2Merged) still reaches the outer pair so it applies the DSv2-symmetric
+    // exemption -- deferredScan alone (consumed at the inner pair) would not. Optimize runs only
+    // MergeSubplans, so the stacked Filters are not combined before the rule sees them.
+    val sub1 = ScalarSubquery(
+      v2ScanReading("a").where($"a" > 1).where($"a" < 100).groupBy()(sum($"a").as("sum_a")))
+    val sub2 = ScalarSubquery(
+      v2ScanReading("b").where($"b" > 2).where($"b" < 200).groupBy()(sum($"b").as("sum_b")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // General symmetric off; the DSv2-specific config on. The flag lets BOTH the inner and outer
+    // Filter pair OR-widen, so the two scans fuse into one.
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false",
+        SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      assert(v2Scans(optimized).map(_.canonicalized).distinct.length == 1,
+        s"the stacked-Filter DSv2 scans should fuse via the propagated merge fact:\n$optimized")
+    }
+
+    // With the DSv2 config off the inner pair already declines, so nothing fuses (control).
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false",
+        SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      assert(v2Scans(optimized).map(_.canonicalized).distinct.length == 2,
+        s"the stacked-Filter DSv2 scans must not fuse when the DSv2 config is off:\n$optimized")
+    }
+  }
+
   test("SPARK-40259: merge proceeds without pruning when the source rejects the pruning") {
     val rejecting = new TestV2Table(
       StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType))),
