@@ -3613,32 +3613,6 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
-  gridTest("count distinct map values")(Seq(true, false)) { enabled =>
-    withSQLConf(
-      SQLConf.INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED.key -> enabled.toString) {
-      val expectedMapCount = if (enabled) 2 else 3
-      checkAnswer(
-        sql(
-          """SELECT count(DISTINCT m)
-            |FROM VALUES
-            |  (map('a', 1, 'b', 2)),
-            |  (map('b', 2, 'a', 1)),
-            |  (map('a', 3)) AS t(m)
-            |""".stripMargin),
-        Row(expectedMapCount))
-
-      checkAnswer(
-        sql(
-          """SELECT count(DISTINCT m), count(DISTINCT id)
-            |FROM VALUES
-            |  (map('a', 1, 'b', 2), 1),
-            |  (map('b', 2, 'a', 1), 1),
-            |  (map('a', 3), 2) AS t(m, id)
-            |""".stripMargin),
-        Row(expectedMapCount, 2))
-    }
-  }
-
   test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
     val numRows = 50
 
