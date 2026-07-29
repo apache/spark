@@ -288,11 +288,13 @@ private[spark] class HadoopDelegationTokenManager(
         "credentials are available and direct credential providers are not enabled.")
     }
 
-    // If every direct provider failed and no tokens were obtained, throw so that
-    // updateTokensTask() skips distributing empty credentials and schedules a retry.
-    // This mirrors the Kerberos path, where a provider failure propagates instead of
-    // sending empty tokens to executors.
-    if (failureCount > 0 && nextRenewal == Long.MaxValue) {
+    // If at least one provider failed and no credentials were obtained at all, throw so that
+    // updateTokensTask() skips distributing empty credentials and schedules a retry. This
+    // mirrors the Kerberos path, where a provider failure propagates instead of sending empty
+    // tokens to executors. The check keys off the actual credential content rather than
+    // nextRenewal, since a provider may legitimately add tokens and still report no expiry
+    // (nextRenewal == Long.MaxValue), which is not a failure.
+    if (failureCount > 0 && creds.numberOfTokens() == 0 && creds.numberOfSecretKeys() == 0) {
       throw new IllegalStateException(
         "All direct credential providers failed to obtain delegation tokens.")
     }

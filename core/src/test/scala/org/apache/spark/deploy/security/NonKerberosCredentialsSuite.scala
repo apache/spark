@@ -79,6 +79,25 @@ private class TestFailingProvider extends HadoopDelegationTokenProvider {
   }
 }
 
+// Adds a credential but reports no expiry (returns None), mimicking providers such as
+// HBaseDelegationTokenProvider. This exercises the nextRenewal == Long.MaxValue case where
+// credentials were nevertheless obtained.
+private class TestNoExpiryProvider extends HadoopDelegationTokenProvider {
+  override def serviceName: String = "test-noexpiry"
+
+  override def delegationTokensRequired(
+      sparkConf: SparkConf, hadoopConf: Configuration): Boolean =
+    sparkConf.getBoolean("spark.security.directCredentialProviders.enabled", false)
+
+  override def obtainDelegationTokens(
+      hadoopConf: Configuration,
+      sparkConf: SparkConf,
+      creds: Credentials): Option[Long] = {
+    creds.addSecretKey(new Text("test.noexpiry.credential"), "noexpiry-token".getBytes)
+    None
+  }
+}
+
 class NonKerberosCredentialsSuite extends SparkFunSuite {
   private val hadoopConf = new Configuration()
 
@@ -187,10 +206,11 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
 
   test("start() does not send empty credentials when all direct providers fail") {
     val mockRef = mock(classOf[RpcEndpointRef])
-    // Disable the only succeeding provider so the failing provider is the sole active one,
-    // producing a total failure with no tokens obtained.
+    // Disable both succeeding providers so the failing provider is the sole active one,
+    // producing a total failure with no credentials obtained.
     val sparkConf = baseConf
       .set("spark.security.credentials.test-direct.enabled", "false")
+      .set("spark.security.credentials.test-noexpiry.enabled", "false")
     val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, mockRef)
 
     try {
@@ -200,6 +220,33 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
       val tokens = manager.start()
       assert(tokens == null)
       verify(mockRef, never()).send(any())
+    } finally {
+      manager.stop()
+    }
+  }
+
+  test("start() sends partial credentials when some providers succeed without expiry") {
+    val mockRef = mock(classOf[RpcEndpointRef])
+    // Disable the provider that reports an expiry, leaving a provider that adds a credential
+    // but returns None (nextRenewal stays Long.MaxValue) alongside the failing one. Even
+    // though a provider failed and no expiry was reported, the obtained credential must still
+    // be distributed rather than discarded as a spurious total failure.
+    val sparkConf = baseConf
+      .set("spark.security.credentials.test-direct.enabled", "false")
+    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, mockRef)
+
+    try {
+      val tokens = manager.start()
+      assert(tokens != null)
+
+      val captor = ArgumentCaptor.forClass(classOf[Any])
+      verify(mockRef).send(captor.capture())
+      val msg = captor.getValue.asInstanceOf[UpdateDelegationTokens]
+
+      val creds = SparkHadoopUtil.get.deserialize(msg.tokens)
+      assert(creds.getSecretKey(new Text("test.noexpiry.credential")) != null)
+      assert(new String(creds.getSecretKey(new Text("test.noexpiry.credential")))
+        === "noexpiry-token")
     } finally {
       manager.stop()
     }
