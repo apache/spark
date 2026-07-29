@@ -1003,15 +1003,10 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
         val loggerName = StateStore.getClass.getName.stripSuffix("$")
         withLogAppender(logAppender,
             loggerNames = Seq(loggerName), level = Some(Level.WARN)) {
-          // Stop the captured task's scheduler directly so triggerNow below
-          // submits to the exact executor we just shut down. Going through
-          // StateStore.stopMaintenanceTaskWithoutLock() stops whatever is in the
-          // global maintenanceTask field, which a concurrent query in the same
-          // JVM can have replaced, leaving this task's executor alive so
-          // triggerNow never hits the rejection path this assertion verifies.
-          // Stopping the task directly also holds no lock, so there is no
-          // deadlock with pool threads awaiting the loadedProviders lock.
-          task.stopAndAwait()
+          // Use WithoutLock to avoid deadlock from stopMaintenanceTask
+          // holding loadedProviders lock while awaiting pool termination, but
+          // pool threads needing to acquire the same lock.
+          StateStore.stopMaintenanceTaskWithoutLock()
           task.triggerNow()
           assert(!triggerPending.get(), "reset after rejection")
           assert(logAppender.loggingEvents.exists(_.getMessage.getFormattedMessage
