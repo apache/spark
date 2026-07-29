@@ -254,11 +254,17 @@ class PlanMerger(
    *
    * Invariants:
    * - `filterAboveScan` is set true ONLY by the `(Filter, Filter)` arm; the leaf defers building
-   *   the merged DSv2 scan ONLY when it is true. A deferred result then flows leaf -> (pass-through
-   *   Project arms, which propagate `deferredScan` unchanged) -> the `(Filter, Filter)` arm, which
-   *   builds it once via `buildDeferredScan`. No other arm ever receives a deferred child: stacked
-   *   Filters are combined by `CombineFilters` before this rule runs, so `(Filter, Filter)`'s
-   *   children are never themselves Filters.
+   *   the merged DSv2 scan ONLY when it is true. A deferred result flows leaf -> (pass-through
+   *   Project arms, which propagate `deferredScan` unchanged) -> the enclosing `(Filter, Filter)`
+   *   arm, which builds it once via `buildDeferredScan` and returns `deferredScan = None`.
+   * - A `(Filter, Filter)`'s children CAN themselves be Filters: `PartitionPruning` and
+   *   `InjectRuntimeFilter` insert a Filter above an existing one after `CombineFilters` has run,
+   *   and the `PushDownPredicates` pass that would re-combine them runs only in a later batch. This
+   *   is still safe: the innermost `(Filter, Filter)` pair consumes the deferral and returns
+   *   `deferredScan = None`, so an enclosing pair sees no deferred child and merges (or declines)
+   *   over the already-built scan. When such an enclosing pair has differing conditions it declines
+   *   the merge (leaving the original plan) rather than deferring again -- an intentional
+   *   best-effort limitation, not a bug.
    * - The `merge()` pattern requiring `deferredScan = None` is the fail-safe backstop: if a
    *   deferred scan somehow reached `merge()` unbuilt, it declines the merge rather than emitting a
    *   plan with a placeholder relation.
@@ -640,8 +646,10 @@ class PlanMerger(
         // rule is not mergeable by default.
         np.mergeableScan && cp.mergeableScan &&
         // Reported partitioning/ordering (e.g. storage-partitioned join, reported sort) is not
-        // reconstructed by the rebuilt scan, so decline the merge rather than silently drop it.
-        // Merging these can be added as a follow-up.
+        // reconstructed by the rebuilt scan -- it never carries reported partitioning or ordering,
+        // as V2ScanPartitioningAndOrdering is a separate early rule that rebuildScan does not run.
+        // So decline the merge when either input reports them rather than silently dropping them;
+        // merging these can be added as a follow-up.
         np.keyGroupedPartitioning.isEmpty && cp.keyGroupedPartitioning.isEmpty &&
         np.ordering.isEmpty && cp.ordering.isEmpty &&
         // Both scans opt in to Spark-side merging.
