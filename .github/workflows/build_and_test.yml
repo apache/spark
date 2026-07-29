@@ -61,7 +61,7 @@ concurrency:
 jobs:
   precondition:
     name: Check changes
-    # `ubuntu-slim` is lighter than `ubuntu-latest`.
+    # `ubuntu-slim` is lighter than `ubuntu-24.04`.
     # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
     runs-on: ubuntu-slim
     env:
@@ -253,7 +253,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     needs: [precondition, precompile]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).build == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 150
     strategy:
       fail-fast: false
@@ -456,7 +456,7 @@ jobs:
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
       fromJson(needs.precondition.outputs.required).docs == 'true' ||
       fromJson(needs.precondition.outputs.required).sparkr == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       packages: write
     steps:
@@ -550,7 +550,7 @@ jobs:
         fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true' ||
         fromJson(needs.precondition.outputs.required).tpcds-1g == 'true')
     name: "Precompile Spark"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     # Optional optimization: if this job fails or is cancelled, the pyspark
     # matrix entries fall back to running the SBT build locally as before.
@@ -620,7 +620,7 @@ jobs:
       fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true'
     name: "Build modules: ${{ matrix.modules }}"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     container:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
@@ -846,7 +846,7 @@ jobs:
     needs: [precondition, infra-image, precompile]
     if: fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     container:
       image: ${{ needs.precondition.outputs.image_sparkr_url_link }}
@@ -947,7 +947,7 @@ jobs:
     needs: [precondition]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).buf == 'true'
     name: Protobuf breaking change detection and Python CodeGen check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v6
@@ -990,7 +990,7 @@ jobs:
     needs: [precondition, infra-image]
     if: fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, and dependencies
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
       LC_ALL: C.UTF-8
@@ -1113,7 +1113,7 @@ jobs:
     needs: [precondition]
     if: fromJson(needs.precondition.outputs.required).java25 == 'true'
     name: Java 25 build with Maven
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
     - uses: actions/checkout@v6
@@ -1132,7 +1132,7 @@ jobs:
     needs: [precondition, infra-image]
     if: fromJson(needs.precondition.outputs.required).docs == 'true'
     name: Documentation generation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
       LC_ALL: C.UTF-8
@@ -1242,7 +1242,7 @@ jobs:
     needs: [precondition, precompile]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
       SPARK_LOCAL_IP: localhost
@@ -1366,7 +1366,7 @@ jobs:
     needs: [precondition, precompile]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
@@ -1460,7 +1460,7 @@ jobs:
     needs: [precondition, precompile]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - name: Checkout Spark repository
@@ -1555,7 +1555,7 @@ jobs:
     needs: [precondition]
     if: fromJson(needs.precondition.outputs.required).ui == 'true'
     name: Run Spark UI tests
-    # `ubuntu-slim` is lighter than `ubuntu-latest`.
+    # `ubuntu-slim` is lighter than `ubuntu-24.04`.
     # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
     runs-on: ubuntu-slim
     timeout-minutes: 120

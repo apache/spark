@@ -95,7 +95,7 @@ on:
 jobs:
   release:
     name: Release Apache Spark
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Allow workflow to run only in the following cases:
     # 1. In the apache/spark repository:
     #    - Only allow dry runs (i.e., both 'branch' and 'release-version' inputs are empty).

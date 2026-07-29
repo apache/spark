@@ -40,7 +40,7 @@ on:
         description: OS to run this build.
         required: false
         type: string
-        default: ubuntu-latest
+        default: ubuntu-24.04
       arch:
         description: The target architecture (x86, x64, arm64) of the Python interpreter.
         required: false

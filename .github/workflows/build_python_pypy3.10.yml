@@ -31,7 +31,7 @@ on:
 jobs:
   noop:
     if: github.repository == 'apache/spark'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: No-op
         run: echo "PyPy 3.10 is not built on this branch. See branches that still support it (e.g. branch-4.1)."
