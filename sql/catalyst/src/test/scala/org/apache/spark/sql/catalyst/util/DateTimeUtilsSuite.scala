@@ -2522,13 +2522,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     // (atZone picks the earlier offset in an overlap, the post-gap instant in a gap), matching the
     // slow path's daysToMicros; HOUR/MINUTE keep the original offset, matching truncatedTo.
     def oracle(micros: Long, level: Int, zid: java.time.ZoneId): Long = {
-      val local = periodStartLocal(micros, level, zid)
-      val instant = if (level <= DateTimeUtils.TRUNC_TO_HOUR) {
-        DateTimeUtils.microsToInstant(micros).atZone(zid).truncatedTo(
-          if (level == DateTimeUtils.TRUNC_TO_HOUR) java.time.temporal.ChronoUnit.HOURS
-          else java.time.temporal.ChronoUnit.MINUTES).toInstant
+      // MINUTE/HOUR/DAY truncate via ZonedDateTime.truncatedTo, which retains the input instant's
+      // offset when the truncated wall clock is ambiguous; the date levels resolve the local
+      // period start via atZone/atStartOfDay, which picks the earlier offset. Both conventions
+      // mirror the reference slow path's.
+      val instant = if (level <= DateTimeUtils.TRUNC_TO_DAY) {
+        DateTimeUtils.microsToInstant(micros).atZone(zid).truncatedTo(level match {
+          case DateTimeUtils.TRUNC_TO_DAY => java.time.temporal.ChronoUnit.DAYS
+          case DateTimeUtils.TRUNC_TO_HOUR => java.time.temporal.ChronoUnit.HOURS
+          case _ => java.time.temporal.ChronoUnit.MINUTES
+        }).toInstant
       } else {
-        local.atZone(zid).toInstant
+        periodStartLocal(micros, level, zid).atZone(zid).toInstant
       }
       DateTimeUtils.instantToMicros(instant)
     }
@@ -2557,15 +2562,36 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       val cache = new ZoneOffsetCache(zid)
       for (level <- levels; s <- secs) {
         val micros = Math.multiplyExact(s, MICROS_PER_SECOND)
-        // A truncated period-start that lands on a DST fall-back overlap (local time occurs twice)
-        // is skipped: the offset-arithmetic fast path returns the later occurrence while the slow
-        // path's atStartOfDay picks the earlier one. That divergence predates and is independent of
-        // this cache work (a SPARK-56769 fast-path issue tracked separately), so it is out of scope
-        // here; every unambiguous boundary must still match exactly.
-        if (rules.getValidOffsets(periodStartLocal(micros, level, zid)).size() <= 1) {
-          assert(DateTimeUtils.truncTimestamp(micros, level, cache) === oracle(micros, level, zid),
-            s"zone=$z level=$level sec=$s")
-        }
+        assert(DateTimeUtils.truncTimestamp(micros, level, cache) === oracle(micros, level, zid),
+          s"zone=$z level=$level sec=$s")
+      }
+    }
+  }
+
+  test("SPARK-57769: date-level truncation onto a DST fall-back overlap picks the earlier " +
+    "instant") {
+    // When the truncated period-start local midnight occurs twice (a fall-back overlap covers it),
+    // date-level truncation must resolve to the earlier of the two instants -- the atStartOfDay
+    // convention the pre-fast-path implementation used -- for every input in the period, so that
+    // date_trunc stays deterministic per period. Cases: a Jan 1 overlap (Tokyo 1888, the LMT
+    // fall-back), a 1st-of-month overlap (Havana 2015), and a quarter-start overlap (Berlin 1916).
+    val cases = Seq(
+      // (zone, level, earlier midnight epoch-sec, later midnight epoch-sec)
+      ("Asia/Tokyo", DateTimeUtils.TRUNC_TO_YEAR, -2587713539L, -2587712400L),
+      ("America/Havana", DateTimeUtils.TRUNC_TO_MONTH, 1446350400L, 1446354000L),
+      ("Europe/Berlin", DateTimeUtils.TRUNC_TO_QUARTER, -1680487200L, -1680483600L))
+    for ((zone, level, earlierSec, laterSec) <- cases) {
+      val zid = getZoneId(zone)
+      val expected = Math.multiplyExact(earlierSec, MICROS_PER_SECOND)
+      // Inputs across the overlap: the earlier midnight itself, inside the overlap, the later
+      // midnight (the previously-wrong case), just after the overlap, and a day into the period.
+      val inputs = Seq(earlierSec, (earlierSec + laterSec) / 2, laterSec, laterSec + 1,
+        laterSec + 86400)
+      val cache = new ZoneOffsetCache(zid)
+      for (s <- inputs) {
+        val micros = Math.multiplyExact(s, MICROS_PER_SECOND)
+        assert(DateTimeUtils.truncTimestamp(micros, level, cache) === expected,
+          s"zone=$zone level=$level sec=$s")
       }
     }
   }

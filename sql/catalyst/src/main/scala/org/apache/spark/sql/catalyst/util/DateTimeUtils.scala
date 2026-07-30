@@ -643,13 +643,21 @@ object DateTimeUtils extends SparkDateTimeUtils {
       val candidate = Math.subtractExact(truncatedLocal, offsetMicros)
       if (!cache.isFixedOffset) {
         val candidateSec = Math.floorDiv(candidate, MICROS_PER_SECOND)
-        val candidateOffsetSec = cache.offsetSecondsReadOnly(candidateSec)
-        if (candidateOffsetSec != originalOffsetSec) {
-          // The truncation boundary crosses a transition. Date levels resolve it by mapping the
-          // already-truncated local day back through the zone; other levels defer to the reference
-          // slow path.
-          return if (isDateLevel) daysToMicros(truncatedDays, cache.zoneId)
-            else truncTimestampSlow(micros, level, cache.zoneId)
+        if (isDateLevel) {
+          // Fall back when the truncation boundary crosses a transition, or when the truncated
+          // midnight lands in a fall-back overlap (the candidate is then the later of the two
+          // instants sharing that wall clock, while daysToMicros picks the earlier; SPARK-57769).
+          // The fallback maps the already-truncated local day back through the zone.
+          if (!cache.dateCandidateMatches(candidateSec, originalOffsetSec)) {
+            return daysToMicros(truncatedDays, cache.zoneId)
+          }
+        } else {
+          // MINUTE/HOUR/DAY defer to the reference slow path on a DST cross. No overlap handling
+          // is needed here: truncatedTo retains the original instant's offset, which is exactly
+          // what the arithmetic candidate carries.
+          if (cache.offsetSecondsReadOnly(candidateSec) != originalOffsetSec) {
+            return truncTimestampSlow(micros, level, cache.zoneId)
+          }
         }
       }
       candidate
@@ -1523,6 +1531,10 @@ class ZoneOffsetCache(val zoneId: ZoneId) {
   private var mruLo = Long.MaxValue
   private var mruHi = Long.MinValue
   private var mruOff = 0L
+  // Instants in [mruLo, mruAmbiguousUntil) are treated as the later of two instants sharing one
+  // wall-clock time (the fall-back overlap at the window's start). mruLo when the window has no
+  // overlap, mruHi when the bound was not derived (conservatively marking the whole window).
+  private var mruAmbiguousUntil = Long.MinValue
 
   /**
    * Offset in seconds at `epochSec`, equal to
@@ -1557,15 +1569,56 @@ class ZoneOffsetCache(val zoneId: ZoneId) {
   }
 
   /**
+   * True iff the offset-arithmetic result is exact for a date-level truncation candidate at
+   * `epochSec`: the candidate's window carries `offsetSec` (same offset as the original instant,
+   * the SPARK-30766/30857 DST-cross guard) AND the candidate is not inside the fall-back overlap
+   * at its window's start. In that overlap the truncated midnight occurs twice and the reference
+   * `daysToMicros`/`atStartOfDay` resolution picks the earlier instant, while the arithmetic
+   * candidate is the later one (SPARK-57769). Callers route a false result to the
+   * [[DateTimeUtils.truncTimestamp]] date-level fallback, which always produces the reference
+   * result -- so answering false conservatively (as done wholesale beyond the materialized table)
+   * costs the slow path, never correctness. Like [[offsetSecondsReadOnly]], resident state is not
+   * mutated.
+   */
+  def dateCandidateMatches(epochSec: Long, offsetSec: Long): Boolean = {
+    if (epochSec >= mruLo && epochSec < mruHi) {
+      return mruOff == offsetSec && epochSec >= mruAmbiguousUntil
+    }
+    if (isFixedOffset) {
+      // Unreachable in practice: the caller skips the guard for fixed-offset zones.
+      fixedOffsetSec == offsetSec
+    } else if (epochSec >= table.horizonSec || table.transSec.length == 0) {
+      // Beyond the materialized table: defer to the fallback rather than re-derive the window and
+      // its overlap from the rules -- that derivation would allocate about as much as the fallback.
+      false
+    } else {
+      val idx = table.floorIndex(epochSec)
+      if (idx < 0) {
+        // Before the first transition: no preceding window, so no overlap to fall into.
+        table.offBefore0.toLong == offsetSec
+      } else {
+        val off = table.offAfter(idx).toLong
+        val prev = (if (idx == 0) table.offBefore0 else table.offAfter(idx - 1)).toLong
+        off == offsetSec && epochSec >= table.transSec(idx) + (prev - off).max(0L)
+      }
+    }
+  }
+
+  /**
    * Resolve the constant-offset window containing `epochSec` (a single binary search over the
    * shared transition table, no allocation), install it as the MRU window, and return the offset.
    */
   private def resolveAndInstall(epochSec: Long): Long = {
     var lo = 0L
     var hi = 0L
+    // Upper bound of the fall-back overlap at the window's start (see [[dateCandidateMatches]]):
+    // `lo` itself when there is none, and conservatively `hi` (marking the whole window) where the
+    // bound is not derived from the table.
+    var ambiguousUntil = 0L
     val o = if (isFixedOffset) {
       lo = Long.MinValue
       hi = Long.MaxValue
+      ambiguousUntil = lo
       fixedOffsetSec
     } else if (epochSec >= table.horizonSec || table.transSec.length == 0) {
       // Beyond the materialized range (or a zone with no transitions): resolve via the rules.
@@ -1574,11 +1627,13 @@ class ZoneOffsetCache(val zoneId: ZoneId) {
       if (nextT == null) {
         lo = epochSec
         hi = Long.MaxValue
+        ambiguousUntil = hi
         rules.getOffset(instant).getTotalSeconds.toLong
       } else {
         hi = nextT.toEpochSecond
         val prevT = rules.previousTransition(Instant.ofEpochSecond(hi - 1))
         lo = if (prevT == null) Long.MinValue else prevT.toEpochSecond
+        ambiguousUntil = hi
         nextT.getOffsetBefore.getTotalSeconds.toLong
       }
     } else {
@@ -1587,14 +1642,19 @@ class ZoneOffsetCache(val zoneId: ZoneId) {
       if (idx < 0) {
         lo = Long.MinValue
         hi = table.transSec(0)
+        ambiguousUntil = lo
         table.offBefore0.toLong
       } else {
         lo = table.transSec(idx)
         hi = if (idx + 1 < table.transSec.length) table.transSec(idx + 1) else table.horizonSec
-        table.offAfter(idx).toLong
+        val off = table.offAfter(idx).toLong
+        val prev = (if (idx == 0) table.offBefore0 else table.offAfter(idx - 1)).toLong
+        ambiguousUntil = lo + (prev - off).max(0L)
+        off
       }
     }
     mruLo = lo; mruHi = hi; mruOff = o
+    mruAmbiguousUntil = ambiguousUntil
     o
   }
 }
