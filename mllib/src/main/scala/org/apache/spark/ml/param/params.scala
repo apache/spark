@@ -654,11 +654,7 @@ case class ParamPair[T] @Since("1.2.0") (
 trait Params extends Identifiable with Serializable {
 
   private[ml] def estimateMatadataSize: Long = {
-    def paramMapMetadata(paramMap: ParamMap): Seq[(String, Any)] = {
-      paramMap.toSeq.map(pair => (pair.param.name, pair.value))
-    }
-    // Param keys retain validation functions, which can capture the Params instance.
-    SizeEstimator.estimate((paramMapMetadata(paramMap), paramMapMetadata(defaultParamMap), uid))
+    SizeEstimator.estimate((this.paramMap, this.defaultParamMap, this.uid))
   }
 
   /**
