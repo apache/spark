@@ -3415,8 +3415,8 @@ private[spark] class DAGScheduler(
             (isPipelinedGroupMember(failedStage) || isPipelinedGroupMember(mapStage))) {
           // Failure is group-atomic for a pipelined group. The base scheduler handles a
           // FetchFailed by resubmitting just the map stage in isolation and recomputing serially,
-          // but a transient pipelined shuffle cannot be re-read and its members are co-scheduled, so
-          // a lone-stage resubmit is never valid and would deadlock the group. Abort the
+          // but a transient pipelined shuffle cannot be re-read and its members are co-scheduled,
+          // so a lone-stage resubmit is never valid and would deadlock the group. Abort the
           // whole group instead: aborting the failed stage tears down its running co-scheduled
           // members and fails the job, and the caller (e.g. the streaming batch loop) reruns the
           // batch from scratch. This is distinct from the maxTaskFailures=1 lever (which handles
@@ -4111,12 +4111,12 @@ private[spark] class DAGScheduler(
   /**
    * On a FetchFailed, unregister the shuffle outputs of the executor (or its whole host) whose
    * fetch failed, treating the FetchFailed as authoritative evidence that its shuffle data is gone.
-   * Extracted from the base FetchFailed handler so the pipelined-group-abort branch can also run it:
-   * aborting the group fails only this job's stages, but a dead executor's REGULAR outputs must
-   * still be cleaned up for other/concurrent jobs (with an external shuffle service, an ExecutorLost
-   * does not clean them, so FetchFailed is the only proactive channel). No-op when `bmAddress` is
-   * null. Safe for a pipelined shuffle: it registers no map outputs in the tracker, so this can only
-   * strip regular/durable outputs.
+   * Extracted from the base FetchFailed handler so the pipelined-group-abort branch can also run
+   * it: aborting the group fails only this job's stages, but a dead executor's REGULAR outputs must
+   * still be cleaned up for other/concurrent jobs (with an external shuffle service, an
+   * ExecutorLost does not clean them, so FetchFailed is the only proactive channel). No-op when
+   * `bmAddress` is null. Safe for a pipelined shuffle: it registers no map outputs in the tracker,
+   * so this can only strip regular/durable outputs.
    */
   private def unregisterOutputsOnFetchFailedExecutor(
       bmAddress: BlockManagerId, task: Task[_]): Unit = {

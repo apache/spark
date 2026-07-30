@@ -109,8 +109,8 @@ private[spark] class ShuffleMapStage(
    * When this reaches [[numPartitions]], this map stage is ready.
    */
   def numAvailableOutputs: Int = {
-    // A pipelined shuffle's outputs are never populated in the MapOutputTracker (its entry stays
-    // empty; see pipelinedCompletedPartitions); read its locally-tracked, monotonic completed set.
+    // A pipelined shuffle is not registered with the MapOutputTracker at all (see
+    // pipelinedCompletedPartitions); read its locally-tracked, monotonic completed set instead.
     if (isPipelined) pipelinedCompletedPartitions.size
     else mapOutputTrackerMaster.getNumAvailableOutputs(shuffleDep.shuffleId)
   }
