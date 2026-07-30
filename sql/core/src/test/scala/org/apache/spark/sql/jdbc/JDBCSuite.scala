@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
@@ -1205,6 +1205,33 @@ class JDBCSuite extends SharedSparkSession {
     val bareIsNull = new Predicate("IS_NULL", Array[V2Expression](a))
     assert(dialect.compileExpression(bareIsNull).get === "\"a\" IS NULL")
     assert(msSqlServer.compileExpression(bareIsNull).get === "\"a\" IS NULL")
+  }
+
+  test("fractional to integral cast pushdown is wrapped in the dialect truncating function " +
+    "when needed") {
+    val cast = new V2Cast(FieldReference("a"), DoubleType, IntegerType)
+
+    assert(JdbcDialects.get("jdbc:").compileExpression(cast).get === """CAST("a" AS integer)""")
+
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db").compileExpression(cast).get ===
+      """CAST(TRUNC("a") AS integer)""")
+    assert(JdbcDialects.get("jdbc:oracle://127.0.0.1/db").compileExpression(cast).get ===
+      """CAST(TRUNC("a") AS NUMBER(10))""")
+    assert(JdbcDialects.get("jdbc:snowflake://127.0.0.1/db").compileExpression(cast).get ===
+      """CAST(TRUNC("a") AS INTEGER)""")
+    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db").compileExpression(cast).get ===
+      "CAST(TRUNCATE(`a`, 0) AS SIGNED)")
+
+    withSQLConf(SQLConf.LEGACY_JDBC_ROUND_INTEGRAL_CAST_PUSHDOWN.key -> "true") {
+      assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db").compileExpression(cast).get ===
+        """CAST("a" AS integer)""")
+      assert(JdbcDialects.get("jdbc:oracle://127.0.0.1/db").compileExpression(cast).get ===
+        """CAST("a" AS NUMBER(10))""")
+      assert(JdbcDialects.get("jdbc:snowflake://127.0.0.1/db").compileExpression(cast).get ===
+        """CAST("a" AS INTEGER)""")
+      assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db").compileExpression(cast).get ===
+        "CAST(`a` AS SIGNED)")
+    }
   }
 
   test("SPARK-57988: IS [NOT] NULL parenthesizes IN and other non-comparison predicate operands") {
