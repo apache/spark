@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.write.WriterCommitMessage
-import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
+import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -248,7 +248,7 @@ object FileFormatWriter extends Logging {
       // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
       // partition rdd to make sure we at least set up one write task to write the metadata.
       val rddWithNonEmptyPartitions = if (rdd.partitions.length == 0) {
-        sparkSession.sparkContext.parallelize(Array.empty[InternalRow].toImmutableArraySeq, 1)
+        new EmptyRDDWithPartitions(sparkSession.sparkContext, 1)
       } else {
         rdd
       }

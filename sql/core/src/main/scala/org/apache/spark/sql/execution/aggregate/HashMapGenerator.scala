@@ -64,7 +64,7 @@ abstract class HashMapGenerator(
 
   def generate(): String = {
     s"""
-       |public class $generatedClassName {
+       |public class $generatedClassName implements java.lang.AutoCloseable {
        |${initializeAggregateHashMap()}
        |
        |${generateFindOrInsert()}

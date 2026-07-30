@@ -997,9 +997,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  for ((label, insertClause) <- Seq(
-      ("REPLACE ON", "AS t REPLACE ON t.i = 1"),
-      ("REPLACE USING", "AS t REPLACE USING (i)"))) {
+  for ((label, insertClause, operation) <- Seq(
+      ("REPLACE WHERE", "REPLACE WHERE i = 1", "INSERT INTO ... REPLACE WHERE"),
+      ("REPLACE ON", "AS t REPLACE ON t.i = 1", "INSERT INTO ... REPLACE ON/USING"),
+      ("REPLACE USING", "AS t REPLACE USING (i)", "INSERT INTO ... REPLACE ON/USING"))) {
     test(s"INSERT INTO ... $label is unsupported for V1 tables") {
       withTable("test_table") {
         val schema = new StructType().add("i", "int").add("j", "string")
@@ -1027,7 +1028,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sqlState = "0A000",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`test_table`",
-            "operation" -> "INSERT INTO ... REPLACE ON/USING")
+            "operation" -> operation)
         )
       }
     }
@@ -2615,7 +2616,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("INSERT INTO TABLE insertTable PARTITION(part1=1, part2='') SELECT 1")
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> ("The spec ([part1=Some(1), part2=Some()]) " +
             "contains an empty partition column value"))
@@ -2624,7 +2625,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("INSERT INTO TABLE insertTable PARTITION(part1='', part2) SELECT 1 ,'' AS part2")
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> ("The spec ([part1=Some(), part2=None]) " +
             "contains an empty partition column value"))

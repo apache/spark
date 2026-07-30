@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
   ColumnSelection,
   UnqualifiedColumnName
 }
@@ -54,7 +55,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // a NULL email; run #2 emits an upsert with a non-NULL email.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, String, Option[String], Long)]
@@ -93,7 +94,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // is strictly wider. Users must full-refresh the target to change column types.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, age INT, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, age INT, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Int, Long)]
@@ -137,7 +138,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // even when the new type is strictly narrower.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, payload BIGINT, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, payload BIGINT, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long, Long)]
@@ -179,7 +180,7 @@ class AutoCdcScd1SchemaEvolutionSuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Single MemoryStream of (id, name, email, version) shared across runs so the streaming
@@ -221,6 +222,56 @@ class AutoCdcScd1SchemaEvolutionSuite
     )
   }
 
+  test("additive target-column evolution leaves the SCD1 auxiliary table schema unchanged") {
+    val session = spark
+    import session.implicits._
+
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
+    )
+
+    // Shared (id, name, version) stream so the streaming checkpoint resumes cleanly across
+    // runs; run #1 projects away `name` (target starts at (id, version)), run #2 keeps it so
+    // the target additively gains `name`.
+    val stream = MemoryStream[(Int, String, Long)]
+    def buildCtx(includeName: Boolean): TestGraphRegistrationContext = {
+      val sourceDf = stream.toDF().toDF("id", "name", "version")
+      val projectedDf = if (includeName) sourceDf else sourceDf.drop("name")
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projectedDf,
+        keys = Seq("id"),
+        sequencing = functions.col("version"))
+    }
+
+    val expectedAuxSchema = Seq("id", AutoCdcReservedNames.cdcMetadataColName)
+
+    // Run #1: target is (id, version); aux is (id, _cdc_metadata).
+    stream.addData((1, "ignored", 1L))
+    runPipeline(buildCtx(includeName = false))
+    assert(
+      spark.table(auxTableNameFor("target")).schema.fieldNames.toSeq == expectedAuxSchema,
+      "auxiliary schema after run #1 should be the keys plus the CDC metadata column"
+    )
+
+    // Run #2: `name` is added to the target but the auxiliary schema must remain unchanged, since
+    // the SCD keys remain unchanged. For SCD1, the auxiliary table only contains key and CDC
+    // metadata columns.
+    stream.addData((2, "bob", 2L))
+    runPipeline(buildCtx(includeName = true))
+
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.target"),
+      Seq(
+        Row(1, 1L, cdcMeta(None, Some(1L)), null),
+        Row(2, 2L, cdcMeta(None, Some(2L)), "bob")
+      )
+    )
+    assert(spark.table(auxTableNameFor("target")).schema.fieldNames.toSeq == expectedAuxSchema)
+  }
+
   test("broadening the column selection between runs adds the newly-included column to " +
     "the target") {
     val session = spark
@@ -233,7 +284,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // [[ColumnSelection]] knob rather than the source DF's own schema.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, String, String, Long)]
@@ -279,7 +330,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // schema level (SDP's `SchemaMergingUtils.mergeSchemas` is a union, never a subtraction).
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, String, String, Long)]
@@ -327,7 +378,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // tightening [[ChangeArgs.columnSelection]].
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Same `MemoryStream[(Int, String, Option[String], Long)]` shape across runs; runs
@@ -379,7 +430,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(key INT NOT NULL, version BIGINT NOT NULL, " +
-      s"value STRUCT<a:INT,b:STRUCT<c:INT,d:INT>>, $cdcMetadataDdl)"
+      s"value STRUCT<a:INT,b:STRUCT<c:INT,d:INT>>, $scd1MetadataDdl)"
     )
 
     // Stream is (key, version, a, b_c, b_d). Each run reshapes into different `value`
@@ -434,7 +485,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(key INT NOT NULL, version BIGINT NOT NULL, " +
-      s"vals ARRAY<STRUCT<a:INT,b:STRUCT<c:INT>>>, $cdcMetadataDdl)"
+      s"vals ARRAY<STRUCT<a:INT,b:STRUCT<c:INT>>>, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, Long, Int, Int, Int)]
@@ -492,7 +543,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(key INT NOT NULL, version BIGINT NOT NULL, " +
-      s"vals ARRAY<STRUCT<a:INT,b:STRUCT<c:INT,d:INT>>>, $cdcMetadataDdl)"
+      s"vals ARRAY<STRUCT<a:INT,b:STRUCT<c:INT,d:INT>>>, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, Long, Int, Int, Int)]
@@ -549,7 +600,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       spark.sql(
         s"CREATE TABLE $catalog.$namespace.target " +
-        s"(key INT NOT NULL, version BIGINT NOT NULL, value STRING, $cdcMetadataDdl)"
+        s"(key INT NOT NULL, version BIGINT NOT NULL, value STRING, $scd1MetadataDdl)"
       )
 
       val stream = MemoryStream[(Int, Long, String)]
@@ -597,7 +648,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // resolve `extra` to NULL.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, extra INT, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, extra INT, $scd1MetadataDdl)"
     )
     insertPreloadedRow(
       s"$catalog.$namespace.target",
@@ -633,7 +684,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     // the target to change a column's type.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(key INT NOT NULL, version BIGINT NOT NULL, value TIMESTAMP, $cdcMetadataDdl)"
+      s"(key INT NOT NULL, version BIGINT NOT NULL, value TIMESTAMP, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long, Timestamp)]

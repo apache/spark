@@ -750,6 +750,29 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("SPARK-57736: CreateNamedStruct.dataType is null-safe when a field name is null") {
+    // Accessing `dataType` must not throw an NPE even though a null field name is invalid input.
+    val struct = CreateNamedStruct(Seq(Literal.create(null, StringType), Literal(1)))
+    val dt = struct.dataType
+    assert(dt.length == 1)
+    assert(dt.head.name == null)
+    // The null field name is still reported as invalid by input type checking.
+    assert(struct.checkInputDataTypes().isFailure)
+    val result = struct.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(result.errorSubClass == "UNEXPECTED_NULL")
+
+    // A null field name mixed with valid named fields is null-safe and still flagged.
+    val mixed = CreateNamedStruct(Seq(
+      Literal("a"), Literal(1),
+      Literal.create(null, StringType), Literal(2)))
+    val mixedDt = mixed.dataType
+    assert(mixedDt.length == 2)
+    assert(mixedDt.head.name == "a")
+    assert(mixedDt(1).name == null)
+    assert(mixed.checkInputDataTypes().asInstanceOf[DataTypeMismatch].errorSubClass ==
+      "UNEXPECTED_NULL")
+  }
+
   test("test dsl for complex type") {
     def quickResolve(u: UnresolvedExtractValue): Expression = {
       ExtractValue(u.child, u.extraction, _ == _)

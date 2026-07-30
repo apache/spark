@@ -30,6 +30,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.classic
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{SchemaColumnConvertNotSupportedException, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT._
@@ -37,14 +38,15 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions.struct
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
  * A test suite that tests various Parquet queries.
  */
-abstract class ParquetQuerySuite extends ParquetTest with SharedSparkSession {
+abstract class ParquetQuerySuite extends ParquetTest
+  with QueryTest
+  with classic.SparkSessionBinder {
   import testImplicits._
 
   test("simple select queries") {
@@ -858,6 +860,42 @@ abstract class ParquetQuerySuite extends ParquetTest with SharedSparkSession {
       checkAnswer(
         spark.read.schema(userDefinedSchema).parquet(path),
         Row(Row(TestNestedStruct(1, 2L, 3.5D))))
+    }
+  }
+
+  test("loading UDT classes named in Parquet metadata respects the UDT allow list") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val udtClass = classOf[TestNestedStructUDT].getName
+      val schema = new StructType().add("s", new TestNestedStructUDT, nullable = true)
+      val data = Seq(Row(TestNestedStruct(1, 2L, 3.5D)))
+      // Writing a UDT column embeds the UDT class name in the Parquet key-value metadata, which is
+      // read back and passed to DataType.fromJson during schema inference (the vulnerable path).
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+        .coalesce(1)
+        .write
+        .parquet(path)
+
+      def inferredColumnType: DataType = spark.read.parquet(path).schema("s").dataType
+
+      // By default the UDT class named in the file metadata is loaded during schema inference.
+      assert(inferredColumnType.isInstanceOf[TestNestedStructUDT])
+
+      // With UDT loading disabled and the class not on the allow list, Spark must not load the
+      // class named in the file. Schema inference falls back to the underlying physical schema
+      // rather than instantiating the attacker-named class.
+      withSQLConf(SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false") {
+        assert(!inferredColumnType.isInstanceOf[TestNestedStructUDT])
+        assert(!inferredColumnType.isInstanceOf[UserDefinedType[_]])
+        assert(inferredColumnType.isInstanceOf[StructType])
+      }
+
+      // Explicitly allow-listing the class restores UDT resolution end to end.
+      withSQLConf(
+          SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false",
+          SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES.key -> udtClass) {
+        assert(inferredColumnType.isInstanceOf[TestNestedStructUDT])
+      }
     }
   }
 

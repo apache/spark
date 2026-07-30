@@ -263,13 +263,13 @@ case class JDBCScanBuilder(
     val quotedAliases = columnsWithAliases
       .map(col => Option(col.alias()).map(dialect.quoteIdentifier))
 
-    // Only filters can be pushed down before join pushdown, so we need to craft SQL query
-    // that contains filters as well.
-    // Joins on top of samples are not supported so we don't need to provide tableSample here.
-    dialect
+    val builder = dialect
       .getJdbcSQLQueryBuilder(jdbcOptions)
       .withPredicates(pushedPredicate, JDBCPartition(whereClause = null, idx = 1))
       .withAliasedColumns(quotedColumns, quotedAliases)
+
+    tableSampleClause.foreach(builder.withTableSampleClause)
+    builder
   }
 
   override def pushTableSample(

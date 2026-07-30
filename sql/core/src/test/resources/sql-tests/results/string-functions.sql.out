@@ -2433,3 +2433,339 @@ select quote(NULL)
 struct<quote(NULL):string>
 -- !query output
 NULL
+
+
+-- !query
+select instr('abcabc', 'b', 1)
+-- !query schema
+struct<instr(abcabc, b, 1, 1):int>
+-- !query output
+2
+
+
+-- !query
+select instr('abcabc', 'b', 3)
+-- !query schema
+struct<instr(abcabc, b, 3, 1):int>
+-- !query output
+5
+
+
+-- !query
+select instr('abcabc', 'a', 3)
+-- !query schema
+struct<instr(abcabc, a, 3, 1):int>
+-- !query output
+4
+
+
+-- !query
+select instr('abcabc', 'b', -1)
+-- !query schema
+struct<instr(abcabc, b, -1, 1):int>
+-- !query output
+5
+
+
+-- !query
+select instr('abcabc', 'b', -2)
+-- !query schema
+struct<instr(abcabc, b, -2, 1):int>
+-- !query output
+5
+
+
+-- !query
+select instr('abcabc', 'b', -3)
+-- !query schema
+struct<instr(abcabc, b, -3, 1):int>
+-- !query output
+2
+
+
+-- !query
+select instr('abcabc', 'a', -2)
+-- !query schema
+struct<instr(abcabc, a, -2, 1):int>
+-- !query output
+4
+
+
+-- !query
+select instr('abcabc', 'b', 1, 2)
+-- !query schema
+struct<instr(abcabc, b, 1, 2):int>
+-- !query output
+5
+
+
+-- !query
+select instr('abcabc', 'b', 3, 1)
+-- !query schema
+struct<instr(abcabc, b, 3, 1):int>
+-- !query output
+5
+
+
+-- !query
+select instr('abcabc', 'b', 1, 3)
+-- !query schema
+struct<instr(abcabc, b, 1, 3):int>
+-- !query output
+0
+
+
+-- !query
+select instr('abcabc', 'b', -1, 1)
+-- !query schema
+struct<instr(abcabc, b, -1, 1):int>
+-- !query output
+5
+
+
+-- !query
+select instr('abcabc', 'b', -1, 2)
+-- !query schema
+struct<instr(abcabc, b, -1, 2):int>
+-- !query output
+2
+
+
+-- !query
+select instr('abcabc', 'b', -2, 2)
+-- !query schema
+struct<instr(abcabc, b, -2, 2):int>
+-- !query output
+2
+
+
+-- !query
+select instr('abcabc', 'a', -1, 2)
+-- !query schema
+struct<instr(abcabc, a, -1, 2):int>
+-- !query output
+1
+
+
+-- !query
+select instr('abcabc', 'b', 0, 1)
+-- !query schema
+struct<instr(abcabc, b, 0, 1):int>
+-- !query output
+0
+
+
+-- !query
+select instr('abcabc', 'b', 0, 2)
+-- !query schema
+struct<instr(abcabc, b, 0, 2):int>
+-- !query output
+0
+
+
+-- !query
+select instr('hello', '', 1)
+-- !query schema
+struct<instr(hello, , 1, 1):int>
+-- !query output
+1
+
+
+-- !query
+select instr('hello', '', 3)
+-- !query schema
+struct<instr(hello, , 3, 1):int>
+-- !query output
+1
+
+
+-- !query
+select instr('hello', '', -1)
+-- !query schema
+struct<instr(hello, , -1, 1):int>
+-- !query output
+1
+
+
+-- !query
+select instr('hello', '', -2)
+-- !query schema
+struct<instr(hello, , -2, 1):int>
+-- !query output
+1
+
+
+-- !query
+select instr('', '', 1)
+-- !query schema
+struct<instr(, , 1, 1):int>
+-- !query output
+1
+
+
+-- !query
+select instr('', '', -1)
+-- !query schema
+struct<instr(, , -1, 1):int>
+-- !query output
+1
+
+
+-- !query
+select instr('你好世界你好', '你好', 1, 2)
+-- !query schema
+struct<instr(你好世界你好, 你好, 1, 2):int>
+-- !query output
+5
+
+
+-- !query
+select instr('你好世界你好', '你好', -1, 2)
+-- !query schema
+struct<instr(你好世界你好, 你好, -1, 2):int>
+-- !query output
+1
+
+
+-- !query
+select instr('你好世界你好', '你好', -2, 2)
+-- !query schema
+struct<instr(你好世界你好, 你好, -2, 2):int>
+-- !query output
+1
+
+
+-- !query
+select instr('你好世界你好', '你好', -1)
+-- !query schema
+struct<instr(你好世界你好, 你好, -1, 1):int>
+-- !query output
+5
+
+
+-- !query
+select instr('你好世界你好', '你好', -2)
+-- !query schema
+struct<instr(你好世界你好, 你好, -2, 1):int>
+-- !query output
+5
+
+
+-- !query
+select instr('你好世界你好', '世界', -1)
+-- !query schema
+struct<instr(你好世界你好, 世界, -1, 1):int>
+-- !query output
+3
+
+
+-- !query
+select instr('aaaa', 'aa', 1, 2)
+-- !query schema
+struct<instr(aaaa, aa, 1, 2):int>
+-- !query output
+2
+
+
+-- !query
+select instr('aaaa', 'aa', 1, 3)
+-- !query schema
+struct<instr(aaaa, aa, 1, 3):int>
+-- !query output
+3
+
+
+-- !query
+select instr('aaaa', 'aa', -1, 2)
+-- !query schema
+struct<instr(aaaa, aa, -1, 2):int>
+-- !query output
+2
+
+
+-- !query
+select instr('aaaa', 'aa', -2, 2)
+-- !query schema
+struct<instr(aaaa, aa, -2, 2):int>
+-- !query output
+2
+
+
+-- !query
+select instr('abc', 'd', 1, 1)
+-- !query schema
+struct<instr(abc, d, 1, 1):int>
+-- !query output
+0
+
+
+-- !query
+select instr('abc', 'b', 1, 3)
+-- !query schema
+struct<instr(abc, b, 1, 3):int>
+-- !query output
+0
+
+
+-- !query
+select instr('abc', 'b', 10, 1)
+-- !query schema
+struct<instr(abc, b, 10, 1):int>
+-- !query output
+0
+
+
+-- !query
+select instr('abc', 'b', -10, 1)
+-- !query schema
+struct<instr(abc, b, -10, 1):int>
+-- !query output
+0
+
+
+-- !query
+select instr('a', 'b', cast(null as int))
+-- !query schema
+struct<instr(a, b, CAST(NULL AS INT), 1):int>
+-- !query output
+NULL
+
+
+-- !query
+select instr('a', 'b', 1, cast(null as int))
+-- !query schema
+struct<instr(a, b, 1, CAST(NULL AS INT)):int>
+-- !query output
+NULL
+
+
+-- !query
+select instr(null, 'b', 1)
+-- !query schema
+struct<instr(NULL, b, 1, 1):int>
+-- !query output
+NULL
+
+
+-- !query
+select instr('a', null, 1)
+-- !query schema
+struct<instr(a, NULL, 1, 1):int>
+-- !query output
+NULL
+
+
+-- !query
+select instr('a', 'b', cast(null as int), 2)
+-- !query schema
+struct<instr(a, b, CAST(NULL AS INT), 2):int>
+-- !query output
+NULL
+
+
+-- !query
+select instr(null, null, cast(null as int), cast(null as int))
+-- !query schema
+struct<instr(NULL, NULL, CAST(NULL AS INT), CAST(NULL AS INT)):int>
+-- !query output
+NULL

@@ -122,7 +122,7 @@ private[hive] class SparkGetTablesOperation(
       tableType: String,
       comment: Option[String]): Unit = {
     val rowData = Array[AnyRef](
-      "",
+      sessionCatalogTableCat(""),
       dbName,
       tableName,
       tableType,

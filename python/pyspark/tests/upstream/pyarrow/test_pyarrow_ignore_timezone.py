@@ -112,7 +112,9 @@ class PyArrowIgnoreTimeZoneTests(unittest.TestCase):
         # The corresponding numpy type np.datetime64 is timezone-naive, so no need to test
         ser1 = pd.Series([ts1], dtype=pd.DatetimeTZDtype("us", tz=tz))
         self.assertEqual(ser1.dtype.unit, "us")
-        self.assertEqual(ser1.dtype.tz.zone, tz)
+        # Use str() rather than the pytz-specific .zone attribute: pandas 3 defaults to
+        # zoneinfo.ZoneInfo, which has no .zone. str() yields the zone name for both.
+        self.assertEqual(str(ser1.dtype.tz), tz)
 
         # pyarrow-backed series
         ser2 = pd.Series([ts1], dtype=pd.ArrowDtype(pa_type))

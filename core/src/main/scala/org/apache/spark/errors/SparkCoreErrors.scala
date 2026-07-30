@@ -29,7 +29,7 @@ import org.apache.spark.internal.config.IO_COMPRESSION_CODEC
 import org.apache.spark.io.CompressionCodec.FALLBACK_COMPRESSION_CODEC
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
-import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockResolver}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
 
 /**
@@ -335,13 +335,13 @@ private[spark] object SparkCoreErrors {
   }
 
   def unexpectedShuffleBlockWithUnsupportedResolverError(
-      shuffleManager: ShuffleManager,
+      shuffleBlockResolver: ShuffleBlockResolver,
       blockId: BlockId): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_3035",
       messageParameters = Map(
         "blockId" -> s"$blockId",
-        "shuffleBlockResolver" -> s"${shuffleManager.shuffleBlockResolver}"
+        "shuffleBlockResolver" -> s"$shuffleBlockResolver"
       ),
       cause = null
     )

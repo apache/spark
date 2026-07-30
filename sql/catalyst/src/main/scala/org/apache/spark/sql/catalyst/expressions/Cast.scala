@@ -689,7 +689,20 @@ case class Cast(
 
   override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 
-  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
+  // CAST_TO_TIMESTAMP must be set on a superset of the targets accepted by
+  // Cast.isTimeToTimestampNTZ / isTimeToTimestampLTZ. ComputeCurrentTime relies on
+  // this bit to reach TIME->TIMESTAMP rewrites; if narrowed, those casts silently
+  // escape stabilization with no test catching the drift (two independent match lists).
+  //
+  // We key on the target `dataType` only, not `child.dataType`: node patterns are
+  // computed eagerly at construction before the child is resolved, so reading
+  // child.dataType can throw (the OuterReference / RETURNS TABLE case removed in
+  // commit 51136ecb5e2). Narrowing by source type would reintroduce that failure.
+  final override def nodePatternsInternal(): Seq[TreePattern] = dataType match {
+    case _: TimestampNTZType | _: TimestampNTZNanosType |
+         TimestampType | _: TimestampLTZNanosType => Seq(CAST, CAST_TO_TIMESTAMP)
+    case _ => Seq(CAST)
+  }
 
   override def contextIndependentFoldable: Boolean = {
     child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType)

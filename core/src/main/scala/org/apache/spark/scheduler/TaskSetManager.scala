@@ -33,6 +33,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.CpuAmount
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.{OpenHashSet, PercentileHeap}
@@ -462,7 +463,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
-      taskCpus: Int = sched.CPUS_PER_TASK,
+      taskCpus: BigDecimal = sched.CPUS_PER_TASK,
       taskResourceAssignments: Map[String, Map[String, Long]] = Map.empty)
     : (Option[TaskDescription], Boolean, Int) =
   {
@@ -530,7 +531,7 @@ private[spark] class TaskSetManager(
       index: Int,
       taskLocality: TaskLocality.Value,
       speculative: Boolean,
-      taskCpus: Int,
+      taskCpus: BigDecimal,
       taskResourceAssignments: Map[String, Map[String, Long]],
       launchTime: Long): TaskDescription = {
     // Found a task; do some bookkeeping and return a task description
@@ -824,6 +825,8 @@ private[spark] class TaskSetManager(
     val index = info.index
     // Check if any other attempt succeeded before this and this attempt has not been handled
     if (successful(index) && killedByOtherAttempt.contains(tid)) {
+      // For ShuffleMapTasks, detect speculation duplicate before handling as killed.
+      detectStalePushIfShuffleTask(tid, info.index, result)
       // Undo the effect on calculatedTasks and totalResultSize made earlier when
       // checking if can fetch more results
       calculatedTasks -= 1
@@ -928,6 +931,34 @@ private[spark] class TaskSetManager(
     }
     sched.dagScheduler.taskEnded(task, reason, result, accumUpdates, metricPeaks,
       taskInfoWithAccumulables)
+  }
+
+  /**
+   * For ShuffleMapTasks, detect stale push: if a partition already has
+   * a registered MapStatus with a different mapId, it means another attempt for the same
+   * partition also pushed data to the merger. Mark this partition so that reducers will
+   * skip the merged block and fallback to unmerged blocks.
+   *
+   * This is called from handleSuccessfulTask for late-arriving or killed attempt results,
+   * where the task result won't be forwarded to DAGScheduler (so DAGScheduler's own
+   * stale detection won't cover these cases).
+   */
+  private def detectStalePushIfShuffleTask(
+      tid: Long, index: Int, result: DirectTaskResult[_]): Unit = {
+    if (!isShuffleMapTasks || shuffleId.isEmpty) {
+      return
+    }
+    // This method is only called for late-arriving or killed attempts, meaning the partition
+    // already has a successful attempt registered. Any MapStatus arriving here is from a
+    // stale (redundant) attempt that also pushed data to the merger.
+    val mapStatus = result.value().asInstanceOf[MapStatus]
+    val sid = shuffleId.get
+    val partitionId = tasks(index).partitionId
+    // Mark its mapIndex (== partitionId, NOT MapStatus.mapId) as stale so reducers can detect
+    // the stale data in merged block chunks via chunkBitmaps and fallback if needed.
+    logInfo(s"[StalePush] Late/killed attempt tid=$tid for partition=$partitionId " +
+      s"(index=$index), attemptMapId=${mapStatus.mapId}. Marked as stale push.")
+    sched.mapOutputTracker.markStalePushedPartition(sid, partitionId)
   }
 
   private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {
@@ -1055,6 +1086,12 @@ private[spark] class TaskSetManager(
         logInfo(log"${MDC(TASK_NAME, taskName(tid))} failed because while it was being computed," +
           log" its executor exited for a reason unrelated to the task. " +
           log"Not counting this failure towards the maximum number of failures for the task.")
+        None
+
+      case _: ExecutorShutdownFailure =>
+        logInfo(log"${MDC(TASK_NAME, taskName(tid))} failed because its executor was shutting" +
+          log" down while the task was being launched." +
+          log" Not counting this failure towards the maximum number of failures for the task.")
         None
 
       case _: TaskFailedReason =>  // TaskResultLost and others
@@ -1509,5 +1546,5 @@ private[scheduler] case class BarrierPendingLaunchTask(
   // Used to revert the assigned resources (e.g., cores, custome resources) when the barrier
   // task set doesn't launch successfully in a single resourceOffers round.
   var assignedOfferIndex: Int = _
-  var assignedCores: Int = 0
+  var assignedCores: BigDecimal = CpuAmount.normalize(BigDecimal(0))
 }

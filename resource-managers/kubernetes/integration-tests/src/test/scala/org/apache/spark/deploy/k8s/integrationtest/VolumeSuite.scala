@@ -30,7 +30,10 @@ private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
   val IGNORE = Some((Some(PatienceConfiguration.Interval(Span(0, Seconds))), None))
 
   private def checkDisk(pod: Pod, path: String, expected: String) = {
-    eventually(PatienceConfiguration.Timeout(Span(10, Seconds)), INTERVAL) {
+    // Use the shared TIMEOUT rather than a short fixed timeout: when the volume is an OnDemand
+    // PVC, dynamic provisioning and mounting can keep the driver container in ContainerCreating
+    // for more than a few seconds, so the in-pod `df` command may not be runnable immediately.
+    eventually(TIMEOUT, INTERVAL) {
       implicit val podName: String = pod.getMetadata.getName
       implicit val components: KubernetesTestComponents = kubernetesTestComponents
       assert(Utils.executeCommand("df", path).contains(expected))

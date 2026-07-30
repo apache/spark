@@ -81,7 +81,30 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case ReplaceColumns(ResolvedV1TableIdentifier(ident), _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "REPLACE COLUMNS")
 
-    case a @ AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs)
+    // Comment-only changes that touch multiple columns or a nested field (e.g.
+    // `COMMENT ON TABLE t COLUMN (a IS 'x', b IS 'y')` or `... (point.x IS 'x')`) cannot be
+    // expressed by the single-column, top-level-only `AlterTableChangeColumnCommand`. Handle them
+    // with a dedicated V1 command that applies all specs at once via `applySchemaChanges`.
+    // This is scoped to the `COMMENT ON ... COLUMN` syntax (`fromCommentOn`); the equivalent
+    // `ALTER TABLE ... ALTER COLUMN` multi-column / nested-field forms still fall through to the
+    // next case and keep their existing `UNSUPPORTED_FEATURE.TABLE_OPERATION` error on V1.
+    case a @ AlterColumns(rt @ ResolvedTable(catalog, _, table: V1Table, _), specs, _)
+        if a.fromCommentOn && supportsV1Command(catalog) && a.resolved &&
+          isMultiOrNestedCommentOnly(specs) =>
+      // This rule rewrites AlterColumns into a command during resolution, before CheckAnalysis
+      // gets to validate it, so re-run the "same column changed twice" check here (the same one
+      // CheckAnalysis applies to the AlterColumns node on the V2 path). Use `a.failAnalysis` so the
+      // error carries the same query context as the V2 path.
+      AlterColumns.findRepeatedColumn(specs).foreach { name =>
+        a.failAnalysis(
+          errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+          messageParameters = Map(
+            "table" -> toSQLId(rt.name),
+            "fieldName" -> toSQLId(name)))
+      }
+      AlterTableChangeColumnCommentsCommand(table.catalogTable.identifier, a.changes)
+
+    case a @ AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs, _)
         if supportsV1Command(catalog) && a.resolved && specs.forall(_.isDefaultValueTypeCoerced) =>
       if (specs.size > 1) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -135,7 +158,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         dataType,
         nullable = true,
         builder.build())
-      AlterTableChangeColumnCommand(table.catalogTable.identifier, colName, newColumn)
+      AlterTableChangeColumnCommand(
+        table.catalogTable.identifier, colName, newColumn, dropComment = s.dropComment)
 
     case AlterTableClusterBy(ResolvedTable(catalog, _, table: V1Table, _), clusterBySpecOpt)
         if supportsV1Command(catalog) =>
@@ -431,7 +455,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         isOverwrite,
         partition)
 
-    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) if asSerde =>
+    case ShowCreateTable(ResolvedTable(catalog, _, t: V1Table, _), asSerde, output)
+        if supportsV1Command(catalog) && (asSerde ||
+          (conf.hiveTableShowCreateTableAsSerde && DDLUtils.isHiveTable(t.catalogTable))) =>
+      ShowCreateTableAsSerdeCommand(t.catalogTable.identifier, output)
+
+    case ShowCreateTable(ResolvedViewIdentifier(ident), asSerde, output) if asSerde =>
       ShowCreateTableAsSerdeCommand(ident, output)
 
     // If target is view, force use v1 command
@@ -953,7 +982,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       case _ =>
         assert(resolved.namespace.length > 1)
         throw QueryCompilationErrors.nestedDatabaseUnsupportedByV1SessionCatalogError(
-          resolved.namespace.map(quoteIfNeeded).mkString("."))
+          resolved.namespace)
     }
   }
 
@@ -967,7 +996,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       case _ =>
         assert(resolved.namespace.length > 1)
         throw QueryCompilationErrors.nestedDatabaseUnsupportedByV1SessionCatalogError(
-          resolved.namespace.map(quoteIfNeeded).mkString("."))
+          resolved.namespace)
     }
   }
 
@@ -985,6 +1014,20 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     isSessionCatalog(catalog) && (
       SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
         catalog.isInstanceOf[CatalogExtension])
+  }
+
+  // True when the ALTER COLUMN specs only change comments (set or drop, no type / nullability /
+  // position / default changes) and, taken together, touch multiple columns or a nested field.
+  // Such changes come from `COMMENT ON TABLE ... COLUMN (...)` and cannot be expressed by the
+  // single-column, top-level-only V1 `AlterTableChangeColumnCommand`, so they are handled by the
+  // dedicated `AlterTableChangeColumnCommentsCommand` instead.
+  private def isMultiOrNestedCommentOnly(specs: Seq[AlterColumnSpec]): Boolean = {
+    val commentOnly = specs.forall { s =>
+      (s.newComment.isDefined || s.dropComment) &&
+        s.newDataType.isEmpty && s.newNullability.isEmpty && s.newPosition.isEmpty &&
+        s.newDefaultExpression.isEmpty && !s.dropDefault
+    }
+    commentOnly && (specs.size > 1 || specs.exists(_.column.name.length > 1))
   }
 
 }

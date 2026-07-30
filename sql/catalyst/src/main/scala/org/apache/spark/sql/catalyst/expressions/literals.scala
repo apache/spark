@@ -301,6 +301,60 @@ object Literal {
   }
 
   /**
+   * The size in bytes of a literal `value` of the given `dataType`, or `None` when it cannot be
+   * determined reliably. The result is a safe upper bound, never an under-estimate, so callers can
+   * use it to bound memory:
+   *   - a fixed-length type reports its `defaultSize` (exact);
+   *   - a null `value` reports the type's `defaultSize`;
+   *   - a variable-length type whose real payload size is known (string / binary, or an array /
+   *     map / struct all of whose elements are measurable) reports that real size;
+   *   - any other type (e.g. variant) returns `None`.
+   */
+  private[expressions] def valueSizeInBytes(value: Any, dataType: DataType): Option[Int] = {
+    if (value == null || UnsafeRow.isFixedLength(dataType)) {
+      return Some(dataType.defaultSize)
+    }
+    PhysicalDataType(dataType) match {
+      case _: PhysicalCalendarIntervalType => Some(CalendarIntervalType.defaultSize)
+      case _: PhysicalStringType => Some(value.asInstanceOf[UTF8String].numBytes())
+      case PhysicalBinaryType => Some(value.asInstanceOf[Array[Byte]].length)
+      case _: PhysicalBinaryViewType => Some(value.asInstanceOf[BinaryView].numBytes())
+      case PhysicalArrayType(et, _) =>
+        val array = value.asInstanceOf[ArrayData]
+        var size = 0
+        var i = 0
+        while (i < array.numElements()) {
+          valueSizeInBytes(array.get(i, et), et) match {
+            case Some(elementSize) => size += elementSize
+            case None => return None
+          }
+          i += 1
+        }
+        Some(size)
+      case PhysicalMapType(kt, vt, _) =>
+        val map = value.asInstanceOf[MapData]
+        for {
+          keySize <- valueSizeInBytes(map.keyArray(), ArrayType(kt))
+          valueSize <- valueSizeInBytes(map.valueArray(), ArrayType(vt))
+        } yield keySize + valueSize
+      case st: PhysicalStructType =>
+        val row = value.asInstanceOf[InternalRow]
+        var size = 0
+        var i = 0
+        while (i < st.fields.length) {
+          val fieldType = st.fields(i).dataType
+          valueSizeInBytes(if (row.isNullAt(i)) null else row.get(i, fieldType), fieldType) match {
+            case Some(fieldSize) => size += fieldSize
+            case None => return None
+          }
+          i += 1
+        }
+        Some(size)
+      case _ => None
+    }
+  }
+
+  /**
    * Inverse of [[Literal.sql]]
    */
   def fromSQL(sql: String): Expression = {
@@ -450,6 +504,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   override def nullable: Boolean = value == null
 
+  /**
+   * The size in bytes of this literal's value as a safe upper bound, or `None` when it cannot be
+   * determined reliably. See [[Literal.valueSizeInBytes]] for the exact contract.
+   */
+  lazy val valueSizeInBytes: Option[Int] = Literal.valueSizeInBytes(value, dataType)
+
   private def timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
 
   override lazy val treePatternBits: BitSet = {
@@ -592,13 +652,20 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def sql: String = (value, dataType) match {
     case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
     case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
-    case (v: UTF8String, StringType) =>
-      // Escapes all backslashes and single quotes.
-      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
     case (v: UTF8String, st: StringType) =>
+      // Only render a `collate` clause for an explicit collation (including an explicit
+      // `UTF8_BINARY`). The default `StringType` (the case object) has no explicit collation, so
+      // it must render without a clause and stay distinguishable from an explicitly-collated
+      // string on re-parse (e.g. so that default-collation resolution does not treat an
+      // explicitly-collated literal as eligible for inheriting a default collation).
+      val collateClause =
+        if (DataTypeUtils.isDefaultStringCharOrVarcharType(st)) {
+          ""
+        } else {
+          s" collate ${st.collationName}"
+        }
       // Escapes all backslashes and single quotes.
-      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") +
-        "'" + st.typeName.substring(6)
+      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'" + collateClause
     case (v: Byte, ByteType) => s"${v}Y"
     case (v: Short, ShortType) => s"${v}S"
     case (v: Long, LongType) => s"${v}L"

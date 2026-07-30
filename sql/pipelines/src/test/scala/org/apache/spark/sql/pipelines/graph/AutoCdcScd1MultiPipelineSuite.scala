@@ -46,11 +46,11 @@ class AutoCdcScd1MultiPipelineSuite
     // Two distinct target tables created up-front.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.t_a " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.t_b " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1 only knows about `t_a`. Its auxiliary table
@@ -98,7 +98,7 @@ class AutoCdcScd1MultiPipelineSuite
     // Pipeline #1 writes into target `src` via AutoCDC.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.src " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     val stream = MemoryStream[(Int, String, Long)]
     stream.addData((1, "alice", 1L), (2, "bob", 1L))
@@ -139,7 +139,7 @@ class AutoCdcScd1MultiPipelineSuite
     // but share the target table and its auxiliary table.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.shared_target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1: inserts rows with id=1 and id=2 at version=1.
@@ -197,7 +197,7 @@ class AutoCdcScd1MultiPipelineSuite
     // to schema-merge into the target.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.shared_target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1: source DF schema is (id, name, version); inserts id=1 and id=2.
@@ -267,7 +267,7 @@ class AutoCdcScd1MultiPipelineSuite
     // be schema-compatible with the first; only the AutoCDC `keys` differ between flows.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.shared_target " +
-      s"(id INT NOT NULL, name STRING NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1: AutoCDC flow keyed on `id`. Materializes the auxiliary table with schema
@@ -298,9 +298,8 @@ class AutoCdcScd1MultiPipelineSuite
       condition = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
       sqlState = Some("42000"),
       parameters = Map(
-        "flowName" ->
-          fullyQualifiedIdentifier("flow_v2", Some(catalog), Some(namespace)).unquotedString,
-        "auxTableName" -> auxTableNameFor("shared_target"),
+        "tableName" ->
+          fullyQualifiedIdentifier("shared_target", Some(catalog), Some(namespace)).unquotedString,
         // Pipeline #2's AutoCDC key resolves from the source DF, where `MemoryStream[(Int, String,
         // Long)]` produces a nullable StringType for `name`.
         "expectedKeySchema" -> "name STRING",

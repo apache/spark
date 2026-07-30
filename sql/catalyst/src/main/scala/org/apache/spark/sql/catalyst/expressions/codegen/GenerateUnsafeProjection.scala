@@ -82,6 +82,39 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
      """.stripMargin
   }
 
+  /**
+   * Returns a single `writeNullable` call that subsumes the
+   * `if (isNull) { setNullAt } else { write }` pattern, or None when the pattern must be kept:
+   * either the data type is stored as a nested row (struct/array/map), or the value is a
+   * non-trivial expression that must stay inside the non-null branch so it is only evaluated for
+   * non-null inputs. Collapsing the null check keeps the generated code small: row writes of
+   * nullable columns are emitted for every key/row written by aggregates, sorts, exchanges, etc.
+   */
+  private def nullableWriteCall(
+      input: ExprCode,
+      index: Int,
+      dt: DataType,
+      rowWriter: String): Option[String] = {
+    val valueIsCheap = input.value match {
+      case _: VariableValue | _: GlobalValue | _: LiteralValue => true
+      case _ => false
+    }
+    if (!valueIsCheap) {
+      None
+    } else {
+      // Match the data type the same way `writeElement` does, so types that are stored as nested
+      // rows keep the if/else form.
+      dt match {
+        case _: StructType | _: ArrayType | _: MapType | NullType => None
+        case DecimalType.Fixed(precision, scale) =>
+          Some(s"$rowWriter.writeNullable($index, ${input.value}, ${input.isNull}, " +
+            s"$precision, $scale);")
+        case _ =>
+          Some(s"$rowWriter.writeNullable($index, ${input.value}, ${input.isNull});")
+      }
+    }
+  }
+
   private def writeExpressionsToBuffer(
       ctx: CodegenContext,
       row: String,
@@ -133,14 +166,22 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
              |${setNull.trim}
            """.stripMargin
         } else {
-          s"""
-             |${input.code}
-             |if (${input.isNull}) {
-             |  ${setNull.trim}
-             |} else {
-             |  ${writeField.trim}
-             |}
-           """.stripMargin
+          nullableWriteCall(input, index, dt, rowWriter) match {
+            case Some(writeCall) =>
+              s"""
+                 |${input.code}
+                 |$writeCall
+               """.stripMargin
+            case None =>
+              s"""
+                 |${input.code}
+                 |if (${input.isNull}) {
+                 |  ${setNull.trim}
+                 |} else {
+                 |  ${writeField.trim}
+                 |}
+               """.stripMargin
+          }
         }
     }
 

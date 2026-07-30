@@ -111,7 +111,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       "since there are no usage for multiple broadcasting keys at the moment.")
     val indices = Seq(joinKeys.indexOf(filteringKeys.head))
     lazy val hasBenefit = pruningHasBenefit(
-      pruningKey, partScan, filteringKeys.head, filteringPlan)
+      pruningKey, partScan, filteringKeys.head, filteringPlan, hasSelectivePredicate(filteringPlan))
     if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
@@ -134,45 +134,74 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * in bytes of the plan on the other side of the join. We estimate the filtering ratio
    * using column statistics if they are available, otherwise we use the config value of
    * `spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio`.
+   *
+   * The fallback ratio is only meaningful "when CBO stats are missing, but there is a predicate
+   * that is likely to be selective" -- so it is used only when `hasSelectivePredicate` is true. A
+   * filtering side that is eligible only because it is already materialized (a LocalRelation or a
+   * checkpoint-derived LogicalRDD, SPARK-54593) carries no such predicate; for it we rely solely on
+   * the statistics-based ratio and report no benefit when statistics are unavailable, so it is not
+   * injected as a standalone always-applied subquery on a guessed ratio. A statistics-based ratio,
+   * when available, is always honored regardless of `hasSelectivePredicate`.
    */
   private def pruningHasBenefit(
       partExpr: Expression,
       partPlan: LogicalPlan,
       otherExpr: Expression,
-      otherPlan: LogicalPlan): Boolean = {
+      otherPlan: LogicalPlan,
+      hasSelectivePredicate: Boolean): Boolean = {
 
     // get the distinct counts of an attribute for a given table
     def distinctCounts(attr: Attribute, plan: LogicalPlan): Option[BigInt] = {
       plan.stats.attributeStats.get(attr).flatMap(_.distinctCount)
     }
 
-    // the default filtering ratio when CBO stats are missing, but there is a
-    // predicate that is likely to be selective
-    val fallbackRatio = conf.dynamicPartitionPruningFallbackFilterRatio
-    // the filtering ratio based on the type of the join condition and on the column statistics
-    val filterRatio = (partExpr.references.toList, otherExpr.references.toList) match {
-      // filter out expressions with more than one attribute on any side of the operator
-      case (leftAttr :: Nil, rightAttr :: Nil)
-        if conf.dynamicPartitionPruningUseStats =>
-          // get the CBO stats for each attribute in the join condition
-          val partDistinctCount = distinctCounts(leftAttr, partPlan)
-          val otherDistinctCount = distinctCounts(rightAttr, otherPlan)
-          val availableStats = partDistinctCount.isDefined && partDistinctCount.get > 0 &&
-            otherDistinctCount.isDefined
-          if (!availableStats) {
-            fallbackRatio
-          } else if (partDistinctCount.get.toDouble <= otherDistinctCount.get.toDouble) {
-            // there is likely an estimation error, so we fallback
-            fallbackRatio
-          } else {
-            1 - otherDistinctCount.get.toDouble / partDistinctCount.get.toDouble
-          }
-      case _ => fallbackRatio
+    // the filtering ratio derived from column statistics, when reliable stats are available
+    val statsBasedRatio: Option[Double] =
+      (partExpr.references.toList, otherExpr.references.toList) match {
+        // filter out expressions with more than one attribute on any side of the operator
+        case (leftAttr :: Nil, rightAttr :: Nil)
+          if conf.dynamicPartitionPruningUseStats =>
+            // get the CBO stats for each attribute in the join condition
+            val partDistinctCount = distinctCounts(leftAttr, partPlan)
+            // A materialized filtering side (e.g. a LocalRelation) may carry no column statistics
+            // but an exact `maxRows`, which is a conservative upper bound on its join-key NDV. Use
+            // it when the column statistic is missing so a small, selective materialized side still
+            // yields a statistics-based ratio rather than falling through to the gated fallback.
+            // Restrict this to a cheaply-recomputable materialized side: DPP re-evaluates the
+            // filtering side, so deriving a pruning benefit from the `maxRows` of an opaque plan
+            // (e.g. one with a `mapPartitions`, which `isCheaplyRecomputableMaterializedPlan`
+            // rejects) could inject a standalone subquery that prunes a partition the join's
+            // re-evaluation then needs, giving wrong results for a hidden-non-deterministic side.
+            val otherDistinctCount =
+              distinctCounts(rightAttr, otherPlan).orElse {
+                if (isCheaplyRecomputableMaterializedPlan(otherPlan)) {
+                  otherPlan.maxRows.map(BigInt(_))
+                } else {
+                  None
+                }
+              }
+            val availableStats = partDistinctCount.isDefined && partDistinctCount.get > 0 &&
+              otherDistinctCount.isDefined
+            if (!availableStats) {
+              None
+            } else if (partDistinctCount.get.toDouble <= otherDistinctCount.get.toDouble) {
+              // there is likely an estimation error, so there is no reliable stats-based ratio
+              None
+            } else {
+              Some(1 - otherDistinctCount.get.toDouble / partDistinctCount.get.toDouble)
+            }
+        case _ => None
+      }
+
+    // Without a reliable stats-based ratio, fall back to the configured ratio only when there is a
+    // predicate likely to be selective; otherwise there is no evidence of a pruning benefit.
+    val filterRatio = statsBasedRatio.orElse {
+      if (hasSelectivePredicate) Some(conf.dynamicPartitionPruningFallbackFilterRatio) else None
     }
 
-    val estimatePruningSideSize = filterRatio * partPlan.stats.sizeInBytes.toFloat
-    val overhead = calculatePlanOverhead(otherPlan)
-    estimatePruningSideSize > overhead
+    filterRatio.exists { ratio =>
+      ratio * partPlan.stats.sizeInBytes.toFloat > calculatePlanOverhead(otherPlan)
+    }
   }
 
   /**

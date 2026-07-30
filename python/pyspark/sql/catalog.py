@@ -252,7 +252,8 @@ class Catalog:
         """
         sc = self._sc
         assert sc is not None
-        ju = sc._gateway.jvm.java.util  # type: ignore[union-attr]
+        assert sc._gateway is not None
+        ju = sc._gateway.jvm.java.util
         m = ju.HashMap()
         if properties:
             for k, v in properties.items():
@@ -365,10 +366,7 @@ class Catalog:
         while iter.hasNext():
             jtable = iter.next()
             jnamespace = jtable.namespace()
-            if jnamespace is not None:
-                namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
-            else:
-                namespace = None
+            namespace = list(jnamespace) if jnamespace is not None else None
             views.append(
                 Table(
                     name=jtable.name(),
@@ -694,10 +692,7 @@ class Catalog:
             jtable = iter.next()
 
             jnamespace = jtable.namespace()
-            if jnamespace is not None:
-                namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
-            else:
-                namespace = None
+            namespace = list(jnamespace) if jnamespace is not None else None
 
             tables.append(
                 Table(
@@ -754,10 +749,7 @@ class Catalog:
         """
         jtable = self._jcatalog.getTable(tableName)
         jnamespace = jtable.namespace()
-        if jnamespace is not None:
-            namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
-        else:
-            namespace = None
+        namespace = list(jnamespace) if jnamespace is not None else None
         return Table(
             name=jtable.name(),
             catalog=jtable.catalog(),
@@ -815,10 +807,7 @@ class Catalog:
         while iter.hasNext():
             jfunction = iter.next()
             jnamespace = jfunction.namespace()
-            if jnamespace is not None:
-                namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
-            else:
-                namespace = None
+            namespace = list(jnamespace) if jnamespace is not None else None
 
             functions.append(
                 Function(
@@ -920,10 +909,7 @@ class Catalog:
         """
         jfunction = self._jcatalog.getFunction(functionName)
         jnamespace = jfunction.namespace()
-        if jnamespace is not None:
-            namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
-        else:
-            namespace = None
+        namespace = list(jnamespace) if jnamespace is not None else None
         return Function(
             name=jfunction.name(),
             catalog=jfunction.catalog(),

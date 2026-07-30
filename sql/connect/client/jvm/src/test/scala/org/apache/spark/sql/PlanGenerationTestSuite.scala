@@ -198,7 +198,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   /**
    * Normalize proto messages for stable comparison:
    *   - Trim JVM origin fields (lines, stack traces, anonymous function names)
-   *   - Populate default StringType collation when missing (UTF8_BINARY)
    */
   private def normalizeProtoForComparison[T <: protobuf.Message](message: T): T = {
     def trim(builder: proto.JvmOrigin.Builder): Unit = {
@@ -221,17 +220,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     val builder = message.toBuilder
 
     builder match {
-      // For comparison only, we add UTF8_BINARY when StringType collation is missing
-      // to ensure deterministic plan equality across environments.
-      case dt: proto.DataType.Builder if dt.getKindCase == proto.DataType.KindCase.STRING =>
-        val sb = dt.getStringBuilder
-        if (sb.getCollation.isEmpty) {
-          val defaultCollationName =
-            CollationFactory
-              .fetchCollation(CollationFactory.UTF8_BINARY_COLLATION_ID)
-              .collationName
-          sb.setCollation(defaultCollationName)
-        }
       case exp: proto.Relation.Builder
           if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
         trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
@@ -2773,6 +2761,38 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("variant_delete") {
     fn.variant_delete(fn.parse_json(fn.col("g")), "$.a", "$.b")
+  }
+
+  functionTest("variant_insert") {
+    fn.variant_insert(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("try_variant_insert") {
+    fn.try_variant_insert(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("variant_set") {
+    fn.variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("variant_set with create_if_missing") {
+    fn.variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1), false)
+  }
+
+  functionTest("try_variant_set") {
+    fn.try_variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("try_variant_set with create_if_missing") {
+    fn.try_variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1), false)
+  }
+
+  functionTest("variant_array_append") {
+    fn.variant_array_append(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("try_variant_array_append") {
+    fn.try_variant_array_append(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
   }
 
   functionTest("variant_get") {

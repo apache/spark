@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD, SQLPartitioningAwareUnionRDD, UnionPartition, UnionRDD}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -919,10 +919,20 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     Seq(firstPartitioning) ++ convertedOtherPartitionings
   }
 
+  // Compares two leaf partitionings for union pass-through equivalence. Callers pass leaf
+  // partitionings only; a `PartitioningCollection` is flattened to its members by
+  // `outputPartitioning` before reaching here.
   private def comparePartitioning(left: Partitioning, right: Partitioning): Boolean = {
     (left, right) match {
       case (SinglePartition, SinglePartition) => true
       case (l: HashPartitioningLike, r: HashPartitioningLike) => l == r
+      // For `KeyedPartitioning`, only the partition expressions must match (the other child's
+      // expressions have already been remapped to the first child's attributes by
+      // `prepareOutputPartitioning`). The partition keys are intentionally not compared here:
+      // children typically carry different key sets, and `outputPartitioning` merges them.
+      case (l: KeyedPartitioning, r: KeyedPartitioning) =>
+        l.expressions.length == r.expressions.length &&
+          l.expressions.zip(r.expressions).forall { case (le, re) => le.semanticEquals(re) }
       // Note: two `RangePartitioning`s with even same ordering and number of partitions
       // are not equal, because they might have different partition bounds.
       case _ => false
@@ -930,31 +940,82 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   }
 
   override def outputPartitioning: Partitioning = {
-    if (conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)) {
-      val partitionings = prepareOutputPartitioning()
-      if (partitionings.forall(comparePartitioning(_, partitionings.head))) {
-        val partitioner = partitionings.head
+    if (!conf.getConf(SQLConf.UNION_OUTPUT_PARTITIONING)) {
+      return super.outputPartitioning
+    }
 
-        // Take the output attributes of this union and map the partitioner to them.
-        val attributeMap = children.head.output.zip(output).toMap
-        partitioner match {
-          case e: Expression =>
-            e.transform {
-              case a: Attribute if attributeMap.contains(a) => attributeMap(a)
-            }.asInstanceOf[Partitioning]
-          case _ => partitioner
-        }
+    // Children's partitionings with attributes remapped to the first child's attributes.
+    val partitionings = prepareOutputPartitioning()
+    // Map from the first child's attributes to this union's own output attributes.
+    val attributeMap = children.head.output.zip(output).toMap
+    def toUnionOutput(p: Partitioning): Partitioning = p match {
+      case e: Expression =>
+        e.transform {
+          case a: Attribute if attributeMap.contains(a) => attributeMap(a)
+        }.asInstanceOf[Partitioning]
+      case _ => p
+    }
+
+    // Case A: every child is a single `KeyedPartitioning`. A `UnionExec` concatenates its
+    // children's partitions in order (one child's partitions after another's), so the merged
+    // `KeyedPartitioning` carries the concatenation of the children's partition keys, one key
+    // per physical output partition. Children usually hold different key sets, so the merged
+    // keys often contain duplicates and `isGrouped` is false; a downstream `GroupPartitionsExec`
+    // regroups partitions that share a key. This concatenation (numPartitions = sum) is a
+    // distinct physical strategy from the co-located pass-through below (numPartitions = N), so
+    // it is kept as a separate case and never folded into a `PartitioningCollection`.
+    if (partitionings.forall(_.isInstanceOf[KeyedPartitioning])) {
+      val kps = partitionings.map(_.asInstanceOf[KeyedPartitioning])
+      val headKp = kps.head
+      // The `KeyedPartitioning`s must agree on the partition expressions to merge.
+      val compatible = kps.forall(comparePartitioning(_, headKp))
+      if (compatible) {
+        val mergedKeys = kps.flatMap(_.partitionKeys)
+        val mergedExpressions = headKp.expressions.map(_.transform {
+          case a: Attribute if attributeMap.contains(a) => attributeMap(a)
+        })
+        val isGrouped = mergedKeys.distinct.size == mergedKeys.size
+        val isNarrowed = kps.exists(_.isNarrowed)
+        return KeyedPartitioning(mergedExpressions, mergedKeys, isGrouped, isNarrowed)
       } else {
-        super.outputPartitioning
+        return super.outputPartitioning
       }
-    } else {
-      super.outputPartitioning
+    }
+
+    // Case B: treat each child's partitioning as a set of candidate partitionings (a
+    // `PartitioningCollection` flattens to its members; a single partitioning is a one-element
+    // set) and pass through the intersection across all children. Only index-co-locatable
+    // partitionings participate; `KeyedPartitioning` is excluded here because its concatenation
+    // semantics (Case A) are incompatible with the co-located union RDD.
+    val candidateSets = partitionings.map { p =>
+      PartitioningCollection.flatten(p).filter {
+        case _: HashPartitioningLike => true
+        case SinglePartition => true
+        case _ => false
+      }
+    }
+    // Intersect across all children, anchored on the first child's set. Every surviving member
+    // is shared by all children, so their `numPartitions` agree; a `PartitioningCollection`
+    // built from a subset of one child's members therefore keeps its uniform-numPartitions
+    // invariant, and the co-located `doExecute` arm's invariant holds.
+    val head = candidateSets.head
+    val intersection = head.filter { c =>
+      candidateSets.tail.forall(_.exists(comparePartitioning(c, _)))
+    }
+    intersection match {
+      case Seq() => super.outputPartitioning
+      case Seq(p) => toUnionOutput(p)
+      case ps => PartitioningCollection.fromPartitionings(ps.map(toUnionOutput))
     }
   }
 
   // True when the codegen path applies: `outputPartitioning` is `UnknownPartitioning`,
   // and `unionedInputRDD` matches the semantics of `sparkContext.union(...)` in `doExecute`.
-  private def isPlainUnion: Boolean = outputPartitioning.isInstanceOf[UnknownPartitioning]
+  // A `KeyedPartitioning` union also uses `sparkContext.union(...)` in `doExecute`, but
+  // codegen is disabled for it (`supportCodegenFailureReason` reports "partitioning-aware"):
+  // the per-partition key descriptor is consumed by a downstream `GroupPartitionsExec`, and
+  // keeping these unions out of whole-stage codegen matches the `HashPartitioning` union case.
+  private[sql] def isPlainUnion: Boolean = outputPartitioning.isInstanceOf[UnknownPartitioning]
 
   // Per-child projection from the child's output to the union's output. The wrapped
   // child is always the source `Attribute` (deterministic by construction); the Alias
@@ -1160,14 +1221,22 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   override def usedInputs: AttributeSet = AttributeSet.empty
 
   protected override def doExecute(): RDD[InternalRow] = {
-    if (isPlainUnion) {
-      sparkContext.union(children.map(_.execute()))
-    } else {
-      // This union has a known partitioning, i.e., its children have the same partitioning
-      // in semantics so this union can choose not to change the partitioning by using a
-      // custom partitioning aware union RDD.
-      val nonEmptyRdds = children.map(_.execute()).filter(!_.partitions.isEmpty)
-      new SQLPartitioningAwareUnionRDD(sparkContext, nonEmptyRdds, outputPartitioning.numPartitions)
+    outputPartitioning match {
+      case _: UnknownPartitioning | _: KeyedPartitioning =>
+        // An `UnknownPartitioning` union simply concatenates its children. A
+        // `KeyedPartitioning` union does the same: its merged partition keys describe the
+        // concatenated layout (one key per physical partition), and a downstream
+        // `GroupPartitionsExec` regroups partitions that share a key. This differs from an
+        // index-co-locatable partitioning (e.g. `HashPartitioning`), where a partitioning-aware
+        // union RDD interleaves same-index partitions across children.
+        sparkContext.union(children.map(_.execute()))
+      case _ =>
+        // This union has a known, index-co-locatable partitioning, i.e., its children have the
+        // same partitioning in semantics so this union can choose not to change the partitioning
+        // by using a custom partitioning aware union RDD.
+        val nonEmptyRdds = children.map(_.execute()).filter(!_.partitions.isEmpty)
+        new SQLPartitioningAwareUnionRDD(
+          sparkContext, nonEmptyRdds, outputPartitioning.numPartitions)
     }
   }
 
@@ -1243,7 +1312,7 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
     if (numPartitions == 1 && rdd.getNumPartitions < 1) {
       // Make sure we don't output an RDD with 0 partitions, when claiming that we have a
       // `SinglePartition`.
-      new CoalesceExec.EmptyRDDWithPartitions(sparkContext, numPartitions)
+      new EmptyRDDWithPartitions(sparkContext, numPartitions)
     } else {
       rdd.coalesce(numPartitions, shuffle = false)
     }
@@ -1251,23 +1320,6 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
 
   override protected def withNewChildInternal(newChild: SparkPlan): CoalesceExec =
     copy(child = newChild)
-}
-
-object CoalesceExec {
-  /** A simple RDD with no data, but with the given number of partitions. */
-  class EmptyRDDWithPartitions(
-      @transient private val sc: SparkContext,
-      numPartitions: Int) extends RDD[InternalRow](sc, Nil) {
-
-    override def getPartitions: Array[Partition] =
-      Array.tabulate(numPartitions)(i => EmptyPartition(i))
-
-    override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
-      Iterator.empty
-    }
-  }
-
-  case class EmptyPartition(index: Int) extends Partition
 }
 
 /**

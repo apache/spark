@@ -79,6 +79,9 @@ object JDBCRDD extends Logging {
       case e: SQLException if ident.isDefined &&
         dialect.isObjectNotFoundException(e) =>
         throw QueryCompilationErrors.noSuchTableError(catalogName.get, ident.get)
+      case e: SQLException if ident.isDefined &&
+        dialect.isNotSelectableObjectException(e) =>
+        throw QueryCompilationErrors.objectNotSelectableError(catalogName.get, ident.get, e)
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",

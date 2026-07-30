@@ -112,6 +112,14 @@ class MaxAbsScalerModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Vectors.empty)
 
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (maxAbs != null) {
+      size += maxAbs.getSizeInBytes
+    }
+    size
+  }
+
   /** @group setParam */
   @Since("2.0.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

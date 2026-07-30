@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl._
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{never, times, verify, when}
+import org.mockito.Mockito.{clearInvocations, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
@@ -126,6 +126,21 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, null)
     when(schedulerBackend.getExecutorIds()).thenReturn(Seq.empty)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+  }
+
+  test("SPARK-58113: wait for driver readiness by default") {
+    // The allocator in `before` was started with the default conf.
+    verify(driverPodOperations, times(1)).waitUntilReady(any(), any())
+  }
+
+  test("SPARK-58113: skip driver readiness wait when publishNotReadyAddresses is enabled") {
+    clearInvocations(driverPodOperations)
+    val confWithPublishNotReady = conf.clone()
+      .set(KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES, true)
+    val podsAllocator = new StatefulSetPodsAllocator(
+      confWithPublishNotReady, secMgr, executorBuilder, kubernetesClient, snapshotsStore, null)
+    podsAllocator.start(TEST_SPARK_APP_ID, schedulerBackend)
+    verify(driverPodOperations, never()).waitUntilReady(any(), any())
   }
 
   test("Validate initial statefulSet creation & cleanup with two resource profiles") {

@@ -220,7 +220,6 @@ com.google.flatbuffers:flatbuffers-java
 com.google.guava:guava
 com.jamesmurty.utils:java-xmlbuilder
 com.ning:compress-lzf
-com.squareup.okhttp3:logging-interceptor
 com.squareup.okhttp3:okhttp
 com.squareup.okio:okio
 com.tdunning:json
@@ -409,7 +408,6 @@ org.snakeyaml:snakeyaml-engine
 org.xerial.snappy:snappy-java
 org.yaml:snakeyaml
 oro:oro
-stax:stax-api
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
@@ -512,7 +510,6 @@ Common Development and Distribution License (CDDL) 1.1
 ------------------------------------------------------
 javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
 javax.servlet:javax.servlet-api https://oss.oracle.com/licenses/CDDL+GPL-1.1
-javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
 
 
 

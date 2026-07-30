@@ -151,6 +151,17 @@ class StandardScalerModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Vectors.empty, Vectors.empty)
 
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (std != null) {
+      size += std.getSizeInBytes
+    }
+    if (mean != null) {
+      size += mean.getSizeInBytes
+    }
+    size
+  }
+
   /** @group setParam */
   @Since("1.2.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

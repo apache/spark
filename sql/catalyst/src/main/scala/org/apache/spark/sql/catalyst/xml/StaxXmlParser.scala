@@ -148,18 +148,18 @@ class StaxXmlParser(
       xsdSchema.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
       }
-      options.singleVariantColumn match {
-        case Some(_) =>
-          // If the singleVariantColumn is specified, parse the entire xml string as a Variant
-          val v = StaxXmlParser.parseVariant(xml, options)
-          Some(InternalRow(v))
-        case _ =>
-          // Otherwise, parse the xml string as Structs
-          val parser = StaxXmlParserUtils.filteredReader(xml)
-          val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-          val result = Some(convertObject(parser, schema, rootAttributes))
-          parser.close()
-          result
+      if (options.singleVariantColumn.isDefined || options.rootVariantType) {
+        // If the singleVariantColumn is specified or the requested output is a root Variant,
+        // parse the entire xml string as a Variant.
+        val v = StaxXmlParser.parseVariant(xml, options)
+        Some(InternalRow(v))
+      } else {
+        // Otherwise, parse the xml string as Structs
+        val parser = StaxXmlParserUtils.filteredReader(xml)
+        val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+        val result = Some(convertObject(parser, schema, rootAttributes))
+        parser.close()
+        result
       }
     } catch {
       case e: SparkUpgradeException => throw e
@@ -601,6 +601,9 @@ class StaxXmlParser(
           Decimal(decimalParser(datum), dt.precision, dt.scale)
         case _: TimestampType => parseXmlTimestamp(datum, options)
         case _: TimestampNTZType => timestampNTZFormatter.parseWithoutTimeZone(datum, false)
+        case t: TimestampLTZNanosType => timestampFormatter.parseNanos(datum, t.precision)
+        case t: TimestampNTZNanosType =>
+          timestampNTZFormatter.parseWithoutTimeZoneNanos(datum, t.precision, false)
         case _: DateType => parseXmlDate(datum, options)
         case _: TimeType => timeFormatter.parse(datum)
         case _: StringType => UTF8String.fromString(datum)
@@ -652,6 +655,8 @@ class StaxXmlParser(
         case DateType => castTo(value, DateType)
         case TimestampType => castTo(value, TimestampType)
         case TimestampNTZType => castTo(value, TimestampNTZType)
+        case t: TimestampLTZNanosType => castTo(value, t)
+        case t: TimestampNTZNanosType => castTo(value, t)
         case _: TimeType => castTo(value, TimeType())
         case FloatType => signSafeToFloat(value)
         case ByteType => castTo(value, ByteType)

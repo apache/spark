@@ -134,7 +134,6 @@
     <dependency>
       <groupId>com.fasterxml.jackson.dataformat</groupId>
       <artifactId>jackson-dataformat-cbor</artifactId>
-      <version>${fasterxml.jackson.version}</version>
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>

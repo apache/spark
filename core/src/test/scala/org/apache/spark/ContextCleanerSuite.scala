@@ -336,6 +336,16 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
       case _ => false
     }, askStorageEndpoints = true).isEmpty)
   }
+
+  test("SPARK-57873: non-positive spark.cleaner.periodicGC.interval disables periodic GC") {
+    sc.stop()
+    val conf = new SparkConf()
+      .setMaster("local[2]")
+      .setAppName("periodicGCDisabled")
+      .set(CLEANER_PERIODIC_GC_INTERVAL.key, "0s")
+    sc = new SparkContext(conf)
+    assert(sc.cleaner.isDefined)
+  }
 }
 
 

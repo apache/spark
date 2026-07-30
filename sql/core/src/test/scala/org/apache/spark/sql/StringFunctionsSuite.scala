@@ -468,6 +468,47 @@ class StringFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.selectExpr("instr(a, b)"),
       Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, b, 2)"),
+      Row(2))
+
+    checkAnswer(
+      df.select(instr($"a", $"b", -1)),
+      Row(2))
+
+    checkAnswer(
+      df.selectExpr("instr(a, '', -1)"),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, b, 1, 2)"),
+      Row(2))
+
+    checkAnswer(
+      df.select(instr($"a", $"b", -1, 2)),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, '', -1, 2)"),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr('abcde', 'cd', -3, 1)"),
+      Row(3))
+
+    // Test throw exception when occurrence <= 0
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        spark.sql("SELECT instr('abc', 'b', 1, 0)").collect()
+      },
+      condition = "INVALID_PARAMETER_VALUE.OCCURRENCE",
+      parameters = Map(
+        "functionName" -> toSQLId("instr"),
+        "parameter" -> toSQLId("occurrence"),
+        "actual" -> "0"
+      )
+    )
   }
 
   test("string substring_index function") {

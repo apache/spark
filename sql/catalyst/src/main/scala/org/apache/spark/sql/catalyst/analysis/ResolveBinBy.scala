@@ -65,7 +65,8 @@ object ResolveBinBy extends Rule[LogicalPlan] {
       originExpr = b.originExpr)
 
     val appendedAttributes =
-      BinBy.appendedAttributesWithAliases(parameters.rangeType, b.outputAliases)
+      BinByResolution.appendedAttributesWithAliases(parameters.rangeType, b.outputAliases)
+    val scaledDistributeColumns = BinByResolution.scaledDistributeAttributes(distributeAttributes)
 
     BinBy(
       binWidthMicros = parameters.binWidthMicros,
@@ -73,6 +74,7 @@ object ResolveBinBy extends Rule[LogicalPlan] {
       rangeEnd = rangeEnd,
       originMicros = parameters.originMicros,
       distributeColumns = distributeAttributes,
+      scaledDistributeColumns = scaledDistributeColumns,
       appendedAttributes = appendedAttributes,
       child = child,
       timeZoneId = parameters.timeZoneId)

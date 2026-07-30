@@ -203,6 +203,35 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(resourceProfileAdded, resourceProfileJsonString)
   }
 
+  test("SPARK-58192: resource profiles with historical zero cpus amounts deserialize") {
+    // Event logs written before cpus amounts were validated can carry a cpus amount of 0;
+    // deserialization must accept them so the history server can replay such applications.
+    val legacyJson =
+      """
+        |{
+        |  "Event":"SparkListenerResourceProfileAdded",
+        |  "Resource Profile Id":7,
+        |  "Executor Resource Requests":{
+        |    "cores":{
+        |      "Resource Name":"cores",
+        |      "Amount":2,
+        |      "Discovery Script":"",
+        |      "Vendor":""
+        |    }
+        |  },
+        |  "Task Resource Requests":{
+        |    "cpus":{
+        |      "Resource Name":"cpus",
+        |      "Amount":0.0
+        |    }
+        |  }
+        |}
+      """.stripMargin
+    val event = JsonProtocol.sparkEventFromJson(legacyJson)
+      .asInstanceOf[SparkListenerResourceProfileAdded]
+    assert(event.resourceProfile.taskResources("cpus").amount === 0.0)
+  }
+
   test("Dependent Classes") {
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout")
     val attributes = Map("ContainerId" -> "ct1", "User" -> "spark")
@@ -254,6 +283,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testTaskEndReason(TaskKilled("test"))
     testTaskEndReason(TaskCommitDenied(2, 3, 4))
     testTaskEndReason(ExecutorLostFailure("100", true, Some("Induced failure")))
+    testTaskEndReason(ExecutorShutdownFailure("exec-42"))
     testTaskEndReason(UnknownReason)
 
     // BlockId
@@ -476,6 +506,12 @@ class JsonProtocolSuite extends SparkFunSuite {
       .removeField("Executor ID")
     val expectedExecutorLostFailure = ExecutorLostFailure("Unknown", true, Some("Induced failure"))
     assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
+  }
+
+  test("SPARK-57465: ExecutorShutdownFailure deserializes from its JSON representation") {
+    val json = """{"Reason":"ExecutorShutdownFailure","Executor ID":"exec-42"}"""
+    val reason = JsonProtocol.taskEndReasonFromJson(json)
+    assert(reason === ExecutorShutdownFailure("exec-42"))
   }
 
   test("SparkListenerJobStart backward compatibility") {
@@ -1359,6 +1395,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(execId1 === execId2)
         assert(exit1CausedByApp === exit2CausedByApp)
         assert(reason1 === reason2)
+      case (ExecutorShutdownFailure(execId1), ExecutorShutdownFailure(execId2)) =>
+        assert(execId1 === execId2)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
     }

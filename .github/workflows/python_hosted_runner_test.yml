@@ -128,7 +128,7 @@ jobs:
             | tar --null -cf - -T - | zstd -c -T0 > compile-artifact.tar.zst
           ls -lh compile-artifact.tar.zst
       - name: Upload compile artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: spark-compile-${{ inputs.os }}-${{ inputs.branch }}-${{ github.run_id }}
           path: compile-artifact.tar.zst
@@ -245,7 +245,7 @@ jobs:
         id: download-precompiled
         if: needs.precompile.result == 'success'
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: spark-compile-${{ inputs.os }}-${{ inputs.branch }}-${{ github.run_id }}
       - name: Extract precompiled artifact

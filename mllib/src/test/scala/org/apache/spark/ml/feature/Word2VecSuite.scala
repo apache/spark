@@ -35,6 +35,19 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(model)
   }
 
+  test("model estimated size") {
+    val df = sc.parallelize(Seq(Array("a", "b", "c"), Array("a", "b", "c"))).toDF("text")
+    val model = new Word2Vec()
+      .setVectorSize(3)
+      .setMinCount(1)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .fit(df)
+    val maxSize = 1024 * 5
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("Word2Vec") {
     val sentence = "a b ".repeat(100) + "a c ".repeat(10)
     val numOfWords = sentence.split(" ").length
@@ -226,4 +239,3 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
   }
 
 }
-

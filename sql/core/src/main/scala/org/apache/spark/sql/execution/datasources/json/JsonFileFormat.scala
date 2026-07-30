@@ -40,7 +40,7 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       options: Map[String, String],
       path: Path): Boolean = {
     val parsedOptions = getJsonOptions(sparkSession, options)
-    if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(path)) {
+    if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }
@@ -107,7 +107,7 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
         parsedOptions,
         allowArrayAsStructs = true,
         filters)
-      if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
+      if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
         JsonDataSource(parsedOptions).readArchive(
           broadcastedHadoopConf.value.value, file, () => parser(), requiredSchema)
       } else {
@@ -126,9 +126,6 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
     case _: VariantType => true
 
     case _: GeometryType | _: GeographyType => false
-
-    // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: AnyTimestampNanoType => false
 
     case _: AtomicType => true
 

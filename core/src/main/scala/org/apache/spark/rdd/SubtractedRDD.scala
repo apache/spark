@@ -108,7 +108,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
 
         case shuffleDependency: ShuffleDependency[_, _, _] =>
           val metrics = context.taskMetrics().createTempShuffleReadMetrics()
-          val iter = SparkEnv.get.shuffleManager
+          val iter = SparkEnv.get.shuffleManagerFor(shuffleDependency)
             .getReader(
               shuffleDependency.shuffleHandle,
               partition.index,

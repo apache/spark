@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUti
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.VariantUtil
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String, VariantVal}
 
 class StaxXmlGenerator(
     schema: DataType,
@@ -200,6 +200,10 @@ class StaxXmlGenerator(
       gen.writeCharacters(timestampFormatter.format(v))
     case (TimestampNTZType, v: Long) =>
       gen.writeCharacters(timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(v)))
+    case (t: TimestampLTZNanosType, v: TimestampNanosVal) =>
+      gen.writeCharacters(timestampFormatter.formatNanos(v, t.precision))
+    case (t: TimestampNTZNanosType, v: TimestampNanosVal) =>
+      gen.writeCharacters(timestampNTZFormatter.formatWithoutTimeZoneNanos(v, t.precision))
     case (DateType, v: Int) =>
       gen.writeCharacters(dateFormatter.format(v))
     case (_: TimeType, v: Long) => gen.writeCharacters(timeFormatter.format(v))
