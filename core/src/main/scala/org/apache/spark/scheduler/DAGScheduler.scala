@@ -188,7 +188,7 @@ private[spark] class DAGScheduler(
   private[scheduler] val dependentStageMap = new HashMap[Stage, DependentStageInfo]
 
   // Whether we have already logged that the pipelined-group slot check is disabled. Only the
-  // (single-threaded) event loop touches this, so a plain var is safe. Keeps the warning to once
+  // (single-threaded) event loop touches this, so a plain var is safe. Limits the warning to once
   // per scheduler rather than once per submitted batch job.
   private var warnedPipelinedSlotCheckDisabled = false
 
@@ -809,7 +809,7 @@ private[spark] class DAGScheduler(
     if (shuffleDep.checksumMismatchFullRetryEnabled) {
       throw pipelinedUnsupportedError("checksum-mismatch full retry with a pipelined shuffle")
     }
-    // Push-based shuffle merge as the pipelined shuffle: exposes output only after a
+    // Push-based shuffle merge on a pipelined shuffle: exposes output only after a
     // post-completion finalize step, the opposite of incremental reads. A
     // PipelinedShuffleDependency disables merge in its constructor, so this is a defensive
     // backstop against that being bypassed.
