@@ -133,9 +133,15 @@ class EquivalentExpressions(
     if (skipForShortcutEnable) {
       // The subexpression may not need to eval even if it appears more than once.
       // e.g., `if(or(a, and(b, b)))`, the expression `b` would be skipped if `a` is true.
+      // `And`/`Or` short-circuit, so only the left operand is guaranteed to be evaluated.
+      // A chained predicate `a AND b AND c` is left-deep, i.e. `And(And(a, b), c)`, so we must
+      // keep peeling left operands until we reach the single always-evaluated leaf. Peeling only
+      // one level would leave operands past the first (which are conditionally evaluated) to be
+      // treated as always-evaluated, so a subexpression they share could be hoisted and eagerly
+      // evaluated, breaking short-circuit semantics (e.g. a spurious NPE or divide-by-zero).
       expr match {
-        case and: And => and.left
-        case or: Or => or.left
+        case and: And => skipForShortcut(and.left)
+        case or: Or => skipForShortcut(or.left)
         case other => other
       }
     } else {

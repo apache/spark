@@ -393,10 +393,14 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
 
   private val jsonOptimization: PartialFunction[Expression, Expression] = {
     case c: CreateNamedStruct
-        // If we create struct from various fields of the same `JsonToStructs`.
+        // If we create struct from various fields of the same `JsonToStructs`. Pruning the
+        // schema stops the parser from converting the dropped fields, so a malformed value in
+        // one of them no longer fails under a parse mode such as failfast. To be more
+        // conservative, it does not optimize when any option is set, like the cases below.
         if c.valExprs.forall { v =>
           v.isInstanceOf[GetStructField] &&
             v.asInstanceOf[GetStructField].child.isInstanceOf[JsonToStructs] &&
+            v.asInstanceOf[GetStructField].child.asInstanceOf[JsonToStructs].options.isEmpty &&
             v.children.head.semanticEquals(c.valExprs.head.children.head)
         } =>
       val jsonToStructs = c.valExprs.map(_.children.head)

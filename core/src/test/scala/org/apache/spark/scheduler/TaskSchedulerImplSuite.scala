@@ -35,7 +35,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.config
-import org.apache.spark.resource.{ExecutorResourceRequests, ResourceAmountUtils, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.{CpuAmount, ExecutorResourceRequests, ResourceAmountUtils, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -238,6 +238,62 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(1 === taskDescriptions.length)
     assert("executor0" === taskDescriptions(0).executorId)
     assert(!failedTaskSet)
+  }
+
+  test("SPARK-58192: Scheduler correctly accounts for fractional CPUs per task") {
+    // With spark.task.cpus = 0.5, a single core can run 2 tasks concurrently.
+    val taskScheduler = setupSchedulerWithMaster(
+      "local[1]",
+      config.CPUS_PER_TASK.key -> "0.5")
+    val singleCoreOffers =
+      IndexedSeq(WorkerOffer("executor0", "host0", 1))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(5))
+    val taskDescriptions = taskScheduler.resourceOffers(singleCoreOffers).flatten
+    assert(2 === taskDescriptions.length)
+    assert(taskDescriptions.forall(_.executorId == "executor0"))
+    assert(taskDescriptions.forall(td => td.cpus.toDouble == 0.5))
+    assert(!failedTaskSet)
+  }
+
+  test("SPARK-58192: fractional CPUs (0.2) schedule the expected number of tasks") {
+    // 1.0 / 0.2 would floor to 4 with naive Double arithmetic; BigDecimal computes it exactly
+    // as 5, so all 5 task slots on a single core are used.
+    val taskScheduler = setupSchedulerWithMaster(
+      "local[1]",
+      config.CPUS_PER_TASK.key -> "0.2")
+    val singleCoreOffers =
+      IndexedSeq(WorkerOffer("executor0", "host0", 1))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(10))
+    val taskDescriptions = taskScheduler.resourceOffers(singleCoreOffers).flatten
+    assert(5 === taskDescriptions.length)
+    assert(!failedTaskSet)
+  }
+
+  test("SPARK-58192: fractional CPUs above 1 (1.5) schedule the expected number of tasks") {
+    val taskScheduler = setupSchedulerWithMaster(
+      "local[2]",
+      config.CPUS_PER_TASK.key -> "1.5")
+    val offers = IndexedSeq(WorkerOffer("executor0", "host0", 4))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(5))
+    val taskDescriptions = taskScheduler.resourceOffers(offers).flatten
+    // floor(4 / 1.5) == 2 tasks fit on a 4-core executor
+    assert(2 === taskDescriptions.length)
+    assert(taskDescriptions.forall(td => td.cpus.toDouble == 1.5))
+    assert(!failedTaskSet)
+  }
+
+  test("SPARK-58192: calculateAvailableSlots saturates instead of overflowing Int") {
+    val taskScheduler = setupSchedulerWithMaster(
+      "local[1]",
+      config.CPUS_PER_TASK.key -> "0.000000001")
+    // Each 4-core executor contributes floor(4 / 1e-9) clamped to Int.MaxValue; the sum over
+    // two executors must saturate at Int.MaxValue instead of wrapping negative.
+    val rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    val fourCores = CpuAmount.normalize(BigDecimal(4))
+    val slots = TaskSchedulerImpl.calculateAvailableSlots(taskScheduler, sc.conf,
+      rpId, Array(rpId, rpId), Array(fourCores, fourCores),
+      Array(Map.empty[String, Int], Map.empty[String, Int]))
+    assert(slots === Int.MaxValue)
   }
 
   private def setupTaskSchedulerForLocalityTests(
@@ -1125,7 +1181,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         // as we offer resources to the taskset -- each iteration either schedules
         // something, or it terminates that locality level, so the maximum number of
         // checks is numCores + numLocalityLevels
-        val numCoresOnAllOffers = offers.map(_.cores).sum
+        val numCoresOnAllOffers = offers.map(_.cores).sum.toInt
         val numLocalityLevels = TaskLocality.values.size
         val maxExcludelistChecks = numCoresOnAllOffers + numLocalityLevels
 
@@ -2750,6 +2806,64 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val tsm = taskScheduler.createTaskSetManager(taskSet, 1)
 
     assert(!tsm.isInstanceOf[StructuredStreamingIdAwareSchedulerLogging])
+  }
+
+  test("outstandingTasksForOtherWorkInProfile counts running + enqueued, excludes given stages, " +
+      "and is resource-profile-scoped") {
+    // Backs the pipelined-group slot admission check (DAGScheduler): it must report the OUTSTANDING
+    // (running + enqueued, i.e. numTasks - tasksSuccessful) task demand of OTHER work in a given
+    // resource profile, excluding the group's own member stages.
+    val taskScheduler = setupScheduler()
+    // Only 3 total cores, but each stage has 4 tasks -> some tasks launch, the rest stay enqueued.
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", 2),
+      new WorkerOffer("executor1", "host1", 1))
+
+    // Stage 0 and stage 1 both in the DEFAULT profile, 4 tasks each (8 total) but only 3 cores, so
+    // 3 launch and 5 remain enqueued. Distinct stageIds let us exclude one and count the other.
+    taskScheduler.submitTasks(FakeTask.createTaskSet(4, stageId = 0, stageAttemptId = 0))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(4, stageId = 1, stageAttemptId = 0))
+    val launched = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(launched.length === 3, "only three tasks can run (3 cores); the other five are enqueued")
+
+    val defaultRp = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    // Nothing excluded: all 8 tasks are outstanding (3 running + 5 enqueued) though only 3 run.
+    // The old running-only count would have reported 3 here; outstanding demand is what can hang a
+    // co-scheduled group, so it must be 8.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set.empty) === 8)
+    // Exclude stage 0 (as if it were the group's own member): only stage 1's 4 tasks remain.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set(0)) === 4)
+    // Exclude both: zero "other" tasks.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set(0, 1)) === 0)
+    // A DIFFERENT (non-existent here) resource profile has no outstanding tasks -- other-profile
+    // load must not be charged against this profile (RP-scoping).
+    val otherRpId = defaultRp + 12345
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(otherRpId, Set.empty) === 0,
+      "tasks in the default profile must not be counted against a different profile")
+  }
+
+  test("outstandingTasksForOtherWorkInProfile does not double-count a zombie + live attempt") {
+    // A retried/killed stage can have both a zombie (superseded) attempt and a live attempt in the
+    // map at once; the live attempt re-runs the zombie's outstanding tasks, so only the live
+    // attempt's demand should count. Counting both would inflate occupancy and could spuriously
+    // fail a pipelined group with CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT.
+    val taskScheduler = setupScheduler()
+    val defaultRp = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+
+    // Attempt 0 of stage 0: 4 tasks, none started. Mark it zombie (as if superseded).
+    val attempt0 = FakeTask.createTaskSet(4, stageId = 0, stageAttemptId = 0)
+    taskScheduler.submitTasks(attempt0)
+    taskScheduler.taskSetManagerForAttempt(0, 0).get.isZombie = true
+
+    // Attempt 1 of the SAME stage: the live retry, also 4 tasks.
+    val attempt1 = FakeTask.createTaskSet(4, stageId = 0, stageAttemptId = 1)
+    taskScheduler.submitTasks(attempt1)
+
+    // Both attempts are in the map, but only the live attempt's 4 tasks are outstanding -- not 8.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set.empty) === 4,
+      "a zombie attempt must not be counted alongside its live retry")
+    // Excluding the stage (as the group's own member) drops both attempts.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set(0)) === 0)
   }
 
 }

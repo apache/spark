@@ -217,6 +217,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     defaultCopy[Bucketizer](extra).setParent(parent)
   }
 
+  private[spark] override def estimatedSize: Long = estimateMatadataSize
+
   @Since("3.0.0")
   override def toString: String = {
     s"Bucketizer: uid=$uid" +

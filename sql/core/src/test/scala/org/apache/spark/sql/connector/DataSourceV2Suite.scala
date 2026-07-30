@@ -1376,6 +1376,29 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "non-deterministic filter should be retained as a post-scan Filter")
   }
 
+  test("SPARK-58207: V2 filter pushdown skips non-deterministic filters") {
+    val df = spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
+    // i > 3 is deterministic and pushable; rand() > 0.5 is non-deterministic. rand() translates
+    // to a V2 Predicate (V2ExpressionBuilder handles Rand), so without a guard it would be pushed
+    // to the source, which may evaluate it a different number of times than Spark (or use it for
+    // pruning while also returning it for post-scan re-check).
+    val q = df.filter($"i" > 3 && rand() > 0.5)
+
+    // Only the deterministic predicate should reach the source's pushPredicates.
+    val pushed = getBatchWithV2Filter(q).predicates.map(_.describe())
+    assert(pushed.exists(_.contains("i")),
+      s"the deterministic predicate on i should be pushed; got: ${pushed.mkString(", ")}")
+    assert(!pushed.exists(_.contains("RAND")),
+      s"a non-deterministic predicate must not be pushed; got: ${pushed.mkString(", ")}")
+
+    // The non-deterministic filter must be retained as a post-scan Filter.
+    val postScanConditions = q.queryExecution.optimizedPlan.collect {
+      case f: LogicalFilter => f.condition
+    }
+    assert(postScanConditions.exists(cond => cond.exists(!_.deterministic)),
+      "non-deterministic filter should be retained as a post-scan Filter")
+  }
+
   test("pushedFilters drops filters referencing pruned columns") {
     // Disable constraint propagation so IsNotNull(i) is not added (it would keep
     // column i in the scan output). This simulates a connector that pushes IsNotNull.

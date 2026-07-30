@@ -64,12 +64,17 @@ abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZe
     val n1 = n.left
     val n2 = n.right
     val newN = n1 + n2
-    val dx = xAvg.right - xAvg.left
+    // See CentralMomentAgg for the rationale: when one side is an empty buffer (n1 == 0 or
+    // n2 == 0), force dx/dy to 0.0 so the `dx * dyN * n1 * n2` (and `dx * dxN`, `dy * dyN`) terms
+    // vanish cleanly instead of overflowing to Infinity and then NaN-ing out via `Infinity * 0`.
+    val isEmptyLeft = n1 === Literal(0.0)
+    val isEmptyRight = n2 === Literal(0.0)
+    val dx = If(isEmptyLeft || isEmptyRight, Literal(0.0), xAvg.right - xAvg.left)
+    val dy = If(isEmptyLeft || isEmptyRight, Literal(0.0), yAvg.right - yAvg.left)
     val dxN = If(newN === 0.0, 0.0, dx / newN)
-    val dy = yAvg.right - yAvg.left
     val dyN = If(newN === 0.0, 0.0, dy / newN)
-    val newXAvg = xAvg.left + dxN * n2
-    val newYAvg = yAvg.left + dyN * n2
+    val newXAvg = If(isEmptyLeft, xAvg.right, If(isEmptyRight, xAvg.left, xAvg.left + dxN * n2))
+    val newYAvg = If(isEmptyLeft, yAvg.right, If(isEmptyRight, yAvg.left, yAvg.left + dyN * n2))
     val newCk = ck.left + ck.right + dx * dyN * n1 * n2
     val newXMk = xMk.left + xMk.right + dx * dxN * n1 * n2
     val newYMk = yMk.left + yMk.right + dy * dyN * n1 * n2
@@ -105,6 +110,13 @@ abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZe
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns Pearson coefficient of correlation between a set of number pairs.",
+  arguments = """
+    Arguments:
+      * expr1 - The first variable of the number pairs.
+        An expression that evaluates to a numeric.
+      * expr2 - The second variable of the number pairs.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(c1, c2) FROM VALUES (3, 2), (3, 3), (6, 4) as tab(c1, c2);

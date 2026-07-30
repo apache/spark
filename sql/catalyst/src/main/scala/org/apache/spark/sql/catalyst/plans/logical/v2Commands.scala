@@ -42,6 +42,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
@@ -860,6 +861,16 @@ case class CreateStreamingTable(
  *                       clause was specified. Mutually exclusive with [[excludeColumns]].
  * @param excludeColumns Source columns to exclude. [[None]] when no COLUMNS clause was specified.
  *                       Mutually exclusive with [[includeColumns]].
+ * @param storedAsScdType The SCD type of the target table, from `STORED AS SCD TYPE <n>`. 1 for
+ *                       SCD Type 1 (upsert) and 2 for SCD Type 2 (history-tracking). Defaults to
+ *                       1 when no `STORED AS` clause is specified.
+ * @param trackHistoryColumns SCD2-only. An explicit list of columns whose value change opens a
+ *                       new history record, from `TRACK HISTORY ON (...)`. [[None]] when no TRACK
+ *                       HISTORY clause was specified. Mutually exclusive with
+ *                       [[trackHistoryExceptColumns]].
+ * @param trackHistoryExceptColumns SCD2-only. Columns excluded from history tracking, from
+ *                       `TRACK HISTORY ON * EXCEPT (...)`. [[None]] when no TRACK HISTORY clause
+ *                       was specified. Mutually exclusive with [[trackHistoryColumns]].
  */
 case class CreateStreamingTableAutoCdc(
     name: LogicalPlan,
@@ -872,7 +883,10 @@ case class CreateStreamingTableAutoCdc(
     deleteCondition: Option[Expression],
     sequenceByExpr: Expression,
     includeColumns: Option[Seq[UnresolvedAttribute]],
-    excludeColumns: Option[Seq[UnresolvedAttribute]]
+    excludeColumns: Option[Seq[UnresolvedAttribute]],
+    storedAsScdType: Int,
+    trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
+    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]]
 ) extends BinaryCommand with CreatePipelineDataset {
   override def left: LogicalPlan = name
   override def right: LogicalPlan = source
@@ -1102,7 +1116,8 @@ case class DeleteFromTable(
  */
 case class DeleteFromTableWithFilters(
     table: LogicalPlan,
-    condition: Seq[Predicate]) extends LeafCommand
+    condition: Seq[Predicate],
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()) extends LeafCommand
 
 /**
  * The logical plan of the UPDATE TABLE command.

@@ -75,7 +75,12 @@ from pyspark.sql.connect.client.artifact import ArtifactManager
 from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.profiler import ConnectProfilerCollector
 from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
-from pyspark.sql.connect.client.retries import RetryPolicy, Retrying, DefaultPolicy
+from pyspark.sql.connect.client.retries import (
+    RetryPolicy,
+    Retrying,
+    DefaultPolicy,
+    DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+)
 from pyspark.sql.connect.conversion import (
     storage_level_to_proto,
     proto_to_storage_level,
@@ -509,7 +514,7 @@ class DefaultChannelBuilder(ChannelBuilder):
             session = PySparkSession._instantiatedSession
 
             if session is not None:
-                jvm = PySparkSession._instantiatedSession._jvm  # type: ignore[union-attr]
+                jvm = session._jvm
                 return getattr(
                     getattr(
                         jvm,
@@ -814,6 +819,7 @@ class SparkConnectClient(object):
         allow_arrow_batch_chunking: bool = True,
         preferred_arrow_chunk_size: Optional[int] = None,
         rpc_deadlines: Optional[RpcDeadlines] = None,
+        max_retry_exception_elapsed_time: Optional[float] = None,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -865,6 +871,13 @@ class SparkConnectClient(object):
             Per-RPC gRPC call timeouts in seconds (10 min for most RPCs,
             1 hour for analyze/addArtifacts, none for non-reattachable execute).
             Use :meth:`RpcDeadlines.disabled` to turn off all deadlines.
+        max_retry_exception_elapsed_time : float, optional
+            Maximum cumulative elapsed time in seconds the client will keep retrying a
+            RetryException (raised internally when a reattach attempt keeps hitting
+            DEADLINE_EXCEEDED, or when the initial ExecutePlan never reached the server) before
+            giving up and raising the underlying error. Defaults to
+            :data:`~pyspark.sql.connect.client.retries.DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME`
+            (1 hour).
         """
         self.thread_local = threading.local()
 
@@ -880,6 +893,12 @@ class SparkConnectClient(object):
         retry_policy_args = retry_policy or dict()
         default_policy = DefaultPolicy(**retry_policy_args)
         self.set_retry_policies([default_policy])
+
+        self._max_retry_exception_elapsed_time = (
+            max_retry_exception_elapsed_time
+            if max_retry_exception_elapsed_time is not None
+            else DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME
+        )
 
         if self._builder.session_id is None:
             # Generate a unique session ID for this client. This UUID must be unique to allow
@@ -984,7 +1003,10 @@ class SparkConnectClient(object):
         self._progress_handlers.remove(handler)
 
     def _retrying(self) -> "Retrying":
-        return Retrying(self._retry_policies)
+        return Retrying(
+            self._retry_policies,
+            max_retry_exception_elapsed_time=self._max_retry_exception_elapsed_time,
+        )
 
     def disable_reattachable_execute(self) -> "SparkConnectClient":
         self._use_reattachable_execute = False
@@ -1391,8 +1413,6 @@ class SparkConnectClient(object):
             # when not at debug log level.
             logger.debug(f"Execute command for command {self._proto_to_string(command, True)}")
         req = self._execute_plan_request_with_metadata()
-        if self._user_id:
-            req.user_context.user_id = self._user_id
         self._set_command_in_plan(req.plan, command)
         data, _, metrics, observed_metrics, properties = self._execute_and_fetch(
             req, observations or {}
@@ -1417,8 +1437,6 @@ class SparkConnectClient(object):
                 f"Execute command as iterator for command {self._proto_to_string(command, True)}"
             )
         req = self._execute_plan_request_with_metadata()
-        if self._user_id:
-            req.user_context.user_id = self._user_id
         self._set_command_in_plan(req.plan, command)
         for response in self._execute_and_fetch_as_iterator(req, observations or {}):
             if isinstance(response, dict):
@@ -1559,11 +1577,13 @@ class SparkConnectClient(object):
         elif method == "explain":
             req.explain.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
             explain_mode = kwargs.get("explain_mode")
-            if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
+            allowed_explain_modes = ["simple", "extended", "codegen", "cost", "formatted"]
+            if explain_mode not in allowed_explain_modes:
                 raise PySparkValueError(
-                    errorClass="UNKNOWN_EXPLAIN_MODE",
+                    errorClass="VALUE_NOT_ALLOWED",
                     messageParameters={
-                        "explain_mode": str(explain_mode),
+                        "arg_name": "explain_mode",
+                        "allowed_values": str(allowed_explain_modes),
                     },
                 )
             if explain_mode == "simple":
@@ -2035,11 +2055,12 @@ class SparkConnectClient(object):
         try:
             for attempt in self._retrying():
                 with attempt:
-                    resp = self._stub.Config(
-                        req,
-                        metadata=self._builder.metadata(),
-                        timeout=self._rpc_deadlines.config,
-                    )
+                    with disable_gc():
+                        resp = self._stub.Config(
+                            req,
+                            metadata=self._builder.metadata(),
+                            timeout=self._rpc_deadlines.config,
+                        )
                     self._verify_response_integrity(resp)
                     return ConfigResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")

@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.datasources.parquet.SparkToParquetSchemaConverter
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -410,6 +410,29 @@ class QueryCompilationErrorsSuite
       },
       condition = "INVALID_JSON_SCHEMA_MAP_TYPE",
       parameters = Map("jsonSchema" -> "\"STRUCT<map: MAP<INT, INT> NOT NULL>\"")
+    )
+  }
+
+  test("COLUMN_IS_NOT_VARIANT_TYPE: semi-structured extraction on non-variant column") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT id:field FROM range(1)")
+      },
+      condition = "COLUMN_IS_NOT_VARIANT_TYPE",
+      parameters = Map.empty[String, String]
+    )
+  }
+
+  test("INVALID_XML_SCHEMA_MAP_TYPE: only STRING as a key type for MAP") {
+    val schema = StructType(
+      StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.schema(schema).xml(spark.emptyDataset[String])
+      },
+      condition = "INVALID_XML_SCHEMA_MAP_TYPE",
+      parameters = Map("xmlSchema" -> "\"STRUCT<map: MAP<INT, INT> NOT NULL>\"")
     )
   }
 
@@ -1098,6 +1121,17 @@ class QueryCompilationErrorsSuite
         parameters = Map("format" -> "JSON")
       )
     }
+  }
+
+  test("RESERVED_DATABASE_NAME: cannot create a database with a system-preserved name") {
+    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"CREATE DATABASE $globalTempDB")
+      },
+      condition = "RESERVED_DATABASE_NAME",
+      parameters = Map("database" -> s"`$globalTempDB`")
+    )
   }
 }
 

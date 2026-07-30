@@ -158,6 +158,17 @@ class MinMaxScalerModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Vectors.empty, Vectors.empty)
 
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (originalMin != null) {
+      size += originalMin.getSizeInBytes
+    }
+    if (originalMax != null) {
+      size += originalMax.getSizeInBytes
+    }
+    size
+  }
+
   /** @group setParam */
   @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)

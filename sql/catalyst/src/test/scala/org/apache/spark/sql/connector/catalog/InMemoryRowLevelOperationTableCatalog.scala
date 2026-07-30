@@ -151,3 +151,28 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
       currentSchema: StructType,
       changes: Seq[TableChange]): StructType = currentSchema
 }
+
+/**
+ * A catalog that creates [[InMemoryTruncatableOnlyTable]] instances - tables that implement
+ * [[TruncatableTable]] but NOT [[SupportsDeleteV2]]. Used to test the [[TruncateTableExec]]
+ * planning path for DELETE statements with no WHERE clause.
+ */
+class InMemoryTruncatableOnlyTableCatalog extends InMemoryTableCatalog {
+  import CatalogV2Implicits._
+
+  override def loadTable(ident: Identifier): Table = liveTable(ident)
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    if (tables.containsKey(ident)) {
+      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
+    }
+    InMemoryTableCatalog.maybeSimulateFailedTableCreation(tableInfo.properties)
+    val tableName = s"$name.${ident.quoted}"
+    val columns = tableInfo.columns
+    val table = new InMemoryTruncatableOnlyTable(
+      tableName, columns, tableInfo.partitions, tableInfo.properties, tableInfo.constraints())
+    tables.put(ident, table)
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
+    table
+  }
+}

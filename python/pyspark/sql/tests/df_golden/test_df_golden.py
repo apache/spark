@@ -23,7 +23,7 @@ the PySpark DataFrame API.  Each ``.test`` file in this directory describes a
 list of test cases; every case points to a standalone script under
 ``scripts/`` that builds the DataFrame under test.  The expected outputs live
 inline in the ``.test`` file, which doubles as the golden file.  See
-``pyspark.testing.df_golden`` for the file format.
+``pyspark.sql.tests.df_golden.df_golden`` for the file format.
 
 Running the tests::
 
@@ -50,7 +50,7 @@ regenerate the golden files with the steps above.
 import os
 
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.df_golden import run_golden_test
+from pyspark.sql.tests.df_golden.df_golden import run_golden_test
 
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))

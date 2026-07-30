@@ -93,6 +93,13 @@ object PushDownUtils extends Logging {
           (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownV2Filters =>
+        // Non-deterministic filters should not be pushed down: a data source may evaluate a pushed
+        // predicate a different number of times or at a different point than Spark, and a partial
+        // push (a predicate used for pruning yet also returned for post-scan re-evaluation, e.g. a
+        // parquet row group filter) would evaluate a non-deterministic predicate twice with
+        // different results. Keep them as post-scan filters, matching the
+        // SupportsPushDownCatalystFilters branch below.
+        val (deterministicFilters, nonDeterministicFilters) = filters.partition(_.deterministic)
         // Divide the filters into those translatable and untranslatable to data source filters.
         // For the translated filters, we will try to push them down to the data source,
         // and the data source will return the filters that it cannot guarantee to be true
@@ -101,7 +108,7 @@ object PushDownUtils extends Logging {
         val translatedFilters = mutable.ArrayBuffer.empty[Predicate]
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
-        for (filterExpr <- filters) {
+        for (filterExpr <- deterministicFilters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
               filterExpr, Some(translatedFilterToExpr))
@@ -131,7 +138,7 @@ object PushDownUtils extends Logging {
           }
 
         val orderedPostScanFilters = prioritizeFilters(finalPostScanFilters,
-          ExpressionSet(untranslatableExprs))
+          ExpressionSet(untranslatableExprs)) ++ nonDeterministicFilters
         (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
         val (deterministicFilters, nonDeterministicFilters) = filters.partition(_.deterministic)
