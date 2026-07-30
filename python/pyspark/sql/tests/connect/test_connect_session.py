@@ -115,6 +115,16 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             self.spark.conf.get("some.conf")
         self._check_no_active_session_error(e.exception)
 
+    def test_with_block(self):
+        with PySparkSession.builder.remote("local[*]").getOrCreate() as session:
+            df = session.sql("select 1 as a, 2 as b")
+            self.assertEqual(df.collect(), [(1, 2)])
+
+        # Confirm that the session is stopped
+        with self.assertRaises(SparkConnectException) as e:
+            self.spark.sql("select 1")
+        self._check_no_active_session_error(e.exception)
+
     def test_error_enrichment_message(self):
         with self.sql_conf(
             {
