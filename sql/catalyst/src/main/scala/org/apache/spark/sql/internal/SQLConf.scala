@@ -4678,6 +4678,14 @@ object SQLConf {
       .version("4.1.0")
       .fallbackConf(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
 
+  val WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD =
+    buildConf("spark.sql.windowExec.distinct.hash.fallbackThreshold")
+      .internal()
+      .doc("Threshold for number of distinct keys in the in-memory hash map before a window " +
+        "DISTINCT aggregate falls back to external sorting")
+      .version("4.4.0")
+      .fallbackConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
+
   val WINDOW_GROUP_LIMIT_THRESHOLD =
     buildConf("spark.sql.optimizer.windowGroupLimitThreshold")
       .internal()
@@ -9119,6 +9127,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
   def windowExecBufferSpillSizeThreshold: Long = getConf(WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD)
+
+  def windowExecDistinctHashFallbackThreshold: Int =
+    getConf(WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD)
 
   def windowGroupLimitThreshold: Int = getConf(WINDOW_GROUP_LIMIT_THRESHOLD)
 
