@@ -2195,8 +2195,8 @@ class MergeSubplansSuite extends PlanTest {
     // pair; the OUTER pair sees dsv2DeferredScan = None. The merge only fuses if the "a DSv2 merge
     // happened below" fact (TryMergeResult.dsv2Merged) still reaches the outer pair so it applies
     // the DSv2-symmetric exemption -- dsv2DeferredScan alone (consumed at the inner pair) would
-    // not. Optimize runs only MergeSubplans, so the stacked Filters are not combined before the rule
-    // sees them.
+    // not. Optimize runs only MergeSubplans, so the stacked Filters are not combined before the
+    // rule sees them.
     val sub1 = ScalarSubquery(
       v2ScanReading("a").where($"a" > 1).where($"a" < 100).groupBy()(sum($"a").as("sum_a")))
     val sub2 = ScalarSubquery(
