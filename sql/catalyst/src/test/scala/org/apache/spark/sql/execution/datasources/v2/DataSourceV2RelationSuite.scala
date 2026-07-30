@@ -302,6 +302,35 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("DataSourceV2ScanRelation.computeStats invokes estimateStatistics at most once without CBO") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    // Scan with only a row count and the default estimateSizeInBytes(): the size-only path must
+    // consult the full statistics exactly once, not once for the (empty) size and again for the row
+    // count.
+    var estimateStatisticsCalls = 0
+    val scan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = {
+        estimateStatisticsCalls += 1
+        new V2Statistics {
+          override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+          override def numRows(): OptionalLong = OptionalLong.of(5L)
+        }
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "false",
+        SQLConf.PLAN_STATS_ENABLED.key -> "false") {
+      val stats = scanRel(output, scan).computeStats()
+
+      assert(stats.sizeInBytes === EstimationUtils.getSizePerRow(output) * BigInt(5))
+      assert(estimateStatisticsCalls === 1,
+        s"estimateStatistics should be called at most once, was $estimateStatisticsCalls")
+    }
+  }
+
   test("DataSourceV2ScanRelation.computeStats uses default size without CBO for empty stats") {
     val output = Seq(AttributeReference("id", IntegerType)())
     val scan = new Scan with SupportsReportStatistics {
@@ -405,6 +434,44 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
         assert(stats.sizeInBytes === BigInt(12345))
         assert(stats.rowCount.isEmpty)
       }
+    }
+  }
+
+  test("DataSourceV2ScanRelation.computeStats tolerates null column stats with row count") {
+    val idAttr = AttributeReference("id", IntegerType)()
+    val output = Seq(idAttr)
+    // numRows present, columnStats null: isNotEmpty is true (via numRows), so the conversion runs
+    // and must not NPE on the null column-stats map.
+    val rowCountScan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.of(42L)
+        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = null
+      }
+    }
+    // sizeInBytes present, columnStats null: same null-tolerance requirement, reached via
+    // sizeInBytes instead of numRows.
+    val sizeScan = new Scan with SupportsReportStatistics {
+      override def readSchema(): StructType = StructType(Seq(StructField("id", IntegerType)))
+      override def estimateStatistics(): V2Statistics = new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.of(1000L)
+        override def numRows(): OptionalLong = OptionalLong.empty()
+        override def columnStats(): java.util.Map[NamedReference, ColumnStatistics] = null
+      }
+    }
+
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      val rowCountStats = scanRel(output, rowCountScan).computeStats()
+      assert(rowCountStats.rowCount.contains(BigInt(42)))
+      assert(rowCountStats.attributeStats.isEmpty)
+      assert(rowCountStats.sizeInBytes ===
+        EstimationUtils.getOutputSize(output, BigInt(42), rowCountStats.attributeStats))
+
+      val sizeStats = scanRel(output, sizeScan).computeStats()
+      assert(sizeStats.sizeInBytes === BigInt(1000))
+      assert(sizeStats.rowCount.isEmpty)
+      assert(sizeStats.attributeStats.isEmpty)
     }
   }
 

@@ -40,20 +40,16 @@ object V2StatisticsUtils {
 
   def computeSizeInBytes(
       scan: Scan,
-      avgRowSize: => BigInt): Option[BigInt] = {
-    extractSizeInBytes(scan).orElse(extractRowCount(scan).map(_ * avgRowSize))
-  }
-
-  private def extractSizeInBytes(scan: Scan): Option[BigInt] = scan match {
-    case s: SupportsReportStatistics => toBigInt(s.estimateSizeInBytes())
-    case _ => None
-  }
-
-  private def extractRowCount(scan: Scan): Option[BigInt] = scan match {
+      avgRowSize: => BigInt): Option[BigInt] = scan match {
     case s: SupportsReportStatistics =>
-      Option(s.estimateStatistics()).flatMap(stats => toBigInt(stats.numRows()))
-    case _ =>
-      None
+      // Prefer a cheap size estimate; otherwise read the full statistics once and derive the size
+      // from sizeInBytes, falling back to numRows * avgRowSize.
+      toBigInt(s.estimateSizeInBytes()).orElse {
+        Option(s.estimateStatistics()).flatMap { stats =>
+          toBigInt(stats.sizeInBytes()).orElse(toBigInt(stats.numRows()).map(_ * avgRowSize))
+        }
+      }
+    case _ => None
   }
 
   private def toBigInt(value: OptionalLong): Option[BigInt] = {

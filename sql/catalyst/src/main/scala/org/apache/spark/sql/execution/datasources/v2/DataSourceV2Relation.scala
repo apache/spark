@@ -447,12 +447,15 @@ object DataSourceV2Relation {
     }
 
     var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
-    if (!v2Statistics.columnStats().isEmpty) {
-      val v2ColumnStat = v2Statistics.columnStats()
-      val keys = v2ColumnStat.keySet()
+    // columnStats() may be null even when numRows/sizeInBytes are present, so normalize it to an
+    // empty map before conversion to avoid an NPE.
+    val v2ColumnStats = Option(v2Statistics.columnStats())
+      .getOrElse(java.util.Collections.emptyMap[NamedReference, ColumnStatistics]())
+    if (!v2ColumnStats.isEmpty) {
+      val keys = v2ColumnStats.keySet()
 
       keys.forEach(key => {
-        val colStat = v2ColumnStat.get(key)
+        val colStat = v2ColumnStats.get(key)
         val distinct: Option[BigInt] =
           if (colStat.distinctCount().isPresent) Some(colStat.distinctCount().getAsLong) else None
         val min: Option[Any] = if (colStat.min().isPresent) Some(colStat.min().get) else None
