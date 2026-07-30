@@ -72,13 +72,15 @@ case class LogicalQueryStage(
   }
 
   override def maxRows: Option[Long] = {
-    // A query stage's runtime `rowCount` is an exact, valid upper bound only once the stage
-    // is materialized. Before materialization, `stats` falls back to the logical plan's cost
-    // estimate, which can under-count (e.g. return 0) and must not be treated as a hard maximum
-    // - otherwise rules such as EliminateLimits can wrongly drop a LIMIT and change the result
-    // cardinality (SPARK-57956). When the stage is not materialized, fall back to the logical
-    // plan's `maxRows`, which is always a sound upper bound.
-    if (isMaterialized) {
+    // A query stage's `rowCount` is an exact, valid upper bound only when it comes from the
+    // runtime statistics of a materialized stage. Checking `isMaterialized` alone is not enough:
+    // `computeStats()` can still fall back to `logicalPlan.stats` (a cost estimate, with
+    // `isRuntime = false`) when the physical-stage lookup yields no statistics, and that estimate
+    // can under-count (e.g. return 0). Treating such an estimate as a hard upper bound lets rules
+    // such as EliminateLimits wrongly drop a LIMIT and change the result cardinality
+    // (SPARK-57956). Only trust `rowCount` when the stats are materialized runtime stats;
+    // otherwise fall back to `logicalPlan.maxRows`, which is always a sound upper bound.
+    if (isMaterialized && stats.isRuntime) {
       stats.rowCount.map(_.min(Long.MaxValue).toLong)
     } else {
       logicalPlan.maxRows
