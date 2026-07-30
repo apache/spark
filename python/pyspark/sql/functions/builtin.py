@@ -6285,6 +6285,74 @@ def collect_set(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def collect_union(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: given an array-typed column, collects the distinct union of the
+    elements of the arrays across rows and returns it as an array.
+
+    The aggregation buffer holds only the distinct elements, so its size is bounded by the
+    element universe rather than by the number of input rows. Null elements are dropped by
+    default (``IGNORE NULLS``), matching :func:`collect_set`. With ``RESPECT NULLS`` a single
+    null element is kept, in which case this is equivalent to
+    ``array_distinct(flatten(collect_list(col)))``. The ``RESPECT NULLS`` clause is only
+    available through SQL, e.g. ``expr("collect_union(col) RESPECT NULLS")``.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target array column on which the function is computed.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new Column object representing the distinct union of the array elements.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.collect_set`
+    :meth:`pyspark.sql.functions.collect_list`
+    :meth:`pyspark.sql.functions.array_distinct`
+    :meth:`pyspark.sql.functions.flatten`
+
+    Notes
+    -----
+    This function is non-deterministic as the order of collected results depends
+    on the order of the rows, which may be non-deterministic after any shuffle operations.
+
+    Examples
+    --------
+    Example 1: Union the elements of array columns across rows
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [([1, 2],), ([2, 3],), ([1],)], ('value',))
+    >>> df.select(sf.sort_array(sf.collect_union('value')).alias('u')).show()
+    +---------+
+    |        u|
+    +---------+
+    |[1, 2, 3]|
+    +---------+
+
+    Example 2: Union per group
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("a", [1, 2]), ("a", [2, 3]), ("b", [4])], ("k", "value"))
+    >>> df = df.groupBy("k").agg(sf.sort_array(sf.collect_union('value')).alias('u'))
+    >>> df.orderBy("k").show()
+    +---+---------+
+    |  k|        u|
+    +---+---------+
+    |  a|[1, 2, 3]|
+    |  b|      [4]|
+    +---+---------+
+    """
+    return _invoke_function_over_columns("collect_union", col)
+
+
+@_try_remote_functions
 def degrees(col: "ColumnOrName") -> Column:
     """
     Converts an angle measured in radians to an approximately equivalent angle
