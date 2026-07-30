@@ -21,9 +21,12 @@ import org.apache.spark.sql.catalyst.expressions.{
   AggregateWindowFunction,
   CurrentRow,
   FrameLessOffsetWindowFunction,
+  PythonUDAF,
   RangeFrame,
   RankLike,
   RowFrame,
+  RowOrdering,
+  SortOrder,
   SpecifiedWindowFrame,
   UnboundedFollowing,
   UnboundedPreceding,
@@ -109,11 +112,12 @@ object WindowResolution {
    * - Disallows [[FrameLessOffsetWindowFunction]] (e.g. [[Lag]]) without defined ordering or
    *   one with a frame which is defined as something other than an offset frame (e.g.
    *   `ROWS BETWEEN` is logically incompatible with offset functions).
-   * - Disallows distinct aggregate expressions in window functions.
+   * - Allows distinct aggregate expressions with an unbounded preceding frame.
+   * - Disallows other distinct aggregate expressions in window functions.
    * - Disallows use of certain aggregate functions - [[ListAgg]], [[PercentileCont]],
    *   [[PercentileDisc]], [[Median]]
    * - Allows only window functions of following types:
-   *   - [[AggregateExpression]] (non-distinct)
+   *   - [[AggregateExpression]] (non-distinct, or supported distinct aggregate)
    *   - [[FrameLessOffsetWindowFunction]]
    *   - [[AggregateWindowFunction]]
    */
@@ -141,11 +145,6 @@ object WindowResolution {
 
   def checkWindowFunction(windowExpression: WindowExpression): Unit = {
     windowExpression.windowFunction match {
-      case AggregateExpression(_, _, true, _, _) =>
-        windowExpression.failAnalysis(
-          errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
-          messageParameters = Map("windowExpr" -> toSQLExpr(windowExpression))
-        )
       case agg @ AggregateExpression(fun: ListAgg, _, _, _, _)
         // listagg(...) WITHIN GROUP (ORDER BY ...) OVER (ORDER BY ...) is unsupported
         if fun.orderingFilled && (windowExpression.windowSpec.orderSpec.nonEmpty ||
@@ -162,6 +161,26 @@ object WindowResolution {
         agg.failAnalysis(
           errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
           messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction))
+        )
+      case AggregateExpression(_: PythonUDAF, _, true, _, _) =>
+        windowExpression.failAnalysis(
+          errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+          messageParameters = Map("windowExpr" -> toSQLExpr(windowExpression))
+        )
+      case AggregateExpression(function, _, true, _, _)
+          if (windowExpression.windowSpec.frameSpecification match {
+            case SpecifiedWindowFrame(_, UnboundedPreceding, _) =>
+              val distinctExpressions = function.children.filterNot(_.foldable).map {
+                case sortOrder: SortOrder => sortOrder.child
+                case expression => expression
+              }
+              RowOrdering.isOrderable(distinctExpressions)
+            case _ => false
+          }) => ()
+      case AggregateExpression(_, _, true, _, _) =>
+        windowExpression.failAnalysis(
+          errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+          messageParameters = Map("windowExpr" -> toSQLExpr(windowExpression))
         )
       case _: AggregateExpression | _: FrameLessOffsetWindowFunction | _: AggregateWindowFunction =>
       case other =>

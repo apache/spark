@@ -21,6 +21,9 @@ import java.util.Properties
 
 import scala.util.Random
 
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, never, verify, when}
+
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
@@ -30,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafePro
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.map.BytesToBytesMap
+import org.apache.spark.util.TaskCompletionListener
 
 /**
  * Test suite for [[UnsafeKVExternalSorter]], with randomly generated test data.
@@ -49,6 +53,42 @@ class UnsafeKVExternalSorterSuite extends SharedSparkSession {
     testKVSorter(keySchema, valueSchema, spill = i > 3)
   }
 
+  test("kv insertion honors the record-count spill threshold") {
+    assertKVInsertionSpills(numElementsForSpillThreshold = 1, Long.MaxValue)
+  }
+
+  test("kv insertion honors the size spill threshold") {
+    assertKVInsertionSpills(Int.MaxValue, sizeInBytesForSpillThreshold = 1L)
+  }
+
+  test("kv sorter can use a caller-owned lifecycle") {
+    val memoryManager = new TestMemoryManager(new SparkConf())
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
+    val context = mock(classOf[TaskContext])
+    when(context.taskMemoryManager()).thenReturn(taskMemoryManager)
+    TaskContext.setTaskContext(context)
+
+    var sorter: UnsafeKVExternalSorter = null
+    try {
+      val schema = new StructType().add("i", IntegerType)
+      sorter = UnsafeKVExternalSorter.createWithCallerOwnedLifecycle(
+        schema,
+        schema,
+        SparkEnv.get.blockManager,
+        SparkEnv.get.serializerManager,
+        taskMemoryManager.pageSizeBytes(),
+        Int.MaxValue,
+        Long.MaxValue)
+
+      verify(context, never()).addTaskCompletionListener(any[TaskCompletionListener]())
+    } finally {
+      if (sorter != null) {
+        sorter.cleanupResources()
+      }
+      assert(taskMemoryManager.cleanUpAllAllocatedMemory === 0L)
+      TaskContext.unset()
+    }
+  }
 
   /**
    * Create a test case using randomly generated data for the given key and value schema.
@@ -293,6 +333,58 @@ class UnsafeKVExternalSorterSuite extends SharedSparkSession {
       sorter1.merge(sorter2)
       assert(sorter1.getSpillSize === expectedSpillSize)
     } finally {
+      TaskContext.unset()
+    }
+  }
+
+  private def assertKVInsertionSpills(
+      numElementsForSpillThreshold: Int,
+      sizeInBytesForSpillThreshold: Long): Unit = {
+    val memoryManager = new TestMemoryManager(new SparkConf())
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
+    val context = new TaskContextImpl(
+      stageId = 0,
+      stageAttemptNumber = 0,
+      partitionId = 0,
+      taskAttemptId = 0,
+      attemptNumber = 0,
+      numPartitions = 1,
+      taskMemoryManager = taskMemoryManager,
+      localProperties = new Properties,
+      metricsSystem = null)
+    TaskContext.setTaskContext(context)
+
+    var sorter: UnsafeKVExternalSorter = null
+    try {
+      val schema = new StructType().add("i", IntegerType)
+      val projection = UnsafeProjection.create(schema)
+      val keys = Seq(1, 2).map(i => projection(InternalRow(i)).copy())
+      val value = projection(InternalRow(0)).copy()
+      sorter = new UnsafeKVExternalSorter(
+        schema,
+        schema,
+        SparkEnv.get.blockManager,
+        SparkEnv.get.serializerManager,
+        taskMemoryManager.pageSizeBytes(),
+        numElementsForSpillThreshold,
+        sizeInBytesForSpillThreshold)
+
+      sorter.insertKV(keys.head, value)
+      assert(sorter.getSpillSize === 0L)
+      sorter.insertKV(keys.last, value)
+      assert(sorter.getSpillSize > 0L)
+
+      val iterator = sorter.sortedIterator()
+      var count = 0
+      while (iterator.next()) {
+        count += 1
+      }
+      assert(count === 2)
+    } finally {
+      if (sorter != null) {
+        sorter.cleanupResources()
+      }
+      assert(taskMemoryManager.cleanUpAllAllocatedMemory === 0L)
       TaskContext.unset()
     }
   }
