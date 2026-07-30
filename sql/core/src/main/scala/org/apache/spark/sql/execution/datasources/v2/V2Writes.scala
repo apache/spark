@@ -51,7 +51,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       a.copy(write = Some(write), query = newQuery)
 
-    case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, None, _, _) =>
+    case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, None, _) =>
       val writeOptions = r.options.asCaseSensitiveMap.asScala.toMap
       val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
       val write = writeBuilder.build()
@@ -59,7 +59,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       m.copy(write = Some(write), query = newQuery)
 
     case o @ OverwriteByExpression(
-        r: DataSourceV2Relation, deleteExpr, query, options, _, _, None, _) =>
+        r: DataSourceV2Relation, deleteExpr, query, options, _, _, None, _, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val predicates = splitConjunctivePredicates(deleteExpr).flatMap { pred =>
         val predicate = DataSourceV2Strategy.translateFilterV2(pred)

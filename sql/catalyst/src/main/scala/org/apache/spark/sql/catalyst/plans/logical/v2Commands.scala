@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolvedTable, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -55,6 +55,22 @@ import org.apache.spark.util.collection.BitSet
 // field so that it won't be transformed by the optimizer.
 trait KeepAnalyzedQuery extends Command {
   def storeAnalyzedQuery(): Command
+}
+
+private[sql] object V2CommandOutput {
+  def apply(table: LogicalPlan, operation: TableOperation): Seq[Attribute] = {
+    EliminateSubqueryAliases(table) match {
+      case ExtractV2Table(table: SupportsOperationOutput) =>
+        V2CommandOutput(table, operation)
+      case _ => Nil
+    }
+  }
+
+  def apply(table: Table, operation: TableOperation): Seq[Attribute] = table match {
+    case table: SupportsOperationOutput =>
+      DataTypeUtils.toAttributes(table.outputSchema(operation))
+    case _ => Nil
+  }
 }
 
 /**
@@ -105,8 +121,10 @@ trait V2WriteCommand
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
+  def tableOperation: TableOperation
 
   override def child: LogicalPlan = query
+  override lazy val output: Seq[Attribute] = V2CommandOutput(table, tableOperation)
 
   // `table` is a non-child slot, so the default tree-pattern propagation in TreeNode/QueryPlan
   // does not see patterns inside it. Add `table`'s bits so that `containsPattern(...)` pruning
@@ -178,6 +196,7 @@ case class AppendData(
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
+  override val tableOperation: TableOperation = TableOperation.INSERT
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
@@ -223,8 +242,8 @@ case class InsertOnlyMerge(
     table: NamedRelation,
     query: LogicalPlan,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None,
-    override val output: Seq[Attribute] = Nil) extends V2WriteCommand with TransactionalWrite {
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
+  override val tableOperation: TableOperation = TableOperation.MERGE
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
@@ -246,7 +265,9 @@ case class OverwriteByExpression(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
+    analyzedQuery: Option[LogicalPlan] = None,
+    tableOperation: TableOperation = TableOperation.INSERT_OVERWRITE)
+  extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] =
     Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override lazy val resolved: Boolean = {
@@ -271,14 +292,16 @@ object OverwriteByExpression {
       df: LogicalPlan,
       deleteExpr: Expression,
       writeOptions: Map[String, String] = Map.empty,
-      withSchemaEvolution: Boolean = false): OverwriteByExpression = {
+      withSchemaEvolution: Boolean = false,
+      tableOperation: TableOperation = TableOperation.INSERT_OVERWRITE): OverwriteByExpression = {
     OverwriteByExpression(
       table,
       deleteExpr,
       df,
       writeOptions,
       isByName = true,
-      withSchemaEvolution)
+      withSchemaEvolution,
+      tableOperation = tableOperation)
   }
 
   def byPosition(
@@ -286,14 +309,16 @@ object OverwriteByExpression {
       query: LogicalPlan,
       deleteExpr: Expression,
       writeOptions: Map[String, String] = Map.empty,
-      withSchemaEvolution: Boolean = false): OverwriteByExpression = {
+      withSchemaEvolution: Boolean = false,
+      tableOperation: TableOperation = TableOperation.INSERT_OVERWRITE): OverwriteByExpression = {
     OverwriteByExpression(
       table,
       deleteExpr,
       query,
       writeOptions,
       isByName = false,
-      withSchemaEvolution)
+      withSchemaEvolution,
+      tableOperation = tableOperation)
   }
 }
 
@@ -307,6 +332,7 @@ case class OverwritePartitionsDynamic(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None) extends V2WriteCommand with TransactionalWrite {
+  override val tableOperation: TableOperation = TableOperation.INSERT_OVERWRITE
   override val writePrivileges: Set[TableWritePrivilege] =
     Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
@@ -356,11 +382,10 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
   def condition: Expression
   def originalTable: NamedRelation
 
-  override lazy val output: Seq[Attribute] = {
-    EliminateSubqueryAliases(table) match {
-      case ExtractV2Table(table: RowLevelOperationTable) => table.operationOutput
-      case _ => Nil
-    }
+  override lazy val tableOperation: TableOperation = operation.command match {
+    case DELETE => TableOperation.DELETE
+    case UPDATE => TableOperation.UPDATE
+    case MERGE => TableOperation.MERGE
   }
 
   protected def operationResolved: Boolean = {
@@ -1103,6 +1128,8 @@ case class DeleteFromTable(
     table: LogicalPlan,
     condition: Expression)
   extends UnaryCommand with TransactionalWrite with SupportsSubquery {
+  override lazy val output: Seq[Attribute] =
+    V2CommandOutput(table, TableOperation.DELETE)
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): DeleteFromTable =
     copy(table = newChild)
@@ -1117,7 +1144,10 @@ case class DeleteFromTable(
 case class DeleteFromTableWithFilters(
     table: LogicalPlan,
     condition: Seq[Predicate],
-    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()) extends LeafCommand
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()) extends LeafCommand {
+  override lazy val output: Seq[Attribute] =
+    V2CommandOutput(table, TableOperation.DELETE)
+}
 
 /**
  * The logical plan of the UPDATE TABLE command.
@@ -1821,6 +1851,11 @@ object ShowColumns {
  * The logical plan of the TRUNCATE TABLE command.
  */
 case class TruncateTable(table: LogicalPlan) extends UnaryCommand {
+  override lazy val output: Seq[Attribute] = table match {
+    case ResolvedTable(_, _, table, _) =>
+      V2CommandOutput(table, TableOperation.TRUNCATE)
+    case _ => Nil
+  }
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): TruncateTable =
     copy(table = newChild)

@@ -19,11 +19,10 @@ package org.apache.spark.sql.connector.write
 
 import java.util
 
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{Column, SupportsRead, SupportsRowLevelOperations, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Column, SupportsOperationOutput, SupportsRead, SupportsRowLevelOperations, SupportsWrite, Table, TableCapability, TableOperation}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.read.ScanBuilder
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -36,16 +35,19 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 private[sql] case class RowLevelOperationTable(
     table: Table with SupportsRowLevelOperations,
-    operation: RowLevelOperation) extends Table with SupportsRead with SupportsWrite {
-
-  lazy val operationOutput: Seq[AttributeReference] =
-    DataTypeUtils.toAttributes(operation.outputSchema())
+    operation: RowLevelOperation)
+  extends Table with SupportsRead with SupportsWrite with SupportsOperationOutput {
 
   override def name: String = table.name
   override def columns: Array[Column] = table.columns()
   override def capabilities: util.Set[TableCapability] = table.capabilities
   override def constraints(): Array[Constraint] = table.constraints()
   override def toString: String = table.toString
+
+  override def outputSchema(tableOperation: TableOperation): StructType = table match {
+    case table: SupportsOperationOutput => table.outputSchema(tableOperation)
+    case _ => new StructType()
+  }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     operation.newScanBuilder(options)

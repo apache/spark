@@ -66,7 +66,7 @@ abstract class InMemoryBaseTable(
     val isDistributionStrictlyRequired: Boolean = true,
     val numRowsPerSplit: Int = Int.MaxValue)
   extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns
-    with SupportsSchemaEvolution {
+    with SupportsSchemaEvolution with SupportsOperationOutput {
 
   // Tracks the current version number of the table.
   protected var tableVersion: Int = 0
@@ -217,6 +217,12 @@ abstract class InMemoryBaseTable(
 
   val commits: ListBuffer[Commit] = ListBuffer[Commit]()
 
+  protected final val commandOutputSchema: StructType = new StructType()
+    .add("metric", StringType, nullable = false)
+    .add("value", LongType, nullable = false)
+
+  override def outputSchema(operation: TableOperation): StructType = commandOutputSchema
+
   protected def commandOutput: Array[InternalRow] = {
     commits.lastOption.flatMap(_.writeSummary).map {
       case summary: MergeSummary =>
@@ -236,11 +242,18 @@ abstract class InMemoryBaseTable(
       case summary: DeleteSummary =>
         Array(metricRow("num_affected_rows", summary.numDeletedRows()))
 
+      case summary: InsertSummary =>
+        affectedRowsOutput(summary.numInsertedRows())
+
       case _ => Array.empty[InternalRow]
     }.getOrElse(Array.empty)
   }
 
-  private def metricRow(name: String, value: Long): InternalRow = {
+  protected def affectedRowsOutput(numAffectedRows: Long): Array[InternalRow] = {
+    Array(metricRow("num_affected_rows", numAffectedRows))
+  }
+
+  protected def metricRow(name: String, value: Long): InternalRow = {
     new GenericInternalRow(Array[Any](UTF8String.fromString(name), value))
   }
 

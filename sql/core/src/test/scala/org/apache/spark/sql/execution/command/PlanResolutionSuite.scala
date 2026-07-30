@@ -1352,7 +1352,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
     }
     overwriteParsed match {
-      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _) =>
+      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
     }

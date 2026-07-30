@@ -53,7 +53,10 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"CREATE TABLE $t (c0 INT, c1 INT) $defaultUsing")
       sql(s"INSERT INTO $t SELECT 0, 1")
 
-      sql(s"TRUNCATE TABLE $t")
+      val result = sql(s"TRUNCATE TABLE $t")
+      if (commandVersion == DDLCommandTestUtils.V2_COMMAND_VERSION) {
+        checkAnswer(result, Seq(Row("num_affected_rows", 1L)))
+      }
       QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Nil)
     }
   }

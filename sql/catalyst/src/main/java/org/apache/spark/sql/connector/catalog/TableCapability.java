@@ -105,6 +105,9 @@ public enum TableCapability {
    * Tables that return this capability must create a V1Write and may also support additional
    * write modes, like {@link #TRUNCATE}, and {@link #OVERWRITE_BY_FILTER}, but cannot support
    * {@link #OVERWRITE_DYNAMIC}.
+   * <p>
+   * Command output rows declared through {@link SupportsOperationOutput} are not supported for
+   * operations executed using this capability.
    */
   V1_BATCH_WRITE,
 

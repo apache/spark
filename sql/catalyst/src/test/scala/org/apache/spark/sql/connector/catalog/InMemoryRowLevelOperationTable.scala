@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
-import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -79,9 +79,6 @@ class InMemoryRowLevelOperationTable private (
   private final val SPLIT_UPDATES = "split-updates"
   private final val NO_METADATA = "no-metadata"
   private final val noMetadata = properties.getOrDefault(NO_METADATA, "false") == "true"
-  private final val commandOutputSchema = new StructType()
-    .add("metric", StringType, nullable = false)
-    .add("value", LongType, nullable = false)
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -94,7 +91,8 @@ class InMemoryRowLevelOperationTable private (
   var lastDeleteOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
 
   override def deleteWhere(
-      predicates: Array[Predicate], options: CaseInsensitiveStringMap): Unit = {
+      predicates: Array[Predicate],
+      options: CaseInsensitiveStringMap): Array[InternalRow] = {
     lastDeleteOptions = options
     deleteWhere(predicates)
   }
@@ -137,8 +135,6 @@ class InMemoryRowLevelOperationTable private (
   case class PartitionBasedOperation(command: Command, options: CaseInsensitiveStringMap)
     extends RowLevelOperation with RowLevelOperationWithOptions {
     var configuredScan: InMemoryBatchScan = _
-
-    override def outputSchema(): StructType = commandOutputSchema
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
       if (noMetadata) {
@@ -212,8 +208,6 @@ class InMemoryRowLevelOperationTable private (
   case class DeltaBasedOperation(command: Command, options: CaseInsensitiveStringMap)
     extends RowLevelOperation with SupportsDelta with RowLevelOperationWithOptions {
     private final val PK_COLUMN_REF = FieldReference("pk")
-
-    override def outputSchema(): StructType = commandOutputSchema
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
       if (noMetadata) {
@@ -372,17 +366,26 @@ class InMemoryTruncatableOnlyTable(
     }
   }
 
-  override def truncateTable(): Boolean = {
+  override def truncateTable(): util.Optional[Array[InternalRow]] = {
     lastTruncateOptions = CaseInsensitiveStringMap.empty()
-    dataMap.synchronized { dataMap.clear() }
+    val numAffectedRows = dataMap.synchronized {
+      val count = rows.size.toLong
+      dataMap.clear()
+      count
+    }
     increaseVersion()
-    true
+    util.Optional.of(affectedRowsOutput(numAffectedRows))
   }
 
-  override def truncateTable(options: CaseInsensitiveStringMap): Boolean = {
+  override def truncateTable(
+      options: CaseInsensitiveStringMap): util.Optional[Array[InternalRow]] = {
     lastTruncateOptions = options
-    dataMap.synchronized { dataMap.clear() }
+    val numAffectedRows = dataMap.synchronized {
+      val count = rows.size.toLong
+      dataMap.clear()
+      count
+    }
     increaseVersion()
-    true
+    util.Optional.of(affectedRowsOutput(numAffectedRows))
   }
 }

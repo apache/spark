@@ -50,11 +50,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
-        case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
+        case r: DataSourceV2Relation =>
           checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
-          val operationTable = buildOperationTable(
-            tbl, MERGE, CaseInsensitiveStringMap.empty())
 
           // NOT MATCHED conditions may only refer to columns in source so they can be pushed down
           val insertAction = notMatchedActions.head.asInstanceOf[InsertAction]
@@ -75,7 +73,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           }
           val project = Project(projectList, joinPlan)
 
-          InsertOnlyMerge(r, project, output = operationTable.operationOutput)
+          InsertOnlyMerge(r, project)
 
         case _ =>
           m
@@ -86,11 +84,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         matchedActions.isEmpty && notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
-        case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
+        case r: DataSourceV2Relation =>
           checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
-          val operationTable = buildOperationTable(
-            tbl, MERGE, CaseInsensitiveStringMap.empty())
 
           // there are only NOT MATCHED actions, use a left anti join to remove any matching rows
           // and switch to using a regular append instead of a row-level MERGE operation
@@ -119,7 +115,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             output = generateExpandOutput(r.output, outputs),
             joinPlan)
 
-          InsertOnlyMerge(r, mergeRows, output = operationTable.operationOutput)
+          InsertOnlyMerge(r, mergeRows)
 
         case _ =>
           m

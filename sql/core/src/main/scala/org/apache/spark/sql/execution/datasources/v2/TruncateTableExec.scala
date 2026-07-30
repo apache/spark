@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.TruncatableTable
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for table truncation.
@@ -29,19 +30,23 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class TruncateTableExec(
     table: TruncatableTable,
     refreshCache: () => Unit,
-    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
+    override val output: Seq[Attribute])
   extends LeafV2CommandExec
   with SupportsCustomDriverMetrics {
 
   override lazy val customMetrics: Map[String, SQLMetric] =
     createCustomMetrics(table.supportedCustomMetrics())
 
-  override def output: Seq[Attribute] = Seq.empty
-
   override protected def run(): Seq[InternalRow] = {
     try {
-      if (table.truncateTable(options)) refreshCache()
-      Seq.empty
+      val result = table.truncateTable(options)
+      if (result.isPresent) {
+        refreshCache()
+        result.get().toImmutableArraySeq
+      } else {
+        Seq.empty
+      }
     } finally {
       postDriverMetrics(table.reportDriverMetrics())
     }

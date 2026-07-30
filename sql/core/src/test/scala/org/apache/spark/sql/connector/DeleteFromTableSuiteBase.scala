@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.internal.config
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.plans.logical.Filter
@@ -737,7 +737,9 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         |{ "pk": 3, "id": 3, "dep": 100 }
         |""".stripMargin)
 
-    executeDeleteWithFilters(s"DELETE FROM $tableNameAsString WHERE dep = 100")
+    executeDeleteWithFilters(
+      s"DELETE FROM $tableNameAsString WHERE dep = 100",
+      expectedOutput = Some(Seq(Row("num_affected_rows", 2L))))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -1026,10 +1028,14 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
-  private def executeDeleteWithFilters(query: String): Unit = {
+  private def executeDeleteWithFilters(
+      query: String,
+      expectedOutput: Option[Seq[Row]] = None): Unit = {
+    var result: DataFrame = null
     val executedPlan = executeAndKeepPlan {
-      sql(query)
+      result = sql(query)
     }
+    expectedOutput.foreach(checkAnswer(result, _))
 
     executedPlan match {
       case _: DeleteFromTableExec =>

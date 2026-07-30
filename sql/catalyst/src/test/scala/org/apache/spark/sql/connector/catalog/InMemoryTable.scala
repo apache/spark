@@ -68,11 +68,18 @@ class InMemoryTable(
     InMemoryTable.supportsFilters(filters)
   }
 
-  override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
+  override def deleteWhere(filters: Array[Filter]): Array[InternalRow] = dataMap.synchronized {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-    dataMap --= InMemoryTable
+    val deleteKeys = InMemoryTable
       .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
+      .toSeq
+    val numDeletedRows = deleteKeys.iterator
+      .flatMap(key => dataMap.getOrElse(key, Nil))
+      .map(_.rows.size.toLong)
+      .sum
+    dataMap --= deleteKeys
     increaseVersion()
+    affectedRowsOutput(numDeletedRows)
   }
 
   override def withData(data: Array[BufferedRows]): InMemoryTable = {

@@ -290,6 +290,7 @@ case class AppendDataExec(
     refreshCache: () => Unit,
     write: Write,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
   override def withTransaction(txn: Option[Transaction]): AppendDataExec = copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): AppendDataExec =
@@ -326,8 +327,6 @@ case class InsertOnlyMergeExec(
       numTargetRowsMatchedDeleted = 0L,
       numTargetRowsNotMatchedBySourceUpdated = 0L,
       numTargetRowsNotMatchedBySourceDeleted = 0L))
-
-  override protected def outputRows: Seq[InternalRow] = write.output().toImmutableArraySeq
 }
 
 /**
@@ -345,11 +344,15 @@ case class OverwriteByExpressionExec(
     refreshCache: () => Unit,
     write: Write,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
   override def withTransaction(txn: Option[Transaction]): OverwriteByExpressionExec =
     copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): OverwriteByExpressionExec =
     copy(query = newChild)
+
+  override protected def getWriteSummary(): Option[WriteSummary] =
+    Some(InsertSummaryImpl(numInsertedRows = numOutputRowsMetric.value))
 }
 
 /**
@@ -366,11 +369,15 @@ case class OverwritePartitionsDynamicExec(
     refreshCache: () => Unit,
     write: Write,
     tableName: String,
+    override val output: Seq[Attribute],
     transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
   override def withTransaction(txn: Option[Transaction]): OverwritePartitionsDynamicExec =
     copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): OverwritePartitionsDynamicExec =
     copy(query = newChild)
+
+  override protected def getWriteSummary(): Option[WriteSummary] =
+    Some(InsertSummaryImpl(numInsertedRows = numOutputRowsMetric.value))
 }
 
 /**
@@ -506,7 +513,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec with TransactionalExec {
     outputRows
   }
 
-  protected def outputRows: Seq[InternalRow] = Nil
+  protected def outputRows: Seq[InternalRow] = write.output().toImmutableArraySeq
 }
 
 /**
@@ -514,8 +521,6 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec with TransactionalExec {
  */
 trait RowLevelWriteExec extends V2ExistingTableWriteExec {
   def rowLevelCommand: RowLevelOperation.Command
-
-  override protected def outputRows: Seq[InternalRow] = write.output().toImmutableArraySeq
 
   override protected lazy val sparkMetrics: Map[String, SQLMetric] = super.sparkMetrics ++ (
     rowLevelCommand match {

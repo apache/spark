@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, RowLevelOperationBuilder, RowLevelOperationInfo, WriteBuilder}
@@ -145,7 +146,7 @@ class TxnTable(
     super.newRowLevelOperationBuilder(info)
   }
 
-  override def deleteWhere(filters: Array[Filter]): Unit = {
+  override def deleteWhere(filters: Array[Filter]): Array[InternalRow] = {
     catalog.writeTarget = this
     super.deleteWhere(filters)
   }
