@@ -31,7 +31,8 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   with AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
     val (keyedPartitionings, otherPartitionings) =
-      flattenPartitioning(child.outputPartitioning).partition(_.isInstanceOf[KeyedPartitioning])
+      PartitioningCollection.flatten(child.outputPartitioning)
+        .partition(_.isInstanceOf[KeyedPartitioning])
 
     val projectedKPs =
       projectKeyedPartitionings(keyedPartitionings.map(_.asInstanceOf[KeyedPartitioning]))
@@ -152,15 +153,6 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
       projectablePositions.map(i => () => alternativesPerPosition(i)))
       .map(projectedExprs =>
         new KeyedPartitioning(projectedExprs, sharedKeys, isGrouped, isNarrowed))
-  }
-
-  private def flattenPartitioning(partitioning: Partitioning): Seq[Partitioning] = {
-    partitioning match {
-      case PartitioningCollection(childPartitionings) =>
-        childPartitionings.flatMap(flattenPartitioning)
-      case rest =>
-        rest +: Nil
-    }
   }
 }
 

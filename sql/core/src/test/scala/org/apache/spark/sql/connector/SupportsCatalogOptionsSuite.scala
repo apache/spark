@@ -285,7 +285,7 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
         sql(s"create table t1 (id bigint) using $format")
       }
 
-      assert(e.getMessage.contains("Cannot find catalog plugin class"))
+      assert(e.getMessage.contains("cannot find the plugin class"))
       assert(e.getMessage.contains("InvalidCatalogClass"))
     } finally {
       spark.sessionState.catalogManager.reset()

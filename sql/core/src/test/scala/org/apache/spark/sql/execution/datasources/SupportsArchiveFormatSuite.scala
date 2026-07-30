@@ -158,8 +158,8 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
   /** Drains every entry into `(name, decodedText)` pairs through `SupportsArchiveFormat`. */
   private def collect(file: File): Seq[(String, String)] =
     SupportsArchiveFormat.readArchiveEntries(new Path(file.toURI), new Configuration()) {
-      (name, in) =>
-        Iterator.single((name, new String(readAll(in), StandardCharsets.UTF_8)))
+      (entry, in) =>
+        Iterator.single((entry.getName, new String(readAll(in), StandardCharsets.UTF_8)))
     }.toList
 
   // ----- isArchivePath ------------------------------------------------------
@@ -256,8 +256,8 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
       // HadoopFSUtils.shouldFilterOutPathName still apply -- mirroring a loose-file listing with
       // the ignoredPathSegmentRegex option set to the same regex.
       val entries = SupportsArchiveFormat.readArchiveEntries(
-        new Path(tar.toURI), new Configuration(), Pattern.compile("(?!)")) { (name, in) =>
-        Iterator.single((name, new String(readAll(in), StandardCharsets.UTF_8)))
+        new Path(tar.toURI), new Configuration(), Pattern.compile("(?!)")) { (entry, in) =>
+        Iterator.single((entry.getName, new String(readAll(in), StandardCharsets.UTF_8)))
       }.toList
       assert(entries == Seq("_SUCCESS" -> "marker", "real.csv" -> "kept"))
     }
@@ -272,9 +272,9 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
       // parseEntry yields a single element without reading the stream, so each invocation maps to
       // exactly one consumed output element -- letting us observe when the next entry is opened.
       val it = SupportsArchiveFormat.readArchiveEntries(new Path(tar.toURI), new Configuration()) {
-        (name, _) =>
-          opened += name
-          Iterator.single(name)
+        (entry, _) =>
+          opened += entry.getName
+          Iterator.single(entry.getName)
       }
 
       // Construction opens only the first entry; later entries open on demand as iteration
@@ -300,11 +300,11 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
 
       val seen = ArrayBuffer[String]()
       val it = SupportsArchiveFormat.readArchiveEntries(new Path(tar.toURI), new Configuration()) {
-        (name, in) =>
+        (entry, in) =>
           val body = new String(readAll(in), StandardCharsets.UTF_8)
           in.close() // must NOT close the underlying archive
           seen += body
-          Iterator.single(name)
+          Iterator.single(entry.getName)
       }
       assert(it.toList == List("a.csv", "b.csv"))
       assert(seen.toList == List("a", "b"))
@@ -317,7 +317,7 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
       writeTar(tar, Seq(textEntry("a.csv", "a"), textEntry("b.csv", "b")))
 
       val it = SupportsArchiveFormat.readArchiveEntries(new Path(tar.toURI), new Configuration()) {
-        (name, _) => Iterator.single(name)
+        (entry, _) => Iterator.single(entry.getName)
       }
       assert(it.hasNext)
       it.asInstanceOf[Closeable].close()
@@ -346,7 +346,7 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
       try {
         val it = SupportsArchiveFormat.readArchiveEntries(
           new Path(tar.toURI), new Configuration()) {
-          (name, _) => Iterator.single(name)
+          (entry, _) => Iterator.single(entry.getName)
         }
         assert(it.hasNext)
         it.next() // open the archive and register the completion listener
@@ -417,9 +417,9 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
 
       val opened = ArrayBuffer[String]()
       val it = SupportsArchiveFormat.readArchiveEntries(new Path(zip.toURI), new Configuration()) {
-        (name, _) =>
-          opened += name
-          Iterator.single(name)
+        (entry, _) =>
+          opened += entry.getName
+          Iterator.single(entry.getName)
       }
       // Construction opens only the first entry; advancing past each boundary opens the next.
       assert(opened.toList == List("a.csv"))
@@ -442,11 +442,11 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
 
       val seen = ArrayBuffer[String]()
       val it = SupportsArchiveFormat.readArchiveEntries(new Path(zip.toURI), new Configuration()) {
-        (name, in) =>
+        (entry, in) =>
           val body = new String(readAll(in), StandardCharsets.UTF_8)
           in.close() // must NOT close the underlying archive
           seen += body
-          Iterator.single(name)
+          Iterator.single(entry.getName)
       }
       assert(it.toList == List("a.csv", "b.csv"))
       assert(seen.toList == List("a", "b"))

@@ -433,6 +433,47 @@ object functions {
   def collect_set(columnName: String): Column = collect_set(Column(columnName))
 
   /**
+   * Aggregate function: returns the distinct union of the elements of an array-typed column
+   * across rows.
+   *
+   * The aggregation buffer holds only the distinct elements, so its size is bounded by the
+   * element universe rather than by the number of input rows. Null elements are dropped by
+   * default (IGNORE NULLS), matching `collect_set`. With `RESPECT NULLS`, a single null element
+   * is kept, in which case this is equivalent to `array_distinct(flatten(collect_list(e)))`. The
+   * `RESPECT NULLS` clause is only available through SQL (e.g.
+   * `expr("collect_union(col) RESPECT NULLS")`).
+   *
+   * @param e
+   *   The array column to collect the union of. A column of type array.
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to an array.
+   */
+  def collect_union(e: Column): Column = Column.fn("collect_union", e)
+
+  /**
+   * Aggregate function: returns the distinct union of the elements of an array-typed column
+   * across rows.
+   *
+   * @param columnName
+   *   The name of the array column to collect the union of. A column of type array.
+   * @note
+   *   The function is non-deterministic because the order of collected results depends on the
+   *   order of the rows which may be non-deterministic after a shuffle.
+   *
+   * @group agg_funcs
+   * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to an array.
+   */
+  def collect_union(columnName: String): Column = collect_union(Column(columnName))
+
+  /**
    * Returns a count-min sketch of a column with the given esp, confidence and seed. The result is
    * an array of bytes, which can be deserialized to a `CountMinSketch` before usage. Count-min
    * sketch is a probabilistic data structure used for cardinality estimation using sub-linear
@@ -12967,7 +13008,8 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns null if the array is null, true if the array contains `value`, and false otherwise.
+   * Returns true if the array contains `value`, false if not. Returns null if the array or
+   * `value` is null, or if `value` is not found and the array contains a null element.
    * @param column
    *   the target column containing the arrays. A column that evaluates to an array.
    * @param value

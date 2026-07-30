@@ -179,8 +179,17 @@ class BisectingKMeansModel private[ml] (
   @Since("2.1.0")
   override def summary: BisectingKMeansSummary = super.summary
 
-  private[spark] override def estimatedSize: Long =
-    SizeEstimator.estimate(parentModel)
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (parentModel != null) {
+      // parentModel contains:
+      // - root: ClusteringTreeNode containing centers, costs, and children.
+      // - distanceMeasure: String and trainingCost: Double.
+      // - distanceMeasureInstance, derived from distanceMeasure.
+      size += SizeEstimator.estimate(parentModel)
+    }
+    size
+  }
 
   // BisectingKMeans model hasn't supported offloading, so put an empty `saveSummary` here for now
   override private[spark] def saveSummary(path: String): Unit = {}
