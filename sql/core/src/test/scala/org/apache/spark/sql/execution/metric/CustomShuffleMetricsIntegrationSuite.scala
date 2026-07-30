@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.CollectLimitExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.metric.SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN
-import org.apache.spark.util.MetricUtils
 
 /**
  * Integration coverage for the shuffle custom-metrics SPI: a toy [[ShuffleDataIO]] declares a
@@ -135,7 +134,8 @@ class TestCustomMetricDriverComponents(delegate: ShuffleDriverComponents)
     new CustomShuffleMetric {
       override def name(): String = TestCustomMetricShuffleDataIO.MetricName
       override def description(): String = "test shuffle bytes uploaded"
-      override def metricType(): String = MetricUtils.SIZE_METRIC
+      override def metricType(): CustomShuffleMetric.MetricType =
+        CustomShuffleMetric.MetricType.SIZE
     })
 }
 
@@ -163,6 +163,6 @@ class TestCollidingMetricDriverComponents(delegate: ShuffleDriverComponents)
     new CustomShuffleMetric {
       override def name(): String = SHUFFLE_RECORDS_WRITTEN
       override def description(): String = "colliding shuffle records written"
-      override def metricType(): String = MetricUtils.SUM_METRIC
+      override def metricType(): CustomShuffleMetric.MetricType = CustomShuffleMetric.MetricType.SUM
     })
 }

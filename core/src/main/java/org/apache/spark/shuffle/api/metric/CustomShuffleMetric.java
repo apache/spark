@@ -28,6 +28,17 @@ import org.apache.spark.annotation.Private;
 @Private
 public interface CustomShuffleMetric {
 
+  enum MetricType {
+    /** Count rendered as a plain number. */
+    SUM,
+    /** A byte size, rendered in human-readable units. */
+    SIZE,
+    /** A duration in milliseconds. */
+    TIMING,
+    /** A duration in nanoseconds. */
+    NS_TIMING
+  }
+
   /**
    * The name of this metric. Must match the name reported by the corresponding
    * {@link CustomShuffleTaskMetric} so per-task values can be matched to this declaration.
@@ -40,11 +51,7 @@ public interface CustomShuffleMetric {
   String description();
 
   /**
-   * Defines how the per-task values are represented as a string in the UI. Per-task values are
-   * always aggregated as a plain sum across tasks. Must be one of:
-   * {@code "sum"} (raw count), {@code "size"} (bytes), {@code "timing"} (milliseconds), or
-   * {@code "nsTiming"} (nanoseconds). A metric declaring any other value is dropped with a
-   * warning rather than failing the query.
+   * Selects how the per-task values, once summed across tasks, are rendered in the UI.
    */
-  String metricType();
+  MetricType metricType();
 }

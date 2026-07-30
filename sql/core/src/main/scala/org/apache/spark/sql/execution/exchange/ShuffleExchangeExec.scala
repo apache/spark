@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.{CustomShuffleMetrics, SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
+import org.apache.spark.sql.execution.metric.{CustomShuffleMetrics, SQLMetric, SQLMetrics, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.{MutablePair, ThreadUtils}
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
@@ -194,22 +194,12 @@ case class ShuffleExchangeExec(
     shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS,
     advisoryPartitionSize: Option[Long] = None,
     pipelined: Boolean = false)
-  extends ShuffleExchangeLike {
+  extends ShuffleExchangeLike with ShuffleMetricsSupport {
 
-  private lazy val writeMetrics =
-    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
-  private[sql] lazy val readMetrics =
-    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
-
-  private lazy val sparkMetrics: Map[String, SQLMetric] = Map(
+  override protected def extraReservedMetrics: Map[String, SQLMetric] = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")
-  ) ++ readMetrics ++ writeMetrics
-
-  private lazy val customWriteMetrics: Map[String, SQLMetric] =
-    CustomShuffleMetrics.createFilteredMetrics(sparkContext, sparkMetrics.keySet)
-
-  override lazy val metrics = sparkMetrics ++ customWriteMetrics
+  )
 
   override def nodeName: String = "Exchange"
 

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.metric.{CustomShuffleMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
+import org.apache.spark.sql.execution.metric.{CustomShuffleMetrics, SQLMetric, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.execution.python.HybridRowQueue
 import org.apache.spark.util.collection.Utils
 
@@ -39,21 +39,22 @@ trait LimitExec extends UnaryExecNode {
 }
 
 /**
- * Provides the shuffle read/write metric plumbing shared by the operators that collapse their
- * input to a single partition via [[ShuffleExchangeExec.prepareShuffleDependency]]. Exposes the
- * built-in read/write metrics plus collision-filtered plugin metrics as `customWriteMetrics`, and
- * publishes all of them through `metrics`. Mixing this in wires the custom shuffle metrics in one
- * place so a shuffle-writing operator can't silently drop them.
+ * Shuffle read/write metric plumbing for operators that shuffle via
+ * [[ShuffleExchangeExec.prepareShuffleDependency]]. Publishes the built-in read/write metrics plus
+ * collision-filtered plugin metrics (`customWriteMetrics`) through `metrics`. Operators with
+ * additional Spark-owned metrics reserve those names against plugin collisions via
+ * [[extraReservedMetrics]].
  */
 trait ShuffleMetricsSupport { self: SparkPlan =>
   protected lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
   protected lazy val readMetrics =
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
-  private lazy val shuffleMetrics = readMetrics ++ writeMetrics
+  protected def extraReservedMetrics: Map[String, SQLMetric] = Map.empty
+  private lazy val reservedMetrics = extraReservedMetrics ++ readMetrics ++ writeMetrics
   protected lazy val customWriteMetrics =
-    CustomShuffleMetrics.createFilteredMetrics(sparkContext, shuffleMetrics.keySet)
-  override lazy val metrics = shuffleMetrics ++ customWriteMetrics
+    CustomShuffleMetrics.createFilteredMetrics(sparkContext, reservedMetrics.keySet)
+  override lazy val metrics = reservedMetrics ++ customWriteMetrics
 }
 
 /**

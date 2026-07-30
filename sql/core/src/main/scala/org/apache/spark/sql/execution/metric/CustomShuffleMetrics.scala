@@ -19,17 +19,10 @@ package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{METRIC_NAME, METRIC_TYPE}
+import org.apache.spark.internal.LogKeys.METRIC_NAME
 import org.apache.spark.shuffle.api.metric.{CustomShuffleMetric, CustomShuffleTaskMetric}
-import org.apache.spark.util.MetricUtils
 
 object CustomShuffleMetrics extends Logging {
-
-  private val SupportedMetricTypes = Seq(
-    MetricUtils.SUM_METRIC,
-    MetricUtils.SIZE_METRIC,
-    MetricUtils.TIMING_METRIC,
-    MetricUtils.NS_TIMING_METRIC).mkString(", ")
 
   /**
    * Creates collision-filtered custom shuffle metric [[SQLMetric]]s for an operator that already
@@ -53,26 +46,20 @@ object CustomShuffleMetrics extends Logging {
 
   /**
    * Creates [[SQLMetric]]s for the given declared custom shuffle metrics, keyed by metric name.
-   * A metric with an unsupported [[CustomShuffleMetric.metricType]] is dropped with a warning.
    */
   def createMetrics(
       sc: SparkContext,
       metrics: Array[CustomShuffleMetric]): Map[String, SQLMetric] = {
-    metrics.flatMap { metric =>
+    metrics.map { metric =>
       val label = metric.description()
       val acc = metric.metricType() match {
-        case MetricUtils.SUM_METRIC => Some(SQLMetrics.createMetric(sc, label))
-        case MetricUtils.SIZE_METRIC => Some(SQLMetrics.createSizeMetric(sc, label))
-        case MetricUtils.TIMING_METRIC => Some(SQLMetrics.createTimingMetric(sc, label))
-        case MetricUtils.NS_TIMING_METRIC => Some(SQLMetrics.createNanoTimingMetric(sc, label))
-        case other =>
-          logWarning(log"Ignoring custom shuffle metric " +
-            log"${MDC(METRIC_NAME, metric.name())} with unsupported type " +
-            log"${MDC(METRIC_TYPE, other)}. Supported types: " +
-            log"${MDC(METRIC_TYPE, SupportedMetricTypes)}.")
-          None
+        case CustomShuffleMetric.MetricType.SUM => SQLMetrics.createMetric(sc, label)
+        case CustomShuffleMetric.MetricType.SIZE => SQLMetrics.createSizeMetric(sc, label)
+        case CustomShuffleMetric.MetricType.TIMING => SQLMetrics.createTimingMetric(sc, label)
+        case CustomShuffleMetric.MetricType.NS_TIMING =>
+          SQLMetrics.createNanoTimingMetric(sc, label)
       }
-      acc.map(metric.name() -> _)
+      metric.name() -> acc
     }.toMap
   }
 
