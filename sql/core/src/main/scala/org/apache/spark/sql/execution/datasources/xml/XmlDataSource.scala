@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.{ByteArrayInputStream, FileNotFoundException, InputStream, IOException}
+import java.io.{ByteArrayInputStream, Closeable, FileNotFoundException, InputStream, IOException}
 import java.nio.charset.{Charset, StandardCharsets}
 
 import scala.util.control.NonFatal
@@ -428,6 +428,12 @@ object MultiLineXmlDataSource extends XmlDataSource {
         try delegate.hasNext
         catch {
           case NonFatal(e) =>
+            // The failed iterator owns the archive stream and releases it only on exhaustion or an
+            // explicit close, neither of which a mid-advance throw reaches.
+            delegate match {
+              case c: Closeable => try c.close() catch { case NonFatal(_) => }
+              case _ =>
+            }
             delegate = handle(e)
             delegate.hasNext
         }

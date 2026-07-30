@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{ByteArrayInputStream, FileNotFoundException, InputStream, IOException}
+import java.io.{ByteArrayInputStream, Closeable, FileNotFoundException, InputStream, IOException}
 
 import scala.util.control.NonFatal
 
@@ -348,6 +348,12 @@ object MultiLineJsonDataSource extends JsonDataSource {
         try delegate.hasNext
         catch {
           case NonFatal(e) =>
+            // The failed iterator owns the archive stream and releases it only on exhaustion or an
+            // explicit close, neither of which a mid-advance throw reaches.
+            delegate match {
+              case c: Closeable => try c.close() catch { case NonFatal(_) => }
+              case _ =>
+            }
             delegate = handle(e)
             delegate.hasNext
         }
