@@ -332,6 +332,8 @@ public class UTF8StringSuite {
     assertEquals(-1, fromString("hello").indexOf(fromString("o"), 6, 1));
     assertEquals(0, fromString("hello").indexOf(fromString("h"), -5, 1));
     assertEquals(-1, fromString("hello").indexOf(fromString("h"), -6, 1));
+    // SPARK-58443: Int.MinValue start must not overflow into a backward search from the end.
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("abc"), Integer.MIN_VALUE, 1));
 
     // Target larger than string
     assertEquals(-1, fromString("ab").indexOf(fromString("abc"), 1, 1));

@@ -1300,6 +1300,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } else {
       // For negative start, skip |start| characters from the end to position
       // byteIdx at the starting byte of the first character to compare.
+      // -start would overflow for Int.MinValue; such a start is always out of range.
+      if (start == Integer.MIN_VALUE) return -1;
       charsToSkip = -start;
       byteIdx = numBytes;
       while (byteIdx > 0 && charCount < charsToSkip) {
