@@ -24,38 +24,26 @@ import org.apache.spark.util.MetricUtils
 
 class CustomShuffleMetricsSuite extends SparkFunSuite with SharedSparkContext {
 
-  test("createMetrics maps each declared metric to a SQLMetric of the declared type") {
+  test("each metric type maps to a SQLMetric that renders the summed value accordingly") {
     val metrics = CustomShuffleMetrics.createMetrics(sc, Array(
-      shuffleMetric("s3BytesUploaded", "s3 bytes uploaded", MetricUtils.SIZE_METRIC),
-      shuffleMetric("s3BlockUploads", "s3 block uploads", MetricUtils.SUM_METRIC),
-      shuffleMetric("s3FirstByteLatency", "s3 first byte latency", MetricUtils.TIMING_METRIC)))
+      shuffleMetric("s3BytesUploaded", "s3 bytes uploaded", CustomShuffleMetric.MetricType.SIZE),
+      shuffleMetric("s3BlockUploads", "s3 block uploads", CustomShuffleMetric.MetricType.SUM),
+      shuffleMetric("s3Latency", "s3 first byte latency", CustomShuffleMetric.MetricType.TIMING),
+      shuffleMetric(
+        "s3LatencyNs", "s3 first byte latency ns", CustomShuffleMetric.MetricType.NS_TIMING)))
 
-    assert(metrics.keySet === Set("s3BytesUploaded", "s3BlockUploads", "s3FirstByteLatency"))
+    assert(metrics.keySet ===
+      Set("s3BytesUploaded", "s3BlockUploads", "s3Latency", "s3LatencyNs"))
     assert(metrics("s3BytesUploaded").metricType === MetricUtils.SIZE_METRIC)
     assert(metrics("s3BlockUploads").metricType === MetricUtils.SUM_METRIC)
-    assert(metrics("s3FirstByteLatency").metricType === MetricUtils.TIMING_METRIC)
-  }
-
-  test("createMetrics drops a metric with an unsupported type instead of failing") {
-    val logAppender = new LogAppender("unsupported custom shuffle metric type")
-    var metrics: Map[String, SQLMetric] = Map.empty
-    withLogAppender(logAppender) {
-      metrics = CustomShuffleMetrics.createMetrics(sc, Array(
-        shuffleMetric("s3BytesUploaded", "s3 bytes uploaded", MetricUtils.SIZE_METRIC),
-        shuffleMetric("s3Avg", "s3 avg", MetricUtils.AVERAGE_METRIC)))
-    }
-
-    assert(metrics.keySet === Set("s3BytesUploaded"))
-    assert(logAppender.loggingEvents.exists { event =>
-      val message = event.getMessage.getFormattedMessage
-      message.contains("s3Avg") && message.contains(MetricUtils.AVERAGE_METRIC)
-    })
+    assert(metrics("s3Latency").metricType === MetricUtils.TIMING_METRIC)
+    assert(metrics("s3LatencyNs").metricType === MetricUtils.NS_TIMING_METRIC)
   }
 
   test("updateMetrics folds reported values into the matching SQLMetrics by name") {
     val metrics = CustomShuffleMetrics.createMetrics(sc, Array(
-      shuffleMetric("s3BytesUploaded", "s3 bytes uploaded", MetricUtils.SIZE_METRIC),
-      shuffleMetric("s3BlockUploads", "s3 block uploads", MetricUtils.SUM_METRIC)))
+      shuffleMetric("s3BytesUploaded", "s3 bytes uploaded", CustomShuffleMetric.MetricType.SIZE),
+      shuffleMetric("s3BlockUploads", "s3 block uploads", CustomShuffleMetric.MetricType.SUM)))
 
     CustomShuffleMetrics.updateMetrics(
       Array(taskMetric("s3BytesUploaded", 1024L), taskMetric("s3BlockUploads", 3L)), metrics)
@@ -66,7 +54,7 @@ class CustomShuffleMetricsSuite extends SparkFunSuite with SharedSparkContext {
 
   test("updateMetrics ignores reported values with no matching declaration") {
     val metrics = CustomShuffleMetrics.createMetrics(sc, Array(
-      shuffleMetric("s3BytesUploaded", "s3 bytes uploaded", MetricUtils.SIZE_METRIC)))
+      shuffleMetric("s3BytesUploaded", "s3 bytes uploaded", CustomShuffleMetric.MetricType.SIZE)))
 
     CustomShuffleMetrics.updateMetrics(
       Array(taskMetric("s3BytesUploaded", 512L), taskMetric("undeclared", 99L)), metrics)
@@ -76,18 +64,25 @@ class CustomShuffleMetricsSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   private def shuffleMetric(
-      metricName: String, desc: String, mType: String): CustomShuffleMetric = {
+      name: String,
+      description: String,
+      metricType: CustomShuffleMetric.MetricType): CustomShuffleMetric = {
+    val metricName = name
+    val metricDescription = description
+    val metricTypeValue = metricType
     new CustomShuffleMetric {
       override def name(): String = metricName
-      override def description(): String = desc
-      override def metricType(): String = mType
+      override def description(): String = metricDescription
+      override def metricType(): CustomShuffleMetric.MetricType = metricTypeValue
     }
   }
 
-  private def taskMetric(metricName: String, v: Long): CustomShuffleTaskMetric = {
+  private def taskMetric(name: String, value: Long): CustomShuffleTaskMetric = {
+    val metricName = name
+    val metricValue = value
     new CustomShuffleTaskMetric {
       override def name(): String = metricName
-      override def value(): Long = v
+      override def value(): Long = metricValue
     }
   }
 }

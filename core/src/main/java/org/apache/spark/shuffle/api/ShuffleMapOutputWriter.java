@@ -88,7 +88,8 @@ public interface ShuffleMapOutputWriter {
   void abort(Throwable error) throws IOException;
 
   /**
-   * The values of the custom shuffle metrics for this map task.
+   * The values of the custom shuffle metrics for this map task. Values are surfaced only when the
+   * {@link org.apache.spark.shuffle.ShuffleWriteProcessor} consumes them; otherwise discarded.
    */
   default CustomShuffleTaskMetric[] currentMetricsValues() {
     return new CustomShuffleTaskMetric[0];
