@@ -25,6 +25,7 @@ import os
 from pyspark.worker_util import get_sock_file_to_executor
 from pyspark.serializers import (
     write_int,
+    read_int,
     read_long,
     UTF8Deserializer,
     CPickleSerializer,
@@ -76,6 +77,9 @@ def main(infile: IO, outfile: IO) -> None:
         func = worker.read_command(pickle_ser, infile)
         write_int(0, outfile)
         outfile.flush()
+
+        for _ in range(read_int(infile)):
+            spark_connect_session.addTag(utf8_deserializer.loads(infile))
 
         while True:
             df_ref_id = utf8_deserializer.loads(infile)
