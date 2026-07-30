@@ -234,14 +234,8 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
     (stratName, execClass, stratConf) <- joinStrategies
     cgConf <- codegenModes
   } {
-    val cgName = if (cgConf.exists(_ == (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true"))) {
-      "codegen on"
-    } else {
-      "codegen off"
-    }
-
     test(s"NTZ nanos join distinguishes the sub-microsecond remainder - " +
-      s"$stratName - $cgName") {
+      s"$stratName - ${cgLabel(cgConf)}") {
       withSQLConf((stratConf ++ cgConf): _*) {
         Seq(7, 8, 9).foreach { p =>
           val left = ntzLeft(p)
@@ -268,14 +262,8 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
     (stratName, execClass, stratConf) <- joinStrategies
     cgConf <- codegenModes
   } {
-    val cgName = if (cgConf.exists(_ == (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true"))) {
-      "codegen on"
-    } else {
-      "codegen off"
-    }
-
     test(s"LTZ nanos join distinguishes the sub-microsecond remainder - " +
-      s"$stratName - $cgName") {
+      s"$stratName - ${cgLabel(cgConf)}") {
       withSQLConf((stratConf ++ cgConf): _*) {
         Seq(7, 8, 9).foreach { p =>
           val left = ltzLeft(p)
