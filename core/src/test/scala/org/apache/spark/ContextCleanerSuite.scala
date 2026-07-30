@@ -221,6 +221,49 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     postGCTester.assertCleanup()
   }
 
+  test("automatically cleanup pipelined shuffle from the streaming output tracker") {
+    // The load-bearing leak guarantee for a pipelined (streaming) shuffle: it is registered ONLY
+    // with the driver-only StreamingShuffleOutputTracker (never the MapOutputTracker), and its only
+    // cleanup channel is the ContextCleaner weak-reference path fired when the
+    // PipelinedShuffleDependency is garbage-collected (registerShuffleForCleanup in the
+    // ShuffleDependency constructor). If that GC path did not reach the streaming tracker,
+    // the tracker would grow without bound across Real-Time Mode micro-batches. The sibling
+    // doCleanupShuffle tests call cleanup directly; this one proves the end-to-end
+    // GC -> ContextCleaner -> streaming-tracker unregister link.
+    val streamingTracker = sc.env.streamingShuffleOutputTracker.get
+      .asInstanceOf[StreamingShuffleOutputTrackerMaster]
+    val mapOutputTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+
+    // Build a real PipelinedShuffleDependency (registers itself for cleanup on construction) and
+    // register its shuffleId in the streaming tracker exactly as DAGScheduler.createShuffleMapStage
+    // does for a pipelined shuffle (nothing is put in the MapOutputTracker).
+    var pipelinedDep: PipelinedShuffleDependency[Int, Int, Int] =
+      new PipelinedShuffleDependency(newPairRDD(), new HashPartitioner(2))
+    val shuffleId = pipelinedDep.shuffleId
+    streamingTracker.registerShuffle(shuffleId, numMaps = 2, numReduces = 2, jobId = 0)
+    assert(streamingTracker.containsShuffle(shuffleId))
+    assert(!mapOutputTracker.containsShuffle(shuffleId),
+      "a pipelined shuffle must not be registered with the MapOutputTracker")
+
+    // A strong reference to the dependency must prevent GC-triggered cleanup.
+    runGC()
+    intercept[Exception] {
+      eventually(timeout(1.second), interval(100.milliseconds)) {
+        assert(!streamingTracker.containsShuffle(shuffleId),
+          "cleanup must NOT fire while the dependency is strongly referenced")
+      }
+    }
+
+    // Dereference the dependency; GC must then drive ContextCleaner to unregister it from the
+    // streaming tracker (and only there -- it was never in the MapOutputTracker).
+    pipelinedDep = null
+    runGC()
+    eventually(timeout(10.seconds), interval(100.milliseconds)) {
+      assert(!streamingTracker.containsShuffle(shuffleId),
+        "GC of the PipelinedShuffleDependency must unregister it from the streaming tracker")
+    }
+  }
+
   test("automatically cleanup broadcast") {
     var broadcast = newBroadcast()
 

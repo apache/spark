@@ -7078,6 +7078,46 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       s"a dropped fan-in consumer must not replay when a surviving producer succeeds; got $results")
   }
 
+  test("pipelined shuffle: a fan-in group leaks no scheduler state when a producer fails and the " +
+      "job is torn down") {
+    // Leak check for the multi-producer (fan-in) deferral: a consumer deferred against TWO
+    // producers buffers its completions; when one producer fails and the job is torn down, ALL
+    // scheduler state -- the consumer's dependentStageMap deferral keyed on both producers --
+    // must be cleaned up. The sibling "dropped as soon as one producer fails" test stops at the
+    // drop-vs-replay outcome; this one drives the failure to full job teardown and asserts no leak.
+    val producerA = new MyRDD(sc, 2, Nil)
+    val psdA = new PipelinedShuffleDependency(producerA, new HashPartitioner(2))
+    val producerB = new MyRDD(sc, 2, Nil)
+    val psdB = new PipelinedShuffleDependency(producerB, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(psdA, psdB), tracker = mapOutputTracker)
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(consumerRdd, Array(0, 1), listener = failListener)
+    assert(taskSets.size === 3, s"A, B and the consumer must be co-scheduled; got ${taskSets.size}")
+    val consumerTaskSet =
+      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd).get
+    val consumerStage = scheduler.stageIdToStage(consumerTaskSet.stageId)
+    val producerATaskSet =
+      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq producerA).get
+
+    // Consumer finishes early -> buffered (deferred) against BOTH producers.
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    assert(results.isEmpty, "consumer completions should be buffered while its producers run")
+    assert(scheduler.dependentStageMap.get(consumerStage).exists(_.parents.size == 2),
+      "the consumer must be deferred against both producers")
+
+    // Producer A fails its whole task set -> the job fails and the group is torn down.
+    failed(producerATaskSet, "producer A blew up")
+    assert(failure.get() != null, "the job must fail when a fan-in producer fails")
+    assert(results.isEmpty, "buffered consumer successes must be dropped, not applied, on failure")
+    sc.listenerBus.waitUntilEmpty(10000)
+    // The whole point: no leak. Every scheduler map (including the two-parent deferral) empties.
+    assertDataStructuresEmpty()
+  }
+
   test("pipelined shuffle: a multi-producer consumer's buffered successes are dropped when one " +
       "producer fails (no stale replay via a sibling)") {
     // Group-atomic drop across MULTIPLE producers. Consumer C reads TWO pipelined producers P1 and
