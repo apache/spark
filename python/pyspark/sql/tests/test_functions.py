@@ -2193,9 +2193,7 @@ class FunctionsTestsMixin:
         )
 
         # Per-group union.
-        gdf = self.spark.createDataFrame(
-            [("a", [1, 2]), ("a", [2, 3]), ("b", [4])], ["k", "value"]
-        )
+        gdf = self.spark.createDataFrame([("a", [1, 2]), ("a", [2, 3]), ("b", [4])], ["k", "value"])
         rows = gdf.groupBy("k").agg(F.collect_union("value").alias("r")).orderBy("k").collect()
         self.assertEqual(sorted(rows[0].r), [1, 2, 3])
         self.assertEqual(sorted(rows[1].r), [4])

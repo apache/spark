@@ -617,12 +617,8 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
         # collect_union takes an array-typed column; build one via array(b, c).
         self.assert_eq(
-            cdf.groupBy("a")
-            .agg(CF.sort_array(CF.collect_union(CF.array("b", "c"))))
-            .toPandas(),
-            sdf.groupBy("a")
-            .agg(SF.sort_array(SF.collect_union(SF.array("b", "c"))))
-            .toPandas(),
+            cdf.groupBy("a").agg(CF.sort_array(CF.collect_union(CF.array("b", "c")))).toPandas(),
+            sdf.groupBy("a").agg(SF.sort_array(SF.collect_union(SF.array("b", "c")))).toPandas(),
             check_exact=False,
         )
 
