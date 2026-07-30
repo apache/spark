@@ -105,6 +105,7 @@ class CombineApproximatePercentilesSuite extends PlanTest {
       .asInstanceOf[ApproximatePercentile]
 
     assert(combined.percentageExpression.isInstanceOf[PercentileFusionArray])
+    assert(!combined.percentageExpression.contextIndependentFoldable)
   }
 
   test("avoid redundant entries for duplicate physical aggregates") {
@@ -151,8 +152,8 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     val compatible = optimizedAggregate(
       Alias(percentile(value, 0.5, filter = Some(filter)), "filtered_p50")(),
       Alias(percentile(value, 0.9, filter = Some(filter)), "filtered_p90")(),
-      Alias(percentile(value, 0.5, isDistinct = true), "distinct_p50")(),
-      Alias(percentile(value, 0.9, isDistinct = true), "distinct_p90")())
+      Alias(percentile(value, 0.5, isDistinct = true, filter = Some(filter)), "distinct_p50")(),
+      Alias(percentile(value, 0.9, isDistinct = true, filter = Some(filter)), "distinct_p90")())
     assert(percentileAggregates(compatible).map(_.resultId).distinct.size == 2)
   }
 
@@ -229,7 +230,13 @@ class CombineApproximatePercentilesSuite extends PlanTest {
       Alias(arrayPercentile, "percentiles")(),
       Alias(percentileWithPercentage(secondPercentage), "p0")(),
       Alias(percentile(value, 0.9), "p90")())
-    assertNotCombined(arrayResult)
+    val arrayAggregates = percentileAggregates(arrayResult)
+    assert(arrayAggregates.map(_.resultId).distinct.size == 2)
+    assert(percentageValues(arrayAggregates.head.aggregateFunction
+      .asInstanceOf[ApproximatePercentile]) == Seq(0.5, 0.9))
+    assert(percentageValues(arrayAggregates(1).aggregateFunction
+      .asInstanceOf[ApproximatePercentile]) == Seq(0.0, 0.9))
+    assert(ordinals(arrayResult) == Seq(None, Some(0), Some(1)))
   }
 
   test("preserve existing arrays while combining compatible scalars") {

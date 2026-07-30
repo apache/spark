@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CreateArray, Expression, ExprId, GetArrayItem, LeafExpression, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, ExprId, GetArrayItem, LeafExpression, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateMode, ApproximatePercentile}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
@@ -45,7 +45,6 @@ private[optimizer] case class PercentileFusionIdentity(
 private[optimizer] case class PercentileFusionArray(identity: PercentileFusionIdentity)
     extends LeafExpression with CodegenFallback {
   override def foldable: Boolean = true
-  override def contextIndependentFoldable: Boolean = true
   override def nullable: Boolean = false
   override def dataType: ArrayType = ArrayType(DoubleType, containsNull = false)
 
@@ -104,8 +103,7 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
     key.child.canonicalized,
     accuracy.canonicalized,
     key.mode,
-    // OptimizeOneRowPlan can remove DISTINCT later, including during AQE.
-    isDistinct = false,
+    key.isDistinct,
     key.filter.map(_.canonicalized))
 
   private def hasSafePhysicalFusion(
@@ -136,7 +134,6 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
     // key that shares a physical key so fusion does not change that existing deduplication.
     val physicalCompatibilityKeys = mutable.HashMap.empty[
       PhysicalCompatibilityKey, mutable.HashSet[CompatibilityKey]]
-    val arrayPercentiles = mutable.ArrayBuffer.empty[AggregateExpression]
 
     aggregate.aggregateExpressions.foreach(_.foreach {
       case expression @ AggregateExpression(
@@ -155,8 +152,6 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
           mutable.HashSet.empty) += key
         if (percentile.percentageExpression.dataType == DoubleType) {
           compatible.getOrElseUpdate(key, mutable.ArrayBuffer.empty) += expression
-        } else {
-          arrayPercentiles += expression
         }
       case _ =>
     })
@@ -179,24 +174,18 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
           .percentageExpression
       }
       val percentageValues = percentages.map(_.eval().asInstanceOf[Double]).toSeq
-      val combinedPercentile = percentile.copy(
-        percentageExpression = CreateArray(percentages.toSeq))
-      val combined = first.copy(aggregateFunction = combinedPercentile)
-      if (!arrayPercentiles.exists(_.semanticEquals(combined))) {
-        val identity = PercentileFusionIdentity(
-          expressions.map { expression =>
-            structurallyNormalize(expression.aggregateFunction, aggregate.child.output)
-          }.toSeq,
-          key.mode,
-          key.isDistinct,
-          key.filter.map(structurallyNormalize(_, aggregate.child.output)),
-          percentageValues.map(java.lang.Double.doubleToRawLongBits))
-        val identifiedCombined = combined.copy(
-          aggregateFunction = combinedPercentile.copy(
-            percentageExpression = PercentileFusionArray(identity)))
-        expressions.zipWithIndex.foreach { case (expression, index) =>
-          replacements.put(expression.resultId, (identifiedCombined, index))
-        }
+      val identity = PercentileFusionIdentity(
+        expressions.map { expression =>
+          structurallyNormalize(expression.aggregateFunction, aggregate.child.output)
+        }.toSeq,
+        key.mode,
+        key.isDistinct,
+        key.filter.map(structurallyNormalize(_, aggregate.child.output)),
+        percentageValues.map(java.lang.Double.doubleToRawLongBits))
+      val combined = first.copy(aggregateFunction = percentile.copy(
+        percentageExpression = PercentileFusionArray(identity)))
+      expressions.zipWithIndex.foreach { case (expression, index) =>
+        replacements.put(expression.resultId, (combined, index))
       }
     }
 

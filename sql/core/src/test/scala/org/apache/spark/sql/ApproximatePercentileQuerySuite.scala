@@ -211,7 +211,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
       Row(Seq(7, 7), null, null))
   }
 
-  test("do not fuse canonically colliding parameters") {
+  test("preserve canonically colliding parameters") {
     val cases = Seq(
       (
         """SELECT
@@ -235,7 +235,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
           |  percentile_approx(id, 0.9D)
           |FROM range(100)
           |""".stripMargin,
-        3))
+        2))
 
     cases.foreach { case (sql, expectedDigests) =>
       checkMatchesUnfusedBaseline(sql, expectedDigests)
@@ -296,7 +296,8 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
   test("preserve pre-fusion identity across exchange reuse") {
     val parameterPairs = Seq(
       ("(1e16D + -1e16D) + 0.5D", "100"),
-      ("0.5D", "CAST((1e16D + -1e16D) + 100D AS INT)"))
+      ("0.5D", "CAST((1e16D + -1e16D) + 100D AS INT)"),
+      ("0.5D", "100L"))
     val activeRules = (excludedRules :+ constantFoldingRule)
       .filterNot(_ == fusionRule)
       .distinct
