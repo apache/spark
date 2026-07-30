@@ -187,16 +187,19 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
   if (supportsMidAdvanceFailure) {
     test("JSON: multiLine inference keeps entries read before a mid-advance failure " +
         "(ignoreCorruptFiles)") {
-      // Entry 0 is read, then advancing to a later entry throws (not at open). The `extra` field
-      // from entry 0 must survive the skip; a whole-archive drop would lose it.
+      // Entry 0 is read, then advancing to a later entry throws (not at open). A whole-archive drop
+      // would lose entry 0's `extra`; aborting the traversal would lose the sibling file's `later`.
       val opts = Map("multiLine" -> "true")
       withArchiveFile() { archive =>
         writeArchiveFailingAfterFirstEntry(archive,
           entryName(0) -> jsonBytes("{\n  \"id\": 1,\n  \"name\": \"Alice\",\n  \"extra\": 9\n}"))
+        Files.write(new File(archive.getParentFile, s"later.$fileExtension").toPath,
+          jsonBytes("{\n  \"id\": 2,\n  \"name\": \"Bob\",\n  \"later\": 7\n}"))
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-          val schema = inferredSchema(Seq(archive.getCanonicalPath), opts)
-          assert(schema.fieldNames.toSet == Set("id", "name", "extra"),
-            s"expected the first entry (with `extra`) to survive the mid-advance skip, got $schema")
+          val schema = inferredSchema(Seq(archive.getParentFile.getCanonicalPath), opts)
+          assert(schema.fieldNames.toSet == Set("id", "name", "extra", "later"),
+            "expected `extra` (pre-failure entry) and `later` (sibling file) in the inferred " +
+              s"schema after the mid-advance skip, got $schema")
         }
       }
     }

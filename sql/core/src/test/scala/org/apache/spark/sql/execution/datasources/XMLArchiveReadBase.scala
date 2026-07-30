@@ -137,16 +137,19 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
   if (supportsMidAdvanceFailure) {
     test("XML: multiLine inference keeps records read before a mid-advance failure " +
         "(ignoreCorruptFiles)") {
-      // Entry 0 is read, then advancing to a later entry throws (not at open). The `extra` field
-      // from entry 0 must survive the skip; a whole-archive drop would lose it.
+      // Entry 0 is read, then advancing to a later entry throws (not at open). A whole-archive drop
+      // would lose entry 0's `extra`; aborting the traversal would lose the sibling file's `later`.
       val opts = Map("multiLine" -> "true")
       withArchiveFile() { archive =>
         writeArchiveFailingAfterFirstEntry(archive, entryName(0) ->
           xmlBytes("<rows><row><id>1</id><name>Alice</name><extra>9</extra></row></rows>"))
+        Files.write(new File(archive.getParentFile, s"later.$fileExtension").toPath,
+          xmlBytes("<rows><row><id>2</id><name>Bob</name><later>7</later></row></rows>"))
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-          val schema = inferredSchema(Seq(archive.getCanonicalPath), opts)
-          assert(schema.fieldNames.toSet == Set("id", "name", "extra"),
-            s"expected the first entry (with `extra`) to survive the mid-advance skip, got $schema")
+          val schema = inferredSchema(Seq(archive.getParentFile.getCanonicalPath), opts)
+          assert(schema.fieldNames.toSet == Set("id", "name", "extra", "later"),
+            "expected `extra` (pre-failure entry) and `later` (sibling file) in the inferred " +
+              s"schema after the mid-advance skip, got $schema")
         }
       }
     }

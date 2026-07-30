@@ -72,6 +72,9 @@ trait TarArchiveTestUtils {
    */
   protected def writeArchiveFailingAfterFirstEntry(
       dest: File, firstEntry: (String, Array[Byte])): Unit = {
+    require(firstEntry._1.getBytes(StandardCharsets.UTF_8).length <= 100,
+      "the first entry's name must fit the 100-byte ustar name field so its header is a single " +
+        s"512-byte block, otherwise the truncation offset below shifts; got '${firstEntry._1}'")
     val buf = new ByteArrayOutputStream()
     val out = new TarArchiveOutputStream(buf)
     Seq(firstEntry, ("part-later.bin", ("x" * 4096).getBytes(StandardCharsets.UTF_8))).foreach {
