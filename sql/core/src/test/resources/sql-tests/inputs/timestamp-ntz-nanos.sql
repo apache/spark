@@ -148,6 +148,8 @@ SELECT TIMESTAMP_NTZ '1960-01-02 03:04:05.123456789' + INTERVAL '0 00:00:00.0000
 -- carries the whole fraction (including the sub-microsecond digits) through unchanged; a month
 -- shift never touches the time of day.
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' YEAR;
+-- The interval-first operand order resolves to the same addition.
+SELECT INTERVAL '1' YEAR + TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789';
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH;
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1-2' YEAR TO MONTH;
 -- Jan-31 -> Feb-29 day clamp on a pre-epoch (leap-year) value.

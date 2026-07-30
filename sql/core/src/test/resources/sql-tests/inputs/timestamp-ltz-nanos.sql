@@ -172,6 +172,8 @@ SELECT TIMESTAMP_LTZ '1960-01-02 03:04:05.123456789 UTC' +
 -- carries the whole fraction (including the sub-microsecond digits) through unchanged; the month
 -- shift is applied on the session-local wall clock.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' YEAR;
+-- The interval-first operand order resolves to the same addition.
+SELECT INTERVAL '1' YEAR + TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC';
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH;
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - INTERVAL '1-2' YEAR TO MONTH;
 -- Jan-31 -> Feb-29 day clamp on a pre-epoch (leap-year) value.
