@@ -692,24 +692,11 @@ private[spark] class DAGScheduler(
     checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
     checkPipelinedProducerSupported(shuffleDep)
-    // A pipelined shuffle is served solely by the StreamingShuffleOutputTracker, so that tracker
-    // MUST exist for one -- it is created whenever a streaming-capable shuffle manager is set up
-    // (see SparkEnv.initializeStreamingShuffleOutputTracker), a prerequisite for producing a
-    // PipelinedShuffleDependency. Resolve it up front (BEFORE any stage-map mutation below), so a
-    // fail-loud on the misconfiguration leaves no partial scheduler state -- and so a pipelined
-    // shuffle is never silently registered in no tracker (a consumer would then find no writer
-    // locations). The reader enforces the same invariant (see StreamingShuffleReader). None for a
-    // regular shuffle, which is registered with the MapOutputTracker instead.
-    val streamingTrackerForPipelined: Option[StreamingShuffleOutputTrackerMaster] =
-      if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
-        Some(sc.env.streamingShuffleOutputTracker
-          .getOrElse(throw new IllegalStateException(
-            s"A pipelined shuffle (id ${shuffleDep.shuffleId}) requires a " +
-              "StreamingShuffleOutputTracker, but none is configured"))
-          .asInstanceOf[StreamingShuffleOutputTrackerMaster])
-      } else {
-        None
-      }
+    // Resolve the tracker that owns this shuffle's output, by dependency type (see
+    // outputTrackerMaster). Resolve it up front, BEFORE any stage-map mutation below, so that a
+    // fail-loud on a misconfigured pipelined shuffle (no StreamingShuffleOutputTracker) leaves no
+    // partial scheduler state and a re-submit re-throws the same error.
+    val outputTracker = outputTrackerMaster(shuffleDep)
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(shuffleDeps, jobId)
     val id = nextStageId.getAndIncrement()
@@ -721,47 +708,49 @@ private[spark] class DAGScheduler(
     shuffleIdToMapStage(shuffleDep.shuffleId) = stage
     updateJobIdStageIdMaps(jobId, stage)
 
-    // A pipelined shuffle and a regular shuffle live in DIFFERENT trackers -- the split is by
-    // dependency type, with no overlap. A pipelined shuffle produces no durable, addressable map
-    // output; its producer/consumer task-location routing lives entirely in the
-    // StreamingShuffleOutputTracker (resolved fail-loud above), and it is never registered with the
-    // MapOutputTracker (nothing reads such an entry -- availability is tracked on the stage via
-    // pipelinedCompletedPartitions, and the reader locates writers through the streaming tracker).
-    // The MapOutputTracker.getStatistics paths, which WOULD throw ShuffleStatusNotFoundException on
-    // the absent entry, are all unreachable for a pipelined dependency: markMapStageJobsAsFinished
-    // only calls it when mapStageJobs is non-empty, but handleMapStageSubmitted rejects a pipelined
-    // dependency before addActiveJob (its sole populator) ever runs, so a pipelined stage's
-    // mapStageJobs is always empty; and the getStatistics in checkAndScheduleShuffleMergeFinalize
-    // is on the push-based-shuffle merge path, which a pipelined dependency rejects up front
-    // (shuffleMergeEnabled in checkPipelinedProducerSupported). A regular shuffle registers with
-    // the MapOutputTracker as before.
-    streamingTrackerForPipelined match {
-      case Some(streamingTracker) =>
-        // Register the producer/consumer fan-in before any consumer task asks for a writer loc.
-        // Self-guarded on the tracker's own state (createShuffleMapStage runs once per shuffleId
-        // via getOrCreateShuffleMapStage, but guard defensively against a re-entry).
-        if (!streamingTracker.containsShuffle(shuffleDep.shuffleId)) {
-          logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)} " +
-            log"(${MDC(CREATION_SITE, rdd.getCreationSite)}) as input to pipelined " +
-            log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
-          streamingTracker.registerShuffle(
-            shuffleDep.shuffleId,
-            rdd.partitions.length,
-            shuffleDep.partitioner.numPartitions,
-            jobId)
-        }
-      case None if !mapOutputTracker.containsShuffle(shuffleDep.shuffleId) =>
-        // Kind of ugly: need to register RDDs with the cache and map output tracker here
-        // since we can't do it in the RDD constructor because # of partitions is unknown
-        logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)} " +
-          log"(${MDC(CREATION_SITE, rdd.getCreationSite)}) as input to " +
-          log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
-        mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
-          shuffleDep.partitioner.numPartitions)
-
-      case _ => // regular shuffle already registered with the MapOutputTracker; nothing to do
+    // Register the shuffle with its own tracker (a pipelined shuffle in the
+    // StreamingShuffleOutputTracker, a regular one in the MapOutputTracker -- split by dependency
+    // type, no overlap). Self-guarded on the tracker's own membership: createShuffleMapStage runs
+    // once per shuffleId via getOrCreateShuffleMapStage, but guard defensively against re-entry.
+    // (A pipelined shuffle is never registered with the MapOutputTracker; its availability is
+    // tracked on the stage via pipelinedCompletedPartitions and its writers are located through the
+    // StreamingShuffleOutputTracker. jobId is used only by the streaming tracker.) The
+    // MapOutputTracker.getStatistics paths, which WOULD throw ShuffleStatusNotFoundException on the
+    // absent entry, are unreachable for a pipelined dependency: markMapStageJobsAsFinished calls it
+    // only when mapStageJobs is non-empty, but handleMapStageSubmitted rejects a pipelined dep
+    // before addActiveJob (its sole populator) runs, so a pipelined stage's mapStageJobs is always
+    // empty; and checkAndScheduleShuffleMergeFinalize's getStatistics is on the push-based-merge
+    // path, which a pipelined dependency rejects up front (checkPipelinedProducerSupported).
+    if (!outputTracker.containsShuffle(shuffleDep.shuffleId)) {
+      logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)} " +
+        log"(${MDC(CREATION_SITE, rdd.getCreationSite)}) as input to " +
+        log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
+      outputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
+        shuffleDep.partitioner.numPartitions, jobId)
     }
     stage
+  }
+
+  /**
+   * The driver-side output tracker that owns a shuffle's outputs, selected by dependency type: the
+   * StreamingShuffleOutputTracker for a pipelined shuffle, the MapOutputTracker otherwise. The two
+   * are split with no overlap. A pipelined shuffle REQUIRES a StreamingShuffleOutputTracker
+   * (created with a streaming-capable shuffle manager, see
+   * SparkEnv.initializeStreamingShuffleOutputTracker), so fail loud if one is not configured rather
+   * than silently register it nowhere (a consumer would then find no writer locations; the reader
+   * enforces the same invariant, see StreamingShuffleReader).
+   */
+  private def outputTrackerMaster(
+      shuffleDep: ShuffleDependency[_, _, _]): ShuffleOutputTrackerMaster = {
+    if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
+      sc.env.streamingShuffleOutputTracker
+        .getOrElse(throw new IllegalStateException(
+          s"A pipelined shuffle (id ${shuffleDep.shuffleId}) requires a " +
+            "StreamingShuffleOutputTracker, but none is configured"))
+        .asInstanceOf[StreamingShuffleOutputTrackerMaster]
+    } else {
+      mapOutputTracker
+    }
   }
 
   private def pipelinedUnsupportedError(reason: String): PipelinedShuffleUnsupportedException =
