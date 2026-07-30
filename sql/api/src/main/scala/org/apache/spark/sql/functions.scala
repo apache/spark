@@ -438,10 +438,10 @@ object functions {
    *
    * The aggregation buffer holds only the distinct elements, so its size is bounded by the
    * element universe rather than by the number of input rows. Null elements are dropped by
-   * default (IGNORE NULLS), matching `collect_set`. With `RESPECT NULLS`, a single null
-   * element is kept, in which case this is equivalent to
-   * `array_distinct(flatten(collect_list(e)))`. The `RESPECT NULLS` clause is only available
-   * through SQL (e.g. `expr("collect_union(col) RESPECT NULLS")`).
+   * default (IGNORE NULLS), matching `collect_set`. With `RESPECT NULLS`, a single null element
+   * is kept, in which case this is equivalent to `array_distinct(flatten(collect_list(e)))`. The
+   * `RESPECT NULLS` clause is only available through SQL (e.g.
+   * `expr("collect_union(col) RESPECT NULLS")`).
    *
    * @param e
    *   The array column to collect the union of. A column of type array.
