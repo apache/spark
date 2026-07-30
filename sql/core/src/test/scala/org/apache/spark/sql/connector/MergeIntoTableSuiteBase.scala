@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, I
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
 import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryBaseTable, InMemoryTable, TableInfo}
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable.commandOutput
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.write.MergeSummary
 import org.apache.spark.sql.execution.SparkPlan
@@ -62,11 +63,11 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
              |WHEN NOT MATCHED THEN
              | INSERT *
              |""".stripMargin),
-        Seq(
-          Row("num_affected_rows", 1L),
-          Row("num_updated_rows", 1L),
-          Row("num_deleted_rows", 0L),
-          Row("num_inserted_rows", 0L)))
+        commandOutput(
+          "num_affected_rows" -> 1L,
+          "num_updated_rows" -> 1L,
+          "num_deleted_rows" -> 0L,
+          "num_inserted_rows" -> 0L))
     }
 
     // check txn was properly committed and closed
@@ -1344,11 +1345,11 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
              |WHEN NOT MATCHED THEN
              | INSERT *
              |""".stripMargin),
-        Seq(
-          Row("num_affected_rows", 1L),
-          Row("num_updated_rows", 0L),
-          Row("num_deleted_rows", 0L),
-          Row("num_inserted_rows", 1L)))
+        commandOutput(
+          "num_affected_rows" -> 1L,
+          "num_updated_rows" -> 0L,
+          "num_deleted_rows" -> 0L,
+          "num_inserted_rows" -> 1L))
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -2638,11 +2639,11 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
            |WHEN NOT MATCHED BY SOURCE AND salary > 400 THEN
            | DELETE
            |""".stripMargin,
-        expectedOutput = Some(Seq(
-          Row("num_affected_rows", 3L),
-          Row("num_updated_rows", 0L),
-          Row("num_deleted_rows", 2L),
-          Row("num_inserted_rows", 1L))))
+        expectedOutput = Some(commandOutput(
+          "num_affected_rows" -> 3L,
+          "num_updated_rows" -> 0L,
+          "num_deleted_rows" -> 2L,
+          "num_inserted_rows" -> 1L)))
 
       assertMetric(mergeExec, "numTargetRowsCopied", if (deltaMerge) 0 else 3)
       assertMetric(mergeExec, "numTargetRowsInserted", 1)

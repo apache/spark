@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable.commandOutput
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionPredicateDeleteCatalog
 import org.apache.spark.sql.connector.expressions.PartitionFieldReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
@@ -53,7 +54,9 @@ class DataSourceV2EnhancedDeleteFilterSuite extends SharedSparkSession {
       assertDeleteWithFilters(
         s"DELETE FROM $deleteTableName WHERE dep = 'hr'",
         expectedNumConditions = 1,
-        expectedOutput = Some(Seq(Row("num_affected_rows", 2L))))
+        expectedOutput = Some(commandOutput(
+          "num_affected_rows" -> 2L,
+          "num_deleted_rows" -> 2L)))
 
       checkAnswer(
         sql(s"SELECT * FROM $deleteTableName"),

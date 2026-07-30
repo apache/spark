@@ -107,7 +107,7 @@ class InMemoryPartitionPredicateDeleteTable(
         }
       }
     }
-    affectedRowsOutput(numRowsBeforeDelete - rows.size)
+    deletedRowsOutput(numRowsBeforeDelete - rows.size)
   }
 
   private def rowMatchesAll(

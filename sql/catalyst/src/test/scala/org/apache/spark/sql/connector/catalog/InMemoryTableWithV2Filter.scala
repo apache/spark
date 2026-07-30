@@ -51,7 +51,7 @@ class InMemoryTableWithV2Filter(
       .map(_.rows.size.toLong)
       .sum
     dataMap --= deleteKeys
-    affectedRowsOutput(numDeletedRows)
+    deletedRowsOutput(numDeletedRows)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {

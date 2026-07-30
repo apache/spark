@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable.commandOutput
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
@@ -1336,7 +1337,9 @@ class DataSourceV2SQLSuiteV1Filter
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       checkAnswer(
         sql(s"INSERT INTO $t1(id, data) VALUES(1L, 'a')"),
-        Seq(Row("num_affected_rows", 1L)))
+        commandOutput(
+          "num_affected_rows" -> 1L,
+          "num_inserted_rows" -> 1L))
       // Can be in a different order
       sql(s"INSERT INTO $t1(data, id) VALUES('b', 2L)")
       // Can be casted automatically
@@ -1367,7 +1370,9 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       checkAnswer(
         sql(s"INSERT OVERWRITE $t1(id, data) VALUES(1L, 'a')"),
-        Seq(Row("num_affected_rows", 1L)))
+        commandOutput(
+          "num_affected_rows" -> 1L,
+          "num_inserted_rows" -> 1L))
       verifyTable(t1, Seq((1L, "a")).toDF("id", "data"))
       // Can be in a different order
       sql(s"INSERT OVERWRITE $t1(data, id) VALUES('b', 2L)")
@@ -1401,7 +1406,9 @@ class DataSourceV2SQLSuiteV1Filter
         s"USING $v2Format PARTITIONED BY (id)")
       checkAnswer(
         sql(s"INSERT OVERWRITE $t1(id, data, data2) VALUES(1L, 'a', 'b')"),
-        Seq(Row("num_affected_rows", 1L)))
+        commandOutput(
+          "num_affected_rows" -> 1L,
+          "num_inserted_rows" -> 1L))
       verifyTable(t1, Seq((1L, "a", "b")).toDF("id", "data", "data2"))
       // Can be in a different order
       sql(s"INSERT OVERWRITE $t1(data, data2, id) VALUES('b', 'd', 2L)")
@@ -4498,7 +4505,10 @@ class DataSourceV2SQLSuiteV1Filter
 
       checkAnswer(
         spark.sql(s"INSERT INTO $t REPLACE WHERE TRUE SELECT * FROM source2"),
-        Seq(Row("num_affected_rows", 3L)))
+        commandOutput(
+          "num_affected_rows" -> 3L,
+          "num_deleted_rows" -> -1L,
+          "num_inserted_rows" -> 3L))
       checkAnswer(
         spark.table(s"$t"),
         Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
@@ -4523,7 +4533,10 @@ class DataSourceV2SQLSuiteV1Filter
 
       checkAnswer(
         spark.sql(s"INSERT INTO $t REPLACE WHERE id = 3 SELECT * FROM source2"),
-        Seq(Row("num_affected_rows", 3L)))
+        commandOutput(
+          "num_affected_rows" -> 3L,
+          "num_deleted_rows" -> -1L,
+          "num_inserted_rows" -> 3L))
       checkAnswer(
         spark.table(s"$t"),
         Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))

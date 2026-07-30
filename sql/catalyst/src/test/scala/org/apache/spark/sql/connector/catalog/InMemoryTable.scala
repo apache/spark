@@ -79,7 +79,7 @@ class InMemoryTable(
       .sum
     dataMap --= deleteKeys
     increaseVersion()
-    affectedRowsOutput(numDeletedRows)
+    deletedRowsOutput(numDeletedRows)
   }
 
   override def withData(data: Array[BufferedRows]): InMemoryTable = {

@@ -23,6 +23,7 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTable, InMemoryTable, InMemoryTruncatableOnlyTable, InMemoryTruncatableOnlyTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable.commandOutput
 import org.apache.spark.sql.connector.write.DeleteSummary
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, TruncateTableExec, WriteDeltaExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -82,7 +83,9 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
     checkAnswer(
       sql(s"DELETE FROM $tableNameAsString WHERE pk IN (2, 5)"),
-      Seq(Row("num_affected_rows", 2L)))
+      commandOutput(
+        "num_affected_rows" -> 2L,
+        "num_deleted_rows" -> 2L))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -739,7 +742,9 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
     executeDeleteWithFilters(
       s"DELETE FROM $tableNameAsString WHERE dep = 100",
-      expectedOutput = Some(Seq(Row("num_affected_rows", 2L))))
+      expectedOutput = Some(commandOutput(
+        "num_affected_rows" -> 2L,
+        "num_deleted_rows" -> 2L)))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -1160,7 +1165,11 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql("INSERT INTO trunccat.ns.tbl VALUES (1, 'hr'), (2, 'software')")
 
         val Seq(qe) = withQueryExecutionsCaptured(spark) {
-          sql("DELETE FROM trunccat.ns.tbl WITH (`write.split-size` = 10)")
+          checkAnswer(
+            sql("DELETE FROM trunccat.ns.tbl WITH (`write.split-size` = 10)"),
+            commandOutput(
+              "num_affected_rows" -> 2L,
+              "num_deleted_rows" -> 2L))
         }
         val exec = qe.executedPlan.collectFirst {
           case e: TruncateTableExec => e
