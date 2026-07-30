@@ -7233,12 +7233,12 @@ object SQLConf {
     "spark.sql.optimizer.mergeSubplans.filterPropagation.dsv2SymmetricFilterPropagation.enabled")
     .doc("When true, two DataSource V2 scan subplans that pushed the same strict filters but " +
       "carry different best-effort (post-scan) filters can merge into one scan even when " +
-      s"${MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key} is false. This is always " +
-      "correctness-safe here: the strict filters are equal (re-enforced on the rebuilt scan), " +
-      "and the differing filters are pushed only as best-effort row-group/partition pruning " +
-      "(OR-widened), with the enclosing Filter re-checking exactness above the scan. Unlike the " +
-      "general symmetric case, OR-widening cannot change the strict (enforced) row set. Has no " +
-      s"effect when ${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
+      s"${MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key} is false. The strict filters " +
+      "are equal (re-enforced on the rebuilt scan) and the differing filters are pushed only as " +
+      "best-effort row-group/partition pruning (OR-widened), with the enclosing Filter " +
+      "re-checking exactness above the scan. Unlike the general symmetric case, OR-widening " +
+      "cannot change the strict (enforced) row set. Has no effect when " +
+      s"${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
     .version("4.3.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf

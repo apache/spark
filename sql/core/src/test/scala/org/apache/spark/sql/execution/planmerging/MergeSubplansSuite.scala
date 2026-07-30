@@ -2144,63 +2144,119 @@ class MergeSubplansSuite extends PlanTest {
     // config allows it, since the equal strict filters mean both sides read the same base set and
     // only the best-effort OR pruning is broadened.
     val sub1 = ScalarSubquery(
-      v2ScanReading("a").where($"a" > 1).groupBy()(sum($"a").as("sum_a")))
+      v2ScanReading("a").where($"a" > 1).groupBy()(sum($"a").as("sum_a")))    // cp
     val sub2 = ScalarSubquery(
-      v2ScanReading("b").where($"b" > 2).groupBy()(sum($"b").as("sum_b")))
+      v2ScanReading("b").where($"b" > 2).groupBy()(sum($"b").as("sum_b")))    // np
     val originalQuery = testRelation.select(sub1, sub2)
+
+    // Expected when the DSv2 config allows it: the two scans fuse into one reading {a, b}; the
+    // differing filters become propagatedFilter aliases OR-widened in a Filter, and each side's
+    // aggregate carries its filter as a FILTER clause (np = sub2 gets id 0, cp = sub1 gets id 1).
+    val mergedScan = v2ScanReadingOn(v2Table, Seq("a", "b"))
+    val npFilterAlias = Alias($"b" > 2, "propagatedFilter_0")()
+    val cpFilterAlias = Alias($"a" > 1, "propagatedFilter_1")()
+    val npFilter = npFilterAlias.toAttribute
+    val cpFilter = cpFilterAlias.toAttribute
+    val mergedSubquery = mergedScan
+      .select(mergedScan.output ++ Seq(npFilterAlias, cpFilterAlias): _*)
+      .where(Or(npFilter, cpFilter))
+      .groupBy()(
+        sum($"a", Some(cpFilter)).as("sum_a"),
+        sum($"b", Some(npFilter)).as("sum_b"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("sum_b"), $"sum_b")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     withSQLConf(
         SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
         SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false",
         SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
-      val optimized = Optimize.execute(originalQuery.analyze)
-      assert(v2Scans(optimized).map(_.canonicalized).distinct.length == 1,
-        s"the two DSv2 scans should fuse into one:\n$optimized")
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
     }
 
-    // With the DSv2 config also off, the differing-filter pair must NOT merge (two scans remain).
+    // With the DSv2 config also off, the differing-filter pair must NOT merge (plan unchanged).
     withSQLConf(
         SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
         SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false",
         SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false") {
-      val optimized = Optimize.execute(originalQuery.analyze)
-      assert(v2Scans(optimized).map(_.canonicalized).distinct.length == 2,
-        s"the two DSv2 scans must not fuse when both symmetric configs are off:\n$optimized")
+      comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
     }
   }
 
   test("SPARK-40259: DSv2 merge fact propagates to an outer stacked Filter pair") {
-    // Stacked Filters over each DSv2 scan (inner a>1/b>2, outer a<100/b<200). The leaf scans merge
-    // and the deferral is consumed at the INNER (Filter, Filter) pair; the OUTER pair sees
-    // deferredScan = None. The merge only fuses if the "a DSv2 merge happened below" fact
-    // (TryMergeResult.dsv2Merged) still reaches the outer pair so it applies the DSv2-symmetric
-    // exemption -- deferredScan alone (consumed at the inner pair) would not. Optimize runs only
-    // MergeSubplans, so the stacked Filters are not combined before the rule sees them.
+    // Stacked Filters over each DSv2 scan (cp = sub1: inner a>1, outer a<100; np = sub2: inner b>2,
+    // outer b<200). The leaf scans merge and the deferral is consumed at the INNER (Filter, Filter)
+    // pair; the OUTER pair sees dsv2DeferredScan = None. The merge only fuses if the "a DSv2 merge
+    // happened below" fact (TryMergeResult.dsv2Merged) still reaches the outer pair so it applies
+    // the DSv2-symmetric exemption -- dsv2DeferredScan alone (consumed at the inner pair) would
+    // not. Optimize runs only MergeSubplans, so the stacked Filters are not combined before the rule
+    // sees them.
     val sub1 = ScalarSubquery(
       v2ScanReading("a").where($"a" > 1).where($"a" < 100).groupBy()(sum($"a").as("sum_a")))
     val sub2 = ScalarSubquery(
       v2ScanReading("b").where($"b" > 2).where($"b" < 200).groupBy()(sum($"b").as("sum_b")))
     val originalQuery = testRelation.select(sub1, sub2)
 
+    // Expected when the DSv2 config is on: the scans fuse into one reading {a, b}. Merge traversal
+    // (inner-to-outer):
+    //   Inner pair (np: b>2, cp: a>1) OR-widens:
+    //     f0 = Alias(b > 2, "propagatedFilter_0")  -- np / sum_b
+    //     f1 = Alias(a > 1, "propagatedFilter_1")  -- cp / sum_a
+    //   Outer pair (np: b<200, cp: a<100) OR-widens, AND-combining each side's inner filter:
+    //     f2 = Alias(AND(f0, b < 200), "propagatedFilter_2")  -- np
+    //     f3 = Alias(AND(f1, a < 100), "propagatedFilter_3")  -- cp
+    //   Aggregate consumes f2/f3 as FILTER clauses: sum_a FILTER f3, sum_b FILTER f2 -- i.e. each
+    //   side's per-side AND(inner, outer).
+    val mergedScan = v2ScanReadingOn(v2Table, Seq("a", "b"))
+    val f0Alias = Alias($"b" > 2, "propagatedFilter_0")()
+    val f1Alias = Alias($"a" > 1, "propagatedFilter_1")()
+    val f0 = f0Alias.toAttribute
+    val f1 = f1Alias.toAttribute
+    val innerFilter = mergedScan
+      .select(mergedScan.output ++ Seq(f0Alias, f1Alias): _*)
+      .where(Or(f0, f1))
+    val f2Alias = Alias(And(f0, $"b" < 200), "propagatedFilter_2")()
+    val f3Alias = Alias(And(f1, $"a" < 100), "propagatedFilter_3")()
+    val f2 = f2Alias.toAttribute
+    val f3 = f3Alias.toAttribute
+    val mergedSubquery = innerFilter
+      .select(innerFilter.output ++ Seq(f2Alias, f3Alias): _*)
+      .where(Or(f2, f3))
+      .groupBy()(
+        sum($"a", Some(f3)).as("sum_a"),
+        sum($"b", Some(f2)).as("sum_b"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("sum_b"), $"sum_b")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
     // General symmetric off; the DSv2-specific config on. The flag lets BOTH the inner and outer
-    // Filter pair OR-widen, so the two scans fuse into one.
+    // Filter pair OR-widen, so the two scans fuse into one and each aggregate FILTER is the
+    // per-side AND(inner, outer).
     withSQLConf(
         SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
         SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false",
         SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
-      val optimized = Optimize.execute(originalQuery.analyze)
-      assert(v2Scans(optimized).map(_.canonicalized).distinct.length == 1,
-        s"the stacked-Filter DSv2 scans should fuse via the propagated merge fact:\n$optimized")
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
     }
 
-    // With the DSv2 config off the inner pair already declines, so nothing fuses (control).
+    // With the DSv2 config off the inner pair already declines, so nothing fuses (plan unchanged).
     withSQLConf(
         SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
         SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false",
         SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "false") {
-      val optimized = Optimize.execute(originalQuery.analyze)
-      assert(v2Scans(optimized).map(_.canonicalized).distinct.length == 2,
-        s"the stacked-Filter DSv2 scans must not fuse when the DSv2 config is off:\n$optimized")
+      comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
     }
   }
 
