@@ -5586,6 +5586,39 @@
     ],
     "sqlState" : "KD000"
   },
+  "MALFORMED_EXPRESSION_INFO" : {
+    "message" : [
+      "'<fieldName>' is malformed in the expression [<exprName>]:"
+    ],
+    "subClass" : {
+      "DEPRECATED" : {
+        "message" : [
+          "it should start with a newline and 4 leading spaces; end with a newline and two spaces; however, got [<deprecated>]."
+        ]
+      },
+      "GROUP" : {
+        "message" : [
+          "it should be a value in <validGroups>; however, got [<group>]."
+        ]
+      },
+      "NOTE" : {
+        "message" : [
+          "it should start with a newline and 4 leading spaces; end with a newline and two spaces; however, got [<note>]."
+        ]
+      },
+      "SINCE" : {
+        "message" : [
+          "it should not start with a negative number; however, got [<since>]."
+        ]
+      },
+      "SOURCE" : {
+        "message" : [
+          "it should be a value in <validSources>; however, got [<source>]."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "MALFORMED_LOG_FILE" : {
     "message" : [
       "Log file was malformed: failed to read correct log version from <text>."
@@ -6404,6 +6437,18 @@
       "Path does not exist: <path>."
     ],
     "sqlState" : "42K03"
+  },
+  "PIPELINED_SHUFFLE_CROSS_JOB_REUSE" : {
+    "message" : [
+      "The pipelined shuffle <shuffleId> is being reused across jobs. A pipelined (incrementally-readable) shuffle is transient and has no retained output for another job to read, so its producer stage cannot be shared across jobs."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPELINED_SHUFFLE_UNSUPPORTED" : {
+    "message" : [
+      "A pipelined shuffle stage group cannot be scheduled because it uses an unsupported feature: <reason>. Pipelined (incrementally-readable) shuffles run their producer and consumer stages concurrently over a transient, once-through stream, which is incompatible with this feature in this version."
+    ],
+    "sqlState" : "0A000"
   },
   "PIPELINE_DATASET_WITHOUT_FLOW" : {
     "message" : [
@@ -11867,31 +11912,6 @@
   "_LEGACY_ERROR_TEMP_3200" : {
     "message" : [
       "Read-ahead limit < 0"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3201" : {
-    "message" : [
-      "'note' is malformed in the expression [<exprName>]. It should start with a newline and 4 leading spaces; end with a newline and two spaces; however, got [<note>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3202" : {
-    "message" : [
-      "'group' is malformed in the expression [<exprName>]. It should be a value in <validGroups>; however, got <group>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3203" : {
-    "message" : [
-      "'source' is malformed in the expression [<exprName>]. It should be a value in <validSources>; however, got [<source>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3204" : {
-    "message" : [
-      "'since' is malformed in the expression [<exprName>]. It should not start with a negative number; however, got [<since>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3205" : {
-    "message" : [
-      "'deprecated' is malformed in the expression [<exprName>]. It should start with a newline and 4 leading spaces; end with a newline and two spaces; however, got [<deprecated>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_3206" : {
