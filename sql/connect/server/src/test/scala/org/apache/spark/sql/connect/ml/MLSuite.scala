@@ -401,8 +401,7 @@ class MLSuite extends MLHelper {
     assert(sessionHolder.mlCache.cachedModel.size() == 1)
     assert(sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get() > 0)
     val modelSizeBytes = sessionHolder.mlCache.totalMLCacheInMemorySizeBytes.get()
-    val modelSizeKiB = Math.ceil(modelSizeBytes.toDouble / 1024).toInt
-    val maxNumModels = memorySizeBytes / 1024 / modelSizeKiB
+    val maxNumModels = memorySizeBytes / modelSizeBytes.toInt
 
     // All models will be kept if the total size is less than the memory limit.
     for (i <- 1 until maxNumModels) {
@@ -430,18 +429,15 @@ class MLSuite extends MLHelper {
   test("Model size limit") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key, "1")
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key, "4000")
     intercept[MLModelSizeOverflowException] {
       trainLogisticRegressionModel(sessionHolder)
     }
     sessionHolder.session.conf
-      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key, "1g")
-    val modelId = trainLogisticRegressionModel(sessionHolder)
-    val modelSizeBytes = sessionHolder.mlCache.cachedModel.get(modelId).sizeBytes
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key, "8000")
     sessionHolder.session.conf
-      .set(
-        Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_STORAGE_SIZE.key,
-        modelSizeBytes.toString)
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_STORAGE_SIZE.key, "10000")
+    trainLogisticRegressionModel(sessionHolder)
     intercept[MLCacheSizeOverflowException] {
       trainLogisticRegressionModel(sessionHolder)
     }
