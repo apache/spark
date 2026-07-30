@@ -842,9 +842,9 @@ object SQLConf {
 
   val PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED =
     buildConf("spark.sql.optimizer.pushDownJoinThroughUnion.enabled")
-      .doc("When true, pushes down Join through Union when the right side is small enough " +
-        "to broadcast. This can improve performance by allowing each Union branch to " +
-        "directly perform a broadcast join, avoiding materializing the entire Union result.")
+      .doc("When true, pushes down Join through Union when every Union branch would broadcast " +
+        "the right side of the join. This can improve performance by allowing each Union branch " +
+        "to directly perform a broadcast join, avoiding materializing the entire Union result.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
