@@ -1374,20 +1374,39 @@ private[v2] trait V2JDBCTest
       // .6 magnitudes make the result independent of tie-breaking: rounding gives 2, truncation 1.
       sql(s"INSERT INTO $tbl VALUES (1.6, 1.6, 'a'), (2.6, 2.6, 'b'), (-1.6, -1.6, 'c')")
 
-      // Spark truncates toward zero, so only 2.6 casts to 2.
+      // A projected cast is evaluated locally, not pushed down, so this guards end-to-end
+      // correctness. Spark truncates toward zero, so -1.6, 1.6 and 2.6 become -1, 1 and 2.
+      Seq("double_col", "decimal_col").foreach { col =>
+        val projected = sql(s"SELECT CAST($col AS INT) FROM $tbl ORDER BY $col")
+        assert(projected.collect().map(_.getInt(0)) === Array(-1, 1, 2))
+      }
+
+      // A filter cast is pushed down, so only 2.6 truncates to 2.
       Seq("double_col", "decimal_col").foreach { col =>
         val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS INT) = 2")
         checkFilterPushed(filtered)
         assert(filtered.collect().map(_.getString(0)) === Array("b"))
       }
 
-      // Legacy behavior: the conf disables the truncation, so a rounding database now matches 1.6.
+      // An aggregate cast is pushed down too. Truncation gives 1 + 2 + (-1) = 2.
+      Seq("double_col", "decimal_col").foreach { col =>
+        val aggregated = sql(s"SELECT SUM(CAST($col AS INT)) FROM $tbl")
+        checkAggregateRemoved(aggregated)
+        assert(aggregated.collect().map(_.getLong(0)) === Array(2L))
+      }
+
+      // Legacy behavior: the conf disables the truncation, so a rounding database rounds instead.
+      // The filter then matches 1.6, and the sum rounds to 2 + 3 + (-2) = 3.
       if (roundsIntegralCast) {
         withSQLConf("spark.sql.legacy.jdbc.roundIntegralCastPushdown.enabled" -> "true") {
           Seq("double_col", "decimal_col").foreach { col =>
             val filtered = sql(s"SELECT label FROM $tbl WHERE CAST($col AS INT) = 2")
             checkFilterPushed(filtered)
             assert(filtered.collect().map(_.getString(0)) === Array("a"))
+
+            val aggregated = sql(s"SELECT SUM(CAST($col AS INT)) FROM $tbl")
+            checkAggregateRemoved(aggregated)
+            assert(aggregated.collect().map(_.getLong(0)) === Array(3L))
           }
         }
       }
