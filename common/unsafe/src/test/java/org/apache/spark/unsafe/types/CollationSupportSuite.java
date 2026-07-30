@@ -2737,6 +2737,25 @@ public class CollationSupportSuite {
     assertSubstringIndex("a🙃b🙃c", "d", -1, UTF8_LCASE, "a🙃b🙃c");
     assertSubstringIndex("a🙃b🙃c", "d", -1, UNICODE, "a🙃b🙃c");
     assertSubstringIndex("a🙃b🙃c", "d", -1, UNICODE_CI, "a🙃b🙃c");
+    // SPARK-58441: negative count with adjacent delimiter occurrences over characters that map
+    // to multiple collation elements: the ICU path previously used StringSearch.previous(),
+    // which skips such occurrences and returned the wrong suffix.
+    assertSubstringIndex("ééa", "é", -2, UNICODE, "éa");
+    assertSubstringIndex("ééa", "é", -2, UNICODE_CI, "éa");
+    assertSubstringIndex("aéééba", "é", -2, UNICODE, "éba");
+    assertSubstringIndex("aéééba", "é", -3, UNICODE, "ééba");
+    assertSubstringIndex("aéééba", "éé", -2, UNICODE, "éba");
+    assertSubstringIndex("ébééb", "é", -2, UNICODE, "éb");
+    assertSubstringIndex("ébééb", "é", -2, UNICODE_CI, "éb");
+    // Positive count with the first delimiter occurrence at position 0 and a delimiter
+    // starting with a surrogate pair: the stuck-iterator workaround previously used 0 as the
+    // "no match yet" sentinel and double-counted the first occurrence.
+    assertSubstringIndex("😀a😀b", "😀", 2, UNICODE, "😀a");
+    assertSubstringIndex("😀a😀b", "😀", 2, UNICODE_CI, "😀a");
+    assertSubstringIndex("😀😀😀", "😀😀", 2, UNICODE, "😀");
+    // A count larger than the string length cannot be satisfied by any input, and is rejected
+    // before the ICU path sizes a buffer after it.
+    assertSubstringIndex("a.b.c", ".", -1000000, UNICODE, "a.b.c");
   }
 
   /**
@@ -4340,6 +4359,31 @@ public class CollationSupportSuite {
     assertStringInstrWithOccurrence("aaaa", "aa", -2, 1, UNICODE, 3);
     assertStringInstrWithOccurrence("aaaa", "aa", -1, 3, UNICODE, 1);
     assertStringInstrWithOccurrence("aaaa", "aa", -2, 3, UNICODE, 1);
+    // SPARK-58441: backward search over characters that map to multiple collation elements: the
+    // ICU path previously used StringSearch.previous(), which skips or misaligns such matches.
+    assertStringInstrWithOccurrence("bbébébé", "bé", -3, 1, UNICODE, 4);
+    assertStringInstrWithOccurrence("bbébébé", "bé", -3, 2, UNICODE, 2);
+    assertStringInstrWithOccurrence("bbébébé", "bé", -3, 1, UNICODE_CI, 4);
+    assertStringInstrWithOccurrence("babaéa", "aé", -3, 1, UNICODE, 4);
+    assertStringInstrWithOccurrence("ééé", "é", -1, 2, UNICODE, 2);
+    assertStringInstrWithOccurrence("ééé", "é", -1, 3, UNICODE, 1);
+    assertStringInstrWithOccurrence("ééé", "é", -1, 2, UNICODE_CI, 2);
+    // A backward start one position before the beginning of the string matches nothing. The ICU
+    // path used to accept such a start and report a match, unlike every other collation, so the
+    // UTF8_BINARY expectation below is the reference the ICU ones are now aligned with.
+    assertStringInstrWithOccurrence("é", "é", -2, 1, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("é", "é", -2, 1, UNICODE, 0);
+    assertStringInstrWithOccurrence("é", "é", -2, 1, UNICODE_CI, 0);
+    // A match at position 0 of a pattern starting with a surrogate pair: the stuck-iterator
+    // workaround previously used 0 as the "no match yet" sentinel and double-counted it.
+    assertStringInstrWithOccurrence("😀a😀b", "😀", 1, 2, UNICODE, 3);
+    assertStringInstrWithOccurrence("😀a😀b", "😀", 1, 2, UNICODE_CI, 3);
+    assertStringInstrWithOccurrence("😀abc", "😀", 1, 2, UNICODE, 0);
+    // Overlapping matches of a pattern starting with a surrogate pair.
+    assertStringInstrWithOccurrence("😀😀😀", "😀😀", 1, 2, UNICODE, 2);
+    // An occurrence larger than the string length cannot be satisfied by any input, and is
+    // rejected before the ICU path sizes a buffer after it.
+    assertStringInstrWithOccurrence("abc", "b", -1, 2000000000, UNICODE, 0);
   }
 
 }

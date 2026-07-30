@@ -32,6 +32,7 @@ import static org.apache.spark.unsafe.types.UTF8String.CodePointIteratorType;
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -48,6 +49,13 @@ public class CollationAwareUTF8String {
    * string in a target string.
    */
   private static final int MATCH_NOT_FOUND = -1;
+
+  /**
+   * The initial capacity of the ring buffer used by `findIndexFromEnd` to retain the last
+   * `count` match positions. The buffer grows on demand, so a caller-supplied `count` that is
+   * far larger than the number of matches does not allocate up front.
+   */
+  private static final int INITIAL_MATCH_RING_CAPACITY = 16;
 
   /**
    * `COMBINED_ASCII_SMALL_I_COMBINING_DOT` is an internal representation of the combined
@@ -933,44 +941,48 @@ public class CollationAwareUTF8String {
 
     String targetStr = target.toValidString();
     String patternStr = pattern.toValidString();
-
-    // Adjust the starting position from 1-based to 0-based.
-    int realStart;
-    if (start > 0) {
-      realStart = start - 1;
-      if (targetStr.codePointCount(0, targetStr.length()) <= realStart) return MATCH_NOT_FOUND;
-    } else {
-      realStart = targetStr.codePointCount(0, targetStr.length()) + start + 1;
-      if (realStart < 0) return MATCH_NOT_FOUND;
-    }
+    int numCodePoints = targetStr.codePointCount(0, targetStr.length());
 
     StringSearch stringSearch =
             CollationFactory.getStringSearch(targetStr, patternStr, collationId);
     // Set Overlapping to true to support finding locations
     // similar to the second occurrence of 'aa' in 'aaa'.
     stringSearch.setOverlapping(true);
-    int startIndex = targetStr.offsetByCodePoints(0, realStart);
-    stringSearch.setIndex(startIndex);
 
-    // Search for target index.
     int searchIndex;
-    if (start > 0) searchIndex = findIndex(stringSearch, occurrence);
-    else searchIndex = findStartIndexReverse(stringSearch, occurrence);
+    if (start > 0) {
+      // Adjust the starting position from 1-based to 0-based.
+      int realStart = start - 1;
+      if (numCodePoints <= realStart) return MATCH_NOT_FOUND;
+      stringSearch.setIndex(targetStr.offsetByCodePoints(0, realStart));
+      searchIndex = findIndex(stringSearch, targetStr, occurrence);
+    } else {
+      // The last code point index at which a match is allowed to start. A start before the
+      // beginning of the string matches nothing, as in UTF8String.indexOf.
+      int anchor = numCodePoints + start;
+      if (anchor < 0) return MATCH_NOT_FOUND;
+      searchIndex = findIndexFromEnd(stringSearch, targetStr, occurrence,
+        targetStr.offsetByCodePoints(0, anchor), false);
+    }
 
     if (searchIndex == MATCH_NOT_FOUND) return MATCH_NOT_FOUND;
     // Convert the search index from character count to code point count.
     return targetStr.codePointCount(0, searchIndex);
   }
 
-  private static int findIndex(final StringSearch stringSearch, int count) {
+  private static int findIndex(final StringSearch stringSearch, final String text, int count) {
     assert(count >= 0);
-    int index = 0;
+    // -1 is a safe "no match seen yet" sentinel: StringSearch.DONE (also -1) is handled first,
+    // so next() can never store -1 in `index`. Using 0 here would fail to detect the iterator
+    // reporting the same match at index 0 again (e.g. an overlapping search on a pattern that
+    // starts with a surrogate pair), double-counting that match.
+    int index = -1;
     while (count > 0) {
       int nextIndex = stringSearch.next();
       if (nextIndex == StringSearch.DONE) {
         return MATCH_NOT_FOUND;
-      } else if (nextIndex == index && index != 0) {
-        stringSearch.setIndex(stringSearch.getIndex() + stringSearch.getMatchLength());
+      } else if (nextIndex == index) {
+        advancePastStuckMatch(stringSearch, text, nextIndex);
       } else {
         count--;
         index = nextIndex;
@@ -979,30 +991,60 @@ public class CollationAwareUTF8String {
     return index;
   }
 
-  private static int findIndexReverse(final StringSearch stringSearch, int count) {
-    assert(count >= 0);
-    int index = 0;
-    while (count > 0) {
-      index = stringSearch.previous();
-      if (index == StringSearch.DONE) {
-        return MATCH_NOT_FOUND;
-      }
-      count--;
-    }
-    return index + stringSearch.getMatchLength();
+  /**
+   * The overlapping search advances by one UTF-16 code unit past the last match start, which
+   * falls inside a surrogate pair when the match starts with a supplementary character, making
+   * next() report the same match again. Advance by one code point past the stuck match start so
+   * the search resumes at the next candidate without skipping an overlapping match.
+   */
+  private static void advancePastStuckMatch(final StringSearch stringSearch, final String text,
+      final int matchStart) {
+    stringSearch.setIndex(matchStart + Character.charCount(text.codePointAt(matchStart)));
   }
 
-  private static int findStartIndexReverse(final StringSearch stringSearch, int count) {
-    assert(count >= 0);
-    int index = 0;
-    while (count > 0) {
-      index = stringSearch.previous();
-      if (index == StringSearch.DONE) {
-        return MATCH_NOT_FOUND;
+  /**
+   * Returns the {@code count}-th match of {@code stringSearch} counting backward from the end,
+   * among the matches that start at or before {@code maxStartIndex}, or {@code MATCH_NOT_FOUND}
+   * if there are fewer such matches. The index returned (in UTF-16 code units) is the end of
+   * that match when {@code matchEnd} is true, and its start otherwise.
+   *
+   * The matches are enumerated forward with next() because StringSearch.previous() does not
+   * visit the same match set as next(): it skips overlapping matches, and it skips or misaligns
+   * matches when a character maps to multiple collation elements (see the note in
+   * collationTrimRight). Only the last {@code count} positions are retained, in a ring buffer
+   * that grows on demand so that a {@code count} far larger than the number of matches does not
+   * allocate up front.
+   */
+  private static int findIndexFromEnd(final StringSearch stringSearch, final String text,
+      final int count, final int maxStartIndex, final boolean matchEnd) {
+    // The buffer sizing and ring arithmetic below both need a positive count, so reject any
+    // other value here rather than relying on an assertion, which is disabled outside of test
+    // JVMs. This also covers a caller that negated Integer.MIN_VALUE and got it back unchanged.
+    if (count <= 0) return MATCH_NOT_FOUND;
+    // Match starts are distinct text offsets, so there can be at most text.length() matches.
+    if (count > text.length()) return MATCH_NOT_FOUND;
+    int[] lastMatches = new int[Math.min(count, INITIAL_MATCH_RING_CAPACITY)];
+    int found = 0;
+    int index = -1;
+    int nextIndex;
+    while ((nextIndex = stringSearch.next()) != StringSearch.DONE && nextIndex <= maxStartIndex) {
+      if (nextIndex == index) {
+        advancePastStuckMatch(stringSearch, text, nextIndex);
+        continue;
       }
-      count--;
+      // While the buffer is shorter than `count` no entry has been evicted yet, so `found` is
+      // below its length and indexes it directly; grow before the first write that would wrap.
+      if (found == lastMatches.length && lastMatches.length < count) {
+        lastMatches = Arrays.copyOf(lastMatches, (int) Math.min(count, 2L * lastMatches.length));
+      }
+      lastMatches[found % lastMatches.length] =
+        matchEnd ? nextIndex + stringSearch.getMatchLength() : nextIndex;
+      found++;
+      index = nextIndex;
     }
-    return index;
+    if (found < count) return MATCH_NOT_FOUND;
+    // The count-th match from the end is the oldest entry still in the ring buffer.
+    return lastMatches[found % count];
   }
 
   public static UTF8String subStringIndex(final UTF8String string, final UTF8String delimiter,
@@ -1016,7 +1058,7 @@ public class CollationAwareUTF8String {
     stringSearch.setOverlapping(true);
     if (count > 0) {
       // If the count is positive, we search for the count-th delimiter from the left.
-      int searchIndex = findIndex(stringSearch, count);
+      int searchIndex = findIndex(stringSearch, str, count);
       if (searchIndex == MATCH_NOT_FOUND) {
         return string;
       } else if (searchIndex == 0) {
@@ -1025,8 +1067,9 @@ public class CollationAwareUTF8String {
         return UTF8String.fromString(str.substring(0, searchIndex));
       }
     } else {
-      // If the count is negative, we search for the count-th delimiter from the right.
-      int searchIndex = findIndexReverse(stringSearch, -count);
+      // If the count is negative, we search for the count-th delimiter from the right. Any
+      // match start qualifies, so the search is not anchored.
+      int searchIndex = findIndexFromEnd(stringSearch, str, -count, str.length(), true);
       if (searchIndex == MATCH_NOT_FOUND) {
           return string;
       } else if (searchIndex == str.length()) {
