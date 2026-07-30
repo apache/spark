@@ -29,6 +29,14 @@ struct<size(collect_list(DISTINCT m)):int>
 
 
 -- !query
+SELECT COLLECT_LIST(DISTINCT m) FROM distinct_map_data
+-- !query schema
+struct<collect_list(DISTINCT m):array<map<string,int>>>
+-- !query output
+[{"a":1,"b":2},{"a":3}]
+
+
+-- !query
 SELECT COUNT(DISTINCT m, id) FROM distinct_map_data
 -- !query schema
 struct<count(DISTINCT m, id):bigint>
@@ -133,6 +141,32 @@ struct<count(DISTINCT map(m, m)):bigint>
 
 
 -- !query
+SELECT COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m)
+FROM VALUES
+  (CAST(map() AS MAP<STRING, INT>)),
+  (CAST(map() AS MAP<STRING, INT>)),
+  (CAST(NULL AS MAP<STRING, INT>))
+AS null_and_empty_map_data(m)
+-- !query schema
+struct<count(DISTINCT m):bigint,collect_list(DISTINCT m):array<map<string,int>>>
+-- !query output
+1	[{}]
+
+
+-- !query
+SELECT g, GROUPING(g), COUNT(DISTINCT m)
+FROM distinct_map_data
+GROUP BY GROUPING SETS ((g), ())
+ORDER BY GROUPING(g), g
+-- !query schema
+struct<g:int,grouping(g):tinyint,count(DISTINCT m):bigint>
+-- !query output
+1	0	2
+2	0	1
+NULL	1	2
+
+
+-- !query
 SELECT COUNT(DISTINCT named_struct('m', m, 'n', n))
 FROM VALUES
   (map('a', 1, 'b', 2), map('x', 1, 'y', 2)),
@@ -143,3 +177,35 @@ GROUP BY m
 struct<count(DISTINCT named_struct(m, m, n, n)):bigint>
 -- !query output
 1
+
+
+-- !query
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled	false
+
+
+-- !query
+SELECT COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m) FROM distinct_map_data
+-- !query schema
+struct<count(DISTINCT m):bigint,collect_list(DISTINCT m):array<map<string,int>>>
+-- !query output
+3	[{"a":1,"b":2},{"a":1,"b":2},{"a":3}]
+
+
+-- !query
+SELECT COUNT(DISTINCT named_struct('m', m)) FROM distinct_map_data
+-- !query schema
+struct<count(DISTINCT named_struct(m, m)):bigint>
+-- !query output
+3
+
+
+-- !query
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled	true

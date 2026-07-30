@@ -43,6 +43,18 @@ Aggregate [size(collect_list(distinct m#x, 0, 0, true), false) AS size(collect_l
 
 
 -- !query
+SELECT COLLECT_LIST(DISTINCT m) FROM distinct_map_data
+-- !query analysis
+Aggregate [collect_list(distinct m#x, 0, 0, true) AS collect_list(DISTINCT m)#x]
++- SubqueryAlias distinct_map_data
+   +- View (`distinct_map_data`, [g#x, m#x, id#x, should_keep#x])
+      +- Project [cast(g#x as int) AS g#x, cast(m#x as map<string,int>) AS m#x, cast(id#x as int) AS id#x, cast(should_keep#x as boolean) AS should_keep#x]
+         +- Project [g#x, m#x, id#x, should_keep#x]
+            +- SubqueryAlias distinct_map_data
+               +- LocalRelation [g#x, m#x, id#x, should_keep#x]
+
+
+-- !query
 SELECT COUNT(DISTINCT m, id) FROM distinct_map_data
 -- !query analysis
 Aggregate [count(distinct m#x, id#x) AS count(DISTINCT m, id)#xL]
@@ -197,6 +209,37 @@ Aggregate [count(distinct map(m, m#x)) AS count(DISTINCT map(m, m))#xL]
 
 
 -- !query
+SELECT COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m)
+FROM VALUES
+  (CAST(map() AS MAP<STRING, INT>)),
+  (CAST(map() AS MAP<STRING, INT>)),
+  (CAST(NULL AS MAP<STRING, INT>))
+AS null_and_empty_map_data(m)
+-- !query analysis
+Aggregate [count(distinct m#x) AS count(DISTINCT m)#xL, collect_list(distinct m#x, 0, 0, true) AS collect_list(DISTINCT m)#x]
++- SubqueryAlias null_and_empty_map_data
+   +- LocalRelation [m#x]
+
+
+-- !query
+SELECT g, GROUPING(g), COUNT(DISTINCT m)
+FROM distinct_map_data
+GROUP BY GROUPING SETS ((g), ())
+ORDER BY GROUPING(g), g
+-- !query analysis
+Sort [grouping(g)#x ASC NULLS FIRST, g#x ASC NULLS FIRST], true
++- Aggregate [g#x, spark_grouping_id#xL], [g#x, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grouping(g)#x, count(distinct m#x) AS count(DISTINCT m)#xL]
+   +- Expand [[g#x, m#x, id#x, should_keep#x, g#x, 0], [g#x, m#x, id#x, should_keep#x, null, 1]], [g#x, m#x, id#x, should_keep#x, g#x, spark_grouping_id#xL]
+      +- Project [g#x, m#x, id#x, should_keep#x, g#x AS g#x]
+         +- SubqueryAlias distinct_map_data
+            +- View (`distinct_map_data`, [g#x, m#x, id#x, should_keep#x])
+               +- Project [cast(g#x as int) AS g#x, cast(m#x as map<string,int>) AS m#x, cast(id#x as int) AS id#x, cast(should_keep#x as boolean) AS should_keep#x]
+                  +- Project [g#x, m#x, id#x, should_keep#x]
+                     +- SubqueryAlias distinct_map_data
+                        +- LocalRelation [g#x, m#x, id#x, should_keep#x]
+
+
+-- !query
 SELECT COUNT(DISTINCT named_struct('m', m, 'n', n))
 FROM VALUES
   (map('a', 1, 'b', 2), map('x', 1, 'y', 2)),
@@ -207,3 +250,39 @@ GROUP BY m
 Aggregate [m#x], [count(distinct named_struct(m, m#x, n, n#x)) AS count(DISTINCT named_struct(m, m, n, n))#xL]
 +- SubqueryAlias grouped_distinct_map_data
    +- LocalRelation [m#x, n#x]
+
+
+-- !query
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=false
+-- !query analysis
+SetCommand (spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled,Some(false))
+
+
+-- !query
+SELECT COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m) FROM distinct_map_data
+-- !query analysis
+Aggregate [count(distinct m#x) AS count(DISTINCT m)#xL, collect_list(distinct m#x, 0, 0, true) AS collect_list(DISTINCT m)#x]
++- SubqueryAlias distinct_map_data
+   +- View (`distinct_map_data`, [g#x, m#x, id#x, should_keep#x])
+      +- Project [cast(g#x as int) AS g#x, cast(m#x as map<string,int>) AS m#x, cast(id#x as int) AS id#x, cast(should_keep#x as boolean) AS should_keep#x]
+         +- Project [g#x, m#x, id#x, should_keep#x]
+            +- SubqueryAlias distinct_map_data
+               +- LocalRelation [g#x, m#x, id#x, should_keep#x]
+
+
+-- !query
+SELECT COUNT(DISTINCT named_struct('m', m)) FROM distinct_map_data
+-- !query analysis
+Aggregate [count(distinct named_struct(m, m#x)) AS count(DISTINCT named_struct(m, m))#xL]
++- SubqueryAlias distinct_map_data
+   +- View (`distinct_map_data`, [g#x, m#x, id#x, should_keep#x])
+      +- Project [cast(g#x as int) AS g#x, cast(m#x as map<string,int>) AS m#x, cast(id#x as int) AS id#x, cast(should_keep#x as boolean) AS should_keep#x]
+         +- Project [g#x, m#x, id#x, should_keep#x]
+            +- SubqueryAlias distinct_map_data
+               +- LocalRelation [g#x, m#x, id#x, should_keep#x]
+
+
+-- !query
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=true
+-- !query analysis
+SetCommand (spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled,Some(true))

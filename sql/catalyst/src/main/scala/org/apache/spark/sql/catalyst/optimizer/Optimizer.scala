@@ -352,8 +352,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
       // Put `InsertMapSortInGroupingExpressions` after `PullOutGroupingExpressions`,
-      // so the grouping keys can only be attribute and literal which makes
-      // `InsertMapSortInGroupingExpressions` easy to insert `MapSort`.
+      // so grouping keys are attributes or literals. The rule also projects complex distinct
+      // aggregate arguments before inserting `MapSort`.
       InsertMapSortInGroupingExpressions,
       InsertMapSortInRepartitionExpressions,
       ComputeCurrentTime,

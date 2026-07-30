@@ -11,6 +11,8 @@ SELECT COUNT(DISTINCT m) FROM distinct_map_data;
 
 SELECT SIZE(COLLECT_LIST(DISTINCT m)) FROM distinct_map_data;
 
+SELECT COLLECT_LIST(DISTINCT m) FROM distinct_map_data;
+
 SELECT COUNT(DISTINCT m, id) FROM distinct_map_data;
 
 SELECT COUNT(DISTINCT m), COUNT(DISTINCT id) FROM distinct_map_data;
@@ -47,9 +49,29 @@ SELECT COUNT(DISTINCT array(m)) FROM distinct_map_data;
 
 SELECT COUNT(DISTINCT map('m', m)) FROM distinct_map_data;
 
+SELECT COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m)
+FROM VALUES
+  (CAST(map() AS MAP<STRING, INT>)),
+  (CAST(map() AS MAP<STRING, INT>)),
+  (CAST(NULL AS MAP<STRING, INT>))
+AS null_and_empty_map_data(m);
+
+SELECT g, GROUPING(g), COUNT(DISTINCT m)
+FROM distinct_map_data
+GROUP BY GROUPING SETS ((g), ())
+ORDER BY GROUPING(g), g;
+
 SELECT COUNT(DISTINCT named_struct('m', m, 'n', n))
 FROM VALUES
   (map('a', 1, 'b', 2), map('x', 1, 'y', 2)),
   (map('b', 2, 'a', 1), map('y', 2, 'x', 1))
 AS grouped_distinct_map_data(m, n)
 GROUP BY m;
+
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=false;
+
+SELECT COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m) FROM distinct_map_data;
+
+SELECT COUNT(DISTINCT named_struct('m', m)) FROM distinct_map_data;
+
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=true;
