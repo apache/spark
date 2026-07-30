@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Attri
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DATA_SOURCE_V2_RELATION, DATA_SOURCE_V2_SCAN_RELATION, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
@@ -143,6 +144,8 @@ case class DataSourceV2Relation(
     table.capabilities.contains(TableCapability.AUTOMATIC_SCHEMA_EVOLUTION)
 
   def isVersioned: Boolean = table.version != null
+
+  override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_RELATION)
 }
 
 /**
@@ -186,6 +189,8 @@ case class DataSourceV2ScanRelation(
         s.filterAttributes.toImmutableArraySeq, this))
     case _ => AttributeSet.empty
   }
+
+  override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)
 
   override def name: String = relation.name
 
