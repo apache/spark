@@ -531,6 +531,41 @@ Project [cast(1960-01-02 03:04:05.123456789 + INTERVAL '0 00:00:00.000001' DAY T
 
 
 -- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' YEAR
+-- !query analysis
+Project [2020-01-02 03:04:05.123456789 + INTERVAL '1' YEAR AS TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' YEAR#x]
++- OneRowRelation
+
+
+-- !query
+SELECT INTERVAL '1' YEAR + TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789'
+-- !query analysis
+Project [2020-01-02 03:04:05.123456789 + INTERVAL '1' YEAR AS TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' YEAR#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH
+-- !query analysis
+Project [2020-01-02 03:04:05.123456789 + INTERVAL '1' MONTH AS TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1-2' YEAR TO MONTH
+-- !query analysis
+Project [2020-01-02 03:04:05.123456789 - INTERVAL '1-2' YEAR TO MONTH AS TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1-2' YEAR TO MONTH#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '1960-01-31 03:04:05.123456789' + INTERVAL '1' MONTH
+-- !query analysis
+Project [1960-01-31 03:04:05.123456789 + INTERVAL '1' MONTH AS TIMESTAMP_NTZ '1960-01-31 03:04:05.123456789' + INTERVAL '1' MONTH#x]
++- OneRowRelation
+
+
+-- !query
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -550,28 +585,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 89,
     "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0)"
-  } ]
-}
-
-
--- !query
-SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "left" : "\"TIMESTAMP_NTZ(9)\"",
-    "right" : "\"INTERVAL MONTH\"",
-    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 73,
-    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH"
   } ]
 }
 
