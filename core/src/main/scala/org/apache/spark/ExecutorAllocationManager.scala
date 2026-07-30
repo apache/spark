@@ -768,14 +768,16 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToNumRunningTask(stageAttempt) =
           stageAttemptToNumRunningTask.getOrElse(stageAttempt, 0) + 1
         // If this is the last pending task, mark the scheduler queue as empty
-        if (taskStart.taskInfo.speculative) {
-          stageAttemptToSpeculativeTaskIndices.getOrElseUpdate(stageAttempt,
-            new mutable.HashSet[Int]) += taskIndex
-          stageAttemptToPendingSpeculativeTasks
-            .get(stageAttempt).foreach(_.remove(taskIndex))
-        } else {
-          stageAttemptToTaskIndices.getOrElseUpdate(stageAttempt,
-            new mutable.HashSet[Int]) += taskIndex
+        if (stageAttemptToNumTasks.contains(stageAttempt)) {
+          if (taskStart.taskInfo.speculative) {
+            stageAttemptToSpeculativeTaskIndices.getOrElseUpdate(stageAttempt,
+              new mutable.HashSet[Int]) += taskIndex
+            stageAttemptToPendingSpeculativeTasks
+              .get(stageAttempt).foreach(_.remove(taskIndex))
+          } else {
+            stageAttemptToTaskIndices.getOrElseUpdate(stageAttempt,
+              new mutable.HashSet[Int]) += taskIndex
+          }
         }
         if (!hasPendingTasks) {
           allocationManager.onSchedulerQueueEmpty()
@@ -833,9 +835,11 @@ private[spark] class ExecutorAllocationManager(
       val stageAttempt = StageAttempt(stageId, stageAttemptId)
       val taskIndex = speculativeTask.taskIndex
       allocationManager.synchronized {
-        stageAttemptToPendingSpeculativeTasks.getOrElseUpdate(stageAttempt,
-          new mutable.HashSet[Int]).add(taskIndex)
-        allocationManager.onSchedulerBacklogged()
+        if (stageAttemptToNumTasks.contains(stageAttempt)) {
+          stageAttemptToPendingSpeculativeTasks.getOrElseUpdate(stageAttempt,
+            new mutable.HashSet[Int]).add(taskIndex)
+          allocationManager.onSchedulerBacklogged()
+        }
       }
     }
 
