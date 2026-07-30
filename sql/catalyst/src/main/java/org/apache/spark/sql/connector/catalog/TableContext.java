@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.Collections;
-import java.util.HashSet;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
@@ -34,7 +34,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * A load is either a read (optionally with time travel) or a write (carrying write privileges);
  * time travel and write privileges are mutually exclusive.
  *
- * @since 4.2.0
+ * @since 4.3.0
  */
 @Evolving
 public class TableContext {
@@ -44,15 +44,14 @@ public class TableContext {
   // Never null; an empty set means no write privileges (i.e. a read).
   private final Set<TableWritePrivilege> writePrivileges;
 
-  public TableContext(TimeTravel timeTravel, Set<TableWritePrivilege> writePrivileges) {
-    Set<TableWritePrivilege> privileges = (writePrivileges == null)
-        ? Collections.emptySet()
-        : Collections.unmodifiableSet(new HashSet<>(writePrivileges));
-    if (timeTravel != null && !privileges.isEmpty()) {
-      throw new IllegalArgumentException("Should not write to a table with time travel");
-    }
+  public TableContext(TimeTravel timeTravel, Set<TableWritePrivilege> privileges) {
     this.timeTravel = timeTravel;
-    this.writePrivileges = privileges;
+    this.writePrivileges = privileges == null ? Set.of() : Set.copyOf(privileges);
+    if (timeTravel != null && !writePrivileges.isEmpty()) {
+      throw new SparkIllegalArgumentException(
+          "INTERNAL_ERROR",
+          Map.of("message", "Cannot set both time travel and write privileges"));
+    }
   }
 
   /** Returns the time-travel spec, or empty for a current-version read. */

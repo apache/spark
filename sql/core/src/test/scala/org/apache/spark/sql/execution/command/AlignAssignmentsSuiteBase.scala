@@ -30,12 +30,13 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, ColumnDefaultValue, Identifier, SupportsRowLevelOperations, TableCapability, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Column, ColumnDefaultValue, Identifier, SupportsRowLevelOperations, TableCapability, TableCatalog, TableContext, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
 
@@ -162,6 +163,10 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
       }
     })
     when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
+      .thenCallRealMethod()
+    // The options-aware overload runs the real default dispatch, which delegates to the
+    // stubbed overloads above.
+    when(newCatalog.loadTable(any(), any[TableContext](), any[CaseInsensitiveStringMap]()))
       .thenCallRealMethod()
     when(newCatalog.name()).thenReturn("cat")
     newCatalog

@@ -488,18 +488,27 @@ private[sql] object CatalogV2Util {
       writePrivilegesString: Option[String] = None,
       options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): Table = {
     val timeTravel: TimeTravel = timeTravelSpec match {
-      case Some(v: AsOfVersion) => new TimeTravel.Version(v.version)
-      case Some(ts: AsOfTimestamp) => new TimeTravel.Timestamp(ts.timestamp)
+      case Some(v: AsOfVersion) => new TimeTravel.AsOfVersion(v.version)
+      case Some(ts: AsOfTimestamp) => new TimeTravel.AsOfTimestamp(ts.timestamp)
       case None => null
     }
-    val writePrivileges: util.Set[TableWritePrivilege] = writePrivilegesString match {
+    val context = new TableContext(timeTravel, parseWritePrivileges(writePrivilegesString))
+    catalog.asTableCatalog.loadTable(ident, context, options)
+  }
+
+  /**
+   * Parses the comma-separated write-privileges string (as carried in the internal
+   * [[org.apache.spark.sql.catalyst.analysis.UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES]]
+   * option) into a set of [[TableWritePrivilege]]. Returns an empty set when absent (a read).
+   */
+  private def parseWritePrivileges(
+      writePrivilegesString: Option[String]): util.Set[TableWritePrivilege] = {
+    writePrivilegesString match {
       case Some(str) =>
         str.split(",").map(_.trim).map(TableWritePrivilege.valueOf).toSet.asJava
       case None =>
         Collections.emptySet()
     }
-    val context = new TableContext(timeTravel, writePrivileges)
-    catalog.asTableCatalog.loadTable(ident, context, options)
   }
 
   /**

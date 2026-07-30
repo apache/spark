@@ -26,26 +26,26 @@ import org.apache.spark.annotation.Evolving;
  * <p>
  * This sealed interface has two implementations:
  * <ul>
- *   <li>{@link Version} -- read the table as of a specific version identifier</li>
- *   <li>{@link Timestamp} -- read the table as of a specific point in time</li>
+ *   <li>{@link AsOfVersion} -- read the table as of a specific version identifier</li>
+ *   <li>{@link AsOfTimestamp} -- read the table as of a specific point in time</li>
  * </ul>
  *
- * @since 4.2.0
+ * @since 4.3.0
  */
 @Evolving
-public sealed interface TimeTravel permits TimeTravel.Version, TimeTravel.Timestamp {
+public sealed interface TimeTravel permits TimeTravel.AsOfVersion, TimeTravel.AsOfTimestamp {
 
   /**
    * Time travel to a specific version of the table.
    *
    * @param version the version identifier (connector-defined)
    */
-  record Version(String version) implements TimeTravel {}
+  record AsOfVersion(String version) implements TimeTravel {}
 
   /**
    * Time travel to a specific point in time.
    *
    * @param micros microseconds since 1970-01-01 00:00:00 UTC
    */
-  record Timestamp(long micros) implements TimeTravel {}
+  record AsOfTimestamp(long micros) implements TimeTravel {}
 }

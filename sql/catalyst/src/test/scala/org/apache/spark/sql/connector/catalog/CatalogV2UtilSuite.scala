@@ -22,7 +22,7 @@ import java.util.Collections
 import org.mockito.ArgumentMatchers.{any, eq => mockEq}
 import org.mockito.Mockito.{mock, verify, when}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, TimeTravelSpec}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.IntegerType
@@ -92,10 +92,10 @@ class CatalogV2UtilSuite extends SparkFunSuite {
   test("getTable rejects combining time travel and write privileges") {
     val testCatalog = mockCatalogWithRealDispatch()
     val ident = mock(classOf[Identifier])
-    val e = intercept[IllegalArgumentException] {
+    val e = intercept[SparkIllegalArgumentException] {
       CatalogV2Util.getTable(testCatalog, ident, Some(AsOfVersion("v1")), Some("INSERT"))
     }
-    assert(e.getMessage.contains("Should not write to a table with time travel"))
+    assert(e.getMessage.contains("Cannot set both time travel and write privileges"))
   }
 
   test("TableContext normalizes null time travel and null write privileges to empty") {
@@ -106,9 +106,9 @@ class CatalogV2UtilSuite extends SparkFunSuite {
 
   test("TableContext equals / hashCode / toString") {
     val emptyPrivileges = Collections.emptySet[TableWritePrivilege]()
-    val a = new TableContext(new TimeTravel.Version("v1"), emptyPrivileges)
-    val b = new TableContext(new TimeTravel.Version("v1"), emptyPrivileges)
-    val c = new TableContext(new TimeTravel.Timestamp(1L), emptyPrivileges)
+    val a = new TableContext(new TimeTravel.AsOfVersion("v1"), emptyPrivileges)
+    val b = new TableContext(new TimeTravel.AsOfVersion("v1"), emptyPrivileges)
+    val c = new TableContext(new TimeTravel.AsOfTimestamp(1L), emptyPrivileges)
     assert(a == b)
     assert(a.hashCode() == b.hashCode())
     assert(a != c)

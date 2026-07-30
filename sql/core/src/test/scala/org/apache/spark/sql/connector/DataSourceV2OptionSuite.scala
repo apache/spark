@@ -485,7 +485,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       val ctx = inMemoryCatalog.lastTableContext
       assert(ctx.isDefined)
       assert(ctx.get.timeTravel().isPresent)
-      assert(ctx.get.timeTravel().get() === new TimeTravel.Version("v1"))
+      assert(ctx.get.timeTravel().get() === new TimeTravel.AsOfVersion("v1"))
 
       val opts = inMemoryCatalog.lastLoadTableOptions
       assert(opts.isDefined)

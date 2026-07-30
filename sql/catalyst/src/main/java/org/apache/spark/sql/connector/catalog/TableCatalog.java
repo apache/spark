@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
@@ -212,7 +213,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @return the table's metadata
    * @throws NoSuchTableException If the table doesn't exist
    *
-   * @since 4.2.0
+   * @since 4.3.0
    */
   default Table loadTable(
       Identifier ident,
@@ -220,12 +221,14 @@ public interface TableCatalog extends CatalogPlugin {
       CaseInsensitiveStringMap options) throws NoSuchTableException {
     if (context.timeTravel().isPresent()) {
       TimeTravel timeTravel = context.timeTravel().get();
-      if (timeTravel instanceof TimeTravel.Version v) {
+      if (timeTravel instanceof TimeTravel.AsOfVersion v) {
         return loadTable(ident, v.version());
-      } else if (timeTravel instanceof TimeTravel.Timestamp ts) {
+      } else if (timeTravel instanceof TimeTravel.AsOfTimestamp ts) {
         return loadTable(ident, ts.micros());
       } else {
-        throw new IllegalArgumentException("Unsupported time travel spec: " + timeTravel);
+        throw new SparkIllegalArgumentException(
+            "INTERNAL_ERROR",
+            Map.of("message", "Unsupported time travel spec: " + timeTravel));
       }
     } else if (!context.writePrivileges().isEmpty()) {
       return loadTable(ident, context.writePrivileges());

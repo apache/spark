@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpe
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableWritePrivilege, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -47,6 +47,7 @@ import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, Partitio
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
@@ -190,6 +191,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     })
     when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
       .thenCallRealMethod()
+    // The options-aware overload runs the real default dispatch, which delegates to the
+    // stubbed overloads above.
+    when(newCatalog.loadTable(any(), any[TableContext](), any[CaseInsensitiveStringMap]()))
+      .thenCallRealMethod()
     when(newCatalog.name()).thenReturn("testcat")
     newCatalog
   }
@@ -208,6 +213,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       }
     })
     when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
+      .thenCallRealMethod()
+    // The options-aware overload runs the real default dispatch, which delegates to the
+    // stubbed overloads above.
+    when(newCatalog.loadTable(any(), any[TableContext](), any[CaseInsensitiveStringMap]()))
       .thenCallRealMethod()
     when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
     newCatalog
