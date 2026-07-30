@@ -9558,6 +9558,12 @@
     ],
     "sqlState" : "42601"
   },
+  "WRITING_JOB_FAILED" : {
+    "message" : [
+      "Writing job failed."
+    ],
+    "sqlState" : "58030"
+  },
   "WRONG_COMMAND_FOR_OBJECT_TYPE" : {
     "message" : [
       "The operation <operation> requires a <requiredType>. But <objectName> is a <foundType>. Use <alternative> instead."
@@ -10652,11 +10658,6 @@
   "_LEGACY_ERROR_TEMP_2068" : {
     "message" : [
       "Missing database location."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2070" : {
-    "message" : [
-      "Writing job failed."
     ]
   },
   "_LEGACY_ERROR_TEMP_2071" : {
