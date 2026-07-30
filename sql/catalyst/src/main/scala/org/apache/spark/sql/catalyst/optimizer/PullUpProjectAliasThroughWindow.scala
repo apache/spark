@@ -115,13 +115,17 @@ object PullUpProjectAliasThroughWindow extends Rule[LogicalPlan] {
         // carries below (e.g. across a subquery alias).
         val pullUpMap = AttributeMap(pullUp.map(a => a.toAttribute -> a))
         val newProjectList = projectList.map {
-          // Rename the pulled-up alias to the top attribute's name: the lookup is keyed by expr id
-          // only, so a resolved top attribute may carry a different (but equivalent) cosmetic name
-          // than the lower alias. `withName` keeps the alias's child and expr id, so the output
-          // schema stays byte-for-byte identical.
+          // Rebuild the alias so it keeps the lower alias's child and expr id but adopts the top
+          // attribute's full identity (name, qualifier, metadata). The lookup is keyed by expr id
+          // only, so a resolved top attribute may carry a different name/qualifier/metadata than
+          // the lower alias (e.g. a different qualifier across a subquery alias); taking them from
+          // the top attribute keeps the output schema byte-for-byte identical.
           case attr: Attribute =>
             pullUpMap.get(attr) match {
-              case Some(a) => a.withName(attr.name)
+              case Some(a) => Alias(a.child, attr.name)(
+                exprId = a.exprId,
+                qualifier = attr.qualifier,
+                explicitMetadata = Some(attr.metadata))
               case None => attr
             }
           case other => other

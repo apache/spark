@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.types.MetadataBuilder
 
 class PullUpProjectAliasThroughWindowSuite extends PlanTest {
 
@@ -258,26 +259,34 @@ class PullUpProjectAliasThroughWindowSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 
-  test("rewrite preserves the top attribute's name when it differs from the lower alias") {
-    // The lookup is keyed by expr id only, so a resolved top attribute can carry a different
-    // cosmetic name than the lower alias (same expr id). The rebuilt alias must keep the top
-    // attribute's name so the output schema is unchanged.
+  test("rewrite preserves the top attribute's name, qualifier, and metadata") {
+    // The lookup is keyed by expr id only, so a resolved top attribute can carry a different name,
+    // qualifier, and metadata than the lower alias (same expr id). The rebuilt alias must adopt the
+    // top attribute's full identity so the output schema is byte-for-byte unchanged.
     val userid = Alias(key, "userid")()
     val bottom = Project(Seq(userid, value, key), testRelation)
     val window = windowOver(bottom, "w", key :: Nil)
     val w = window.windowExpressions.head.toAttribute
-    // The top project references `userid` under a different (but expr-id-equivalent) name.
-    val renamed = userid.toAttribute.withName("external")
-    val originalQuery = Project(Seq(renamed, w), window)
+    // The top project references `userid` under a different name, qualifier, and metadata.
+    val metadata = new MetadataBuilder().putString("comment", "external").build()
+    val topAttr = AttributeReference("external", key.dataType, key.nullable, metadata)(
+      exprId = userid.exprId, qualifier = Seq("sub"))
+    val originalQuery = Project(Seq(topAttr, w), window)
 
     val prunedBottom = Project(Seq(value, key), testRelation)
     val expected = Project(
-      Seq(Alias(key, "external")(exprId = userid.exprId), w),
+      Seq(
+        Alias(key, "external")(
+          exprId = userid.exprId, qualifier = Seq("sub"), explicitMetadata = Some(metadata)),
+        w),
       window.copy(child = prunedBottom))
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, expected)
-    // The output name must be preserved as `external`, not reverted to the lower alias's `userid`.
-    assert(optimized.output.head.name == "external")
+    // The output attribute must match the top attribute exactly, not the lower alias's identity.
+    val out = optimized.output.head
+    assert(out.name == "external")
+    assert(out.qualifier == Seq("sub"))
+    assert(out.metadata == metadata)
   }
 
   test("rewrite is idempotent") {
