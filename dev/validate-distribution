@@ -18,7 +18,7 @@
 #
 
 """
-Run basic smoke tests against a built Spark distribution.
+Validate a built Spark distribution.
 """
 
 import argparse
@@ -54,9 +54,19 @@ SMOKE_TESTS = [
     ("sbin/start-connect-server.sh", "--help"),
 ]
 
+SMOKE_TEST_TIMEOUT = 60
+
+# Scripts that must have SPARK_CONNECT_MODE set in the Connect distribution.
+CONNECT_MODE_SCRIPTS = [
+    "bin/pyspark",
+    "bin/spark-shell",
+    "bin/spark-submit",
+]
+
 
 @contextmanager
 def resolve_distribution(dist_input: Path):
+    """Yield a directory path to a distribution, unpacking a .tgz to a temp dir if needed."""
     if dist_input.is_dir():
         yield dist_input.resolve()
     elif dist_input.is_file():
@@ -64,9 +74,14 @@ def resolve_distribution(dist_input: Path):
             work_dir = Path(tmp)
             print(f"Unpacking {dist_input} into {work_dir}")
             with tarfile.open(dist_input) as tf:
-                tf.extractall(work_dir)
+                tf.extractall(work_dir, filter="data")
             top_level = list(work_dir.iterdir())
-            assert len(top_level) == 1, f"Expected one top-level entry, got: {top_level}"
+            if len(top_level) != 1:
+                print(
+                    f"Expected one top-level entry, got: {top_level}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             yield top_level[0]
     else:
         print(f"Not found: {dist_input}", file=sys.stderr)
@@ -91,10 +106,20 @@ def check_distribution(spark_dist: Path) -> list[str]:
     for rel_path, *args in SMOKE_TESTS:
         label = " ".join([rel_path, *args])
         print(f"Checking {label}...", end=" ", flush=True)
-        result = subprocess.run(
-            [str(spark_dist / rel_path), *args],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-        )
+        try:
+            result = subprocess.run(
+                [str(spark_dist / rel_path), *args],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                timeout=SMOKE_TEST_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            print("FAILED")
+            errors.append(f"{label}: timed out after {SMOKE_TEST_TIMEOUT}s")
+            continue
+        except OSError as e:
+            print("FAILED")
+            errors.append(f"{label}: {e}")
+            continue
         if result.returncode != 0:
             print("FAILED")
             for line in result.stdout.splitlines():
@@ -128,9 +153,30 @@ def check_tar_has_license_notice(tar_path: Path, label: str) -> list[str]:
     return errors
 
 
+def check_connect_scripts(spark_dist: Path) -> list[str]:
+    """Verify the Connect distribution has SPARK_CONNECT_MODE set in key scripts."""
+    errors = []
+    print("Checking Connect environment variables...", end=" ", flush=True)
+    for script in CONNECT_MODE_SCRIPTS:
+        path = spark_dist / script
+        if not path.exists():
+            errors.append(f"{script}: not found in Connect distribution")
+            continue
+        content = path.read_text()
+        if "SPARK_CONNECT_MODE" not in content:
+            errors.append(f"{script}: missing SPARK_CONNECT_MODE")
+    if errors:
+        print("FAILED")
+        for e in errors:
+            print(f"  {e}")
+    else:
+        print("OK")
+    return errors
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Smoke tests for a built Spark distribution.",
+        description="Basic validation and smoke tests for a built Spark distribution.",
     )
     parser.add_argument(
         "distribution",
@@ -165,6 +211,7 @@ def main():
     if args.connect:
         with resolve_distribution(args.connect) as connect_dist:
             errors.extend(check_distribution(connect_dist))
+            errors.extend(check_connect_scripts(connect_dist))
 
     if args.pip:
         pip_dist = args.pip
@@ -184,7 +231,7 @@ def main():
             print(f"  {e}", file=sys.stderr)
         sys.exit(1)
 
-    print("All distribution smoke tests passed.")
+    print("All distribution validation checks passed.")
 
 
 if __name__ == "__main__":

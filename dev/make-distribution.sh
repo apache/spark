@@ -396,13 +396,13 @@ if [ "$MAKE_TGZ" == "true" ]; then
   fi
 fi
 
-echo "Running distribution smoke tests..."
+echo "Running distribution validation..."
 if [ "$MAKE_TGZ" == "true" ]; then
   DIST_ARG="$SPARK_HOME/spark-$VERSION-bin-$NAME.tgz"
 else
   DIST_ARG="$DISTDIR"
 fi
-VALIDATE_CMD=("$SPARK_HOME/dev/run-distribution-tests" "$DIST_ARG")
+VALIDATE_CMD=("$SPARK_HOME/dev/validate-distribution" "$DIST_ARG")
 if [ "$MAKE_PIP" == "true" ]; then
   VALIDATE_CMD+=(--pip "$SPARK_HOME/python/dist")
 fi
