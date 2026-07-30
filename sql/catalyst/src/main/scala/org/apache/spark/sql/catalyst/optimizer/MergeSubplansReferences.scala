@@ -22,18 +22,18 @@ import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.trees.TreePattern.{NO_GROUPING_AGGREGATE_REFERENCE, SCALAR_SUBQUERY_REFERENCE, TreePattern}
 import org.apache.spark.sql.types.DataType
 
-// The temporal reference placeholders below are produced by the `MergeSubplans` rule (now in
+// The temporary reference placeholders below are produced by the `MergeSubplans` rule (now in
 // sql/core) but must remain in catalyst: `ScalarSubqueryReference` is referenced by the catalyst
 // expression `BloomFilterMightContain`, and catalyst cannot depend on sql/core.
 
 /**
- * Temporal reference to a subquery which is added to a `PlanMerger`.
+ * Temporary reference to a subquery which is added to a `PlanMerger`.
  *
  * @param level The level of the replaced subquery. It defines the `PlanMerger` instance into which
  *              the subquery is merged.
  * @param mergedPlanIndex The index of the merged plan in the `PlanMerger`.
  * @param outputIndex The index of the output attribute of the merged plan.
- * @param dataType The dataType of original scalar subquery.
+ * @param dataType The data type of the original scalar subquery.
  * @param exprId The expression id of the original scalar subquery.
  */
 case class ScalarSubqueryReference(
@@ -48,13 +48,13 @@ case class ScalarSubqueryReference(
 }
 
 /**
- * Temporal reference to a non-grouping aggregate which is added to a `PlanMerger`.
+ * Temporary reference to a non-grouping aggregate which is added to a `PlanMerger`.
  *
  * @param level The level of the replaced aggregate. It defines the `PlanMerger` instance into which
  *              the aggregate is merged.
  * @param mergedPlanIndex The index of the merged plan in the `PlanMerger`.
  * @param outputIndices The indices of the output attributes of the merged plan.
- * @param output The output of original aggregate.
+ * @param output The output of the original aggregate.
  */
 case class NonGroupingAggregateReference(
     level: Int,
