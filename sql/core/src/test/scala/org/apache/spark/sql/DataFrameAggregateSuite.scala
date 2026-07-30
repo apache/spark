@@ -738,7 +738,8 @@ class DataFrameAggregateSuite extends SharedSparkSession
         "inputSql" -> "\"a\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"ARRAY\""),
-      context = ExpectedContext(fragment = "collect_union", callSitePattern = getCurrentClassCallSitePattern))
+      context = ExpectedContext(
+        fragment = "collect_union", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-55256: array_agg and collect_list skip nulls by default") {
