@@ -30,8 +30,8 @@ import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 /**
- * Adds [[MapSort]] to grouping expressions, including distinct aggregate arguments, containing
- * map columns, as the key/value pairs need to be in the correct order before grouping:
+ * Adds [[MapSort]] to grouping expressions and distinct aggregate arguments that contain maps,
+ * ensuring key/value pairs have a consistent order before aggregation:
  *
  * SELECT map_column, COUNT(*) FROM TABLE GROUP BY map_column =>
  * SELECT _groupingmapsort as map_column, COUNT(*) FROM (
