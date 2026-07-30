@@ -132,9 +132,9 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
  * @param maxNestedViewDepth The maximum allowed depth of nested view resolution.
- * @param relationCache A mapping from qualified table names and time travel spec to resolved
- *                      relations. This can ensure that the table is resolved only once if a table
- *                      is used multiple times in a query.
+ * @param relationCache A mapping from (qualified table name, time travel spec, options) to
+ *                      resolved relations. This can ensure that the table is resolved only once if
+ *                      a table is used multiple times in a query with the same options.
  * @param referredTempViewNames All the temp view names referred by the current view we are
  *                              resolving. It's used to make sure the relation resolution is
  *                              consistent between view creation and view resolution. For example,
@@ -154,8 +154,7 @@ case class AnalysisContext(
     resolutionPathEntries: Option[Seq[Seq[String]]] = None,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
-    relationCache: mutable.Map[(Seq[String], Option[TimeTravelSpec]), LogicalPlan] =
-      mutable.Map.empty,
+    relationCache: mutable.Map[RelationCacheKey, LogicalPlan] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.

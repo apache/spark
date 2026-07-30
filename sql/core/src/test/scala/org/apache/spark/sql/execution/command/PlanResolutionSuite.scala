@@ -27,7 +27,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -3407,7 +3407,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
       // after first resolution, cache should have 1 entry (without time travel)
       assert(ctx.relationCache.size == 1)
-      assert(ctx.relationCache.keys.head._2.isEmpty)
+      assert(ctx.relationCache.keys.head.timeTravelSpec.isEmpty)
 
       // create unresolved relation with time travel spec
       val timeTravelSpec = AsOfVersion("v1")
@@ -3462,6 +3462,43 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       assert(resolved1.catalog == resolved2.catalog)
       assert(resolved1.identifier == resolved2.identifier)
       assert(resolved1.timeTravelSpec == resolved2.timeTravelSpec)
+    }
+  }
+
+  test("SPARK-58389: shared relation cache hit re-applies the current read's options") {
+    AnalysisContext.withNewAnalysisContext {
+      val ident = Identifier.of(Array.empty[String], "tab")
+      // testCat.loadTable returns a stable `table` mock, so a relation built from it shares the
+      // same Table.id and therefore passes `isSameTable` in the shared-cache lookup.
+      val cachedTable = testCat.loadTable(ident)
+      // The entry sitting in the shared relation cache (as if left by an earlier CACHE TABLE)
+      // carries a distinctive option that must NOT leak onto this query's relation.
+      val cachedRelation = DataSourceV2Relation.create(
+        cachedTable, Some(testCat), Some(ident),
+        new CaseInsensitiveStringMap(java.util.Map.of("cachedOnly", "stale")))
+
+      // A shared relation cache that always returns the stale entry by name -- this is the same
+      // RelationCache abstraction that SharedState backs with the CacheManager (df.cache()).
+      val sharedCache: RelationCache = (_, _) => Some(cachedRelation)
+
+      val rule = new RelationResolution(catalogManagerWithDefault, sharedCache)
+
+      // This read carries its own option, different from the cached entry's.
+      val unresolved = UnresolvedRelation(
+        Seq("testcat", "tab"),
+        new CaseInsensitiveStringMap(java.util.Map.of("split-size", "5")))
+
+      val resolved = rule.resolveRelation(unresolved) match {
+        case Some(AsDataSourceV2Relation(relation)) => relation
+        case other => fail(s"failed to resolve as v2 relation: $other")
+      }
+
+      // The shared-cache entry was reused (same Table), proving we went through that branch.
+      assert(resolved.table == cachedTable)
+      // ... but the relation carries THIS read's option, not the stale cached one: the branch
+      // re-applies `finalOptions` via `cached.copy(options = ...)`.
+      assert(resolved.options.get("split-size") === "5")
+      assert(!resolved.options.containsKey("cachedOnly"))
     }
   }
 

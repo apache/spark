@@ -200,11 +200,8 @@ public interface TableCatalog extends CatalogPlugin {
    * user-specified options.
    * <p>
    * The default implementation ignores {@code options} and delegates to the existing
-   * {@code loadTable} overloads based on {@code context}: {@link #loadTable(Identifier, String)}
-   * or {@link #loadTable(Identifier, long)} when time travel is present,
-   * {@link #loadTable(Identifier, Set)} when write privileges are present, otherwise
-   * {@link #loadTable(Identifier)}. Catalogs that want to receive the user options while reading a
-   * table (e.g. to customize the scan) must override this method.
+   * {@code loadTable} overloads based on {@code context}. Catalogs that want to receive the user
+   * options while reading a table must override this method.
    *
    * @param ident a table identifier
    * @param context the parsed load parameters (time travel, write privileges)

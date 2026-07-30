@@ -507,7 +507,7 @@ private[sql] object CatalogV2Util {
       case Some(str) =>
         str.split(",").map(_.trim).map(TableWritePrivilege.valueOf).toSet.asJava
       case None =>
-        Collections.emptySet()
+        util.Set.of()
     }
   }
 

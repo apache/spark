@@ -15,29 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.catalog;
+package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * A time-travel specification for reading a table as of a specific version or point in time.
+ * Key for the per-query relation cache in [[AnalysisContext]], shared by [[RelationResolution]].
  *
- * @since 4.3.0
+ * Options are part of the key because a catalog's options-aware `loadTable` can return a different
+ * `Table` depending on them, so two references to the same identifier with different options must
+ * not share a cached relation.
  */
-@Evolving
-public sealed interface TimeTravel permits TimeTravel.AsOfVersion, TimeTravel.AsOfTimestamp {
-
-  /**
-   * Time travel to a specific version of the table.
-   *
-   * @param version the version identifier (connector-defined)
-   */
-  record AsOfVersion(String version) implements TimeTravel {}
-
-  /**
-   * Time travel to a specific point in time.
-   *
-   * @param micros microseconds since 1970-01-01 00:00:00 UTC
-   */
-  record AsOfTimestamp(long micros) implements TimeTravel {}
-}
+private[sql] case class RelationCacheKey(
+    nameParts: Seq[String],
+    timeTravelSpec: Option[TimeTravelSpec],
+    options: CaseInsensitiveStringMap)

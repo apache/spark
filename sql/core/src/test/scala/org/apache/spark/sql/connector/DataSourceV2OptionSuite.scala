@@ -510,4 +510,99 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert(opts.get.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES) === null)
     }
   }
+
+  test("SPARK-58389: a self-join with different options loads the table once per option bag") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+      inMemoryCatalog.resetLoadTableCalls()
+
+      // The two references share a name but carry different options. Because a catalog's
+      // options-aware loadTable can return a different Table depending on the options, the analyzer
+      // relation cache is keyed on the options, so each reference triggers its own loadTable rather
+      // than reusing the first reference's Table.
+      val df = sql(s"SELECT a.id FROM $t1 WITH (`split-size` = 5) a " +
+        s"JOIN $t1 WITH (`split-size` = 9) b ON a.id = b.id")
+      df.collect()
+
+      // Each distinct option bag reaches the catalog as its own loadTable call.
+      val loadedOptions = inMemoryCatalog.loadTableCalls
+        .map(_._2.get("split-size"))
+        .filter(_ != null)
+        .sorted
+      assert(loadedOptions === Seq("5", "9"),
+        s"expected one loadTable per distinct option bag, got: $loadedOptions")
+
+      // Each scan also keeps its own option end-to-end (neither reference inherits the other's).
+      val splitSizes = df.queryExecution.optimizedPlan.collect {
+        case s: DataSourceV2ScanRelation => s.relation.options.get("split-size")
+      }.sorted
+      assert(splitSizes === Seq("5", "9"))
+    }
+  }
+
+  test("SPARK-58389: repeated references with the same options load the table once") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+      inMemoryCatalog.resetLoadTableCalls()
+
+      // Both references carry the same options, so they share one relation-cache entry: the table
+      // is loaded once (resolve-once-per-query is preserved for identical option bags).
+      sql(s"SELECT a.id FROM $t1 WITH (`split-size` = 5) a " +
+        s"JOIN $t1 WITH (`split-size` = 5) b ON a.id = b.id").collect()
+
+      val splitSizeLoads = inMemoryCatalog.loadTableCalls
+        .count(_._2.get("split-size") === "5")
+      assert(splitSizeLoads === 1,
+        s"expected a single loadTable for identical option bags, got: $splitSizeLoads")
+    }
+  }
+
+  test("SPARK-58389: time travel option on a write target is rejected with a user-facing error") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+
+      // A time-travel option on a write target is reachable via the option form (the `AS OF`
+      // syntax is blocked earlier by the parser). It must surface as a user-facing analysis error,
+      // not the internal TableContext mutual-exclusion guard (which would report INTERNAL_ERROR).
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $t1 WITH ('versionAsOf' = 'v1') VALUES (1, 'a')")
+        },
+        condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+        parameters = Map("relationId" -> "`testcat`.`ns1`.`ns2`.`table`"))
+    }
+  }
+
+  test("SPARK-58389: CACHE TABLE result is not reused for a read carrying different options") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      // Cache the option-free read. The CacheManager keys entries on the query plan, and a DSv2
+      // relation's plan carries its `options`, so the cached entry's fingerprint is "no options".
+      val cached = spark.table(t1)
+      cached.cache()
+      try {
+        val cacheManager = spark.sharedState.cacheManager
+
+        // An option-free read has the same plan fingerprint, so it reuses the cached result.
+        assert(cacheManager.lookupCachedData(spark.table(t1)).isDefined,
+          "an option-free read should hit the cached result")
+
+        // A read carrying options has a different fingerprint, so it must NOT reuse the cached
+        // result -- otherwise the connector's options would be silently ignored on a cache hit.
+        assert(
+          cacheManager.lookupCachedData(spark.read.option("split-size", "5").table(t1)).isEmpty,
+          "a read carrying options must not reuse the option-free cached result")
+      } finally {
+        cached.unpersist()
+      }
+    }
+  }
 }
