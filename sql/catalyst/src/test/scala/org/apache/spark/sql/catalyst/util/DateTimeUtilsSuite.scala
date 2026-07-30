@@ -1199,6 +1199,49 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-57825: timestamp nanos add year-month interval preserves nanosWithinMicro") {
+    def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+
+    // The epoch-micros part follows the micro `timestampAddMonths` (including the Jan-31 -> Feb-29
+    // day clamp in a leap year) while the sub-microsecond remainder is carried through unchanged.
+    assert(timestampNanosAddMonths(
+      nanos(date(2020, 1, 31, 12, 0, 0, 123000, LA), 789), 1, LA) ===
+      nanos(date(2020, 2, 29, 12, 0, 0, 123000, LA), 789))
+
+    outstandingZoneIds.foreach { zid =>
+      // The sub-microsecond remainder is preserved for the boundary values 0, 1 and 999.
+      Seq(0, 1, 999).foreach { rem =>
+        // Zero interval is a no-op on both the epoch-micros and the remainder.
+        assert(timestampNanosAddMonths(
+          nanos(date(2021, 3, 18, 19, 44, 1, 123456, zid), rem), 0, zid) ===
+          nanos(date(2021, 3, 18, 19, 44, 1, 123456, zid), rem))
+        // Adding whole years/months shifts only the month field, never the fraction.
+        assert(timestampNanosAddMonths(
+          nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), rem), 14, zid) ===
+          nanos(date(2021, 3, 2, 3, 4, 5, 123456, zid), rem))
+        // Subtracting months is symmetric.
+        assert(timestampNanosAddMonths(
+          nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), rem), -1, zid) ===
+          nanos(date(2019, 12, 2, 3, 4, 5, 123456, zid), rem))
+        // Pre-epoch (negative epochMicros) value.
+        assert(timestampNanosAddMonths(
+          nanos(date(1960, 1, 2, 3, 4, 5, 123456, zid), rem), 1, zid) ===
+          nanos(date(1960, 2, 2, 3, 4, 5, 123456, zid), rem))
+      }
+    }
+
+    // Consistency with the micro helper: epochMicros matches `timestampAddMonths` exactly and the
+    // remainder is independent of the interval amount.
+    outstandingZoneIds.foreach { zid =>
+      val start = nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), 789)
+      val months = 15
+      val result = timestampNanosAddMonths(start, months, zid)
+      assert(result.epochMicros === timestampAddMonths(start.epochMicros, months, zid))
+      assert(result.nanosWithinMicro === start.nanosWithinMicro)
+    }
+  }
+
   test("SPARK-57159: timestampNanosToEpochNanos packs into int64 epoch-nanoseconds") {
     def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
       TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
