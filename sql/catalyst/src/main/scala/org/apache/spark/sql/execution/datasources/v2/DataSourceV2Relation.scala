@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Optional, OptionalLong}
+import java.util.{Collections, Optional, OptionalLong}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
@@ -217,7 +217,8 @@ case class DataSourceV2ScanRelation(
   }
 
   private def computeSizeOnlyStats(): Statistics = {
-    V2StatisticsUtils.computeSizeInBytes(scan, EstimationUtils.getSizePerRow(output)) match {
+    val avgRowSize = EstimationUtils.getSizePerRow(output)
+    V2StatisticsUtils.computeSizeInBytes(scan, avgRowSize) match {
       case Some(sizeInBytes) => Statistics(sizeInBytes = sizeInBytes)
       case _ => defaultSizeOnlyStats
     }
@@ -339,6 +340,10 @@ object ExtractV2ScanInfo {
 }
 
 object DataSourceV2Relation {
+
+  private val EMPTY_V2_COLUMN_STATS =
+    Collections.emptyMap[NamedReference, ColumnStatistics]()
+
   def create(
       table: Table,
       catalog: Option[CatalogPlugin],
@@ -449,8 +454,7 @@ object DataSourceV2Relation {
     var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
     // columnStats() may be null even when numRows/sizeInBytes are present, so normalize it to an
     // empty map before conversion to avoid an NPE.
-    val v2ColumnStats = Option(v2Statistics.columnStats())
-      .getOrElse(java.util.Collections.emptyMap[NamedReference, ColumnStatistics]())
+    val v2ColumnStats = Option(v2Statistics.columnStats()).getOrElse(EMPTY_V2_COLUMN_STATS)
     if (!v2ColumnStats.isEmpty) {
       val keys = v2ColumnStats.keySet()
 

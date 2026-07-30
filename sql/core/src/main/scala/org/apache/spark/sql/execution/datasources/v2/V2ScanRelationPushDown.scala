@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.Locale
+import java.util.{Locale, OptionalLong}
 
 import scala.collection.mutable
 
@@ -1241,16 +1241,16 @@ case class V1ScanWrapper(
     v1Scan match {
       case r: SupportsReportStatistics => r.estimateStatistics()
       case _ => new V2Statistics {
-        override def sizeInBytes(): java.util.OptionalLong = java.util.OptionalLong.empty()
-        override def numRows(): java.util.OptionalLong = java.util.OptionalLong.empty()
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.empty()
       }
     }
   }
 
-  override def estimateSizeInBytes(): java.util.OptionalLong = {
+  override def estimateSizeInBytes(): OptionalLong = {
     v1Scan match {
       case r: SupportsReportStatistics => r.estimateSizeInBytes()
-      case _ => java.util.OptionalLong.empty()
+      case _ => OptionalLong.empty()
     }
   }
 
