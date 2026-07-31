@@ -2068,6 +2068,7 @@ class AstBuilder extends DataTypeAstBuilder
           relationPrimary match {
             case _: AliasedQueryContext =>
             case _: TableValuedFunctionContext =>
+            case _: UnnestTableContext =>
             case other =>
               throw QueryParsingErrors.invalidLateralJoinRelationError(other)
           }
@@ -2552,6 +2553,7 @@ class AstBuilder extends DataTypeAstBuilder
         ctx.right match {
           case _: AliasedQueryContext =>
           case _: TableValuedFunctionContext =>
+          case _: UnnestTableContext =>
           case other =>
             throw QueryParsingErrors.invalidLateralJoinRelationError(other)
         }
@@ -3215,6 +3217,28 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitTableFunctionCallWithTrailingClauses(
       ctx: TableFunctionCallWithTrailingClausesContext): LogicalPlan = withOrigin(ctx) {
     buildTvfFromTableFunctionCall(ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
+  }
+
+  /**
+   * Create a plan for the ANSI SQL `UNNEST(array [, array ...]) [WITH ORDINALITY]` relation used
+   * in the FROM clause. It is desugared into a [[Generate]] over a [[OneRowRelation]] backed by the
+   * [[Unnest]] generator, then wrapped with the optional table/column aliases via the shared
+   * FROM-clause aliasing helper. Correlated references (e.g. `FROM t, LATERAL UNNEST(t.arr)`) are
+   * handled by the surrounding `LATERAL` machinery, exactly like generator table functions such as
+   * `explode`.
+   */
+  override def visitUnnestTable(ctx: UnnestTableContext): LogicalPlan = withOrigin(ctx) {
+    val unnest = ctx.unnest
+    val expressions = expressionList(unnest.expression)
+    val withOrdinality = unnest.ORDINALITY != null
+    val generate = Generate(
+      Unnest(expressions, withOrdinality),
+      unrequiredChildIndex = Nil,
+      outer = false,
+      qualifier = None,
+      generatorOutput = Nil,
+      child = OneRowRelation())
+    mayApplyAliasPlan(unnest.tableAlias, generate)
   }
 
   /**
