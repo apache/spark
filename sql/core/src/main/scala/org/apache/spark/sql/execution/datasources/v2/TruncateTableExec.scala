@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.TruncatableTable
+import org.apache.spark.sql.connector.catalog.{TableOperation, TruncatableTable}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -31,6 +31,7 @@ case class TruncateTableExec(
     table: TruncatableTable,
     refreshCache: () => Unit,
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
+    operation: TableOperation,
     override val output: Seq[Attribute])
   extends LeafV2CommandExec
   with SupportsCustomDriverMetrics {
@@ -40,7 +41,7 @@ case class TruncateTableExec(
 
   override protected def run(): Seq[InternalRow] = {
     try {
-      val result = table.truncateTable(options)
+      val result = table.truncateTable(options, operation)
       if (result.isPresent) {
         refreshCache()
         result.get().toImmutableArraySeq

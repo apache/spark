@@ -1164,16 +1164,16 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql("CREATE TABLE trunccat.ns.tbl (pk INT NOT NULL, dep STRING) USING foo")
         sql("INSERT INTO trunccat.ns.tbl VALUES (1, 'hr'), (2, 'software')")
 
-        val Seq(qe) = withQueryExecutionsCaptured(spark) {
+        val queryExecutions = withQueryExecutionsCaptured(spark) {
           checkAnswer(
             sql("DELETE FROM trunccat.ns.tbl WITH (`write.split-size` = 10)"),
             commandOutput(
               "num_affected_rows" -> 2L,
               "num_deleted_rows" -> 2L))
         }
-        val exec = qe.executedPlan.collectFirst {
+        val exec = queryExecutions.iterator.flatMap(_.executedPlan.collect {
           case e: TruncateTableExec => e
-        }.getOrElse(fail("expected TruncateTableExec for the truncate path"))
+        }).nextOption().getOrElse(fail("expected TruncateTableExec for the truncate path"))
         assert(exec.options.get("write.split-size") === "10",
           "options must reach TruncateTableExec")
 
@@ -1183,7 +1183,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
             Array("ns"), "tbl"))
           .asInstanceOf[InMemoryTruncatableOnlyTable]
         assert(truncTable.lastTruncateOptions.get("write.split-size") === "10",
-          "options must be forwarded to TruncatableTable.truncateTable(options)")
+          "options must be forwarded to TruncatableTable.truncateTable(options, operation)")
 
         checkAnswer(spark.table("trunccat.ns.tbl"), Nil)
       }

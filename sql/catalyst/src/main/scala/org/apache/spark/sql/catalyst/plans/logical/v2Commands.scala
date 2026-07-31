@@ -1126,13 +1126,22 @@ object DescribeColumn {
  */
 case class DeleteFromTable(
     table: LogicalPlan,
-    condition: Expression)
+    condition: Expression,
+    override val output: Seq[Attribute])
   extends UnaryCommand with TransactionalWrite with SupportsSubquery {
-  override lazy val output: Seq[Attribute] =
-    V2CommandOutput(table, TableOperation.DELETE)
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): DeleteFromTable =
-    copy(table = newChild)
+    copy(
+      table = newChild,
+      output = if (output.nonEmpty) output else {
+        V2CommandOutput(newChild, TableOperation.DELETE)
+      })
+}
+
+object DeleteFromTable {
+  def apply(table: LogicalPlan, condition: Expression): DeleteFromTable = {
+    DeleteFromTable(table, condition, V2CommandOutput(table, TableOperation.DELETE))
+  }
 }
 
 /**

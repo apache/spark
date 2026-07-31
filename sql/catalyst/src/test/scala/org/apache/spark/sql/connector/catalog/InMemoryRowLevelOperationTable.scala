@@ -159,13 +159,13 @@ class InMemoryRowLevelOperationTable private (
       new WriteBuilder {
         override def build(): Write = if (noMetadata) {
           new Write {
-            override def output(): Array[InternalRow] = commandOutput
+            override def output(): Array[InternalRow] = commandOutput(info.operation().get())
             override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
             override def description: String = "InMemoryWrite"
           }
         } else {
           new Write with RequiresDistributionAndOrdering {
-            override def output(): Array[InternalRow] = commandOutput
+            override def output(): Array[InternalRow] = commandOutput(info.operation().get())
 
             override def requiredDistribution: Distribution = {
               Distributions.clustered(Array(PARTITION_COLUMN_REF))
@@ -228,12 +228,12 @@ class InMemoryRowLevelOperationTable private (
       new DeltaWriteBuilder {
         override def build(): DeltaWrite = if (noMetadata) {
           new DeltaWrite {
-            override def output(): Array[InternalRow] = commandOutput
+            override def output(): Array[InternalRow] = commandOutput(info.operation().get())
             override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
           }
         } else {
           new DeltaWrite with RequiresDistributionAndOrdering {
-            override def output(): Array[InternalRow] = commandOutput
+            override def output(): Array[InternalRow] = commandOutput(info.operation().get())
 
             override def requiredDistribution(): Distribution = {
               Distributions.clustered(Array(PARTITION_COLUMN_REF))
@@ -378,7 +378,8 @@ class InMemoryTruncatableOnlyTable(
   }
 
   override def truncateTable(
-      options: CaseInsensitiveStringMap): util.Optional[Array[InternalRow]] = {
+      options: CaseInsensitiveStringMap,
+      operation: TableOperation): util.Optional[Array[InternalRow]] = {
     lastTruncateOptions = options
     val numAffectedRows = dataMap.synchronized {
       val count = rows.size.toLong
@@ -386,6 +387,10 @@ class InMemoryTruncatableOnlyTable(
       count
     }
     increaseVersion()
-    util.Optional.of(affectedRowsOutput(numAffectedRows))
+    if (operation == TableOperation.DELETE) {
+      util.Optional.of(deletedRowsOutput(numAffectedRows))
+    } else {
+      util.Optional.of(affectedRowsOutput(numAffectedRows))
+    }
   }
 }

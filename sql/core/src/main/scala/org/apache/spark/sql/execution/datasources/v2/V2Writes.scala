@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertOnlyMerge,
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.catalog.{Table, TableOperation}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWriteBuilder, LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwriteV2, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -46,14 +46,16 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case a @ AppendData(r: DataSourceV2Relation, query, options, _, _, None, _) =>
       val writeOptions = mergeOptions(options, r.options.asCaseSensitiveMap.asScala.toMap)
-      val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
+      val writeBuilder = newWriteBuilder(
+        r.table, writeOptions, query.schema, operation = Some(a.tableOperation))
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       a.copy(write = Some(write), query = newQuery)
 
     case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, None, _) =>
       val writeOptions = r.options.asCaseSensitiveMap.asScala.toMap
-      val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
+      val writeBuilder = newWriteBuilder(
+        r.table, writeOptions, query.schema, operation = Some(m.tableOperation))
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       m.copy(write = Some(write), query = newQuery)
@@ -71,7 +73,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
 
       val table = r.table
       val writeOptions = mergeOptions(options, r.options.asCaseSensitiveMap.asScala.toMap)
-      val writeBuilder = newWriteBuilder(table, writeOptions, query.schema)
+      val writeBuilder = newWriteBuilder(
+        table, writeOptions, query.schema, operation = Some(o.tableOperation))
       val write = writeBuilder match {
         case builder: SupportsTruncate if isTruncate(predicates) =>
           builder.truncate().build()
@@ -87,7 +90,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
     case o @ OverwritePartitionsDynamic(r: DataSourceV2Relation, query, options, _, _, None) =>
       val table = r.table
       val writeOptions = mergeOptions(options, r.options.asCaseSensitiveMap.asScala.toMap)
-      val writeBuilder = newWriteBuilder(table, writeOptions, query.schema)
+      val writeBuilder = newWriteBuilder(
+        table, writeOptions, query.schema, operation = Some(o.tableOperation))
       val write = writeBuilder match {
         case builder: SupportsDynamicOverwrite =>
           builder.overwriteDynamicPartitions().build()
@@ -112,14 +116,20 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val rowSchema = projections.rowProjection.schema
       val metadataSchema = projections.metadataProjection.map(_.schema)
       val writeOptions = mergeOptions(Map.empty, r.options.asCaseSensitiveMap.asScala.toMap)
-      val writeBuilder = newWriteBuilder(r.table, writeOptions, rowSchema, metadataSchema)
+      val writeBuilder = newWriteBuilder(
+        r.table,
+        writeOptions,
+        rowSchema,
+        metadataSchema,
+        operation = Some(rd.tableOperation))
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       rd.copy(write = Some(write), query = newQuery)
 
     case wd @ WriteDelta(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
       val writeOptions = mergeOptions(Map.empty, r.options.asCaseSensitiveMap.asScala.toMap)
-      val deltaWriteBuilder = newDeltaWriteBuilder(r.table, writeOptions, projections)
+      val deltaWriteBuilder = newDeltaWriteBuilder(
+        r.table, writeOptions, projections, operation = wd.tableOperation)
       val deltaWrite = deltaWriteBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(deltaWrite, query, r.funCatalog)
       wd.copy(write = Some(deltaWrite), query = newQuery)
@@ -164,6 +174,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       writeOptions: Map[String, String],
       rowSchema: StructType,
       metadataSchema: Option[StructType] = None,
+      operation: Option[TableOperation] = None,
       queryId: String = UUID.randomUUID().toString): WriteBuilder = {
 
     val info = LogicalWriteInfoImpl(
@@ -171,7 +182,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       rowSchema,
       writeOptions.asOptions,
       rowIdSchema = None,
-      metadataSchema)
+      metadataSchema,
+      operation)
     table.asWritable.newWriteBuilder(info)
   }
 
@@ -179,6 +191,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       table: Table,
       writeOptions: Map[String, String],
       projections: WriteDeltaProjections,
+      operation: TableOperation,
       queryId: String = UUID.randomUUID().toString): DeltaWriteBuilder = {
 
     val rowSchema = projections.rowProjection.map(_.schema).getOrElse(StructType(Nil))
@@ -190,7 +203,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       rowSchema,
       writeOptions.asOptions,
       rowIdSchema,
-      metadataSchema)
+      metadataSchema,
+      operation = Some(operation))
 
     val writeBuilder = table.asWritable.newWriteBuilder(info)
     assert(writeBuilder.isInstanceOf[DeltaWriteBuilder], s"$writeBuilder must be DeltaWriteBuilder")

@@ -54,6 +54,17 @@ class InMemoryTableWithV2Filter(
     deletedRowsOutput(numDeletedRows)
   }
 
+  override def truncateTable(
+      options: CaseInsensitiveStringMap,
+      operation: TableOperation): util.Optional[Array[InternalRow]] = {
+    val result = truncateTable()
+    if (result.isPresent && operation == TableOperation.TRUNCATE) {
+      util.Optional.of(affectedRowsOutput(result.get()(0).getLong(0)))
+    } else {
+      result
+    }
+  }
+
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     new InMemoryV2FilterScanBuilder(schema, options)
   }

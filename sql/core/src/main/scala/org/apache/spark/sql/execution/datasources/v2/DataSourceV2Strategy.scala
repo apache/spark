@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableOperation, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -535,7 +535,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DeleteFromTableExec(
         r.table.asDeletable, filters.toArray, refreshCache(r), options, d.output) :: Nil
 
-    case d @ DeleteFromTable(relation, condition) =>
+    case d @ DeleteFromTable(relation, condition, _) =>
       relation match {
         case ExtractV2ScanInfo(r, _, output) =>
           val table = r.table
@@ -556,7 +556,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             case t: SupportsDeleteV2 =>
               throw QueryCompilationErrors.cannotDeleteTableWhereFiltersError(t, filters)
             case t: TruncatableTable if condition == TrueLiteral =>
-              TruncateTableExec(t, refreshCache(r), r.options, d.output) :: Nil
+              TruncateTableExec(
+                t, refreshCache(r), r.options, TableOperation.DELETE, d.output) :: Nil
             case _ =>
               throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
           }
@@ -750,6 +751,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         r.table.asTruncatable,
         recacheTable(r, includeTimeTravel = false),
         CaseInsensitiveStringMap.empty(),
+        TableOperation.TRUNCATE,
         t.output) :: Nil
 
     case TruncatePartition(r: ResolvedTable, part) =>

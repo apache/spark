@@ -45,15 +45,19 @@ public interface TruncatableTable extends Table {
   /**
    * Truncate a table with per-statement options from a {@code DELETE ... WITH (key=value)} clause.
    * <p>
-   * The default implementation ignores {@code options} and delegates to {@link #truncateTable()},
-   * which preserves backward compatibility for connectors that do not need per-statement options.
+   * Spark may use table truncation to execute another operation, such as a {@code DELETE} without
+   * a condition. The default implementation ignores all parameters and delegates to
+   * {@link #truncateTable()}, which preserves backward compatibility for connectors that do not
+   * need per-statement options or the logical operation.
    *
    * @param options per-statement options from the {@code WITH} clause; empty if none were given
+   * @param operation the logical table operation being executed
    * @return the rows produced by the command if the table was truncated successfully;
    *         otherwise, an empty optional
    * @since 4.3.0
    */
-  default Optional<InternalRow[]> truncateTable(CaseInsensitiveStringMap options) {
+  default Optional<InternalRow[]> truncateTable(
+      CaseInsensitiveStringMap options, TableOperation operation) {
     return truncateTable();
   }
 

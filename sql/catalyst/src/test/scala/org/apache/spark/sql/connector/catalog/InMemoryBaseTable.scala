@@ -252,7 +252,7 @@ abstract class InMemoryBaseTable(
     case TableOperation.MERGE => mergeOutputSchema
   }
 
-  protected def commandOutput: Array[InternalRow] = {
+  protected def commandOutput(operation: TableOperation): Array[InternalRow] = {
     commits.lastOption.flatMap(_.writeSummary).map {
       case summary: MergeSummary =>
         val affectedRows = sumIfKnown(
@@ -273,7 +273,17 @@ abstract class InMemoryBaseTable(
 
       case summary: InsertSummary =>
         val insertedRows = summary.numInsertedRows()
-        Array[InternalRow](new GenericInternalRow(Array[Any](insertedRows, insertedRows)))
+        operation match {
+          case TableOperation.INSERT | TableOperation.INSERT_OVERWRITE =>
+            Array[InternalRow](new GenericInternalRow(Array[Any](insertedRows, insertedRows)))
+
+          case TableOperation.INSERT_REPLACE_WHERE |
+               TableOperation.INSERT_REPLACE_ON |
+               TableOperation.INSERT_REPLACE_USING =>
+            Array[InternalRow](new GenericInternalRow(Array[Any](insertedRows, -1L, insertedRows)))
+
+          case _ => Array.empty[InternalRow]
+        }
 
       case _ => Array.empty[InternalRow]
     }.getOrElse(Array.empty)
@@ -833,7 +843,7 @@ abstract class InMemoryBaseTable(
     }
 
     override def build(): Write = new Write with RequiresDistributionAndOrdering {
-      override def output(): Array[InternalRow] = commandOutput
+      override def output(): Array[InternalRow] = commandOutput(info.operation().get())
 
       override def requiredDistribution: Distribution = distribution
 

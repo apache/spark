@@ -64,7 +64,7 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       val newCond = replaceNullWithFalse(cond)
       val newGroupFilterCond = groupFilterCond.map(replaceNullWithFalse)
       wd.copy(condition = newCond, groupFilterCondition = newGroupFilterCond)
-    case d @ DeleteFromTable(_, cond) => d.copy(condition = replaceNullWithFalse(cond))
+    case d @ DeleteFromTable(_, cond, _) => d.copy(condition = replaceNullWithFalse(cond))
     case u @ UpdateTable(_, _, Some(cond)) => u.copy(condition = Some(replaceNullWithFalse(cond)))
     case m: MergeIntoTable =>
       m.copy(
