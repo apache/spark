@@ -3851,14 +3851,20 @@ object Sequence {
       estimatedStep: String,
       len: String): String = {
     val calcFn = classOf[Sequence].getName + ".sequenceLength"
+    // `$start` and `$stop` are numeric expressions and `$step` is numeric or a
+    // CalendarInterval reference, so they have to be converted before going into a
+    // `Map<String, String>`. Janino, which compiles the generated code, erases the type
+    // arguments and binds `put` to `put(Object, Object)`, which lets the raw values through
+    // and leaves the parameter map holding non-String values that
+    // `SparkThrowable.getMessageParameters` then hands out as Strings.
     s"""
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
        |  ($estimatedStep < 0 && $start >= $stop) ||
        |  ($estimatedStep == 0 && $start == $stop))) {
        |  java.util.Map<String, String> params = new java.util.HashMap<String, String>();
-       |  params.put("start", $start);
-       |  params.put("stop", $stop);
-       |  params.put("step", $step);
+       |  params.put("start", String.valueOf($start));
+       |  params.put("stop", String.valueOf($stop));
+       |  params.put("step", String.valueOf($step));
        |  throw new org.apache.spark.SparkIllegalArgumentException(
        |    "_LEGACY_ERROR_TEMP_3243", params);
        |}
