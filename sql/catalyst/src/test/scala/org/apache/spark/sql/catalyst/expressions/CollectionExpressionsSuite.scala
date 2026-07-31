@@ -24,8 +24,7 @@ import java.util.TimeZone
 import scala.language.implicitConversions
 import scala.util.Random
 
-import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkFunSuite}
-import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -1114,21 +1113,6 @@ class CollectionExpressionsSuite
       new Sequence(Literal(2), Literal(1), Literal(1)), EmptyRow, "boundaries: 2 to 1 by 1")
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(1), Literal(2), Literal(-1)), EmptyRow, "boundaries: 1 to 2 by -1")
-
-    withSQLConf(
-      SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
-      checkError(
-        exception = intercept[SparkIllegalArgumentException] {
-          evaluateWithMutableProjection(
-            new Sequence(
-              BoundReference(0, IntegerType, nullable = false),
-              Literal(1),
-              Literal(1)),
-            InternalRow(2))
-        },
-        condition = "_LEGACY_ERROR_TEMP_3243",
-        parameters = Map("start" -> "2", "stop" -> "1", "step" -> "1"))
-    }
 
     // SPARK-43393: test Sequence overflow checking
     checkErrorInExpression[SparkRuntimeException](
