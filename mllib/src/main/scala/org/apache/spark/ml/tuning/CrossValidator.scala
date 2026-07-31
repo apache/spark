@@ -38,8 +38,8 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.{SizeEstimator, ThreadUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
