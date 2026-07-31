@@ -76,6 +76,22 @@ case class DynamicPruningSubquery(
   override def withNewHint(hint: Option[HintInfo]): SubqueryExpression =
     copy(hint = hint)(broadcastValueProjection)
 
+  private[sql] def usableBroadcastValueProjection: Option[BroadcastValueProjection] = {
+    broadcastValueProjection.filter { projection =>
+      projection.sourcePlan.resolved &&
+        projection.sourcePlan.deterministic &&
+        projection.sourceHashKeys.nonEmpty &&
+        projection.sourceHashKeys.forall(_.resolved) &&
+        projection.sourceHashKeys.forall(_.deterministic) &&
+        projection.sourceHashKeys.forall(
+          _.references.subsetOf(projection.sourcePlan.outputSet)) &&
+        projection.valueExpression.resolved &&
+        projection.valueExpression.deterministic &&
+        projection.valueExpression.references.subsetOf(projection.sourcePlan.outputSet) &&
+        projection.valueExpression.dataType == pruningKey.dataType
+    }
+  }
+
   override lazy val resolved: Boolean = {
     pruningKey.resolved &&
       buildQuery.resolved &&
@@ -86,20 +102,7 @@ case class DynamicPruningSubquery(
       // DynamicPruningSubquery should only have a single broadcasting key since
       // there are no usage for multiple broadcasting keys at the moment.
       broadcastKeyIndices.size == 1 &&
-      child.dataType == buildKeys(broadcastKeyIndices.head).dataType &&
-      broadcastValueProjection.forall { projection =>
-        projection.sourcePlan.resolved &&
-          projection.sourcePlan.deterministic &&
-          projection.sourceHashKeys.nonEmpty &&
-          projection.sourceHashKeys.forall(_.resolved) &&
-          projection.sourceHashKeys.forall(_.deterministic) &&
-          projection.sourceHashKeys.forall(
-            _.references.subsetOf(projection.sourcePlan.outputSet)) &&
-          projection.valueExpression.resolved &&
-          projection.valueExpression.deterministic &&
-          projection.valueExpression.references.subsetOf(projection.sourcePlan.outputSet) &&
-          projection.valueExpression.dataType == pruningKey.dataType
-      }
+      child.dataType == buildKeys(broadcastKeyIndices.head).dataType
   }
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(DYNAMIC_PRUNING_SUBQUERY)

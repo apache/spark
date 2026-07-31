@@ -55,7 +55,7 @@ case class PlanAdaptiveSubqueries(
           onlyInBroadcast,
           buildPlan,
           buildKeys,
-          subqueryMap(exprId.id))(pruning.broadcastValueProjection)
+          subqueryMap(exprId.id))(pruning.usableBroadcastValueProjection)
         DynamicPruningExpression(InSubqueryExec(value, subquery, exprId))
     }
   }

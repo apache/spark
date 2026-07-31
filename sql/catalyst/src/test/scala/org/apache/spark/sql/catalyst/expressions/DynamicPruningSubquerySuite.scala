@@ -124,6 +124,7 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
       key, source, Seq(key), Seq(0), onlyInBroadcast = true)(Some(projection))
 
     assert(pruning.resolved)
+    assert(pruning.usableBroadcastValueProjection.contains(projection))
     assert(pruning.productArity === 7)
     assert(DynamicPruningSubquery.unapply(pruning).exists(_.productArity == 7))
     assert(Modifier.isTransient(
@@ -148,8 +149,17 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
     assert(pruning.canonicalized === unprojected.canonicalized)
 
     val missing = AttributeReference("missing", IntegerType)()
-    assert(!pruning.copy()(Some(projection.copy(sourceHashKeys = Seq(missing)))).resolved)
-    assert(!pruning.copy()(Some(projection.copy(valueExpression = missing))).resolved)
+    Seq(
+      projection.copy(sourceHashKeys = Seq(missing)),
+      projection.copy(valueExpression = missing),
+      projection.copy(sourceHashKeys = Seq.empty),
+      projection.copy(valueExpression = Literal(1L))
+    ).foreach { invalidProjection =>
+      val rewritten = pruning.copy()(Some(invalidProjection))
+      assert(rewritten.resolved)
+      assert(rewritten.broadcastValueProjection.contains(invalidProjection))
+      assert(rewritten.usableBroadcastValueProjection.isEmpty)
+    }
   }
 
   test("extract broadcast hash keys without rejecting residual join predicates") {

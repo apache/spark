@@ -128,7 +128,7 @@ case class InSubqueryExec(
   override def nullable: Boolean = child.nullable
   override def toString: String = s"$child IN ${plan.name}"
   override def withNewPlan(plan: BaseSubqueryExec): InSubqueryExec =
-    copy(plan = plan, resultBroadcast = null, result = null)
+    copy(plan = plan, result = null)
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(IN_SUBQUERY_EXEC)
 
   def updateResult(): Unit = {

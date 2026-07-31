@@ -29,6 +29,10 @@ import org.apache.spark.sql.types.{DateType, StringType, TimestampNTZType, Times
  */
 private[sql] object ReusableBroadcastValueProjection extends PredicateHelper {
 
+  // Keep this an allowlist: projected values are evaluated directly from broadcast rows, so
+  // supported expressions must be deterministic and row-local, without subqueries or outer
+  // references, and preserve their time-zone, collation, and equality semantics. Extend it only
+  // when those properties hold; runtime limits and recoverable failures disable projection.
   private def isSafeValueExpression(expression: Expression): Boolean = {
     expression.deterministic && !expression.exists {
       case _: OuterReference | _: SubqueryExpression => true

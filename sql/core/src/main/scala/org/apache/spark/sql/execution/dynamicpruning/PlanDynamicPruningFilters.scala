@@ -103,7 +103,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
           plan, name, broadcastKeyIndices, buildPlan, buildKeys, None)
         val reusedBroadcast = directBroadcast.orElse {
           if (onlyInBroadcast) {
-            pruning.broadcastValueProjection.flatMap { projection =>
+            pruning.usableBroadcastValueProjection.flatMap { projection =>
               reusableBroadcast(
                 plan,
                 name,
