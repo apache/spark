@@ -15,15 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.sql.execution.planmerging
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, Expression, If, Literal, NamedExpression, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeSet, Expression, ExpressionSet, If, Literal, NamedExpression, Or}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.connector.catalog.TableCapability
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -62,8 +64,8 @@ object PlanMerger {
 
   // Global counter for generating unique names for propagated filter attributes across all
   // PlanMerger instances.
-  private[optimizer] val curId = new java.util.concurrent.atomic.AtomicLong()
-  private[optimizer] def newId: Long = curId.getAndIncrement()
+  private[planmerging] val curId = new java.util.concurrent.atomic.AtomicLong()
+  private[planmerging] def newId: Long = curId.getAndIncrement()
 }
 
 /**
@@ -135,7 +137,9 @@ class PlanMerger(
     symmetricFilterPropagationEnabled: Boolean =
       SQLConf.get.getConf(SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED),
     filterPropagationThroughJoinEnabled: Boolean =
-      SQLConf.get.getConf(SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED)) {
+      SQLConf.get.getConf(SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED),
+    dsv2SymmetricFilterPropagationEnabled: Boolean =
+      SQLConf.get.getConf(SQLConf.MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED)) {
   val cache = mutable.ArrayBuffer.empty[MergedPlan]
 
   /**
@@ -166,8 +170,8 @@ class PlanMerger(
           val outputMap = AttributeMap(plan.output.zipWithIndex)
           MergeResult(newMergedPlan, i, outputMap)
         }.orElse {
-          tryMergePlans(plan, mp.plan, false).collect {
-            case TryMergeResult(mergedPlan, npMapping, None, None) =>
+          tryMergePlans(plan, mp.plan, MergeContext(filterPropagationSupported = false)).collect {
+            case TryMergeResult(mergedPlan, npMapping, None, None, None, _) =>
               val newMergedPlan = MergedPlan(mergedPlan, true)
               cache(i) = newMergedPlan
               val outputMap = AttributeMap(npMapping.iterator.map { case (origAttr, mergedAttr) =>
@@ -220,12 +224,64 @@ class PlanMerger(
    *                      merged plan. `None` when no differing filter was propagated.
    * @param cachedPlanFilter Like `newPlanFilter` but for the cached plan's side. Always a freshly
    *                         created alias when present, so no `isNew` flag is needed.
+   * @param dsv2Merged Whether an (equal-strict) DSv2 scan merge occurred anywhere in this merged
+   *                   subtree. Unlike `dsv2DeferredScan` (consumed at the enclosing Filter that
+   *                   builds the scan), this fact is propagated all the way up: it lets a Filter
+   *                   pair that is NOT the innermost one still recognize the merge below it and
+   *                   apply the DSv2-symmetric exemption. It only ever gates behaviour when
+   *                   `dsv2SymmetricFilterPropagationEnabled` is on.
    */
   case class TryMergeResult(
       mergedPlan: LogicalPlan,
       newPlanMapping: AttributeMap[Attribute],
       newPlanFilter: Option[(Attribute, Boolean)] = None,
-      cachedPlanFilter: Option[Attribute] = None)
+      cachedPlanFilter: Option[Attribute] = None,
+      dsv2DeferredScan: Option[DSv2DeferredScan] = None,
+      dsv2Merged: Boolean = false)
+
+  /**
+   * Carries a DSv2 scan whose build has been deferred from the leaf up to the enclosing [[Filter]],
+   * so the merged scan is built exactly once per merge round (strict + best-effort filters
+   * together) rather than once strict-only at the leaf and then rebuilt at the Filter.
+   *
+   * The relation to rebuild from is not carried here: the deferring leaf leaves it in the plan as
+   * the placeholder [[TryMergeResult.mergedPlan]] (the sole bare [[DataSourceV2Relation]] in the
+   * subtree), and `tryBuildFilterDSv2ScanChild` recovers it from there. Only what the tree does NOT
+   * hold is carried: the projected `unionAttrs` and the `strictFilters` to re-enforce.
+   *
+   * @param unionAttrs The union of both sides' projected columns the merged scan must produce.
+   * @param strictFilters The strict pushed filters that must be re-enforced by the rebuilt scan.
+   */
+  case class DSv2DeferredScan(
+      unionAttrs: Seq[Attribute],
+      strictFilters: Seq[Expression])
+
+  /**
+   * Context threaded DOWN through [[tryMergePlans]] recursion.
+   *
+   * Invariants:
+   * - `filterAboveScan` is set true ONLY by the `(Filter, Filter)` arm; the leaf defers building
+   *   the merged DSv2 scan ONLY when it is true. A deferred result flows leaf -> (pass-through
+   *   Project arms, which propagate `dsv2DeferredScan` unchanged) -> the enclosing `(Filter,
+   *   Filter)` arm, which builds it once (via `tryBuildFilterDSv2ScanChild`) and returns
+   *   `dsv2DeferredScan = None`.
+   * - A `(Filter, Filter)`'s children CAN themselves be Filters: `PartitionPruning` and
+   *   `InjectRuntimeFilter` insert a Filter above an existing one after `CombineFilters` has run,
+   *   and the `PushDownPredicates` pass that would re-combine them runs only in a later batch. The
+   *   deferral is consumed at the INNERMOST `(Filter, Filter)` pair (which builds the scan); an
+   *   enclosing pair sees `dsv2DeferredScan = None`, but `dsv2Merged` still marks the merge below
+   *   it, so it can apply the DSv2-symmetric exemption too. This is sound because
+   *   `V2ScanRelationPushDown` only pushes the innermost (scan-adjacent) Filter chain to the scan:
+   *   an outer stacked Filter was never scan pruning (a runtime filter inserted after pushdown, or
+   *   one separated from the scan by an operator that blocks pushdown), so OR-widening it above the
+   *   built scan drops no pruning.
+   * - The `merge()` pattern requiring `dsv2DeferredScan = None` is the fail-safe backstop: if a
+   *   deferred scan somehow reached `merge()` unbuilt, it declines the merge rather than emitting a
+   *   plan with a placeholder relation.
+   * - Eligibility gating stays at the leaf (read-only, inspects only the two input scans). Only the
+   *   build moves up.
+   */
+  case class MergeContext(filterPropagationSupported: Boolean, filterAboveScan: Boolean = false)
 
   /**
    * Recursively attempts to merge two plans by traversing their tree structures.
@@ -249,40 +305,62 @@ class PlanMerger(
   private def tryMergePlans(
       newPlan: LogicalPlan,
       cachedPlan: LogicalPlan,
-      filterPropagationSupported: Boolean): Option[TryMergeResult] = {
-    checkIdenticalPlans(newPlan, cachedPlan).map(TryMergeResult(cachedPlan, _)).orElse(
+      context: MergeContext): Option[TryMergeResult] = {
+    // The plain "reuse the cached plan as-is" result, shared by every branch below. Lazy because
+    // the DSv2 merge path under a Filter does not need it when the merge itself succeeds.
+    lazy val identical = checkIdenticalPlans(newPlan, cachedPlan).map(TryMergeResult(cachedPlan, _))
+    // A DSv2 scan pair is handled here in one place, rather than split between this leading check
+    // and the structural match below. Under a Filter, merging DEFERS the scan build so the
+    // enclosing Filter's row-group pruning is pushed in a single rebuild -- so try the merge first
+    // and fall back to plain reuse if the scans cannot merge. Trying the merge first even when the
+    // two scans are identical is deliberate: the deferred rebuild re-pushes the enclosing Filter's
+    // condition as a best-effort filter, which plain reuse would leave as a post-scan Filter, so
+    // reusing identical scans here would forfeit that pruning. Without a Filter there is no pruning
+    // to recover, so reuse an identical scan as-is (no rebuild) and only merge scans that differ
+    // (projected columns / strict filters). Any other plan pair uses the general reuse.
+    val earlyResult = (newPlan, cachedPlan) match {
+      case (np: DataSourceV2ScanRelation, cp: DataSourceV2ScanRelation) =>
+        if (context.filterAboveScan) {
+          tryMergeScanRelations(np, cp, context).orElse(identical)
+        } else {
+          identical.orElse(tryMergeScanRelations(np, cp, context))
+        }
+      case _ => identical
+    }
+    earlyResult.orElse(
       (newPlan, cachedPlan) match {
         case (np: Project, cp: Project) =>
-          tryMergePlans(np.child, cp.child, filterPropagationSupported).map {
-            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter) =>
+          tryMergePlans(np.child, cp.child, context).map {
+            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, deferred, dsv2Merged) =>
               val (mergedProjectList, newNPMapping) =
                 mergeNamedExpressions(np.projectList, cp.projectList, npMapping, npFilter, cpFilter)
               TryMergeResult(Project(mergedProjectList, mergedChild), newNPMapping, npFilter,
-                cpFilter)
+                cpFilter, deferred, dsv2Merged)
           }
         case (np, cp: Project) =>
-          tryMergePlans(np, cp.child, filterPropagationSupported).map {
-            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter) =>
+          tryMergePlans(np, cp.child, context).map {
+            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, deferred, dsv2Merged) =>
               val (mergedProjectList, newNPMapping) =
                 mergeNamedExpressions(np.output, cp.projectList, npMapping, npFilter, cpFilter)
               TryMergeResult(Project(mergedProjectList, mergedChild), newNPMapping, npFilter,
-                cpFilter)
+                cpFilter, deferred, dsv2Merged)
           }
         case (np: Project, cp) =>
-          tryMergePlans(np.child, cp, filterPropagationSupported).map {
-            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter) =>
+          tryMergePlans(np.child, cp, context).map {
+            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, deferred, dsv2Merged) =>
               val (mergedProjectList, newNPMapping) =
                 mergeNamedExpressions(np.projectList, cp.output, npMapping, npFilter, cpFilter)
               TryMergeResult(Project(mergedProjectList, mergedChild), newNPMapping, npFilter,
-                cpFilter)
+                cpFilter, deferred, dsv2Merged)
           }
 
         case (np: Aggregate, cp: Aggregate) if supportedAggregateMerge(np, cp) =>
           // Filter propagation into the aggregate is only safe when there is no grouping.
           val childFilterPropagationSupported = filterPropagationEnabled &&
             np.groupingExpressions.isEmpty && cp.groupingExpressions.isEmpty
-          tryMergePlans(np.child, cp.child, childFilterPropagationSupported).flatMap {
-            case TryMergeResult(mergedChild, npMapping, None, None) =>
+          tryMergePlans(np.child, cp.child,
+              MergeContext(childFilterPropagationSupported, filterAboveScan = false)).flatMap {
+            case TryMergeResult(mergedChild, npMapping, None, None, _, dsv2Merged) =>
               val mappedNPGroupingExpression =
                 np.groupingExpressions.map(mapAttributes(_, npMapping))
               // Order of grouping expression does matter as merging different grouping orders can
@@ -294,11 +372,11 @@ class PlanMerger(
                   mergeNamedExpressions(np.aggregateExpressions, cp.aggregateExpressions, npMapping)
                 val mergedPlan =
                   Aggregate(cp.groupingExpressions, mergedAggregateExpressions, mergedChild)
-                Some(TryMergeResult(mergedPlan, newNPMapping))
+                Some(TryMergeResult(mergedPlan, newNPMapping, dsv2Merged = dsv2Merged))
               } else {
                 None
               }
-            case TryMergeResult(mergedChild, npMapping, npFilterOpt, cpFilterOpt) =>
+            case TryMergeResult(mergedChild, npMapping, npFilterOpt, cpFilterOpt, _, dsv2Merged) =>
               // childFilterPropagationSupported guarantees both aggregates have no grouping, so
               // the grouping-match check is skipped.
               assert(childFilterPropagationSupported)
@@ -317,55 +395,87 @@ class PlanMerger(
                 mergeNamedExpressions(filteredNPAggregateExpressions,
                   filteredCPAggregateExpressions, npMapping)
               val mergedPlan = Aggregate(Seq.empty, mergedAggregateExpressions, mergedChild)
-              Some(TryMergeResult(mergedPlan, newNPMapping))
+              Some(TryMergeResult(mergedPlan, newNPMapping, dsv2Merged = dsv2Merged))
           }
 
         case (np: Filter, cp: Filter) =>
-          tryMergePlans(np.child, cp.child, filterPropagationSupported).flatMap {
-            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter) =>
+          tryMergePlans(np.child, cp.child, context.copy(filterAboveScan = true)).flatMap {
+            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, deferred, dsv2Merged) =>
               val mappedNPCondition = mapAttributes(np.condition, npMapping)
               // Comparing the canonicalized form is required to ignore different forms of the same
               // expression.
               if (mappedNPCondition.canonicalized == cp.condition.canonicalized) {
-                // Identical conditions: the filter node itself adds no new discrimination between
-                // the two sides, so we keep it unchanged and pass the child's mappings up.
-                val mergedPlan = Filter(cp.condition, mergedChild)
-                Some(TryMergeResult(mergedPlan, npMapping, npFilter, cpFilter))
-              } else if (filterPropagationSupported && symmetricFilterPropagationEnabled) {
+                // Identical conditions: the filter node adds no new discrimination between the two
+                // sides, so keep it unchanged. If it sits above a deferred merged DSv2 scan, build
+                // that scan once here with this condition as a best-effort filter. If the build
+                // cannot re-enforce the strict filters, decline the whole merge (the leaf's
+                // strict-only build would have failed identically).
+                tryBuildFilterDSv2ScanChild(mergedChild, deferred, Some(cp.condition))
+                  .map { prunedChild =>
+                    val mergedPlan = Filter(cp.condition, prunedChild)
+                    TryMergeResult(
+                      mergedPlan, npMapping, npFilter, cpFilter, dsv2Merged = dsv2Merged)
+                  }
+              // Symmetric propagation broadens the merged scan to OR(f1, f2); it is off by default
+              // because the two sides may read disjoint data. A DSv2 scan merge is exempt under its
+              // own config: `dsv2Merged` marks an (equal-strict) DSv2 merge below -- whose equal
+              // strict filters mean both sides read the same base set, so the OR only weakens the
+              // best-effort filter. Unlike `deferred`, `dsv2Merged` survives past the innermost
+              // Filter that built the scan, so a stacked outer Filter pair recognizes it too.
+              } else if (context.filterPropagationSupported &&
+                  (symmetricFilterPropagationEnabled ||
+                    (dsv2SymmetricFilterPropagationEnabled && dsv2Merged))) {
                 if (cp.getTagValue(PlanMerger.MERGED_FILTER_TAG).isDefined) {
                   // cp Filter is already a merged filter from a previous round: its condition
                   // is OR(f0, f1, ...) and its child Project already contains aliases for those
                   // attributes. Only create a new alias for the np side, and extend the OR
-                  // condition.
-                  val newNPCondition = npFilter.fold(mappedNPCondition) {
-                    case (f, _) => And(f, mappedNPCondition)
-                  }
-                  val childProject = mergedChild match {
-                    case p: Project => p
-                    case other => throw new IllegalStateException(
-                      "Expected Project child under MERGED_FILTER_TAG filter, got " +
-                        s"${other.getClass.getSimpleName}")
-                  }
-                  // If newNPCondition is already aliased in the child Project (e.g. a third
-                  // subplan whose filter matches one from a previous merge round), reuse the
-                  // existing attribute instead of creating a redundant alias.
-                  val existingNPFilter = childProject.projectList.collectFirst {
-                    case a: Alias if a.child.canonicalized == newNPCondition.canonicalized =>
-                      a.toAttribute
-                  }
-                  existingNPFilter match {
-                    case Some(reusedFilter) =>
-                      val newFilter = cp.withNewChildren(Seq(mergedChild))
-                      Some(TryMergeResult(newFilter, npMapping, Some((reusedFilter, false)), None))
-                    case None =>
-                      val newNPFilterAlias =
-                        Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
-                      val newNPFilter = newNPFilterAlias.toAttribute
-                      val newProject = childProject.copy(
-                        projectList = childProject.projectList ++ Seq(newNPFilterAlias))
-                      val newFilter = Filter(Or(cp.condition, newNPFilter), newProject)
-                      newFilter.copyTagsFrom(cp)
-                      Some(TryMergeResult(newFilter, npMapping, Some((newNPFilter, true)), None))
+                  // condition. A tagged filter is always built with a Project child (see the
+                  // first-time branch below), so a non-Project child should not happen; decline the
+                  // merge rather than fail, keeping the merge best-effort.
+                  mergedChild match {
+                    case childProject: Project =>
+                      val newNPCondition = npFilter.fold(mappedNPCondition) {
+                        case (f, _) => And(f, mappedNPCondition)
+                      }
+                      // If newNPCondition is already aliased in the child Project (e.g. a third
+                      // subplan whose filter matches one from a previous merge round), reuse the
+                      // existing attribute instead of creating a redundant alias.
+                      val existingNPFilter = childProject.projectList.collectFirst {
+                        case a: Alias if a.child.canonicalized == newNPCondition.canonicalized =>
+                          a.toAttribute
+                      }
+                      val (newProjectList, newCondition, newNPFilterOut) =
+                        existingNPFilter match {
+                          case Some(reusedFilter) =>
+                            // np matches an existing side: no new alias, OR condition unchanged.
+                            (childProject.projectList, cp.condition, (reusedFilter, false))
+                          case None =>
+                            val newNPFilterAlias =
+                              Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
+                            (childProject.projectList :+ newNPFilterAlias,
+                              Or(cp.condition, newNPFilterAlias.toAttribute): Expression,
+                              (newNPFilterAlias.toAttribute, true))
+                        }
+                      // Phase 2: the leaf re-merge rebuilt the scan with strict filters only,
+                      // dropping the OR best-effort filter established in earlier rounds, so
+                      // re-establish it here from ALL propagated conditions, not just the new
+                      // side's. Only the aliases the OR condition references are filter sides;
+                      // other aliases in the Project are computed columns, not filters.
+                      val conditions = newProjectList.collect {
+                        case a: Alias if newCondition.references.contains(a.toAttribute) => a.child
+                      }
+                      tryBuildFilterDSv2ScanChild(
+                        childProject.child, deferred, conditions.reduceOption(Or))
+                        .map { prunedChild =>
+                          val newProject = childProject.copy(
+                            projectList = newProjectList, child = prunedChild)
+                          val newFilter = Filter(newCondition, newProject)
+                          newFilter.copyTagsFrom(cp)
+                          TryMergeResult(newFilter, npMapping, Some(newNPFilterOut), None,
+                            dsv2Merged = dsv2Merged)
+                        }
+                    case _ =>
+                      None
                   }
                 } else {
                   // First-time filter propagation: alias both sides' conditions as boolean
@@ -377,31 +487,40 @@ class PlanMerger(
                   val newNPCondition =
                     npFilter.fold(mappedNPCondition) { case (f, _) => And(f, mappedNPCondition) }
                   val newCPCondition = cpFilter.fold(cp.condition)(And(_, cp.condition))
-                  val newNPFilterAlias =
-                    Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
-                  val newCPFilterAlias =
-                    Alias(newCPCondition, s"propagatedFilter_${PlanMerger.newId}")()
-                  val newNPFilter = newNPFilterAlias.toAttribute
-                  val newCPFilter = newCPFilterAlias.toAttribute
-                  val project = Project(
-                    mergedChild.output.toList ++ Seq(newNPFilterAlias, newCPFilterAlias),
-                    mergedChild)
-                  val newFilter = Filter(Or(newNPFilter, newCPFilter), project)
-                  newFilter.copyTagsFrom(cp)
-                  newFilter.setTagValue(PlanMerger.MERGED_FILTER_TAG, ())
-                  Some(TryMergeResult(newFilter, npMapping, Some((newNPFilter, true)),
-                    Some(newCPFilter)))
+                  // The OR-widen moves both conditions into a boolean Project above the merged
+                  // scan, so the scan itself would read the full table. Build the deferred scan
+                  // here with OR(np condition, cp condition) as the best-effort filter (the Filter
+                  // above still enforces exactness). The best-effort filter is derived from the
+                  // scan-level conditions, not the propagated filter attributes in newNP/newCP.
+                  tryBuildFilterDSv2ScanChild(
+                    mergedChild, deferred, Some(Or(mappedNPCondition, cp.condition)))
+                    .map { prunedChild =>
+                      val newNPFilterAlias =
+                        Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
+                      val newCPFilterAlias =
+                        Alias(newCPCondition, s"propagatedFilter_${PlanMerger.newId}")()
+                      val newNPFilter = newNPFilterAlias.toAttribute
+                      val newCPFilter = newCPFilterAlias.toAttribute
+                      val project = Project(
+                        prunedChild.output.toList ++ Seq(newNPFilterAlias, newCPFilterAlias),
+                        prunedChild)
+                      val newFilter = Filter(Or(newNPFilter, newCPFilter), project)
+                      newFilter.copyTagsFrom(cp)
+                      newFilter.setTagValue(PlanMerger.MERGED_FILTER_TAG, ())
+                      TryMergeResult(newFilter, npMapping, Some((newNPFilter, true)),
+                        Some(newCPFilter), dsv2Merged = dsv2Merged)
+                    }
                 }
               } else {
                 None
               }
           }
-        case (np: Filter, cp) if filterPropagationSupported =>
-          tryMergePlans(np.child, cp, filterPropagationSupported).collect {
+        case (np: Filter, cp) if context.filterPropagationSupported =>
+          tryMergePlans(np.child, cp, context.copy(filterAboveScan = false)).collect {
             // If the cp side already propagated a filter from deeper recursion, the merge is
             // effectively symmetric (both sides have a filter condition). Abort unless
             // symmetricFilterPropagationEnabled.
-            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter)
+            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, _, dsv2Merged)
                 if cpFilter.isEmpty || symmetricFilterPropagationEnabled =>
               val mappedNPCondition = mapAttributes(np.condition, npMapping)
               val newNPCondition = npFilter.fold(mappedNPCondition) {
@@ -413,14 +532,15 @@ class PlanMerger(
               val project = Project(
                 mergedChild.output.toList :+ newNPFilterAlias,
                 mergedChild)
-              TryMergeResult(project, npMapping, Some((newNPFilter, true)), cpFilter)
+              TryMergeResult(project, npMapping, Some((newNPFilter, true)), cpFilter,
+                dsv2Merged = dsv2Merged)
           }
-        case (np, cp: Filter) if filterPropagationSupported =>
-          tryMergePlans(np, cp.child, filterPropagationSupported).collect {
+        case (np, cp: Filter) if context.filterPropagationSupported =>
+          tryMergePlans(np, cp.child, context.copy(filterAboveScan = false)).collect {
             // If the np side already propagated a filter from deeper recursion, the merge is
             // effectively symmetric (both sides have a filter condition). Abort unless
             // symmetricFilterPropagationEnabled.
-            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter)
+            case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter, _, dsv2Merged)
                 if npFilter.isEmpty || symmetricFilterPropagationEnabled =>
               if (cp.getTagValue(PlanMerger.MERGED_FILTER_TAG).isDefined) {
                 // cp is a previously-merged Filter: its condition is `OR(pf_0, pf_1, ...)` and cp's
@@ -430,7 +550,7 @@ class PlanMerger(
                 // upstream, which simplifies to `FILTER pf_i` -- wasted work and plan bloat.
                 // Drop cp's Filter and let the recursion's result flow up with cpFilter = None so
                 // cp's aggregates are left untouched.
-                TryMergeResult(mergedChild, npMapping, npFilter, None)
+                TryMergeResult(mergedChild, npMapping, npFilter, None, dsv2Merged = dsv2Merged)
               } else {
                 val newCPCondition = cpFilter.fold(cp.condition)(And(_, cp.condition))
                 val newCPFilterAlias =
@@ -439,15 +559,18 @@ class PlanMerger(
                 val project = Project(
                   mergedChild.output.toList :+ newCPFilterAlias,
                   mergedChild)
-                TryMergeResult(project, npMapping, npFilter, Some(newCPFilter))
+                TryMergeResult(project, npMapping, npFilter, Some(newCPFilter),
+                  dsv2Merged = dsv2Merged)
               }
           }
 
         case (np: Join, cp: Join) if np.joinType == cp.joinType && np.hint == cp.hint =>
-          tryMergePlans(np.left, cp.left, filterPropagationSupported).flatMap {
-            case TryMergeResult(mergedLeft, leftNPMapping, leftNPFilter, leftCPFilter) =>
-              tryMergePlans(np.right, cp.right, filterPropagationSupported).flatMap {
-                case TryMergeResult(mergedRight, rightNPMapping, rightNPFilter, rightCPFilter)
+          tryMergePlans(np.left, cp.left, context.copy(filterAboveScan = false)).flatMap {
+            case TryMergeResult(mergedLeft, leftNPMapping, leftNPFilter, leftCPFilter, _,
+                leftDsv2Merged) =>
+              tryMergePlans(np.right, cp.right, context.copy(filterAboveScan = false)).flatMap {
+                case TryMergeResult(mergedRight, rightNPMapping, rightNPFilter, rightCPFilter, _,
+                    rightDsv2Merged)
                     // If both children independently propagate filter attributes we would need to
                     // AND them into a new alias above the join, which is not yet supported.
                     if !(leftNPFilter.isDefined && rightNPFilter.isDefined) &&
@@ -474,7 +597,7 @@ class PlanMerger(
                     val npFilter = leftNPFilter.orElse(rightNPFilter)
                     val cpFilter = leftCPFilter.orElse(rightCPFilter)
                     Some(TryMergeResult(cp.withNewChildren(Seq(mergedLeft, mergedRight)), npMapping,
-                      npFilter, cpFilter))
+                      npFilter, cpFilter, dsv2Merged = leftDsv2Merged || rightDsv2Merged))
                   } else {
                     None
                   }
@@ -486,6 +609,187 @@ class PlanMerger(
         // Otherwise merging is not possible.
         case _ => None
       })
+  }
+
+  /**
+   * The DSv2 scan merge: fuse two scans of the same table that differ only in projected columns
+   * (and carry the same strict pushed filters) into a single scan reading the union of their
+   * columns. The connector opts in via
+   * `TableCapability.SCAN_MERGING`; Spark runs the real DSv2 pushdown
+   * ([[V2ScanRelationPushDown]]) on a synthetic `Filter` over the relation, extracts the merged
+   * scan, and verifies the (equal) strict filters remain fully enforced. Eligibility gating
+   * (`mergeable`) is read-only, inspecting only the two input scans.
+   *
+   * When this scan sits under a [[Filter]] (`context.filterAboveScan`), the build is DEFERRED: the
+   * merged scan is not built here but carried up as a [[DSv2DeferredScan]] and built exactly once
+   * at the enclosing Filter (via `tryBuildFilterDSv2ScanChild`), where the strict filters and the
+   * Filter's best-effort row-group pruning are known and can be pushed together in a single
+   * rebuild. The placeholder plan returned in that case is the bare relation (its output is a
+   * superset of the union columns); the Filter arm splices the built scan in by reference identity.
+   * Otherwise (no enclosing Filter) the scan is built here, strict-only.
+   *
+   * A differing post-scan filter is handled by filter propagation at the Filter, not here. There is
+   * no fallback, so any anomaly (a strict filter the rebuilt scan does not fully enforce, an
+   * unexpected output schema) results in `None` (no merge): it must be correct on its own.
+   */
+  private def tryMergeScanRelations(
+      np: DataSourceV2ScanRelation,
+      cp: DataSourceV2ScanRelation,
+      context: MergeContext): Option[TryMergeResult] = {
+    // np's relation attributes paired with cp's by position, reused below. Safe because the
+    // `mergeable` gate requires the two relations to be canonically equal, so both list the table's
+    // columns in the same order; lazy so it is only built once that check has passed. A scan's
+    // (pruned) `output` is a subset of its `relation.output` -- even where nested field pruning
+    // narrows a column's type -- so this maps each scan's output, and its pushed filters (which
+    // reference the relation's full output), through to the other scan's relation.
+    lazy val npRelationMapping = AttributeMap[Attribute](np.relation.output.zip(cp.relation.output))
+
+    // Each side must read a subset of its relation's columns AT THE SAME type. Column pruning may
+    // drop columns, but a struct/array/map column read at a narrower type via nested schema pruning
+    // leaves its extractors (e.g. GetStructField ordinals) resolved against the narrow layout; the
+    // merge rebuilds the column at the relation's full type, so those ordinals would read the wrong
+    // field. This subset property also guarantees every output attribute maps through
+    // npRelationMapping (and, in tryBuildMergedDSv2Scan, back to the relation). Widening the
+    // merged scan to the union of nested fields and remapping the ordinals is a possible follow-up.
+    def readsSubsetOfRelation(scan: DataSourceV2ScanRelation): Boolean = {
+      val relTypes = AttributeMap(scan.relation.output.map(a => a -> a.dataType))
+      scan.output.forall(a => relTypes.get(a).contains(a.dataType))
+    }
+
+    val mergeable =
+      // Same table, options, catalog and identifier: the relation's canonical form covers all of
+      // these (options compares by content via `CaseInsensitiveStringMap.equals`).
+      np.relation.canonicalized == cp.relation.canonicalized &&
+        // Both scans are mergeable: each came out of the plain column-pruning + filter pushdown
+        // path carrying only pushdowns a rebuilt scan can reproduce. A scan with a non-reproducible
+        // pushdown (aggregate, join, variant, limit, offset, top-N, sample) or built by any other
+        // rule is not mergeable by default.
+        np.mergeableScan && cp.mergeableScan &&
+        // Reported partitioning/ordering (e.g. storage-partitioned join, reported sort) is not
+        // reconstructed by the rebuilt scan -- it never carries reported partitioning or ordering,
+        // as V2ScanPartitioningAndOrdering is a separate early rule that rebuildScan does not run.
+        // So decline the merge when either input reports a NON-EMPTY one rather than silently
+        // dropping it; merging these can be added as a follow-up. A source that implements
+        // SupportsReportOrdering/SupportsReportPartitioning but reports nothing yields Some(Nil),
+        // so test the inner Seq (forall) rather than the Option (isEmpty), which would decline it.
+        np.keyGroupedPartitioning.forall(_.isEmpty) &&
+        cp.keyGroupedPartitioning.forall(_.isEmpty) &&
+        np.ordering.forall(_.isEmpty) && cp.ordering.forall(_.isEmpty) &&
+        // The table opts in to Spark-side merging (a table capability, so a V1-fallback source
+        // whose scan Spark wraps can still opt in). Both relations are the same table (canonically
+        // equal, checked above), but check each to be safe.
+        np.relation.table.capabilities().contains(TableCapability.SCAN_MERGING) &&
+        cp.relation.table.capabilities().contains(TableCapability.SCAN_MERGING) &&
+        // Each side reads a subset of its relation's columns at the same type (see above).
+        readsSubsetOfRelation(np) && readsSubsetOfRelation(cp) &&
+        // Both pushed the same strict filters, so re-pushing reproduces both sides' row sets. Remap
+        // np's pushed filters onto cp's via npRelationMapping (the full relation-to-relation
+        // mapping, since a pushed filter may reference a column pruned out of np.output) before
+        // comparing as sets.
+        ExpressionSet(np.pushedFilters.map(mapAttributes(_, npRelationMapping))) ==
+          ExpressionSet(cp.pushedFilters)
+
+    // Eligibility is settled above (a read-only gate); everything below constructs the merge.
+    if (!mergeable) {
+      return None
+    }
+
+    // np's columns expressed in cp's relation space; the subset check above guarantees each maps.
+    val npMapping = AttributeMap(np.output.map(a => a -> npRelationMapping(a)))
+    // cp's columns are already cp.relation attributes; append the np-only columns, in np.output
+    // order (npMapping.values would be exprId-hash-ordered).
+    val unionAttrs = cp.output ++ np.output.map(npMapping).filterNot(cp.outputSet.contains)
+
+    if (context.filterAboveScan) {
+      // Defer the build to the enclosing Filter so the scan is built once with strict +
+      // best-effort filters. The placeholder mergedPlan is the bare relation (its output is a
+      // superset of unionAttrs). rebuildScan reuses the relation's attributes, so mapping
+      // np.output to cp's relation attributes is consistent with the eventual built scan.
+      Some(TryMergeResult(cp.relation, npMapping,
+        dsv2DeferredScan = Some(DSv2DeferredScan(unionAttrs, cp.pushedFilters)), dsv2Merged = true))
+    } else {
+      // No enclosing Filter: build the merged scan here enforcing the (equal) strict filters over
+      // the union of columns, with no best-effort filter (no post-scan Filter to prune on).
+      tryBuildMergedDSv2Scan(cp.relation, unionAttrs, cp.pushedFilters, bestEffortFilter = None)
+        .map(TryMergeResult(_, npMapping, dsv2Merged = true))
+    }
+  }
+
+  /**
+   * Rebuilds the merged DSv2 scan via [[V2ScanRelationPushDown.rebuildScan]], projecting
+   * `unionAttrs` and filtering by `strictFilters` (plus the `bestEffortFilter`). This reuses
+   * the production pushdown end to end -- the same filter translation, column pruning,
+   * determinism/subquery handling and iterative PartitionPredicate second pass -- rather than
+   * reimplementing a slice of it here.
+   *
+   * `strictFilters` must come back fully enforced (present in the rebuilt scan's `pushedFilters`);
+   * otherwise `None`, because nothing above the leaf re-checks it. The `bestEffortFilter` is
+   * offered to the source only when sound: it is dropped unless it is deterministic (a
+   * non-deterministic predicate the source prunes on would drop rows the enclosing Filter cannot
+   * recover) and references only the relation's own columns (propagated boolean filter attributes
+   * are not columns of the relation).
+   */
+  private def tryBuildMergedDSv2Scan(
+      relation: DataSourceV2Relation,
+      unionAttrs: Seq[Attribute],
+      strictFilters: Seq[Expression],
+      bestEffortFilter: Option[Expression]): Option[DataSourceV2ScanRelation] = {
+    val relationOut = relation.outputSet
+    // Defensive: strict filters come from `pushedFilters`, which reference only relation columns,
+    // so this holds today. If a future caller offers a filter over non-relation attributes, decline
+    // the merge rather than build an unsound scan (there is no fallback above the leaf).
+    if (!strictFilters.forall(_.references.subsetOf(relationOut))) {
+      return None
+    }
+    // `unionAttrs` are the relation's own attributes (the caller builds the union in the relation's
+    // space), so they are the projection directly.
+    // strictFilters are enforced; the bestEffortFilter is offered too, but only when it is
+    // expressible over the relation -- a condition referencing propagated boolean filter aliases
+    // rather than relation columns is dropped. A non-deterministic predicate needs no handling
+    // here: SPARK-58207 keeps non-deterministic filters from being pushed to a V2 source, so an
+    // offered one is simply not pushed (and dropped when the scan is extracted).
+    val conds = strictFilters ++ bestEffortFilter.filter(_.references.subsetOf(relationOut))
+    V2ScanRelationPushDown.rebuildScan(relation, unionAttrs, conds).filter { scan =>
+      // The rebuilt scan must itself be mergeable. rebuildScan re-runs the full pushdown, so any
+      // non-reproducible pushdown it introduces would make the merged scan unsound. Today's
+      // Project-over-Filter input only triggers the plain path (always mergeable), so this is
+      // defensive: it re-validates the rebuild's output against the same gate applied to its
+      // inputs, rather than trusting the rebuild if its input plan ever broadens.
+      scan.mergeableScan &&
+        // Every intended-strict filter must be fully enforced by the rebuilt scan (nothing above
+        // re-checks it), and the scan must produce exactly the requested union of columns.
+        strictFilters.forall(ExpressionSet(scan.pushedFilters).contains) &&
+        scan.outputSet == AttributeSet(unionAttrs)
+    }
+  }
+
+  /**
+   * Threads the deferred DSv2 scan build through a [[Filter]] arm. If the merged child carries a
+   * [[DSv2DeferredScan]], build the scan once here -- at the enclosing Filter, with the strict
+   * filters plus the Filter's `bestEffortFilter` -- and splice it in place of the placeholder
+   * relation. Tries strict + best-effort first, then strict-only (the best-effort filter is
+   * droppable); returns `None` only if the strict filters cannot be re-enforced at all, in which
+   * case the caller must decline the merge (the leaf's strict-only build would have failed
+   * identically). If there is no deferred scan (a non-DSv2 child, or a scan not under a Filter),
+   * there is nothing to build and the child is returned unchanged.
+   */
+  private def tryBuildFilterDSv2ScanChild(
+      child: LogicalPlan,
+      dsv2DeferredScan: Option[DSv2DeferredScan],
+      bestEffortFilter: Option[Expression]): Option[LogicalPlan] = dsv2DeferredScan match {
+    case None => Some(child)
+    case Some(d) =>
+      // The deferring leaf left the relation to rebuild from in the plan as the placeholder
+      // mergedPlan. It is the sole bare DataSourceV2Relation in the subtree (early pushdown has
+      // turned every other relation into a DataSourceV2ScanRelation), so recover it by type here
+      // rather than carrying it on DSv2DeferredScan.
+      child.collectFirst { case r: DataSourceV2Relation => r }.flatMap { relation =>
+        tryBuildMergedDSv2Scan(relation, d.unionAttrs, d.strictFilters, bestEffortFilter)
+          .orElse(tryBuildMergedDSv2Scan(relation, d.unionAttrs, d.strictFilters, None))
+          .map { built =>
+            child.transformUp { case r: DataSourceV2Relation if r eq relation => built }
+          }
+      }
   }
 
   // Returns true when a filter attribute originating from `fromLeft` child of a join with
@@ -517,7 +821,7 @@ class PlanMerger(
       }
     }
 
-  private def mapAttributes[T <: Expression](expr: T, outputMap: AttributeMap[Attribute]) = {
+  private def mapAttributes[T <: Expression](expr: T, outputMap: AttributeMap[_ <: Attribute]) = {
     expr.transform {
       case a: Attribute => outputMap.getOrElse(a, a)
     }.asInstanceOf[T]
