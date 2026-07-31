@@ -69,6 +69,24 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  /**
+   * Rebuilds a single scan for a Spark-side scan merge (see
+   * `TableCapability.SCAN_MERGING`): runs this rule on a synthetic
+   * `Project(projectList, Filter(conditions, relation))` and returns the resulting
+   * [[DataSourceV2ScanRelation]]. This lets `PlanMerger` fuse two scans of the same table by
+   * expressing what the merged scan should project and filter, while the pushdown lifecycle (filter
+   * translation, column pruning, the iterative PartitionPredicate second pass) stays owned here.
+   * `conditions` are pushed as a single `Filter` directly above the relation; the caller decides
+   * which of them must come back fully enforced.
+   */
+  def rebuildScan(
+      relation: DataSourceV2Relation,
+      projectList: Seq[NamedExpression],
+      conditions: Seq[Expression]): Option[DataSourceV2ScanRelation] = {
+    val child = conditions.reduceOption(And).map(Filter(_, relation)).getOrElse(relation)
+    apply(Project(projectList, child)).collectFirst { case s: DataSourceV2ScanRelation => s }
+  }
+
   private def collapseGroupedSumOfCount(plan: LogicalPlan): LogicalPlan = {
     val excludedRules = SQLConf.get.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
     if (excludedRules.contains(CollapseGroupedSumOfCount.ruleName)) {
@@ -111,8 +129,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
 
       // Compute the pushed filter expressions: the normalized filters that were fully pushed
-      // down (i.e., not in postScanFilters). These are stored on the scan relation for
-      // potential future use in constraint propagation.
+      // down (i.e., not in postScanFilters). These are stored on the scan relation for potential
+      // future use in constraint propagation, and are read by a Spark-side scan merge (see
+      // TableCapability.SCAN_MERGING) to compare and re-enforce a scan's filters.
       val postScanFilterSet = ExpressionSet(postScanFiltersWithoutSubquery)
       sHolder.pushedFilterExpressions = normalizedFiltersWithoutSubquery
         .filterNot(postScanFilterSet.contains)
@@ -826,6 +845,37 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
     }
 
+  /**
+   * Whether the plain-scan path ([[pruneColumns]]) carries a pushdown that a Spark-side scan merge
+   * (see `TableCapability.SCAN_MERGING`) cannot reproduce by
+   * rebuilding the scan from a fresh `ScanBuilder` and re-applying the pushed filters and pruned
+   * columns. Used only to decide the plain-scan `mergeableScan` flag (`!hasBlockingPushdown`).
+   *
+   * Scan merging is default-safe: [[DataSourceV2ScanRelation.mergeableScan]] defaults to false and
+   * this is the ONLY site that ever sets it true. Every other scan-relation build path -- the
+   * dedicated aggregate/join/variant rules ([[buildScanWithPushedAggregate]] /
+   * [[buildScanWithPushedJoin]] / [[buildScanWithPushedVariants]]), row-level-operation planning,
+   * and anything added later -- leaves the scan not-mergeable by default, so those sites need no
+   * change here.
+   *
+   * The plain-scan non-reproducible pushdowns are:
+   *   - `pushedLimit`            -- pushed LIMIT
+   *   - `pushedOffset`           -- pushed OFFSET
+   *   - `pushedSample`           -- pushed table sample
+   *   - `sortOrders`             -- pushed sort order (top-N / ordering)
+   *
+   * Reproducible (re-applied by the merge), so NOT blocking: `output` (column pruning, via
+   * `SupportsPushDownRequiredColumns`) and `pushedPredicates` / `pushedFilterExpressions`
+   * (deterministic filters, re-pushed via `SupportsPushDownV2Filters`). A pushed aggregate, join or
+   * variant never reaches here -- their build rules run first. When a new pushdown capability adds
+   * plain-scan state to [[ScanBuilderHolder]], list it above so it keeps the scan not-mergeable.
+   */
+  private def hasBlockingPushdown(holder: ScanBuilderHolder): Boolean =
+    holder.pushedLimit.isDefined ||
+      holder.pushedOffset.isDefined ||
+      holder.pushedSample.isDefined ||
+      holder.sortOrders.nonEmpty
+
   def buildScanWithPushedAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
     case holder: ScanBuilderHolder if holder.pushedAggregate.isDefined =>
       // No need to do column pruning because only the aggregate columns are used as
@@ -838,6 +888,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val wrappedScan = getWrappedScan(scan, holder)
       // Note: holder.pushedFilterExpressions is not propagated here because the output schema
       // changes to aggregate columns. When validConstraints is wired up, this needs revisiting.
+      // A pushed aggregate cannot be reproduced by rebuilding the scan, so this scan stays
+      // not-mergeable (the default `mergeableScan = false`).
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
       val projectList = realOutput.zip(holder.output).map { case (a1, a2) =>
         // The data source may return columns with arbitrary data types and it's safer to cast them
@@ -857,6 +909,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val wrappedScan = getWrappedScan(scan, holder)
       // Note: holder.pushedFilterExpressions is not propagated here because the output schema
       // changes with pushed join. When validConstraints is wired up, this needs revisiting.
+      // A pushed join cannot be reproduced by rebuilding the scan, so this scan stays not-mergeable
+      // (the default `mergeableScan = false`).
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
 
       // When join is pushed down, the real output is going to be, for example,
@@ -885,6 +939,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val wrappedScan = getWrappedScan(scan, holder)
       // Note: holder.pushedFilterExpressions is not propagated here because the output schema
       // changes with variant extraction. When validConstraints is wired up, this needs revisiting.
+      // Pushed variant extraction cannot be reproduced by rebuilding the scan, so this scan stays
+      // not-mergeable (the default `mergeableScan = false`).
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
 
       // Create projection to map real output to expected output (with transformed types)
@@ -941,10 +997,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         case projectionOverSchema(newExpr) => newExpr
       }
 
-      // Remap pushed filter attributes to the pruned output schema and drop filters
-      // whose references are no longer in the pruned output. Catch FIELD_NOT_FOUND
-      // because ProjectionOverSchema throws when a pushed filter references a nested
-      // struct field that was pruned from the schema.
+      // Remap pushed filter attributes to the pruned output schema and drop filters whose
+      // references are no longer in the pruned output. Catch FIELD_NOT_FOUND because
+      // ProjectionOverSchema throws when a pushed filter references a nested struct field that was
+      // pruned from the schema. This feeds only the Spark post-pushdown adjustment below; the scan
+      // relation's own pushedFilters keep the complete set (see the next comment).
       val remappedPushedFilters = sHolder.pushedFilterExpressions.flatMap { filter =>
         try Some(projectionFunc(filter))
         catch {
@@ -952,8 +1009,19 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             None
         }
       }.filter(_.references.subsetOf(AttributeSet(output)))
+
+      // Record the fully-pushed filter expressions on the scan relation, keeping their references
+      // to the relation's (pre-pruning) output. These include filters on columns that were pruned
+      // out of the scan output -- e.g. an unselected partition column the source still enforces
+      // internally. PlanMerger needs this complete set to compare two scans' filters and to
+      // re-enforce them when it rebuilds a merged scan; remapping to the pruned output (as the
+      // post-scan filters below are) would silently drop pruned-out filter columns and make the
+      // merge unsound. See DataSourceV2ScanRelation.pushedFilters.
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output,
-        pushedFilters = remappedPushedFilters)
+        pushedFilters = sHolder.pushedFilterExpressions,
+        // The one site that grants mergeability: a plain scan carrying only reproducible pushdowns
+        // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
+        mergeableScan = !hasBlockingPushdown(sHolder))
 
       val finalFilters = normalizedFilters.map(projectionFunc)
       // bottom-most filters are put in the left of the list.

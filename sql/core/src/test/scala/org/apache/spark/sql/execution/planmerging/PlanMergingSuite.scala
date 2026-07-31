@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.planmerging
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class PlanMergeSuite extends SharedSparkSession
+class PlanMergingSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
