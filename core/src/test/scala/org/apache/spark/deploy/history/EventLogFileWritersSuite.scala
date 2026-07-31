@@ -353,13 +353,16 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
   }
 
   test("Event log file names") {
-    val names = SingleEventLogFileWriter.getLogFileNames("app1", Some("attempt1"))
-    assert(names.head === "app1_attempt1")
-    assert(names.contains("app1_attempt1.inprogress"))
-    assert(names.size === (1 + CompressionCodec.shortCompressionCodecNames.size) * 2)
-    CompressionCodec.shortCompressionCodecNames.keys.foreach { codec =>
-      assert(names.contains(s"app1_attempt1.$codec"))
-      assert(names.contains(s"app1_attempt1.$codec.inprogress"))
+    Seq(None, Some("attempt1")).foreach { attemptId =>
+      val baseName = attemptId.map(id => s"app1_$id").getOrElse("app1")
+      val names = SingleEventLogFileWriter.getLogFileNames("app1", attemptId)
+      assert(names.head === baseName)
+      assert(names.contains(s"$baseName.inprogress"))
+      assert(names.size === (1 + CompressionCodec.shortCompressionCodecNames.size) * 2)
+      CompressionCodec.shortCompressionCodecNames.keys.foreach { codec =>
+        assert(names.contains(s"$baseName.$codec"))
+        assert(names.contains(s"$baseName.$codec.inprogress"))
+      }
     }
   }
 

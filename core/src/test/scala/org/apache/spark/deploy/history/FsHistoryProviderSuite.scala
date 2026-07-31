@@ -1789,6 +1789,9 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
             assert(appInfo.attempts.head.duration === 4000)
           }
 
+          assert(provider.getAppUI("nonexist", None).isEmpty)
+          assert(provider.getListing().length === (if (onDemandEnabled) 1 else 0))
+
           provider.stop()
         }
       }
@@ -1901,6 +1904,38 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
       provider.checkForLogs()
       assert(provider.getListing().length === 1)
+
+      provider.stop()
+    }
+  }
+
+  test("On-demand loading supports rolling and single event logs together") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, true)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val provider = new FsHistoryProvider(conf)
+
+      val rollingWriter = new RollingEventLogFilesWriter(
+        "app-rolling", None, dir.toURI, conf, hadoopConf)
+      rollingWriter.start()
+      writeEventsToRollingWriter(rollingWriter, Seq(
+        SparkListenerApplicationStart("app-rolling", Some("app-rolling"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      rollingWriter.stop()
+
+      val singleLog = newLogFile("app-single", None, inProgress = false, logDir = dir)
+      writeFile(singleLog, None,
+        SparkListenerApplicationStart("app-single", Some("app-single"), 0, "user", None),
+        SparkListenerApplicationEnd(1))
+
+      assert(provider.getAppUI("app-rolling", None).isDefined)
+      assert(provider.getAppUI("app-single", None).isDefined)
+      assert(provider.getListing().length === 2)
+      assert(provider.getAppUI("nonexist", None).isEmpty)
+      assert(provider.getListing().length === 2)
 
       provider.stop()
     }
