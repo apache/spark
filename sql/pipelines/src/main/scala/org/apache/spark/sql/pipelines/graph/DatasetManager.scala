@@ -107,16 +107,29 @@ object DatasetManager extends Logging {
             if (tablesToMaterialize.keySet.contains(table.identifier)) {
               try {
                 val isFullRefresh = tablesToMaterialize(table.identifier).isFullRefresh
+                // Load the existing auxiliary table (if any) once here and thread the snapshot into
+                // both materializeTable (which uses it for AutoCDC config-drift validation) and
+                // materializeAuxiliaryTable (which uses it to decide evolve-vs-create). Nothing
+                // between them mutates the auxiliary table, so a single load is safe and avoids a
+                // redundant catalog round trip.
+                val auxiliaryTableSpecOpt =
+                  resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier)
+                val existingAuxiliaryTable = auxiliaryTableSpecOpt.flatMap { spec =>
+                  val (auxCatalog, auxId) =
+                    PipelinesCatalogUtils.resolveTableCatalog(context.spark, spec.identifier)
+                  loadTableIfExists(auxCatalog, auxId)
+                }
                 val (tableWithMaterializationMetadata, catalogTableEntity) = materializeTable(
                   resolvedDataflowGraph = resolvedDataflowGraph,
                   table = table,
                   isFullRefresh = isFullRefresh,
+                  existingAuxiliaryTable = existingAuxiliaryTable,
                   context = context
                 )
                 // Auxiliary tables' lifecycle should follow the table that it is complementary to.
                 // If this table has any auxiliary tables, validate the target can host them and
                 // materialize/full-refresh them accordingly.
-                resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier).foreach {
+                auxiliaryTableSpecOpt.foreach {
                   auxiliaryTableSpec =>
                     // If this table is an AutoCDC target table, as identified by being
                     // accompanied by an AutoCDC auxiliary table, additionally validate that the
@@ -134,6 +147,7 @@ object DatasetManager extends Logging {
                     materializeAuxiliaryTable(
                       auxiliaryTableSpec = auxiliaryTableSpec,
                       isFullRefresh = isFullRefresh,
+                      existingAuxiliaryTable = existingAuxiliaryTable,
                       context = context
                     )
                 }
@@ -270,6 +284,9 @@ object DatasetManager extends Logging {
    * @param resolvedDataflowGraph The resolved [[DataflowGraph]] used to infer the table schema.
    * @param table The table to be materialized.
    * @param isFullRefresh Whether this table should be full refreshed or not.
+   * @param existingAuxiliaryTable The already-loaded auxiliary table for this target (if it has one
+   *                               and it exists), used for AutoCDC config-drift validation. Loaded
+   *                               once by the caller and shared with [[materializeAuxiliaryTable]].
    * @param context The context for the pipeline update.
    * @return The materialized graph [[Table]] (with additional metadata set) paired with the loaded
    *         DSv2 handle of the just created/evolved table.
@@ -278,6 +295,7 @@ object DatasetManager extends Logging {
       resolvedDataflowGraph: DataflowGraph,
       table: Table,
       isFullRefresh: Boolean,
+      existingAuxiliaryTable: Option[V2Table],
       context: PipelineUpdateContext): (Table, V2Table) = {
     logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
     // Get the DSv2 catalog handler and identifier for the table.
@@ -342,7 +360,7 @@ object DatasetManager extends Logging {
       resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier).collect {
         case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
       }.foreach { autoCdcSpec =>
-        validateNoAutoCdcAuxConfigDrift(autoCdcSpec, context)
+        validateNoAutoCdcAuxConfigDrift(autoCdcSpec, existingAuxiliaryTable, context)
       }
     }
 
@@ -431,11 +449,15 @@ object DatasetManager extends Logging {
    *
    * @param auxiliaryTableSpec the spec describing the auxiliary table to create/evolve.
    * @param isFullRefresh whether the owning table is being fully refreshed.
+   * @param existingAuxiliaryTable the already-loaded auxiliary table (if it exists), loaded once by
+   *                               the caller and shared with the config-drift validation in
+   *                               [[materializeTable]] rather than re-loaded here.
    * @param context the context for the pipeline update.
    */
   private def materializeAuxiliaryTable(
       auxiliaryTableSpec: AuxiliaryTableSpec,
       isFullRefresh: Boolean,
+      existingAuxiliaryTable: Option[V2Table],
       context: PipelineUpdateContext): Unit = {
     // Get the DSv2 catalog handler and identifier for the aux table.
     val (catalog, auxiliaryTableIdentifier) =
@@ -471,17 +493,19 @@ object DatasetManager extends Logging {
         transforms = Seq.empty
       )
     } else {
-      loadTableIfExists(catalog, auxiliaryTableIdentifier) match {
-        case Some(existingAuxiliaryTable) =>
+      // Uses the auxiliary-table snapshot loaded by the caller (see materializeDatasets), rather
+      // than re-loading it here.
+      existingAuxiliaryTable match {
+        case Some(existingAuxTable) =>
           // NOTE: AutoCDC configuration-drift validation (key columns, SCD type, sequencing type,
           // track-history columns) intentionally runs in [[materializeTable]] BEFORE the target's
-          // schema is evolved, not here -- see `validateNoAutoCdcConfigDrift`. Validating here
+          // schema is evolved, not here -- see `validateNoAutoCdcAuxConfigDrift`. Validating here
           // would be too late: the target has already been ALTERed by the time an aux-owned check
           // could reject the run.
           evolveTable(
             catalog = catalog,
             tableIdentifier = auxiliaryTableIdentifier,
-            existingTable = existingAuxiliaryTable,
+            existingTable = existingAuxTable,
             desiredSchema = auxiliaryTableSpec.schema,
             properties = auxiliaryTableSpec.properties,
             mergeWithExistingSchema = true
@@ -511,15 +535,17 @@ object DatasetManager extends Logging {
    * `.validateNoTargetSequencingTypeDrift`) because it reads the target schema, not the aux table.
    *
    * @param autoCdcSpec the auxiliary-table spec carrying this run's expected AutoCDC configuration.
+   * @param existingAuxiliaryTableOpt the already-loaded auxiliary table (if it exists), shared with
+   *                                  the caller and [[materializeAuxiliaryTable]] to avoid a
+   *                                  redundant load.
    * @param context the context for the pipeline update.
    */
   private def validateNoAutoCdcAuxConfigDrift(
       autoCdcSpec: AutoCdcAuxiliaryTableSpec,
+      existingAuxiliaryTableOpt: Option[V2Table],
       context: PipelineUpdateContext): Unit = {
     val resolver = context.spark.sessionState.conf.resolver
-    val (auxCatalog, auxIdentifier) =
-      PipelinesCatalogUtils.resolveTableCatalog(context.spark, autoCdcSpec.identifier)
-    loadTableIfExists(auxCatalog, auxIdentifier).foreach { existingAuxiliaryTable =>
+    existingAuxiliaryTableOpt.foreach { existingAuxiliaryTable =>
       AutoCdcAuxiliaryTable.validateNoKeyColumnDrift(
         existingAuxiliaryTable = existingAuxiliaryTable,
         targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
