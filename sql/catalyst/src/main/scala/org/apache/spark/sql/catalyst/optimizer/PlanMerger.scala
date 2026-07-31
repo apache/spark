@@ -19,11 +19,15 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, Expression, If, Literal, NamedExpression, Or}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeReference, Expression, ExpressionSet, If, Literal, NamedExpression, Or}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.connector.catalog.SupportsRead
+import org.apache.spark.sql.connector.read.SupportsScanMerging
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -483,9 +487,97 @@ class PlanMerger(
             case _ => None
           }
 
+        case (np: DataSourceV2ScanRelation, cp: DataSourceV2ScanRelation) =>
+          tryMergeV2ScanRelations(np, cp)
+
         // Otherwise merging is not possible.
         case _ => None
       })
+  }
+
+  /** Attempt to merge two V2 scan relations via the [[SupportsScanMerging]] connector
+   *  interface. Both scans must reference the same underlying relation and have
+   *  canonicalized-identical relation-level `pushedFilters` (see the gate below). The
+   *  merged scan's output is the union of both sides' read schemas; cp's attribute IDs
+   *  are preserved for shared columns and np's attribute IDs are mapped to the
+   *  corresponding merged attribute.
+   *
+   *  How this reaches V1 parity for filter differences: for sources whose pushdown is
+   *  best-effort (e.g. Parquet row-group filters), the exact predicate remains as a
+   *  post-scan [[Filter]] node ABOVE the scan, and the relation-level `pushedFilters`
+   *  field is empty. So two branches that differ only in their WHERE clause look like
+   *  `Filter(p1) over scan` vs `Filter(p2) over scan` -- the existing `(Filter, Filter)`
+   *  symmetric-propagation cases OR-widen the exact filter and emit per-side aggregate
+   *  `FILTER (WHERE ...)` clauses, exactly as for V1. This leaf case only merges the
+   *  scans underneath, OR-widening their best-effort pushed filter (via the connector's
+   *  `mergeWith`) so the merged scan reads a superset of either side's rows. The
+   *  per-side correctness is then restored by the Filter nodes above.
+   */
+  private def tryMergeV2ScanRelations(
+      np: DataSourceV2ScanRelation,
+      cp: DataSourceV2ScanRelation): Option[TryMergeResult] = {
+    // Both scans must reference the same underlying relation.
+    if (np.relation.canonicalized != cp.relation.canonicalized) return None
+
+    // Relation-level pushedFilters must match. For best-effort sources these are empty
+    // (the exact predicate stays as a post-scan Filter, handled by the (Filter, Filter)
+    // cases above). For sources that report EXACT pushdown (no residual Filter node),
+    // differing pushedFilters here would have no Filter above to re-apply per-side
+    // predicates, so OR-widening the scan would change results -- this gate
+    // conservatively declines that case.
+    if (ExpressionSet(np.pushedFilters) != ExpressionSet(cp.pushedFilters)) return None
+
+    // Both scans must implement SupportsScanMerging.
+    val (npm, cpm) = (np.scan, cp.scan) match {
+      case (a: SupportsScanMerging, b: SupportsScanMerging) => (a, b)
+      case _ => return None
+    }
+
+    // The underlying table must be SupportsRead so we can call newScanBuilder.
+    val table = np.relation.table match {
+      case sr: SupportsRead => sr
+      case _ => return None
+    }
+
+    val mergedOpt = npm.mergeWith(cpm, table)
+    if (!mergedOpt.isPresent) return None
+    val mergedScan = mergedOpt.get()
+
+    // Build merged output: preserve cp's attribute IDs for shared columns, allocate
+    // fresh attribute IDs for np-exclusive columns.
+    val realOutput = toAttributes(mergedScan.readSchema())
+    val cpByName = cp.output.map(a => a.name -> a).toMap
+    val mergedOutput = realOutput.map { ra =>
+      cpByName.get(ra.name) match {
+        case Some(cpa) =>
+          AttributeReference(ra.name, ra.dataType, ra.nullable, ra.metadata)(
+            cpa.exprId, cpa.qualifier)
+        case None => ra
+      }
+    }
+
+    // np.output -> mergedOutput by name. If any np-output column is missing from
+    // the merged scan, the merge is not usable. AttributeMap is invariant in its
+    // value type, so widen the pairs to (Attribute, Attribute) explicitly.
+    val mergedByName = mergedOutput.map(a => a.name -> a).toMap
+    val mappingOpts: Seq[Option[(Attribute, Attribute)]] =
+      np.output.map(npa => mergedByName.get(npa.name).map(npa -> _))
+    if (mappingOpts.exists(_.isEmpty)) return None
+
+    val npMapping = AttributeMap(mappingOpts.flatten)
+
+    // Preserve the original pushedFilters (np.pushedFilters == cp.pushedFilters by
+    // the check above). Partitioning and ordering hints from V2ScanPartitioningAndOrdering
+    // are intentionally dropped: a merged scan with a wider read schema may have a
+    // different output partitioning than either input, and re-running pushdown via
+    // the connector's mergeWith does not preserve those hints. Consumers that need
+    // them can be re-fixed by a later pass of V2ScanPartitioningAndOrdering.
+    val mergedRelation = DataSourceV2ScanRelation(
+      np.relation,
+      mergedScan,
+      mergedOutput,
+      pushedFilters = cp.pushedFilters)
+    Some(TryMergeResult(mergedRelation, npMapping))
   }
 
   // Returns true when a filter attribute originating from `fromLeft` child of a join with
