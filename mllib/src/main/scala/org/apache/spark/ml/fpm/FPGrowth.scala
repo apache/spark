@@ -324,7 +324,7 @@ class FPGrowthModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize
+    var size = estimateMatadataSize()
     // freqItemsets: DataFrame("items": Array, "freq": Long)
     freqItemsets match {
       case df: org.apache.spark.sql.classic.DataFrame =>

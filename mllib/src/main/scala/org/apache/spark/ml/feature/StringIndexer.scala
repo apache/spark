@@ -329,7 +329,7 @@ class StringIndexerModel (
   }
 
   private[spark] override def estimatedSize: Long =
-    estimateMatadataSize + SizeEstimator.estimate((labelsArray, labelsToIndexArray))
+    estimateMatadataSize() + SizeEstimator.estimate((labelsArray, labelsToIndexArray))
 
   /** @group setParam */
   @Since("1.6.0")

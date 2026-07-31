@@ -55,7 +55,7 @@ class MinHashLSHModel private[ml](
   private[ml] def this() = this("", Array.empty)
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize
+    var size = estimateMatadataSize()
     // randCoefficients: Array[(Int, Int)]
     size += SizeEstimator.estimate(randCoefficients)
     size

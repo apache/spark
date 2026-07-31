@@ -248,7 +248,7 @@ class IsotonicRegressionModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize
+    var size = estimateMatadataSize()
     if (oldModel != null) {
       // boundaries: Array[Double]
       size += SizeEstimator.estimate(oldModel.boundaries)

@@ -287,7 +287,7 @@ class CountVectorizerModel(
   private[ml] def this() = this("", Array.empty)
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize
+    var size = estimateMatadataSize()
     // vocabulary: Array[String]
     size += SizeEstimator.estimate(vocabulary)
     size

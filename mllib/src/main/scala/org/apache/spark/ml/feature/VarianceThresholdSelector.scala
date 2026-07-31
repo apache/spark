@@ -134,7 +134,7 @@ class VarianceThresholdSelectorModel private[ml](
 
   private[spark] override def estimatedSize: Long = {
     // selectedFeatures: Array[Int]
-    estimateMatadataSize + SizeEstimator.estimate(selectedFeatures)
+    estimateMatadataSize() + SizeEstimator.estimate(selectedFeatures)
   }
 
   if (selectedFeatures.length >= 2) {

@@ -179,7 +179,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     val topology = FeedForwardTopology.multiLayerPerceptron($(layers), softmaxOnTop = true)
     val expectedWeightSize = topology.layers.map(_.weightSize).sum
 
-    var size = this.estimateMatadataSize
+    var size = this.estimateMatadataSize()
     size += Vectors.getDenseSize(expectedWeightSize) // weights
     size
   }
@@ -334,7 +334,7 @@ class MultilayerPerceptronClassificationModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    var size = this.estimateMatadataSize
+    var size = this.estimateMatadataSize()
     if (this.weights != null) {
       size += this.weights.getSizeInBytes
     }

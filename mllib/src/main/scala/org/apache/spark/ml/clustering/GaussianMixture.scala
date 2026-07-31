@@ -223,7 +223,7 @@ class GaussianMixtureModel private[ml] (
   override def summary: GaussianMixtureSummary = super.summary
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize
+    var size = estimateMatadataSize()
     // weights: Array[Double]
     // gaussians: Array[MultivariateGaussian], each containing a mean Vector and covariance Matrix
     size += SizeEstimator.estimate((weights, gaussians))

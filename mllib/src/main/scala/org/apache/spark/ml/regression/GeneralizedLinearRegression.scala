@@ -448,7 +448,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   override def estimateModelSize(dataset: Dataset[_]): Long = {
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
 
-    var size = this.estimateMatadataSize
+    var size = this.estimateMatadataSize()
     size += Vectors.getDenseSize(numFeatures) // coefficients
     size
   }
@@ -1113,7 +1113,7 @@ class GeneralizedLinearRegressionModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    var size = this.estimateMatadataSize
+    var size = this.estimateMatadataSize()
     if (this.coefficients != null) {
       size += this.coefficients.getSizeInBytes
     }

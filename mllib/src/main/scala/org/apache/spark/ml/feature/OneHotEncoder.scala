@@ -241,7 +241,7 @@ class OneHotEncoderModel private[ml] (
   private[ml] def this() = this("", Array.emptyIntArray)
 
   private[spark] override def estimatedSize: Long =
-    estimateMatadataSize + SizeEstimator.estimate(categorySizes)
+    estimateMatadataSize() + SizeEstimator.estimate(categorySizes)
 
   // Returns the category size for each index with `dropLast` and `handleInvalid`
   // taken into account.

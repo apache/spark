@@ -113,7 +113,7 @@ class MaxAbsScalerModel private[ml] (
   private[ml] def this() = this("", Vectors.empty)
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize
+    var size = estimateMatadataSize()
     if (maxAbs != null) {
       size += maxAbs.getSizeInBytes
     }
