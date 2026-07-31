@@ -53,7 +53,10 @@ To run locally::
         python/run-tests --testnames pyspark.sql.tests.test_udf_transpile_hypothesis
 
 Set ``RUN_HYPOTHESIS_MAX_EXAMPLES`` to override the per-test example count
-(default 1000).
+(default 1000). Each generated example runs two full Spark jobs (a
+transpiled-vs-interpreted differential), so CI caps this at 50 via
+``build_and_test.yml`` to stay under ``PYSPARK_TEST_TIMEOUT``; the explicit
+``@example`` edge seeds always run on top of the generated ones regardless.
 """
 
 import os

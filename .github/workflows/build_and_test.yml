@@ -686,6 +686,10 @@ jobs:
       BRANCH: ${{ inputs.branch }}
       PYSPARK_TEST_TIMEOUT: 450
       RUN_HYPOTHESIS: ${{ fromJson(needs.precondition.outputs.required).transpile }}
+      # Each generated example runs two full Spark jobs (transpiled vs. interpreted
+      # differential), so the local default of 1000 blows past PYSPARK_TEST_TIMEOUT.
+      # Cap CI fuzz volume; the explicit @example edge seeds still always run.
+      RUN_HYPOTHESIS_MAX_EXAMPLES: 50
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v6
