@@ -24,7 +24,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan,
-  MapInPandas, MapPartitionsExternalUDF}
+  EvalExternalUDF, MapInPandas, MapPartitionsExternalUDF}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.python.{MapInPandasExec,
   UserDefinedPythonFunction}
@@ -62,9 +62,22 @@ trait ExternalUDFPlanningTestBase extends SharedSparkSession {
       pythonEvalType = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
       udfDeterministic = true)
 
+  protected val scalarPythonUDF: UserDefinedPythonFunction =
+    UserDefinedPythonFunction(
+      name = "dummyScalarPythonUDF",
+      func = dummyPythonFunction,
+      dataType = IntegerType,
+      pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
+      udfDeterministic = true)
+
   protected def applyMapInPandas(): DataFrame = {
     val inputDF = Seq(("hello", 1)).toDF("a", "b")
     inputDF.mapInPandas(mapInPandasUDF(col("a"), col("b")))
+  }
+
+  protected def applyScalarPythonUDF(): DataFrame = {
+    val inputDF = Seq(("hello", 1)).toDF("a", "b")
+    inputDF.select(scalarPythonUDF(col("b")))
   }
 
   protected def assertLogicalNode[T <: LogicalPlan: ClassTag](
@@ -76,6 +89,17 @@ trait ExternalUDFPlanningTestBase extends SharedSparkSession {
     assert(node.isDefined,
       s"Expected ${tag.runtimeClass.getSimpleName}" +
         " in logical plan")
+  }
+
+  protected def assertOptimizedLogicalNode[T <: LogicalPlan: ClassTag](
+      df: DataFrame): Unit = {
+    val tag = implicitly[ClassTag[T]]
+    val node = df.queryExecution.optimizedPlan.collectFirst {
+      case n if tag.runtimeClass.isInstance(n) => n
+    }
+    assert(node.isDefined,
+      s"Expected ${tag.runtimeClass.getSimpleName}" +
+        " in optimized logical plan")
   }
 
   protected def assertPhysicalNode[T <: SparkPlan: ClassTag](
@@ -129,5 +153,15 @@ class UnifiedUDFPlanningSuite
       " physical node") {
     val result = applyMapInPandas()
     assertPhysicalNode[MapPartitionsExternalUDFExec](result)
+  }
+
+  test("scalar Python UDF uses EvalExternalUDF logical node") {
+    val result = applyScalarPythonUDF()
+    assertOptimizedLogicalNode[EvalExternalUDF](result)
+  }
+
+  test("scalar Python UDF uses EvalExternalUDFExec physical node") {
+    val result = applyScalarPythonUDF()
+    assertPhysicalNode[EvalExternalUDFExec](result)
   }
 }
