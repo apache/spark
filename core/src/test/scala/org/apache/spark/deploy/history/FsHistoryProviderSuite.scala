@@ -1761,7 +1761,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("Support spark.history.fs.eventLog.single.onDemandLoadEnabled") {
+  test("Support spark.history.fs.eventLog.onDemandLoadEnabled") {
     Seq(true, false).foreach { onDemandEnabled =>
       Seq(None, Some(CompressionCodec.LZF)).foreach { codecName =>
         withTempDir { dir =>
