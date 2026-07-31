@@ -18,6 +18,9 @@ package org.apache.spark.sql.connect
 
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
+
 /**
  * Test suite showcasing the APIs provided by SparkConnectServerTest trait.
  *
@@ -28,6 +31,29 @@ import org.scalatest.time.SpanSugar._
  *   - Assertion helpers for execution state
  */
 class SparkConnectServerTestSuite extends SparkConnectServerTest {
+
+  test("Spark Connect cached plan sees changes to a DSv2 table") {
+    withSession { clientSession =>
+      val table = "testcat.ns.tbl"
+      clientSession.conf.set(
+        "spark.sql.catalog.testcat",
+        classOf[InMemoryTableCatalog].getName)
+      clientSession.conf.set("spark.sql.catalog.testcat.copyOnLoad", "true")
+      clientSession.sql(s"CREATE TABLE $table (id INT) USING foo").collect()
+      clientSession.sql(s"INSERT INTO $table VALUES (1)").collect()
+
+      try {
+        val cachedPlan = clientSession.table(table).drop("missing")
+        assert(cachedPlan.collect().toSeq == Seq(Row(1)))
+
+        getServerSession(clientSession).sql(s"INSERT INTO $table VALUES (2)").collect()
+
+        assert(cachedPlan.collect().toSet == Set(Row(1), Row(2)))
+      } finally {
+        clientSession.sql(s"DROP TABLE IF EXISTS $table").collect()
+      }
+    }
+  }
 
   test("withSession: execute SQL and collect results") {
     withSession { session =>
