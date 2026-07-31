@@ -663,7 +663,7 @@ class DataFrameWriter(OptionUtils):
                     },
                 )
 
-            col, cols = col[0], col[1:]  # type: ignore[assignment]
+            col, cols = col[0], tuple(col[1:])
 
         for c in cols:
             if not isinstance(c, str):
@@ -709,7 +709,7 @@ class DataFrameWriter(OptionUtils):
                     },
                 )
 
-            col, cols = col[0], col[1:]  # type: ignore[assignment]
+            col, cols = col[0], tuple(col[1:])
 
         for c in cols:
             if not isinstance(c, str):
