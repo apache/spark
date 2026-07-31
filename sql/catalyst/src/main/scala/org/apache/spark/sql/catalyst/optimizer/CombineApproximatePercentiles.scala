@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, ExprId, GetArrayItem, LeafExpression, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ExprId, GetArrayItem, LeafExpression, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateMode, ApproximatePercentile}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
@@ -87,13 +87,11 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
 
   private def structurallyNormalize(
       expression: Expression,
-      input: Seq[Attribute]): Expression = expression.transformUp {
+      inputOrdinals: scala.collection.Map[ExprId, Int]): Expression = expression.transformUp {
     case attribute: AttributeReference =>
-      val ordinal = input.indexWhere(_.exprId == attribute.exprId)
-      if (ordinal < 0) {
-        attribute
-      } else {
-        AttributeReference("none", attribute.dataType)(ExprId(ordinal))
+      inputOrdinals.get(attribute.exprId) match {
+        case Some(ordinal) => AttributeReference("none", attribute.dataType)(ExprId(ordinal))
+        case None => attribute
       }
   }
 
@@ -157,13 +155,25 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
     })
 
     val replacements = mutable.HashMap.empty[ExprId, (AggregateExpression, Int)]
+    lazy val inputOrdinals = {
+      val ordinals = mutable.HashMap.empty[ExprId, Int]
+      aggregate.child.output.zipWithIndex.foreach { case (attribute, ordinal) =>
+        ordinals.getOrElseUpdate(attribute.exprId, ordinal)
+      }
+      ordinals
+    }
     compatible.iterator.map { case (key, expressions) =>
       key -> expressions.distinctBy(_.resultId)
     }.filter { case (key, expressions) =>
       hasSafePhysicalFusion(expressions) && expressions.forall { expression =>
         val percentile = expression.aggregateFunction.asInstanceOf[ApproximatePercentile]
-        physicalCompatibilityKeys(
-          physicalCompatibilityKey(key, percentile.accuracyExpression)).sizeCompare(1) == 0
+        val physicalKey = physicalCompatibilityKey(key, percentile.accuracyExpression)
+        // OptimizeOneRowPlan can erase DISTINCT after fusion. Across distinctness boundaries,
+        // canonical matches are safe only when their original inputs and filters also match.
+        physicalCompatibilityKeys(physicalKey).sizeCompare(1) == 0 &&
+          physicalCompatibilityKeys
+            .get(physicalKey.copy(isDistinct = !physicalKey.isDistinct))
+            .forall(_.forall(other => other.child == key.child && other.filter == key.filter))
       }
     }.foreach { case (key, expressions) =>
       val first = expressions.head
@@ -176,14 +186,15 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
       val percentageValues = percentages.map(_.eval().asInstanceOf[Double]).toSeq
       val identity = PercentileFusionIdentity(
         expressions.map { expression =>
-          structurallyNormalize(expression.aggregateFunction, aggregate.child.output)
+          structurallyNormalize(expression.aggregateFunction, inputOrdinals)
         }.toSeq,
         key.mode,
         key.isDistinct,
-        key.filter.map(structurallyNormalize(_, aggregate.child.output)),
+        key.filter.map(structurallyNormalize(_, inputOrdinals)),
         percentageValues.map(java.lang.Double.doubleToRawLongBits))
-      val combined = first.copy(aggregateFunction = percentile.copy(
-        percentageExpression = PercentileFusionArray(identity)))
+      val combinedFunction = percentile.copy(percentageExpression = PercentileFusionArray(identity))
+      combinedFunction.copyTagsFrom(percentile)
+      val combined = first.copy(aggregateFunction = combinedFunction)
       expressions.zipWithIndex.foreach { case (expression, index) =>
         replacements.put(expression.resultId, (combined, index))
       }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Expression, GetArrayItem, Literal}
@@ -77,8 +78,10 @@ class CombineApproximatePercentilesSuite extends PlanTest {
   }
 
   test("combine compatible percentiles and preserve output shape") {
+    val firstPercentile = percentile(value, 0.9)
+    firstPercentile.aggregateFunction.setTagValue(FunctionRegistry.FUNC_ALIAS, "approx_percentile")
     val aliases = Seq(
-      Alias(percentile(value, 0.9), "first")(),
+      Alias(firstPercentile, "first")(),
       Alias(percentile(value, 0.5), "second")(),
       Alias(percentile(value, 0.9), "third")())
     val original = Aggregate(Seq(group), group +: aliases, relation).analyze
@@ -91,6 +94,7 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(percentageValues(combined) == Seq(0.9, 0.5, 0.9))
     assert(combined.percentageExpression.toString == "[0.9,0.5,0.9]")
     assert(combined.percentageExpression.sql == "ARRAY(0.9D, 0.5D, 0.9D)")
+    assert(combined.prettyName == "approx_percentile")
     assert(ordinals(result) == Seq(None, Some(0), Some(1), Some(2)))
     assert(result.groupingExpressions == original.groupingExpressions)
     assert(result.output.map(_.exprId) == original.output.map(_.exprId))
@@ -170,6 +174,13 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(firstInput.canonicalized == secondInput.canonicalized)
     assertNotCombined(inputResult)
 
+    val crossDistinctInput = optimizedAggregate(
+      Alias(percentile(firstInput, 0.5), "first_p50")(),
+      Alias(percentile(firstInput, 0.9), "first_p90")(),
+      Alias(percentile(secondInput, 0.5, isDistinct = true), "distinct_p50")(),
+      Alias(percentile(secondInput, 0.9, isDistinct = true), "distinct_p90")())
+    assertNotCombined(crossDistinctInput)
+
     val firstFilter = firstInput > Literal(0)
     val secondFilter = secondInput > Literal(0)
     val filterResult = optimizedAggregate(
@@ -178,6 +189,15 @@ class CombineApproximatePercentilesSuite extends PlanTest {
       Alias(percentile(value, 0.9, filter = Some(secondFilter)), "second_p90")(),
       Alias(percentile(value, 0.9, filter = Some(firstFilter)), "first_p90")())
     assertNotCombined(filterResult)
+
+    val crossDistinctFilter = optimizedAggregate(
+      Alias(percentile(value, 0.5, filter = Some(firstFilter)), "first_p50")(),
+      Alias(percentile(value, 0.9, filter = Some(firstFilter)), "first_p90")(),
+      Alias(percentile(
+        value, 0.5, isDistinct = true, filter = Some(secondFilter)), "distinct_p50")(),
+      Alias(percentile(
+        value, 0.9, isDistinct = true, filter = Some(secondFilter)), "distinct_p90")())
+    assertNotCombined(crossDistinctFilter)
   }
 
   test("do not fuse canonically equivalent but differently evaluated accuracies") {

@@ -87,14 +87,19 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       val query = spark.sql(
         s"""SELECT
-           |  percentile_approx(col, 0.5, 10000),
-           |  percentile_approx(col, 0.9, 10000),
-           |  percentile_approx(col, 0.95, 10000)
+           |  approx_percentile(col, 0.5, 10000),
+           |  approx_percentile(col, 0.9, 10000),
+           |  approx_percentile(col, 0.95, 10000)
            |FROM $table
            |""".stripMargin)
 
       checkAnswer(query, Row(500, 900, 950))
       assertPercentileDigestCount(query, 1)
+      val optimizedPercentiles = query.queryExecution.optimizedPlan.expressions.flatMap {
+        _.collect { case percentile: ApproximatePercentile => percentile }
+      }
+      assert(optimizedPercentiles.nonEmpty)
+      assert(optimizedPercentiles.forall(_.prettyName == "approx_percentile"))
       val modes = query.queryExecution.sparkPlan.collect {
         case aggregate: ObjectHashAggregateExec =>
           aggregate.aggregateExpressions.collect {
@@ -191,6 +196,25 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
           |) AS t(a, b, c)
           |""".stripMargin),
       Row(0.0d, 0.0d, 1.0d, 1.0d))
+
+    val crossDistinctCollision =
+      """SELECT
+        |  percentile_approx(DISTINCT a + (b + c), 0.5D),
+        |  percentile_approx(DISTINCT a + (b + c), 0.9D),
+        |  percentile_approx((a + b) + c, 0.5D),
+        |  percentile_approx((a + b) + c, 0.9D)
+        |FROM VALUES (
+        |  CAST(10000000000000000 AS DOUBLE),
+        |  CAST(-10000000000000000 AS DOUBLE),
+        |  CAST(1 AS DOUBLE)
+        |) AS t(a, b, c)
+        |""".stripMargin
+    val unfusedBaseline = withSQLConf(
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        (excludedRules :+ fusionRule).distinct.mkString(",")) {
+      spark.sql(crossDistinctCollision).collect().toSeq
+    }
+    checkAnswer(spark.sql(crossDistinctCollision), unfusedBaseline)
 
     checkAnswer(
       spark.sql(
