@@ -18,8 +18,10 @@ package org.apache.spark.sql.connect
 
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.connector.catalog.CountingInMemoryTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Test suite showcasing the APIs provided by SparkConnectServerTest trait.
@@ -40,6 +42,7 @@ class SparkConnectServerTestSuite extends SparkConnectServerTest {
         classOf[CountingInMemoryTableCatalog].getName)
       clientSession.conf.set("spark.sql.catalog.countingcat.copyOnLoad", "true")
       clientSession.sql(s"CREATE TABLE $table (id INT) USING foo").collect()
+      clientSession.sql(s"INSERT INTO $table VALUES (1)").collect()
 
       val serverSession = getServerSession(clientSession)
 
@@ -52,21 +55,43 @@ class SparkConnectServerTestSuite extends SparkConnectServerTest {
       }
 
       try {
+        var rows = Array.empty[Row]
         assertRefreshSkipped(expectedLoads = 1) {
-          clientSession.table(table).collect()
+          rows = clientSession.table(table).collect()
+        }
+        assert(rows.toSeq == Seq(Row(1)))
+
+        serverSession.sessionState.conf.setConf(SQLConf.SKIP_V2_TABLE_REFRESH, false)
+        try {
+          CountingInMemoryTableCatalog.resetLoadCount()
+          val queryExecutions = withQueryExecutionsCaptured(serverSession) {
+            rows = clientSession.table(table).collect()
+          }
+          assert(CountingInMemoryTableCatalog.loadCount == 2)
+          assert(queryExecutions.nonEmpty)
+          assert(queryExecutions.forall(_.refreshPhaseEnabled))
+          assert(rows.toSeq == Seq(Row(1)))
+        } finally {
+          serverSession.sessionState.conf.setConf(SQLConf.SKIP_V2_TABLE_REFRESH, true)
         }
 
         val dropMissing = clientSession.table(table).drop("missing")
         assertRefreshSkipped(expectedLoads = 1) {
-          dropMissing.collect()
+          rows = dropMissing.collect()
         }
+        assert(rows.toSeq == Seq(Row(1)))
+
+        // Mutate the live table after the resolved plan has been cached. The cache hit below
+        // must refresh its stale DataSourceV2Relation to make the new row visible.
+        serverSession.sql(s"INSERT INTO $table VALUES (2)").collect()
 
         CountingInMemoryTableCatalog.resetLoadCount()
         val cachedQueryExecutions = withQueryExecutionsCaptured(serverSession) {
-          dropMissing.collect()
+          rows = dropMissing.collect()
         }
         assert(CountingInMemoryTableCatalog.loadCount == 1)
         assert(cachedQueryExecutions.exists(_.refreshPhaseEnabled))
+        assert(rows.toSet == Set(Row(1), Row(2)))
 
         assertRefreshSkipped(expectedLoads = 2) {
           clientSession.sql(s"SELECT * FROM $table").collect()
