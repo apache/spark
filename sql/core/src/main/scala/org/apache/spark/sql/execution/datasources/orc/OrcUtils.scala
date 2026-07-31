@@ -48,6 +48,7 @@ import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, 
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
+import org.apache.spark.sql.execution.datasources.orc.types.ops.OrcTypeOps
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -350,11 +351,10 @@ object OrcUtils extends Logging {
       s"array<${getOrcSchemaString(a.elementType)}>"
     case m: MapType =>
       s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
-    case _: DayTimeIntervalType | _: TimestampNTZType | _: TimeType => LongType.catalogString
-    case _: TimestampLTZNanosType => "timestamp with local time zone"
-    case _: TimestampNTZNanosType => "timestamp"
+    case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
-    case _ => dt.catalogString
+    // Framework types (TimeType, nanosecond timestamps) supply their own ORC schema string.
+    case _ => OrcTypeOps(dt).map(_.orcSchemaString).getOrElse(dt.catalogString)
   }
 
   def orcTypeDescription(dt: DataType): TypeDescription = {
@@ -372,21 +372,16 @@ object OrcUtils extends Logging {
           val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, n.typeName)
           Some(typeDesc)
-        case tm: TimeType =>
-          val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
-          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, tm.typeName)
-          Some(typeDesc)
         case t: TimestampType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, t.typeName)
           Some(typeDesc)
-        case t: TimestampLTZNanosType =>
-          val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP_INSTANT)
-          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, t.typeName)
-          Some(typeDesc)
-        case t: TimestampNTZNanosType =>
-          val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
-          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, t.typeName)
+        // Framework types (TimeType, nanosecond timestamps) supply their own ORC category; the
+        // CATALYST_TYPE_ATTRIBUTE_NAME is stamped uniformly here so the true Spark type
+        // round-trips on read.
+        case OrcTypeOps(ops) =>
+          val typeDesc = new TypeDescription(ops.orcCategory)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, dt.typeName)
           Some(typeDesc)
         case _: StringType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.STRING)
