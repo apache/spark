@@ -125,6 +125,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeRepartition,
         EliminateWindowPartitions,
         TransposeWindow,
+        PullUpProjectAliasThroughWindow,
         NullPropagation,
         // NullPropagation may introduce Exists subqueries, so RewriteNonCorrelatedExists must run
         // after.
