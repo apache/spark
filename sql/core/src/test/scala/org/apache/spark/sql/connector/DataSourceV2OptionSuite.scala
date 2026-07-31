@@ -605,4 +605,28 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       }
     }
   }
+
+  test("SPARK-58389: a DataFrame temp view's options do not leak to a later reference") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      // The temp view resolves via the V2TableReference path, whose relation carries the view's
+      // options. A later option-free reference to the same table must not inherit them.
+      withTempView("v") {
+        spark.read.option("split-size", "5").table(t1).createOrReplaceTempView("v")
+        val df = sql(s"SELECT v.id FROM v JOIN $t1 b ON v.id = b.id")
+
+        val splitSizes = df.queryExecution.analyzed.collect {
+          case r: DataSourceV2Relation => Option(r.options.get("split-size"))
+        }
+        // Exactly one reference (`v`) keeps its option; `b` (option-free) must not inherit it.
+        assert(splitSizes.flatten === Seq("5"),
+          s"option leaked to the option-free reference, got: $splitSizes")
+        assert(splitSizes.contains(None),
+          s"expected an option-free reference, got: $splitSizes")
+      }
+    }
+  }
 }

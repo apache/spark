@@ -176,7 +176,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
 
-              (catalog.loadTable(ident), Some(catalog), Some(ident))
+              // Forward the user options to the catalog, mirroring the read path in
+              // DataSourceV2Utils.loadV2Source.
+              (CatalogV2Util.getTable(catalog, ident, options = dsOptions),
+                Some(catalog), Some(ident))
             case _: TableProvider =>
               val t = getTable
               if (t.supports(BATCH_WRITE)) {

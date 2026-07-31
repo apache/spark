@@ -310,14 +310,17 @@ class RelationResolution(
             // we don't share-cache views.
             val table: Option[Table] = relation.collect { case t: Table => t }
 
+            // Reuse a cached relation only when this read's options match: the lookup is by name
+            // and `Table.id`, so a differing-options read would otherwise get the cached read's
+            // `Table`.
             val sharedRelationCacheMatch = for {
               t <- table
               if finalTimeTravelSpec.isEmpty && writePrivileges == null && !u.isStreaming
               cached <- lookupSharedRelationCache(catalog, ident, t)
+              if cached.options == finalOptions
             } yield {
-              val updatedRelation = cached.copy(options = finalOptions)
               val nameParts = ident.toQualifiedNameParts(catalog)
-              val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
+              val aliasedRelation = SubqueryAlias(nameParts, cached)
               relationCache.update(key, aliasedRelation)
               adaptCachedRelation(aliasedRelation, planId)
             }
@@ -485,7 +488,7 @@ class RelationResolution(
   }
 
   private def getOrLoadRelation(ref: V2TableReference): LogicalPlan = {
-    val key = toCacheKey(ref.catalog, ref.identifier)
+    val key = toCacheKey(ref.catalog, ref.identifier, None, ref.options)
     relationCache.get(key) match {
       case Some(cached) =>
         adaptCachedRelation(cached, ref)
@@ -545,8 +548,8 @@ class RelationResolution(
   private def toCacheKey(
       catalog: CatalogPlugin,
       ident: Identifier,
-      timeTravelSpec: Option[TimeTravelSpec] = None,
-      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): RelationCacheKey = {
+      timeTravelSpec: Option[TimeTravelSpec],
+      options: CaseInsensitiveStringMap): RelationCacheKey = {
     RelationCacheKey(
       (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq, timeTravelSpec, options)
   }

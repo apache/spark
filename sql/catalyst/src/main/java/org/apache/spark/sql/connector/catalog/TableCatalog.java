@@ -202,6 +202,11 @@ public interface TableCatalog extends CatalogPlugin {
    * The default implementation ignores {@code options} and delegates to the existing
    * {@code loadTable} overloads based on {@code context}. Catalogs that want to receive the user
    * options while reading a table must override this method.
+   * <p>
+   * An override replaces that dispatch and must honor {@code context} itself: apply the time
+   * travel in {@link TableContext#timeTravel()}, and authorize the requested
+   * {@link TableContext#writePrivileges()} as it would in {@link #loadTable(Identifier, Set)}.
+   * Spark does not re-check either afterwards.
    *
    * @param ident a table identifier
    * @param context the parsed load parameters (time travel, write privileges)

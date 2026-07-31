@@ -3465,41 +3465,52 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
   }
 
-  test("SPARK-58389: shared relation cache hit re-applies the current read's options") {
-    AnalysisContext.withNewAnalysisContext {
-      val ident = Identifier.of(Array.empty[String], "tab")
-      // testCat.loadTable returns a stable `table` mock, so a relation built from it shares the
-      // same Table.id and therefore passes `isSameTable` in the shared-cache lookup.
-      val cachedTable = testCat.loadTable(ident)
-      // The entry sitting in the shared relation cache (as if left by an earlier CACHE TABLE)
-      // carries a distinctive option that must NOT leak onto this query's relation.
-      val cachedRelation = DataSourceV2Relation.create(
-        cachedTable, Some(testCat), Some(ident),
-        new CaseInsensitiveStringMap(java.util.Map.of("cachedOnly", "stale")))
+  test("SPARK-58389: shared relation cache is reused only when the read's options match") {
+    val ident = Identifier.of(Array.empty[String], "tab")
+    val cachedTable = testCat.loadTable(ident)
 
-      // A shared relation cache that always returns the stale entry by name -- this is the same
-      // RelationCache abstraction that SharedState backs with the CacheManager (df.cache()).
-      val sharedCache: RelationCache = (_, _) => Some(cachedRelation)
-
-      val rule = new RelationResolution(catalogManagerWithDefault, sharedCache)
-
-      // This read carries its own option, different from the cached entry's.
-      val unresolved = UnresolvedRelation(
-        Seq("testcat", "tab"),
-        new CaseInsensitiveStringMap(java.util.Map.of("split-size", "5")))
-
-      val resolved = rule.resolveRelation(unresolved) match {
-        case Some(AsDataSourceV2Relation(relation)) => relation
-        case other => fail(s"failed to resolve as v2 relation: $other")
-      }
-
-      // The shared-cache entry was reused (same Table), proving we went through that branch.
-      assert(resolved.table == cachedTable)
-      // ... but the relation carries THIS read's option, not the stale cached one: the branch
-      // re-applies `finalOptions` via `cached.copy(options = ...)`.
-      assert(resolved.options.get("split-size") === "5")
-      assert(!resolved.options.containsKey("cachedOnly"))
+    // A shared relation cache entry (as if left by an earlier CACHE TABLE) built with a specific
+    // set of options. The `id` tag lets the test tell a cache reuse apart from a fresh load, since
+    // both would otherwise carry the same mock `Table`.
+    def cachedRelationWith(opts: java.util.Map[String, String]): DataSourceV2Relation = {
+      val r = DataSourceV2Relation.create(
+        cachedTable, Some(testCat), Some(ident), new CaseInsensitiveStringMap(opts))
+      r.setTagValue(LogicalPlan.PLAN_ID_TAG, 4242L)
+      r
     }
+
+    def resolveWith(
+        cacheOpts: java.util.Map[String, String],
+        readOpts: java.util.Map[String, String]): DataSourceV2Relation = {
+      AnalysisContext.withNewAnalysisContext {
+        val sharedCache: RelationCache = (_, _) => Some(cachedRelationWith(cacheOpts))
+        val rule = new RelationResolution(catalogManagerWithDefault, sharedCache)
+        val unresolved =
+          UnresolvedRelation(Seq("testcat", "tab"), new CaseInsensitiveStringMap(readOpts))
+        rule.resolveRelation(unresolved) match {
+          case Some(AsDataSourceV2Relation(relation)) => relation
+          case other => fail(s"failed to resolve as v2 relation: $other")
+        }
+      }
+    }
+
+    // Same options as the cached entry: the cache is reused (the tagged cached relation flows
+    // through, so the tag survives).
+    val reused = resolveWith(
+      java.util.Map.of("split-size", "5"), java.util.Map.of("split-size", "5"))
+    assert(reused.options.get("split-size") === "5")
+    assert(reused.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(4242L),
+      "matching options should reuse the cached relation")
+
+    // Different options: the cache is NOT reused. The relation is freshly loaded with this read's
+    // options, so it does not carry the cached entry's option or its tag.
+    val fresh = resolveWith(
+      java.util.Map.of("cachedOnly", "stale"), java.util.Map.of("split-size", "5"))
+    assert(fresh.options.get("split-size") === "5")
+    assert(!fresh.options.containsKey("cachedOnly"),
+      "differing options must not reuse the cached relation")
+    assert(fresh.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty,
+      "differing options should freshly load, not reuse the cached relation")
   }
 
   private def resolve(
