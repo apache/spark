@@ -217,8 +217,7 @@ case class DataSourceV2ScanRelation(
   }
 
   private def computeSizeOnlyStats(): Statistics = {
-    val avgRowSize = EstimationUtils.getSizePerRow(output)
-    V2StatisticsUtils.computeSizeInBytes(scan, avgRowSize) match {
+    V2StatisticsUtils.computeSizeInBytes(scan, EstimationUtils.getSizePerRow(output)) match {
       case Some(sizeInBytes) => Statistics(sizeInBytes = sizeInBytes)
       case _ => defaultSizeOnlyStats
     }

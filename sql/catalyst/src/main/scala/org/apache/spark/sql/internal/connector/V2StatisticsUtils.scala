@@ -28,9 +28,9 @@ object V2StatisticsUtils {
   }
 
   private def hasAnyValue(stats: Statistics): Boolean = {
-    stats.sizeInBytes().isPresent ||
-      stats.numRows().isPresent ||
-      (stats.columnStats() != null && !stats.columnStats().isEmpty)
+    stats.sizeInBytes.isPresent ||
+      stats.numRows.isPresent ||
+      (stats.columnStats != null && !stats.columnStats.isEmpty)
   }
 
   def computeStats(scan: Scan): Option[Statistics] = scan match {
@@ -46,7 +46,7 @@ object V2StatisticsUtils {
       // from sizeInBytes, falling back to numRows * avgRowSize.
       toBigInt(s.estimateSizeInBytes()).orElse {
         Option(s.estimateStatistics()).flatMap { stats =>
-          toBigInt(stats.sizeInBytes()).orElse(toBigInt(stats.numRows()).map(_ * avgRowSize))
+          toBigInt(stats.sizeInBytes).orElse(toBigInt(stats.numRows).map(_ * avgRowSize))
         }
       }
     case _ => None
