@@ -805,7 +805,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // When the partial window group limit is bypassed, skip the pre-shuffle partial
         // WindowGroupLimit and run only a single WindowGroupLimit after the shuffle. This can
         // improve performance when the pre-shuffle reduction ratio is low.
-        val finalChild = if (conf.bypassPartialWindowGroupLimit) {
+        //
+        // The bypass is only gated on a non-empty partitionSpec. With an empty partitionSpec the
+        // final WindowGroupLimit requires AllTuples, so the shuffle funnels the whole input into a
+        // single reducer; the partial pass we would drop bounds each input partition to `limit`
+        // rank groups before that shuffle, so it always helps and should never be skipped.
+        // Bypassing it would shuffle all raw rows to a single partition, which is strictly worse
+        // than the normal Partial+Final path. This mirrors the grouping-keys carve-out in
+        // bypassPartialAggregation (see AggUtils.planAggregateWithoutDistinct).
+        val finalChild = if (conf.bypassPartialWindowGroupLimit && partitionSpec.nonEmpty) {
           planLater(child)
         } else {
           execution.window.WindowGroupLimitExec(partitionSpec,

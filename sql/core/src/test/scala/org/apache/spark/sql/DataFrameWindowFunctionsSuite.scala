@@ -1720,22 +1720,26 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
       }
     }
 
-    // Unpartitioned window: the final WindowGroupLimit requires AllTuples distribution. When the
-    // bypass is on, the partial pass (which cannot reduce cardinality across partitions here) is
-    // skipped, leaving a single WindowGroupLimit. Note row_number() is excluded: with an empty
-    // partition spec InferWindowGroupLimit rewrites it to a Limit + Sort (top-n) rather than a
-    // WindowGroupLimit, so no WindowGroupLimit node is produced.
+    // Unpartitioned window: the final WindowGroupLimit requires AllTuples, so the shuffle funnels
+    // the whole input into a single reducer. The partial pass bounds each input partition to
+    // `limit` rank groups before that shuffle, so the bypass is gated off for an empty partition
+    // spec and both the partial and the final WindowGroupLimit remain even when the flag is on.
+    // Note row_number() is excluded: with an empty partition spec and a limit below
+    // topKSortFallbackThreshold, InferWindowGroupLimit rewrites it to a Limit + Sort (top-n)
+    // rather than a WindowGroupLimit, so no WindowGroupLimit node is produced.
     val unpartitionedWindow = Window.orderBy($"order")
     val unpartitionedExpected = Seq(Row("c", 2, "a", 1))
 
-    withSQLConf(
-      SQLConf.BYPASS_PARTIAL_WINDOW_GROUP_LIMIT.key -> "true",
-      SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "100") {
-      Seq(rank(), dense_rank()).foreach { rankLikeFunction =>
-        val result =
-          df.withColumn("rn", rankLikeFunction.over(unpartitionedWindow)).where($"rn" === 1)
-        checkAnswer(result, unpartitionedExpected)
-        assert(countWindowGroupLimits(result) === 1)
+    Seq(true, false).foreach { bypass =>
+      withSQLConf(
+        SQLConf.BYPASS_PARTIAL_WINDOW_GROUP_LIMIT.key -> bypass.toString,
+        SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> "100") {
+        Seq(rank(), dense_rank()).foreach { rankLikeFunction =>
+          val result =
+            df.withColumn("rn", rankLikeFunction.over(unpartitionedWindow)).where($"rn" === 1)
+          checkAnswer(result, unpartitionedExpected)
+          assert(countWindowGroupLimits(result) === 2)
+        }
       }
     }
   }
