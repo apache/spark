@@ -350,7 +350,7 @@ class ApproxTopKSuite extends SharedSparkSession {
     "separate across sketches and a shuffle") {
     withSQLConf("spark.sql.shuffle.partitions" -> "2") {
       val sketches = sql(
-        s"""SELECT approx_top_k_accumulate(CAST(col AS STRING COLLATE UNICODE_CI)) AS sketch
+        """SELECT approx_top_k_accumulate(CAST(col AS STRING COLLATE UNICODE_CI)) AS sketch
            |  FROM VALUES ('且'), ('且'), ('且'), ('丕') AS t(col)
            |UNION ALL
            |SELECT approx_top_k_accumulate(CAST(col AS STRING COLLATE UNICODE_CI)) AS sketch
