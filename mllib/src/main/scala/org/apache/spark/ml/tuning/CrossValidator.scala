@@ -330,11 +330,11 @@ class CrossValidatorModel private[ml] (
 
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize(excludeParams = Seq(
-      // SPARK-57521: An estimator can retain shared Spark runtime state through Logging.
+      // Param[Estimator[_]]
       estimator,
-      // SPARK-58395: Param validators can capture their owning model and its runtime state.
+      // Param[Array[ParamMap]]
       estimatorParamMaps,
-      // An evaluator is tuning configuration rather than learned model state.
+      // Param[Evaluator]
       evaluator))
     size += bestModel.estimatedSize
     // SPARK-58250: Include model-owned metadata alongside the learned model state.
