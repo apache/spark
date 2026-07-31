@@ -21,7 +21,6 @@ import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.TimeZone
 
-import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.util.Random
 
@@ -1187,33 +1186,34 @@ class CollectionExpressionsSuite
 
   test("SPARK-58440: illegal sequence boundaries carry String message parameters") {
     // Codegen-only: the interpreted path reports this through `require`, which throws a plain
-    // IllegalArgumentException with no error class or parameters.
+    // IllegalArgumentException with no error class or parameters, so the two-mode
+    // `checkErrorInExpression` cannot be used here.
     // The parameter map is built in generated Java source. Janino erases the
     // `Map<String, String>` type arguments, so non-String values used to slip in and reach
     // `SparkThrowable.getMessageParameters`, whose declared value type is String.
     withSQLConf(
         SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
       // Numeric start/stop/step (IntegralSequenceImpl).
-      val e = intercept[SparkIllegalArgumentException] {
-        evaluateWithMutableProjection(new Sequence(Literal(1), Literal(2), Literal(0)))
-      }
-      assert(e.getCondition === "_LEGACY_ERROR_TEMP_3243")
-      assert(e.getMessageParameters.asScala ===
-        Map("start" -> "1", "stop" -> "2", "step" -> "0"))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          evaluateWithMutableProjection(new Sequence(Literal(1), Literal(2), Literal(0)))
+        },
+        condition = "_LEGACY_ERROR_TEMP_3243",
+        parameters = Map("start" -> "1", "stop" -> "2", "step" -> "0"))
 
       // Interval step (InternalSequenceBase): `step` is a CalendarInterval, not a number. A
       // month-granularity step is required to reach this path; a day-granularity one is
       // delegated to the integral implementation with a plain `int` step.
-      val eInterval = intercept[SparkIllegalArgumentException] {
-        evaluateWithMutableProjection(Sequence(
-          Literal(Date.valueOf("1970-01-01")),
-          Literal(Date.valueOf("1970-02-01")),
-          Some(Literal(negateExact(stringToInterval("interval 1 month")))),
-          UTC_OPT))
-      }
-      assert(eInterval.getCondition === "_LEGACY_ERROR_TEMP_3243")
-      assert(eInterval.getMessageParameters.asScala ===
-        Map("start" -> "0", "stop" -> "2678400000000", "step" -> "-1 months"))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          evaluateWithMutableProjection(Sequence(
+            Literal(Date.valueOf("1970-01-01")),
+            Literal(Date.valueOf("1970-02-01")),
+            Some(Literal(negateExact(stringToInterval("interval 1 month")))),
+            UTC_OPT))
+        },
+        condition = "_LEGACY_ERROR_TEMP_3243",
+        parameters = Map("start" -> "0", "stop" -> "2678400000000", "step" -> "-1 months"))
     }
   }
 
