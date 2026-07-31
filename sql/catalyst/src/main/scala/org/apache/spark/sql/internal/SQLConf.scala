@@ -4533,9 +4533,9 @@ object SQLConf {
         "WindowGroupLimit after the shuffle. Bypassing the partial window group limit can " +
         "improve performance when the pre-shuffle reduction ratio is low. This only applies to " +
         "windows with a non-empty partition spec; an unpartitioned window always keeps the " +
-        "partial pass since the shuffle funnels the whole input into a single reducer. When " +
-        "false (default), a partial WindowGroupLimit runs before the shuffle and a final one " +
-        "runs after it.")
+        "partial pass, since for a multi-partition input the shuffle funnels the whole input " +
+        "into a single reducer. When false (default), a partial WindowGroupLimit runs before " +
+        "the shuffle and a final one runs after it.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

@@ -185,9 +185,9 @@ tunes that behavior.
       queries and runs only a single window group limit after the shuffle. Bypassing the partial
       window group limit can improve performance when the pre-shuffle reduction ratio is low. The
       bypass only applies to windows with a non-empty partition spec; for an unpartitioned window
-      the partial pass is always kept since the shuffle funnels the whole input into a single
-      reducer. When false, a partial window group limit runs before the shuffle and a final one
-      runs after it.
+      the partial pass is always kept, since for a multi-partition input the shuffle funnels the
+      whole input into a single reducer. When false, a partial window group limit runs before the
+      shuffle and a final one runs after it.
     </td>
     <td>4.3.0</td>
   </tr>
