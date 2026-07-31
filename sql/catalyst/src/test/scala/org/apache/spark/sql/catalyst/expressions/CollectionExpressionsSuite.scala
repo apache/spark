@@ -24,13 +24,13 @@ import java.util.TimeZone
 import scala.language.implicitConversions
 import scala.util.Random
 
-import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC, UTC_OPT}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.DataTypeErrorsBase
@@ -1182,6 +1182,39 @@ class CollectionExpressionsSuite
     checkEvaluation(
       new Sequence(Literal(-1.toByte), Literal(-3.toByte), Literal(-1.toByte)),
       Seq(-1.toByte, -2.toByte, -3.toByte))
+  }
+
+  test("SPARK-58440: illegal sequence boundaries carry String message parameters") {
+    // Codegen-only: the interpreted path reports this through `require`, which throws a plain
+    // IllegalArgumentException with no error class or parameters, so the two-mode
+    // `checkErrorInExpression` cannot be used here.
+    // The parameter map is built in generated Java source. Janino erases the
+    // `Map<String, String>` type arguments, so non-String values used to slip in and reach
+    // `SparkThrowable.getMessageParameters`, whose declared value type is String.
+    withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      // Numeric start/stop/step (IntegralSequenceImpl).
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          evaluateWithMutableProjection(new Sequence(Literal(1), Literal(2), Literal(0)))
+        },
+        condition = "_LEGACY_ERROR_TEMP_3243",
+        parameters = Map("start" -> "1", "stop" -> "2", "step" -> "0"))
+
+      // Interval step (InternalSequenceBase): `step` is a CalendarInterval, not a number. A
+      // month-granularity step is required to reach this path; a day-granularity one is
+      // delegated to the integral implementation with a plain `int` step.
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          evaluateWithMutableProjection(Sequence(
+            Literal(Date.valueOf("1970-01-01")),
+            Literal(Date.valueOf("1970-02-01")),
+            Some(Literal(negateExact(stringToInterval("interval 1 month")))),
+            UTC_OPT))
+        },
+        condition = "_LEGACY_ERROR_TEMP_3243",
+        parameters = Map("start" -> "0", "stop" -> "2678400000000", "step" -> "-1 months"))
+    }
   }
 
   test("Sequence of timestamps") {

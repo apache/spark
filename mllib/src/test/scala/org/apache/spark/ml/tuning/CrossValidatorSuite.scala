@@ -80,6 +80,22 @@ class CrossValidatorSuite
     }
   }
 
+  test("CrossValidatorModel estimated size") {
+    val estimator = new LogisticRegression().setMaxIter(1)
+    // Initialize the estimator's logger before retaining it in the CrossValidatorModel.
+    estimator.fit(dataset)
+    val model = new CrossValidator()
+      .setEstimator(estimator)
+      .setEstimatorParamMaps(Array(ParamMap.empty))
+      .setEvaluator(new BinaryClassificationEvaluator())
+      .setNumFolds(2)
+      .fit(dataset)
+
+    val maxSize = 16 * 1024
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should not include shared runtime state")
+  }
+
   test("cross validation with logistic regression with fold col") {
     val lr = new LogisticRegression
     val lrParamMaps = new ParamGridBuilder()

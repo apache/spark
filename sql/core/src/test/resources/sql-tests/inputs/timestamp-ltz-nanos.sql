@@ -168,11 +168,19 @@ SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' -
   INTERVAL '1 00:04:00.000321' DAY TO SECOND;
 SELECT TIMESTAMP_LTZ '1960-01-02 03:04:05.123456789 UTC' +
   INTERVAL '0 00:00:00.000001' DAY TO SECOND;
--- SPARK-57501: nanos timestamps support only ANSI day-time intervals. A (legacy) calendar interval
--- is rejected by TimestampAddInterval's type check, and a year-month interval has no supported
--- operator overload.
-SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0);
+-- SPARK-57825: TIMESTAMP_LTZ(p) +/- ANSI year-month interval keeps the nanos type/precision and
+-- carries the whole fraction (including the sub-microsecond digits) through unchanged; the month
+-- shift is applied on the session-local wall clock.
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' YEAR;
+-- The interval-first operand order resolves to the same addition.
+SELECT INTERVAL '1' YEAR + TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC';
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH;
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - INTERVAL '1-2' YEAR TO MONTH;
+-- Jan-31 -> Feb-29 day clamp on a pre-epoch (leap-year) value.
+SELECT TIMESTAMP_LTZ '1960-01-31 03:04:05.123456789 UTC' + INTERVAL '1' MONTH;
+-- SPARK-57501, SPARK-57825: nanos timestamps support ANSI day-time and year-month intervals; the
+-- legacy calendar interval is still rejected by TimestampAddInterval's type check.
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0);
 
 -- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_LTZ. The aggregate preserves the
 -- nanosecond type and orders by the sub-microsecond remainder; NULLs are ignored. Values are

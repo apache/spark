@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.Locale
+import java.util.{Locale, OptionalLong}
 
 import scala.collection.mutable
 
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.VariantExtractionImpl
@@ -1015,14 +1015,21 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val withFilter = finalFilters.foldLeft[LogicalPlan](scanRelation)((plan, cond) => {
         Filter(cond, plan)
       })
+      // Best effort: column pruning can make fully-pushed filters unavailable in the scan output.
+      // `remappedPushedFilters` already drops those filters, so Spark post-pushdown adjustment can
+      // only re-add predicates that still reference the pruned scan output.
+      val withPostPushdownAdjustmentFilters =
+        withSparkPostPushdownAdjustmentFilters(withFilter, remappedPushedFilters)
 
-      if (withFilter.output != project) {
+      if (withPostPushdownAdjustmentFilters.output != project) {
         val newProjects = normalizedProjects
           .map(projectionFunc)
           .asInstanceOf[Seq[NamedExpression]]
-        Project(restoreOriginalOutputNames(newProjects, project.map(_.name)), withFilter)
+        Project(
+          restoreOriginalOutputNames(newProjects, project.map(_.name)),
+          withPostPushdownAdjustmentFilters)
       } else {
-        withFilter
+        withPostPushdownAdjustmentFilters
       }
   }
 
@@ -1216,6 +1223,34 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       sHolder.joinedRelationsPushedDownOperators, optRelationName)
   }
 
+  private def withSparkPostPushdownAdjustmentFilters(
+      plan: LogicalPlan,
+      pushedFilters: Seq[Expression]): LogicalPlan = {
+    pushedFilters.reduceLeftOption(And) match {
+      case None => plan
+      case Some(pushedCondition) =>
+        def shouldAddPushedFilter(scanRelation: DataSourceV2ScanRelation): Boolean = {
+          scanRelation.scan match {
+            case s: SupportsReportStatistics => !s.reflectsFullyPushedDownFilters()
+            case _ => false
+          }
+        }
+
+        def addToScan(plan: LogicalPlan): LogicalPlan = plan match {
+          case Filter(condition, scanRelation: DataSourceV2ScanRelation)
+              if shouldAddPushedFilter(scanRelation) =>
+            Filter(And(condition, pushedCondition), scanRelation)
+          case Filter(condition, child) =>
+            Filter(condition, addToScan(child))
+          case scanRelation: DataSourceV2ScanRelation if shouldAddPushedFilter(scanRelation) =>
+            Filter(pushedCondition, scanRelation)
+          case other => other
+        }
+
+        addToScan(plan)
+    }
+  }
+
 }
 
 case class ScanBuilderHolder(
@@ -1254,6 +1289,30 @@ case class ScanBuilderHolder(
 case class V1ScanWrapper(
     v1Scan: V1Scan,
     handledFilters: Seq[sources.Filter],
-    pushedDownOperators: PushedDownOperators) extends Scan {
+    pushedDownOperators: PushedDownOperators) extends Scan with SupportsReportStatistics {
   override def readSchema(): StructType = v1Scan.readSchema()
+
+  override def estimateStatistics(): V2Statistics = {
+    v1Scan match {
+      case r: SupportsReportStatistics => r.estimateStatistics()
+      case _ => new V2Statistics {
+        override def sizeInBytes(): OptionalLong = OptionalLong.empty()
+        override def numRows(): OptionalLong = OptionalLong.empty()
+      }
+    }
+  }
+
+  override def estimateSizeInBytes(): OptionalLong = {
+    v1Scan match {
+      case r: SupportsReportStatistics => r.estimateSizeInBytes()
+      case _ => OptionalLong.empty()
+    }
+  }
+
+  override def reflectsFullyPushedDownFilters(): Boolean = {
+    v1Scan match {
+      case r: SupportsReportStatistics => r.reflectsFullyPushedDownFilters()
+      case _ => true
+    }
+  }
 }
