@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from typing import Dict
-from typing import Optional, Sequence, Union, List, overload, Tuple, cast, Callable
+from typing import Optional, Sequence, Union, List, overload, cast, Callable
 from typing import TYPE_CHECKING
 
 from pyspark.sql.connect.plan import (
@@ -52,7 +52,6 @@ if TYPE_CHECKING:
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
 PathOrPaths = Union[str, List[str]]
-TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
 class OptionUtils:
@@ -639,10 +638,10 @@ class DataFrameWriter(OptionUtils):
     def bucketBy(self, numBuckets: int, col: str, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def bucketBy(self, numBuckets: int, col: TupleOrListOfString) -> "DataFrameWriter": ...
+    def bucketBy(self, numBuckets: int, col: Sequence[str]) -> "DataFrameWriter": ...
 
     def bucketBy(
-        self, numBuckets: int, col: Union[str, TupleOrListOfString], *cols: Optional[str]
+        self, numBuckets: int, col: Union[str, Sequence[str]], *cols: Optional[str]
     ) -> "DataFrameWriter":
         if not isinstance(numBuckets, int):
             raise PySparkTypeError(
@@ -654,7 +653,7 @@ class DataFrameWriter(OptionUtils):
                 },
             )
 
-        if isinstance(col, (list, tuple)):
+        if not isinstance(col, str) and isinstance(col, Sequence):
             if cols:
                 raise PySparkValueError(
                     errorClass="CANNOT_SET_TOGETHER",
@@ -695,12 +694,12 @@ class DataFrameWriter(OptionUtils):
     def sortBy(self, col: str, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def sortBy(self, col: TupleOrListOfString) -> "DataFrameWriter": ...
+    def sortBy(self, col: Sequence[str]) -> "DataFrameWriter": ...
 
     def sortBy(
-        self, col: Union[str, TupleOrListOfString], *cols: Optional[str]
+        self, col: Union[str, Sequence[str]], *cols: Optional[str]
     ) -> "DataFrameWriter":
-        if isinstance(col, (list, tuple)):
+        if not isinstance(col, str) and isinstance(col, Sequence):
             if cols:
                 raise PySparkValueError(
                     errorClass="CANNOT_SET_TOGETHER",
