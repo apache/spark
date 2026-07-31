@@ -271,28 +271,29 @@ public final class CredentialProviderLoader {
    * @throws Exception if one or more providers threw during close
    */
   public static void closeAll() throws Exception {
+    List<CredentialProvider> toClose;
     synchronized (CredentialProviderLoader.class) {
-      // Copy and clear first to prevent double-close if closeAll() is called again
-      // concurrently or re-entrantly, and to avoid ConcurrentModificationException
-      // if a close() implementation were to interact with this class.
-      List<CredentialProvider> toClose = new ArrayList<>(initializedProviders);
+      // Copy and clear under the lock to prevent double-close if closeAll() is called
+      // again concurrently, and to avoid ConcurrentModificationException.
+      toClose = new ArrayList<>(initializedProviders);
       initializedProviders.clear();
-
-      Exception firstException = null;
-      for (CredentialProvider provider : toClose) {
-        try {
-          provider.close();
-        } catch (Exception e) {
-          if (firstException == null) {
-            firstException = e;
-          } else {
-            firstException.addSuppressed(e);
-          }
+    }
+    // Close outside the lock so a slow or blocking close() cannot stall
+    // providerFor() callers or deadlock against them.
+    Exception firstException = null;
+    for (CredentialProvider provider : toClose) {
+      try {
+        provider.close();
+      } catch (Exception e) {
+        if (firstException == null) {
+          firstException = e;
+        } else {
+          firstException.addSuppressed(e);
         }
       }
-      if (firstException != null) {
-        throw firstException;
-      }
+    }
+    if (firstException != null) {
+      throw firstException;
     }
   }
 
