@@ -668,10 +668,13 @@ class PlanMerger(
         // Reported partitioning/ordering (e.g. storage-partitioned join, reported sort) is not
         // reconstructed by the rebuilt scan -- it never carries reported partitioning or ordering,
         // as V2ScanPartitioningAndOrdering is a separate early rule that rebuildScan does not run.
-        // So decline the merge when either input reports them rather than silently dropping them;
-        // merging these can be added as a follow-up.
-        np.keyGroupedPartitioning.isEmpty && cp.keyGroupedPartitioning.isEmpty &&
-        np.ordering.isEmpty && cp.ordering.isEmpty &&
+        // So decline the merge when either input reports a NON-EMPTY one rather than silently
+        // dropping it; merging these can be added as a follow-up. A source that implements
+        // SupportsReportOrdering/SupportsReportPartitioning but reports nothing yields Some(Nil),
+        // so test the inner Seq (forall) rather than the Option (isEmpty), which would decline it.
+        np.keyGroupedPartitioning.forall(_.isEmpty) &&
+        cp.keyGroupedPartitioning.forall(_.isEmpty) &&
+        np.ordering.forall(_.isEmpty) && cp.ordering.forall(_.isEmpty) &&
         // The table opts in to Spark-side merging (a table capability, so a V1-fallback source
         // whose scan Spark wraps can still opt in). Both relations are the same table (canonically
         // equal, checked above), but check each to be safe.

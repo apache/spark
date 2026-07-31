@@ -2618,6 +2618,35 @@ class MergeSubplansSuite extends PlanTest {
     assertDeclines(s => s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending)))))
   }
 
+  test("SPARK-40259: merge DSv2 scans that report empty key-grouped partitioning or ordering") {
+    // A source implementing SupportsReportPartitioning/SupportsReportOrdering but reporting nothing
+    // yields Some(Nil), not None (V2ScanPartitioningAndOrdering sets the field unconditionally). An
+    // empty report carries no partitioning/ordering to drop, so the merge should still proceed --
+    // the gate tests the inner Seq, not the Option. The fused plan is the plain column union.
+    def assertMerges(withEmptyField: DataSourceV2ScanRelation => DataSourceV2ScanRelation): Unit = {
+      val sub1 = ScalarSubquery(withEmptyField(v2ScanReading("a")).groupBy()(sum($"a").as("sum_a")))
+      val sub2 = ScalarSubquery(withEmptyField(v2ScanReading("b")).groupBy()(sum($"b").as("sum_b")))
+      val originalQuery = testRelation.select(sub1, sub2)
+
+      val mergedScan = v2ScanReadingOn(v2Table, Seq("a", "b"))
+      val mergedSubquery = mergedScan
+        .groupBy()(sum($"a").as("sum_a"), sum($"b").as("sum_b"))
+        .select(CreateNamedStruct(Seq(
+          Literal("sum_a"), $"sum_a",
+          Literal("sum_b"), $"sum_b")).as("mergedValue"))
+      val analyzedMergedSubquery = mergedSubquery.analyze
+      val correctAnswer = WithCTE(
+        testRelation.select(
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1)),
+        Seq(definitionNode(analyzedMergedSubquery, 0)))
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+
+    assertMerges(_.copy(keyGroupedPartitioning = Some(Nil)))
+    assertMerges(_.copy(ordering = Some(Nil)))
+  }
+
   test("SPARK-40259: merge DSv2 scans reading identical columns but differing filters") {
     // Both scans read only "a", so the column union adds nothing (the np-only set is empty); the
     // merge is driven purely by the differing filters, and the OR is still re-pushed for pruning.
