@@ -18,7 +18,7 @@
 import re
 import sys
 from collections.abc import Iterator
-from typing import cast, overload, Any, Callable, List, Optional, Sequence, TYPE_CHECKING, Union
+from typing import cast, overload, Any, Callable, List, Optional, TYPE_CHECKING, Union
 
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.streaming.query import StreamingQuery
@@ -1195,7 +1195,7 @@ class DataStreamWriter:
     @overload
     def partitionBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
-    def partitionBy(self, *cols: Union[str, List[str]]) -> "DataStreamWriter":
+    def partitionBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         """Partitions the output by the given columns on the file system.
 
         If specified, the output is laid out on the file system similar
@@ -1241,10 +1241,8 @@ class DataStreamWriter:
         from pyspark.sql.classic.column import _to_seq
 
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            columns: Sequence[str] = cols[0]
-        else:
-            columns = cast("Sequence[str]", cols)
-        self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, columns))
+            cols = cols[0]
+        self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
         return self
 
     @overload
@@ -1253,7 +1251,7 @@ class DataStreamWriter:
     @overload
     def clusterBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
-    def clusterBy(self, *cols: Union[str, List[str]]) -> "DataStreamWriter":
+    def clusterBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         """Clusters the output by the given columns.
 
         If specified, the output is laid out such that records with similar values on the clustering
@@ -1300,10 +1298,8 @@ class DataStreamWriter:
         from pyspark.sql.classic.column import _to_seq
 
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            columns: Sequence[str] = cols[0]
-        else:
-            columns = cast("Sequence[str]", cols)
-        self._jwrite = self._jwrite.clusterBy(_to_seq(self._spark._sc, columns))
+            cols = cols[0]
+        self._jwrite = self._jwrite.clusterBy(_to_seq(self._spark._sc, cols))
         return self
 
     def queryName(self, queryName: str) -> "DataStreamWriter":
