@@ -15,7 +15,18 @@
 # limitations under the License.
 #
 import sys
-from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
+from typing import (
+    cast,
+    overload,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TYPE_CHECKING,
+    Union,
+)
 
 from pyspark.util import is_remote_only
 from pyspark.sql.types import StructType
@@ -1497,9 +1508,9 @@ class DataFrameWriter(OptionUtils):
     def partitionBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter": ...
+    def partitionBy(self, __cols: Sequence[str]) -> "DataFrameWriter": ...
 
-    def partitionBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
+    def partitionBy(self, *cols: Union[str, Sequence[str]]) -> "DataFrameWriter":
         """Partitions the output by the given columns on the file system.
 
         If specified, the output is laid out on the file system similar
@@ -1546,8 +1557,12 @@ class DataFrameWriter(OptionUtils):
         """
         from pyspark.sql.classic.column import _to_seq
 
-        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]  # type: ignore[assignment]
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], str)
+            and isinstance(cols[0], Sequence)
+        ):
+            cols = tuple(cols[0])
         self._jwrite = self._jwrite.partitionBy(
             _to_seq(self._spark._sc, cast(Iterable["ColumnOrName"], cols))
         )
@@ -1743,9 +1758,9 @@ class DataFrameWriter(OptionUtils):
     def clusterBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter": ...
+    def clusterBy(self, __cols: Sequence[str]) -> "DataFrameWriter": ...
 
-    def clusterBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
+    def clusterBy(self, *cols: Union[str, Sequence[str]]) -> "DataFrameWriter":
         """Clusters the data by the given columns to optimize query performance.
 
         .. versionadded:: 4.0.0
@@ -1767,8 +1782,12 @@ class DataFrameWriter(OptionUtils):
         """
         from pyspark.sql.classic.column import _to_seq
 
-        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]  # type: ignore[assignment]
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], str)
+            and isinstance(cols[0], Sequence)
+        ):
+            cols = tuple(cols[0])
         assert len(cols) > 0, "clusterBy needs one or more clustering columns."
         self._jwrite = self._jwrite.clusterBy(cols[0], _to_seq(self._spark._sc, cols[1:]))
         return self

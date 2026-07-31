@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from typing import Dict
-from typing import Optional, Union, List, overload, Tuple, cast, Callable
+from typing import Optional, Sequence, Union, List, overload, Tuple, cast, Callable
 from typing import TYPE_CHECKING
 
 from pyspark.sql.connect.plan import (
@@ -620,11 +620,15 @@ class DataFrameWriter(OptionUtils):
     def partitionBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter": ...
+    def partitionBy(self, __cols: Sequence[str]) -> "DataFrameWriter": ...
 
-    def partitionBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
-        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]  # type: ignore[assignment]
+    def partitionBy(self, *cols: Union[str, Sequence[str]]) -> "DataFrameWriter":
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], str)
+            and isinstance(cols[0], Sequence)
+        ):
+            cols = tuple(cols[0])
 
         self._write.partitioning_cols = cast(List[str], cols)
         return self
@@ -736,11 +740,15 @@ class DataFrameWriter(OptionUtils):
     def clusterBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter": ...
+    def clusterBy(self, __cols: Sequence[str]) -> "DataFrameWriter": ...
 
-    def clusterBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
-        if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
-            cols = cols[0]  # type: ignore[assignment]
+    def clusterBy(self, *cols: Union[str, Sequence[str]]) -> "DataFrameWriter":
+        if (
+            len(cols) == 1
+            and not isinstance(cols[0], str)
+            and isinstance(cols[0], Sequence)
+        ):
+            cols = tuple(cols[0])
         assert len(cols) > 0, "clusterBy needs one or more clustering columns."
         self._write.clustering_cols = cast(List[str], cols)
         return self
