@@ -329,7 +329,7 @@ class CrossValidatorModel private[ml] (
   def hasSubModels: Boolean = _subModels.isDefined
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize(excludeParams = Seq(
+    var size = estimateMatadataSize(excluded = Seq(
       // Param[Estimator[_]]
       estimator,
       // Param[Array[ParamMap]]

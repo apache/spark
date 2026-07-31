@@ -653,21 +653,29 @@ case class ParamPair[T] @Since("1.2.0") (
  */
 trait Params extends Identifiable with Serializable {
 
-  private[ml] def estimateMatadataSize: Long = estimateMatadataSize(Seq.empty)
+  private[ml] def estimateMatadataSize: Long = {
+    SizeEstimator.estimate((this.paramMap, this.defaultParamMap, this.uid))
+  }
 
-  private[ml] def estimateMatadataSize(excludeParams: Seq[Param[_]]): Long = {
-    var size = SizeEstimator.estimate(uid)
-    paramMap.toSeq.foreach { paramPair =>
-      if (!excludeParams.contains(paramPair.param)) {
-        size += SizeEstimator.estimate(paramPair)
+  private[ml] def estimateMatadataSize(excluded: Seq[Param[_]]): Long = {
+    if (excluded.isEmpty) {
+      estimateMatadataSize
+    } else {
+      val filteredParamMap = mutable.Map.empty[Param[Any], Any]
+      paramMap.toSeq.foreach { pair =>
+        if (!excluded.contains(pair.param)) {
+          filteredParamMap(pair.param.asInstanceOf[Param[Any]]) = pair.value
+        }
       }
-    }
-    defaultParamMap.toSeq.foreach { paramPair =>
-      if (!excludeParams.contains(paramPair.param)) {
-        size += SizeEstimator.estimate(paramPair)
+      val filteredDefaultParamMap = mutable.Map.empty[Param[Any], Any]
+      defaultParamMap.toSeq.foreach { pair =>
+        if (!excluded.contains(pair.param)) {
+          filteredDefaultParamMap(pair.param.asInstanceOf[Param[Any]]) = pair.value
+        }
       }
+      SizeEstimator.estimate((
+        new ParamMap(filteredParamMap), new ParamMap(filteredDefaultParamMap), uid))
     }
-    size
   }
 
   /**
