@@ -19,9 +19,10 @@
 Unit tests for the ``pyspark.sql.tests.df_golden.df_golden`` write/validation machinery.
 
 These exercise the pure ``.test`` file plumbing -- parsing, serialization,
-validation, output normalization and result rendering -- without a Spark
-session, so they are fast and run anywhere.  The end-to-end golden runs that
-need a Spark Connect server live in ``test_df_golden.py``.
+validation, output normalization, result rendering and case registration --
+without a Spark session, so they are fast and run anywhere.  The end-to-end
+golden runs that need a Spark Connect server live in the ``test_<topic>.py``
+modules next to this one.
 """
 
 import os
@@ -29,16 +30,20 @@ import tempfile
 import unittest
 
 from pyspark.sql.tests.df_golden.df_golden import (
-    _compare_case,
-    _regenerate_case,
-    _validate_test_file,
+    DFGoldenTestMixin,
+    build_golden_case,
+    check_cases_in_sync,
+    compare_case,
     format_double,
     format_error,
     hash_result_rows,
+    is_unordered,
     parse_tags,
     parse_test_file,
     render_result_table,
     replace_not_included,
+    unordered,
+    validate_test_file,
     write_test_file,
 )
 
@@ -58,9 +63,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
     def test_parse_basic_case(self):
         path = self._write(
             "--! name\n"
-            "my case\n"
-            "--! script\n"
-            "scripts/x.py\n"
+            "my_case\n"
             "--! expected_output_schema\n"
             "struct<k:bigint>\n"
             "!-- end\n"
@@ -68,8 +71,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
         header, cases = parse_test_file(path)
         self.assertEqual(header, {})
         self.assertEqual(len(cases), 1)
-        self.assertEqual(cases[0]["name"], "my case")
-        self.assertEqual(cases[0]["script"], "scripts/x.py")
+        self.assertEqual(cases[0]["name"], "my_case")
         self.assertEqual(cases[0]["expected_output_schema"], "struct<k:bigint>")
 
     def test_parse_extracts_file_metadata_header(self):
@@ -77,18 +79,21 @@ class DFGoldenFrameworkTests(unittest.TestCase):
             "--! name\n"
             "__file_metadata__\n"
             "--! source\n"
-            "df_golden/group_by\n"
+            "pyspark.sql.tests.df_golden.test_group_by.GroupByGoldenTests\n"
             "!-- end\n"
             "\n\n"
             "--! name\n"
             "c1\n"
-            "--! script\n"
-            "scripts/a.py\n"
+            "--! expected_output_schema\n"
+            "struct<k:bigint>\n"
             "!-- end\n"
         )
         header, cases = parse_test_file(path)
         # The header block is lifted out and its synthetic name dropped.
-        self.assertEqual(header, {"source": "df_golden/group_by"})
+        self.assertEqual(
+            header,
+            {"source": "pyspark.sql.tests.df_golden.test_group_by.GroupByGoldenTests"},
+        )
         self.assertEqual(len(cases), 1)
         self.assertEqual(cases[0]["name"], "c1")
 
@@ -96,8 +101,6 @@ class DFGoldenFrameworkTests(unittest.TestCase):
         path = self._write(
             "--! name\n"
             "c\n"
-            "--! script\n"
-            "scripts/a.py\n"
             "--! expected_analysis_output\n"
             "Sort [k#x ASC], true\n"
             "+- Project\n"
@@ -111,20 +114,18 @@ class DFGoldenFrameworkTests(unittest.TestCase):
         )
 
     def test_round_trip_parse_write_parse(self):
-        header = {"source": "df_golden/group_by"}
+        header = {"source": "pyspark.sql.tests.df_golden.test_group_by.GroupByGoldenTests"}
         cases = [
             {
-                "name": "ordered case",
-                "script": "scripts/a.py",
+                "name": "ordered_case",
                 "expected_analysis_output": "Sort [k#x ASC], true\n+- Range",
                 "expected_output_schema": "struct<k:bigint>",
                 "expected_result": "+---+\n| k |\n+---+\n| 1 |\n+---+\nprinted all 1 rows.",
                 "expected_result_hash": "abc123",
             },
             {
-                "name": "error case",
+                "name": "error_case",
                 "tags": "unordered",
-                "script": "scripts/b.py",
                 "expected_error": "[SOME_ERROR] boom",
             },
         ]
@@ -140,13 +141,13 @@ class DFGoldenFrameworkTests(unittest.TestCase):
         write_test_file(
             path,
             {},
-            [{"script": "scripts/a.py", "name": "c", "junk": "ignored"}],
+            [{"expected_output_schema": "struct<k:bigint>", "name": "c", "junk": "ignored"}],
         )
         with open(path) as f:
             body = f.read()
         self.assertNotIn("junk", body)
-        # name precedes script in the canonical order regardless of dict order.
-        self.assertLess(body.index("--! name"), body.index("--! script"))
+        # name precedes the outputs in the canonical order regardless of dict order.
+        self.assertLess(body.index("--! name"), body.index("--! expected_output_schema"))
 
     # -- tags -------------------------------------------------------------
 
@@ -155,12 +156,22 @@ class DFGoldenFrameworkTests(unittest.TestCase):
         self.assertEqual(parse_tags({}), set())
         self.assertEqual(parse_tags({"tags": ""}), set())
 
+    def test_unordered_decorator_marks_the_case_method(self):
+        def plain(self, spark):
+            pass
+
+        @unordered
+        def marked(self, spark):
+            pass
+
+        self.assertFalse(is_unordered(plain))
+        self.assertTrue(is_unordered(marked))
+
     # -- validation -------------------------------------------------------
 
     def _valid_case(self, **overrides):
         case = {
             "name": "c",
-            "script": "scripts/a.py",
             "expected_output_schema": "struct<k:bigint>",
         }
         case.update(overrides)
@@ -168,91 +179,67 @@ class DFGoldenFrameworkTests(unittest.TestCase):
 
     def test_validate_accepts_well_formed_file(self):
         # Should not raise.
-        _validate_test_file("f.test", {"source": "x"}, [self._valid_case()], regenerate=False)
+        validate_test_file("f.test", {"source": "x"}, [self._valid_case()])
 
     def test_validate_rejects_unknown_header_section(self):
         with self.assertRaisesRegex(AssertionError, "unknown header sections: bogus"):
-            _validate_test_file("f.test", {"bogus": "x"}, [self._valid_case()], regenerate=False)
+            validate_test_file("f.test", {"bogus": "x"}, [self._valid_case()])
 
     def test_validate_rejects_no_cases(self):
         with self.assertRaisesRegex(AssertionError, "no test cases found"):
-            _validate_test_file("f.test", {}, [], regenerate=False)
+            validate_test_file("f.test", {}, [])
 
     def test_validate_rejects_case_without_name(self):
         with self.assertRaisesRegex(AssertionError, "every test case needs a name"):
-            _validate_test_file("f.test", {}, [{"script": "scripts/a.py"}], regenerate=False)
-
-    def test_validate_rejects_case_without_script(self):
-        with self.assertRaisesRegex(AssertionError, "needs a script"):
-            _validate_test_file(
-                "f.test",
-                {},
-                [{"name": "c", "expected_output_schema": "x"}],
-                regenerate=False,
-            )
+            validate_test_file("f.test", {}, [{"expected_output_schema": "x"}])
 
     def test_validate_rejects_unknown_section(self):
         with self.assertRaisesRegex(AssertionError, "unknown sections: expected_bogus"):
-            _validate_test_file(
-                "f.test", {}, [self._valid_case(expected_bogus="x")], regenerate=False
-            )
+            validate_test_file("f.test", {}, [self._valid_case(expected_bogus="x")])
 
     def test_validate_rejects_unknown_tag(self):
         with self.assertRaisesRegex(AssertionError, "unknown tags: wat"):
-            _validate_test_file("f.test", {}, [self._valid_case(tags="wat")], regenerate=False)
+            validate_test_file("f.test", {}, [self._valid_case(tags="wat")])
 
     def test_validate_accepts_known_unordered_tag(self):
-        _validate_test_file("f.test", {}, [self._valid_case(tags="unordered")], regenerate=False)
+        validate_test_file("f.test", {}, [self._valid_case(tags="unordered")])
 
-    def test_validate_rejects_vacuous_case_in_verify_mode(self):
+    def test_validate_rejects_vacuous_case(self):
         # A case with no expected_* section asserts nothing.
         with self.assertRaisesRegex(AssertionError, "would assert\n?.*nothing"):
-            _validate_test_file(
-                "f.test", {}, [{"name": "c", "script": "scripts/a.py"}], regenerate=False
-            )
-
-    def test_validate_allows_vacuous_case_in_regenerate_mode(self):
-        # New cases legitimately have no expected_* sections before regeneration.
-        _validate_test_file(
-            "f.test", {}, [{"name": "c", "script": "scripts/a.py"}], regenerate=True
-        )
+            validate_test_file("f.test", {}, [{"name": "c"}])
 
     def test_validate_accepts_error_only_case(self):
         # A case carrying only ``expected_error`` is not vacuous: the error is a
         # recognized result section, the single output an error case produces.
-        _validate_test_file(
-            "f.test",
-            {},
-            [{"name": "c", "script": "scripts/a.py", "expected_error": "[ERR] boom"}],
-            regenerate=False,
-        )
+        validate_test_file("f.test", {}, [{"name": "c", "expected_error": "[ERR] boom"}])
 
-    def test_validate_rejects_legacy_split_error_sections(self):
-        # The old analysis/execution split was collapsed into ``expected_error``;
-        # the legacy names are now unknown sections in verify mode.
-        for legacy in ("expected_analysis_error", "expected_execution_error"):
+    def test_validate_rejects_legacy_sections(self):
+        # Sections dropped from the format (the analysis/execution error split
+        # collapsed into ``expected_error``, the script pointer replaced by the
+        # case method) are now unknown sections.
+        for legacy in ("expected_analysis_error", "expected_execution_error", "script"):
             with self.assertRaisesRegex(AssertionError, "unknown sections: " + legacy):
-                _validate_test_file(
-                    "f.test", {}, [self._valid_case(**{legacy: "x"})], regenerate=False
-                )
+                validate_test_file("f.test", {}, [self._valid_case(**{legacy: "x"})])
 
-    def test_validate_tolerates_unknown_sections_in_regenerate_mode(self):
-        # Regeneration drops and rewrites unknown sections, so a file still
-        # carrying a renamed/removed section (e.g. the legacy error split) must
-        # not be rejected during regeneration - otherwise it could never be
-        # migrated.
-        _validate_test_file(
-            "f.test",
-            {},
-            [self._valid_case(expected_analysis_error="x")],
-            regenerate=True,
-        )
+    # -- case / golden file sync ------------------------------------------
 
-    def test_validate_rejects_unknown_tag_even_in_regenerate_mode(self):
-        # Tags are preserved verbatim across regeneration, so an unknown tag
-        # would persist; it is rejected in both modes.
-        with self.assertRaisesRegex(AssertionError, "unknown tags: wat"):
-            _validate_test_file("f.test", {}, [self._valid_case(tags="wat")], regenerate=True)
+    def test_check_cases_in_sync_accepts_identical_lists(self):
+        check_cases_in_sync("f.test", ["a", "b"], ["a", "b"])
+
+    def test_check_cases_in_sync_rejects_case_missing_from_golden(self):
+        with self.assertRaisesRegex(AssertionError, "no block in the golden file: b"):
+            check_cases_in_sync("f.test", ["a", "b"], ["a"])
+
+    def test_check_cases_in_sync_rejects_golden_block_without_case(self):
+        with self.assertRaisesRegex(AssertionError, "no case method: b"):
+            check_cases_in_sync("f.test", ["a"], ["a", "b"])
+
+    def test_check_cases_in_sync_rejects_reordering(self):
+        # The golden file is written in declaration order, so a different order
+        # means the file no longer matches the class.
+        with self.assertRaisesRegex(AssertionError, "different order"):
+            check_cases_in_sync("f.test", ["a", "b"], ["b", "a"])
 
     # -- output normalization --------------------------------------------
 
@@ -268,7 +255,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
         msg = (
             "[DIVIDE_BY_ZERO] Division by zero. SQLSTATE: 22012\n"
             "== DataFrame ==\n"
-            '"__truediv__" was called from /abs/path/script.py:7\n'
+            '"__truediv__" was called from /abs/path/test_arithmetic.py:7\n'
             "\n"
             "JVM stacktrace:\n"
             "org.apache.spark.SparkArithmeticException: ..."
@@ -324,12 +311,12 @@ class DFGoldenFrameworkTests(unittest.TestCase):
             "name": "c",
             "expected_output_schema": "struct<k:bigint>",
         }
-        _compare_case(self, case, {"expected_output_schema": "struct<k:bigint>"})
+        compare_case(self, case, {"expected_output_schema": "struct<k:bigint>"})
 
     def test_compare_case_ignores_sections_absent_from_golden(self):
         # Only sections present in the golden file are checked; extras in
         # ``actual`` are ignored.
-        _compare_case(
+        compare_case(
             self,
             {"name": "c", "expected_output_schema": "struct<k:bigint>"},
             {
@@ -340,7 +327,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
 
     def test_compare_case_fails_on_value_mismatch(self):
         with self.assertRaises(AssertionError):
-            _compare_case(
+            compare_case(
                 self,
                 {"name": "c", "expected_output_schema": "struct<k:bigint>"},
                 {"expected_output_schema": "struct<v:string>"},
@@ -348,7 +335,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
 
     def test_compare_case_fails_when_expected_section_not_produced(self):
         with self.assertRaisesRegex(AssertionError, "expected section `expected_result`"):
-            _compare_case(
+            compare_case(
                 self,
                 {"name": "c", "expected_result": "printed all 0 rows."},
                 {"expected_error": "[ERR] boom"},
@@ -357,59 +344,49 @@ class DFGoldenFrameworkTests(unittest.TestCase):
     # -- under-assertion guards ------------------------------------------
 
     def test_validate_accepts_result_with_hash(self):
-        _validate_test_file(
+        validate_test_file(
             "f.test",
             {},
             [self._valid_case(expected_result="printed all 0 rows.", expected_result_hash="h")],
-            regenerate=False,
         )
 
     def test_validate_rejects_result_without_hash(self):
         with self.assertRaisesRegex(AssertionError, "or neither"):
-            _validate_test_file(
-                "f.test",
-                {},
-                [self._valid_case(expected_result="printed all 0 rows.")],
-                regenerate=False,
+            validate_test_file(
+                "f.test", {}, [self._valid_case(expected_result="printed all 0 rows.")]
             )
 
     def test_validate_rejects_hash_without_result(self):
         with self.assertRaisesRegex(AssertionError, "or neither"):
-            _validate_test_file(
-                "f.test", {}, [self._valid_case(expected_result_hash="h")], regenerate=False
-            )
+            validate_test_file("f.test", {}, [self._valid_case(expected_result_hash="h")])
 
     def test_validate_rejects_error_case_mixed_with_result(self):
         with self.assertRaisesRegex(AssertionError, "must carry only `expected_error`"):
-            _validate_test_file(
+            validate_test_file(
                 "f.test",
                 {},
                 [
                     {
                         "name": "c",
-                        "script": "scripts/a.py",
                         "expected_error": "[ERR] boom",
                         "expected_result": "printed all 0 rows.",
                         "expected_result_hash": "h",
                     }
                 ],
-                regenerate=False,
             )
 
     def test_validate_rejects_error_case_mixed_with_plan(self):
         with self.assertRaisesRegex(AssertionError, "must carry only `expected_error`"):
-            _validate_test_file(
+            validate_test_file(
                 "f.test",
                 {},
                 [
                     {
                         "name": "c",
-                        "script": "scripts/a.py",
                         "expected_error": "[ERR] boom",
                         "expected_analysis_output": "Range",
                     }
                 ],
-                regenerate=False,
             )
 
     # -- double formatting / float refusal --------------------------------
@@ -459,42 +436,33 @@ class DFGoldenFrameworkTests(unittest.TestCase):
 
     def test_parse_rejects_duplicate_section(self):
         path = self._write(
-            "--! name\nc\n--! script\nscripts/a.py\n--! script\nscripts/b.py\n!-- end\n"
+            "--! name\nc\n--! expected_output_schema\nx\n--! expected_output_schema\ny\n!-- end\n"
         )
-        with self.assertRaisesRegex(AssertionError, "duplicate section `script`"):
+        with self.assertRaisesRegex(AssertionError, "duplicate section `expected_output_schema`"):
             parse_test_file(path)
 
     def test_parse_rejects_malformed_marker(self):
         # Missing space after "--!": a typo'd marker, not body text.
-        path = self._write(
-            "--! name\nc\n--! script\nscripts/a.py\n--!expected_result\nx\n!-- end\n"
-        )
+        path = self._write("--! name\nc\n--!expected_result\nx\n!-- end\n")
         with self.assertRaisesRegex(AssertionError, "malformed section marker"):
             parse_test_file(path)
 
     def test_parse_rejects_stray_content_outside_section(self):
-        path = self._write("stray text\n--! name\nc\n--! script\nscripts/a.py\n!-- end\n")
+        path = self._write("stray text\n--! name\nc\n!-- end\n")
         with self.assertRaisesRegex(AssertionError, "content outside any section"):
             parse_test_file(path)
 
     def test_parse_allows_blank_lines_between_blocks(self):
         # Blank separators outside sections are fine (not stray content).
-        path = self._write(
-            "--! name\nc1\n--! script\nscripts/a.py\n!-- end\n\n\n"
-            "--! name\nc2\n--! script\nscripts/b.py\n!-- end\n"
-        )
+        path = self._write("--! name\nc1\n!-- end\n\n\n--! name\nc2\n!-- end\n")
         _, cases = parse_test_file(path)
         self.assertEqual([c["name"] for c in cases], ["c1", "c2"])
 
-    def test_parse_unterminated_trailing_case(self):
-        # Last case missing "!-- end".
-        path = self._write("--! name\nc\n--! script\nscripts/a.py\n")
-        # Lenient by default (regeneration rewrites with terminators):
-        _, cases = parse_test_file(path)
-        self.assertEqual(len(cases), 1)
-        # Strict (verify mode) rejects it:
+    def test_parse_rejects_unterminated_trailing_case(self):
+        # Last case missing "!-- end", i.e. a truncated file.
+        path = self._write("--! name\nc\n--! expected_output_schema\nx\n")
         with self.assertRaisesRegex(AssertionError, "does not end with"):
-            parse_test_file(path, require_terminated=True)
+            parse_test_file(path)
 
     def test_format_value_refuses_tab_or_newline_in_string(self):
         try:
@@ -510,25 +478,73 @@ class DFGoldenFrameworkTests(unittest.TestCase):
 
     # -- regeneration ----------------------------------------------------
 
-    def test_regenerate_replaces_expected_sections_and_carries_identity(self):
-        old = {
-            "name": "c",
-            "tags": "unordered",
-            "script": "scripts/a.py",
-            "expected_optimized_output": "old base",
-            "expected_output_schema": "old schema",
-        }
+    def test_build_golden_case_writes_identity_from_the_case_method(self):
         actual = {
             "expected_optimized_output": "new base",
             "expected_output_schema": "new schema",
         }
-        new = _regenerate_case(old, actual)
-        # Name / tags / script are carried over; expected_* come from this run.
-        self.assertEqual(new["name"], "c")
-        self.assertEqual(new["tags"], "unordered")
-        self.assertEqual(new["script"], "scripts/a.py")
-        self.assertEqual(new["expected_optimized_output"], "new base")
-        self.assertEqual(new["expected_output_schema"], "new schema")
+        case = build_golden_case("c", False, actual)
+        self.assertEqual(case["name"], "c")
+        self.assertNotIn("tags", case)
+        self.assertEqual(case["expected_optimized_output"], "new base")
+        self.assertEqual(case["expected_output_schema"], "new schema")
+        # An unordered case records the tag that explains its sorted rows.
+        self.assertEqual(build_golden_case("c", True, actual)["tags"], "unordered")
+
+    # -- case registration ------------------------------------------------
+
+    def test_mixin_registers_a_test_per_case_in_declaration_order(self):
+        class Cases(DFGoldenTestMixin, unittest.TestCase):
+            golden_file = "x.test"
+
+            def _test_second(self, spark):
+                """Second case."""
+
+            def _test_first(self, spark):
+                pass
+
+        # Declaration order, not alphabetical: the golden file is written in it.
+        self.assertEqual(Cases.case_names(), ["second", "first"])
+        self.assertTrue(callable(Cases.test_second))
+        self.assertTrue(callable(Cases.test_first))
+        self.assertEqual(Cases.test_second.__doc__, "Second case.")
+
+    def test_mixin_inherits_cases_from_base_classes(self):
+        class Base(DFGoldenTestMixin, unittest.TestCase):
+            golden_file = "x.test"
+
+            def _test_inherited(self, spark):
+                pass
+
+        class Derived(Base):
+            def _test_added(self, spark):
+                pass
+
+        self.assertEqual(Derived.case_names(), ["inherited", "added"])
+
+    def test_mixin_rejects_wrong_inheritance_order(self):
+        # The mixin's setUpClass has to run after the session exists, which only
+        # happens when it precedes the session-providing class.
+        with self.assertRaisesRegex(TypeError, "must be listed before"):
+
+            class Wrong(unittest.TestCase, DFGoldenTestMixin):
+                golden_file = "x.test"
+
+    def test_mixin_resolves_golden_file_next_to_the_test_module(self):
+        class Cases(DFGoldenTestMixin, unittest.TestCase):
+            golden_file = "group_by.test"
+
+        self.assertEqual(
+            Cases.golden_file_path(),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "group_by.test"),
+        )
+
+    def test_mixin_requires_a_golden_file(self):
+        class Cases(DFGoldenTestMixin, unittest.TestCase):
+            pass
+
+        with self.assertRaisesRegex(AssertionError, "set `golden_file`"):
+            Cases.golden_file_path()
 
 
 if __name__ == "__main__":

@@ -1,40 +1,19 @@
 --! name
 __file_metadata__
 --! source
-df_golden/group_by
+pyspark.sql.tests.df_golden.test_group_by.GroupByGoldenTests
 !-- end
 
 
 --! name
-create testData view
---! script
-scripts/group_by/setup_test_data.py
---! expected_analysis_output
-LocalRelation <empty>
---! expected_optimized_output
-LocalRelation <empty>
---! expected_output_schema
-struct<>
---! expected_result
-printed all 0 rows.
---! expected_result_hash
-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-!-- end
-
-
---! name
-select non-grouping column without GROUP BY (error)
---! script
-scripts/group_by/select_non_grouping_column.py
+select_non_grouping_column
 --! expected_error
 [MISSING_GROUP_BY] The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses. SQLSTATE: 42803
 !-- end
 
 
 --! name
-aggregate with empty GroupBy expressions
---! script
-scripts/group_by/agg_counts_no_grouping.py
+agg_counts_no_grouping
 --! expected_analysis_output
 Aggregate [count(a#x) AS count(a)#xL, count(b#x) AS count(b)#xL]
 +- SubqueryAlias testdata
@@ -61,11 +40,9 @@ f68f701c7611c45f2e32de9394884c63089bd8174e53a863a1b61168442dbaac
 
 
 --! name
-aggregate with non-empty GroupBy expressions
+group_by_count
 --! tags
 unordered
---! script
-scripts/group_by/group_by_count.py
 --! expected_analysis_output
 Aggregate [a#x], [a#x, count(b#x) AS count(b)#xL]
 +- SubqueryAlias testdata
@@ -95,9 +72,7 @@ printed all 4 rows.
 
 
 --! name
-non-aggregate column not in GROUP BY (error)
---! script
-scripts/group_by/group_by_missing_aggregation.py
+group_by_missing_aggregation
 --! expected_error
 [MISSING_AGGREGATION] The non-aggregating expression "a" is based on columns which are not participating in the GROUP BY clause.
 Add the columns or the expression to the GROUP BY, aggregate the expression, or use "any_value(a)" if you do not care which of the values within a group is returned. SQLSTATE: 42803
@@ -105,11 +80,9 @@ Add the columns or the expression to the GROUP BY, aggregate the expression, or 
 
 
 --! name
-group by with multiple aggregates
+group_by_multiple_counts
 --! tags
 unordered
---! script
-scripts/group_by/group_by_multiple_counts.py
 --! expected_analysis_output
 Aggregate [a#x], [a#x, count(a#x) AS count(a)#xL, count(b#x) AS count(b)#xL]
 +- SubqueryAlias testdata
@@ -139,9 +112,7 @@ printed all 4 rows.
 
 
 --! name
-aggregate grouped by literal
---! script
-scripts/group_by/group_by_literal.py
+group_by_literal
 --! expected_analysis_output
 Aggregate [foo], [foo AS foo#x, count(a#x) AS count(a)#xL]
 +- SubqueryAlias testdata
@@ -168,9 +139,7 @@ printed all 1 rows.
 
 
 --! name
-aggregate grouped by literal (hash aggregate)
---! script
-scripts/group_by/group_by_literal_hash_agg.py
+group_by_literal_hash_agg
 --! expected_analysis_output
 Aggregate [foo], [foo AS foo#x, approx_count_distinct(a#x, 0.05, 0, 0) AS approx_count_distinct(a)#xL]
 +- Filter (a#x = 0)
@@ -196,9 +165,7 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 
 
 --! name
-aggregate grouped by literal (sort aggregate)
---! script
-scripts/group_by/group_by_literal_sort_agg.py
+group_by_literal_sort_agg
 --! expected_analysis_output
 Aggregate [foo], [foo AS foo#x, max(struct(a, a#x)) AS max(struct(a))#x]
 +- Filter (a#x = 0)
@@ -224,11 +191,9 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 
 
 --! name
-aggregate with complex GroupBy expression
+group_by_complex_expr
 --! tags
 unordered
---! script
-scripts/group_by/group_by_complex_expr.py
 --! expected_analysis_output
 Aggregate [(a#x + b#x)], [(a#x + b#x) AS (a + b)#x, count(b#x) AS count(b)#xL]
 +- SubqueryAlias testdata
@@ -259,11 +224,9 @@ e5a84602fefae835a3f9378c2cb5e6c8a653f258181aca8e9e88f1653b75823a
 
 
 --! name
-struct() in group by
+group_by_struct
 --! tags
 unordered
---! script
-scripts/group_by/group_by_struct.py
 --! expected_analysis_output
 Aggregate [struct(aa, (cast(a#x as double) + 0.1))], [struct(aa, (cast(a#x as double) + 0.1)) AS struct((a + 0.1) AS aa)#x, count(1) AS count(1)#xL]
 +- SubqueryAlias testdata
@@ -293,9 +256,7 @@ printed all 4 rows.
 
 
 --! name
-aggregate with nulls
---! script
-scripts/group_by/agg_stats_with_nulls.py
+agg_stats_with_nulls
 --! expected_analysis_output
 Aggregate [round(skewness(cast(a#x as double)), 12) AS round(skewness(a), 12)#x, round(kurtosis(cast(a#x as double)), 12) AS round(kurtosis(a), 12)#x, min(a#x) AS min(a)#x, max(a#x) AS max(a)#x, round(avg(a#x), 12) AS round(avg(a), 12)#x, round(variance(cast(a#x as double)), 12) AS round(variance(a), 12)#x, round(stddev(cast(a#x as double)), 12) AS round(stddev(a), 12)#x, sum(a#x) AS sum(a)#xL, count(a#x) AS count(a)#xL]
 +- SubqueryAlias testdata
@@ -322,9 +283,7 @@ printed all 1 rows.
 
 
 --! name
-aggregate with empty input and non-empty GroupBy expressions
---! script
-scripts/group_by/empty_input_group_by.py
+empty_input_group_by
 --! expected_analysis_output
 Aggregate [a#x], [a#x, count(1) AS count(1)#xL]
 +- Filter false
@@ -350,9 +309,7 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 
 
 --! name
-aggregate with empty input and empty GroupBy expressions
---! script
-scripts/group_by/empty_input_agg.py
+empty_input_agg
 --! expected_analysis_output
 Aggregate [count(1) AS count(1)#xL]
 +- Filter false
@@ -380,9 +337,7 @@ printed all 1 rows.
 
 
 --! name
-aggregate with empty input and constant projection
---! script
-scripts/group_by/empty_input_agg_select.py
+empty_input_agg_select
 --! expected_analysis_output
 Project [1 AS 1#x]
 +- Aggregate [count(1) AS count(1)#xL]
@@ -411,26 +366,7 @@ printed all 1 rows.
 
 
 --! name
-create test_agg view
---! script
-scripts/group_by/setup_test_agg.py
---! expected_analysis_output
-LocalRelation <empty>
---! expected_optimized_output
-LocalRelation <empty>
---! expected_output_schema
-struct<>
---! expected_result
-printed all 0 rows.
---! expected_result_hash
-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-!-- end
-
-
---! name
-bool aggregates over empty table
---! script
-scripts/group_by/bool_agg_empty_table.py
+bool_agg_empty_table
 --! expected_analysis_output
 Aggregate [every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, bool_or(v#x) AS bool_or(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
 +- Filter (1 = 0)
@@ -458,9 +394,7 @@ ad29e33ee1f3f4cfe263272e81d7c89ea08bdfb7aa45758a6adfc7752d80ab7e
 
 
 --! name
-bool aggregates over all null values
---! script
-scripts/group_by/bool_agg_all_nulls.py
+bool_agg_all_nulls
 --! expected_analysis_output
 Aggregate [every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, bool_or(v#x) AS bool_or(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
 +- Filter (k#x = 4)
@@ -488,9 +422,7 @@ ad29e33ee1f3f4cfe263272e81d7c89ea08bdfb7aa45758a6adfc7752d80ab7e
 
 
 --! name
-bool aggregates null filtering
---! script
-scripts/group_by/bool_agg_null_filtering.py
+bool_agg_null_filtering
 --! expected_analysis_output
 Aggregate [every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, bool_or(v#x) AS bool_or(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
 +- Filter (k#x = 5)
@@ -518,11 +450,9 @@ printed all 1 rows.
 
 
 --! name
-bool aggregates with group by
+bool_agg_group_by
 --! tags
 unordered
---! script
-scripts/group_by/bool_agg_group_by.py
 --! expected_analysis_output
 Aggregate [k#x], [k#x, every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, bool_or(v#x) AS bool_or(v)#x, bool_and(v#x) AS bool_and(v)#x, bool_or(v#x) AS bool_or(v)#x]
 +- SubqueryAlias test_agg
@@ -553,11 +483,9 @@ printed all 5 rows.
 
 
 --! name
-bool aggregates with having false
+bool_agg_having_false
 --! tags
 unordered
---! script
-scripts/group_by/bool_agg_having_false.py
 --! expected_analysis_output
 Project [k#x, every_v#x]
 +- Filter (every_v#x = false)
@@ -589,9 +517,7 @@ b38b91ef7aec43d0957f73891494f8c09519ffe4731fb729a0569c7c2d970118
 
 
 --! name
-bool aggregates with having null
---! script
-scripts/group_by/bool_agg_having_null.py
+bool_agg_having_null
 --! expected_analysis_output
 Project [k#x, every_v#x]
 +- Filter isnull(every_v#x)
@@ -621,36 +547,28 @@ printed all 1 rows.
 
 
 --! name
-every input type checking: int (error)
---! script
-scripts/group_by/every_int_error.py
+every_int_error
 --! expected_error
 [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "every(1)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1" has the type "INT". SQLSTATE: 42K09
 !-- end
 
 
 --! name
-some input type checking: int (error)
---! script
-scripts/group_by/some_int_error.py
+some_int_error
 --! expected_error
 [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "some(1)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1" has the type "INT". SQLSTATE: 42K09
 !-- end
 
 
 --! name
-bool_or input type checking: int (error)
---! script
-scripts/group_by/bool_or_int_error.py
+bool_or_int_error
 --! expected_error
 [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "bool_or(1)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1" has the type "INT". SQLSTATE: 42K09
 !-- end
 
 
 --! name
-every input type checking: string
---! script
-scripts/group_by/every_string.py
+every_string
 --! expected_analysis_output
 Aggregate [every(cast(true as boolean)) AS every(true)#x]
 +- SubqueryAlias test_agg
@@ -677,29 +595,23 @@ b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b
 
 
 --! name
-bool_and input type checking: decimal (error)
---! script
-scripts/group_by/bool_and_decimal_error.py
+bool_and_decimal_error
 --! expected_error
 [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "bool_and(1.0)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1.0" has the type "DECIMAL(10,1)". SQLSTATE: 42K09
 !-- end
 
 
 --! name
-bool_or input type checking: double (error)
---! script
-scripts/group_by/bool_or_double_error.py
+bool_or_double_error
 --! expected_error
 [DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] Cannot resolve "bool_or(1.0)" due to data type mismatch: The first parameter requires the "BOOLEAN" type, however "1.0" has the type "DOUBLE". SQLSTATE: 42K09
 !-- end
 
 
 --! name
-every as window expression
+every_window
 --! tags
 unordered
---! script
-scripts/group_by/every_window.py
 --! expected_analysis_output
 Project [k#x, v#x, every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
 +- Project [k#x, v#x, every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
@@ -738,11 +650,9 @@ printed all 10 rows.
 
 
 --! name
-some as window expression
+some_window
 --! tags
 unordered
---! script
-scripts/group_by/some_window.py
 --! expected_analysis_output
 Project [k#x, v#x, some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
 +- Project [k#x, v#x, some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
@@ -781,11 +691,9 @@ printed all 10 rows.
 
 
 --! name
-bool_or as window expression
+bool_or_window
 --! tags
 unordered
---! script
-scripts/group_by/bool_or_window.py
 --! expected_analysis_output
 Project [k#x, v#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
 +- Project [k#x, v#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
@@ -824,11 +732,9 @@ printed all 10 rows.
 
 
 --! name
-bool_and as window expression
+bool_and_window
 --! tags
 unordered
---! script
-scripts/group_by/bool_and_window.py
 --! expected_analysis_output
 Project [k#x, v#x, bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
 +- Project [k#x, v#x, bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, bool_and(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
@@ -867,11 +773,9 @@ printed all 10 rows.
 
 
 --! name
-bool_or as window expression (repeated)
+bool_or_window_repeated
 --! tags
 unordered
---! script
-scripts/group_by/bool_or_window_repeated.py
 --! expected_analysis_output
 Project [k#x, v#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
 +- Project [k#x, v#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, bool_or(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
@@ -910,9 +814,7 @@ printed all 10 rows.
 
 
 --! name
-having referencing aggregate expression
---! script
-scripts/group_by/having_agg_count.py
+having_agg_count
 --! expected_analysis_output
 Project [cnt#xL]
 +- Filter (cnt#xL > cast(1 as bigint))
@@ -942,11 +844,9 @@ printed all 1 rows.
 
 
 --! name
-having on aliased max
+having_max_v
 --! tags
 unordered
---! script
-scripts/group_by/having_max_v.py
 --! expected_analysis_output
 Project [k#x, max_v#x]
 +- Filter (max_v#x = true)
@@ -978,9 +878,7 @@ d6212a5d216fffb25342120cad425c6ebe96fc8485c6b082be8624faf6a531c4
 
 
 --! name
-aggregate expression referenced through alias
---! script
-scripts/group_by/agg_alias_filter.py
+agg_alias_filter
 --! expected_analysis_output
 Filter (cnt#xL > cast(1 as bigint))
 +- Aggregate [count(k#x) AS cnt#xL]
@@ -1009,11 +907,9 @@ printed all 1 rows.
 
 
 --! name
-SPARK-34581: do not optimize out grouping expressions
+grouping_exprs_not_optimized
 --! tags
 unordered
---! script
-scripts/group_by/grouping_exprs_not_optimized.py
 --! expected_analysis_output
 Aggregate [isnull(a#x)], [isnull(a#x) AS (a IS NULL)#x, NOT isnull(a#x) AS (NOT (a IS NULL))#x, count(1) AS c#xL]
 +- SubqueryAlias testdata
@@ -1041,11 +937,9 @@ c5421419b0d389431648774e2aa0156b8472da926b1dd3cd50c94821001e7bcd
 
 
 --! name
-PullOutGroupingExpressions pulls out grouping expressions
+pull_out_grouping_exprs
 --! tags
 unordered
---! script
-scripts/group_by/pull_out_grouping_exprs.py
 --! expected_analysis_output
 Aggregate [isnull(a#x)], [isnull(a#x) AS (a IS NULL)#x, CASE WHEN NOT isnull(a#x) THEN 0 ELSE 1 END AS CASE WHEN (NOT (a IS NULL)) THEN 0 ELSE 1 END#x, first(isnull(a#x), false) AS c#x]
 +- SubqueryAlias testdata
@@ -1073,11 +967,9 @@ ce61427fcddb697480c2921f7450c541ac0bf1fe284b7e88bd9d784a84a2120a
 
 
 --! name
-count_if with grouping expression reference
+count_if_group_by
 --! tags
 unordered
---! script
-scripts/group_by/count_if_group_by.py
 --! expected_analysis_output
 Aggregate [(a#x + 1)], [(a#x + 1) AS (a + 1)#x, count_if(((a#x + 1) = b#x)) AS count_if(((a + 1) = b))#xL]
 +- SubqueryAlias testdata
