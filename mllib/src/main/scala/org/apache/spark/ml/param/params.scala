@@ -657,6 +657,16 @@ trait Params extends Identifiable with Serializable {
     SizeEstimator.estimate((this.paramMap, this.defaultParamMap, this.uid))
   }
 
+  /**
+   * Estimates metadata size while omitting params that can retain shared runtime state.
+   *
+   * A `Param` may hold this state indirectly through a validation closure that captures its
+   * owning instance, which can retain a `SparkSession`. Its value may also be a complex object,
+   * such as an `Estimator` in a `Param[Estimator[_]]`, that retains a `SparkSession`. Exclude
+   * such params to avoid accounting for shared infrastructure.
+   *
+   * @param excluded params to omit from the estimate
+   */
   private[ml] def estimateMatadataSize(excluded: Seq[Param[_]]): Long = {
     if (excluded.isEmpty) {
       estimateMatadataSize

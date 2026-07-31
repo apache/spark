@@ -330,15 +330,17 @@ class CrossValidatorModel private[ml] (
 
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize(excluded = Seq(
-      // Param[Estimator[_]]
+      // estimator: Param[Estimator[_]]
       estimator,
-      // Param[Array[ParamMap]]
+      // estimatorParamMaps: Param[Array[ParamMap]]
       estimatorParamMaps,
-      // Param[Evaluator]
+      // evaluator: Param[Evaluator]
       evaluator))
+    // bestModel: Model[_]
     size += bestModel.estimatedSize
-    // Array[Double]
+    // avgMetrics: Array[Double]
     size += SizeEstimator.estimate(avgMetrics)
+    // _subModels: Option[Array[Array[Model[_]]]]
     _subModels.foreach { models =>
       models.foreach { modelArray =>
         modelArray.foreach { model =>
