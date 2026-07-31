@@ -188,8 +188,16 @@ private[spark] object History {
 
   val EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED =
     ConfigBuilder("spark.history.fs.eventLog.rolling.onDemandLoadEnabled")
-      .doc("Whether to look up rolling event log locations on demand manner before listing files.")
+      .doc("Whether to look up rolling event log locations on demand before listing files.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val EVENT_LOG_V1_ON_DEMAND_LOAD_ENABLED =
+    ConfigBuilder("spark.history.fs.eventLog.v1.onDemandLoadEnabled")
+      .doc("Whether to look up V1 event log locations on demand before listing files.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
