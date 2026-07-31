@@ -5853,6 +5853,7 @@ object SQLConf {
         "into an arbitrary LIMIT/OFFSET. When disabled (default), the ORDER BY is preserved so " +
         "the result is deterministic.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
