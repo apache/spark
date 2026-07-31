@@ -327,7 +327,7 @@ class ApproxTopKSuite extends SharedSparkSession {
     // sketch on that decoded String would collapse them into a single item with an inflated
     // count; keying on the raw sort-key bytes keeps them separate.
     val res = sql(
-      s"""SELECT approx_top_k(c, 3)
+      """SELECT approx_top_k(c, 3)
          |FROM (SELECT CAST(col AS STRING COLLATE UNICODE_CI) AS c
          |      FROM VALUES ('且'), ('且'), ('且'),
          |                  ('丕'), ('丕'), ('世') AS t(col))
