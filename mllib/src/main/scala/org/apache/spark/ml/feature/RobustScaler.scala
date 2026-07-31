@@ -235,7 +235,7 @@ class RobustScalerModel private[ml] (
   private[ml] def this() = this("", Vectors.empty, Vectors.empty)
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize()
+    var size = estimateMatadataSize
     if (range != null) {
       size += range.getSizeInBytes
     }

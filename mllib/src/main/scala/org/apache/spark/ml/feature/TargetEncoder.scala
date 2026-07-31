@@ -293,7 +293,7 @@ class TargetEncoderModel private[ml] (
   private[ml] def this() = this("", Array.empty)
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize()
+    var size = estimateMatadataSize
     // stats: Array[Map[Double, (Double, Double)]]
     size += SizeEstimator.estimate(stats)
     size

@@ -150,7 +150,7 @@ final class OneVsRestModel private[ml] (
   val numFeatures: Int = models.head.numFeatures
 
   private[spark] override def estimatedSize: Long = {
-    estimateMatadataSize() + SizeEstimator.estimate(labelMetadata) +
+    estimateMatadataSize + SizeEstimator.estimate(labelMetadata) +
       models.iterator.map(_.estimatedSize).sum
   }
 

@@ -72,7 +72,7 @@ class BucketedRandomProjectionLSHModel private[ml](
   private[ml] def this() = this("", Matrices.empty)
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize()
+    var size = estimateMatadataSize
     if (randMatrix != null) {
       size += randMatrix.getSizeInBytes
     }

@@ -72,7 +72,7 @@ class IsotonicRegressionSuite extends MLTest with DefaultReadWriteTest {
     val dataset = generateIsotonicInput(Seq(1, 2, 3, 1, 6, 17, 16, 17, 18))
     val model = new IsotonicRegression().fit(dataset)
 
-    val expectedSize = model.estimateMatadataSize() +
+    val expectedSize = model.estimateMatadataSize +
       SizeEstimator.estimate(model.boundaries.toArray) +
       SizeEstimator.estimate(model.predictions.toArray)
     assert(model.estimatedSize === expectedSize)

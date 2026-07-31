@@ -180,7 +180,7 @@ class BisectingKMeansModel private[ml] (
   override def summary: BisectingKMeansSummary = super.summary
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize()
+    var size = estimateMatadataSize
     if (parentModel != null) {
       // parentModel contains:
       // - root: ClusteringTreeNode containing centers, costs, and children.

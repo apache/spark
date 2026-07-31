@@ -297,7 +297,7 @@ class UnivariateFeatureSelectorModel private[ml](
 
   private[spark] override def estimatedSize: Long = {
     // selectedFeatures: Array[Int]
-    estimateMatadataSize() + SizeEstimator.estimate(selectedFeatures)
+    estimateMatadataSize + SizeEstimator.estimate(selectedFeatures)
   }
 
   /** @group setParam */

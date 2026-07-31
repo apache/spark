@@ -234,7 +234,7 @@ class FMClassifier @Since("3.0.0") (
   override def estimateModelSize(dataset: Dataset[_]): Long = {
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
 
-    var size = this.estimateMatadataSize()
+    var size = this.estimateMatadataSize
     size += Vectors.getDenseSize(numFeatures) // linear
     size += Matrices.getDenseSize(numFeatures, $(factorSize)) // factors
     size
@@ -315,7 +315,7 @@ class FMClassificationModel private[classification] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    var size = this.estimateMatadataSize()
+    var size = this.estimateMatadataSize
     if (this.linear != null) {
       size += this.linear.getSizeInBytes
     }

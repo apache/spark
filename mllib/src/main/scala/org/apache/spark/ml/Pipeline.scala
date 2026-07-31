@@ -323,7 +323,7 @@ class PipelineModel private[ml] (
   extends Model[PipelineModel] with MLWritable with Logging {
 
   private[spark] override def estimatedSize: Long = {
-    estimateMatadataSize() + stages.iterator.map {
+    estimateMatadataSize + stages.iterator.map {
       case model: Model[_] => model.estimatedSize
       // Non-model transformers are skipped because:
       // - ML Connect cache accounting counts only models.

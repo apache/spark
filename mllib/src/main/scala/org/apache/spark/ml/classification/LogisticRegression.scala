@@ -1034,7 +1034,7 @@ class LogisticRegression @Since("1.2.0") (
     val numClasses = DatasetUtils.getNumClasses(dataset, $(labelCol))
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
 
-    var size = this.estimateMatadataSize()
+    var size = this.estimateMatadataSize
     if (checkMultinomial(numClasses)) {
       size += Matrices.getDenseSize(numFeatures, numClasses) // coefficientMatrix
       size += Vectors.getDenseSize(numClasses) // interceptVector
@@ -1253,7 +1253,7 @@ class LogisticRegressionModel private[spark] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    var size = this.estimateMatadataSize()
+    var size = this.estimateMatadataSize
     if (this.coefficientMatrix != null) {
       size += this.coefficientMatrix.getSizeInBytes
     }

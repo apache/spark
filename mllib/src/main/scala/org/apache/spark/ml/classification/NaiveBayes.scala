@@ -350,7 +350,7 @@ class NaiveBayes @Since("1.5.0") (
     val numClasses = DatasetUtils.getNumClasses(dataset, $(labelCol))
     val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
 
-    var size = this.estimateMatadataSize()
+    var size = this.estimateMatadataSize
     size += Vectors.getDenseSize(numClasses) // pi
     size += Matrices.getDenseSize(numClasses, numFeatures) // theta
     $(modelType) match {
@@ -570,7 +570,7 @@ class NaiveBayesModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
-    var size = this.estimateMatadataSize()
+    var size = this.estimateMatadataSize
     if (this.pi != null) {
       size += this.pi.getSizeInBytes
     }

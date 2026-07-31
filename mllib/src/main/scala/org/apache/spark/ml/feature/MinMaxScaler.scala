@@ -159,7 +159,7 @@ class MinMaxScalerModel private[ml] (
   private[ml] def this() = this("", Vectors.empty, Vectors.empty)
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize()
+    var size = estimateMatadataSize
     if (originalMin != null) {
       size += originalMin.getSizeInBytes
     }
