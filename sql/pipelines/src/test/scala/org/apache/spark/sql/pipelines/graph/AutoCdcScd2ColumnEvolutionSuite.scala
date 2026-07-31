@@ -275,4 +275,65 @@ class AutoCdcScd2ColumnEvolutionSuite
       )
     )
   }
+
+  test("a field dropped inside an array<struct> element between runs is preserved on existing " +
+    "records and null on new ones (SCD2 is more permissive than SCD1 here)") {
+    val session = spark
+    import session.implicits._
+
+    // The array<struct> analog of the nested-struct-drop test above, and the counterpart to
+    // AutoCdcScd1SchemaEvolutionSuite's array<struct> case, which fails with
+    // INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA on `vals.element.b.d`. SCD2's
+    // allowMissingColumns recurses into arrays as well as structs, so it pads the dropped element
+    // field before the union/MERGE and reconciles additively. Default tracking is fine: the tracked
+    // set is the top-level name `vals`, unchanged when only a nested element field is dropped.
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, " +
+      s"vals ARRAY<STRUCT<a:INT,b:STRUCT<c:INT,d:INT>>>, $scd2MetadataDdl)"
+    )
+
+    val stream = MemoryStream[(Int, Long, Int, Int, Int)]
+    def buildCtx(includeD: Boolean): TestGraphRegistrationContext = {
+      val src = stream.toDF().toDF("id", "version", "a", "b_c", "b_d")
+      val inner = if (includeD) {
+        functions.struct(functions.col("b_c").as("c"), functions.col("b_d").as("d"))
+      } else {
+        functions.struct(functions.col("b_c").as("c"))
+      }
+      val projected = src.select(
+        functions.col("id"),
+        functions.col("version"),
+        functions.array(
+          functions.struct(functions.col("a"), inner.as("b"))
+        ).as("vals")
+      )
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projected,
+        keys = Seq("id"),
+        sequencing = functions.col("version"),
+        scdType = ScdType.Type2)
+    }
+
+    // Run #1 (wide): vals[0].b carries both c and d for key=1.
+    stream.addData((1, 1L, 1, 10, 100))
+    runPipeline(buildCtx(includeD = true))
+
+    // Run #2 (narrow): drop `d` from the element struct. The union pads the missing nested element
+    // field; key=1's closed record keeps d=100, and the newly-opened record has d=null.
+    stream.addData((1, 2L, 2, 200, 99))
+    runPipeline(buildCtx(includeD = false))
+
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.target")
+        .selectExpr("id", "version", "inline(vals) as (a, b)", "__START_AT", "__END_AT")
+        .selectExpr("id", "version", "a", "b.c", "b.d", "__START_AT", "__END_AT"),
+      Seq(
+        Row(1, 1L, 1, 10, 100, 1L, 2L),
+        Row(1, 2L, 2, 200, null, 2L, null)
+      )
+    )
+  }
 }
