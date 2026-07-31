@@ -1154,3 +1154,67 @@ SELECT date_trunc('NANOSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
 struct<date_trunc(NANOSECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789'):timestamp_ntz(9)>
 -- !query output
 NULL
+
+
+-- !query
+SELECT typeof(localtimestamp(9)), typeof(localtimestamp(8)), typeof(localtimestamp(7))
+-- !query schema
+struct<typeof(localtimestamp()):string,typeof(localtimestamp()):string,typeof(localtimestamp()):string>
+-- !query output
+timestamp_ntz(9)	timestamp_ntz(8)	timestamp_ntz(7)
+
+
+-- !query
+SELECT typeof(localtimestamp()), typeof(localtimestamp(6))
+-- !query schema
+struct<typeof(localtimestamp()):string,typeof(localtimestamp()):string>
+-- !query output
+timestamp_ntz	timestamp_ntz
+
+
+-- !query
+SELECT typeof(localtimestamp(8 + 1))
+-- !query schema
+struct<typeof(localtimestamp()):string>
+-- !query output
+timestamp_ntz(9)
+
+
+-- !query
+SELECT localtimestamp(9) = localtimestamp(9)
+-- !query schema
+struct<(localtimestamp() = localtimestamp()):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT localtimestamp(3)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "3",
+    "type" : "TIMESTAMP_NTZ"
+  }
+}
+
+
+-- !query
+SELECT localtimestamp(10)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "10",
+    "type" : "TIMESTAMP_NTZ"
+  }
+}

@@ -1244,3 +1244,61 @@ SELECT date_trunc('NANOSECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC
 -- !query analysis
 Project [date_trunc(NANOSECOND, 2020-01-01 04:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(NANOSECOND, TIMESTAMP_LTZ '2020-01-01 04:34:56.123456789')#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT typeof(current_timestamp(9)), typeof(current_timestamp(8)), typeof(current_timestamp(7))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(now(9)), typeof(now(6))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(current_timestamp()), typeof(current_timestamp(6))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(current_timestamp(7 + 2))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT current_timestamp(9) = current_timestamp(9), now(9) = current_timestamp(9)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT current_timestamp(3)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "3",
+    "type" : "TIMESTAMP_LTZ"
+  }
+}
+
+
+-- !query
+SELECT current_timestamp(10)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "10",
+    "type" : "TIMESTAMP_LTZ"
+  }
+}

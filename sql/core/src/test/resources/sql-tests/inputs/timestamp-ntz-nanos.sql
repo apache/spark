@@ -341,3 +341,16 @@ SELECT date_trunc('HOUR', '2020-01-01 12:34:56.123456789' :: timestamp_ntz(9));
 SELECT date_trunc('DAY', '2020-06-21 23:30:00.000000123' :: timestamp_ntz(7));
 -- An unsupported (sub-microsecond) unit yields NULL; the result still carries the nanos type.
 SELECT date_trunc('NANOSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789');
+
+-- SPARK-57837: localtimestamp(p) with a nanosecond precision returns TIMESTAMP_NTZ(p). The values
+-- are non-deterministic, so only the (deterministic) result type and query-stable self-equality
+-- are checked. Precision 6 keeps the standard microsecond TIMESTAMP_NTZ.
+SELECT typeof(localtimestamp(9)), typeof(localtimestamp(8)), typeof(localtimestamp(7));
+SELECT typeof(localtimestamp()), typeof(localtimestamp(6));
+-- A foldable (constant) precision expression is accepted.
+SELECT typeof(localtimestamp(8 + 1));
+-- All references to localtimestamp(p) within a query see the same value.
+SELECT localtimestamp(9) = localtimestamp(9);
+-- Out-of-range precision is rejected.
+SELECT localtimestamp(3);
+SELECT localtimestamp(10);

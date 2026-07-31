@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, Tim
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
@@ -197,64 +197,25 @@ abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallbac
 }
 
 /**
- * Returns the current timestamp at the start of query evaluation.
+ * Returns the current timestamp at the start of query evaluation. The no-argument micro form
+ * registered as `current_timestamp` / `now`; see [[CurrentTimestampExpressionBuilder]] for the
+ * `current_timestamp(precision)` / `now(precision)` variants.
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_() - Returns the current timestamp at the start of query evaluation. All calls of current_timestamp within the same query return the same value.
-
-    _FUNC_ - Returns the current timestamp at the start of query evaluation.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_();
-       2020-04-25 15:49:11.914
-      > SELECT _FUNC_;
-       2020-04-25 15:49:11.914
-  """,
-  note = """
-    The syntax without braces has been supported since 2.0.1.
-  """,
-  group = "datetime_funcs",
-  since = "1.5.0")
-// scalastyle:on line.size.limit
 case class CurrentTimestamp() extends CurrentTimestampLike {
   override def prettyName: String = "current_timestamp"
 }
 
-@ExpressionDescription(
-  usage = "_FUNC_() - Returns the current timestamp at the start of query evaluation.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_();
-       2020-04-25 15:49:11.914
-  """,
-  group = "datetime_funcs",
-  since = "1.6.0")
 case class Now() extends CurrentTimestampLike {
   override def prettyName: String = "now"
 }
 
 /**
- * Returns the current timestamp without time zone at the start of query evaluation.
+ * Returns the current timestamp without time zone at the start of query evaluation. The
+ * no-argument micro form registered as `localtimestamp`; see
+ * [[LocalTimestampExpressionBuilder]] for the `localtimestamp(precision)` variant.
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_() - Returns the current timestamp without time zone at the start of query evaluation. All calls of localtimestamp within the same query return the same value.
-
-    _FUNC_ - Returns the current local date-time at the session time zone at the start of query evaluation.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_();
-       2020-04-25 15:49:11.914
-  """,
-  group = "datetime_funcs",
-  since = "3.4.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
   with TimeZoneAwareExpression with CodegenFallback {
   def this() = this(None)
@@ -266,6 +227,185 @@ case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpress
     copy(timeZoneId = Option(timeZoneId))
   override def eval(input: InternalRow): Any = localDateTimeToMicros(LocalDateTime.now(zoneId))
   override def prettyName: String = "localtimestamp"
+}
+
+/**
+ * Returns the current timestamp with local time zone at the start of query evaluation, as a
+ * nanosecond-precision `TIMESTAMP_LTZ(precision)` (`precision` in `[7, 9]`). This is the
+ * nanosecond counterpart of [[CurrentTimestamp]] / [[Now]] and is produced by
+ * [[CurrentTimestampExpressionBuilder]] when `current_timestamp(p)` / `now(p)` is called with a
+ * nanosecond precision. Like the microsecond current-timestamp expressions it is foldable and
+ * gets constant folded by [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]]; there
+ * is no code generation.
+ */
+case class CurrentTimestampNanos(precision: Int) extends CurrentTimestampLike {
+  override def dataType: DataType = TimestampLTZNanosType(precision)
+  override def eval(input: InternalRow): Any =
+    instantToTimestampNanos(java.time.Instant.now(), precision)
+  override def prettyName: String = "current_timestamp"
+}
+
+/**
+ * Returns the current timestamp without time zone at the start of query evaluation, as a
+ * nanosecond-precision `TIMESTAMP_NTZ(precision)` (`precision` in `[7, 9]`). This is the
+ * nanosecond counterpart of [[LocalTimestamp]] and is produced by
+ * [[LocalTimestampExpressionBuilder]] when `localtimestamp(p)` is called with a nanosecond
+ * precision. Like [[LocalTimestamp]] it is time-zone aware (the session time zone determines the
+ * wall-clock value), foldable, and gets constant folded by
+ * [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]]; there is no code generation.
+ */
+case class LocalTimestampNanos(precision: Int, timeZoneId: Option[String] = None)
+  extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
+  def this(precision: Int) = this(precision, None)
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def dataType: DataType = TimestampNTZNanosType(precision)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+  override def eval(input: InternalRow): Any =
+    localDateTimeToTimestampNanos(LocalDateTime.now(zoneId), precision)
+  override def prettyName: String = "localtimestamp"
+}
+
+/**
+ * Shared precision handling for the `current_timestamp(p)` / `now(p)` / `localtimestamp(p)`
+ * expression builders.
+ */
+private[expressions] object CurrentTimestampPrecision {
+  /**
+   * Validates the foldable integer precision argument `p` of a current-timestamp function and
+   * returns it. `p == 6` selects the historical microsecond type; `p` in `[7, 9]` selects the
+   * nanosecond type (which requires `spark.sql.timestampNanosTypes.enabled`). Any other value is
+   * rejected with `INVALID_TIMESTAMP_PRECISION`. The `typeName` (`TIMESTAMP_LTZ` / `TIMESTAMP_NTZ`)
+   * is used in the precision / feature-flag error messages, matching the `TIMESTAMP(p)` type
+   * parser.
+   */
+  def validate(funcName: String, precision: Expression, typeName: String): Int = {
+    if (!precision.foldable) {
+      throw QueryCompilationErrors.nonFoldableArgumentError(
+        funcName, "precision", precision.dataType)
+    }
+    if (!precision.dataType.isInstanceOf[IntegralType]) {
+      throw QueryCompilationErrors.unexpectedInputDataTypeError(
+        funcName, 1, IntegerType, precision)
+    }
+    val value = precision.eval()
+    if (value == null) {
+      throw QueryCompilationErrors.unexpectedNullError("precision", precision)
+    }
+    val p = value.asInstanceOf[Number].intValue()
+    // Reject out-of-range precisions before the feature-flag check so the error is always
+    // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED (mirrors the TIMESTAMP(p) type parser).
+    if (p != 6 &&
+      (p < TimestampLTZNanosType.MIN_PRECISION || p > TimestampLTZNanosType.MAX_PRECISION)) {
+      throw DataTypeErrors.invalidTimestampPrecisionError(p.toString, typeName)
+    }
+    if (p != 6) {
+      DataTypeErrors.checkTimestampNanosTypesEnabled()
+    }
+    p
+  }
+}
+
+/**
+ * Builds `current_timestamp` / `now`. The no-argument form keeps the historical microsecond
+ * `TIMESTAMP` type ([[CurrentTimestamp]] / [[Now]]); the single-argument form accepts a foldable
+ * integer precision `p`, returning the microsecond `TIMESTAMP` for `p == 6` and a nanosecond
+ * `TIMESTAMP_LTZ(p)` for `p` in `[7, 9]` (gated behind `spark.sql.timestampNanosTypes.enabled`).
+ * The precision handling mirrors the `TIMESTAMP_LTZ(p)` type parser and `current_time(p)`.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current timestamp at the start of query evaluation. All calls of current_timestamp within the same query return the same value.
+
+    _FUNC_ - Returns the current timestamp at the start of query evaluation.
+
+    _FUNC_(precision) - Returns the current timestamp at the start of query evaluation, with the given fractional-seconds precision. A precision in [7, 9] returns a nanosecond-precision TIMESTAMP_LTZ(precision) and requires spark.sql.timestampNanosTypes.enabled to be true; precision 6 returns the standard microsecond TIMESTAMP.
+  """,
+  arguments = """
+    Arguments:
+      * precision - An optional integer literal. Either 6 (the microsecond TIMESTAMP default) or a
+                    value in [7, 9] selecting a nanosecond-precision TIMESTAMP_LTZ(precision).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+      > SELECT _FUNC_;
+       2020-04-25 15:49:11.914
+      > SELECT _FUNC_(9);
+       2020-04-25 15:49:11.914120463
+  """,
+  note = """
+    The syntax without braces has been supported since 2.0.1.
+  """,
+  group = "datetime_funcs",
+  since = "1.5.0")
+// scalastyle:on line.size.limit
+object CurrentTimestampExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions.length match {
+      case 0 =>
+        // Preserve the exact historical expression so `now` still maps to `Now` and rendering /
+        // pattern matching are unchanged.
+        if (funcName.equalsIgnoreCase("now")) Now() else CurrentTimestamp()
+      case 1 =>
+        val p = CurrentTimestampPrecision.validate(funcName, expressions.head, "TIMESTAMP_LTZ")
+        if (p == 6) {
+          if (funcName.equalsIgnoreCase("now")) Now() else CurrentTimestamp()
+        } else {
+          CurrentTimestampNanos(p)
+        }
+      case n =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(0, 1), n)
+    }
+  }
+}
+
+/**
+ * Builds `localtimestamp`. The no-argument form keeps the historical microsecond `TIMESTAMP_NTZ`
+ * type ([[LocalTimestamp]]); the single-argument form accepts a foldable integer precision `p`,
+ * returning the microsecond `TIMESTAMP_NTZ` for `p == 6` and a nanosecond `TIMESTAMP_NTZ(p)` for
+ * `p` in `[7, 9]` (gated behind `spark.sql.timestampNanosTypes.enabled`). The precision handling
+ * mirrors the `TIMESTAMP_NTZ(p)` type parser and `current_time(p)`.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current timestamp without time zone at the start of query evaluation. All calls of localtimestamp within the same query return the same value.
+
+    _FUNC_ - Returns the current local date-time at the session time zone at the start of query evaluation.
+
+    _FUNC_(precision) - Returns the current local date-time with the given fractional-seconds precision. A precision in [7, 9] returns a nanosecond-precision TIMESTAMP_NTZ(precision) and requires spark.sql.timestampNanosTypes.enabled to be true; precision 6 returns the standard microsecond TIMESTAMP_NTZ.
+  """,
+  arguments = """
+    Arguments:
+      * precision - An optional integer literal. Either 6 (the microsecond TIMESTAMP_NTZ default)
+                    or a value in [7, 9] selecting a nanosecond-precision TIMESTAMP_NTZ(precision).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+      > SELECT _FUNC_(9);
+       2020-04-25 15:49:11.914120463
+  """,
+  group = "datetime_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit
+object LocalTimestampExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions.length match {
+      case 0 => LocalTimestamp()
+      case 1 =>
+        val p = CurrentTimestampPrecision.validate(funcName, expressions.head, "TIMESTAMP_NTZ")
+        if (p == 6) LocalTimestamp() else LocalTimestampNanos(p)
+      case n =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(0, 1), n)
+    }
+  }
 }
 
 /**
