@@ -157,7 +157,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
 
   /** Supported values for Param [[optimizer]]. */
   @Since("1.6.0")
-  final val supportedOptimizers: Array[String] = Array("online", "em")
+  final val supportedOptimizers: Array[String] = LDA.supportedOptimizers
 
   /**
    * Optimizer or inference algorithm used to estimate the LDA model.
@@ -180,7 +180,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   final val optimizer = new Param[String](this, "optimizer", "Optimizer or inference" +
     " algorithm used to estimate the LDA model. Supported: " + supportedOptimizers.mkString(", "),
-    (value: String) => supportedOptimizers.contains(value.toLowerCase(Locale.ROOT)))
+    (value: String) => LDA.supportedOptimizers.contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("1.6.0")
@@ -1073,6 +1073,8 @@ class LDA @Since("1.6.0") (
 
 @Since("2.0.0")
 object LDA extends MLReadable[LDA] {
+
+  private[clustering] val supportedOptimizers: Array[String] = Array("online", "em")
 
   /** Get dataset for spark.mllib LDA */
   private[clustering] def getOldDataset(
