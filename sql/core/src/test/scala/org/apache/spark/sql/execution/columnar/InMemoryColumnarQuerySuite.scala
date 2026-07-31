@@ -661,10 +661,19 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
         }.get
 
         assert(relation.hasSelectivePredicate)
+        assert(!relation.mayHaveUsableMaterializedStats)
+        assert(relation.materializedMetadata.isEmpty)
         assert(!relation.isOutputRepeatable)
         assert(!relation.statsAvailable)
         relation.cacheBuilder.cachedColumnBuffers.count()
 
+        val metadata = relation.materializedMetadata.get
+        assert(metadata.rowCount == 10L)
+        assert(metadata.sizeInBytes == relation.computeStats().sizeInBytes)
+        assert(metadata.isOutputRepeatable)
+        assert(metadata.isDurable == expected)
+        assert(metadata.statsAvailable == expected)
+        assert(relation.mayHaveUsableMaterializedStats == expected)
         assert(relation.isOutputRepeatable)
         assert(relation.statsAvailable == expected)
         assert(relation.computeStats().rowCount.contains(10L))
@@ -697,6 +706,7 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
 
         assert(blockManager.getStatus(blockId).nonEmpty)
         assert(builder.loadedMaterializedStats.exists(_._1 == 0L))
+        assert(relation.materializedMetadata.exists(_.rowCount == 0L))
 
         System.setProperty(property, "true")
         blockManager.removeBlock(blockId)
@@ -705,6 +715,7 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
         assert(blockManager.getStatus(blockId).nonEmpty)
         assert(builder.materializedRowCount == 8L)
         assert(builder.loadedMaterializedStats.exists(_._1 == 8L))
+        assert(relation.materializedMetadata.exists(_.rowCount == 8L))
 
         withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
           checkAnswer(cached.groupBy("id").count(), (0L until 8L).map(id => Row(id, 1L)))
@@ -780,11 +791,16 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
           withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
             builder.cachedColumnBuffers.count()
           }
+          assert(!relation.materializedMetadata.get.isOutputRepeatable)
+          assert(!relation.mayHaveUsableMaterializedStats)
           assert(!relation.isOutputRepeatable)
           assert(!relation.statsAvailable)
 
           builder.clearCache(blocking = true)
+          assert(relation.materializedMetadata.isEmpty)
           builder.cachedColumnBuffers.count()
+          assert(relation.materializedMetadata.get.statsAvailable)
+          assert(relation.mayHaveUsableMaterializedStats)
           assert(relation.isOutputRepeatable)
           assert(relation.statsAvailable)
         } finally {

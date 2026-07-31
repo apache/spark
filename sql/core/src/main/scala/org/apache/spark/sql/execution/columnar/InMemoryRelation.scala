@@ -338,8 +338,14 @@ case class CachedRDDBuilder(
     }
   }
 
-  private[sql] def repeatableMaterializedStats: Option[(Long, Long)] = synchronized {
-    if (isCachedPlanRepeatable) loadedMaterializedStats else None
+  private[sql] def materializedMetadata: Option[logical.MaterializedLeafMetadata] = synchronized {
+    loadedMaterializedStats.map { case (rowCount, sizeInBytes) =>
+      logical.MaterializedLeafMetadata(
+        rowCount = rowCount,
+        sizeInBytes = sizeInBytes,
+        isOutputRepeatable = isCachedPlanRepeatable,
+        isDurable = storageLevel.useDisk)
+    }
   }
 
   // Reported row count / size for the cache's statistics: exact and de-duplicated, folded over the
@@ -654,10 +660,14 @@ case class InMemoryRelation(
 
   def cachedPlan: SparkPlan = cacheBuilder.cachedPlan
 
-  override def statsAvailable: Boolean =
-    cacheBuilder.storageLevel.useDisk && cacheBuilder.repeatableMaterializedStats.isDefined
+  override def mayHaveUsableMaterializedStats: Boolean =
+    cacheBuilder.storageLevel.useDisk && cacheBuilder.isCachedPlanRepeatable
 
-  override def isOutputRepeatable: Boolean = cacheBuilder.repeatableMaterializedStats.isDefined
+  override def materializedMetadata: Option[logical.MaterializedLeafMetadata] =
+    cacheBuilder.materializedMetadata
+
+  override def isOutputRepeatable: Boolean =
+    cacheBuilder.isCachedPlanRepeatable && materializedMetadata.exists(_.isOutputRepeatable)
 
   override def hasSelectivePredicate: Boolean = cacheBuilder.hasSelectivePredicate
 

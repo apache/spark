@@ -41,7 +41,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       key: Expression,
       plan: LogicalPlan,
       useMaterializedThreshold: Boolean,
-      materializedRowCount: Option[BigInt] = None)
+      materializedRowCount: Option[BigInt] = None,
+      materializedSizeInBytes: Option[BigInt] = None)
 
   private def injectFilter(
       filterApplicationSideKey: Expression,
@@ -66,7 +67,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       conf.runtimeFilterCreationSideThreshold
     }
     // Skip if the filter creation side is too big
-    if (filterCreationSidePlan.stats.sizeInBytes > creationSideThreshold) {
+    if (filterCreationSide.materializedSizeInBytes
+        .getOrElse(filterCreationSidePlan.stats.sizeInBytes) > creationSideThreshold) {
       return filterApplicationSidePlan
     }
     val rowCount = filterCreationSide.materializedRowCount
@@ -192,27 +194,41 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           findExpressionAndTrackLineageDown(targetKey, currentPlan).exists {
             case (trackedKey, _) => isSimpleExpression(trackedKey)
           }
-        if (allowMaterializedCache && leaf.statsAvailable && leaf.isOutputRepeatable &&
-            safeLineage && currentPlan.stats.sizeInBytes <=
-              conf.runtimeFilterMaterializedCreationSideThreshold) {
-          leaf.stats.rowCount.filter { rowCount =>
-            rowCount <= conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS) &&
-              (hasHitSelectiveFilter || leaf.hasSelectivePredicate ||
-                applicationDistinctCount.exists(_ > rowCount))
-          }.map { rowCount =>
-            FilterCreationSide(
-              targetKey,
-              currentPlan,
-              useMaterializedThreshold = true,
-              materializedRowCount = Some(rowCount))
+        val materializedMetadata = if (allowMaterializedCache && safeLineage &&
+            leaf.mayHaveUsableMaterializedStats) {
+          leaf.materializedMetadata.filter(_.statsAvailable).flatMap { metadata =>
+            val creationSize = if (currentPlan eq leaf) {
+              metadata.sizeInBytes
+            } else {
+              currentPlan.stats.sizeInBytes
+            }
+            Option.when(creationSize <= conf.runtimeFilterMaterializedCreationSideThreshold) {
+              metadata -> creationSize
+            }
           }
-        } else if (hasHitSelectiveFilter) {
-          Some(FilterCreationSide(
-            targetKey,
-            currentPlan,
-            useMaterializedThreshold = false))
         } else {
           None
+        }
+        materializedMetadata match {
+          case Some((metadata, creationSize)) =>
+            val rowCount = metadata.rowCount
+            Option.when(
+              rowCount <= conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS) &&
+                (hasHitSelectiveFilter || leaf.hasSelectivePredicate ||
+                  applicationDistinctCount.exists(_ > rowCount))) {
+              FilterCreationSide(
+                targetKey,
+                currentPlan,
+                useMaterializedThreshold = true,
+                materializedRowCount = Some(rowCount),
+                materializedSizeInBytes = Some(creationSize))
+            }
+          case None if hasHitSelectiveFilter =>
+            Some(FilterCreationSide(
+              targetKey,
+              currentPlan,
+              useMaterializedThreshold = false))
+          case _ => None
         }
       case _: LeafNode if hasHitSelectiveFilter =>
         Some(FilterCreationSide(

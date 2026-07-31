@@ -326,6 +326,7 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           }
 
           val before = cachedRelation
+          assert(before.materializedMetadata.isEmpty)
           assert(!before.statsAvailable)
           assert(getNumBloomFilters(sql(query).queryExecution.optimizedPlan) == 0)
 
@@ -335,11 +336,15 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
             buffers,
             (iterator: Iterator[CachedBatch]) => iterator.size,
             Seq(0))
+          assert(before.materializedMetadata.isEmpty)
           assert(!before.statsAvailable)
           assert(getNumBloomFilters(sql(query).queryExecution.optimizedPlan) == 0)
 
           assert(spark.table(cacheName).count() == 1)
           val materialized = cachedRelation
+          val metadata = materialized.materializedMetadata.get
+          assert(metadata.rowCount == 1L)
+          assert(metadata.statsAvailable)
           assert(materialized.statsAvailable)
           assert(materialized.isOutputRepeatable)
           assert(materialized.hasSelectivePredicate)
@@ -435,11 +440,17 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
           assert(cachedRelation.hasSelectivePredicate)
 
           val projectedKeys = spark.table(cacheName).selectExpr("c2 + 1 AS projected_key")
-          assert(projectedKeys.queryExecution.optimizedPlan.stats.rowCount.isEmpty)
+          val projectedPlan = projectedKeys.queryExecution.optimizedPlan
+          assert(projectedPlan.stats.rowCount.isEmpty)
+          assert(projectedPlan.stats.sizeInBytes < cachedRelation.stats.sizeInBytes)
 
           val fact = spark.table("bf1")
           val query = fact.join(projectedKeys, fact("c1") === projectedKeys("projected_key"))
-          val plan = query.queryExecution.optimizedPlan
+          val plan = withSQLConf(
+              SQLConf.RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD.key ->
+                projectedPlan.stats.sizeInBytes.toString) {
+            query.queryExecution.optimizedPlan
+          }
           assert(getNumBloomFilters(plan) == 1)
 
           val bloomAggregates = plan.collect {
