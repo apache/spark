@@ -50,7 +50,7 @@ import org.apache.spark.sql.types._
  * (UTC-08:00, no DST on 2020-01-01) so the `TIMESTAMP_LTZ` (`Instant`) values render
  * deterministically in wall-clock time. The two subclasses run every test with ANSI mode on/off.
  */
-abstract class TimestampNanosRenderingSuiteBase extends SharedSparkSession {
+abstract class TimestampNanosRenderingSuiteBase extends QueryTest with SharedSparkSession {
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "America/Los_Angeles")
