@@ -51,9 +51,9 @@ class AutoCdcAuxiliaryTableSuite extends SparkFunSuite {
   // concern -- SQL identifier quoting (backticks) is never part of the stored bytes.
 
   private def assertKeyColumnNamesRoundTrip(names: Seq[String]): Unit = {
-    val json = AutoCdcAuxiliaryTable.serializeKeyColumnNames(names)
+    val json = AutoCdcAuxiliaryTable.serializeColumnNames(names)
     assert(
-      AutoCdcAuxiliaryTable.parseKeyColumnNames(json).contains(names),
+      AutoCdcAuxiliaryTable.parseColumnNames(json).contains(names),
       s"round-trip failed: input=${names}, serialized=${json}"
     )
   }
@@ -66,19 +66,19 @@ class AutoCdcAuxiliaryTableSuite extends SparkFunSuite {
     override def properties(): java.util.Map[String, String] = props.asJava
   }
 
-  test("serializeKeyColumnNames/parseKeyColumnNames round-trip preserves plain ASCII names") {
+  test("serializeColumnNames/parseColumnNames round-trip preserves plain ASCII names") {
     assertKeyColumnNamesRoundTrip(Seq("id"))
     assertKeyColumnNamesRoundTrip(Seq("id", "region"))
     assertKeyColumnNamesRoundTrip(Seq("id", "region", "country"))
   }
 
-  test("serializeKeyColumnNames/parseKeyColumnNames round-trip preserves the empty list") {
+  test("serializeColumnNames/parseColumnNames round-trip preserves the empty list") {
     // Empty key sets are not user-reachable (AutoCdcMergeFlow rejects them upstream), but the
     // helpers themselves must round-trip a `[]` JSON array faithfully.
     assertKeyColumnNamesRoundTrip(Seq.empty)
   }
 
-  test("serializeKeyColumnNames/parseKeyColumnNames preserves names containing JSON-escaped " +
+  test("serializeColumnNames/parseColumnNames preserves names containing JSON-escaped " +
     "characters (quote, backslash, control chars)") {
     // JSON serializer must escape `"` -> `\"`, `\` -> `\\`, and control chars; the parser
     // must invert those escapes and yield the original literal bytes.
@@ -90,7 +90,7 @@ class AutoCdcAuxiliaryTableSuite extends SparkFunSuite {
     assertKeyColumnNamesRoundTrip(Seq("a\"b\\c\nd"))
   }
 
-  test("serializeKeyColumnNames/parseKeyColumnNames preserves names containing characters " +
+  test("serializeColumnNames/parseColumnNames preserves names containing characters " +
     "that JSON does not escape (single quote, dot, space, backtick)") {
     // JSON does not escape these, but they are common in real-world identifiers (especially
     // when users backtick-quote at the API boundary). They must flow through verbatim.
@@ -103,18 +103,18 @@ class AutoCdcAuxiliaryTableSuite extends SparkFunSuite {
     assertKeyColumnNamesRoundTrip(Seq("it's", "name with spaces", "a.b.c", "back`tick"))
   }
 
-  test("parseKeyColumnNames returns None for inputs that are not a JSON array of strings") {
+  test("parseColumnNames returns None for inputs that are not a JSON array of strings") {
     // None of these are a top-level JSON array of strings; the parser must reject every shape
     // with `None` so callers can surface a structured INTERNAL_ERROR with consistent wording.
-    assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("not-json").isEmpty)
-    assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("").isEmpty)
-    assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("\"id\"").isEmpty)        // bare string
-    assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("null").isEmpty)
-    assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("{\"id\": 1}").isEmpty)   // object
-    assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("[1, 2, 3]").isEmpty)     // numbers
-    assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("[\"id\", 1]").isEmpty)   // mixed types
-    assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("[\"id\", null]").isEmpty)
-    assert(AutoCdcAuxiliaryTable.parseKeyColumnNames("[[\"id\"]]").isEmpty)    // nested array
+    assert(AutoCdcAuxiliaryTable.parseColumnNames("not-json").isEmpty)
+    assert(AutoCdcAuxiliaryTable.parseColumnNames("").isEmpty)
+    assert(AutoCdcAuxiliaryTable.parseColumnNames("\"id\"").isEmpty)        // bare string
+    assert(AutoCdcAuxiliaryTable.parseColumnNames("null").isEmpty)
+    assert(AutoCdcAuxiliaryTable.parseColumnNames("{\"id\": 1}").isEmpty)   // object
+    assert(AutoCdcAuxiliaryTable.parseColumnNames("[1, 2, 3]").isEmpty)     // numbers
+    assert(AutoCdcAuxiliaryTable.parseColumnNames("[\"id\", 1]").isEmpty)   // mixed types
+    assert(AutoCdcAuxiliaryTable.parseColumnNames("[\"id\", null]").isEmpty)
+    assert(AutoCdcAuxiliaryTable.parseColumnNames("[[\"id\"]]").isEmpty)    // nested array
   }
 
   test("validateNoScdTypeDrift accepts an auxiliary table whose recorded SCD type matches") {
@@ -170,7 +170,7 @@ class AutoCdcAuxiliaryTableSuite extends SparkFunSuite {
   private def auxTableWithTrackHistory(names: Seq[String]): Table =
     auxTableWithProperties(Map(
       AutoCdcAuxiliaryTable.trackHistoryColumnNamesProperty ->
-        AutoCdcAuxiliaryTable.serializeKeyColumnNames(names)))
+        AutoCdcAuxiliaryTable.serializeColumnNames(names)))
 
   test("validateNoTrackHistoryDrift is a no-op when the expected column set is None") {
     // A None expected set means the flow does not constrain track-history (SCD1, or an SCD2 flow

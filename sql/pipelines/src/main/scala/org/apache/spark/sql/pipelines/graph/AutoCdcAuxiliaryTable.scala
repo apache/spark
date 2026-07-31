@@ -71,20 +71,20 @@ object AutoCdcAuxiliaryTable {
     s"${PipelinesTableProperties.pipelinesPrefix}autocdc.trackHistoryColumnNames"
 
   /**
-   * Serialize key column names to the JSON form stored at [[keyColumnNamesProperty]].
-   * Round-trips an empty list as `[]`; callers are expected to enforce a non-empty key set
-   * upstream.
+   * A JSON string-array codec for column-name lists persisted as auxiliary-table properties (used
+   * for both [[keyColumnNamesProperty]] and [[trackHistoryColumnNamesProperty]]). Round-trips an
+   * empty list as `[]` -- both an empty key set and an empty track-history set are meaningful to
+   * some caller, so no non-empty invariant is assumed here.
    */
-  private[graph] def serializeKeyColumnNames(names: Seq[String]): String = {
+  private[graph] def serializeColumnNames(names: Seq[String]): String = {
     compact(JArray(names.map(JString(_)).toList))
   }
 
   /**
-   * Parse a [[keyColumnNamesProperty]] value. `None` if it is not a JSON array of strings.
-   * Round-trips an empty list as `[]`; callers are expected to enforce a non-empty key set
-   * upstream.
+   * Parse a value written by [[serializeColumnNames]]. `None` if it is not a JSON array of strings.
+   * Round-trips an empty list as `[]` (see [[serializeColumnNames]]).
    */
-  private[graph] def parseKeyColumnNames(raw: String): Option[Seq[String]] = {
+  private[graph] def parseColumnNames(raw: String): Option[Seq[String]] = {
     val parsed = try Some(parse(raw)) catch { case NonFatal(_) => None }
     parsed.flatMap {
       case JArray(elems) =>
@@ -173,7 +173,7 @@ object AutoCdcAuxiliaryTable {
       Map(scdTypePropertyKey -> ScdType.Type1.label) ++
       // Persist the AutoCDC key column names as a JSON list; immutable post-creation (full-refresh
       // is the only way to change it).
-      Map(keyColumnNamesProperty -> serializeKeyColumnNames(keyFields.map(_.name))) ++
+      Map(keyColumnNamesProperty -> serializeColumnNames(keyFields.map(_.name))) ++
       // Inherit the target's format so MERGE semantics line up. When unspecified, omit the provider
       // so the catalog falls back to its default.
       targetTable.format.map(TableCatalog.PROP_PROVIDER -> _)
@@ -256,10 +256,10 @@ object AutoCdcAuxiliaryTable {
       Map(scdTypePropertyKey -> ScdType.Type2.label) ++
       // Persist the AutoCDC key column names as a JSON list; immutable post-creation (full-refresh
       // is the only way to change it).
-      Map(keyColumnNamesProperty -> serializeKeyColumnNames(keyFields.map(_.name))) ++
+      Map(keyColumnNamesProperty -> serializeColumnNames(keyFields.map(_.name))) ++
       // Persist the resolved track-history column names; a change reinterprets already-reconciled
       // history, so it is immutable post-creation (full-refresh is the only way to change it).
-      Map(trackHistoryColumnNamesProperty -> serializeKeyColumnNames(trackHistoryColumnNames)) ++
+      Map(trackHistoryColumnNamesProperty -> serializeColumnNames(trackHistoryColumnNames)) ++
       // Inherit the target's format so MERGE semantics line up. When unspecified, omit the provider
       // so the catalog falls back to its default.
       targetTable.format.map(TableCatalog.PROP_PROVIDER -> _)
@@ -481,7 +481,7 @@ object AutoCdcAuxiliaryTable {
           )
         )
       }
-      val recordedNames = parseKeyColumnNames(rawRecorded).getOrElse {
+      val recordedNames = parseColumnNames(rawRecorded).getOrElse {
         throw new AnalysisException(
           errorClass = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MALFORMED",
           messageParameters = Map(
@@ -527,7 +527,7 @@ object AutoCdcAuxiliaryTable {
         )
       )
     }
-    parseKeyColumnNames(rawKeyColumnNamesStr).getOrElse {
+    parseColumnNames(rawKeyColumnNamesStr).getOrElse {
       throw new AnalysisException(
         errorClass = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MALFORMED",
         messageParameters = Map(

@@ -490,6 +490,13 @@ class AutoCdcConfigDriftSuite
         "tableName" -> targetName,
         "expectedTrackHistoryColumns" -> "name, city, seq",
         "recordedTrackHistoryColumns" -> "name, seq"))
+
+    // The drift check runs before the target's schema is evolved, so the rejected run must leave
+    // the target untouched: `city` must NOT have been added. (Were it added, the "correct the
+    // flow" remedy would then wedge the pipeline on a column-count mismatch during reconciliation.)
+    assert(
+      !spark.table(s"$catalog.$namespace.target").schema.fieldNames.contains("city"),
+      "rejected run must not have evolved the target schema to add `city`")
   }
 
   test("dropping a source column under default (all-column) tracking triggers " +
