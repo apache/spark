@@ -391,7 +391,7 @@ class CatalystTranspiler(AbstractTranspiler):
                 if isinstance(op, ast.Add) and lc == rc:
                     return lc  # str + str -> str, num + num -> num
                 if isinstance(op, ast.Mult):
-                    if lc == "numeric" and rc == "numeric":
+                    if {lc, rc} == {"numeric", "numeric"}:
                         return "numeric"
                     if {lc, rc} == {"numeric", "string"}:
                         return "string"  # str * int / int * str -> repeat
