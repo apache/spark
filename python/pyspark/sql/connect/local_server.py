@@ -259,13 +259,13 @@ class LocalConnectServer:
         return stopped
 
 
-def startup_seed_conf(opts: Dict[str, Any]) -> Dict[str, Any]:
-    """Compute startup confs using the same merge as the in-process server path."""
-    conf: Dict[str, Any] = {}
-    for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
-        conf = json.loads(os.environ["PYSPARK_REMOTE_INIT_CONF_{}".format(i)])
-    conf.update(opts)
-    for k in list(conf):
+def _strip_launcher_conf(conf: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop keys the launcher sets itself (master, binding port, auth token) and the
+    ``spark.local.connect.*`` opt-in keys, returning a new dict. Idempotent, so it is safe to
+    apply to a conf that is already sanitized.
+    """
+    stripped = dict(conf)
+    for k in list(stripped):
         if k in (
             "spark.remote",
             "spark.api.mode",
@@ -273,8 +273,19 @@ def startup_seed_conf(opts: Dict[str, Any]) -> Dict[str, Any]:
             "spark.connect.authenticate.token",
             "spark.connect.grpc.binding.port",
         ) or k.startswith("spark.local.connect."):
-            conf.pop(k)
-    return conf
+            stripped.pop(k)
+    return stripped
+
+
+def startup_seed_conf(opts: Dict[str, Any]) -> Dict[str, Any]:
+    """Compute startup confs using the same merge as the in-process server path, then strip
+    the keys the launcher manages (see ``_strip_launcher_conf``).
+    """
+    conf: Dict[str, Any] = {}
+    for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
+        conf = json.loads(os.environ["PYSPARK_REMOTE_INIT_CONF_{}".format(i)])
+    conf.update(opts)
+    return _strip_launcher_conf(conf)
 
 
 class ServerLauncher:
@@ -349,14 +360,18 @@ class ServerLauncher:
                 return free_port()
 
     def _seed_conf(self) -> Dict[str, Any]:
-        """Startup confs for the new server, merged like the in-process
-        ``_start_connect_server`` merges ``PYSPARK_REMOTE_INIT_CONF_*`` with the builder
-        opts, minus the keys the launcher sets itself and the ``spark.local.connect.*``
-        opt-in keys. Only the run that starts the server can seed static confs; later runs
-        find the JVM already warm.
+        """Startup confs for the new server, minus the keys the launcher sets itself and the
+        ``spark.local.connect.*`` opt-in keys. Only the run that starts the server can seed
+        static confs; later runs find the JVM already warm.
+
+        With no ``seed_conf`` override, this merges ``PYSPARK_REMOTE_INIT_CONF_*`` with the
+        builder opts like the in-process ``_start_connect_server`` does. When an override is
+        given, it is used verbatim instead of the merge. Either way the result is run through
+        ``_strip_launcher_conf``, so the launcher-managed keys never reach
+        ``--properties-file`` even if a caller passes raw opts as the override.
         """
         if self._seed_override is not None:
-            return dict(self._seed_override)
+            return _strip_launcher_conf(self._seed_override)
         return startup_seed_conf(self._opts)
 
     @contextlib.contextmanager
