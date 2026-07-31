@@ -606,6 +606,45 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-58389: recaching preserves and forwards table options") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      val cached = spark.read.option("split-size", "5").table(t1)
+      cached.cache()
+      try {
+        assert(cached.count() === 2)
+
+        // Refreshing a cached table rebuilds its CacheManager entry. The rebuilt relation must
+        // retain the original options, and the catalog must use them when it reloads the Table.
+        inMemoryCatalog.resetLoadTableCalls()
+        spark.catalog.refreshTable(t1)
+
+        val recacheLoads = inMemoryCatalog.loadTableCalls.map(_._2.get("split-size"))
+        assert(recacheLoads.contains("5"),
+          s"expected recache to forward split-size=5, got: $recacheLoads")
+
+        val cacheManager = spark.sharedState.cacheManager
+        val sameOptions = spark.read.option("split-size", "5").table(t1)
+        val recached = cacheManager.lookupCachedData(sameOptions)
+        assert(recached.isDefined, "a read with the original options should hit after recache")
+
+        val recachedOptions = recached.get.plan.collect {
+          case r: DataSourceV2Relation => r.options.get("split-size")
+        }
+        assert(recachedOptions === Seq("5"),
+          s"expected the recached relation to retain split-size=5, got: $recachedOptions")
+
+        assert(cacheManager.lookupCachedData(spark.table(t1)).isEmpty,
+          "an option-free read must not reuse the recached option-carrying result")
+      } finally {
+        spark.catalog.clearCache()
+      }
+    }
+  }
+
   test("SPARK-58389: a DataFrame temp view's options do not leak to a later reference") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
