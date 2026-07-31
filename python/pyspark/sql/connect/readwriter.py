@@ -134,9 +134,11 @@ class DataFrameReader(OptionUtils):
             self.schema(schema)
         self.options(**options)
 
-        paths: Optional[List[str]] = None
-        if path is not None:
-            paths = [path] if isinstance(path, str) else path
+        paths: Optional[List[str]]
+        if isinstance(path, str):
+            paths = [path]
+        else:
+            paths = path
 
         plan = DataSource(
             format=self._format,
