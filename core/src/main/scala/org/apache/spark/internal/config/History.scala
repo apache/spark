@@ -194,7 +194,7 @@ private[spark] object History {
       .createWithDefault(true)
 
   val EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED =
-    ConfigBuilder("spark.history.fs.eventLog.single.onDemandLoadEnabled")
+    ConfigBuilder("spark.history.fs.eventLog.onDemandLoadEnabled")
       .doc("Whether to look up single event log locations on demand manner before listing files.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
