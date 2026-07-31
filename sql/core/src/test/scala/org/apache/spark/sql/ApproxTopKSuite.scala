@@ -338,7 +338,7 @@ class ApproxTopKSuite extends SharedSparkSession {
   test("SPARK-58096: approx_top_k_accumulate/estimate keeps ICU-collation-distinct " +
     "non-ASCII values separate through the serde round-trip") {
     val res = sql(
-      s"""SELECT approx_top_k_estimate(approx_top_k_accumulate(c), 3)
+      """SELECT approx_top_k_estimate(approx_top_k_accumulate(c), 3)
          |FROM (SELECT CAST(col AS STRING COLLATE UNICODE_CI) AS c
          |      FROM VALUES ('且'), ('且'), ('且'),
          |                  ('丕'), ('丕'), ('世') AS t(col))
