@@ -33,9 +33,17 @@ import org.apache.spark.sql.test.SharedSparkSession
  * These exercise the fix for SPARK-58418. Before it, `Scd2ForeachBatchHandler.reconcileMicrobatch`
  * unioned the microbatch with the affected target/aux rows without `allowMissingColumns`, so a
  * narrower microbatch failed with NUM_COLUMNS_MISMATCH (top-level) or INCOMPATIBLE_COLUMN_TYPE
- * (nested). The contract asserted here is additive-tolerant, matching SCD1: records already written
- * keep their values for the no-longer-emitted column, and only records opened by the narrower
- * microbatch carry null for it.
+ * (nested). The contract asserted here is additive-tolerant: records already written keep their
+ * values for the no-longer-emitted column, and only records opened by the narrower microbatch carry
+ * null for it.
+ *
+ * This matches SCD1's behavior for a dropped top-level column
+ * ([[AutoCdcScd1SchemaEvolutionSuite]]). SCD2 applies the same behavior to a dropped *nested*
+ * struct/array field, where SCD1 instead fails with INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA:
+ * SCD1's MERGE source is missing the nested field and the v2 writer's resolver rejects it, whereas
+ * SCD2's `allowMissingColumns` pads the field before the union/MERGE. So SCD2 handles nested
+ * subtractive evolution consistently with the top-level case (and with SCD1's top-level case),
+ * rather than reproducing SCD1's nested-drop limitation.
  *
  * Changing the effective *tracked-history* column set is a distinct, separately-scoped concern
  * (SPARK-58452 / SPARK-58391) and is deliberately not exercised here: every scenario keeps the
@@ -206,10 +214,17 @@ class AutoCdcScd2ColumnEvolutionSuite
   }
 
   test("a nested struct field dropped between runs is preserved on existing records and null on " +
-    "new ones") {
+    "new ones (SCD2 is more permissive than SCD1 here)") {
     val session = spark
     import session.implicits._
 
+    // Contrast with SCD1: AutoCdcScd1SchemaEvolutionSuite rejects this exact shape with
+    // INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA, because its MERGE source is missing `value.b.c`
+    // and the v2 writer's resolver cannot find data for the target's nested field. SCD2's
+    // `allowMissingColumns` pads the missing field before the union/MERGE, so the nested drop is
+    // handled the same additive-tolerant way as a top-level drop -- preserved on existing records,
+    // null on new ones. This is a deliberate, consistency-improving divergence from SCD1, not
+    // parity: SCD1's nested-drop failure is a writer limitation, not an intended policy.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, " +
