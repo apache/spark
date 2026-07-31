@@ -20,13 +20,13 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan,
   EvalExternalUDF, MapInPandas, MapPartitionsExternalUDF}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.python.{MapInPandasExec,
+import org.apache.spark.sql.execution.python.{BatchEvalPythonExec, MapInPandasExec,
   UserDefinedPythonFunction}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -131,6 +131,11 @@ class ClassicUDFPlanningSuite
     val result = applyMapInPandas()
     assertPhysicalNode[MapInPandasExec](result)
   }
+
+  test("scalar Python UDF uses BatchEvalPythonExec physical node") {
+    val result = applyScalarPythonUDF()
+    assertPhysicalNode[BatchEvalPythonExec](result)
+  }
 }
 
 /**
@@ -141,8 +146,9 @@ class UnifiedUDFPlanningSuite
     extends ExternalUDFPlanningTestBase {
 
   override def sparkConf: SparkConf =
-    super.sparkConf.set(
-      SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key, "true")
+    super.sparkConf
+      .set(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key, "true")
+      .set(SQLConf.UNIFIED_UDF_EXECUTION_CONVERT_PYTHON_UDF_ENABLED.key, "true")
 
   test("mapInPandas uses MapPartitionsExternalUDF logical node") {
     val result = applyMapInPandas()
@@ -163,5 +169,28 @@ class UnifiedUDFPlanningSuite
   test("scalar Python UDF uses EvalExternalUDFExec physical node") {
     val result = applyScalarPythonUDF()
     assertPhysicalNode[EvalExternalUDFExec](result)
+  }
+}
+
+/**
+ * Tests that the unified execution path rejects legacy scalar Python UDF
+ * expressions when their conversion config is disabled.
+ */
+class UnsupportedLegacyPythonUDFPlanningSuite
+    extends ExternalUDFPlanningTestBase {
+
+  override def sparkConf: SparkConf =
+    super.sparkConf.set(
+      SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key, "true")
+
+  test("legacy scalar Python UDF is rejected") {
+    val exception = intercept[SparkUnsupportedOperationException] {
+      applyScalarPythonUDF().queryExecution.optimizedPlan
+    }
+    checkError(
+      exception = exception,
+      condition = "UNSUPPORTED_FEATURE.PYTHON_UDF_TO_EXTERNAL_UDF",
+      parameters = Map(
+        "config" -> SQLConf.UNIFIED_UDF_EXECUTION_CONVERT_PYTHON_UDF_ENABLED.key))
   }
 }

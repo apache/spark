@@ -5143,11 +5143,20 @@ object SQLConf {
 
   val UNIFIED_UDF_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.udf.unified.execution.enabled")
-      .doc("When true, UDFs that support the language-agnostic " +
-        "UDF worker protocol are executed via the unified, " +
-        "external UDF worker framework instead of the " +
-        "language-specific runners. Experimental.")
+      .doc("When true, enable planning and execution through the language-agnostic " +
+        "external UDF worker framework. When false, external UDF expressions are rejected. " +
+        "Experimental.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val UNIFIED_UDF_EXECUTION_CONVERT_PYTHON_UDF_ENABLED =
+    buildConf("spark.sql.execution.udf.unified.convertPythonUDF.enabled")
+      .doc("When unified UDF execution is enabled, convert legacy scalar PythonUDF " +
+        "expressions to external UDF expressions. When false, legacy scalar PythonUDF " +
+        "expressions are rejected by the unified execution path. Experimental.")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
