@@ -68,7 +68,7 @@ unary_np_spark_mappings = {
     "reciprocal": pandas_udf(  # type: ignore[call-overload]
         lambda s: np.reciprocal(s), DoubleType()
     ),
-    "rint": pandas_udf(lambda s: np.rint(s), DoubleType()),  # type: ignore[call-overload]
+    "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
     "signbit": lambda c: F.when(c < 0, True).otherwise(False),
     "sin": F.sin,
