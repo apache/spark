@@ -17,15 +17,26 @@
 
 package org.apache.spark.sql.connector
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog, TimeTravel}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog, Table, TimeTravel}
 import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.functions.lit
+
+class LoadCountingInMemoryCatalog extends InMemoryCatalog {
+  val singleArgLoads = new AtomicInteger(0)
+
+  override def loadTable(ident: Identifier): Table = {
+    singleArgLoads.incrementAndGet()
+    super.loadTable(ident)
+  }
+}
 
 class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
   import testImplicits._
@@ -511,6 +522,32 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-58389: execution refresh forwards options on a plain table read") {
+    registerCatalog("loadcounting", classOf[LoadCountingInMemoryCatalog])
+    val loadCountingCatalog =
+      catalog("loadcounting").asInstanceOf[LoadCountingInMemoryCatalog]
+    val t1 = "loadcounting.ns1.ns2.table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+      loadCountingCatalog.resetLoadTableCalls()
+      loadCountingCatalog.singleArgLoads.set(0)
+
+      spark.read.option("split-size", "5").table(t1).collect()
+
+      // Both analysis and the execution-time refresh must enter through the options-aware
+      // overload. Each then delegates to the single-argument overload in this test catalog.
+      val optionAwareLoads = loadCountingCatalog.loadTableCalls
+        .map(_._2.get("split-size"))
+        .filter(_ != null)
+      assert(optionAwareLoads === Seq("5", "5"),
+        s"expected analysis and refresh to forward split-size=5, got: $optionAwareLoads")
+      assert(loadCountingCatalog.singleArgLoads.get() === 2,
+        s"expected two delegated single-argument loads, got: " +
+          loadCountingCatalog.singleArgLoads.get())
+    }
+  }
+
   test("SPARK-58389: a self-join with different options loads the table once per option bag") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
@@ -626,6 +663,35 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-58389: execution refresh does not reuse cached relation with different options") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      val cached = spark.table(t1)
+      cached.cache()
+      try {
+        assert(cached.count() === 2)
+
+        // Analysis correctly rejects the option-free shared relation cache entry. Reset after
+        // analysis to isolate the execution-time refresh, which must apply the same options check.
+        val df = spark.read.option("split-size", "5").table(t1).filter("id > 0")
+        df.queryExecution.analyzed
+        inMemoryCatalog.resetLoadTableCalls()
+        df.collect()
+
+        val refreshLoads = inMemoryCatalog.loadTableCalls
+          .map(_._2.get("split-size"))
+          .filter(_ != null)
+        assert(refreshLoads === Seq("5"),
+          s"expected refresh to reject the option-free cache entry, got: $refreshLoads")
+      } finally {
+        cached.unpersist()
+      }
+    }
+  }
+
   test("SPARK-58389: recaching preserves and forwards table options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
@@ -659,6 +725,37 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
         assert(cacheManager.lookupCachedData(spark.table(t1)).isEmpty,
           "an option-free read must not reuse the recached option-carrying result")
+      } finally {
+        spark.catalog.clearCache()
+      }
+    }
+  }
+
+  test("SPARK-58389: recaching a non-relation plan forwards table options") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      // The filter forces CacheManager.tryRefreshPlan through V2TableRefreshUtil instead of the
+      // bare-relation fast path covered by the preceding test.
+      val cached = spark.read.option("split-size", "5").table(t1).filter("id > 0")
+      cached.cache()
+      try {
+        assert(cached.count() === 2)
+        inMemoryCatalog.resetLoadTableCalls()
+
+        spark.catalog.refreshTable(t1)
+
+        val recacheLoads = inMemoryCatalog.loadTableCalls
+          .map(_._2.get("split-size"))
+          .filter(_ != null)
+        assert(recacheLoads.contains("5"),
+          s"expected non-relation recache to forward split-size=5, got: $recacheLoads")
+
+        val samePlan = spark.read.option("split-size", "5").table(t1).filter("id > 0")
+        assert(spark.sharedState.cacheManager.lookupCachedData(samePlan).isDefined,
+          "the filtered plan should remain cached after refresh")
       } finally {
         spark.catalog.clearCache()
       }
