@@ -16,17 +16,20 @@
 #
 
 import contextlib
+import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 import unittest
 from typing import Tuple
 from unittest import mock
 
 from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
+from pyspark.util import is_remote_only
 
 if should_test_connect:
     from pyspark.sql.connect import local_server_pool
@@ -117,7 +120,18 @@ def _wait_pid_dead(pid: int, timeout: float = 30.0) -> bool:
     return False
 
 
+def _wait_pid_gone(pid: int, timeout: float = 60.0) -> bool:
+    """Wait for a non-child pid to stop running. Linux zombies count as terminated."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not local_server_pool._pid_alive(pid):
+            return True
+        time.sleep(0.2)
+    return False
+
+
 _SAVED_ENV_KEYS = (
+    "SPARK_LOCAL_CONNECT_POOL",
     "SPARK_LOCAL_CONNECT_POOL_DIR",
     "SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT",
     "SPARK_LOCAL_CONNECT_POOL_SIZE",
@@ -1662,6 +1676,117 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertTrue(_wait_proc_dead(duplicate_a))
         self.assertTrue(_wait_proc_dead(duplicate_b))
         self.assertTrue(_wait_proc_dead(retiring))
+
+
+@unittest.skipIf(
+    not should_test_connect or is_remote_only(),
+    connect_requirement_message or "Requires JVM access to start local Connect servers",
+)
+@unittest.skipUnless(os.name == "posix", "the pool relies on the POSIX sbin scripts")
+class LocalConnectServerPoolE2ETests(unittest.TestCase):
+    """End-to-end tests that boot real pooled servers (slow)."""
+
+    CLIENT = textwrap.dedent(
+        """
+        import json
+
+        from pyspark.sql import SparkSession
+
+        spark = (
+            SparkSession.builder.remote("local[2]")
+            .config("spark.local.connect.pool", "true")
+            .getOrCreate()
+        )
+        from pyspark.sql.connect import local_server_pool
+
+        try:
+            # Pool cleanup belongs only to the builder-created session that claimed the
+            # server. Stopping another session must leave the claimed server available.
+            spark.newSession().stop()
+            count = spark.range(1).count()
+            member = local_server_pool._claimed_member
+            print(json.dumps({"count": count, "server_pid": member.pid}))
+        finally:
+            spark.stop()
+        """
+    )
+
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.mkdtemp()
+        self._pool_dir = os.path.join(self._tmpdir, "pool")
+        self._saved_env = {k: os.environ.get(k) for k in _SAVED_ENV_KEYS}
+        os.environ["SPARK_LOCAL_CONNECT_POOL_DIR"] = self._pool_dir
+
+    def tearDown(self) -> None:
+        try:
+            local_server_pool.purge_local_connect_pool()
+            deadline = time.time() + 60
+            while time.time() < deadline:
+                if set(os.listdir(self._pool_dir)) <= {".lock"}:
+                    break
+                # Supervising attendants notice the purged directory and exit on their own;
+                # purge again in case one republished state in between.
+                local_server_pool.purge_local_connect_pool()
+                time.sleep(1)
+        finally:
+            for k, v in self._saved_env.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def _run_clients(self, n: int, pool_size: str) -> list:
+        env = dict(os.environ)
+        env["SPARK_LOCAL_CONNECT_POOL_DIR"] = self._pool_dir
+        env["SPARK_LOCAL_CONNECT_POOL"] = "1"
+        env["SPARK_LOCAL_CONNECT_POOL_SIZE"] = pool_size
+        env.pop("SPARK_CONNECT_AUTHENTICATE_TOKEN", None)
+        procs = [
+            subprocess.Popen(
+                [sys.executable, "-c", self.CLIENT],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for _ in range(n)
+        ]
+        outputs = []
+        try:
+            for proc in procs:
+                stdout, stderr = proc.communicate(timeout=300)
+                self.assertEqual(proc.returncode, 0, stderr)
+                lines = stdout.strip().splitlines()
+                self.assertTrue(lines, stderr)
+                outputs.append(json.loads(lines[-1]))
+        finally:
+            for proc in procs:
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.communicate()
+        return outputs
+
+    def test_sequential_runs_use_fresh_servers_and_tear_them_down(self) -> None:
+        first = self._run_clients(1, pool_size="1")[0]
+        self.assertEqual(first["count"], 1)
+        # The used server is torn down asynchronously after its run.
+        self.assertTrue(
+            _wait_pid_gone(first["server_pid"]),
+            "the server was not torn down after its run ended",
+        )
+        second = self._run_clients(1, pool_size="1")[0]
+        self.assertEqual(second["count"], 1)
+        self.assertNotEqual(
+            first["server_pid"], second["server_pid"], "a pooled server was reused across runs"
+        )
+
+    def test_concurrent_cold_clients_get_distinct_servers(self) -> None:
+        outputs = self._run_clients(2, pool_size="2")
+        self.assertEqual({o["count"] for o in outputs}, {1})
+        pids = [o["server_pid"] for o in outputs]
+        self.assertEqual(len(set(pids)), 2, "two concurrent runs shared a pooled server")
+
 
 if __name__ == "__main__":
     from pyspark.testing import main

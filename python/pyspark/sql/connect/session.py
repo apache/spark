@@ -310,8 +310,19 @@ class SparkSession:
         )
         self._session_id = self._client._session_id
 
+        self._initialize_lifecycle_state()
+
+    def _initialize_lifecycle_state(self) -> None:
+        """Initialize state shared by normally constructed and derived sessions."""
+
         # Set to false to prevent client.release_session on close() (testing only)
         self.release_session_on_close = True
+        self._on_stop_callbacks: List[Callable[[], None]] = []
+
+    def _register_on_stop_callback(self, callback: Callable[[], None]) -> None:
+        """Register internal lifecycle cleanup owned by the code that created this session."""
+        if callback not in self._on_stop_callbacks:
+            self._on_stop_callbacks.append(callback)
 
     @classmethod
     def _set_default_and_active_session(cls, session: "SparkSession") -> None:
@@ -991,6 +1002,13 @@ class SparkSession:
                 if "SPARK_REMOTE" in os.environ:
                     del os.environ["SPARK_REMOTE"]
 
+            callbacks, self._on_stop_callbacks = self._on_stop_callbacks, []
+            for callback in callbacks:
+                try:
+                    callback()
+                except Exception as e:
+                    logger.warning(f"session.stop(): Cleanup callback failed. Error: {e}")
+
     def __enter__(self) -> "SparkSession":
         """
         Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
@@ -1370,7 +1388,7 @@ class SparkSession:
         new_session = object.__new__(SparkSession)
         new_session._client = cloned_client
         new_session._session_id = cloned_client._session_id
-        new_session.release_session_on_close = True
+        new_session._initialize_lifecycle_state()
         return new_session
 
     def newSession(self) -> "SparkSession":
@@ -1398,7 +1416,7 @@ class SparkSession:
         new_session = object.__new__(SparkSession)
         new_session._client = new_client
         new_session._session_id = new_client._session_id
-        new_session.release_session_on_close = True
+        new_session._initialize_lifecycle_state()
         return new_session
 
 

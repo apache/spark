@@ -21,10 +21,14 @@ Opt-in pool of single-use local Spark Connect servers
 
 The reuse mode (``spark.local.connect.reuse``, see ``pyspark.sql.connect.local_server``) makes
 local runs fast by sharing one long-lived server, at the price of state backed by the shared
-``SparkContext`` carrying across runs. The pool maintains a small set of booted servers that
-have never been assigned to an application run. A client claims one exclusively, spawns a
+``SparkContext`` (persistent catalog, global temp views, cached data) carrying across runs.
+The pool keeps the speed without the sharing: it maintains a small set of booted servers that
+have never been assigned to an application run, and
+``SparkSession.builder.remote("local[*]").getOrCreate()`` *claims* one exclusively, spawns a
 replacement in the background, and tears the claimed server down when the session stops or the
-client exits. No server ever serves two application runs.
+client exits. No server ever serves two application runs, so runs are as isolated from each
+other as with the default in-process server -- at the cost of the idle servers' memory while
+you iterate. If both opt-ins are set, the pool takes precedence.
 
 The pool lives in a ``pool`` subdirectory of the per-user runtime directory (override with
 ``SPARK_LOCAL_CONNECT_POOL_DIR``). A member is a set of files named by a random ``<uid>``;
@@ -48,6 +52,10 @@ Servers are only handed to runs they were built for: each member carries a finge
 master, seeded confs, working directory, and Python executable, and a run only claims members
 whose fingerprint matches its own. ``python -m pyspark.sql.connect.local_server_pool --purge``
 force-stops every member and empties the pool directory.
+
+This mode is experimental. Everything but the opt-in itself -- the pool directory layout, the
+attendant, and the ``--purge`` entry point -- is an internal detail that may change or move,
+for example into a unified ``spark connect`` CLI. POSIX only, like the reuse mode.
 """
 
 import argparse
@@ -154,7 +162,7 @@ _DEFAULT_POOL_SIZE = 2
 
 
 def _pool_size(opts: Dict[str, Any]) -> int:
-    """The number of warm or in-flight members to keep per fingerprint; at least one.
+    """The number of ready or in-flight members to keep per fingerprint; at least one.
     Malformed values fall back to the default rather than failing session creation over a
     tuning knob.
     """
@@ -621,7 +629,7 @@ class ServerPool:
     def acquire(self, master: str, opts: Dict[str, Any]) -> PoolMember:
         """Claim one ready, fingerprint-matching member and top the pool back up.
 
-        On a warm pool this returns after one janitor-claim-refill pass; on a cold pool
+        When a member is ready this returns after one janitor-claim-refill pass; on a cold pool
         (first run, conf change, or all members consumed) the refill starts a full complement
         and the loop waits for the first member to become ready, which costs one ordinary
         cold start. The lock is released between polls so attendants can publish; launches
