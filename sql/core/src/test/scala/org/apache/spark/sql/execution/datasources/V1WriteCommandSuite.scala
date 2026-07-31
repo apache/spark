@@ -442,7 +442,7 @@ class V1WriteCommandSuite extends SharedSparkSession with V1WriteCommandSuiteBas
   test("SPARK-58444: planned write should not enable concurrent writer when ordering " +
     "already matched") {
     // The concurrent output writer keeps one open writer per dynamic partition and falls back
-    // to the sort-based sequential writer once the number of open writers exceeds
+    // to the sort-based sequential writer once the number of open writers reaches
     // `maxConcurrentOutputFileWriters`. When the input is already sorted by the required
     // ordering, FileFormatWriter should NOT enable the concurrent writer at all, so that this
     // wasteful fall-back never happens. This test pins that behavior via the fall-back log.
