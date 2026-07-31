@@ -189,9 +189,13 @@ object FileFormatWriter extends Logging {
 
       if (writeFilesOpt.isDefined) {
         // build `WriteFilesSpec` for `WriteFiles`
-        val concurrentOutputWriterSpecFunc = (plan: SparkPlan) => {
-          val sortPlan = createSortPlan(plan, requiredOrdering, outputSpec)
-          createConcurrentOutputWriterSpec(sparkSession, sortPlan, sortColumns)
+        val concurrentOutputWriterSpecFunc = if (orderingMatched) {
+          (_: SparkPlan) => None
+        } else {
+          (plan: SparkPlan) => {
+            val sortPlan = createSortPlan(plan, requiredOrdering, outputSpec)
+            createConcurrentOutputWriterSpec(sparkSession, sortPlan, sortColumns)
+          }
         }
         val writeSpec = WriteFilesSpec(
           description = description,
