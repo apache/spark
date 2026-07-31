@@ -340,8 +340,8 @@ class CrossValidatorModel private[ml] (
     // Array[Double]
     size += SizeEstimator.estimate(avgMetrics)
     _subModels.foreach { models =>
-      models.foreach { foldModels =>
-        foldModels.foreach { model =>
+      models.foreach { modelArray =>
+        modelArray.foreach { model =>
           if (model != null) {
             size += model.estimatedSize
           }

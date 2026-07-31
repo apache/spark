@@ -91,7 +91,7 @@ class CrossValidatorSuite
       .setNumFolds(2)
       .fit(dataset)
 
-    val maxSize = 64 * 1024
+    val maxSize = 16 * 1024
     assert(model.estimatedSize < maxSize,
       s"Estimation (${model.estimatedSize}) should not include shared runtime state")
   }
