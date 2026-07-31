@@ -114,6 +114,65 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             self.assertIn("spark-connect-{}".format(getpass.getuser()), default.directory)
             self.assertEqual(os.stat(default.directory).st_mode & 0o777, 0o700)
 
+    def test_startup_seed_conf(self) -> None:
+        from unittest import mock
+
+        initial = {
+            "spark.sql.shuffle.partitions": "8",
+            "spark.master": "local[1]",
+        }
+        opts = {
+            "spark.sql.warehouse.dir": os.path.join(self._tmpdir, "warehouse"),
+            "spark.local.connect.reuse": "true",
+            "spark.connect.grpc.binding.port": "0",
+        }
+        env = {
+            "PYSPARK_REMOTE_INIT_CONF_LEN": "1",
+            "PYSPARK_REMOTE_INIT_CONF_0": json.dumps(initial),
+        }
+        with mock.patch.dict(os.environ, env):
+            self.assertEqual(
+                local_server.startup_seed_conf(opts),
+                {
+                    "spark.sql.shuffle.partitions": "8",
+                    "spark.sql.warehouse.dir": opts["spark.sql.warehouse.dir"],
+                },
+            )
+
+    def test_start_delegates_launch_options(self) -> None:
+        from unittest import mock
+
+        discovery = mock.Mock()
+        discovery.load.side_effect = [
+            None,
+            {
+                "host": "localhost",
+                "port": 15002,
+                "token": "t",
+                "pid": os.getpid(),
+                "spark_version": __version__,
+            },
+        ]
+        server = LocalConnectServer(discovery)
+        seed_conf = {"spark.sql.shuffle.partitions": "4"}
+        with mock.patch.object(local_server, "ServerLauncher") as launcher:
+            server.start(
+                "local[2]",
+                {"spark.local.connect.reuse": "true"},
+                use_ephemeral_port=True,
+                seed_conf=seed_conf,
+            )
+
+        launcher.assert_called_once_with(
+            "local[2]",
+            {"spark.local.connect.reuse": "true"},
+            discovery,
+            use_ephemeral_port=True,
+            seed_conf=seed_conf,
+        )
+        launcher.return_value.launch.assert_called_once_with()
+        self.assertEqual(server.port, 15002)
+
     def test_discovery_roundtrip(self) -> None:
         with Discovery() as discovery:
             saved = self._server(port=15002)
