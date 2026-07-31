@@ -140,15 +140,15 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
    * all user-specified options.
    * <p>
    * Behaves like {@link #loadRelation(Identifier)} but also receives the options passed to the
-   * read, so a catalog can take them into account when producing the {@link Table} or
-   * {@link View}. The default implementation ignores {@code options} and delegates to
-   * {@link #loadRelation(Identifier)}; override it to make use of the options.
+   * read. The default implementation ignores {@code options} and delegates to
+   * {@link #loadRelation(Identifier)}; catalogs that want to receive the user options while
+   * reading a relation must override this method.
    *
    * @param ident the identifier
    * @param options all options passed to the read
    * @return a {@link Table} for tables, or a {@link View} for views
    * @throws NoSuchTableException if neither a table nor a view exists at {@code ident}
-   * @since 4.2.0
+   * @since 4.3.0
    */
   default Relation loadRelation(Identifier ident, CaseInsensitiveStringMap options)
       throws NoSuchTableException {
