@@ -4072,6 +4072,63 @@ abstract class CSVSuite
       }
     }
   }
+
+  test("SPARK-58458: a quoted line break splits the record when multiLine is disabled") {
+    // A line break inside a quoted value is valid CSV (RFC 4180 section 2.6) and occurs in
+    // published datasets. In the default non-multiLine mode the input is split on the line
+    // separator before the CSV tokenizer runs -- HadoopFileLinesReader feeds
+    // UnivocityParser.parseLine one physical line at a time -- so the record cannot be
+    // reassembled. It becomes a NULL-tailed head plus a fragment, which changes the row
+    // count as well as the values. None of that is currently covered by a test.
+    val schema = new StructType()
+      .add("id", StringType)
+      .add("nome", StringType)
+      .add("uf", StringType)
+
+    withTempPath { path =>
+      Files.write(
+        path.toPath,
+        ("1,ACME LTDA,SP\n" +
+          "2,\"EMPRESA COM\nQUEBRA DE LINHA\",RJ\n" +
+          "3,OUTRA EMPRESA,MG\n").getBytes(StandardCharsets.UTF_8))
+
+      // Three records in, four rows out: record 2 is cut at the line break, its trailing
+      // field is nulled, and the remainder of the quoted value starts a new record.
+      checkAnswer(
+        spark.read.schema(schema).csv(path.getAbsolutePath),
+        Row("1", "ACME LTDA", "SP") ::
+          Row("2", "EMPRESA COM", null) ::
+          Row("QUEBRA DE LINHA\"", "RJ", null) ::
+          Row("3", "OUTRA EMPRESA", "MG") :: Nil)
+
+      // multiLine reassembles the record, so the line break survives inside the value.
+      checkAnswer(
+        spark.read.schema(schema).option("multiLine", true).csv(path.getAbsolutePath),
+        Row("1", "ACME LTDA", "SP") ::
+          Row("2", "EMPRESA COM\nQUEBRA DE LINHA", "RJ") ::
+          Row("3", "OUTRA EMPRESA", "MG") :: Nil)
+
+      // Both halves carry unbalanced quotes, so both are malformed and DROPMALFORMED
+      // discards the pair -- the whole source record is lost, not just the damaged half.
+      checkAnswer(
+        spark.read.schema(schema).option("mode", "DROPMALFORMED").csv(path.getAbsolutePath),
+        Row("1", "ACME LTDA", "SP") ::
+          Row("3", "OUTRA EMPRESA", "MG") :: Nil)
+
+      // With columnNameOfCorruptRecord declared, both halves are captured with their raw
+      // text, which is the only configuration in which the split leaves a trace.
+      val withCorrupt = schema.add("_corrupt", StringType)
+      checkAnswer(
+        spark.read
+          .schema(withCorrupt)
+          .option("columnNameOfCorruptRecord", "_corrupt")
+          .csv(path.getAbsolutePath),
+        Row("1", "ACME LTDA", "SP", null) ::
+          Row("2", "EMPRESA COM", null, "2,\"EMPRESA COM") ::
+          Row("QUEBRA DE LINHA\"", "RJ", null, "QUEBRA DE LINHA\",RJ") ::
+          Row("3", "OUTRA EMPRESA", "MG", null) :: Nil)
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
