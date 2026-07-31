@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.externalUDF
 
 import java.nio.charset.StandardCharsets
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference,
   ExternalUserDefinedFunction, Expression}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{EvalExternalUDF, LocalRelation,
   LogicalPlan, Project}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.udf.worker.{DirectWorker, ProcessCallable, UDFWorkerProperties,
   UDFWorkerSpecification, WorkerCapabilities, WorkerEnvironment}
@@ -65,7 +66,9 @@ class ExtractExternalUDFsSuite extends PlanTest {
   }
 
   private def extract(expression: Expression): LogicalPlan = {
-    extractRule(Project(Seq(Alias(expression, "result")()), relation))
+    withSQLConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key -> "true") {
+      extractRule(Project(Seq(Alias(expression, "result")()), relation))
+    }
   }
 
   private def evalNodes(plan: LogicalPlan): Seq[EvalExternalUDF] = {
@@ -138,5 +141,20 @@ class ExtractExternalUDFsSuite extends PlanTest {
     val nodes = evalNodes(extract(expression))
     assert(nodes.size == 2)
     assert(nodes.forall(_.udfs.size == 1))
+  }
+
+  test("external UDF expressions are rejected when unified execution is disabled") {
+    val spec = workerSpec("disabled", supportsChaining = true)
+    val plan = Project(Seq(Alias(udf("external", spec, Seq(input)), "result")()), relation)
+
+    val exception = withSQLConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key -> "false") {
+      intercept[SparkUnsupportedOperationException] {
+        extractRule(plan)
+      }
+    }
+    checkError(
+      exception = exception,
+      condition = "UNSUPPORTED_FEATURE.EXTERNAL_UDF",
+      parameters = Map("config" -> SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key))
   }
 }

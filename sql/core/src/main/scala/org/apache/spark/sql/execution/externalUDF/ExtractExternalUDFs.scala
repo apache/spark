@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.externalUDF
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.PythonUDF.isScalarPythonUDF
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -36,14 +36,23 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
  * supports chaining may evaluate unary nested chains and fuse independent
  * UDF roots that use the same worker specification.
  *
- * When unified UDF execution is enabled, scalar [[PythonUDF]] expressions are
- * converted to [[ExternalUserDefinedFunction]] expressions before extraction.
+ * When unified UDF execution and legacy Python UDF conversion are enabled,
+ * scalar [[PythonUDF]] expressions are converted to
+ * [[ExternalUserDefinedFunction]] expressions before extraction.
  */
 private[sql] class ExtractExternalUDFs(sparkConf: SparkConf) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan match {
     // A correlated subquery is rewritten as a join and revisits this rule later.
     case subquery: Subquery if subquery.correlated => plan
+    case _ if !conf.getConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED) =>
+      if (plan.containsPattern(EXTERNAL_UDF)) {
+        throw new SparkUnsupportedOperationException(
+          errorClass = "UNSUPPORTED_FEATURE.EXTERNAL_UDF",
+          messageParameters = Map(
+            "config" -> SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key))
+      }
+      plan
     case _ =>
       val externalPlan = convertPythonUDFs(plan)
       externalPlan.transformUpWithPruning(_.containsPattern(EXTERNAL_UDF)) {
@@ -54,23 +63,28 @@ private[sql] class ExtractExternalUDFs(sparkConf: SparkConf) extends Rule[Logica
   }
 
   private def convertPythonUDFs(plan: LogicalPlan): LogicalPlan = {
-    if (!conf.getConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED)) {
-      plan
-    } else {
-      plan.transformUpWithPruning(_.containsPattern(PYTHON_UDF)) { operator =>
-        operator.transformExpressionsUpWithPruning(_.containsPattern(PYTHON_UDF)) {
-          case udf: PythonUDF if isScalarPythonUDF(udf) =>
-            ExternalUserDefinedFunction(
-              name = Some(udf.name),
-              workerSpec = PythonUDFWorkerSpecification.fromPythonFunction(udf.func, sparkConf),
-              payload = udf.func.command.toArray,
-              dataType = udf.dataType,
-              children = udf.children,
-              inputTypes = None,
-              udfDeterministic = udf.udfDeterministic,
-              udfNullable = udf.nullable,
-              resultId = udf.resultId)
-        }
+    val convertPythonUDF =
+      conf.getConf(SQLConf.UNIFIED_UDF_EXECUTION_CONVERT_PYTHON_UDF_ENABLED)
+    plan.transformUpWithPruning(_.containsPattern(PYTHON_UDF)) { operator =>
+      operator.transformExpressionsUpWithPruning(_.containsPattern(PYTHON_UDF)) {
+        case udf: PythonUDF if isScalarPythonUDF(udf) =>
+          if (!convertPythonUDF) {
+            throw new SparkUnsupportedOperationException(
+              errorClass = "UNSUPPORTED_FEATURE.PYTHON_UDF_TO_EXTERNAL_UDF",
+              messageParameters = Map(
+                "config" ->
+                  SQLConf.UNIFIED_UDF_EXECUTION_CONVERT_PYTHON_UDF_ENABLED.key))
+          }
+          ExternalUserDefinedFunction(
+            name = Some(udf.name),
+            workerSpec = PythonUDFWorkerSpecification.fromPythonFunction(udf.func, sparkConf),
+            payload = udf.func.command.toArray,
+            dataType = udf.dataType,
+            children = udf.children,
+            inputTypes = None,
+            udfDeterministic = udf.udfDeterministic,
+            udfNullable = udf.nullable,
+            resultId = udf.resultId)
       }
     }
   }
