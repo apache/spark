@@ -18,15 +18,9 @@
 package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
-import org.apache.spark.sql.pipelines.autocdc.{
-  ChangeArgs,
-  ColumnSelection,
-  ScdType,
-  UnqualifiedColumnName
-}
+import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -46,9 +40,9 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Changing the effective *tracked-history* column set is a distinct, separately-scoped concern
  * (SPARK-58452 / SPARK-58391) and is deliberately not exercised here: every scenario keeps the
  * effective tracked set unchanged across runs, so the only thing evolving is the set of user
- * columns the flow emits. The column-selection test therefore drops a column that is *not* in the
- * tracked set (an explicit `TRACK HISTORY ON (name)` flow dropping the non-tracked `email`), so it
- * stays valid once the track-history drift guard (SPARK-58391) lands.
+ * columns the flow emits. Each scenario tracks history explicitly on `name` and drops the
+ * non-tracked `email`, so the tracked set ({name}) is unchanged and these stay valid once the
+ * track-history drift guard (SPARK-58391) lands.
  */
 class AutoCdcScd2ColumnEvolutionSuite
     extends ExecutionTest
@@ -58,33 +52,9 @@ class AutoCdcScd2ColumnEvolutionSuite
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
   private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
 
-  /**
-   * Build a single-flow SCD2 pipeline that tracks history on exactly `trackColumns` (an explicit
-   * `TRACK HISTORY ON (...)`), so a column outside that set can be dropped without changing the
-   * tracked set. The mixin's `singleAutoCdcFlowPipeline` does not expose a track-history knob, so
-   * the flow is built inline here.
-   */
-  private def scd2FlowTracking(
-      sourceDf: DataFrame,
-      keys: Seq[String],
-      trackColumns: Seq[String]): TestGraphRegistrationContext =
-    new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(AutoCdcFlow(
-        identifier = fullyQualifiedIdentifier("auto_cdc_flow", Some(catalog), Some(namespace)),
-        destinationIdentifier =
-          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)),
-        func = dfFlowFunc(sourceDf),
-        queryContext =
-          QueryContext(currentCatalog = Some(catalog), currentDatabase = Some(namespace)),
-        origin = QueryOrigin.empty,
-        changeArgs = ChangeArgs(
-          keys = keys.map(UnqualifiedColumnName(_)),
-          sequencing = functions.col("version"),
-          storedAsScdType = ScdType.Type2,
-          trackHistorySelection = Some(ColumnSelection.IncludeColumns(
-            trackColumns.map(UnqualifiedColumnName(_)))))))
-    }
+  /** An explicit SCD2 `TRACK HISTORY ON (name)` selection, shared across the scenarios below. */
+  private val trackName: Option[ColumnSelection] =
+    Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name"))))
 
   test("a source column dropped between runs is preserved on existing records and null on new " +
     "ones") {
@@ -102,10 +72,14 @@ class AutoCdcScd2ColumnEvolutionSuite
     val stream = MemoryStream[(Int, String, String, Long)]
     def buildCtx(includeEmail: Boolean): TestGraphRegistrationContext = {
       val df = stream.toDF().toDF("id", "name", "email", "version")
-      scd2FlowTracking(
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
         sourceDf = if (includeEmail) df else df.drop("email"),
         keys = Seq("id"),
-        trackColumns = Seq("name"))
+        sequencing = functions.col("version"),
+        scdType = ScdType.Type2,
+        trackHistorySelection = trackName)
     }
 
     // Run #1 (wide): key=1 opens a record carrying email=a@x.
@@ -130,7 +104,7 @@ class AutoCdcScd2ColumnEvolutionSuite
     )
   }
 
-  test("dropping a non-tracked column from the COLUMNS selection preserves it on existing " +
+  test("narrowing the COLUMNS selection to drop a non-tracked column preserves it on existing " +
     "records and leaves it null on new ones") {
     val session = spark
     import session.implicits._
@@ -140,31 +114,38 @@ class AutoCdcScd2ColumnEvolutionSuite
       s"(id INT NOT NULL, name STRING, email STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
     )
 
-    // The flow tracks history on `name` only, so `email` is a selected-but-not-tracked column.
-    // Dropping `email` from the selection is therefore pure column-schema narrowing: the effective
-    // tracked set ({name}) is unchanged, so this stays column evolution rather than a tracked-set
-    // change even once the track-history drift guard (SPARK-58391) lands.
+    // The source DF is fixed at (id, name, email, version) across both runs; only the flow's
+    // `columnSelection` narrows. Tracking history on `name` only makes `email` a
+    // selected-but-not-tracked column, so dropping it from the selection is pure column-schema
+    // narrowing -- the effective tracked set ({name}) is unchanged, so this stays column evolution
+    // rather than a tracked-set change even once the track-history drift guard (SPARK-58391) lands.
     val stream = MemoryStream[(Int, String, String, Long)]
-    def buildCtx(includeEmail: Boolean): TestGraphRegistrationContext = {
-      val df = stream.toDF().toDF("id", "name", "email", "version")
-      scd2FlowTracking(
-        sourceDf = if (includeEmail) df else df.drop("email"),
+    def buildCtx(selection: Option[ColumnSelection]): TestGraphRegistrationContext =
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = stream.toDF().toDF("id", "name", "email", "version"),
         keys = Seq("id"),
-        trackColumns = Seq("name"))
-    }
+        sequencing = functions.col("version"),
+        columnSelection = selection,
+        scdType = ScdType.Type2,
+        trackHistorySelection = trackName)
 
-    // Run #1: `email` selected; key=1 carries email=a@x.
+    // Run #1: no selection (all columns); key=1 carries email=a@x.
     stream.addData((1, "alice", "a@x", 1L))
-    runPipeline(buildCtx(includeEmail = true))
+    runPipeline(buildCtx(selection = None))
     checkAnswer(
       spark.table(s"$catalog.$namespace.target"),
       Seq(Row(1, "alice", "a@x", 1L, 1L, null, scd2Meta(1L)))
     )
 
-    // Run #2: drop the non-tracked `email`. Because `name` (the sole tracked column) changes, this
-    // opens a new record; key=1's closed record keeps a@x, and the new records carry null.
+    // Run #2: narrow the selection to (id, name, version), dropping the non-tracked `email`.
+    // Because `name` (the sole tracked column) changes, this opens a new record; key=1's closed
+    // record keeps a@x, and the new records carry null.
     stream.addData((1, "alice2", "ignored", 2L), (2, "bob", "ignored", 1L))
-    runPipeline(buildCtx(includeEmail = false))
+    runPipeline(buildCtx(selection = Some(ColumnSelection.IncludeColumns(
+      Seq("id", "name", "version").map(UnqualifiedColumnName(_))
+    ))))
     checkAnswer(
       spark.table(s"$catalog.$namespace.target"),
       Seq(
@@ -189,10 +170,14 @@ class AutoCdcScd2ColumnEvolutionSuite
     val stream = MemoryStream[(Int, String, String, Long)]
     def buildCtx(includeEmail: Boolean): TestGraphRegistrationContext = {
       val df = stream.toDF().toDF("id", "name", "email", "version")
-      scd2FlowTracking(
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
         sourceDf = if (includeEmail) df else df.drop("email"),
         keys = Seq("id"),
-        trackColumns = Seq("name"))
+        sequencing = functions.col("version"),
+        scdType = ScdType.Type2,
+        trackHistorySelection = trackName)
     }
 
     // Run #1 (wide): two distinct-name records for key=1 at seq 10 and 30.
