@@ -24,7 +24,13 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
-import org.apache.spark.sql.pipelines.autocdc.ScdType
+import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
+  Scd1BatchProcessor,
+  Scd2BatchProcessor,
+  ScdType
+}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
 /**
  * Unit tests for the [[AutoCdcAuxiliaryTable]] companion object.
@@ -281,5 +287,139 @@ class AutoCdcAuxiliaryTableSuite extends SparkFunSuite {
         "tableName" -> targetIdent.unquotedString,
         "propertyName" -> AutoCdcAuxiliaryTable.trackHistoryColumnNamesProperty,
         "rawValue" -> "not-a-json-array"))
+  }
+
+  // ===========================================================================================
+  // validateNoTargetSequencingTypeDrift
+  // ===========================================================================================
+
+  private val meta = AutoCdcReservedNames.cdcMetadataColName
+
+  /** An SCD1 target schema whose `_cdc_metadata` carries sequence fields of `seqType`. */
+  private def scd1TargetSchema(seqType: org.apache.spark.sql.types.DataType): StructType =
+    new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add(meta, new StructType()
+        .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, seqType)
+        .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, seqType))
+
+  /** An SCD2 target schema whose `_cdc_metadata` carries a recordStartAt field of `seqType`. */
+  private def scd2TargetSchema(seqType: org.apache.spark.sql.types.DataType): StructType =
+    new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add(meta, new StructType()
+        .add(Scd2BatchProcessor.recordStartAtFieldName, seqType))
+
+  test("validateNoTargetSequencingTypeDrift accepts a matching SCD1 sequencing type") {
+    AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
+      existingTargetSchema = scd1TargetSchema(LongType),
+      targetTableIdentifier = targetIdent,
+      expectedScdType = ScdType.Type1,
+      expectedSequencingType = LongType,
+      resolver = caseInsensitiveResolution)
+  }
+
+  test("validateNoTargetSequencingTypeDrift accepts a matching SCD2 sequencing type") {
+    AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
+      existingTargetSchema = scd2TargetSchema(LongType),
+      targetTableIdentifier = targetIdent,
+      expectedScdType = ScdType.Type2,
+      expectedSequencingType = LongType,
+      resolver = caseInsensitiveResolution)
+  }
+
+  test("validateNoTargetSequencingTypeDrift throws SEQUENCING_TYPE_DRIFT when the recorded " +
+    "type differs (SCD1)") {
+    val ex = intercept[AnalysisException] {
+      AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
+        existingTargetSchema = scd1TargetSchema(LongType),
+        targetTableIdentifier = targetIdent,
+        expectedScdType = ScdType.Type1,
+        expectedSequencingType = IntegerType,
+        resolver = caseInsensitiveResolution)
+    }
+    checkError(
+      exception = ex,
+      condition = "AUTOCDC_INVALID_STATE.SEQUENCING_TYPE_DRIFT",
+      sqlState = "42000",
+      parameters = Map(
+        "tableName" -> targetIdent.unquotedString,
+        "expectedSequencingType" -> IntegerType.sql,
+        "recordedSequencingType" -> LongType.sql))
+  }
+
+  test("validateNoTargetSequencingTypeDrift throws SEQUENCING_TYPE_DRIFT when the recorded " +
+    "type differs (SCD2)") {
+    val ex = intercept[AnalysisException] {
+      AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
+        existingTargetSchema = scd2TargetSchema(LongType),
+        targetTableIdentifier = targetIdent,
+        expectedScdType = ScdType.Type2,
+        expectedSequencingType = IntegerType,
+        resolver = caseInsensitiveResolution)
+    }
+    checkError(
+      exception = ex,
+      condition = "AUTOCDC_INVALID_STATE.SEQUENCING_TYPE_DRIFT",
+      sqlState = "42000",
+      parameters = Map(
+        "tableName" -> targetIdent.unquotedString,
+        "expectedSequencingType" -> IntegerType.sql,
+        "recordedSequencingType" -> LongType.sql))
+  }
+
+  test("validateNoTargetSequencingTypeDrift is a silent no-op when _cdc_metadata is absent") {
+    // Not a recognizable AutoCDC target state: skip rather than misreport. A genuine
+    // incompatibility would surface later during schema evolution.
+    AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
+      existingTargetSchema = new StructType().add("id", IntegerType, nullable = false),
+      targetTableIdentifier = targetIdent,
+      expectedScdType = ScdType.Type2,
+      expectedSequencingType = IntegerType,
+      resolver = caseInsensitiveResolution)
+  }
+
+  test("validateNoTargetSequencingTypeDrift is a silent no-op when _cdc_metadata is not a " +
+    "struct") {
+    AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
+      existingTargetSchema = new StructType()
+        .add("id", IntegerType, nullable = false)
+        .add(meta, StringType),
+      targetTableIdentifier = targetIdent,
+      expectedScdType = ScdType.Type2,
+      expectedSequencingType = IntegerType,
+      resolver = caseInsensitiveResolution)
+  }
+
+  test("validateNoTargetSequencingTypeDrift is a silent no-op when _cdc_metadata is an empty " +
+    "struct") {
+    AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
+      existingTargetSchema = new StructType()
+        .add("id", IntegerType, nullable = false)
+        .add(meta, new StructType()),
+      targetTableIdentifier = targetIdent,
+      expectedScdType = ScdType.Type2,
+      expectedSequencingType = IntegerType,
+      resolver = caseInsensitiveResolution)
+  }
+
+  test("validateNoTargetSequencingTypeDrift resolves _cdc_metadata and the inner field via the " +
+    "resolver (case-insensitive)") {
+    // A hand-written target DDL may differ in case; under the default resolver the check still
+    // finds the metadata column and the recordStartAt field, so a real type drift is caught.
+    val upperCasedSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add(meta.toUpperCase(java.util.Locale.ROOT), new StructType()
+        .add(Scd2BatchProcessor.recordStartAtFieldName.toLowerCase(java.util.Locale.ROOT),
+          LongType))
+    val ex = intercept[AnalysisException] {
+      AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
+        existingTargetSchema = upperCasedSchema,
+        targetTableIdentifier = targetIdent,
+        expectedScdType = ScdType.Type2,
+        expectedSequencingType = IntegerType,
+        resolver = caseInsensitiveResolution)
+    }
+    assert(ex.getCondition == "AUTOCDC_INVALID_STATE.SEQUENCING_TYPE_DRIFT")
   }
 }

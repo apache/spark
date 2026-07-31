@@ -445,4 +445,89 @@ class AutoCdcConfigDriftSuite
       sequencing = $"seq" + 1L,
       scdType = ScdType.Type2))
   }
+
+  // ===========================================================================================
+  // Intended divergence from SCD1: additive source-schema evolution under default / EXCEPT
+  // tracking changes the effective tracked set, and so requires a full refresh.
+  // ===========================================================================================
+
+  test("adding a source column under default (all-column) tracking triggers TRACK_HISTORY_DRIFT") {
+    // The effective tracked set is derived from the flow's selected source schema, so under default
+    // tracking every selected non-key column is tracked. Adding a source column therefore changes
+    // the tracked set, which reinterprets which transitions open a new SCD2 record and cannot be
+    // applied to already-reconciled history. Unlike SCD1 (where a new nullable column is absorbed
+    // by schema evolution), SCD2 requires a full refresh. Pins that intended divergence.
+    createScd2Target("id INT NOT NULL, name STRING, seq BIGINT")
+
+    // Run #1: source (id, name, seq); recorded tracked set = {name, seq}.
+    val stream1 = MemoryStream[(Int, String, Long)]
+    stream1.addData((1, "a", 1L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v1",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "name", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2))
+
+    // Run #2: source gains a nullable `city`; default tracking now resolves to {name, city, seq}.
+    val stream2 = MemoryStream[(Int, String, String, Long)]
+    stream2.addData((1, "a", "nyc", 2L))
+    val ctx2 = singleAutoCdcFlowPipeline(
+      flowName = "flow_v2",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "name", "city", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2)
+
+    val ex = intercept[RuntimeException] { runPipeline(ctx2) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "tableName" -> targetName,
+        "expectedTrackHistoryColumns" -> "name, city, seq",
+        "recordedTrackHistoryColumns" -> "name, seq"))
+  }
+
+  test("dropping a source column under default (all-column) tracking triggers " +
+    "TRACK_HISTORY_DRIFT") {
+    // The mirror of the additive case: removing a selected column shrinks the default tracked set,
+    // which is likewise a tracked-set change requiring a full refresh.
+    createScd2Target("id INT NOT NULL, name STRING, city STRING, seq BIGINT")
+
+    // Run #1: source (id, name, city, seq); recorded tracked set = {name, city, seq}.
+    val stream1 = MemoryStream[(Int, String, String, Long)]
+    stream1.addData((1, "a", "nyc", 1L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v1",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "name", "city", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2))
+
+    // Run #2: `city` dropped from the source; default tracking now resolves to {name, seq}.
+    val stream2 = MemoryStream[(Int, String, Long)]
+    stream2.addData((1, "a", 2L))
+    val ctx2 = singleAutoCdcFlowPipeline(
+      flowName = "flow_v2",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "name", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2)
+
+    val ex = intercept[RuntimeException] { runPipeline(ctx2) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "tableName" -> targetName,
+        "expectedTrackHistoryColumns" -> "name, seq",
+        "recordedTrackHistoryColumns" -> "name, city, seq"))
+  }
 }

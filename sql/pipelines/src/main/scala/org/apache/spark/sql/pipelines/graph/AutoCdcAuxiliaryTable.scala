@@ -27,7 +27,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table => CatalogTable, TableCatalog}
-import org.apache.spark.sql.pipelines.autocdc.{AutoCdcReservedNames, Scd2BatchProcessor, ScdType}
+import org.apache.spark.sql.pipelines.autocdc.{AutoCdcReservedNames, Scd1BatchProcessor,
+  Scd2BatchProcessor, ScdType}
 import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
 
 /**
@@ -238,16 +239,15 @@ object AutoCdcAuxiliaryTable {
       StructField(Scd2BatchProcessor.deletedByBatchIdColName, LongType, nullable = true)
     val scd2AuxiliaryTableSchema = StructType(targetTableSchema.fields :+ deletedByBatchIdField)
 
-    // Resolve the effective track-history columns (an explicit TRACK HISTORY selection, or the
-    // default of every eligible non-key/non-framework column) against the target schema, using the
-    // same single source of truth the reconciler uses. A change in this set reinterprets which
-    // transitions open a new historical record, so it is drift-checked.
-    val caseSensitive =
-      inputAutoCdcFlow.df.sparkSession.sessionState.conf.caseSensitiveAnalysis
-    val trackHistoryColumnNames = Scd2BatchProcessor.computeTrackedHistoryColumns(
-      schema = targetTableSchema,
-      changeArgs = inputAutoCdcFlow.changeArgs,
-      caseSensitive = caseSensitive
+    // The effective track-history column set, resolved by the flow from its user-selected source
+    // schema (see [[AutoCdcMergeFlow.trackHistoryColumnNames]]) -- NOT recomputed here from the
+    // evolved target schema, which would keep tracking columns the flow no longer selects and would
+    // miss implicit (default / `* EXCEPT`) tracked-set changes. A change in this set reinterprets
+    // which transitions open a new historical record, so it is drift-checked.
+    val trackHistoryColumnNames = inputAutoCdcFlow.trackHistoryColumnNames.getOrElse(
+      throw SparkException.internalError(
+        "SCD2 AutoCDC flow is missing its resolved track-history column set."
+      )
     )
 
     val scd2AuxiliaryTableProperties =
@@ -412,21 +412,35 @@ object AutoCdcAuxiliaryTable {
    * table. The remedy is a full refresh.
    *
    * @param existingTargetSchema the schema of the already-materialized target table.
+   * @param expectedScdType the SCD type of the incoming AutoCDC flow, which determines which inner
+   *                        `_cdc_metadata` field carries the recorded sequencing type.
    * @param expectedSequencingType the resolved sequencing type of the incoming AutoCDC flow.
+   * @param resolver the session resolver, used to match the reserved column and inner field names
+   *                 the same case-aware way as every other schema lookup in this file.
    */
   private[graph] def validateNoTargetSequencingTypeDrift(
       existingTargetSchema: StructType,
       targetTableIdentifier: TableIdentifier,
-      expectedSequencingType: DataType): Unit = {
-    // The sequencing type is embedded as the inner field type(s) of the reserved _cdc_metadata
-    // struct, for both SCD1 (delete/upsert sequence fields) and SCD2 (recordStartAt field). Read it
-    // from the first inner field. If the metadata column is absent or not a struct, this is not a
-    // recognizable AutoCDC target state; skip rather than misreport (schema evolution will surface
-    // any genuine incompatibility).
+      expectedScdType: ScdType,
+      expectedSequencingType: DataType,
+      resolver: Resolver): Unit = {
+    // The sequencing type is embedded as an inner field of the reserved _cdc_metadata struct: for
+    // SCD1 the delete/upsert sequence fields, for SCD2 the recordStartAt field. Look the field up
+    // by name (not by position) so a future metadata field added at position 0 cannot silently
+    // shift this to an unrelated type, and via the resolver so a case-differing hand-written target
+    // DDL resolves the same way it does everywhere else. If the metadata column is absent, not a
+    // struct, or lacks the expected inner field, this is not a recognizable AutoCDC target state;
+    // skip rather than misreport (schema evolution will surface any genuine incompatibility).
+    val sequencingFieldName = expectedScdType match {
+      case ScdType.Type1 => Scd1BatchProcessor.cdcUpsertSequenceFieldName
+      case ScdType.Type2 => Scd2BatchProcessor.recordStartAtFieldName
+    }
     val recordedSequencingType: Option[DataType] = existingTargetSchema.fields
-      .find(_.name == AutoCdcReservedNames.cdcMetadataColName)
+      .find(f => resolver(f.name, AutoCdcReservedNames.cdcMetadataColName))
       .map(_.dataType)
-      .collect { case s: StructType if s.nonEmpty => s.fields.head.dataType }
+      .collect { case s: StructType => s }
+      .flatMap(_.fields.find(f => resolver(f.name, sequencingFieldName)))
+      .map(_.dataType)
 
     recordedSequencingType.foreach { recordedType =>
       if (!recordedType.sameType(expectedSequencingType)) {

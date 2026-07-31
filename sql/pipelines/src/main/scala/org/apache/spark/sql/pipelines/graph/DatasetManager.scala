@@ -344,7 +344,9 @@ object DatasetManager extends Logging {
               existingTargetSchema =
                 CatalogV2Util.v2ColumnsToStructType(existingTable.columns()),
               targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
-              expectedSequencingType = autoCdcSpec.expectedSequencingType
+              expectedScdType = autoCdcSpec.expectedScdType,
+              expectedSequencingType = autoCdcSpec.expectedSequencingType,
+              resolver = context.spark.sessionState.conf.resolver
             )
           }
         }
