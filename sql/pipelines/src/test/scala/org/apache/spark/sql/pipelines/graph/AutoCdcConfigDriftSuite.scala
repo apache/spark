@@ -537,4 +537,57 @@ class AutoCdcConfigDriftSuite
         "expectedTrackHistoryColumns" -> "name, seq",
         "recordedTrackHistoryColumns" -> "name, city, seq"))
   }
+
+  test("dropping the target (but not the auxiliary table) between runs still detects drift") {
+    // A user drops and recreates the target to reset it, but does not know to also drop the
+    // internal auxiliary table. On the next run the target is absent (so it is re-created), but the
+    // stale auxiliary table survives with the old recorded configuration. Drift validation reads
+    // the auxiliary table, so it must still fire regardless of the target's existence -- otherwise
+    // the aux table's additive evolve would silently overwrite the recorded track-history property
+    // with the new run's value. Mirrors AutoCdcScd1AuxiliaryTableDurabilitySuite's
+    // "auxiliary table is dropped between runs" case, with the two tables swapped.
+    createScd2Target("id INT NOT NULL, name STRING, amount INT, seq BIGINT")
+
+    // Run #1: track history on `name`; records trackHistoryColumnNames = [name] on the aux table.
+    val stream1 = MemoryStream[(Int, String, Int, Long)]
+    stream1.addData((1, "a", 10, 1L))
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "flow_v1",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "name", "amount", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2,
+      trackHistorySelection =
+        Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name"))))))
+
+    // Drop ONLY the target; the auxiliary table survives with its recorded config.
+    spark.sql(s"DROP TABLE $catalog.$namespace.target")
+    assert(spark.catalog.tableExists(auxTableNameFor("target")),
+      "auxiliary table should survive dropping the target")
+
+    // Run #2: recreate the target and track history on `amount` instead -- a changed tracked set.
+    createScd2Target("id INT NOT NULL, name STRING, amount INT, seq BIGINT")
+    val stream2 = MemoryStream[(Int, String, Int, Long)]
+    stream2.addData((1, "a", 20, 2L))
+    val ctx2 = singleAutoCdcFlowPipeline(
+      flowName = "flow_v2",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "name", "amount", "seq"),
+      keys = Seq("id"),
+      sequencing = $"seq",
+      scdType = ScdType.Type2,
+      trackHistorySelection =
+        Some(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("amount")))))
+
+    val ex = intercept[RuntimeException] { runPipeline(ctx2) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "tableName" -> targetName,
+        "expectedTrackHistoryColumns" -> "amount",
+        "recordedTrackHistoryColumns" -> "name"))
+  }
 }

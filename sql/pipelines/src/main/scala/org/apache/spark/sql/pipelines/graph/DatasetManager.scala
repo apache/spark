@@ -24,7 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.PersistedView
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, PersistedView}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
@@ -330,26 +330,43 @@ object DatasetManager extends Logging {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
 
+    // For an incrementally-updated AutoCDC target, validate that the AutoCDC configuration recorded
+    // on the auxiliary table has not drifted, BEFORE anything is created or evolved this run. These
+    // checks read the auxiliary table, so they run whenever IT exists -- independent of whether the
+    // target exists. That matters when a user drops and recreates the target without dropping the
+    // internal auxiliary table: the target is then absent (so it is re-created below) but the stale
+    // auxiliary table survives, and `materializeAuxiliaryTable`'s additive evolve would otherwise
+    // silently overwrite the recorded key/SCD-type/track-history properties with this run's values.
+    // Running here turns that into one clear drift error (remedy: full refresh).
+    if (isTableIncrementallyUpdated) {
+      resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier).collect {
+        case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
+      }.foreach { autoCdcSpec =>
+        validateNoAutoCdcAuxConfigDrift(autoCdcSpec, context)
+      }
+    }
+
     // Create the table if absent, otherwise evolve it (schema + properties).
     existingTableOpt match {
       case Some(existingTable) =>
-        // For an incrementally-updated AutoCDC target, validate that the AutoCDC configuration has
-        // not drifted from what the auxiliary table recorded, BEFORE evolving the target's schema.
-        // This ordering is load-bearing: `evolveTable` below ALTERs the target (additively) in
-        // place, so a check that ran afterwards would leave the target already mutated by a run it
-        // then rejects -- and the drift remedy ("correct the flow") could not undo that. Running
-        // first means a rejected run leaves the target untouched. It also surfaces a
-        // sequencing-type change as an actionable SEQUENCING_TYPE_DRIFT rather than a generic
+        // The sequencing-type check needs the existing target schema (the type is embedded in the
+        // target's `_cdc_metadata`), so it runs here, and BEFORE `evolveTable`: `evolveTable`
+        // ALTERs the target (additively) in place, so a check that ran afterwards would leave the
+        // target already mutated by a run it then rejects -- and the drift remedy could not undo
+        // that. Running first means a rejected run leaves the target untouched, and surfaces the
+        // change as an actionable SEQUENCING_TYPE_DRIFT rather than a generic
         // CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE from the schema merge.
         if (isTableIncrementallyUpdated) {
           resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier).collect {
             case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
           }.foreach { autoCdcSpec =>
-            validateNoAutoCdcConfigDrift(
+            AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
               existingTargetSchema =
                 CatalogV2Util.v2ColumnsToStructType(existingTable.columns()),
-              autoCdcSpec = autoCdcSpec,
-              context = context
+              targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
+              expectedScdType = autoCdcSpec.expectedScdType,
+              expectedSequencingType = autoCdcSpec.expectedSequencingType,
+              resolver = context.spark.sessionState.conf.resolver
             )
           }
         }
@@ -482,37 +499,24 @@ object DatasetManager extends Logging {
   }
 
   /**
-   * Validate that an incrementally-updated AutoCDC target's configuration has not drifted from
-   * what its auxiliary table recorded. Called from [[materializeTable]] BEFORE the target's
-   * `evolveTable`, so a rejected run leaves the target's schema untouched (a check that ran after
-   * the target evolve would leave it already ALTERed by a run it then rejects, and the drift
-   * remedy could not undo that).
+   * Validate that an incrementally-updated AutoCDC flow's configuration has not drifted from what
+   * its auxiliary table recorded. Called from [[materializeTable]] before the target and auxiliary
+   * tables are created/evolved this run, so a rejected run leaves both untouched.
    *
-   * The sequencing-type check reads the existing target schema directly; the key-column, SCD-type,
-   * and track-history checks read the recorded properties off the existing auxiliary table, so this
-   * loads it. If the auxiliary table does not exist yet (first AutoCDC run over a pre-existing
-   * target), those three checks are skipped -- there is no recorded configuration to drift from.
+   * Covers the checks that read the recorded configuration off the existing auxiliary table: key
+   * columns, SCD type, and track-history columns. Runs whenever the auxiliary table exists,
+   * independent of the target's existence (see the call site). If the auxiliary table does not
+   * exist yet (first AutoCDC run), all three are skipped -- there is no recorded configuration to
+   * drift from. The sequencing-type check is separate ([[AutoCdcAuxiliaryTable]]
+   * `.validateNoTargetSequencingTypeDrift`) because it reads the target schema, not the aux table.
    *
-   * @param existingTargetSchema the schema of the already-materialized target table.
    * @param autoCdcSpec the auxiliary-table spec carrying this run's expected AutoCDC configuration.
    * @param context the context for the pipeline update.
    */
-  private def validateNoAutoCdcConfigDrift(
-      existingTargetSchema: StructType,
+  private def validateNoAutoCdcAuxConfigDrift(
       autoCdcSpec: AutoCdcAuxiliaryTableSpec,
       context: PipelineUpdateContext): Unit = {
     val resolver = context.spark.sessionState.conf.resolver
-
-    // Independent of the auxiliary table: the sequencing type is embedded in the target's schema.
-    AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
-      existingTargetSchema = existingTargetSchema,
-      targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
-      expectedScdType = autoCdcSpec.expectedScdType,
-      expectedSequencingType = autoCdcSpec.expectedSequencingType,
-      resolver = resolver
-    )
-
-    // The remaining checks read the recorded configuration off the existing auxiliary table.
     val (auxCatalog, auxIdentifier) =
       PipelinesCatalogUtils.resolveTableCatalog(context.spark, autoCdcSpec.identifier)
     loadTableIfExists(auxCatalog, auxIdentifier).foreach { existingAuxiliaryTable =>
@@ -536,11 +540,18 @@ object DatasetManager extends Logging {
     }
   }
 
-  /** Loads the table at `identifier` from `catalog`, or `None` if it does not exist. */
+  /**
+   * Loads the table at `identifier` from `catalog`, or `None` if it does not exist. A single
+   * `loadTable` guarded by a `NoSuchTableException` catch, rather than a `tableExists` +
+   * `loadTable` pair: one catalog round trip instead of two, and no window where the table can
+   * disappear between the existence check and the load. A missing *namespace* is not treated as
+   * "table absent" -- it surfaces as its own `NoSuchDatabaseException` rather than being swallowed.
+   */
   private def loadTableIfExists(
       catalog: TableCatalog,
       identifier: Identifier): Option[V2Table] = {
-    Option.when(catalog.tableExists(identifier))(catalog.loadTable(identifier))
+    try Some(catalog.loadTable(identifier))
+    catch { case _: NoSuchTableException => None }
   }
 
   /**
