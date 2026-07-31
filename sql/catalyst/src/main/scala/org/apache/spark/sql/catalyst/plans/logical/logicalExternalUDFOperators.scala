@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.sql.catalyst.expressions.{Attribute,
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet,
   ExternalUserDefinedFunction}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.types.StructType
@@ -36,6 +36,54 @@ trait ExternalUDF extends UnaryNode {
 
   /** Specification describing how to create and communicate with the UDF worker. */
   def workerSpec: UDFWorkerSpecification
+}
+
+/**
+ * :: Experimental ::
+ * Logical plan node for evaluating scalar UDF expressions in one external
+ * worker session.
+ *
+ * Every UDF call in this node uses [[workerSpec]]. Workers without UDF
+ * chaining support receive exactly one non-nested UDF. Workers with chaining
+ * support may receive nested chains or multiple independent UDF roots.
+ *
+ * @param workerSpec Specification describing the UDF worker.
+ * @param udfs UDF expression roots evaluated by the worker session.
+ * @param resultAttrs One output attribute for each UDF expression root.
+ * @param child Input relation for the UDFs.
+ */
+@Experimental
+case class EvalExternalUDF(
+    workerSpec: UDFWorkerSpecification,
+    udfs: Seq[ExternalUserDefinedFunction],
+    resultAttrs: Seq[Attribute],
+    child: LogicalPlan)
+  extends ExternalUDF {
+
+  assert(udfs.length == resultAttrs.length,
+    "Input UDFs and result attributes must have the same size")
+  assert(udfs.zip(resultAttrs).forall { case (udf, resultAttr) =>
+    udf.dataType == resultAttr.dataType && udf.nullable == resultAttr.nullable
+  }, "Input UDFs and result attributes must have matching types and nullability")
+
+  private val allUdfs = udfs.flatMap(_.collect {
+    case udf: ExternalUserDefinedFunction => udf
+  })
+  assert(allUdfs.forall(_.workerSpec == workerSpec),
+    "All UDFs in one evaluation node must use the same worker specification")
+  assert(workerSpec.getCapabilities.getSupportsUdfChaining || allUdfs.size == 1,
+    "A worker without UDF chaining support can evaluate only one UDF per node")
+
+  override def output: Seq[Attribute] = child.output ++ resultAttrs
+
+  override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
+
+  override def maxRows: Option[Long] = child.maxRows
+
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): EvalExternalUDF =
+    copy(child = newChild)
 }
 
 /**
@@ -58,6 +106,9 @@ case class MapPartitionsExternalUDF(
     profile: Option[ResourceProfile],
     child: LogicalPlan)
   extends ExternalUDF {
+
+  assert(function.workerSpec == workerSpec,
+    "The map partitions UDF must use the node's worker specification")
 
   val nodeOutputAttributes = toAttributes(
     function.dataType.asInstanceOf[StructType]
