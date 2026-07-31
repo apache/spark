@@ -337,7 +337,7 @@ class CrossValidatorModel private[ml] (
       // Param[Evaluator]
       evaluator))
     size += bestModel.estimatedSize
-    // SPARK-58250: Include model-owned metadata alongside the learned model state.
+    // Array[Double]
     size += SizeEstimator.estimate(avgMetrics)
     _subModels.foreach { models =>
       size += models.iterator.flatMap(_.iterator).map(_.estimatedSize).sum
