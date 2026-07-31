@@ -105,6 +105,7 @@ class UnifiedExternalUDFPlanner(
         pythonUdf.func, conf)
     val udf = ExternalUserDefinedFunction(
       name = Some(pythonUdf.name),
+      workerSpec = workerSpec,
       payload = pythonUdf.func.command.toArray,
       dataType = pythonUdf.dataType,
       children = Seq.empty,
