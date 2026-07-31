@@ -454,15 +454,15 @@ Security options for the Spark History Server are covered more detail in the
     <td>spark.history.fs.eventLog.rolling.onDemandLoadEnabled</td>
     <td>true</td>
     <td>
-      Whether to look up rolling event log locations on demand before listing files.
+      Whether to look up rolling event log locations on demand manner before listing files.
     </td>
     <td>4.1.0</td>
   </tr>
   <tr>
-    <td>spark.history.fs.eventLog.v1.onDemandLoadEnabled</td>
+    <td>spark.history.fs.eventLog.single.onDemandLoadEnabled</td>
     <td>true</td>
     <td>
-      Whether to look up V1 event log locations on demand before listing files.
+      Whether to look up single event log locations on demand manner before listing files.
     </td>
     <td>4.3.0</td>
   </tr>

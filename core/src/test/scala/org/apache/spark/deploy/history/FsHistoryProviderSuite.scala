@@ -1732,6 +1732,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val conf = createTestConf(true)
         conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
         conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, onDemandEnabled)
+        conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, false)
         val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
         val provider = new FsHistoryProvider(conf)
 
@@ -1760,13 +1761,14 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("Support spark.history.fs.eventLog.v1.onDemandLoadEnabled") {
+  test("Support spark.history.fs.eventLog.single.onDemandLoadEnabled") {
     Seq(true, false).foreach { onDemandEnabled =>
       Seq(None, Some(CompressionCodec.LZF)).foreach { codecName =>
         withTempDir { dir =>
           val conf = createTestConf(true)
           conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
-          conf.set(EVENT_LOG_V1_ON_DEMAND_LOAD_ENABLED, onDemandEnabled)
+          conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+          conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, onDemandEnabled)
           val provider = new FsHistoryProvider(conf)
           val appId = s"app1-${codecName.getOrElse("none")}"
           val logFile = newLogFile(appId, None, inProgress = false, codecName, dir)
@@ -1793,12 +1795,13 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("Support on-demand loading for in-progress V1 event logs") {
+  test("Support on-demand loading for in-progress single event logs") {
     Seq(None, Some(CompressionCodec.LZF)).foreach { codecName =>
       withTempDir { dir =>
         val conf = createTestConf(true)
         conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
-        conf.set(EVENT_LOG_V1_ON_DEMAND_LOAD_ENABLED, true)
+        conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+        conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
         val provider = new FsHistoryProvider(conf)
         val appId = s"app1-${codecName.getOrElse("none")}"
         val logFile = newLogFile(appId, None, inProgress = true, codecName, dir)
@@ -1814,7 +1817,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("On-demand loading preserves in-progress V1 event logs during cleanup") {
+  test("On-demand loading preserves in-progress single event logs during cleanup") {
     withTempDir { dir =>
       val clock = new ManualClock(0)
       val conf = createTestConf(true)
@@ -1822,7 +1825,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         .set(CLEANER_ENABLED, true)
         .set(MAX_LOG_AGE_S, 0L)
         .set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
-        .set(EVENT_LOG_V1_ON_DEMAND_LOAD_ENABLED, true)
+        .set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
       val provider = new FsHistoryProvider(conf, clock)
       val logFile = newLogFile("app1", None, inProgress = true, logDir = dir)
       writeFile(logFile, None,
@@ -1839,11 +1842,12 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("On-demand loading respects V1 event log attempts") {
+  test("On-demand loading respects single event log attempts") {
     withTempDir { dir =>
       val conf = createTestConf(true)
       conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
-      conf.set(EVENT_LOG_V1_ON_DEMAND_LOAD_ENABLED, true)
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
       val provider = new FsHistoryProvider(conf)
       val logFile = newLogFile("app1", Some("attempt1"), inProgress = false, logDir = dir)
       writeFile(logFile, None,
@@ -1858,11 +1862,12 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("On-demand loading finds V1 event logs in all directories") {
+  test("On-demand loading finds single event logs in all directories") {
     withTempDir { dir =>
       val conf = createTestConf(true)
       conf.set(HISTORY_LOG_DIR, s"${testDir.getAbsolutePath},${dir.getAbsolutePath}")
-      conf.set(EVENT_LOG_V1_ON_DEMAND_LOAD_ENABLED, true)
+      conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
       val provider = new FsHistoryProvider(conf)
       val logFile = newLogFile("app1", None, inProgress = false, logDir = dir)
       writeFile(logFile, None,
@@ -1877,13 +1882,13 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
-  test("On-demand loading supports V1 event logs when scanning is disabled") {
+  test("On-demand loading supports single event logs when scanning is disabled") {
     withTempDir { dir =>
       val conf = createTestConf(true)
       conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
       conf.set(SCAN_DISABLED_PATH_PATTERNS, Seq("file:.*"))
       conf.set(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED, false)
-      conf.set(EVENT_LOG_V1_ON_DEMAND_LOAD_ENABLED, true)
+      conf.set(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED, true)
       val provider = new FsHistoryProvider(conf)
       val logFile = newLogFile("app1", None, inProgress = false, logDir = dir)
       writeFile(logFile, None,

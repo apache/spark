@@ -465,7 +465,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logPaths += RollingEventLogFilesWriter.EVENT_LOG_DIR_NAME_PREFIX +
         EventLogFileWriter.nameForAppAndAttempt(appId, attemptId)
     }
-    if (conf.get(EVENT_LOG_V1_ON_DEMAND_LOAD_ENABLED)) {
+    if (conf.get(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED)) {
       logPaths ++= SingleEventLogFileWriter.getLogFileNames(appId, attemptId)
     }
     logPaths.iterator.map(loadFromFallbackLocation(appId, attemptId, _)).collectFirst {
@@ -475,7 +475,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def isOnDemandLogLoadEnabled: Boolean = {
     conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) ||
-      conf.get(EVENT_LOG_V1_ON_DEMAND_LOAD_ENABLED)
+      conf.get(EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED)
   }
 
   private def loadFromFallbackLocation(appId: String, attemptId: Option[String], logPath: String)
