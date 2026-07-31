@@ -30,6 +30,7 @@ from pyspark.testing.connectutils import should_test_connect, connect_requiremen
 if should_test_connect:
     from pyspark.sql.connect import local_server_pool
     from pyspark.sql.connect.local_server_pool import (
+        MemberAttendant,
         PoolDirectory,
         PoolMember,
         ServerPool,
@@ -104,6 +105,7 @@ _SAVED_ENV_KEYS = (
     "SPARK_LOCAL_CONNECT_POOL_DIR",
     "SPARK_LOCAL_CONNECT_POOL_SIZE",
     "SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT",
+    "SPARK_CONNECT_AUTHENTICATE_TOKEN",
     "PYSPARK_PYTHON",
 )
 
@@ -430,6 +432,41 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertEqual(os.listdir(self._directory.path), [".lock"])
         self.assertTrue(_wait_proc_dead(warm))
         self.assertTrue(_wait_proc_dead(attendant))
+
+    def test_refill_only_counts_matching_members(self) -> None:
+        from unittest import mock
+
+        with self._directory as directory:
+            directory.write_json(
+                directory.server_path("srv"), self._server_data(1, os.getpid(), "my-fp")
+            )
+            directory.write_json(
+                directory.pending_path("pen"),
+                {"attendant_pid": os.getpid(), "created": time.time(), "fingerprint": "other"},
+            )
+            with mock.patch.object(MemberAttendant, "spawn") as spawn:
+                self._pool.refill("local[2]", {}, "my-fp", target=2)
+        # One matching member exists (the other-fingerprint launch does not count), so one
+        # launch tops the pool up to the target of two.
+        self.assertEqual(spawn.call_count, 1)
+
+    def test_acquire_returns_the_member_already_claimed_by_this_process(self) -> None:
+        member = PoolMember(self._server_data(15002, os.getpid()))
+        member.claim_path = "unused"
+        local_server_pool._claimed_member = member
+        url = local_server_pool.acquire_pooled_local_connect_server("local[2]", {})
+        self.assertEqual(url, "sc://localhost:15002")
+        self.assertEqual(os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN"), "t")
+
+    def test_acquire_requires_posix(self) -> None:
+        from unittest import mock
+
+        from pyspark.errors import PySparkRuntimeError
+
+        with mock.patch.object(os, "name", "nt"):
+            with self.assertRaises(PySparkRuntimeError) as ctx:
+                local_server_pool.acquire_pooled_local_connect_server("local[2]", {})
+        self.assertIn("POSIX", str(ctx.exception))
 
 
 if __name__ == "__main__":
