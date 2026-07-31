@@ -721,7 +721,7 @@ object InlineOuterGeneratorBuilder extends InlineGeneratorBuilderBase {
  *   20   NULL   2
  * }}}
  *
- * This generator uses interpreted evaluation ([[CodegenFallback]]); [[GenerateExec]] therefore
+ * This generator uses interpreted evaluation ([[CodegenFallback]]); `GenerateExec` therefore
  * disables whole-stage codegen for the enclosing `Generate`. The per-array/per-ordinality zip with
  * NULL padding does not map onto the existing [[CollectionGenerator]] codegen path (which emits a
  * single `ArrayData`/`MapData`), and its interpreted `eval` is already lazy (one row built per
@@ -759,8 +759,9 @@ case class Unnest(children: Seq[Expression], withOrdinality: Boolean)
 
   override def elementSchema: StructType = {
     // With a single array keep the `explode`-compatible default name `col`; with several arrays
-    // use positional names `col0`, `col1`, .... A shorter array yields NULLs in the padded rows,
-    // so a padded column is always nullable regardless of the array's own `containsNull`.
+    // use positional names `col0`, `col1`, and so on. A shorter array yields NULLs in the
+    // padded rows, so a padded column is always nullable regardless of the array's own
+    // `containsNull`.
     val padded = children.length > 1
     val arrayFields = arrayElementTypes.zipWithIndex.map { case (at, idx) =>
       val name = if (children.length == 1) "col" else s"col$idx"

@@ -187,7 +187,7 @@ class GeneratorExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("unnest - type checks") {
     assert(Unnest(Seq(int_array), withOrdinality = false).checkInputDataTypes().isSuccess)
 
-    // No arguments is rejected.
+    // Providing no arguments is rejected.
     checkError(
       exception = intercept[AnalysisException] {
         Unnest(Seq.empty, withOrdinality = false).checkInputDataTypes()
