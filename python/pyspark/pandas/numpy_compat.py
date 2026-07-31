@@ -109,9 +109,9 @@ binary_np_spark_mappings = {
     ),
     # F.shiftleft accepts literal counts only; call_function also accepts a column.
     # NumPy returns zero for counts outside an int64's bit width, unlike JVM shifts.
-    "left_shift": lambda c1, c2: F.when(
-        (c2 < 0) | (c2 >= 64), F.lit(0)
-    ).otherwise(F.call_function("shiftleft", c1, c2)),
+    "left_shift": lambda c1, c2: F.when((c2 < 0) | (c2 >= 64), F.lit(0)).otherwise(
+        F.call_function("shiftleft", c1, c2)
+    ),
     "logaddexp": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.logaddexp(s1, s2), DoubleType()
     ),
