@@ -14766,6 +14766,71 @@ def md5(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def xxh3_64(col: "ColumnOrName") -> Column:
+    """Returns a 64-bit hash value of the argument using the XXH3 algorithm.
+
+    Unlike :func:`xxhash64`, which hashes one or more columns structurally, this hashes the raw
+    bytes of a single value with seed 0, so its result is byte compatible with the reference XXH3.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to compute on. A column of string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a long.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_128`
+    :meth:`pyspark.sql.functions.xxhash64`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.xxh3_64('a').alias('h')).collect()
+    [Row(h=80997306238743657)]
+    """
+    return _invoke_function_over_columns("xxh3_64", col)
+
+
+@_try_remote_functions
+def xxh3_128(col: "ColumnOrName") -> Column:
+    """Returns a 128-bit XXH3 hash of the argument as a 32-character hex string.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        target column to compute on. A column of string or binary type.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Returns a column that evaluates to a string.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxh3_64`
+    :meth:`pyspark.sql.functions.md5`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('Spark',)], ['a'])
+    >>> df.select(sf.xxh3_128('a').alias('h')).collect()
+    [Row(h='7d57dd84c60c86ca1f4e82ab91a12b5e')]
+    """
+    return _invoke_function_over_columns("xxh3_128", col)
+
+
+@_try_remote_functions
 def sha1(col: "ColumnOrName") -> Column:
     """Returns the hex string result of SHA-1.
 

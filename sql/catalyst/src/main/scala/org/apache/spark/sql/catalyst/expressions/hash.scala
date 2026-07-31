@@ -248,6 +248,78 @@ case class Crc32(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): Crc32 = copy(child = newChild)
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns a 64-bit hash value of the argument using the XXH3 algorithm.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the XXH3 hash of.
+        An expression that evaluates to a binary.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark');
+       80997306238743657
+  """,
+  since = "4.3.0",
+  group = "hash_funcs")
+case class Xxh364(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  override def dataType: DataType = LongType
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  protected override def nullSafeEval(input: Any): Any =
+    XXH3.hash64(input.asInstanceOf[Array[Byte]])
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val cls = classOf[XXH3].getName
+    nullSafeCodeGen(ctx, ev, value => s"${ev.value} = $cls.hash64($value);")
+  }
+
+  override def prettyName: String = "xxh3_64"
+
+  override protected def withNewChildInternal(newChild: Expression): Xxh364 = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns a 128-bit XXH3 hash of the argument as a hex string.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the XXH3 hash of.
+        An expression that evaluates to a binary.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark');
+       7d57dd84c60c86ca1f4e82ab91a12b5e
+  """,
+  since = "4.3.0",
+  group = "hash_funcs")
+case class Xxh3128(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  protected override def nullSafeEval(input: Any): Any =
+    XXH3.hash128Hex(input.asInstanceOf[Array[Byte]])
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val cls = classOf[XXH3].getName
+    defineCodeGen(ctx, ev, c => s"$cls.hash128Hex($c)")
+  }
+
+  override def prettyName: String = "xxh3_128"
+
+  override protected def withNewChildInternal(newChild: Expression): Xxh3128 =
+    copy(child = newChild)
+}
 
 /**
  * A function that calculates hash value for a group of expressions.  Note that the `seed` argument
