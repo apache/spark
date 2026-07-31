@@ -18,12 +18,13 @@ package org.apache.spark.udf.worker.grpc
 
 import java.util.Locale
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
-import io.grpc.{ManagedChannel, Server}
+import io.grpc.{CallOptions, ClientCall, ConnectivityState, ForwardingClientCall, ManagedChannel,
+  Metadata, MethodDescriptor, Server}
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
@@ -49,7 +50,7 @@ import org.apache.spark.udf.worker.core.{Termination, WorkerHandle, WorkerLogger
  *    after Init without releasing the worker underneath an active stream.
  *  - An immediate ErrorResponse after InitResponse must fail init and send the
  *    protocol-required Cancel; a premature FinishResponse must not truncate input.
- *  - Cancel / close concurrent with an in-progress data phase terminate
+ *  - Cancel and close concurrent with an in-progress data phase terminate
  *    cleanly without leaks or unbounded hangs.
  *
  * Runs entirely in-process: no subprocess, no UDS. Server services are
@@ -148,6 +149,44 @@ class GrpcWorkerSessionConcurrencySuite
     openServers.add(server)
     openChannels.add(channel)
     (server, channel)
+  }
+
+  /** A [[ManagedChannel]] wrapper whose operations delegate to `underlying`. */
+  private class DelegatingManagedChannel(underlying: ManagedChannel) extends ManagedChannel {
+    override def shutdown(): ManagedChannel = {
+      underlying.shutdown()
+      this
+    }
+
+    override def isShutdown: Boolean = underlying.isShutdown
+
+    override def isTerminated: Boolean = underlying.isTerminated
+
+    override def shutdownNow(): ManagedChannel = {
+      underlying.shutdownNow()
+      this
+    }
+
+    override def awaitTermination(timeout: Long, unit: TimeUnit): Boolean =
+      underlying.awaitTermination(timeout, unit)
+
+    override def newCall[ReqT, RespT](
+        methodDescriptor: MethodDescriptor[ReqT, RespT],
+        callOptions: CallOptions): ClientCall[ReqT, RespT] =
+      underlying.newCall(methodDescriptor, callOptions)
+
+    override def authority(): String = underlying.authority()
+
+    override def getState(requestConnection: Boolean): ConnectivityState =
+      underlying.getState(requestConnection)
+
+    override def notifyWhenStateChanged(
+        source: ConnectivityState,
+        callback: Runnable): Unit = underlying.notifyWhenStateChanged(source, callback)
+
+    override def resetConnectBackoff(): Unit = underlying.resetConnectBackoff()
+
+    override def enterIdle(): Unit = underlying.enterIdle()
   }
 
   private def newSession(
@@ -825,7 +864,7 @@ class GrpcWorkerSessionConcurrencySuite
     assert(ex.executionError != null && ex.executionError.getUser.getErrorClass == "PreInitError",
       s"init() must throw the structured error, got: ${ex.executionError}")
 
-    // close() returns the proto terminator: Cancelled, not a bare/Failed outcome.
+    // close() returns the proto terminator: Cancelled, not a generic Failed outcome.
     val termination = session.close(emptyCancel)
     assert(termination.isInstanceOf[Termination.Cancelled],
       s"expected the proto terminator Termination.Cancelled, got: $termination")
@@ -981,9 +1020,27 @@ class GrpcWorkerSessionConcurrencySuite
     session.close(emptyCancel)
   }
 
+  test("input iterator returning null: cancels the stream and surfaces the error") {
+    val service = new CapturingService()
+    val (_, channel) = startServer(service)
+    val session = newSession(channel)
+    session.init(basicInit())
+
+    val input = Iterator.single(null.asInstanceOf[DataRequest])
+    val it = session.process(input, emptyFinish)
+    val ex = intercept[NullPointerException] { it.hasNext }
+    assert(ex.getMessage.contains("input iterator returned null"),
+      s"the invalid input must propagate, got: ${ex.getMessage}")
+    val requests = service.captured.asScala.toSeq
+    assert(requests.size == 2 && requests.head.getControl.hasInit &&
+      requests(1).getControl.hasCancel,
+      s"a null input must produce exactly Init then Cancel, got: $requests")
+    assert(session.close(emptyCancel).isInstanceOf[Termination.Cancelled])
+  }
+
   // ---------------------------------------------------------------------------
   // A throwing finish() thunk (caller-supplied, may run a finish callback) must
-  // Cancel the stream and rethrow rather than escaping uncaught.
+  // Cancel the stream before rethrowing the callback failure.
   // ---------------------------------------------------------------------------
 
   test("finish thunk throwing: cancels the stream and surfaces the error") {
@@ -1029,9 +1086,26 @@ class GrpcWorkerSessionConcurrencySuite
     session.close(emptyCancel)
   }
 
+  test("finish thunk returning null: cancels the stream and surfaces the error") {
+    val service = new CapturingService()
+    val (_, channel) = startServer(service)
+    val session = newSession(channel)
+    session.init(basicInit())
+
+    val it = session.process(Iterator.empty, () => null)
+    val ex = intercept[NullPointerException] { it.hasNext }
+    assert(ex.getMessage.contains("finish callback returned null"),
+      s"the invalid finish result must propagate, got: ${ex.getMessage}")
+    val requests = service.captured.asScala.toSeq
+    assert(requests.size == 2 && requests.head.getControl.hasInit &&
+      requests(1).getControl.hasCancel,
+      s"a null finish result must produce exactly Init then Cancel, got: $requests")
+    assert(session.close(emptyCancel).isInstanceOf[Termination.Cancelled])
+  }
+
   // ---------------------------------------------------------------------------
-  // close() concurrent with a blocked init(): close() settles the terminal, so
-  // init() must be woken and fail fast rather than park for initResponseTimeoutMs.
+  // close() concurrent with init(): close must serialize with stream opening, and
+  // a close-settled terminal must wake an init blocked on its response.
   //
   // Regression guard for onTerminalSettled waking initValue. The terminal here is
   // settled by close() ITSELF (the terminalTimeoutMs path in doClose, because the
@@ -1041,35 +1115,43 @@ class GrpcWorkerSessionConcurrencySuite
   // stays parked until initResponseTimeoutMs.
   // ---------------------------------------------------------------------------
 
-  test("close concurrent with the initial write sends Cancel only after Init") {
-    val initHandlerEntered = new CountDownLatch(1)
-    val releaseInitHandler = new CountDownLatch(1)
-    val cancelSeen = new CountDownLatch(1)
+  test("close concurrent with stream opening waits and sends Cancel only after Init") {
+    val callStartEntered = new CountDownLatch(1)
+    val releaseCallStart = new CountDownLatch(1)
     val service = new CapturingService(
       onRequest = (req, resp) => {
-        if (req.hasControl && req.getControl.hasInit) {
-          // Hold the directExecutor Init write inside the server handler. close()
-          // must wait for this write rather than treating requestObserver as
-          // absent, releasing the worker, and letting Init escape afterward.
-          initHandlerEntered.countDown()
-          releaseInitHandler.await(10, TimeUnit.SECONDS)
-        } else if (req.hasControl && req.getControl.hasCancel) {
-          cancelSeen.countDown()
+        if (req.hasControl && req.getControl.hasCancel) {
           resp.onNext(UdfResponse.newBuilder().setControl(
             UdfControlResponse.newBuilder().setCancel(
               CancelResponse.getDefaultInstance).build()).build())
         }
       })
-    val (_, channel) = startServer(service)
+    val (_, underlying) = startServer(service)
+    val channel = new DelegatingManagedChannel(underlying) {
+      override def newCall[ReqT, RespT](
+          methodDescriptor: MethodDescriptor[ReqT, RespT],
+          callOptions: CallOptions): ClientCall[ReqT, RespT] =
+        new ForwardingClientCall.SimpleForwardingClientCall[ReqT, RespT](
+          super.newCall(methodDescriptor, callOptions)) {
+          override def start(
+              responseListener: ClientCall.Listener[RespT],
+              headers: Metadata): Unit = {
+            callStartEntered.countDown()
+            assert(releaseCallStart.await(10, TimeUnit.SECONDS),
+              "timed out waiting to release ClientCall.start")
+            super.start(responseListener, headers)
+          }
+        }
+    }
     val session = newSession(channel,
       initResponseTimeoutMs = NeverReachedTimeoutMs, terminalTimeoutMs = NeverReachedTimeoutMs)
 
     val initThrown = new AtomicReference[Throwable]()
     val initThread = new Thread(() => {
       try session.init(basicInit()) catch { case t: Throwable => initThrown.set(t) }
-    }, "init-write-close-race")
+    }, "init-open-close-race")
     initThread.start()
-    assert(initHandlerEntered.await(5, TimeUnit.SECONDS), "worker never entered the Init handler")
+    assert(callStartEntered.await(5, TimeUnit.SECONDS), "client call never started opening")
 
     val closeResult = new AtomicReference[Termination]()
     val closeThrown = new AtomicReference[Throwable]()
@@ -1078,21 +1160,23 @@ class GrpcWorkerSessionConcurrencySuite
       try closeResult.set(session.close(emptyCancel))
       catch { case t: Throwable => closeThrown.set(t) }
       finally closeDone.countDown()
-    }, "close-during-init-write")
+    }, "close-during-stream-open")
     closeThread.start()
 
-    // The close thread must block on requestLock while the Init write is in the
-    // directExecutor handler. Before the fix it returned immediately through the
-    // requestObserver-null path and released the worker under the active stream.
+    // The close thread must block on requestLock while ClientCall.start is still
+    // opening the RPC. Before the fix it returned through the requestObserver-null
+    // path and released the worker while stream creation was still in progress.
     val blockedDeadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
     while (closeThread.getState != Thread.State.BLOCKED && closeDone.getCount != 0 &&
         System.nanoTime() < blockedDeadlineNanos) {
       Thread.sleep(10L)
     }
     assert(closeThread.getState == Thread.State.BLOCKED,
-      s"close must wait for the initial write, state=${closeThread.getState}")
+      s"close must wait for stream creation, state=${closeThread.getState}")
+    assert(!handleOf(session).released.get(),
+      "close must not release the worker while the RPC is still opening")
 
-    releaseInitHandler.countDown()
+    releaseCallStart.countDown()
     closeThread.join(10000)
     initThread.join(10000)
     assert(!closeThread.isAlive && !initThread.isAlive,
@@ -1100,13 +1184,59 @@ class GrpcWorkerSessionConcurrencySuite
     assert(closeThrown.get() == null, s"close failed: ${closeThrown.get()}")
     assert(initThrown.get().isInstanceOf[GrpcWorkerSessionException],
       s"init must fail after concurrent close, got: ${initThrown.get()}")
-    assert(cancelSeen.getCount == 0, "close must send Cancel after the in-flight Init")
     assert(closeResult.get().isInstanceOf[Termination.Cancelled],
       s"worker acknowledgement should settle Cancelled, got: ${closeResult.get()}")
     val requests = service.captured.asScala.toSeq
     assert(requests.size == 2 && requests.head.getControl.hasInit &&
       requests(1).getControl.hasCancel,
       s"expected exactly Init then Cancel, got: $requests")
+  }
+
+  test("outgoing send failure aborts the request side and close does not half-close") {
+    val cancelCalls = new AtomicInteger(0)
+    val halfCloseCalls = new AtomicInteger(0)
+    val failNextSend = new AtomicBoolean(true)
+    val service = new CapturingService()
+    val (_, underlying) = startServer(service)
+    val channel = new DelegatingManagedChannel(underlying) {
+      override def newCall[ReqT, RespT](
+          methodDescriptor: MethodDescriptor[ReqT, RespT],
+          callOptions: CallOptions): ClientCall[ReqT, RespT] =
+        new ForwardingClientCall.SimpleForwardingClientCall[ReqT, RespT](
+          super.newCall(methodDescriptor, callOptions)) {
+          override def sendMessage(message: ReqT): Unit = {
+            if (failNextSend.compareAndSet(true, false)) {
+              throw new RuntimeException("send boom")
+            }
+            super.sendMessage(message)
+          }
+
+          override def cancel(message: String, cause: Throwable): Unit = {
+            cancelCalls.incrementAndGet()
+            super.cancel(message, cause)
+          }
+
+          override def halfClose(): Unit = {
+            halfCloseCalls.incrementAndGet()
+            super.halfClose()
+          }
+        }
+    }
+    val session = newSession(channel)
+
+    val ex = intercept[GrpcWorkerSessionException] { session.init(basicInit()) }
+    assert(ex.getCause != null && ex.getCause.getMessage.contains("send boom"),
+      s"the outgoing failure must surface from init, got: $ex")
+    assert(cancelCalls.get() == 1,
+      "an outgoing onNext failure must terminate the request side with onError")
+
+    val termination = session.close(emptyCancel)
+    assert(termination.isInstanceOf[Termination.TransportFailed],
+      s"the outgoing failure must settle TransportFailed, got: $termination")
+    assert(halfCloseCalls.get() == 0,
+      "close must not invoke onCompleted after the request side was aborted")
+    assert(cancelCalls.get() == 1,
+      "close must not terminate an already-aborted request side again")
   }
 
   test("close concurrent with blocked init: init is woken and fails fast") {

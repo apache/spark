@@ -156,6 +156,7 @@ abstract class WorkerSession(
    *                the worker needs to start processing.
    */
   final def init(message: Init): InitResponse = {
+    require(message != null, "message is required")
     if (!state.compareAndSet(SessionState.Created, SessionState.Initializing)) {
       throw new IllegalStateException(
         s"init must be called exactly once before process (current state: ${state.get()})")

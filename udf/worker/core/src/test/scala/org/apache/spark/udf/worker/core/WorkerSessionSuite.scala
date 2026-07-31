@@ -95,6 +95,18 @@ class WorkerSessionSuite extends AnyFunSuite {
     assert(ex.getMessage.contains("exactly once"))
   }
 
+  test("init rejects a null message before changing state") {
+    var initCalled = false
+    val s = new FakeWorkerSession(onInit = _ => {
+      initCalled = true
+      InitResponse.getDefaultInstance
+    })
+    val ex = intercept[IllegalArgumentException](s.init(null))
+    assert(ex.getMessage.contains("message is required"))
+    assert(!initCalled)
+    assert(s.state == SessionState.Created)
+  }
+
   test("process before init is rejected") {
     val s = new FakeWorkerSession()
     val ex = intercept[IllegalStateException](s.process(Iterator.empty))

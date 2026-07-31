@@ -35,11 +35,12 @@ import org.apache.spark.udf.worker.{CancelResponse, ExecutionError, FinishRespon
  * `FinishResponse` was already produced when a `Cancel` arrives the engine still
  * receives [[Finished]], otherwise [[Cancelled]].
  *
- * '''Failure outcomes''' ([[Failed]] / [[TransportFailed]]) carry the cause
- * instead of a proto terminator (none arrived, so they have no metrics). They
- * exist so a failure is not reported as a benign cancel -- in particular an
- * error raised during finish/close, '''after all data has been drained''',
- * reaches the caller only through this value, never through the result iterator.
+ * '''Failure outcomes''' ([[Failed]] / [[TransportFailed]] / [[Interrupted]])
+ * carry the cause instead of a proto terminator (none arrived, so they have no
+ * metrics). They prevent a failure from being reported as a benign cancel. In
+ * particular, an error raised during finish/close, '''after all data has been
+ * drained''', reaches the caller only through this value, never through the
+ * result iterator.
  */
 @Experimental
 sealed trait Termination

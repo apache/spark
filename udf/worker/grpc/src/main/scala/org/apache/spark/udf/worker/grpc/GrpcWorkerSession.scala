@@ -16,6 +16,7 @@
  */
 package org.apache.spark.udf.worker.grpc
 
+import java.util.Objects
 import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
@@ -27,7 +28,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.udf.worker.{Cancel, CancelResponse, DataRequest, DataResponse,
   ExecutionError, Finish, FinishResponse, Init, InitResponse, UdfControlRequest,
-  UdfControlResponse, UdfRequest, UdfResponse, UdfWorkerGrpc}
+  UdfControlResponse, UdfPayload, UdfRequest, UdfResponse, UdfWorkerGrpc}
 import org.apache.spark.udf.worker.core.{Termination, WorkerHandle, WorkerLogger, WorkerSession}
 import org.apache.spark.udf.worker.core.WorkerSession.SessionState
 import org.apache.spark.udf.worker.grpc.GrpcWorkerSession._
@@ -48,10 +49,9 @@ import org.apache.spark.udf.worker.grpc.GrpcWorkerSession._
  *                      (ErrorResponse)? -> (FinishResponse | CancelResponse)
  * }}}
  *
- * Knows nothing about how the worker was provisioned (locally spawned,
- * indirectly looked up, ...) -- the dispatcher constructs this with a
- * [[WorkerHandle]] and channel; the base [[WorkerSession]] handles
- * dispatcher-side cleanup on close.
+ * Knows nothing about how the worker was provisioned -- the dispatcher
+ * constructs this with a [[WorkerHandle]] and channel; the base
+ * [[WorkerSession]] handles dispatcher-side cleanup on close.
  *
  * '''Driving model.''' Consumption-driven (Volcano / pull): the thread that
  * consumes the [[doProcess]] result iterator is the one that pulls input and
@@ -69,15 +69,15 @@ import org.apache.spark.udf.worker.grpc.GrpcWorkerSession._
  * [[compareAndSetState]] / [[completeTerminal]] as it exchanges messages:
  * {{{
  *   Initializing --(InitResponse ok)--> Initialized   [handleControl]
- *   Streaming ----(Finish written)----> Finishing      [ProcessIterator]
- *   <any non-terminal> --(Cancel written)--> Cancelling [sendCancelInternal]
+ *   Streaming ----(input exhausted)-------> Finishing      [ProcessIterator]
+ *   <any non-terminal> --(Cancel send starts)--> Cancelling [sendCancelInternal]
  *   <any non-terminal> --(terminator/error)--> terminal [completeTerminal]
  * }}}
  * The two clean terminals carry the worker's `FinishResponse` / `CancelResponse`
  * (metrics + finish/cancel callback `data`/`error`) so [[close]] can return
- * them. The only flag kept outside the machine is [[cancelRequested]], which
- * makes the wire write idempotent and suppresses any in-flight Data/Finish once
- * cancellation begins.
+ * them. Cancellation intent is deliberately tracked outside the machine in
+ * [[cancelRequested]], which makes the wire write idempotent and suppresses any
+ * in-flight Data/Finish once cancellation begins.
  *
  * Threading:
  *  - [[doInit]] is synchronous: sends `Init` and blocks on `InitResponse`,
@@ -90,10 +90,10 @@ import org.apache.spark.udf.worker.grpc.GrpcWorkerSession._
  *    once.
  *  - [[doClose]] is thread-safe and idempotent: it settles + returns the
  *    terminator (cancelling in-flight work if the stream had not finished)
- *    and half-closes the request side.
+ *    and terminates the request side.
  *
  * TODO [SPARK-55278]: this class does not yet implement payload chunking;
- * the entire [[Init.udf]] payload is sent inline. Chunking will be added
+ * the entire [[UdfPayload]] is sent inline. Chunking will be added
  * when a UDF payload large enough to exceed gRPC's default message size
  * limit is introduced.
  *
@@ -144,19 +144,19 @@ class GrpcWorkerSession(
   // stalled consumer).
   private val outputQueue = new LinkedBlockingQueue[QueueItem]()
 
-  // The worker's `InitResponse` (success or error) coupled with the latch that
-  // init() blocks on. Fires when the InitResponse arrives (`complete`), when a
-  // pre-init ErrorResponse arrives, or when a terminal settles first without an
-  // InitResponse (`signalWithoutValue`). Until it fires we have no proof the
-  // worker accepted the session.
+  // This value couples the worker's `InitResponse` (success or error) with the
+  // latch on which init() blocks. The latch fires when the InitResponse arrives
+  // (`complete`), when a pre-init ErrorResponse arrives, or when a terminal
+  // settles first without an InitResponse (`signalWithoutValue`). Until it fires
+  // we have no proof the worker accepted the session.
   //
   // Settle-before-release rule (referenced from every callback that both settles
   // a terminal and fires this latch): settle the terminal FIRST, then complete /
-  // signal. init() blocks on the latch, and only latch await/release establish a
-  // happens-before edge, so a woken init() is guaranteed to observe the terminal
-  // rather than a transient state. OneShotValue keeps that publish-then-release
-  // in one place instead of every caller remembering to count down after setting
-  // the reference.
+  // signal. init() blocks on the latch, and only a latch await/release pair
+  // establishes a happens-before edge, so a woken init() is guaranteed to
+  // observe the terminal rather than a transient state. OneShotValue keeps that
+  // publish-then-release in one place instead of every caller remembering to
+  // count down after setting the reference.
   private val initValue = new OneShotValue[InitResponse]
 
   // Fired when the session reaches a terminal [[SessionState]]. doClose() and
@@ -171,11 +171,11 @@ class GrpcWorkerSession(
   // True immediately before Finish is handed to the request observer. It is set
   // before onNext so a reentrant callback may deliver FinishResponse while the
   // Finish request is still being written.
-  private val finishWritten = new AtomicBoolean(false)
+  private val finishSendStarted = new AtomicBoolean(false)
 
   // Cancellation INTENT -- distinct from the `Cancelling` state, which is reached
-  // only once a Cancel is actually written to the wire ([[sendCancelInternal]]).
-  // Intent is set first and can outrun (or never reach) that write, so
+  // once a Cancel send is attempted under [[requestLock]] ([[sendCancelInternal]]).
+  // Intent is set first and can outrun (or never reach) that attempt, so
   // `cancelRequested` does NOT imply state `Cancelling`. It is kept outside the
   // [[SessionState]] machine to (a) make cancellation idempotent across all call
   // sites and (b) suppress any Data/Finish that would otherwise race a Cancel
@@ -188,6 +188,11 @@ class GrpcWorkerSession(
   // Initialized in init() -- before that, close() is a no-op on the request
   // side, which is exactly the contract the wrapping WorkerSession expects.
   @volatile private var requestObserver: StreamObserver[UdfRequest] = _
+
+  // True after the request side has been half-closed, aborted, or observed the
+  // transport closing. It prevents this session from issuing duplicate terminal
+  // calls, including following onError with onCompleted from close().
+  private val requestSideTerminated = new AtomicBoolean(false)
 
   private val responseObserver: StreamObserver[UdfResponse] = new StreamObserver[UdfResponse] {
     override def onNext(response: UdfResponse): Unit = {
@@ -219,6 +224,7 @@ class GrpcWorkerSession(
       // Transport-level failure: the stream is dead, no further writes possible.
       // Settling the terminal wakes a blocked init() (via onTerminalSettled) so it
       // surfaces the transport cause instead of the initResponseTimeoutMs error.
+      requestSideTerminated.set(true)
       Transitions.transportFailed(t)
     }
 
@@ -227,6 +233,7 @@ class GrpcWorkerSession(
       // / CancelResponse). Treat as transport error so the engine sees a
       // failure, not a silent end-of-stream. Settling the terminal wakes a blocked
       // init() via onTerminalSettled.
+      requestSideTerminated.set(true)
       if (!currentState.isTerminal) {
         Transitions.transportFailed(new IllegalStateException(
           "worker response stream closed without a terminator"))
@@ -246,7 +253,8 @@ class GrpcWorkerSession(
    * terminal CAS in [[completeTerminal]]. The only direct [[initValue]] signals
    * left are the non-terminal init paths ([[handleControl]]'s INIT-ok / INIT-error
    * / pre-init-ERROR branches), which must wake [[doInit]] '''without''' settling a
-   * terminal -- the session stays `Initializing` so `process()` can still run.
+   * terminal. INIT-ok first advances the session to `Initialized`; the error
+   * branches remain `Initializing` only until [[doInit]] sends Cancel and throws.
    */
   override protected def onTerminalSettled(termination: Termination): Unit = {
     outputQueue.put(QueueItem.EndOfStream)
@@ -295,9 +303,9 @@ class GrpcWorkerSession(
       // The FinishResponse carries metrics + the finish-callback data/error.
       // Keep it on the terminal so close() can return it; the iterator inspects
       // its error field to decide whether to throw. A FinishResponse is valid only
-      // after the engine has actually written Finish; accepting one earlier could
+      // after the engine has started sending Finish; accepting one earlier could
       // silently truncate input and report a clean result.
-      if (finishWritten.get()) {
+      if (finishSendStarted.get()) {
         Transitions.finished(ctrl.getFinish)
       } else {
         Transitions.transportFailed(new IllegalStateException(
@@ -343,13 +351,13 @@ class GrpcWorkerSession(
    * `Initialized -> Streaming` in `process`):
    * {{{
    *   Initializing -> Initialized     initAccepted    handleControl INIT-ok  [gRPC cb]
-   *   Streaming -> Finishing          finishSent      advance branch 3       [engine]
-   *   non-terminal -> Cancelling      cancelSentFrom  sendCancelInternal, iff a Cancel
-   *                                     reaches the wire  [gRPC cb | engine | init | close]
-   *   non-terminal -> Terminal        finished/cancelled/transportFailed
+   *   Streaming -> Finishing          beginFinish      advance branch 3       [engine]
+   *   non-terminal -> Cancelling      beginCancelFrom  sendCancelInternal, immediately
+   *                                      before the Cancel send  [gRPC cb | engine | init | close]
+   *   non-terminal -> Terminal        finished/cancelled/transportFailed/interrupted
    *                                     handleControl / doInit / doClose / advance / onError
    * }}}
-   * `Cancelling` is reached only if a Cancel is actually written; a pre-stream or
+   * `Cancelling` is reached only when a Cancel send starts; a pre-stream or
    * raced cancel goes straight to a `Cancelled`/`TransportFailed` terminal (see
    * [[sendCancelInternal]], [[doClose]], `ProcessIterator`) or nowhere -- so
    * `cancelRequested` (intent) does not imply state `Cancelling`.
@@ -359,12 +367,12 @@ class GrpcWorkerSession(
     def initAccepted(): Boolean =
       compareAndSetState(SessionState.Initializing, SessionState.Initialized)
 
-    /** Input exhausted and `Finish` written: `Streaming -> Finishing` (once). */
-    def finishSent(): Boolean =
+    /** Input exhausted: `Streaming -> Finishing` (once). */
+    def beginFinish(): Boolean =
       compareAndSetState(SessionState.Streaming, SessionState.Finishing)
 
-    /** `Cancel` written: `cur -> Cancelling`, from any non-terminal `cur`. */
-    def cancelSentFrom(cur: SessionState): Boolean =
+    /** `Cancel` send starts: `cur -> Cancelling`, from any non-terminal `cur`. */
+    def beginCancelFrom(cur: SessionState): Boolean =
       !cur.isTerminal && compareAndSetState(cur, SessionState.Cancelling)
 
     /** Clean terminal carrying the worker's `FinishResponse`. */
@@ -394,6 +402,12 @@ class GrpcWorkerSession(
   // ---- WorkerSession hooks ------------------------------------------------
 
   override protected def doInit(message: Init): InitResponse = {
+    // Construct the request before opening the RPC. A malformed Init must not
+    // leave an otherwise-unused Execute stream waiting for its first request.
+    val initRequest = UdfRequest.newBuilder()
+      .setControl(UdfControlRequest.newBuilder().setInit(message).build())
+      .build()
+
     // Fail fast if the channel is already shut down. Without this check,
     // asyncStub.execute(...) would still succeed and the failure would
     // surface ~initResponseTimeoutMs later as a misleading "InitResponse
@@ -403,39 +417,24 @@ class GrpcWorkerSession(
       Transitions.transportFailed(ex)
       throw new GrpcWorkerSessionException("UDF worker channel is closed", ex)
     }
-    // Open the stream as a local first. Publication and the Init write are
-    // serialized with close/cancel below so close either settles the session
-    // before Init is sent, or writes Cancel only after Init.
-    val stream = try {
-      asyncStub.execute(responseObserver)
-    } catch {
-      case NonFatal(e) =>
-        Transitions.transportFailed(e)
-        throw new GrpcWorkerSessionException("UDF worker stream failed during init", e)
-    }
-    val initRequest = UdfRequest.newBuilder()
-      .setControl(UdfControlRequest.newBuilder().setInit(message).build())
-      .build()
-    var initSent = false
     try {
       requestLock.synchronized {
-        // Publish while holding the same lock used by close/cancel, before
-        // onNext. A concurrent close that observes this value waits for Init to
-        // be written before it can write Cancel. If close won the lock first and
-        // settled a terminal, do not put Init on an already-closed session.
-        if (currentState.isTerminal) {
-          // No request is written below. The local stream is half-closed after
-          // releasing requestLock so an RPC opened just before close is not left
-          // dangling.
-        } else {
+        // Serialize stream creation, publication, and Init with close/cancel. A
+        // close that wins the lock first prevents the RPC from opening; one that
+        // loses cannot release the worker until the initial write returns.
+        if (!currentState.isTerminal) {
+          val stream = asyncStub.execute(responseObserver)
           requestObserver = stream
-          // With directExecutor, gRPC callbacks run synchronously on the caller's
-          // thread, so InitResponse can reach responseObserver/handleControl from
-          // *inside* this stream.onNext.
-          // requestObserver is already published, so an immediate ErrorResponse
-          // can write its required Cancel reentrantly without losing the request.
-          stream.onNext(initRequest)
-          initSent = true
+          // Stream creation may invoke a response callback synchronously. Do not
+          // send Init if that callback has already settled a terminal.
+          if (!currentState.isTerminal) {
+            // With directExecutor, gRPC callbacks run synchronously on the caller's
+            // thread, so InitResponse can reach responseObserver/handleControl from
+            // *inside* this stream.onNext.
+            // requestObserver is already published, so an immediate ErrorResponse
+            // can write its required Cancel reentrantly without losing the request.
+            sendOnNext(initRequest)
+          }
         }
       }
     } catch {
@@ -445,11 +444,6 @@ class GrpcWorkerSession(
         // (which catches that type and wraps it) sees a uniform init-failure
         // exception rather than the raw transport error.
         throw new GrpcWorkerSessionException("UDF worker stream failed during init", e)
-    }
-    if (!initSent) {
-      try stream.onCompleted() catch {
-        case NonFatal(e) => logger.debug("Error half-closing unopened UDF Execute stream", e)
-      }
     }
 
     try {
@@ -576,7 +570,7 @@ class GrpcWorkerSession(
     // Coordinate the no-stream decision with doInit's publication + Init write.
     // If close wins this lock, doInit observes the terminal and never sends Init;
     // if doInit wins, close observes the published observer and sends Cancel only
-    // after Init has gone on the wire.
+    // after the Init send has returned.
     val noPublishedStream = requestLock.synchronized {
       if (requestObserver == null) {
         // init() never put a stream on the wire (closed before/around init, or
@@ -599,7 +593,7 @@ class GrpcWorkerSession(
     }
     // If the stream has not finished on its own, cancel anything in flight so
     // the worker can clean up, then wait for the terminator. sendCancelInternal
-    // evaluates the cancel thunk only when it actually writes a Cancel, and at
+    // evaluates the cancel thunk only when it attempts a Cancel, and at
     // most once across all callers.
     if (!currentState.isTerminal) {
       sendCancelInternal(cancel)
@@ -609,7 +603,7 @@ class GrpcWorkerSession(
         case _: InterruptedException =>
           // Interrupted mid-close: settle Interrupted via the
           // shared handler rather than falling through to the TransportFailed
-          // guard below. The Cancel is already on the wire, so handleInterrupt's
+          // guard below. The Cancel was already attempted, so handleInterrupt's
           // sendCancelInternal is a no-op and it just runs the bounded drain.
           //
           // TODO [SPARK-57640]: close() is a finalizer often already on the task
@@ -632,34 +626,79 @@ class GrpcWorkerSession(
       Transitions.transportFailed(new TimeoutException(
         s"timed out waiting for stream terminator after ${terminalTimeoutMs}ms"))
     }
-    // Half-close the request side regardless of whether we sent Cancel or
-    // Finish earlier -- the worker's onCompleted handler relies on this to
-    // tear down the per-stream state cleanly. onCompleted on an
-    // already-torn-down stream throws and is caught, so this stays idempotent
-    // across repeat close() calls.
-    try {
-      requestLock.synchronized { requestObserver.onCompleted() }
-    } catch {
-      case NonFatal(e) =>
-        logger.debug("Error half-closing UDF Execute stream", e)
+    // Close the request side according to the settled outcome. Clean protocol
+    // terminators are half-closed; failures abort the RPC so close() never follows
+    // an onError with onCompleted.
+    currentState match {
+      case SessionState.Terminal(Termination.Finished(_)) |
+          SessionState.Terminal(Termination.Cancelled(_)) =>
+        completeRequestSide()
+      case SessionState.Terminal(Termination.Failed(error)) =>
+        abortRequestSide(new GrpcWorkerSessionException(
+          s"UDF execution failed: ${describeError(error)}", error))
+      case SessionState.Terminal(Termination.TransportFailed(cause)) =>
+        abortRequestSide(cause)
+      case SessionState.Terminal(Termination.Interrupted(cause)) =>
+        abortRequestSide(cause)
+      case other =>
+        logger.debug(s"UDF Execute stream closed without a terminal outcome: $other")
     }
     // Derive the Termination from the settled terminal. close() is the
     // finalizer/cleanup path and must NOT re-throw: a UDF / data-phase error is
     // already surfaced while the result iterator is consumed, and an init error
     // is surfaced from init(). settledTermination returns the settled terminal
     // as-is: the response proto for the clean terminators, and the failure
-    // terminals (Failed / TransportFailed) carrying their cause -- not a bare
-    // Cancelled.
+    // terminals (Failed / TransportFailed / Interrupted) carrying their cause --
+    // not a bare Cancelled.
     settledTermination
   }
 
   // ---- Internal request helpers ---------------------------------------------
 
   /**
-   * Sends a Data or Finish request to the worker. Two invariants are
+   * Writes one request and aborts the request side if the observer rejects it.
+   * Callers hold [[requestLock]], so this also serializes the compensating
+   * `onError` with every other request-side operation.
+   */
+  private def sendOnNext(req: UdfRequest): Unit = {
+    try {
+      requestObserver.onNext(req)
+    } catch {
+      case NonFatal(e) =>
+        abortRequestSide(e)
+        throw e
+    }
+  }
+
+  /** Aborts the request side at most once. Safe to call while holding [[requestLock]]. */
+  private def abortRequestSide(cause: Throwable): Unit = requestLock.synchronized {
+    if (requestObserver != null && requestSideTerminated.compareAndSet(false, true)) {
+      try {
+        requestObserver.onError(cause)
+      } catch {
+        case NonFatal(e) => logger.debug("Error aborting UDF Execute stream", e)
+      }
+    }
+  }
+
+  /** Half-closes the request side at most once. */
+  private def completeRequestSide(): Unit = requestLock.synchronized {
+    if (requestObserver != null && requestSideTerminated.compareAndSet(false, true)) {
+      try {
+        requestObserver.onCompleted()
+      } catch {
+        case NonFatal(e) => logger.debug("Error half-closing UDF Execute stream", e)
+      }
+    }
+  }
+
+  /**
+   * Sends a Data or Finish request to the worker. Three invariants are
    * checked inside [[requestLock]]:
    *  - terminal state: writes are unsafe (transport dead or terminal
    *    received). Throws, so the caller's terminal/exception path runs.
+   *  - request-side termination: no write may follow `onError` / `onCompleted`.
+   *    Throws so the caller settles or surfaces the failure.
    *  - [[cancelRequested]]: a Cancel has been (or is about to be) sent.
    *    Silently no-ops so a Data/Finish never appears on the wire after
    *    Cancel; the caller's iterator falls through to the terminator wait.
@@ -675,6 +714,10 @@ class GrpcWorkerSession(
         throw new IllegalStateException(
           "cannot send request: UDF Execute stream is already closed")
       }
+      if (requestSideTerminated.get()) {
+        throw new IllegalStateException(
+          "cannot send request: UDF Execute request stream is already closed")
+      }
       // Suppress the write when a cancel has been (or is about to be) flushed
       // through this lock; that preserves the proto ordering invariant (no
       // Data/Finish after Cancel). Test the flag rather than `return`-ing from
@@ -684,19 +727,19 @@ class GrpcWorkerSession(
         if (req.hasControl && req.getControl.hasFinish) {
           // Set before onNext: directExecutor delivery may return FinishResponse
           // reentrantly from inside this call.
-          finishWritten.set(true)
+          finishSendStarted.set(true)
         }
-        requestObserver.onNext(req)
+        sendOnNext(req)
       }
     }
 
   /**
-   * Sends a `Cancel` control message, returning `true` iff a `Cancel` was
-   * actually written to the wire. Idempotent across ALL call sites (close()'s
+   * Sends a `Cancel` control message, returning `true` iff the request observer
+   * accepts the `Cancel`. Idempotent across ALL call sites (close()'s
    * cancel, in-band cancels from `handleControl`'s INIT error / ERROR paths,
    * and engine-internal cancels from the iterator) via [[cancelRequested]]:
-   * only the first caller puts a `Cancel` on the wire, and the `cancel` thunk is
-   * evaluated only by that caller and only when the message is actually sent --
+   * only the first caller attempts a `Cancel`, and the `cancel` thunk is evaluated
+   * only by that caller and only when the send is about to start --
    * so a side-effecting thunk (e.g. one carrying a client cancel callback) runs
    * at most once. Setting [[cancelRequested]] also blocks subsequent Data/Finish
    * writes from [[ProcessIterator]] (see [[sendRequest]]), preserving the proto
@@ -712,17 +755,18 @@ class GrpcWorkerSession(
     try {
       requestLock.synchronized {
         // A terminal that arrived first must win; bail without writing. Compute
-        // the block's value rather than `return` (see sendRequest on why non-local
+        // the block's value rather than `return` (see sendRequest for why non-local
         // return is avoided -- here it would also escape the NonFatal catch below).
         val cur = currentState
-        if (cur.isTerminal) {
+        if (cur.isTerminal || requestSideTerminated.get()) {
           false
         } else {
-          // Record that a Cancel is on the wire by advancing to Cancelling.
-          Transitions.cancelSentFrom(cur)
-          requestObserver.onNext(UdfRequest.newBuilder()
+          val request = UdfRequest.newBuilder()
             .setControl(UdfControlRequest.newBuilder().setCancel(cancel()).build())
-            .build())
+            .build()
+          // Record that a Cancel send has started by advancing to Cancelling.
+          Transitions.beginCancelFrom(cur)
+          sendOnNext(request)
           true
         }
       }
@@ -893,19 +937,27 @@ class GrpcWorkerSession(
         // of stranding the worker waiting for input that will never arrive.
         if (!cancelRequested.get() && currentState == SessionState.Streaming &&
             cancelOnThrow("input iterator failed")(input.hasNext)) {
-          val batch = cancelOnThrow("input iterator failed")(input.next())
-          if (!sendOrEndOnRacedTerminal(UdfRequest.newBuilder().setData(batch).build())) return
-        } else if (!cancelRequested.get() && Transitions.finishSent()) {
+          val request = cancelOnThrow("input iterator failed") {
+            val batch = Objects.requireNonNull(
+              input.next(), "input iterator returned null")
+            UdfRequest.newBuilder().setData(batch).build()
+          }
+          if (!sendOrEndOnRacedTerminal(request)) return
+        } else if (!cancelRequested.get() && Transitions.beginFinish()) {
           // (3) No more input; send Finish exactly once (unless cancelled). The
           // `finish` thunk is caller-supplied (it may run a finish callback), so
           // it can throw; cancelOnThrow Cancels the stream before rethrowing. The
           // Streaming -> Finishing CAS has already run, but we have not written
           // Finish yet, so the Cancel is the only engine-to-worker message that
           // reaches the wire -- the proto "nothing after Cancel" invariant holds.
-          val finishMsg = cancelOnThrow("finish callback failed")(finish())
-          if (!sendOrEndOnRacedTerminal(UdfRequest.newBuilder()
+          val request = cancelOnThrow("finish callback failed") {
+            val finishMsg = Objects.requireNonNull(
+              finish(), "finish callback returned null")
+            UdfRequest.newBuilder()
               .setControl(UdfControlRequest.newBuilder().setFinish(finishMsg).build())
-              .build())) {
+              .build()
+          }
+          if (!sendOrEndOnRacedTerminal(request)) {
             return
           }
         } else {
@@ -1107,12 +1159,11 @@ object GrpcWorkerSession {
  * failures to users. [[executionError]] is preserved to carry the structured
  * cause across that boundary.
  *
- * @param executionError the structured protocol error when the failure carries
- *                       one (a worker `ErrorResponse`, an init error, or a
- *                       failure terminator with an error). `null` when there is
- *                       no structured cause: a transport failure, a timeout, or
- *                       a cancellation without an error. Callers must null-check
- *                       before use.
+ * @param executionError the structured protocol error, when present: a worker
+ *                       `ErrorResponse`, an init error, or a failure terminator
+ *                       with an error. `null` when there is no structured cause:
+ *                       a transport failure, a timeout, or a cancellation without
+ *                       an error. Callers must null-check before use.
  */
 @Experimental
 class GrpcWorkerSessionException(
