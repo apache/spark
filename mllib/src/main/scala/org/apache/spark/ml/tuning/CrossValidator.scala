@@ -329,8 +329,15 @@ class CrossValidatorModel private[ml] (
   def hasSubModels: Boolean = _subModels.isDefined
 
   private[spark] override def estimatedSize: Long = {
-    var size = estimateMatadataSize(Seq[Param[_]](estimator, estimatorParamMaps, evaluator))
+    var size = estimateMatadataSize(excludeParams = Seq(
+      // SPARK-57521: An estimator can retain shared Spark runtime state through Logging.
+      estimator,
+      // SPARK-58395: Param validators can capture their owning model and its runtime state.
+      estimatorParamMaps,
+      // An evaluator is tuning configuration rather than learned model state.
+      evaluator))
     size += bestModel.estimatedSize
+    // SPARK-58250: Include model-owned metadata alongside the learned model state.
     size += SizeEstimator.estimate(avgMetrics)
     _subModels.foreach { models =>
       size += models.iterator.flatMap(_.iterator).map(_.estimatedSize).sum
