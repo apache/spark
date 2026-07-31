@@ -21,7 +21,7 @@ import java.util.{Locale, OptionalLong}
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, ExprId, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
@@ -996,6 +996,19 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val projectionFunc = (expr: Expression) => expr transformDown {
         case projectionOverSchema(newExpr) => newExpr
       }
+
+      // Remap pushed filter attributes to the pruned output schema and drop filters whose
+      // references are no longer in the pruned output. Catch FIELD_NOT_FOUND because
+      // ProjectionOverSchema throws when a pushed filter references a nested struct field that was
+      // pruned from the schema. This feeds only the Spark post-pushdown adjustment below; the scan
+      // relation's own pushedFilters keep the complete set (see the next comment).
+      val remappedPushedFilters = sHolder.pushedFilterExpressions.flatMap { filter =>
+        try Some(projectionFunc(filter))
+        catch {
+          case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" =>
+            None
+        }
+      }.filter(_.references.subsetOf(AttributeSet(output)))
 
       // Record the fully-pushed filter expressions on the scan relation, keeping their references
       // to the relation's (pre-pruning) output. These include filters on columns that were pruned

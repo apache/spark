@@ -1368,8 +1368,11 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         "column i should be pruned from the scan output")
       assert(!scan.scan.asInstanceOf[SupportsReportStatistics].reflectsFullyPushedDownFilters(),
         "fake connector should request Spark post-pushdown adjustments")
-      assert(scan.pushedFilters.isEmpty,
-        "pushedFilters should drop filters whose references were pruned")
+      // SPARK-40259 made pushedFilters the complete set: it keeps a fully-pushed filter even when
+      // the filter's column is pruned from the scan output (the adjustment below uses a separate,
+      // pruned-output-remapped set, so it still does not re-add i > 3).
+      assert(scan.pushedFilters.exists(hasIGt3),
+        "pushedFilters keeps i > 3 even though column i was pruned (complete-set semantics)")
 
       val optimizedPlan = q.queryExecution.optimizedPlan
       assert(!optimizedPlan.collect { case f: LogicalFilter => f }.exists(f =>
