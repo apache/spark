@@ -39,7 +39,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{SizeEstimator, ThreadUtils}
 
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
@@ -327,6 +327,16 @@ class CrossValidatorModel private[ml] (
 
   @Since("2.3.0")
   def hasSubModels: Boolean = _subModels.isDefined
+
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize(Seq[Param[_]](estimator, estimatorParamMaps, evaluator))
+    size += bestModel.estimatedSize
+    size += SizeEstimator.estimate(avgMetrics)
+    _subModels.foreach { models =>
+      size += models.iterator.flatMap(_.iterator).map(_.estimatedSize).sum
+    }
+    size
+  }
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {

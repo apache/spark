@@ -653,8 +653,21 @@ case class ParamPair[T] @Since("1.2.0") (
  */
 trait Params extends Identifiable with Serializable {
 
-  private[ml] def estimateMatadataSize: Long = {
-    SizeEstimator.estimate((this.paramMap, this.defaultParamMap, this.uid))
+  private[ml] def estimateMatadataSize: Long = estimateMatadataSize(Seq.empty)
+
+  private[ml] def estimateMatadataSize(excludeParams: Seq[Param[_]]): Long = {
+    var size = SizeEstimator.estimate(uid)
+    paramMap.toSeq.foreach { paramPair =>
+      if (!excludeParams.contains(paramPair.param)) {
+        size += SizeEstimator.estimate(paramPair)
+      }
+    }
+    defaultParamMap.toSeq.foreach { paramPair =>
+      if (!excludeParams.contains(paramPair.param)) {
+        size += SizeEstimator.estimate(paramPair)
+      }
+    }
+    size
   }
 
   /**
