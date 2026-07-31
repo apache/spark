@@ -303,7 +303,8 @@ class CodegenContext extends Logging {
    *                 e.g. InternalRow, UnsafeRow, UnsafeArrayData, etc. Other types will have to
    *                 specify the fully-qualified Java type name. See the code in doCompile() for
    *                 the list of default imports available.
-   *                 Also, generic type arguments are accepted but ignored.
+   *                 Also, generic type arguments are kept in field declarations, but stripped
+   *                 from array creation expressions because Java forbids generic array creation.
    * @param variableName Name of the field.
    * @param initFunc Function includes statement(s) to put into the init() method to initialize
    *                 this field. The argument is the name of the mutable state variable.
