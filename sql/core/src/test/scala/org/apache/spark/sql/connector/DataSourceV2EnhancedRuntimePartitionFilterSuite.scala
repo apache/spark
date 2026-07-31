@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningExpression}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningExpression, Literal}
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryEnhancedRuntimePartitionFilterTable, InMemoryTableEnhancedRuntimePartitionFilterCatalog}
 import org.apache.spark.sql.connector.expressions.PartitionFieldReference
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
@@ -76,7 +76,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
   }
 
   private def withProjectedBroadcastRuntimeFiltering(
-      maxRows: Int)(f: DataFrame => Unit): Unit = {
+      maxRows: Int,
+      projectionEnabled: Boolean = true)(f: DataFrame => Unit): Unit = {
     val fact = s"$catalogName.projection_fact"
     val codes = "broadcast_projection_codes"
     val selectors = "broadcast_projection_selectors"
@@ -96,7 +97,8 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
           SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
           SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
-          SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED.key -> "true",
+          SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED.key ->
+            projectionEnabled.toString,
           SQLConf.DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_ROWS.key ->
             maxRows.toString,
           SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true",
@@ -116,6 +118,18 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
              |""".stripMargin)
         f(df)
       }
+    }
+  }
+
+  test("disabled broadcast projection preserves existing no-op iterative V2 filtering") {
+    withProjectedBroadcastRuntimeFiltering(maxRows = 10, projectionEnabled = false) { df =>
+      checkAnswer(df, Seq(Row(2, 2), Row(3, 3)))
+      assertDPPRuntimeFilters(df)
+      assert(collectBatchScan(df).runtimeFilters.contains(
+        DynamicPruningExpression(Literal.TrueLiteral)))
+      assertPushedPartitionPredicates(df, expectedCount = 1)
+      assert(getPushedPartitionPredicates(df).head.references().isEmpty)
+      assertScanReturnsPartitionKeys(df, Set("0", "1", "2", "3", "4"))
     }
   }
 

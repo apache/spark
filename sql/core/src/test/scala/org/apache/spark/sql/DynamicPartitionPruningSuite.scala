@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
+import org.apache.spark.sql.execution.metric.SQLLastAttemptMetrics
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -353,6 +354,9 @@ abstract class DynamicPartitionPruningSuiteBase
             case subquery: ProjectedBroadcastValueSubqueryExec => subquery
           }
           assert(projected.size === 1, df.queryExecution.executedPlan)
+          val lastAttemptMetric = SQLLastAttemptMetrics.createMetric(
+            spark.sparkContext, "projected broadcast pruning")
+          assert(lastAttemptMetric.lastAttemptValueForDataset(df) === Some(0L))
           val pruning = collectDynamicPruningExpressions(df.queryExecution.executedPlan)
             .collectFirst { case in: InSubqueryExec => in }.get
           assert(pruning.values().get.map(String.valueOf).toSet ===

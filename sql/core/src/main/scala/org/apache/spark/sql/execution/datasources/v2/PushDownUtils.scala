@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -436,7 +436,6 @@ object PushDownUtils extends Logging {
     val catalystExprs = runtimeFilters.flatMap {
       case DynamicPruningExpression(in: InSubqueryExec) if in.isResultUnavailable =>
         None
-      case DynamicPruningExpression(Literal.TrueLiteral) => None
       case DynamicPruningExpression(e) => Some(e)
       case _: DynamicPruning => None
       case f => Some(f.transform { case s: ExecScalarSubquery => s.toLiteral })
