@@ -3935,12 +3935,11 @@ class Analyzer(
         val defaultValueFillMode =
           if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
           else FILL
-        // Only let TableOutputResolver see generation expression metadata if the table
-        // supports auto-filling generated columns on write.
+        // Generation expressions live on the table's columns, so attach them to the expected
+        // output for TableOutputResolver, which auto-fills the generated columns the query is
+        // missing.
         val expected = v2Write.table match {
-          case r: DataSourceV2Relation
-            if !GeneratedColumn.supportsGeneratedColumnsOnWrite(r.table) =>
-            r.output.map(GeneratedColumn.removeGenerationExpressionMetadata)
+          case r: DataSourceV2Relation => GeneratedColumn.attachGenerationExpressions(r)
           case _ => v2Write.table.output
         }
         val (projection, autoFilledGenCols) =
@@ -3950,20 +3949,9 @@ class Analyzer(
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>
-              r.copy(output = r.output.map { attr =>
-                val cleaned = CharVarcharUtils.cleanAttrMetadata(attr)
-                // Strip the generation expression metadata from columns Spark auto-filled, so
-                // ResolveTableConstraints does not add a (redundant) CheckInvariant for them:
-                // their values were computed from the generation expression and are correct by
-                // construction. User-provided generated columns keep the metadata so their
-                // values are still validated.
-                if (autoFilledGenCols.contains(attr.name)) {
-                  GeneratedColumn.removeGenerationExpressionMetadata(cleaned)
-                    .asInstanceOf[AttributeReference]
-                } else {
-                  cleaned
-                }
-              })
+              val cleaned = r.output.map(CharVarcharUtils.cleanAttrMetadata)
+              r.copy(output =
+                GeneratedColumn.markAutoFilledGeneratedColumns(cleaned, autoFilledGenCols))
             case other => other
           }
           v2Write.withNewQuery(projection).withNewTable(cleanedTable)
