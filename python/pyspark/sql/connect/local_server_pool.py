@@ -16,7 +16,7 @@
 #
 
 """
-Opt-in pool of single-use local Spark Connect servers
+Opt-in pool of pre-warmed, single-use local Spark Connect servers
 (``spark.local.connect.pool`` / ``SPARK_LOCAL_CONNECT_POOL``).
 
 The reuse mode (``spark.local.connect.reuse``, see ``pyspark.sql.connect.local_server``) makes
@@ -44,9 +44,14 @@ complete states:
 
 Each launch runs an *attendant* (``python -m pyspark.sql.connect.local_server_pool --attend``),
 a small detached process that boots the server through ``sbin/start-connect-server.sh``,
-publishes its ``server-<uid>.json``, and supervises it. It retires the server once it has sat
-unclaimed past the idle timeout, or once the client that claimed it has died without releasing
-it. A janitor pass on every acquire is the backstop for members whose attendant itself died.
+publishes its ``server-<uid>.json``, JIT-warms it with fixed synthetic queries in a bounded
+child process (so the one real run the member serves starts with hot JIT and codegen caches;
+disable with ``SPARK_LOCAL_CONNECT_POOL_WARMUP=0``), and then stays on as the member's
+supervisor: it retires the server once it has sat unclaimed past the idle timeout
+(``SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT`` seconds, default 1800), or once the client that
+claimed it has died without releasing it. An idle machine therefore drains back to zero
+servers without any further Spark run. A janitor pass on every acquire is the backstop for
+members whose attendant itself died.
 
 Servers are only handed to runs they were built for: each member carries a fingerprint of its
 master, seeded confs, working directory, and Python executable, and a run only claims members
@@ -162,7 +167,7 @@ _DEFAULT_POOL_SIZE = 2
 
 
 def _pool_size(opts: Dict[str, Any]) -> int:
-    """The number of ready or in-flight members to keep per fingerprint; at least one.
+    """The number of warm or in-flight members to keep per fingerprint; at least one.
     Malformed values fall back to the default rather than failing session creation over a
     tuning knob.
     """
@@ -173,6 +178,10 @@ def _pool_size(opts: Dict[str, Any]) -> int:
         return max(1, int(value)) if value is not None else _DEFAULT_POOL_SIZE
     except (TypeError, ValueError, OverflowError):
         return _DEFAULT_POOL_SIZE
+
+
+def _warmup_enabled() -> bool:
+    return os.environ.get("SPARK_LOCAL_CONNECT_POOL_WARMUP", "1").lower() not in ("0", "false")
 
 
 class _PoolStateRecord:
@@ -629,7 +638,7 @@ class ServerPool:
     def acquire(self, master: str, opts: Dict[str, Any]) -> PoolMember:
         """Claim one ready, fingerprint-matching member and top the pool back up.
 
-        When a member is ready this returns after one janitor-claim-refill pass; on a cold pool
+        On a warm pool this returns after one janitor-claim-refill pass; on a cold pool
         (first run, conf change, or all members consumed) the refill starts a full complement
         and the loop waits for the first member to become ready, which costs one ordinary
         cold start. The lock is released between polls so attendants can publish; launches
@@ -1264,7 +1273,7 @@ def purge_local_connect_pool() -> int:
 
 
 class MemberAttendant:
-    """Boots one pool member, publishes it, and supervises it until it is gone.
+    """Boots one pool member, publishes it, warms it, and supervises it until it is gone.
 
     Runs detached from the spawning client (``--attend``). Every phase is appended to
     ``member-<uid>/attendant.log`` so a member that misbehaved can be debugged after the
@@ -1341,6 +1350,8 @@ class MemberAttendant:
         member = self._boot()
         if member is None:
             return 1
+        if _warmup_enabled():
+            self._warm(member)
         self._log("supervising")
         self._supervise(member.pid)
         self._log("done")
@@ -1408,23 +1419,88 @@ class MemberAttendant:
                     return
             time.sleep(2)
 
+    def _warm(self, member: PoolMember) -> None:
+        """Run the fixed warmup queries in a bounded child process.
+
+        A child rather than a thread so that a member claimed, used, and torn down mid-warmup
+        cannot wedge this attendant: a gRPC call against a dying JVM can block indefinitely,
+        and a stuck child is simply killed. The member is published before warmup starts, so
+        a client in a hurry can claim it mid-warmup; the child is stopped the moment that
+        happens.
+        """
+        env = dict(os.environ)
+        env["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = member.token
+        for var in ("SPARK_REMOTE", "SPARK_LOCAL_REMOTE", "SPARK_CONNECT_MODE_ENABLED"):
+            env.pop(var, None)
+        self._log("warmup starting")
+        child = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "pyspark.sql.connect.local_server_pool",
+                "--warm",
+                "--url",
+                member.url,
+            ],
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        deadline = time.monotonic() + 120
+        while child.poll() is None:
+            # A plain existence poll, not a locked read: the only cost of a stale result is
+            # stopping the child one tick later.
+            claimed = not os.path.exists(self._directory.server_path(self._uid))
+            if claimed or time.monotonic() > deadline:
+                child.kill()
+                child.wait()
+                self._log("warmup stopped (member claimed or warmup timed out)")
+                return
+            time.sleep(0.5)
+        self._log(f"warmup finished with code {child.returncode}")
+
+
+def _run_warmup(url: str) -> None:
+    """The fixed synthetic warmup, run inside the ``--warm`` child against one member.
+
+    JIT and codegen caches are JVM-global, so warming them here removes most of the
+    first-query latency from the one real run this member will serve. The queries create no
+    catalog objects, temp views, or cached data, and the warmup session is released at the
+    end, so nothing of it outlives this process.
+    """
+    from pyspark.sql.connect.session import SparkSession as ConnectSession
+
+    session = ConnectSession(connection=url)
+    try:
+        session.sql("SELECT 1").collect()
+        session.sql("SELECT sum(id) AS s, count(1) AS c FROM range(100000)").collect()
+        session.sql(
+            "SELECT x, count(*) AS c FROM (SELECT id % 7 AS x FROM range(100000)) GROUP BY x"
+        ).collect()
+        session.range(100000).selectExpr("sum(id)").collect()
+    finally:
+        session.stop()
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Manage the opt-in pool of single-use local Spark Connect servers "
-        "(spark.local.connect.pool)."
+        description="Manage the opt-in pool of pre-warmed single-use local Spark Connect "
+        "servers (spark.local.connect.pool)."
     )
     parser.add_argument(
         "--purge",
         action="store_true",
         help="force-stop every pool member and empty the pool directory",
     )
-    # Internal entry point spawned by ServerPool.
+    # Internal entry points, spawned by ServerPool and MemberAttendant respectively.
     parser.add_argument("--attend", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--pool-dir", help=argparse.SUPPRESS)
     parser.add_argument("--uid", help=argparse.SUPPRESS)
     parser.add_argument("--master", help=argparse.SUPPRESS)
     parser.add_argument("--fingerprint", help=argparse.SUPPRESS)
+    parser.add_argument("--warm", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--url", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     if args.purge:
@@ -1434,6 +1510,8 @@ def main() -> None:
             PoolDirectory(args.pool_dir), args.uid, args.master, args.fingerprint
         )
         sys.exit(attendant.run())
+    elif args.warm:
+        _run_warmup(args.url)
     else:
         parser.print_help(sys.stderr)
         sys.exit(2)

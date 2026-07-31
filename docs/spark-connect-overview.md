@@ -359,7 +359,7 @@ in-process server:
 ```bash
 export SPARK_LOCAL_CONNECT_POOL=1
 
-# Each run claims a booted server not previously assigned to another run.
+# Each run claims a pre-booted server not previously assigned to another run.
 python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("local[*]").getOrCreate()'
 
 # Force-stop all pool servers and start over from a clean slate.
@@ -367,12 +367,14 @@ python -m pyspark.sql.connect.local_server_pool --purge
 ```
 
 The trade-off relative to the reuse mode above is memory: `spark.local.connect.pool.size`
-(default 2) idle servers stay resident while you iterate, several hundred MB each. They shut
-down on their own after sitting unclaimed for `SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT` seconds
-(default 1800), so an idle machine drains back to zero servers. Pool servers are only handed to
-runs whose master, startup configurations, working directory, and Python environment match the
-ones they were booted with; runs that differ in any of these boot their own pool members. If
-both this and `spark.local.connect.reuse` are set, the pool takes precedence.
+(default 2) idle servers stay resident while you iterate, several hundred MB each. Idle pool
+servers warm themselves up with a fixed set of synthetic queries (disable with
+`SPARK_LOCAL_CONNECT_POOL_WARMUP=0`), so the first real query of a run is fast too, and they
+shut down on their own after sitting unclaimed for `SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT`
+seconds (default 1800), so an idle machine drains back to zero servers. Pool servers are only
+handed to runs whose master, startup configurations, working directory, and Python environment
+match the ones they were booted with; runs that differ in any of these boot their own pool
+members. If both this and `spark.local.connect.reuse` are set, the pool takes precedence.
 
 ## Use Spark Connect in standalone applications
 

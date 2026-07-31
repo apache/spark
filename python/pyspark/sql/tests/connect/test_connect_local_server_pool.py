@@ -135,6 +135,7 @@ _SAVED_ENV_KEYS = (
     "SPARK_LOCAL_CONNECT_POOL_DIR",
     "SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT",
     "SPARK_LOCAL_CONNECT_POOL_SIZE",
+    "SPARK_LOCAL_CONNECT_POOL_WARMUP",
     "SPARK_CONNECT_AUTHENTICATE_TOKEN",
     "PYSPARK_DRIVER_PYTHON",
     "PYSPARK_PYTHON",
@@ -534,6 +535,16 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 with self._directory:
                     pass
 
+    def test_warmup_enabled_parsing(self) -> None:
+        from pyspark.sql.connect.local_server_pool import _warmup_enabled
+
+        self.assertTrue(_warmup_enabled())
+        for value in ("0", "false", "FALSE"):
+            os.environ["SPARK_LOCAL_CONNECT_POOL_WARMUP"] = value
+            self.assertFalse(_warmup_enabled())
+        os.environ["SPARK_LOCAL_CONNECT_POOL_WARMUP"] = "1"
+        self.assertTrue(_warmup_enabled())
+
     @unittest.skipUnless(
         sys.platform.startswith("linux") and os.path.isdir("/proc") and hasattr(os, "waitid"),
         "requires Linux process state and waitid",
@@ -801,8 +812,8 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 )
             with self._directory:
                 member = self._pool.claim("fp")
-        # Prefer the oldest ready member. Ordering is by wall-clock created, so this is
-        # approximate FIFO rather than a guarantee (see ServerPool.claim).
+        # Prefer the oldest ready member, which has also had the longest to finish warmup.
+        # Ordering is approximate FIFO rather than a guarantee (see ServerPool.claim).
         self.assertEqual(member.token, "t-bbbb")
 
     def test_claim_requires_the_lock(self) -> None:
@@ -1631,6 +1642,41 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
                 local_server_pool.acquire_pooled_local_connect_server("local[2]", {})
         self.assertIn("POSIX", str(ctx.exception))
 
+    def test_attendant_warmup_stops_when_member_is_claimed(self) -> None:
+        from unittest import mock
+
+        uid = "warmup"
+        os.makedirs(self._directory.member_dir(uid))
+        attendant = MemberAttendant(self._directory, uid, "local[2]", "fp")
+        member = PoolMember(self._server_data(15002, os.getpid(), token="secret"))
+        child = mock.Mock()
+        child.poll.return_value = None
+
+        with mock.patch.object(subprocess, "Popen", return_value=child) as popen:
+            with mock.patch.object(os.path, "exists", return_value=False):
+                attendant._warm(member)
+
+        child.kill.assert_called_once_with()
+        child.wait.assert_called_once_with()
+        command = popen.call_args.args[0]
+        self.assertEqual(command[-3:], ["--warm", "--url", "sc://localhost:15002"])
+        self.assertEqual(
+            popen.call_args.kwargs["env"]["SPARK_CONNECT_AUTHENTICATE_TOKEN"], "secret"
+        )
+
+    def test_run_warmup_executes_fixed_queries_and_stops_session(self) -> None:
+        from unittest import mock
+
+        session = mock.MagicMock()
+        with mock.patch(
+            "pyspark.sql.connect.session.SparkSession", return_value=session
+        ) as connect_session:
+            local_server_pool._run_warmup("sc://localhost:15002")
+
+        connect_session.assert_called_once_with(connection="sc://localhost:15002")
+        self.assertEqual(session.sql.call_count, 3)
+        session.range.assert_called_once_with(100000)
+        session.stop.assert_called_once_with()
 
     def test_purge_kills_everything_and_empties_the_directory(self) -> None:
         warm = self._live_process()

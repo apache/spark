@@ -547,9 +547,9 @@ class SparkSession(SparkConversionMixin):
                                 )
 
                                 # Opt-in: claim a server not previously assigned to an
-                                # application run from a pool of booted local Connect servers.
-                                # It is torn down when this run's session stops, so no state
-                                # carries across runs. Takes precedence over reuse. See
+                                # application run from a pool of pre-warmed local Connect
+                                # servers. It is torn down when this run's session stops, so no
+                                # state carries across runs. Takes precedence over reuse. See
                                 # `pyspark.sql.connect.local_server_pool`.
                                 url = acquire_pooled_local_connect_server(url, opts)
                                 pool_cleanup = release_pooled_local_connect_server
