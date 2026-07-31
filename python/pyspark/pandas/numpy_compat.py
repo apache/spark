@@ -23,6 +23,20 @@ from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, LongType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
 
+
+# Spark does not provide a numeric trunc function. Subtract the remainder from the absolute value
+# and reapply the sign to truncate toward zero without converting a double to an integral type.
+def _trunc(c):
+    c = c.cast("double")
+    is_non_finite = F.isnan(c) | (c == float("-inf")) | (c == float("inf"))
+    truncated = F.abs(c) - (F.abs(c) % F.lit(1.0))
+    return (
+        F.when(c.isNull() | is_non_finite | (c == 0), c)
+        .when(c < 0, F.negative(truncated))
+        .otherwise(truncated)
+    )
+
+
 unary_np_spark_mappings = {
     "abs": F.abs,
     "absolute": F.abs,
@@ -78,7 +92,7 @@ unary_np_spark_mappings = {
     "square": lambda c: c.cast("double") * c,
     "tan": F.tan,
     "tanh": F.tanh,
-    "trunc": pandas_udf(lambda s: np.trunc(s), DoubleType()),  # type: ignore[call-overload]
+    "trunc": _trunc,
 }
 
 binary_np_spark_mappings = {
