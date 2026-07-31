@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 import sys
-from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
+from abc import ABC, abstractmethod
+from typing import Any, cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 
 from pyspark.util import is_remote_only
 from pyspark.sql.types import StructType
@@ -26,7 +27,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
     from pyspark.core.rdd import RDD
-    from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName, SupportsOption
+    from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.streaming import StreamingQuery
@@ -37,9 +38,12 @@ PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
-class OptionUtils:
+class OptionUtils(ABC):
+    @abstractmethod
+    def option(self, key: str, value: "OptionalPrimitiveType") -> Any: ...
+
     def _set_opts(
-        self: "SupportsOption",
+        self,
         schema: Optional[Union[StructType, str]] = None,
         **options: "OptionalPrimitiveType",
     ) -> None:

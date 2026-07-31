@@ -15,8 +15,9 @@
 # limitations under the License.
 #
 from typing import Dict
-from typing import Optional, Union, List, overload, Tuple, cast, Callable
+from typing import Any, Optional, Union, List, overload, Tuple, cast, Callable
 from typing import TYPE_CHECKING
+from abc import ABC, abstractmethod
 
 from pyspark.sql.connect.plan import (
     Read,
@@ -45,7 +46,7 @@ from pyspark.sql.connect.functions import builtin as F
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType, SupportsOption
+    from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.metrics import ExecutionInfo
 
@@ -55,9 +56,12 @@ PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
-class OptionUtils:
+class OptionUtils(ABC):
+    @abstractmethod
+    def option(self, key: str, value: "OptionalPrimitiveType") -> Any: ...
+
     def _set_opts(
-        self: "SupportsOption",
+        self,
         schema: Optional[Union[StructType, str]] = None,
         **options: "OptionalPrimitiveType",
     ) -> None:

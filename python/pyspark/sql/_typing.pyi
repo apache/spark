@@ -77,9 +77,6 @@ class SupportsProcess(Protocol):
 class SupportsClose(Protocol):
     def close(self, error: Exception) -> None: ...
 
-class SupportsOption(Protocol):
-    def option(self, key: str, value: OptionalPrimitiveType) -> Any: ...
-
 class UserDefinedFunctionLike(Protocol):
     func: Callable[..., Any]
     evalType: int
