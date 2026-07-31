@@ -302,7 +302,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("DataSourceV2ScanRelation.computeStats invokes estimateStatistics at most once without CBO") {
+  test("DataSourceV2ScanRelation.computeStats invokes estimateStatistics once without CBO") {
     val idAttr = AttributeReference("id", IntegerType)()
     val output = Seq(idAttr)
     // Scan with only a row count and the default estimateSizeInBytes(): the size-only path must
