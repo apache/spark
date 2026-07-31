@@ -26,6 +26,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaValidationMode
 import org.apache.spark.sql.util.SchemaValidationMode.ALLOW_NEW_FIELDS
 import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
@@ -81,19 +82,20 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       plan: LogicalPlan,
       versionedOnly: Boolean,
       schemaValidationMode: SchemaValidationMode): LogicalPlan = {
-    val currentTables = mutable.HashMap.empty[(TableCatalog, Identifier), Table]
+    val currentTables =
+      mutable.HashMap.empty[(TableCatalog, Identifier, CaseInsensitiveStringMap), Table]
     plan transformWithSubqueries {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
           if (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
-        val currentTable = currentTables.getOrElseUpdate((catalog, ident), {
+        val currentTable = currentTables.getOrElseUpdate((catalog, ident, r.options), {
           val tableName = V2TableUtil.toQualifiedName(catalog, ident)
           lookupCachedRelation(spark, catalog, ident, r.table) match {
-            case Some(cached) =>
+            case Some(cached) if cached.options == r.options =>
               logDebug(s"Refreshing table metadata for $tableName using shared relation cache")
               cached.table
-            case None =>
+            case _ =>
               logDebug(s"Refreshing table metadata for $tableName using catalog")
-              catalog.loadTable(ident)
+              CatalogV2Util.getTable(catalog, ident, options = r.options)
           }
         })
         validateTableIdentity(currentTable, r)

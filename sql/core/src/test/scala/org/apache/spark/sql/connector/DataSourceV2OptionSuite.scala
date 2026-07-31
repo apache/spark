@@ -524,15 +524,26 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       // than reusing the first reference's Table.
       val df = sql(s"SELECT a.id FROM $t1 WITH (`split-size` = 5) a " +
         s"JOIN $t1 WITH (`split-size` = 9) b ON a.id = b.id")
-      df.collect()
+      df.queryExecution.analyzed
 
-      // Each distinct option bag reaches the catalog as its own loadTable call.
+      // Each distinct option bag reaches the catalog as its own loadTable call during analysis.
       val loadedOptions = inMemoryCatalog.loadTableCalls
         .map(_._2.get("split-size"))
         .filter(_ != null)
         .sorted
       assert(loadedOptions === Seq("5", "9"),
         s"expected one loadTable per distinct option bag, got: $loadedOptions")
+
+      // The execution-time refresh also reloads once per option bag instead of sharing one Table
+      // across the two references.
+      inMemoryCatalog.resetLoadTableCalls()
+      df.collect()
+      val refreshedOptions = inMemoryCatalog.loadTableCalls
+        .map(_._2.get("split-size"))
+        .filter(_ != null)
+        .sorted
+      assert(refreshedOptions === Seq("5", "9"),
+        s"expected refresh to load each distinct option bag, got: $refreshedOptions")
 
       // Each scan also keeps its own option end-to-end (neither reference inherits the other's).
       val splitSizes = df.queryExecution.optimizedPlan.collect {
@@ -551,13 +562,22 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       // Both references carry the same options, so they share one relation-cache entry: the table
       // is loaded once (resolve-once-per-query is preserved for identical option bags).
-      sql(s"SELECT a.id FROM $t1 WITH (`split-size` = 5) a " +
-        s"JOIN $t1 WITH (`split-size` = 5) b ON a.id = b.id").collect()
+      val df = sql(s"SELECT a.id FROM $t1 WITH (`split-size` = 5) a " +
+        s"JOIN $t1 WITH (`split-size` = 5) b ON a.id = b.id")
+      df.queryExecution.analyzed
 
       val splitSizeLoads = inMemoryCatalog.loadTableCalls
         .count(_._2.get("split-size") === "5")
       assert(splitSizeLoads === 1,
         s"expected a single loadTable for identical option bags, got: $splitSizeLoads")
+
+      // The refresh phase also reuses one load for repeated references with identical options.
+      inMemoryCatalog.resetLoadTableCalls()
+      df.collect()
+      val refreshedSplitSizeLoads = inMemoryCatalog.loadTableCalls
+        .count(_._2.get("split-size") === "5")
+      assert(refreshedSplitSizeLoads === 1,
+        s"expected refresh to load identical option bags once, got: $refreshedSplitSizeLoads")
     }
   }
 
