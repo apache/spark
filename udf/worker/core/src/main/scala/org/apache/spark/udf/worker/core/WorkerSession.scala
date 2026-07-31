@@ -349,18 +349,19 @@ abstract class WorkerSession(
    * Whether the underlying worker is in a state safe to reuse after this
    * session ends. The default treats only a dead or unknown transport as
    * unsafe: a [[Termination.TransportFailed]] outcome (transport failure or
-   * timeout) -- or a session that never settled -- leaves the worker in an
-   * unknown state and is not salvageable. Every other terminal is salvageable:
-   * a clean [[Termination.Finished]], a cooperative [[Termination.Cancelled]],
-   * an execution [[Termination.Failed]] (typically a user-code (UDF) error
-   * reported by a still-healthy worker rather than a worker fault), and an
-   * [[Termination.Interrupted]] (an engine-side task kill, not a worker fault).
+   * timeout), a [[Termination.Interrupted]] without a worker acknowledgement, or
+   * a session that never settled leaves the worker in an unknown state and is
+   * not salvageable. The salvageable terminals are a clean
+   * [[Termination.Finished]], a cooperative [[Termination.Cancelled]], and an
+   * execution [[Termination.Failed]] (typically a user-code (UDF) error reported
+   * by a still-healthy worker rather than a worker fault).
    * A `false` result tells [[close]] to mark `workerHandle` invalid so no reuse
    * pool recycles the worker. Subclasses may override for protocol-specific
    * nuances.
    */
   protected def isWorkerSalvageable: Boolean = state.get() match {
     case SessionState.Terminal(_: Termination.TransportFailed) => false
+    case SessionState.Terminal(_: Termination.Interrupted) => false
     case t if t.isTerminal => true
     case _ => false
   }

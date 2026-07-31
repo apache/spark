@@ -45,9 +45,10 @@ import org.apache.spark.udf.worker.core.{Termination, WorkerHandle, WorkerLogger
  *    for `initResponseTimeoutMs`.
  *  - Repeated [[Iterator#hasNext]] after natural iterator exhaustion must
  *    return immediately, not block for `terminalTimeoutMs`.
- *  - Cancel issued before [[GrpcWorkerSession#init]] makes a subsequent
- *    [[GrpcWorkerSession#doProcess]] surface the cancellation immediately,
- *    instead of blocking for `terminalTimeoutMs`.
+ *  - Close racing the initial write must either prevent Init or send Cancel
+ *    after Init without releasing the worker underneath an active stream.
+ *  - An immediate ErrorResponse after InitResponse must fail init and send the
+ *    protocol-required Cancel; a premature FinishResponse must not truncate input.
  *  - Cancel / close concurrent with an in-progress data phase terminate
  *    cleanly without leaks or unbounded hangs.
  *
@@ -256,23 +257,15 @@ class GrpcWorkerSessionConcurrencySuite
   }
 
   // ---------------------------------------------------------------------------
-  // Cancel-never-precedes-Init invariant.
-  //
-  // The former cancel()-vs-init() race test was retired when cancel() folded
-  // into close(): close() settles a terminal and blocks init(),
-  // so a Cancel-before-Init race is no longer reachable through the public API
-  // (close() almost always wins and aborts init() before any control is sent,
-  // making such a race test vacuous). The invariant is now structural --
-  // sendCancelInternal early-returns while requestObserver is null, and
-  // requestObserver is published only after Init is on the wire -- and is
-  // exercised by "worker emits InitResponse with error: init fails fast" (the
-  // requestObserver-null path: a Cancel that cannot be written) and by "close
-  // concurrent with process" (a Cancel written only after Init + data).
+  // Cancel-never-precedes-Init invariant. Publication of requestObserver and the
+  // Init write are serialized with close/cancel under requestLock: close either
+  // wins first and prevents Init entirely, or waits until Init is on the wire
+  // before writing Cancel.
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
   // Terminator-before-InitResponse: must fail init fast, not hang for
-  // initResponseTimeoutMs (defensive initLatch.countDown() in handleControl).
+  // initResponseTimeoutMs (onTerminalSettled completes initValue without a value).
   // ---------------------------------------------------------------------------
 
   test("worker emits ErrorResponse before InitResponse: init fails fast") {
@@ -293,9 +286,9 @@ class GrpcWorkerSessionConcurrencySuite
         }
       })
     val (_, channel) = startServer(service)
-    // Huge init timeout: a regression that dropped the defensive
-    // initLatch.countDown() would park init here until the timeout, so finishing
-    // quickly is proof the fast path ran -- no wall-clock threshold needed.
+    // Huge init timeout: a regression that failed to complete initValue would
+    // park init here until the timeout, so finishing quickly is proof the fast
+    // path ran -- no wall-clock threshold needed.
     val session = newSession(channel, initResponseTimeoutMs = NeverReachedTimeoutMs)
 
     assertFinishesWithin(10000, "init") {
@@ -308,11 +301,10 @@ class GrpcWorkerSessionConcurrencySuite
   }
 
   test("worker emits InitResponse with error: init fails fast (no terminal-timeout stall)") {
-    // Regression for the directExecutor reentrancy where InitResponse(error) is
-    // delivered inside stream.onNext, before doInit publishes requestObserver,
-    // so the in-band Cancel cannot be written. The INIT-error path must settle a
-    // terminal itself rather than block awaiting a CancelResponse that can never
-    // arrive (which would stall for the full terminalTimeoutMs).
+    // Regression for directExecutor reentrancy where InitResponse(error) is
+    // delivered inside stream.onNext. requestObserver is already published, so
+    // doInit can send the required Cancel after onNext returns and drain the
+    // CancelResponse without stalling on terminalTimeoutMs.
     val service = new CapturingService(
       onRequest = (req, resp) => {
         if (req.hasControl && req.getControl.hasInit) {
@@ -343,6 +335,98 @@ class GrpcWorkerSessionConcurrencySuite
         s"expected an init-failure message, got: ${ex.getMessage}")
     }
     session.close(emptyCancel)
+  }
+
+  test("terminal signal wins over a late InitResponse") {
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        if (req.hasControl && req.getControl.hasInit) {
+          // DATA before InitResponse is a protocol failure and completes the
+          // init one-shot without a value. A later InitResponse must not overwrite
+          // that completion and make init() return successfully.
+          resp.onNext(UdfResponse.newBuilder()
+            .setData(DataResponse.newBuilder()
+              .setData(ByteString.copyFromUtf8("premature")).build())
+            .build())
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setInit(
+              InitResponse.getDefaultInstance).build()).build())
+        }
+      })
+    val (_, channel) = startServer(service)
+    val session = newSession(channel, initResponseTimeoutMs = NeverReachedTimeoutMs)
+
+    val ex = intercept[GrpcWorkerSessionException] { session.init(basicInit()) }
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("init") ||
+      ex.getMessage.toLowerCase(Locale.ROOT).contains("stream"),
+      s"expected the earlier protocol failure to win, got: ${ex.getMessage}")
+    assert(session.close(emptyCancel).isInstanceOf[Termination.TransportFailed])
+  }
+
+  test("ErrorResponse immediately after InitResponse fails init and sends Cancel") {
+    val cancelSeen = new CountDownLatch(1)
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        if (req.hasControl && req.getControl.hasInit) {
+          // Both responses are delivered reentrantly from inside the Init write.
+          // The second response is a valid generator-style data-phase failure.
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setInit(
+              InitResponse.getDefaultInstance).build()).build())
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setError(
+              ErrorResponse.newBuilder().setError(
+                ExecutionError.newBuilder().setUser(
+                  UserError.newBuilder().setMessage("generator failed")
+                    .setErrorClass("GeneratorError").build()).build()).build()).build())
+            .build())
+        } else if (req.hasControl && req.getControl.hasCancel) {
+          cancelSeen.countDown()
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setCancel(
+              CancelResponse.getDefaultInstance).build()).build())
+        }
+      })
+    val (_, channel) = startServer(service)
+    val session = newSession(channel, terminalTimeoutMs = NeverReachedTimeoutMs)
+
+    val ex = intercept[GrpcWorkerSessionException] { session.init(basicInit()) }
+    assert(ex.getMessage.contains("generator failed"),
+      s"the immediate ErrorResponse must fail init with the worker error, got: ${ex.getMessage}")
+    assert(cancelSeen.await(5, TimeUnit.SECONDS),
+      "an immediate post-init ErrorResponse must send the protocol-required Cancel")
+    assert(session.close(emptyCancel).isInstanceOf[Termination.Cancelled])
+  }
+
+  test("FinishResponse before Finish is rejected instead of truncating input") {
+    val replied = new AtomicBoolean(false)
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        if (req.hasControl && req.getControl.hasInit) {
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setInit(
+              InitResponse.getDefaultInstance).build()).build())
+        } else if (req.hasData && replied.compareAndSet(false, true)) {
+          // A buggy worker claims success after the first batch even though the
+          // engine has neither exhausted its input nor sent Finish.
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setFinish(
+              FinishResponse.getDefaultInstance).build()).build())
+        }
+      })
+    val (_, channel) = startServer(service)
+    val session = newSession(channel, terminalTimeoutMs = NeverReachedTimeoutMs)
+    session.init(basicInit())
+
+    val ex = intercept[GrpcWorkerSessionException] {
+      session.process(echoIn("first", "must-not-be-consumed"), emptyFinish).foreach(_ => ())
+    }
+    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("stream failed"),
+      s"a premature FinishResponse must be a protocol failure, got: ${ex.getMessage}")
+    val dataRequests = service.captured.asScala.count(_.hasData)
+    assert(dataRequests == 1,
+      s"the premature terminator should stop input after one batch, got: $dataRequests")
+    assert(session.close(emptyCancel).isInstanceOf[Termination.TransportFailed])
   }
 
   test("worker emits FinishResponse before InitResponse: init fails fast") {
@@ -406,10 +490,10 @@ class GrpcWorkerSessionConcurrencySuite
   test("worker emits malformed UdfResponse before InitResponse: init fails fast") {
     // A UdfResponse with no oneof set (RESPONSE_NOT_SET) is malformed: the
     // session's responseObserver settles a transport-failure terminal in its
-    // catch-all `case other` branch. Regression guard for the missing
-    // initLatch.countDown() on that branch -- without it, init() blocks until
-    // initResponseTimeoutMs and reports a misleading "timed out" error instead
-    // of failing fast with the malformed-response cause.
+    // catch-all `case other` branch. Regression guard for failing to wake the
+    // initValue waiter when that terminal settles: without it, init() blocks
+    // until initResponseTimeoutMs and reports a misleading "timed out" error
+    // instead of failing fast with the malformed-response cause.
     val service = new CapturingService(
       onRequest = (req, resp) => {
         if (req.hasControl && req.getControl.hasInit) {
@@ -957,6 +1041,74 @@ class GrpcWorkerSessionConcurrencySuite
   // stays parked until initResponseTimeoutMs.
   // ---------------------------------------------------------------------------
 
+  test("close concurrent with the initial write sends Cancel only after Init") {
+    val initHandlerEntered = new CountDownLatch(1)
+    val releaseInitHandler = new CountDownLatch(1)
+    val cancelSeen = new CountDownLatch(1)
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        if (req.hasControl && req.getControl.hasInit) {
+          // Hold the directExecutor Init write inside the server handler. close()
+          // must wait for this write rather than treating requestObserver as
+          // absent, releasing the worker, and letting Init escape afterward.
+          initHandlerEntered.countDown()
+          releaseInitHandler.await(10, TimeUnit.SECONDS)
+        } else if (req.hasControl && req.getControl.hasCancel) {
+          cancelSeen.countDown()
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setCancel(
+              CancelResponse.getDefaultInstance).build()).build())
+        }
+      })
+    val (_, channel) = startServer(service)
+    val session = newSession(channel,
+      initResponseTimeoutMs = NeverReachedTimeoutMs, terminalTimeoutMs = NeverReachedTimeoutMs)
+
+    val initThrown = new AtomicReference[Throwable]()
+    val initThread = new Thread(() => {
+      try session.init(basicInit()) catch { case t: Throwable => initThrown.set(t) }
+    }, "init-write-close-race")
+    initThread.start()
+    assert(initHandlerEntered.await(5, TimeUnit.SECONDS), "worker never entered the Init handler")
+
+    val closeResult = new AtomicReference[Termination]()
+    val closeThrown = new AtomicReference[Throwable]()
+    val closeDone = new CountDownLatch(1)
+    val closeThread = new Thread(() => {
+      try closeResult.set(session.close(emptyCancel))
+      catch { case t: Throwable => closeThrown.set(t) }
+      finally closeDone.countDown()
+    }, "close-during-init-write")
+    closeThread.start()
+
+    // The close thread must block on requestLock while the Init write is in the
+    // directExecutor handler. Before the fix it returned immediately through the
+    // requestObserver-null path and released the worker under the active stream.
+    val blockedDeadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+    while (closeThread.getState != Thread.State.BLOCKED && closeDone.getCount != 0 &&
+        System.nanoTime() < blockedDeadlineNanos) {
+      Thread.sleep(10L)
+    }
+    assert(closeThread.getState == Thread.State.BLOCKED,
+      s"close must wait for the initial write, state=${closeThread.getState}")
+
+    releaseInitHandler.countDown()
+    closeThread.join(10000)
+    initThread.join(10000)
+    assert(!closeThread.isAlive && !initThread.isAlive,
+      "close and init must both finish after the worker receives Cancel")
+    assert(closeThrown.get() == null, s"close failed: ${closeThrown.get()}")
+    assert(initThrown.get().isInstanceOf[GrpcWorkerSessionException],
+      s"init must fail after concurrent close, got: ${initThrown.get()}")
+    assert(cancelSeen.getCount == 0, "close must send Cancel after the in-flight Init")
+    assert(closeResult.get().isInstanceOf[Termination.Cancelled],
+      s"worker acknowledgement should settle Cancelled, got: ${closeResult.get()}")
+    val requests = service.captured.asScala.toSeq
+    assert(requests.size == 2 && requests.head.getControl.hasInit &&
+      requests(1).getControl.hasCancel,
+      s"expected exactly Init then Cancel, got: $requests")
+  }
+
   test("close concurrent with blocked init: init is woken and fails fast") {
     val initReceived = new CountDownLatch(1)
     val service = new CapturingService(
@@ -1149,7 +1301,8 @@ class GrpcWorkerSessionConcurrencySuite
   // Interrupt handling (cancelled query / killed task). An interrupt while
   // blocked on init sends a best-effort Cancel and waits interruptCancelTimeoutMs
   // for the CancelResponse: a responsive worker settles a clean, salvageable
-  // Cancelled; an unresponsive one falls back to Interrupted (also salvageable).
+  // Cancelled; an unresponsive one falls back to Interrupted and is invalidated
+  // because no acknowledgement or liveness proof makes it safe to reuse.
   // ---------------------------------------------------------------------------
 
   test("interrupt during init: responsive worker settles Cancelled, worker salvageable") {
@@ -1190,11 +1343,11 @@ class GrpcWorkerSessionConcurrencySuite
     assert(termination.isInstanceOf[Termination.Cancelled],
       s"a responsive worker's ack should settle Cancelled, got: $termination")
     assert(!handle.invalidated.get(),
-      "an Interrupted/Cancelled outcome is salvageable; the worker must not be invalidated")
+      "an acknowledged Cancelled outcome is salvageable; the worker must not be invalidated")
     assert(handle.released.get(), "close() must release the worker handle")
   }
 
-  test("interrupt during init: unresponsive worker settles Interrupted, worker salvageable") {
+  test("interrupt during init: unresponsive worker settles Interrupted and is invalidated") {
     // Worker never sends InitResponse and ignores Cancel -- so the interrupt's
     // bounded drain times out and the session falls back to Interrupted.
     val initReceived = new CountDownLatch(1)
@@ -1230,8 +1383,8 @@ class GrpcWorkerSessionConcurrencySuite
     val termination = session.close(emptyCancel)
     assert(termination.isInstanceOf[Termination.Interrupted],
       s"an unresponsive worker should settle Interrupted, got: $termination")
-    assert(!handle.invalidated.get(),
-      "an Interrupted outcome is salvageable; the worker must not be invalidated")
+    assert(handle.invalidated.get(),
+      "an unacknowledged Interrupted outcome must invalidate the worker")
     assert(handle.released.get(), "close() must release the worker handle")
   }
 }

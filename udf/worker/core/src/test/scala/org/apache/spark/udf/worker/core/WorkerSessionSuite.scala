@@ -166,18 +166,18 @@ class WorkerSessionSuite extends AnyFunSuite {
     assert(h.released == 1)
   }
 
-  test("close leaves a worker salvageable after an Interrupted termination") {
+  test("close marks a worker invalid after an unacknowledged Interrupted termination") {
     val h = new RecordingHandle
     val cause = new InterruptedException("task killed")
-    // An Interrupted terminal is an engine-side event (cancelled query / killed
-    // task), not a worker fault, so the worker stays reusable: markInvalid must
-    // NOT be called.
+    // The interrupt itself is an engine-side event, but Interrupted means no
+    // CancelResponse was received. Without that acknowledgement (or a separate
+    // liveness proof), the worker's state is unknown and it must not be reused.
     val s = new FakeWorkerSession(handle = h, onCloseHook = (self, _) => {
       self.settle(Termination.Interrupted(cause))
       self.term
     })
     assert(s.close() == Termination.Interrupted(cause))
-    assert(h.invalidated == 0)
+    assert(h.invalidated == 1)
     assert(h.released == 1)
   }
 

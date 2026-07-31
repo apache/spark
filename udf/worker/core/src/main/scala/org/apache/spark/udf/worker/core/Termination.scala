@@ -74,8 +74,9 @@ object Termination {
    * the worker acks in time the session settles a cooperative [[Cancelled]]
    * instead. So it is distinct from a [[Cancelled]] (which carries the drained
    * `CancelResponse`) and from a [[TransportFailed]] (a genuine transport
-   * fault). The interrupt is an engine-side event, not a worker fault, so the
-   * worker is treated as salvageable (see [[WorkerSession.isWorkerSalvageable]]).
+   * fault). Although the interrupt is an engine-side event, the missing
+   * acknowledgement leaves the worker's state unknown, so it is not salvageable
+   * without a separate liveness proof (see [[WorkerSession.isWorkerSalvageable]]).
    * Carries the interrupt cause.
    */
   final case class Interrupted(cause: Throwable) extends Termination
