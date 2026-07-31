@@ -35,10 +35,12 @@ import java.util.Arrays;
 public class CollatedString {
     private final byte[] key;
     private final String original;
+    private final int hash;
 
     public CollatedString(byte[] key, String original) {
         this.key = key;
         this.original = original;
+        this.hash = Arrays.hashCode(key);
     }
 
     public String original() {
@@ -47,7 +49,7 @@ public class CollatedString {
 
     @Override
     public int hashCode() {
-        return Arrays.hashCode(key);
+        return hash;
     }
 
     @Override

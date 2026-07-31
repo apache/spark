@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ApproxTopK, ApproxTopKAggregateBuffer,
   CombineInternal}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampNTZType, TimestampType, TimeType}
 
@@ -348,7 +349,7 @@ class ApproxTopKSuite extends SharedSparkSession {
 
   test("SPARK-58096: approx_top_k_combine keeps ICU-collation-distinct non-ASCII values " +
     "separate across sketches and a shuffle") {
-    withSQLConf("spark.sql.shuffle.partitions" -> "2") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
       val sketches = sql(
         """SELECT approx_top_k_accumulate(CAST(col AS STRING COLLATE UNICODE_CI)) AS sketch
            |  FROM VALUES ('且'), ('且'), ('且'), ('丕') AS t(col)
