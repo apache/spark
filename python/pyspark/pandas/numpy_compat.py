@@ -20,7 +20,7 @@ import numpy as np
 
 from pyspark.sql import functions as F
 from pyspark.sql.pandas.functions import pandas_udf
-from pyspark.sql.types import DoubleType, LongType, BooleanType
+from pyspark.sql.types import DoubleType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
 
 unary_np_spark_mappings = {
@@ -107,9 +107,11 @@ binary_np_spark_mappings = {
     "ldexp": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.ldexp(s1, s2), DoubleType()
     ),
-    "left_shift": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.left_shift(s1, s2), LongType()
-    ),
+    # F.shiftleft accepts literal counts only; call_function also accepts a column.
+    # NumPy returns zero for counts outside an int64's bit width, unlike JVM shifts.
+    "left_shift": lambda c1, c2: F.when(
+        (c2 < 0) | (c2 >= 64), F.lit(0)
+    ).otherwise(F.call_function("shiftleft", c1, c2)),
     "logaddexp": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.logaddexp(s1, s2), DoubleType()
     ),
@@ -129,9 +131,11 @@ binary_np_spark_mappings = {
     "nextafter": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.nextafter(s1, s2), DoubleType()
     ),
-    "right_shift": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.right_shift(s1, s2), LongType()
-    ),
+    # F.shiftright accepts literal counts only; call_function also accepts a column.
+    # NumPy sign-extends counts outside an int64's bit width, unlike JVM shifts.
+    "right_shift": lambda c1, c2: F.when(
+        (c2 < 0) | (c2 >= 64), F.call_function("shiftright", c1, F.lit(63))
+    ).otherwise(F.call_function("shiftright", c1, c2)),
 }
 
 

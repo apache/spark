@@ -115,6 +115,21 @@ class NumPyCompatTestsMixin:
 
                 self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
 
+    def test_np_bitwise_shift_functions(self):
+        pdf = pd.DataFrame(
+            {
+                "value": [np.iinfo(np.int64).min, -2, -1, 0, 1, 2, np.iinfo(np.int64).max],
+                "bits": [-1, 0, 1, 63, 64, 65, 2],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        for np_func in (np.left_shift, np.right_shift):
+            with self.subTest(name=np_func.__name__):
+                self.assert_eq(
+                    np_func(psdf.value, psdf.bits), np_func(pdf.value, pdf.bits), almost=True
+                )
+
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 
