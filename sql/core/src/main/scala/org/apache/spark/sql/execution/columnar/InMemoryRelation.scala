@@ -319,7 +319,10 @@ case class CachedRDDBuilder(
     hasStrictFileSourceReads = true
   }
 
-  def isCachedColumnBuffersLoaded: Boolean = loadedMaterializedStats.isDefined
+  def isCachedColumnBuffersLoaded: Boolean = synchronized {
+    _cachedColumnBuffers != null &&
+      partitionStats.accumulatedNumPartitions == _cachedColumnBuffers.partitions.length
+  }
 
   private[sql] def isCachedPlanRepeatable: Boolean =
     isCachedLogicalPlanRepeatable && isCachedRDDRepeatable
@@ -492,25 +495,42 @@ object InMemoryRelation extends PredicateHelper {
     }
   }
 
-  private def hasRepeatableLogicalPlan(analyzedPlan: LogicalPlan, plan: LogicalPlan): Boolean = {
+  private def hasRepeatableLogicalPlan(
+      analyzedPlan: LogicalPlan,
+      plan: LogicalPlan,
+      onOptimizedNode: LogicalPlan => Unit): Boolean = {
     // Runtime-replaceable expressions such as AES encryption can become deterministic-looking
     // StaticInvoke nodes during optimization despite using a fresh random initialization vector.
     // Inspect the original analyzed expressions before trusting the optimized execution shape.
-    analyzedPlan.deterministic && analyzedPlan.collectWithSubqueries {
-      case node if !hasSafeExpressions(node) => true
-    }.isEmpty && plan.deterministic && plan.collectWithSubqueries {
-      case node if !hasSafeExpressions(node) => true
-      case _: logical.Project | _: logical.Filter | _: logical.SubqueryAlias |
-           _: logical.Range | _: logical.LocalRelation => false
-      case relation: LogicalRelation => relation.relation match {
-        case fileRelation: HadoopFsRelation =>
-          val fileFormatClass = fileRelation.fileFormat.getClass
-          !(trustedFileFormatClasses.contains(fileFormatClass) ||
-            trustedExternalFileFormatNames.contains(fileFormatClass.getName))
-        case _ => true
+    var repeatable = analyzedPlan.deterministic
+    if (repeatable) {
+      analyzedPlan.foreachWithSubqueries { node =>
+        if (repeatable && !hasSafeExpressions(node)) {
+          repeatable = false
+        }
       }
-      case _ => true
-    }.forall(!_)
+    }
+    if (repeatable) {
+      repeatable = plan.deterministic
+    }
+    plan.foreachWithSubqueries { node =>
+      onOptimizedNode(node)
+      if (repeatable) {
+        repeatable = hasSafeExpressions(node) && (node match {
+          case _: logical.Project | _: logical.Filter | _: logical.SubqueryAlias |
+               _: logical.Range | _: logical.LocalRelation => true
+          case relation: LogicalRelation => relation.relation match {
+            case fileRelation: HadoopFsRelation =>
+              val fileFormatClass = fileRelation.fileFormat.getClass
+              trustedFileFormatClasses.contains(fileFormatClass) ||
+                trustedExternalFileFormatNames.contains(fileFormatClass.getName)
+            case _ => false
+          }
+          case _ => false
+        })
+      }
+    }
+    repeatable
   }
 
   private[columnar] def hasRepeatablePhysicalPlan(plan: SparkPlan): Boolean = {
@@ -525,24 +545,6 @@ object InMemoryRelation extends PredicateHelper {
     }
   }
 
-  private def collectFileSourceOptions(plan: LogicalPlan): Seq[Map[String, String]] = {
-    val relevantOptions = Seq(
-      FileSourceOptions.IGNORE_MISSING_FILES,
-      FileSourceOptions.IGNORE_CORRUPT_FILES)
-    plan.collectWithSubqueries {
-      case relation: LogicalRelation if relation.relation.isInstanceOf[HadoopFsRelation] =>
-        val options = CaseInsensitiveMap(relation.relation.asInstanceOf[HadoopFsRelation].options)
-        relevantOptions.flatMap { key => options.get(key).map(key -> _) }.toMap
-    }
-  }
-
-  private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
-    plan.collectWithSubqueries {
-      case logical.Filter(condition, _) if condition.deterministic &&
-          isLikelySelective(condition) => true
-    }.nonEmpty
-  }
-
   private def newCacheBuilder(
       serializer: CachedBatchSerializer,
       storageLevel: StorageLevel,
@@ -551,15 +553,32 @@ object InMemoryRelation extends PredicateHelper {
       logicalPlan: LogicalPlan,
       analyzedPlan: LogicalPlan,
       optimizedPlan: LogicalPlan): CachedRDDBuilder = {
+    val relevantOptions = Seq(
+      FileSourceOptions.IGNORE_MISSING_FILES,
+      FileSourceOptions.IGNORE_CORRUPT_FILES)
+    val fileSourceOptions = Seq.newBuilder[Map[String, String]]
+    var hasSelectivePredicate = false
+    val repeatable = hasRepeatableLogicalPlan(analyzedPlan, optimizedPlan, {
+      case logical.Filter(condition, _) =>
+        if (!hasSelectivePredicate && condition.deterministic && isLikelySelective(condition)) {
+          hasSelectivePredicate = true
+        }
+      case relation: LogicalRelation if relation.relation.isInstanceOf[HadoopFsRelation] =>
+        val options = CaseInsensitiveMap(relation.relation.asInstanceOf[HadoopFsRelation].options)
+        fileSourceOptions += relevantOptions.flatMap { key =>
+          options.get(key).map(key -> _)
+        }.toMap
+      case _ =>
+    })
     CachedRDDBuilder(
       serializer,
       storageLevel,
       cachedPlan,
       tableName,
       logicalPlan,
-      isCachedLogicalPlanRepeatable = hasRepeatableLogicalPlan(analyzedPlan, optimizedPlan),
-      hasSelectivePredicate = hasSelectivePredicate(optimizedPlan),
-      fileSourceOptions = collectFileSourceOptions(optimizedPlan))
+      isCachedLogicalPlanRepeatable = repeatable,
+      hasSelectivePredicate = hasSelectivePredicate,
+      fileSourceOptions = fileSourceOptions.result())
   }
 
   private[this] var ser: Option[CachedBatchSerializer] = None

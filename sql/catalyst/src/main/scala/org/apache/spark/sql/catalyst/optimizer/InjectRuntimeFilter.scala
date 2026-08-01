@@ -104,7 +104,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       plan: LogicalPlan,
       filterCreationSideKey: Expression,
       allowMaterializedCache: Boolean,
-      applicationDistinctCount: => Option[BigInt]): Option[FilterCreationSide] = {
+      applicationDistinctCount: => Option[BigInt],
+      onMaterializedLeaf: => Unit = ()): Option[FilterCreationSide] = {
     def extract(
         p: LogicalPlan,
         predicateReference: AttributeSet,
@@ -190,12 +191,15 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           None
         }
       case leaf: MaterializedLeafNode =>
+        onMaterializedLeaf
         val safeLineage = currentPlan.deterministic &&
           findExpressionAndTrackLineageDown(targetKey, currentPlan).exists {
             case (trackedKey, _) => isSimpleExpression(trackedKey)
           }
         val materializedMetadata = if (allowMaterializedCache && safeLineage &&
-            leaf.mayHaveUsableMaterializedStats) {
+            leaf.mayHaveUsableMaterializedStats &&
+            (hasHitSelectiveFilter || leaf.hasSelectivePredicate ||
+              applicationDistinctCount.isDefined)) {
           leaf.materializedMetadata.filter(_.statsAvailable).flatMap { metadata =>
             val creationSize = if (currentPlan eq leaf) {
               metadata.sizeInBytes
@@ -343,19 +347,25 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         }
       }
       if (allowMaterializedCache) {
+        var sawMaterializedLeaf = false
         val selectiveCreationSide = extractSelectiveFilterOverScan(
           filterCreationSide,
           filterCreationSideKey,
           allowMaterializedCache = false,
-          applicationDistinctCount = None)
+          applicationDistinctCount = None,
+          onMaterializedLeaf = { sawMaterializedLeaf = true })
         selectiveCreationSide
           .filter(_.plan.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold)
           .orElse {
-            extractSelectiveFilterOverScan(
-              filterCreationSide,
-              filterCreationSideKey,
-              allowMaterializedCache = true,
-              applicationDistinctCount = applicationDistinctCount)
+            if (sawMaterializedLeaf) {
+              extractSelectiveFilterOverScan(
+                filterCreationSide,
+                filterCreationSideKey,
+                allowMaterializedCache = true,
+                applicationDistinctCount = applicationDistinctCount)
+            } else {
+              selectiveCreationSide
+            }
           }
       } else {
         extractSelectiveFilterOverScan(
