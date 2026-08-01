@@ -1,3 +1,5 @@
 fastapi==0.113.0
 uvicorn[standard]==0.24.0
 pydantic==2.9.0
+pytest==7.4.2
+requests==2.31.0
