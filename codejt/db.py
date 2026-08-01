@@ -2,7 +2,7 @@ import sqlite3
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
-from models import SourcePayload, SourceResponse
+from codejt.models import SourcePayload, SourceResponse
 
 DB_PATH = Path(__file__).resolve().parent / "codejt.db"
 

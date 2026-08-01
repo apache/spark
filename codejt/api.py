@@ -4,8 +4,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from uuid import uuid4
 from typing import List
-from models import SourcePayload, SourceResponse
-from db import init_db, create_source as db_create_source, get_source as db_get_source, list_sources as db_list_sources, update_source as db_update_source, delete_source as db_delete_source
+from codejt.models import SourcePayload, SourceResponse
+from codejt.db import (
+    init_db,
+    create_source as db_create_source,
+    get_source as db_get_source,
+    list_sources as db_list_sources,
+    update_source as db_update_source,
+    delete_source as db_delete_source,
+)
 from datetime import datetime
 
 # OpenAPI / docs metadata
