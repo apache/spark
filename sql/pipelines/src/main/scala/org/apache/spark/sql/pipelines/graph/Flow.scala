@@ -268,15 +268,44 @@ class AutoCdcMergeFlow(
     // AutoCDC flows require all key columns to be present in the user-selected source schema,
     // so that they survive into the target table where SCD reconciliation needs them.
     requireKeysPresentInSelectedSchema(selectedSchema)
-    // SCD2 flows may specify history-tracking columns; validate they resolve to eligible columns
-    // of the selected schema at construction time, rather than failing mid-stream on first batch.
-    requireTrackHistoryColumnsResolvableInSelectedSchema(selectedSchema)
     selectedSchema
   }
 
   /** The DataType of the sequencing expression, derived once from the source change feed. */
   private[graph] val sequencingType: DataType =
     df.select(changeArgs.sequencing).schema.head.dataType
+
+  /**
+   * SCD2 only: the effective set of history-tracking column names for this flow, resolved from the
+   * [[userSelectedSchema]] (the user-selected source columns), not from the persisted/evolved
+   * target schema. This is the single source of truth for the tracked set:
+   *
+   *  - Resolving against [[userSelectedSchema]] means the tracked set follows the flow's own
+   *    selection. In particular, under default or `* EXCEPT` tracking, dropping a column from the
+   *    source (or from the `COLUMNS` selection) removes it from the tracked set -- rather than the
+   *    column lingering as tracked because it still exists in the (sticky) target schema.
+   *  - It is recorded on the auxiliary table and drift-checked across runs: a change to this set
+   *    reinterprets which transitions open a new SCD2 record, which cannot be applied to
+   *    already-reconciled history, so any change requires a full refresh (see
+   *    [[AutoCdcAuxiliaryTable.validateNoTrackHistoryDrift]]). Because the set is
+   *    selection-derived, adding or dropping a source column under default / `* EXCEPT` tracking
+   *    is such a change; this is an intended divergence from SCD1, where non-key schema evolution
+   *    needs no full refresh.
+   *
+   * Computing it here (rather than in the aux-table spec builder from the target schema) also
+   * validates the selection at construction time: an unresolvable or ineligible explicit
+   * `TRACK HISTORY ON` selection throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` here, before the
+   * first microbatch, rather than failing deep inside the SCD2 batch processor. `None` for SCD1.
+   */
+  private[graph] val trackHistoryColumnNames: Option[Seq[String]] =
+    changeArgs.storedAsScdType match {
+      case ScdType.Type2 =>
+        Some(Scd2BatchProcessor.computeTrackedHistoryColumns(
+          schema = userSelectedSchema,
+          changeArgs = changeArgs,
+          resolver = spark.sessionState.conf.resolver))
+      case ScdType.Type1 => None
+    }
 
   /**
    * Returns the augmented output schema of this flow, which can differ from the schema of the
@@ -455,25 +484,4 @@ class AutoCdcMergeFlow(
       }
   }
 
-  /**
-   * Validate that this flow's [[ChangeArgs.trackHistorySelection]] (SCD2 `TRACK HISTORY ON ...`)
-   * resolves against the user-selected source schema at construction time. Without this, an
-   * unresolvable or ineligible (key/framework) tracking column would only surface when the first
-   * microbatch runs reconciliation, deep inside the SCD2 batch processor.
-   *
-   * Delegates to [[Scd2BatchProcessor.computeTrackedHistoryColumns]] -- the same resolution used at
-   * runtime -- so the two can never diverge; it throws `AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA` on an
-   * unresolvable selection. `trackHistorySelection` is `None` for SCD1 (enforced by [[ChangeArgs]])
-   * and for SCD2 flows that do not restrict tracking, in which case resolution is a no-op.
-   */
-  private def requireTrackHistoryColumnsResolvableInSelectedSchema(
-      selectedSchema: StructType): Unit = {
-    if (changeArgs.trackHistorySelection.isDefined) {
-      Scd2BatchProcessor.computeTrackedHistoryColumns(
-        schema = selectedSchema,
-        changeArgs = changeArgs,
-        resolver = spark.sessionState.conf.resolver
-      )
-    }
-  }
 }
