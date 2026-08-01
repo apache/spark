@@ -256,7 +256,7 @@
       },
       "AUXILIARY_TABLE_PROPERTY_MISSING" : {
         "message" : [
-          "The internal auxiliary table is missing the required <propertyName> table property; cannot validate AutoCDC key columns. The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+          "The internal auxiliary table is missing the required <propertyName> table property; cannot validate the AutoCDC configuration. The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
         ]
       },
       "KEY_SCHEMA_DRIFT" : {
@@ -267,6 +267,16 @@
       "SCD_TYPE_DRIFT" : {
         "message" : [
           "One or more AutoCDC flows writing to the target use SCD type <expectedScdType>, which is inconsistent with the SCD type recorded for it (recorded <recordedScdType>). AutoCDC does not support changing a target's SCD type across incremental pipeline runs. Correct the conflicting flow(s) or perform a full refresh of the target table."
+        ]
+      },
+      "SEQUENCING_TYPE_DRIFT" : {
+        "message" : [
+          "One or more AutoCDC flows writing to the target use a sequencing expression of type <expectedSequencingType>, which is inconsistent with the sequencing type recorded for it (recorded <recordedSequencingType>). The sequencing expression may change across incremental pipeline runs, but its result type must not, so recorded sequencing values remain comparable. Correct the conflicting flow(s) or perform a full refresh of the target table."
+        ]
+      },
+      "TRACK_HISTORY_DRIFT" : {
+        "message" : [
+          "One or more AutoCDC flows writing to the target track history on columns [<expectedTrackHistoryColumns>], which are inconsistent with the track-history columns recorded for it (recorded [<recordedTrackHistoryColumns>]). AutoCDC does not support changing the SCD Type 2 track-history columns across incremental pipeline runs. Correct the conflicting flow(s) or perform a full refresh of the target table."
         ]
       }
     },
