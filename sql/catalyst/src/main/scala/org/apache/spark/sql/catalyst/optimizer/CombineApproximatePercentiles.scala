@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DoubleType}
 
 private[optimizer] case class PercentileFusionIdentity(
@@ -119,10 +120,13 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
     }
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(AGGREGATE), ruleId) {
-    case aggregate: Aggregate if aggregate.resolved && !aggregate.isStreaming =>
-      combine(aggregate)
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.getConf(SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED)) return plan
+
+    plan.transformUpWithPruning(_.containsPattern(AGGREGATE), ruleId) {
+      case aggregate: Aggregate if aggregate.resolved && !aggregate.isStreaming =>
+        combine(aggregate)
+    }
   }
 
   private def combine(aggregate: Aggregate): Aggregate = {

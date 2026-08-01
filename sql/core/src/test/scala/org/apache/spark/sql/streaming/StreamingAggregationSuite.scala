@@ -125,15 +125,17 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         StartStream(
           checkpointLocation = checkpointDir.getAbsolutePath,
           additionalConfs = Map(
-            SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-              "org.apache.spark.sql.catalyst.optimizer.CombineApproximatePercentiles")),
+            SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key -> "false")),
         AddData(inputData, (0, 1), (0, 2), (0, 3)),
         CheckLastBatch((0, 2, 3)),
         StopStream)
 
-      // Start a separate stream so that the optimizer exclusion has been fully restored.
+      // Restart with percentile fusion enabled to verify the existing checkpoint stays valid.
       testStream(aggregated, Update)(
-        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        StartStream(
+          checkpointLocation = checkpointDir.getAbsolutePath,
+          additionalConfs = Map(
+            SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key -> "true")),
         AddData(inputData, (0, 4)),
         CheckLastBatch((0, 2, 4)),
         StopStream)

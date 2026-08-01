@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
-import org.apache.spark.SparkArithmeticException
+import org.apache.spark.{SparkArithmeticException, SparkConf}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
   ApproximatePercentile, Final, Partial}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
@@ -42,11 +42,12 @@ import org.apache.spark.tags.SlowSQLTest
 class ApproximatePercentileQuerySuite extends SharedSparkSession {
   import testImplicits._
 
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key, "true")
+
   private val table = "percentile_approx"
   private val constantFoldingRule =
     "org.apache.spark.sql.catalyst.optimizer.ConstantFolding"
-  private val fusionRule =
-    "org.apache.spark.sql.catalyst.optimizer.CombineApproximatePercentiles"
 
   private def excludedRules: Seq[String] = {
     spark.sessionState.conf.optimizerExcludedRules.toSeq
@@ -68,17 +69,25 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
   private def checkMatchesUnfusedBaseline(sql: String, expectedDigests: Int): Unit = {
     val withoutConstantFolding = (excludedRules :+ constantFoldingRule).distinct
     val baseline = withSQLConf(
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-        (withoutConstantFolding :+ fusionRule).distinct.mkString(",")) {
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> withoutConstantFolding.mkString(","),
+      SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key -> "false") {
       spark.sql(sql).collect().toSeq
     }
 
     withSQLConf(
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-        withoutConstantFolding.filterNot(_ == fusionRule).mkString(",")) {
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> withoutConstantFolding.mkString(",")) {
       val query = spark.sql(sql)
       checkAnswer(query, baseline)
       assertPercentileDigestCount(query, expectedDigests)
+    }
+  }
+
+  test("approximate percentile fusion can be disabled") {
+    withSQLConf(SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key -> "false") {
+      val query = spark.sql(
+        "SELECT percentile_approx(id, 0.5D), percentile_approx(id, 0.9D) FROM range(10)")
+      checkAnswer(query, Row(4L, 8L))
+      assertPercentileDigestCount(query, 2)
     }
   }
 
@@ -210,8 +219,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
         |) AS t(a, b, c)
         |""".stripMargin
     val unfusedBaseline = withSQLConf(
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
-        (excludedRules :+ fusionRule).distinct.mkString(",")) {
+      SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key -> "false") {
       spark.sql(crossDistinctCollision).collect().toSeq
     }
     checkAnswer(spark.sql(crossDistinctCollision), unfusedBaseline)
@@ -337,10 +345,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
       ("(1e16D + -1e16D) + 0.5D", "100"),
       ("0.5D", "CAST((1e16D + -1e16D) + 100D AS INT)"),
       ("0.5D", "100L"))
-    val activeRules = (excludedRules :+ constantFoldingRule)
-      .filterNot(_ == fusionRule)
-      .distinct
-      .mkString(",")
+    val activeRules = (excludedRules :+ constantFoldingRule).distinct.mkString(",")
 
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",

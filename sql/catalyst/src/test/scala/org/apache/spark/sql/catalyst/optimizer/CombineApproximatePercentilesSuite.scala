@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class CombineApproximatePercentilesSuite extends PlanTest {
@@ -52,7 +53,9 @@ class CombineApproximatePercentilesSuite extends PlanTest {
 
   private def optimizedAggregate(expressions: Alias*): Aggregate = {
     val plan = Aggregate(Seq.empty, expressions, relation)
-    Optimize.execute(plan.analyze).asInstanceOf[Aggregate]
+    withSQLConf(SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key -> "true") {
+      Optimize.execute(plan.analyze).asInstanceOf[Aggregate]
+    }
   }
 
   private def percentileAggregates(aggregate: Aggregate): Seq[AggregateExpression] = {
@@ -77,6 +80,20 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(!aggregate.aggregateExpressions.exists(_.exists(_.isInstanceOf[GetArrayItem])))
   }
 
+  test("do not combine approximate percentiles when disabled") {
+    assert(!new SQLConf().getConf(SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED))
+    val original = Aggregate(
+      Seq.empty,
+      Seq(
+        Alias(percentile(value, 0.5), "p50")(),
+        Alias(percentile(value, 0.9), "p90")()),
+      relation).analyze.asInstanceOf[Aggregate]
+
+    withSQLConf(SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key -> "false") {
+      assertNotCombined(Optimize.execute(original).asInstanceOf[Aggregate])
+    }
+  }
+
   test("combine compatible percentiles and preserve output shape") {
     val firstPercentile = percentile(value, 0.9)
     firstPercentile.aggregateFunction.setTagValue(FunctionRegistry.FUNC_ALIAS, "approx_percentile")
@@ -86,7 +103,9 @@ class CombineApproximatePercentilesSuite extends PlanTest {
       Alias(percentile(value, 0.9), "third")())
     val original = Aggregate(Seq(group), group +: aliases, relation).analyze
       .asInstanceOf[Aggregate]
-    val result = Optimize.execute(original).asInstanceOf[Aggregate]
+    val result = withSQLConf(SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key -> "true") {
+      Optimize.execute(original).asInstanceOf[Aggregate]
+    }
     val aggregates = percentileAggregates(result)
     val combined = aggregates.head.aggregateFunction.asInstanceOf[ApproximatePercentile]
 
