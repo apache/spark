@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -29,15 +28,4 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 case class BroadcastValueProjection(
     sourcePlan: LogicalPlan,
     sourceHashKeys: Seq[Expression],
-    valueExpression: Expression) {
-
-  lazy val canonicalized: BroadcastValueProjection = {
-    val normalizedKeys = sourceHashKeys.map(
-      QueryPlan.normalizeExpressions(_, sourcePlan.output))
-    val normalizedValue = QueryPlan.normalizeExpressions(valueExpression, sourcePlan.output)
-    copy(
-      sourcePlan = sourcePlan.canonicalized,
-      sourceHashKeys = normalizedKeys,
-      valueExpression = normalizedValue)
-  }
-}
+    valueExpression: Expression)
