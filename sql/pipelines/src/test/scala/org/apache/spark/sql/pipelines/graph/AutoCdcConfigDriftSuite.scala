@@ -566,8 +566,8 @@ class AutoCdcConfigDriftSuite
     assert(spark.catalog.tableExists(auxTableNameFor("target")),
       "auxiliary table should survive dropping the target")
 
-    // Run #2: recreate the target and track history on `amount` instead -- a changed tracked set.
-    createScd2Target("id INT NOT NULL, name STRING, amount INT, seq BIGINT")
+    // Run #2: track history on `amount` instead -- a changed tracked set.
+    // This will recreate the target.
     val stream2 = MemoryStream[(Int, String, Int, Long)]
     stream2.addData((1, "a", 20, 2L))
     val ctx2 = singleAutoCdcFlowPipeline(

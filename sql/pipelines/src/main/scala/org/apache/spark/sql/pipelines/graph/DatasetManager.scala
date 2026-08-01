@@ -123,6 +123,7 @@ object DatasetManager extends Logging {
                   resolvedDataflowGraph = resolvedDataflowGraph,
                   table = table,
                   isFullRefresh = isFullRefresh,
+                  auxiliaryTableSpecOpt = auxiliaryTableSpecOpt,
                   existingAuxiliaryTable = existingAuxiliaryTable,
                   context = context
                 )
@@ -284,6 +285,7 @@ object DatasetManager extends Logging {
    * @param resolvedDataflowGraph The resolved [[DataflowGraph]] used to infer the table schema.
    * @param table The table to be materialized.
    * @param isFullRefresh Whether this table should be full refreshed or not.
+   * @param auxiliaryTableSpecOpt The spec for the auxiliary table (if this table has one)
    * @param existingAuxiliaryTable The already-loaded auxiliary table for this target (if it has one
    *                               and it exists), used for AutoCDC config-drift validation. Loaded
    *                               once by the caller and shared with [[materializeAuxiliaryTable]].
@@ -295,6 +297,7 @@ object DatasetManager extends Logging {
       resolvedDataflowGraph: DataflowGraph,
       table: Table,
       isFullRefresh: Boolean,
+      auxiliaryTableSpecOpt: Option[AuxiliaryTableSpec],
       existingAuxiliaryTable: Option[V2Table],
       context: PipelineUpdateContext): (Table, V2Table) = {
     logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
@@ -348,6 +351,10 @@ object DatasetManager extends Logging {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
 
+    val autoCdcAuxTableSpecOpt = auxiliaryTableSpecOpt.collect {
+        case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
+      }
+
     // For an incrementally-updated AutoCDC target, validate that the AutoCDC configuration recorded
     // on the auxiliary table has not drifted, BEFORE anything is created or evolved this run. These
     // checks read the auxiliary table, so they run whenever IT exists -- independent of whether the
@@ -357,10 +364,8 @@ object DatasetManager extends Logging {
     // silently overwrite the recorded key/SCD-type/track-history properties with this run's values.
     // Running here turns that into one clear drift error (remedy: full refresh).
     if (isTableIncrementallyUpdated) {
-      resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier).collect {
-        case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
-      }.foreach { autoCdcSpec =>
-        validateNoAutoCdcAuxConfigDrift(autoCdcSpec, existingAuxiliaryTable, context)
+      autoCdcAuxTableSpecOpt.foreach {
+        validateNoAutoCdcAuxConfigDrift(_, existingAuxiliaryTable, context)
       }
     }
 
@@ -375,9 +380,7 @@ object DatasetManager extends Logging {
         // change as an actionable SEQUENCING_TYPE_DRIFT rather than a generic
         // CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE from the schema merge.
         if (isTableIncrementallyUpdated) {
-          resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier).collect {
-            case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
-          }.foreach { autoCdcSpec =>
+          autoCdcAuxTableSpecOpt.foreach { autoCdcSpec =>
             AutoCdcAuxiliaryTable.validateNoTargetSequencingTypeDrift(
               existingTargetSchema =
                 CatalogV2Util.v2ColumnsToStructType(existingTable.columns()),
