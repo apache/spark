@@ -94,9 +94,7 @@ object InsertMapSortInAggregateExpressions extends Rule[LogicalPlan] {
               // This must be top-down so distinct arguments are normalized before their children.
               // Continuing downward also substitutes grouping aliases in other arguments.
               other.transformDown {
-                case ae: AggregateExpression
-                    if ae.isDistinct &&
-                      !EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction) =>
+                case ae: AggregateExpression if ae.isDistinct =>
                   ae.copy(aggregateFunction = ae.aggregateFunction.withNewChildren(
                     ae.aggregateFunction.children.map { child =>
                       distinctMapSortAliases.get(child.canonicalized)
@@ -126,8 +124,7 @@ object InsertMapSortInAggregateExpressions extends Rule[LogicalPlan] {
       aggregateExpressions: Seq[NamedExpression]): Seq[Expression] = {
     aggregateExpressions
       .flatMap(_.collect {
-        case ae: AggregateExpression
-            if ae.isDistinct && !EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction) => ae
+        case ae: AggregateExpression if ae.isDistinct => ae
       })
       .flatMap(_.aggregateFunction.children)
   }

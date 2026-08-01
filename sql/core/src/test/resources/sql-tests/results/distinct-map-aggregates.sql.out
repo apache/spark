@@ -42,7 +42,7 @@ FROM VALUES (map('b', 2, 'a', 1)) AS single_map_data(m)
 -- !query schema
 struct<map_entries(first(DISTINCT m)):array<struct<key:string,value:int>>,map_entries(last(DISTINCT m)):array<struct<key:string,value:int>>,count(DISTINCT m):bigint>
 -- !query output
-[{"key":"b","value":2},{"key":"a","value":1}]	[{"key":"b","value":2},{"key":"a","value":1}]	1
+[{"key":"a","value":1},{"key":"b","value":2}]	[{"key":"a","value":1},{"key":"b","value":2}]	1
 
 
 -- !query
