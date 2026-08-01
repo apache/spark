@@ -91,6 +91,7 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     val combined = aggregates.head.aggregateFunction.asInstanceOf[ApproximatePercentile]
 
     assert(aggregates.map(_.resultId).distinct.size == 1)
+    assert(aggregates.head.resultId != firstPercentile.resultId)
     assert(percentageValues(combined) == Seq(0.9, 0.5, 0.9))
     assert(combined.percentageExpression.toString == "[0.9,0.5,0.9]")
     assert(combined.percentageExpression.sql == "ARRAY(0.9D, 0.5D, 0.9D)")

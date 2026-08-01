@@ -284,6 +284,21 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
       Row(Seq(0.0d, 0.0d), 0.0d, 1.0d, 1.0d))
   }
 
+  test("fused percentiles use fresh result IDs across CTE references") {
+    checkAnswer(
+      spark.sql(
+        """WITH c AS (
+          |  SELECT
+          |    percentile_approx(v, 0.5D) AS a,
+          |    percentile_approx(v, 0.9D) AS b
+          |  FROM VALUES (1), (2), (3), (4), (5) AS t(v)
+          |)
+          |SELECT c1.a, c1.b, c2.a
+          |FROM c AS c1 JOIN c AS c2
+          |""".stripMargin),
+      Row(3, 5, 3))
+  }
+
   test("preserve percentile inputs across scalar subquery reuse") {
     val query =
       """SELECT

@@ -194,7 +194,8 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
         percentageValues.map(java.lang.Double.doubleToRawLongBits))
       val combinedFunction = percentile.copy(percentageExpression = PercentileFusionArray(identity))
       combinedFunction.copyTagsFrom(percentile)
-      val combined = first.copy(aggregateFunction = combinedFunction)
+      val combined = first.copy(
+        aggregateFunction = combinedFunction, resultId = NamedExpression.newExprId)
       expressions.zipWithIndex.foreach { case (expression, index) =>
         replacements.put(expression.resultId, (combined, index))
       }
