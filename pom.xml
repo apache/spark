@@ -3525,6 +3525,13 @@
     </profile>
 
     <profile>
+      <id>credential-aws</id>
+      <modules>
+        <module>connector/credential-aws</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>test-java-home</id>
       <activation>
         <property><name>env.JAVA_HOME</name></property>
