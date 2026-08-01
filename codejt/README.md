@@ -28,7 +28,7 @@ cd codejt
 uvicorn api:app --host 0.0.0.0 --port 8080
 ```
 
-3. Open `http://localhost:8080/docs` in your browser to use the FastAPI documentation.
+3. Open `http://localhost:8080/docs` in your browser to use the FastAPI documentation (Swagger UI), or see the raw OpenAPI JSON at `http://localhost:8080/openapi.json`.
 
 4. Build with Docker:
 
@@ -54,6 +54,26 @@ X-API-Key: your-secret-key
 ```
 
 If using Docker Compose, place the key in `codejt/.env`.
+
+## OpenAPI / Examples
+
+Once the server is running you can browse the interactive API docs at `/docs`.
+
+Example: check health
+
+```bash
+curl -i http://localhost:8080/
+```
+
+Example: create a source (replace `<API_KEY>` with the value from `codejt/.env`):
+
+```bash
+curl -i -H "X-API-Key: <API_KEY>" -H "Content-Type: application/json" \
+	-d '{"title":"hello","content":"world"}' \
+	http://localhost:8080/sources
+```
+
+The API exposes the full OpenAPI specification at `/openapi.json` and an interactive Swagger UI at `/docs`.
 
 ## Persistence
 
