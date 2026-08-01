@@ -1037,7 +1037,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     val wallClocks = (0 until numRows).map { s =>
       LocalDateTime.of(2020, 5, 25, 10, 0, s, 123456789)
     }
-    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+    def checkNanosPushdown(): Unit = {
       foreachNanosPrecision { precision =>
         Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
           nanosType =>
@@ -1073,6 +1073,15 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
               }
             }
         }
+      }
+    }
+
+    // The LTZ column stores/compares timestamps in the JVM default zone, so a literal built in the
+    // wrong frame would only diverge from the stripe stats outside UTC. Run under zones with both
+    // offset signs so timezone handling is exercised, not just UTC where such a bug is masked.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq(DateTimeTestUtils.UTC, DateTimeTestUtils.LA, DateTimeTestUtils.JST).foreach { zoneId =>
+        DateTimeTestUtils.withDefaultTimeZone(zoneId)(checkNanosPushdown())
       }
     }
   }
