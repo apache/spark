@@ -68,8 +68,10 @@ class ExpressionInfoSuite extends SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", invalidGroupName, "", "", "")
       },
-      condition = "_LEGACY_ERROR_TEMP_3202",
+      condition = "MALFORMED_EXPRESSION_INFO.GROUP",
+      sqlState = Some("22023"),
       parameters = Map(
+        "fieldName" -> "group",
         "exprName" -> "testName",
         "group" -> invalidGroupName,
         "validGroups" -> validGroups.mkString("[", ", ", "]")))
@@ -93,8 +95,10 @@ class ExpressionInfoSuite extends SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", "", "", invalidSource)
       },
-      condition = "_LEGACY_ERROR_TEMP_3203",
+      condition = "MALFORMED_EXPRESSION_INFO.SOURCE",
+      sqlState = Some("22023"),
       parameters = Map(
+        "fieldName" -> "source",
         "exprName" -> "testName",
         "source" -> invalidSource,
         "validSources" -> validSources.sorted.mkString("[", ", ", "]")))
@@ -106,8 +110,9 @@ class ExpressionInfoSuite extends SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException] {
         new ExpressionInfo("testClass", null, "testName", null, "", "", invalidNote, "", "", "", "")
       },
-      condition = "_LEGACY_ERROR_TEMP_3201",
-      parameters = Map("exprName" -> "testName", "note" -> invalidNote))
+      condition = "MALFORMED_EXPRESSION_INFO.NOTE",
+      sqlState = Some("22023"),
+      parameters = Map("fieldName" -> "note", "exprName" -> "testName", "note" -> invalidNote))
 
     val invalidSince = "-3.0.0"
     checkError(
@@ -115,8 +120,9 @@ class ExpressionInfoSuite extends SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", invalidSince, "", "")
       },
-      condition = "_LEGACY_ERROR_TEMP_3204",
-      parameters = Map("since" -> invalidSince, "exprName" -> "testName"))
+      condition = "MALFORMED_EXPRESSION_INFO.SINCE",
+      sqlState = Some("22023"),
+      parameters = Map("fieldName" -> "since", "since" -> invalidSince, "exprName" -> "testName"))
 
     val invalidDeprecated = "  invalid deprecated"
     checkError(
@@ -124,8 +130,12 @@ class ExpressionInfoSuite extends SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", "", invalidDeprecated, "")
       },
-      condition = "_LEGACY_ERROR_TEMP_3205",
-      parameters = Map("exprName" -> "testName", "deprecated" -> invalidDeprecated))
+      condition = "MALFORMED_EXPRESSION_INFO.DEPRECATED",
+      sqlState = Some("22023"),
+      parameters = Map(
+        "fieldName" -> "deprecated",
+        "exprName" -> "testName",
+        "deprecated" -> invalidDeprecated))
   }
 
   test("using _FUNC_ instead of function names in examples") {

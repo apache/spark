@@ -20,7 +20,8 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.connector.catalog.{InMemoryBaseTable, InMemoryRowLevelOperationTableCatalog}
 import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.functions.lit
@@ -118,6 +119,107 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       val insertResult = sql(s"SELECT * FROM $t1")
       checkAnswer(insertResult, Seq(Row(1, "a"), Row(2, "b")))
+    }
+  }
+
+  test("SPARK-58330: dynamic options are not lost when INSERT selects from the same table") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      // The target and the source are the same table, so they share one per-query relation-cache
+      // entry. Each reference must keep its own options: the target's write options must not be
+      // dropped by the source reference, and the source's read options must not leak to the target.
+      val df = sql(s"INSERT INTO $t1 WITH (`write.split-size` = 10) " +
+        s"SELECT id, data FROM $t1 WITH (`split-size` = 5)")
+
+      val appendData = df.queryExecution.optimizedPlan.collectFirst {
+        case CommandResult(_, a: AppendData, _, _) => a
+      }.getOrElse(fail("expected an AppendData in the optimized plan"))
+
+      // target: the write relation keeps its own option and does not pick up the source's
+      val targetOptions = appendData.table.asInstanceOf[DataSourceV2Relation].options
+      assert(targetOptions.get("write.split-size") === "10", "target write option")
+      assert(!targetOptions.containsKey("split-size"), "target must not see source option")
+
+      // source: the read relation under the query keeps its own option and does not pick up
+      // the target's
+      val sourceOptions = appendData.query.collect {
+        case r: DataSourceV2Relation => r.options
+        case s: DataSourceV2ScanRelation => s.relation.options
+      }.filter(_.containsKey("split-size"))
+      assert(sourceOptions.nonEmpty, "source relation carrying the option was not found")
+      sourceOptions.foreach { opts =>
+        assert(opts.get("split-size") === "5", "source read option")
+        assert(!opts.containsKey("write.split-size"), "source must not see target option")
+      }
+
+      checkAnswer(sql(s"SELECT * FROM $t1"),
+        Seq(Row(1, "a"), Row(2, "b"), Row(1, "a"), Row(2, "b")))
+    }
+  }
+
+  test("SPARK-58330: each reference in a self-join keeps its own dynamic options") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+
+      // Both references are reads of the same table with different options, so they share one
+      // per-query relation-cache entry. Neither scan should inherit the other's options.
+      val df = sql(s"SELECT a.id FROM $t1 WITH (`split-size` = 5) a " +
+        s"JOIN $t1 WITH (`split-size` = 9) b ON a.id = b.id")
+
+      val splitSizes = df.queryExecution.optimizedPlan.collect {
+        case s: DataSourceV2ScanRelation => s.relation.options.get("split-size")
+      }
+      assert(splitSizes.sorted === Seq("5", "9"))
+
+      checkAnswer(df, Seq(Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-58330: each reference in a streaming self-join keeps its own dynamic options") {
+    withSQLConf(
+      "spark.sql.catalog.streamcat" -> classOf[InMemoryRowLevelOperationTableCatalog].getName) {
+      val t1 = "streamcat.ns.table"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string)")
+
+        // Both references are streaming reads of the same table with different options, so they
+        // share one per-query relation-cache entry. Neither should inherit the other's options.
+        // The plan is only analyzed here, never executed (no writeStream.start()), so no actual
+        // streaming query runs.
+        val df = sql(s"SELECT a.id FROM STREAM $t1 WITH (`split-size` = 5) a " +
+          s"JOIN STREAM $t1 WITH (`split-size` = 9) b ON a.id = b.id")
+
+        val splitSizes = df.queryExecution.analyzed.collect {
+          case r: StreamingRelationV2 => r.extraOptions.get("split-size")
+        }
+        assert(splitSizes.sorted === Seq("5", "9"))
+      }
+    }
+  }
+
+  test("SPARK-58330: a streaming CTE referencing the same table keeps its own dynamic options") {
+    withSQLConf(
+      "spark.sql.catalog.streamcat" -> classOf[InMemoryRowLevelOperationTableCatalog].getName) {
+      val t1 = "streamcat.ns.table"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string)")
+
+        // The CTE's inner scan of `STREAM t WITH (...)` and the outer `STREAM t WITH (...)`
+        // reference resolve to the same per-query relation-cache entry; CTE substitution must
+        // not let one leak into the other. Analysis-only, as above.
+        val df = sql(s"WITH x AS (SELECT id FROM STREAM $t1 WITH (`split-size` = 5)) " +
+          s"SELECT a.id FROM STREAM $t1 WITH (`split-size` = 9) a CROSS JOIN x")
+
+        val splitSizes = df.queryExecution.analyzed.collect {
+          case r: StreamingRelationV2 => r.extraOptions.get("split-size")
+        }
+        assert(splitSizes.sorted === Seq("5", "9"))
+      }
     }
   }
 

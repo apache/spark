@@ -410,6 +410,21 @@ streaming_kinesis_asl = Module(
 )
 
 
+credential_aws = Module(
+    name="credential-aws",
+    dependencies=[tags, core],
+    source_file_regexes=[
+        "connector/credential-aws/",
+    ],
+    build_profile_flags=[
+        "-Pcredential-aws",
+    ],
+    sbt_test_goals=[
+        "credential-aws/test",
+    ],
+)
+
+
 streaming_kafka_0_10 = Module(
     name="streaming-kafka-0-10",
     dependencies=[streaming, core],
@@ -1178,6 +1193,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_readwriter",
         "pyspark.sql.tests.connect.test_connect_retry",
         "pyspark.sql.tests.connect.test_connect_session",
+        "pyspark.sql.tests.connect.test_connect_local_server",
         "pyspark.sql.tests.connect.test_connect_stat",
         "pyspark.sql.tests.connect.test_parity_geographytype",
         "pyspark.sql.tests.connect.test_parity_geometrytype",

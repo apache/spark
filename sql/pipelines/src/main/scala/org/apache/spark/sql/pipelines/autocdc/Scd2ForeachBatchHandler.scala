@@ -87,11 +87,15 @@ case class Scd2ForeachBatchHandler(
       perKeyMinimumSequenceInMicrobatchDf = perKeyMinimumSequenceInMicrobatchDf
     )
 
-    // All three share the canonical schema; findAffectedRowsFromAuxiliaryTable drops the aux-only
-    // deletedByBatchId column.
+    // The three inputs share the canonical SCD2 row schema by name, but not necessarily by column
+    // set: after cross-run schema evolution the target (and the aux table, which mirrors it) can
+    // carry user columns that the current microbatch no longer emits. `allowMissingColumns` pads
+    // such columns with null on the side that lacks them (recursing into structs and arrays; map
+    // types are not supported) instead of failing the union. (findAffectedRowsFromAuxiliaryTable
+    // drops the aux-only deletedByBatchId column.)
     val microbatchAndAffectedRows = preprocessedBatchDf
-      .unionByName(affectedRowsFromAuxiliaryTable)
-      .unionByName(affectedRowsFromTargetTable)
+      .unionByName(affectedRowsFromAuxiliaryTable, allowMissingColumns = true)
+      .unionByName(affectedRowsFromTargetTable, allowMissingColumns = true)
 
     val decomposedDf = microbatchAndAffectedRows
       .transform(batchProcessor.decomposeOutOfOrderRows)

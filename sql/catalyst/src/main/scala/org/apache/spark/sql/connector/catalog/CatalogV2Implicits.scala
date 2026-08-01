@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, quoteNameParts, QuotingUtils}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, quoteNameParts, removeInternalMetadata, QuotingUtils}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
@@ -252,6 +252,15 @@ private[sql] object CatalogV2Implicits {
   implicit class ColumnsHelper(columns: Array[Column]) {
     def asSchema: StructType = CatalogV2Util.v2ColumnsToStructType(columns)
     def toAttributes: Seq[AttributeReference] = DataTypeUtils.toAttributes(asSchema)
+
+    /**
+     * Same as [[toAttributes]], but strips the internal metadata that must not surface in a
+     * relation's output, such as generation expressions. Column IDs are the exception: although
+     * the key is listed in INTERNAL_METADATA_KEYS so that other paths drop it, the column-ID
+     * feature deliberately surfaces field IDs on a relation's output.
+     */
+    def toOutputAttributes: Seq[AttributeReference] =
+      DataTypeUtils.toAttributes(removeInternalMetadata(asSchema, keepFieldIds = true))
   }
 
   def parseColumnPath(name: String): Seq[String] = {

@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
@@ -1469,6 +1470,57 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           }
         }
       }
+    }
+  }
+
+  test("SPARK-58330: self-reference to a v1 table keeps each reference's own dynamic options") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t(a string, b string) USING CSV")
+      spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
+
+      checkAnswer(
+        sql("SELECT x.a, x.b, y.a, y.b FROM t x CROSS JOIN t WITH ('delimiter' = ';') y"),
+        Row("a;b", "c", "a", "b,c") :: Nil
+      )
+    }
+  }
+
+  test("SPARK-58330: INSERT keeps its own options when selecting from the same v1 table") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t(a string, b string) USING CSV")
+      spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
+
+      // The target and the source are the same session-catalog table, so they share one
+      // per-query relation-cache entry. The target's write option must not be dropped by the
+      // source reference, and the source's read option must not leak to the target.
+      val Seq(qe) = withQueryExecutionsCaptured(spark) {
+        sql("INSERT INTO t WITH ('sep' = '|') SELECT a, b FROM t WITH ('sep' = ';')")
+      }
+
+      val targetOptions = qe.analyzed.collectFirst {
+        case cmd: InsertIntoHadoopFsRelationCommand => cmd.options
+      }.getOrElse(fail("target InsertIntoHadoopFsRelationCommand not found"))
+      val sourceOptions = qe.analyzed.collect {
+        case LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _) => fsRelation.options
+      }.find(_.get("sep").contains(";")).getOrElse(fail("source relation with sep=; not found"))
+      assert(targetOptions.get("sep").contains("|"), "target write option")
+      assert(sourceOptions("sep") === ";", "source read option")
+    }
+  }
+
+  test("SPARK-58330: a CTE referencing the same v1 table keeps its own dynamic options") {
+    withTable("t") {
+      spark.sql("CREATE TABLE t(a string, b string) USING CSV")
+      spark.sql("INSERT INTO TABLE t VALUES ('a;b', 'c')")
+
+      // `t` (no options) and the CTE's inner scan of `t WITH ('delimiter' = ';')` resolve to
+      // the same per-query relation-cache entry; CTE substitution must not let one leak into
+      // the other.
+      checkAnswer(
+        sql("WITH x AS (SELECT a, b FROM t WITH ('delimiter' = ';')) " +
+          "SELECT t.a, t.b, x.a, x.b FROM t CROSS JOIN x"),
+        Row("a;b", "c", "a", "b,c") :: Nil
+      )
     }
   }
 

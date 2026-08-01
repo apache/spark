@@ -2749,7 +2749,8 @@ case class TimestampAddYMInterval(
 
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType, YearMonthIntervalType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(AnyTimestampType, AnyTimestampNanoType), YearMonthIntervalType)
 
   override def dataType: DataType = timestamp.dataType
 
@@ -2758,16 +2759,25 @@ case class TimestampAddYMInterval(
 
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(left.dataType)
 
-  override def nullSafeEval(micros: Any, months: Any): Any = {
-    timestampAddMonths(micros.asInstanceOf[Long], months.asInstanceOf[Int], zoneIdInEval)
+  override def nullSafeEval(start: Any, months: Any): Any = left.dataType match {
+    case _: AnyTimestampNanoType =>
+      timestampNanosAddMonths(
+        start.asInstanceOf[TimestampNanosVal], months.asInstanceOf[Int], zoneIdInEval)
+    case _ =>
+      timestampAddMonths(start.asInstanceOf[Long], months.asInstanceOf[Int], zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (micros, months) => {
-      s"""$dtu.timestampAddMonths($micros, $months, $zid)"""
-    })
+    left.dataType match {
+      case _: AnyTimestampNanoType =>
+        defineCodeGen(ctx, ev, (sd, months) =>
+          s"""$dtu.timestampNanosAddMonths($sd, $months, $zid)""")
+      case _ =>
+        defineCodeGen(ctx, ev, (micros, months) =>
+          s"""$dtu.timestampAddMonths($micros, $months, $zid)""")
+    }
   }
 
   override protected def withNewChildrenInternal(

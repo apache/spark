@@ -2341,6 +2341,72 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ltzMismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
   }
 
+  test("SPARK-57825: add/subtract ANSI year-month interval on nanos timestamps") {
+    val interval = Period.ofYears(1).plusMonths(2)
+    val minusInterval = Period.ofMonths(-1)
+
+    // A year-month shift moves only the month field: the whole fraction (including the
+    // sub-microsecond `789`) and the time of day are carried through unchanged.
+    val ntzType = TimestampNTZNanosType(9)
+    val ntzStart = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2020-01-02T03:04:05.123456789"), precision = 9)
+    val ntzExpectedAdd = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2021-03-02T03:04:05.123456789"), precision = 9)
+    val ntzExpectedSub = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2019-12-02T03:04:05.123456789"), precision = 9)
+
+    checkEvaluation(
+      TimestampAddYMInterval(Literal.create(ntzStart, ntzType), Literal(interval), Some("UTC")),
+      ntzExpectedAdd)
+    checkEvaluation(
+      TimestampAddYMInterval(
+        Literal.create(ntzStart, ntzType),
+        UnaryMinus(Literal(interval)),
+        Some("UTC")),
+      DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("2018-11-02T03:04:05.123456789"), precision = 9))
+    checkEvaluation(
+      TimestampAddYMInterval(
+        Literal.create(ntzStart, ntzType), Literal(minusInterval), Some("UTC")),
+      ntzExpectedSub)
+    assert(ntzExpectedAdd.nanosWithinMicro == ntzStart.nanosWithinMicro)
+    assert(ntzExpectedSub.nanosWithinMicro == ntzStart.nanosWithinMicro)
+
+    val ltzType = TimestampLTZNanosType(9)
+    val ltzStart = DateTimeUtils.instantToTimestampNanos(
+      Instant.parse("2020-01-02T03:04:05.123456789Z"), precision = 9)
+    val ltzExpectedAdd = DateTimeUtils.instantToTimestampNanos(
+      Instant.parse("2021-03-02T03:04:05.123456789Z"), precision = 9)
+    val ltzExpectedSub = DateTimeUtils.instantToTimestampNanos(
+      Instant.parse("2019-12-02T03:04:05.123456789Z"), precision = 9)
+
+    checkEvaluation(
+      TimestampAddYMInterval(Literal.create(ltzStart, ltzType), Literal(interval), Some("UTC")),
+      ltzExpectedAdd)
+    checkEvaluation(
+      TimestampAddYMInterval(
+        Literal.create(ltzStart, ltzType),
+        UnaryMinus(Literal(interval)),
+        Some("UTC")),
+      DateTimeUtils.instantToTimestampNanos(
+        Instant.parse("2018-11-02T03:04:05.123456789Z"), precision = 9))
+    checkEvaluation(
+      TimestampAddYMInterval(
+        Literal.create(ltzStart, ltzType), Literal(minusInterval), Some("UTC")),
+      ltzExpectedSub)
+    assert(ltzExpectedAdd.nanosWithinMicro == ltzStart.nanosWithinMicro)
+    assert(ltzExpectedSub.nanosWithinMicro == ltzStart.nanosWithinMicro)
+
+    yearMonthIntervalTypes.foreach { it =>
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (ts: Expression, ym: Expression) => TimestampAddYMInterval(ts, ym, Some("UTC")),
+        ntzType, it)
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (ts: Expression, ym: Expression) => TimestampAddYMInterval(ts, ym, Some("UTC")),
+        ltzType, it)
+    }
+  }
+
   test("SPARK-37552: convert a timestamp_ntz to another time zone") {
     checkEvaluation(
       ConvertTimezone(

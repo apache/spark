@@ -771,11 +771,11 @@ autoCdcBody
 autoCdcParameters
     : FROM source=relationPrimary
         KEYS LEFT_PAREN keys=identifierSeq RIGHT_PAREN
-        autoCdcDeleteClause?
-        autoCdcSequenceByClause
-        autoCdcColumnsClause?
-        autoCdcStoredAsClause?
-        autoCdcTrackHistoryClause?
+        (autoCdcDeleteClause
+        | autoCdcSequenceByClause
+        | autoCdcColumnsClause
+        | autoCdcStoredAsClause
+        | autoCdcTrackHistoryClause)*
     ;
 
 autoCdcDeleteClause
@@ -1208,7 +1208,16 @@ relationPrimary
     | LEFT_PAREN relation RIGHT_PAREN sample?
        watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
+    | unnest                                                #unnestTable
     | tableFunctionCallWithTrailingClauses                  #tableValuedFunction
+    ;
+
+// ANSI SQL UNNEST of one or more arrays in the FROM clause, with an optional
+// trailing ordinality column (WITH ORDINALITY). Multiple arrays are expanded in
+// parallel, padded with NULLs to the length of the longest array.
+unnest
+    : UNNEST LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+      (WITH ORDINALITY)? tableAlias
     ;
 
 optionsClause
@@ -2254,6 +2263,7 @@ ansiNonReserved
     | OPEN
     | OPTION
     | OPTIONS
+    | ORDINALITY
     | OUT
     | OUTPUTFORMAT
     | OVER
@@ -2374,6 +2384,7 @@ ansiNonReserved
     | UNCACHE
     | UNIFORM
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL
@@ -2695,6 +2706,7 @@ nonReserved
     | OPTIONS
     | OR
     | ORDER
+    | ORDINALITY
     | OUT
     | OUTER
     | OUTPUTFORMAT
@@ -2829,6 +2841,7 @@ nonReserved
     | UNIQUE
     | UNKNOWN
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL

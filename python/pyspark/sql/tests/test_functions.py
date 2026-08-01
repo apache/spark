@@ -2148,6 +2148,56 @@ class FunctionsTestsMixin:
             ["1", "2", "2", "2"],
         )
 
+    def test_collect_union(self):
+        # array<int>: distinct union across rows; NULL arrays ignored.
+        df = self.spark.createDataFrame([([1, 2],), ([2, 3],), ([1],), (None,)], ["value"])
+        self.assertEqual(
+            sorted(df.select(F.collect_union(df.value).alias("r")).collect()[0].r),
+            [1, 2, 3],
+        )
+
+        # array<string>
+        sdf = self.spark.createDataFrame([(["a", "b"],), (["b", "c"],), (["a"],)], ["value"])
+        self.assertEqual(
+            sorted(sdf.select(F.collect_union("value").alias("r")).collect()[0].r),
+            ["a", "b", "c"],
+        )
+
+        # array<double> (buffer keyed by bit pattern; values round-trip)
+        ddf = self.spark.createDataFrame([([1.5, 2.5],), ([2.5, 3.5],)], ["value"])
+        self.assertEqual(
+            sorted(ddf.select(F.collect_union("value").alias("r")).collect()[0].r),
+            [1.5, 2.5, 3.5],
+        )
+
+        # NULL elements inside a non-null array are dropped by default (IGNORE NULLS) ...
+        ndf = self.spark.createDataFrame([([1, None],), ([2],)], "value: array<int>")
+        self.assertEqual(
+            sorted(ndf.select(F.collect_union("value").alias("r")).collect()[0].r),
+            [1, 2],
+        )
+        # ... and kept (a single null) with RESPECT NULLS (SQL clause via expr).
+        respect = ndf.select(F.expr("collect_union(value) RESPECT NULLS").alias("r")).collect()[0].r
+        self.assertEqual(sorted(respect, key=lambda x: (x is not None, x)), [None, 1, 2])
+
+        # array<struct>: the motivating case (dedups whole structs, stays element-wise).
+        struct_data = [
+            ([{"id": 1, "flag": True}, {"id": 2, "flag": False}],),
+            ([{"id": 2, "flag": False}, {"id": 3, "flag": True}],),
+        ]
+        stdf = self.spark.createDataFrame(struct_data, "value: array<struct<id:int,flag:boolean>>")
+        struct_rows = stdf.select(F.collect_union("value").alias("r")).collect()[0].r
+        self.assertEqual(
+            sorted((row.id, row.flag) for row in struct_rows),
+            [(1, True), (2, False), (3, True)],
+        )
+
+        # Per-group union.
+        gdf = self.spark.createDataFrame([("a", [1, 2]), ("a", [2, 3]), ("b", [4])], ["k", "value"])
+        rows = gdf.groupBy("k").agg(F.collect_union("value").alias("r")).orderBy("k").collect()
+        self.assertEqual(sorted(rows[0].r), [1, 2, 3])
+        self.assertEqual(sorted(rows[1].r), [4])
+
     def test_listagg_functions(self):
         df = self.spark.createDataFrame(
             [(1, "1"), (2, "2"), (None, None), (1, "2")], ["key", "value"]

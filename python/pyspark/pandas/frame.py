@@ -2633,8 +2633,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             By default the value will be read from the pandas config module. When set to False
             prevents from escaping latex special characters in column names.
         encoding : str, optional
-            A string representing the encoding to use in the output file, defaults to 'ascii' on
-            Python 2 and 'utf-8' on Python 3.
+            A string representing the encoding to use in the output file, defaults to 'utf-8'.
         decimal : str, default '.'
             Character recognized as decimal separator, e.g. ',' in Europe.
         multicolumn : bool, default True

@@ -684,6 +684,7 @@ Below is a list of all the keywords in Spark SQL.
 |OPTIONS|non-reserved|non-reserved|non-reserved|
 |OR|reserved|non-reserved|reserved|
 |ORDER|reserved|non-reserved|reserved|
+|ORDINALITY|non-reserved|non-reserved|non-reserved|
 |OUT|non-reserved|non-reserved|reserved|
 |OUTER|reserved|non-reserved|reserved|
 |OUTPUTFORMAT|non-reserved|non-reserved|non-reserved|
@@ -823,6 +824,7 @@ Below is a list of all the keywords in Spark SQL.
 |UNIQUE|reserved|non-reserved|reserved|
 |UNKNOWN|reserved|non-reserved|reserved|
 |UNLOCK|non-reserved|non-reserved|non-reserved|
+|UNNEST|non-reserved|non-reserved|non-reserved|
 |UNPIVOT|non-reserved|non-reserved|non-reserved|
 |UNSET|non-reserved|non-reserved|non-reserved|
 |UNTIL|non-reserved|non-reserved|non-reserved|
