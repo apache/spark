@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  codejt:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CODEJT_API_KEY=${CODEJT_API_KEY:-codejt_default_key}
+    env_file:
+      - .env
+    restart: unless-stopped

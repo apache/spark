@@ -1,0 +1,39 @@
+# CodeJT owners
+# GitHub CODEOWNERS file format
+# This file declares ownership of CodeJT project files and directories.
+
+# Global ownership for the CodeJT subtree
+/codejt/* @jonathan-combs
+
+# Top-level CodeJT files
+/codejt/README.md @jonathan-combs
+/codejt/LICENSE @jonathan-combs
+/codejt/NOTICE @jonathan-combs
+/codejt/CODEOWNERS @jonathan-combs
+/codejt/pyproject.toml @jonathan-combs
+/codejt/CONTRIBUTING.md @jonathan-combs
+/codejt/SECURITY.md @jonathan-combs
+/codejt/Dockerfile @jonathan-combs
+/codejt/docker-compose.yml @jonathan-combs
+/codejt/app.py @jonathan-combs
+/codejt/.gitignore @jonathan-combs
+
+# Source code ownership
+/codejt/*.py @jonathan-combs
+/codejt/**/*.py @jonathan-combs
+
+# Configuration and metadata
+/codejt/*.toml @jonathan-combs
+/codejt/*.yml @jonathan-combs
+/codejt/*.yaml @jonathan-combs
+
+# Documentation ownership
+/codejt/*.md @jonathan-combs
+/codejt/**/*.md @jonathan-combs
+
+# Build and deployment files
+/codejt/*Dockerfile @jonathan-combs
+/codejt/docker-compose.* @jonathan-combs
+
+# Ownership for any future CodeJT subdirectories
+/codejt/** @jonathan-combs
