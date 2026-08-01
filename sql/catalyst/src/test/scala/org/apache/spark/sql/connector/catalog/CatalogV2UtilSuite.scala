@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.util.Collections
-
 import org.mockito.ArgumentMatchers.{any, eq => mockEq}
 import org.mockito.Mockito.{mock, verify, when}
 
@@ -105,7 +103,7 @@ class CatalogV2UtilSuite extends SparkFunSuite {
   }
 
   test("TableContext equals / hashCode / toString") {
-    val emptyPrivileges = Collections.emptySet[TableWritePrivilege]()
+    val emptyPrivileges = java.util.Set.of[TableWritePrivilege]()
     val a = new TableContext(new TimeTravel.AsOfVersion("v1"), emptyPrivileges)
     val b = new TableContext(new TimeTravel.AsOfVersion("v1"), emptyPrivileges)
     val c = new TableContext(new TimeTravel.AsOfTimestamp(1L), emptyPrivileges)
