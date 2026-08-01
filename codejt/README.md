@@ -21,7 +21,9 @@ CodeJT is owned and maintained by Jonathan Combs of Combs Contracting LLC.
 python3 -m pip install -r codejt/requirements.txt
 ```
 
-2. Run locally:
+```python
+2. 
+```Run locally:
 
 ```bash
 cd codejt
