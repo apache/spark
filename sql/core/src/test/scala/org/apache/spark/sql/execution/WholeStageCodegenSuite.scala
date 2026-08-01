@@ -753,6 +753,12 @@ class WholeStageCodegenSuite extends SharedSparkSession
     assert(df.collect() === Array(Row(1), Row(2), Row(3)))
   }
 
+  test("SPARK-58437: SortExec generates assignable iterator type") {
+    val code = genCode(spark.range(3, 0, -1).toDF().sort(col("id"))).map(_.body).mkString("\n")
+    assert(!code.contains("scala.collection.Iterator<UnsafeRow>"))
+    assert(code.contains("scala.collection.Iterator<InternalRow>"))
+  }
+
   test("MapElements should be included in WholeStageCodegen") {
     import testImplicits._
 
