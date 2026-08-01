@@ -20,14 +20,14 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class ReuseExchangeAndSubquerySuite extends SharedSparkSession {
+class ReuseExchangeAndSubquerySuite extends SessionQueryTest {
 
   val tableFormat: String = "parquet"
 
   test("SPARK-32041: No reuse interference inside ReuseExchange") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTable("df1", "df2") {
         spark.range(100)
           .select(col("id"), col("id").as("k"))
@@ -68,7 +68,7 @@ class ReuseExchangeAndSubquerySuite extends SharedSparkSession {
   }
 
   test("SPARK-32041: No reuse interference between ReuseExchange and ReuseSubquery") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTable("df1", "df2") {
         spark.range(100)
           .select(col("id"), col("id").as("k"))

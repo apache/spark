@@ -27,10 +27,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper.newDir
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 
-class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
+class StateSchemaCompatibilityCheckerSuite extends SessionQueryTest {
 
   private val hadoopConf: Configuration = new Configuration()
   private val opId = Random.nextInt(100000)

@@ -40,12 +40,12 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, 
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
-class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
+class JDBCV2Suite extends SessionQueryTest with ExplainSuiteHelper {
   import testImplicits._
 
   val tempDir = Utils.createTempDir()
@@ -266,7 +266,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
   }
 
   private def checkPushedInfo(df: DataFrame, expectedPlanFragment: String*): Unit = {
-    withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "1000") {
+    withConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "1000") {
       df.queryExecution.optimizedPlan.collect {
         case _: DataSourceV2ScanRelation =>
           checkKeywordsExistsInExplain(df, expectedPlanFragment: _*)
@@ -1467,7 +1467,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
 
   test("scan with filter push-down with ansi mode") {
     Seq(false, true).foreach { ansiMode =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
+      withConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
         val df = spark.table("h2.test.people").filter($"id" + 1 > 1)
         checkFiltersRemoved(df, ansiMode)
         val expectedPlanFragment = if (ansiMode) {
@@ -2737,7 +2737,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
 
   test("scan with aggregate push-down: aggregate function with binary arithmetic") {
     Seq(false, true).foreach { ansiMode =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
+      withConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
         val df = sql("SELECT SUM(2147483647 + DEPT) FROM h2.test.employee")
         checkAggregateRemoved(df, ansiMode)
         val expectedPlanFragment = if (ansiMode) {
@@ -2962,7 +2962,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
 
   test("scan with aggregate push-down: partial push-down AVG with overflow") {
     Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
+      withConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val df = spark.read
           .option("partitionColumn", "id")
           .option("lowerBound", "0")
@@ -3054,7 +3054,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
         "PushedFilters: []",
         "PushedGroupByExpressions: [NAME]")
       checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withConf(SQLConf.ANSI_ENABLED.key -> "true") {
         val df3 = sql(
           """
             |SELECT

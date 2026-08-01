@@ -29,10 +29,10 @@ import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path, RawLocalFileSy
 
 import org.apache.spark.sql.execution.streaming.sinks.{FileStreamSinkLog, SinkFileStatus}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.util.ArrayImplicits._
 
-class FileStreamSinkLogSuite extends SharedSparkSession {
+class FileStreamSinkLogSuite extends SessionQueryTest {
 
   import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog._
   import FileStreamSinkLog._
@@ -111,7 +111,7 @@ class FileStreamSinkLogSuite extends SharedSparkSession {
   }
 
   test("compact") {
-    withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
+    withConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
       withFileStreamSinkLog { sinkLog =>
         for (batchId <- 0 to 10) {
           sinkLog.add(
@@ -144,7 +144,7 @@ class FileStreamSinkLogSuite extends SharedSparkSession {
   test("delete expired file") {
     // Set FILE_SINK_LOG_CLEANUP_DELAY to 0 so that we can detect the deleting behaviour
     // deterministically and one min batches to retain
-    withSQLConf(
+    withConf(
       SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3",
       SQLConf.FILE_SINK_LOG_CLEANUP_DELAY.key -> "0",
       SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
@@ -168,7 +168,7 @@ class FileStreamSinkLogSuite extends SharedSparkSession {
       }
     }
 
-    withSQLConf(
+    withConf(
       SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3",
       SQLConf.FILE_SINK_LOG_CLEANUP_DELAY.key -> "0",
       SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2") {
@@ -231,7 +231,7 @@ class FileStreamSinkLogSuite extends SharedSparkSession {
   test("getLatestBatchId") {
     withCountOpenLocalFileSystemAsLocalFileSystem {
       val scheme = CountOpenLocalFileSystem.scheme
-      withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
+      withConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
         withTempDir { dir =>
           val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark,
             s"$scheme:///${dir.getCanonicalPath}")

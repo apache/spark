@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution
 import org.apache.spark.TestUtils
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with SharedSparkSession {
+class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with SessionQueryTest {
   import testImplicits._
 
   override protected def defaultSerDe(): String = "row-format-delimited"

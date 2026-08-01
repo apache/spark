@@ -26,7 +26,7 @@ import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{DataType, GeographyType, GeometryType, IntegerType, StringType}
 
 /**
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{DataType, GeographyType, GeometryType, Intege
  */
 class ParquetDeltaLengthByteArrayEncodingSuite
     extends ParquetCompatibilityTest
-    with SharedSparkSession {
+    with SessionQueryTest {
   val values: Array[String] = Array("parquet", "hadoop", "mapreduce")
   var writer: DeltaLengthByteArrayValuesWriter = _
   var reader: VectorizedDeltaLengthByteArrayReader = _

@@ -20,14 +20,14 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.streaming.Unassigned
 import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 /**
  * Tests for streaming source identifying name propagation through the resolution pipeline.
  * These tests verify that sourceIdentifyingName is correctly propagated from CatalogTable
  * through DataSource to StreamingRelation during streaming table resolution.
  */
-class StreamingSourceIdentifyingNameSuite extends SharedSparkSession {
+class StreamingSourceIdentifyingNameSuite extends SessionQueryTest {
 
   test("STREAM table resolution propagates sourceIdentifyingName through pipeline") {
     withTable("stream_name_test") {

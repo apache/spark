@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog.ChangelogRange
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -36,7 +36,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Tests for the CDC (Change Data Capture) analyzer resolution path:
  * RelationChanges -> resolveChangelog -> DataSourceV2Relation(ChangelogTable).
  */
-class ChangelogResolutionSuite extends SharedSparkSession {
+class ChangelogResolutionSuite extends SessionQueryTest {
 
   private val cdcCatalogName = "cdc_catalog"
   private val noCdcCatalogName = "no_cdc_catalog"

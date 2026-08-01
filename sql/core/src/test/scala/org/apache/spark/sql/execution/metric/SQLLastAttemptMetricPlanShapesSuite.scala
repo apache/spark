@@ -28,10 +28,10 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 class SQLLastAttemptMetricPlanShapesSuite
-  extends SharedSparkSession
+  extends SessionQueryTest
   with SQLMetricsTestUtils
   // Need to control AQE per-test to ensure expected plan shapes.
   with DisableAdaptiveExecutionSuite {
@@ -138,10 +138,10 @@ class SQLLastAttemptMetricPlanShapesSuite
       // There is some special handling for df.cache() / df.persist() / df.localCheckpoint() tests.
       val cachedPlanTest = label.startsWith("cache - ")
 
-      withSQLConf(
+      withConf(
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> useAQE.toString) {
         setup()
-        withSQLConf(extraSQLConfs.toSeq: _*) {
+        withConf(extraSQLConfs.toSeq: _*) {
           val aqeRetryMetrics = if (aqeReplans) Seq(testSLAMetric) else Seq.empty
           AQETestHelper.withForcedCancellation(aqeRetryMetrics: _*) {
             withSparkContextConf(failureMode.sparkContextConfs: _*) {

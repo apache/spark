@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 
 private[sql] case class MyLabeledPoint(label: Double, features: TestUDT.MyDenseVector) {
@@ -52,7 +52,7 @@ private[sql] class YearUDT extends UserDefinedType[Year] {
   private[spark] override def asNullable: YearUDT = this
 }
 
-class UserDefinedTypeSuite extends SharedSparkSession with ParquetTest
+class UserDefinedTypeSuite extends SessionQueryTest with ParquetTest
     with ExpressionEvalHelper {
   import testImplicits._
 
@@ -304,7 +304,7 @@ class UserDefinedTypeSuite extends SharedSparkSession with ParquetTest
     withTempView("v1") {
       pointsRDD.createOrReplaceTempView("v1")
       for ((wsSetting, cgSetting) <- settings) {
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wsSetting,
+        withConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wsSetting,
           SQLConf.CODEGEN_FACTORY_MODE.key -> cgSetting) {
           val df = sql("select label from v1 order by features")
           checkAnswer(df, Row(1.0) :: Row(0.0) :: Nil)
@@ -332,7 +332,7 @@ class UserDefinedTypeSuite extends SharedSparkSession with ParquetTest
   }
 
   test("SPARK-53518: No truncation for catalogString of User Defined Type") {
-    withSQLConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "3") {
+    withConf(SQLConf.MAX_TO_STRING_FIELDS.key -> "3") {
       val string = new ExampleIntRowUDT(4).catalogString
       assert(string == "struct<col0:int,col1:int,col2:int,col3:int>")
     }

@@ -20,10 +20,10 @@ package org.apache.spark.sql.collation
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 class CollationAggregationSuite
-  extends SharedSparkSession
+  extends SessionQueryTest
   with AdaptiveSparkPlanHelper {
 
   test("group by collated column doesn't work with obj hash aggregate") {
@@ -37,7 +37,7 @@ class CollationAggregationSuite
         sql(s"SELECT COUNT(*) FROM $tblName GROUP BY c1"),
         Seq(Row(3)))
 
-      withSQLConf("spark.sql.test.forceApplyObjectHashAggregate" -> true.toString) {
+      withConf("spark.sql.test.forceApplyObjectHashAggregate" -> true.toString) {
         checkAnswer(
           sql(s"SELECT COUNT(*) FROM $tblName GROUP BY c1"),
           Seq(Row(1), Row(1), Row(1)))
@@ -53,7 +53,7 @@ class CollationAggregationSuite
     val tblName = "imp_agg"
     Seq(true, false).foreach { useObjHashAgg =>
       withTable(tblName) {
-        withSQLConf("spark.sql.execution.useObjectHashAggregateExec" -> useObjHashAgg.toString) {
+        withConf("spark.sql.execution.useObjectHashAggregateExec" -> useObjHashAgg.toString) {
           sql(
             s"""
                |CREATE TABLE $tblName (

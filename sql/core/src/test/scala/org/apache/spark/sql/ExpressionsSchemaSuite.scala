@@ -23,7 +23,7 @@ import java.nio.file.Files
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.util.stringToFile
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
 
@@ -66,7 +66,7 @@ import org.apache.spark.util.Utils
  */
 // scalastyle:on line.size.limit
 @ExtendedSQLTest
-class ExpressionsSchemaSuite extends SharedSparkSession {
+class ExpressionsSchemaSuite extends SessionQueryTest {
 
   private val baseResourcePath = {
     // We use a path based on Spark home for 2 reasons:

@@ -23,10 +23,10 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Attribut
 import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.execution.{DummySparkPlan, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.IntegerType
 
-class GroupPartitionsExecSuite extends SharedSparkSession {
+class GroupPartitionsExecSuite extends SessionQueryTest {
 
   private val exprA = AttributeReference("a", IntegerType)()
   private val exprB = AttributeReference("b", IntegerType)()
@@ -76,7 +76,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     // With the config disabled (default), key-expression filtering is skipped.
     assert(gpe.outputOrdering === Nil)
     // When enabled, the key-expression order is preserved through coalescing.
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+    withConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       val ordering = gpe.outputOrdering
       assert(ordering.length === 1)
       assert(ordering.head.child === exprA)
@@ -95,7 +95,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
 
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
     assert(gpe.outputOrdering === Nil)
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+    withConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       val ordering = gpe.outputOrdering
       assert(ordering.length === 2)
       assert(ordering.head.child === exprA)
@@ -119,7 +119,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
 
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
     assert(gpe.outputOrdering === Nil)
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+    withConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       val ordering = gpe.outputOrdering
       assert(ordering.length === 1)
       assert(ordering.head.child === exprA)
@@ -139,7 +139,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
 
     assert(!gpe.groupedPartitions.forall(_._2.size <= 1), "expected coalescing")
     assert(gpe.outputOrdering === Nil)
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+    withConf(SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       val ordering = gpe.outputOrdering
       assert(ordering.length === 1)
       assert(ordering.head.child === exprA)
@@ -172,7 +172,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
 
     assert(!GroupPartitionsExec(child).groupedPartitions.forall(_._2.size <= 1),
       "expected coalescing")
-    withSQLConf(
+    withConf(
         SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       // Even though enableSortedMerge = true, the child is not safe for k-way merge,
@@ -196,12 +196,12 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
 
     assert(!GroupPartitionsExec(child).groupedPartitions.forall(_._2.size <= 1),
       "expected coalescing")
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+    withConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       assert(GroupPartitionsExec(child).outputOrdering !== childOrdering,
         "config alone should not enable k-way merge; enableSortedMerge must be set by planner")
       assert(GroupPartitionsExec(child, enableSortedMerge = true).outputOrdering === childOrdering)
     }
-    withSQLConf(
+    withConf(
         SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       // Sorted-merge config disabled, key-ordering config enabled: only key-expression orders
@@ -220,7 +220,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       outputOrdering = childOrdering)
     val gpe = GroupPartitionsExec(child)
 
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+    withConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       val result = gpe.tryEnableSortedMerge()
       assert(result.isDefined)
       assert(result.get.enableSortedMerge)
@@ -236,7 +236,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       outputOrdering = childOrdering)
     val gpe = GroupPartitionsExec(child)
 
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+    withConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
       assert(gpe.tryEnableSortedMerge().isEmpty)
     }
   }
@@ -250,7 +250,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
       outputOrdering = childOrdering)
     val gpe = GroupPartitionsExec(child)
 
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+    withConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       assert(gpe.tryEnableSortedMerge().isEmpty)
     }
   }
@@ -264,7 +264,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val gpe = GroupPartitionsExec(child)
 
     assert(gpe.groupedPartitions.forall(_._2.size <= 1), "expected non-coalescing")
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+    withConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       assert(gpe.tryEnableSortedMerge().isEmpty)
     }
   }

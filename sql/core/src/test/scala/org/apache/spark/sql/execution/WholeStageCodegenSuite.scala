@@ -32,11 +32,11 @@ import org.apache.spark.sql.execution.debug.{codegenString, codegenStringSeq}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType}
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
-class WholeStageCodegenSuite extends SharedSparkSession
+class WholeStageCodegenSuite extends SessionQueryTest
   with DisableAdaptiveExecutionSuite {
 
   import testImplicits._
@@ -59,7 +59,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
   test("SortAggregate should be included in WholeStageCodegen") {
     val df = spark.range(10).agg(max(col("id")), avg(col("id")))
-    withSQLConf(SQLConf.USE_HASH_AGG.key -> "false") {
+    withConf(SQLConf.USE_HASH_AGG.key -> "false") {
       val plan = df.queryExecution.executedPlan
       assert(plan.exists(p =>
         p.isInstanceOf[WholeStageCodegenExec] &&
@@ -398,7 +398,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
   test("SPARK-44236: disable WholeStageCodegen when set spark.sql.codegen.factoryMode is " +
     "NO_CODEGEN") {
-    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+    withConf(SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
       val df = spark.range(10).select($"id" + 1)
       val plan = df.queryExecution.executedPlan
       assert(!plan.exists(_.isInstanceOf[WholeStageCodegenExec]))
@@ -462,7 +462,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val df2 = spark.range(1, 11).select($"id".as("k2"))
     val df3 = spark.range(2, 5).select($"id".as("k3"))
 
-    withSQLConf(SQLConf.ENABLE_BUILD_SIDE_OUTER_SHUFFLED_HASH_JOIN_CODEGEN.key -> "true") {
+    withConf(SQLConf.ENABLE_BUILD_SIDE_OUTER_SHUFFLED_HASH_JOIN_CODEGEN.key -> "true") {
       Seq("SHUFFLE_HASH", "SHUFFLE_MERGE").foreach { hint =>
         // test right join with unique key from build side
         val rightJoinUniqueDf = df1.join(df2.hint(hint), $"k1" === $"k2", "right_outer")
@@ -627,7 +627,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val df3 = spark.range(2).select($"id".as("k3"))
 
     Seq(true, false).foreach { codegenEnabled =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString) {
+      withConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString) {
         // test broadcast nested loop join without condition
         val oneJoinDF = df1.join(df2)
         var hasJoinInCodegen = oneJoinDF.queryExecution.executedPlan.collect {
@@ -668,7 +668,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val df4 = spark.range(0).select($"id".as("k4"))
 
     Seq(true, false).foreach { codegenEnabled =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString) {
+      withConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString) {
         // test left outer join
         val leftOuterJoinDF = df1.join(df2, $"k1" > $"k2", "left_outer")
         var hasJoinInCodegen = leftOuterJoinDF.queryExecution.executedPlan.collect {
@@ -714,7 +714,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val df3 = spark.range(2).select($"id".as("k3"))
 
     Seq(true, false).foreach { codegenEnabled =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString) {
+      withConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString) {
         // test left semi join
         val semiJoinDF = df1.join(df2, $"k1" + 1 <= $"k2", "left_semi")
         var hasJoinInCodegen = semiJoinDF.queryExecution.executedPlan.collect {
@@ -825,7 +825,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
   }
 
   test("SPARK-21441 SortMergeJoin codegen with CodegenFallback expressions should be disabled") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
+    withConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
       import testImplicits._
 
       val df1 = Seq((1, 1), (2, 2), (3, 3)).toDF("key", "int")
@@ -895,7 +895,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val df = spark.range(10).select(Seq.tabulate(201) {i => ($"id" + i).as(s"c$i")} : _*)
       df.write.mode(SaveMode.Overwrite).parquet(path)
 
-      withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "202",
+      withConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "202",
         SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "2000") {
         // wide table batch scan causes the byte code of codegen exceeds the limit of
         // WHOLESTAGE_HUGE_METHOD_LIMIT
@@ -912,7 +912,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val df = spark.range(10).select(Seq.tabulate(2) {i => ($"id" + i).as(s"c$i")} : _*)
 
     Seq(true, false).foreach { config =>
-      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> s"$config") {
+      withConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> s"$config") {
         val plan = df.queryExecution.executedPlan
         val wholeStageCodeGenExec = plan.find(p => p match {
           case wp: WholeStageCodegenExec => true
@@ -934,7 +934,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
         spark.range(10).select(Seq.tabulate(columnNum) {i => lit(i).as(s"c$i")} : _*)
           .write.mode(SaveMode.Overwrite).parquet(path)
 
-        withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "255",
+        withConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "255",
             SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "true") {
           val projection = Seq.tabulate(columnNum)(i => s"c$i + c$i as newC$i")
           val df = spark.read.parquet(path).selectExpr(projection: _*)
@@ -954,7 +954,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
   test("codegen stage IDs should be preserved in transformations after CollapseCodegenStages") {
     // test case adapted from DataFrameSuite to trigger ReuseExchange
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2") {
+    withConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2") {
       val df = spark.range(100)
       val join = df.join(df, "id")
       val plan = join.queryExecution.executedPlan
@@ -969,7 +969,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
   test("including codegen stage ID in generated class name should not regress codegen caching") {
     import testImplicits._
 
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME.key -> "true") {
+    withConf(SQLConf.WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME.key -> "true") {
       // the same query run twice should produce identical code, which would imply a hit in
       // the generated code cache.
       val ds1 = spark.range(3).select($"id" + 2)
@@ -981,7 +981,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
   }
 
   ignore("SPARK-23598: Codegen working for lots of aggregation operations without runtime errors") {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+    withConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       var df = Seq((8, "bat"), (15, "mouse"), (5, "horse")).toDF("age", "name")
       for (i <- 0 until 70) {
         df = df.groupBy("name").agg(avg("age").alias("age"))
@@ -1044,7 +1044,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
   }
 
   test("SPARK-26572: evaluate non-deterministic expressions for aggregate results") {
-    withSQLConf(
+    withConf(
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       val baseTable = Seq(1, 1).toDF("idx")
@@ -1103,7 +1103,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
   }
 
   test("Give up splitting aggregate code if a parameter length goes over the limit") {
-    withSQLConf(
+    withConf(
         SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
         SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
         "spark.sql.CodeGenerator.validParamLength" -> "0") {
@@ -1127,7 +1127,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
   }
 
   test("Give up splitting subexpression code if a parameter length goes over the limit") {
-    withSQLConf(
+    withConf(
         SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "false",
         SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
         "spark.sql.CodeGenerator.validParamLength" -> "0") {
@@ -1156,7 +1156,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     // case 2: threshold is a larger number, shouldn't broadcast since not yet exceeded.
     // case 3: threshold is 0, should broadcast since it's always smaller than generated code size.
     Seq((-1, false), (1000000000, false), (0, true)).foreach { case (threshold, shouldBroadcast) =>
-      withSQLConf(SQLConf.WHOLESTAGE_BROADCAST_CLEANED_SOURCE_THRESHOLD.key -> threshold.toString,
+      withConf(SQLConf.WHOLESTAGE_BROADCAST_CLEANED_SOURCE_THRESHOLD.key -> threshold.toString,
         SQLConf.USE_PARTITION_EVALUATOR.key -> "true") {
         val df = Seq(0, 1, 2).toDF().groupBy("value").sum()
         // Invoke WholeStageCodegenExec.execute and cast the rdd, and then get
@@ -1204,7 +1204,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
     Seq("1", Int.MaxValue.toString).foreach { splitThreshold =>
       def testFilterCSE(cseEnabled: Boolean): String = {
-        withSQLConf(
+        withConf(
           SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
@@ -1246,7 +1246,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
       Row(new JBigDecimal("50.00"), new JBigDecimal("200.00")),
       Row(new JBigDecimal("80.00"), new JBigDecimal("100.00"))))
 
-    withSQLConf(
+    withConf(
       SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
@@ -1276,7 +1276,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     // AdaptiveSparkPlan.
     val t = Seq(("3", "numeric"), ("abc", "text")).toDF("s", "kind")
     val idx = Seq(1, 2).toDF("i")
-    withSQLConf(
+    withConf(
       SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
@@ -1321,7 +1321,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
             "and a non-IsNotNull guard conjunct")
         checkAnswer(df, Seq(Row("3", 1), Row("3", 2)))
         // Cross-check the codegen path against the interpreted path.
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        withConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
           checkAnswer(spark.sql(query), Seq(Row("3", 1), Row("3", 2)))
         }
       }
@@ -1344,7 +1344,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
       Row(null, "numeric"),
       Row("abc", "text")))
 
-    withSQLConf(
+    withConf(
       SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
@@ -1381,7 +1381,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val data = spark.sparkContext.parallelize(Seq(
       Row(0), Row(2), Row(4)))
 
-    withSQLConf(
+    withConf(
       SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
@@ -1414,7 +1414,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val expected = Seq(Row(5, 6), Row(7, 8))
 
     def filterCode(cseEnabled: Boolean): String = {
-      withSQLConf(
+      withConf(
         SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
@@ -1454,7 +1454,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val expected = Seq(Row(Row(10)), Row(Row(50)))
 
     def filterCode(cseEnabled: Boolean): String = {
-      withSQLConf(
+      withConf(
         SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
@@ -1489,7 +1489,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     val expected = Seq(Row(1, 5), Row(10, 20))
 
     def filterCode(cseEnabled: Boolean): String = {
-      withSQLConf(
+      withConf(
         SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
@@ -1528,7 +1528,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
     // `a + b` appears three times in the predicate, so it is a CSE candidate. We count `addExact`
     // occurrences in the generated code: the CSE path evaluates it once, the lazy path per use.
     def filterCode(filterExecCseEnabled: Boolean): String = {
-      withSQLConf(
+      withConf(
         // Subexpression elimination stays globally on; only the FilterExec gate flips.
         SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
         SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key ->

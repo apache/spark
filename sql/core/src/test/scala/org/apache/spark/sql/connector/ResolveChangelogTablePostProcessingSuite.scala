@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.Changelog.{
   CHANGE_TYPE_UPDATE_PREIMAGE}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.v2.ChangelogTable
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{
   BinaryType, BooleanType, DoubleType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -45,7 +45,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * paths (carry-over removal, update detection) and then verifies that Spark's analyzer rule
  * correctly transforms the plan and produces the expected output.
  */
-class ResolveChangelogTablePostProcessingSuite extends SharedSparkSession {
+class ResolveChangelogTablePostProcessingSuite extends SessionQueryTest {
 
   private val catalogName = "cdc_test_catalog"
   private val testTableName = "events"

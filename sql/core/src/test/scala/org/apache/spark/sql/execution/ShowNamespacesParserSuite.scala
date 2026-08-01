@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.ShowNamespacesCommand
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class ShowNamespacesParserSuite extends AnalysisTest with SharedSparkSession {
+class ShowNamespacesParserSuite extends AnalysisTest with SessionQueryTest {
 
   private lazy val parser = new SparkSqlParser()
 

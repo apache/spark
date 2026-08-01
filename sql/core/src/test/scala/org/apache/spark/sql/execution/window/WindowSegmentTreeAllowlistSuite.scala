@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 /**
  * Coverage for the explicit segment-tree aggregate allowlist
@@ -36,7 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * [[SegmentTreeWindowFunctionSuite]].
  */
 class WindowSegmentTreeAllowlistSuite
-    extends SharedSparkSession with SQLMetricsTestUtils {
+    extends SessionQueryTest with SQLMetricsTestUtils {
 
   import testImplicits._
 
@@ -90,7 +90,7 @@ class WindowSegmentTreeAllowlistSuite
       (c: org.apache.spark.sql.Column) => last(c, ignoreNulls = true))
   ).foreach { case (name, fn) =>
     test(s"$name routes to the segment-tree path") {
-      withSQLConf(enableSegTree.toSeq: _*) {
+      withConf(enableSegTree.toSeq: _*) {
         val df = baseDF.withColumn("agg", fn($"vd").over(winSpec))
         val (seg, fallback) = segTreeCounters(df)
         assert(seg > 0, s"$name should bump numSegmentTreeFrames (got $seg)")
@@ -103,7 +103,7 @@ class WindowSegmentTreeAllowlistSuite
   // Negative: non-allowlisted aggregates fall through
 
   test("collect_list falls through (unbounded buffer)") {
-    withSQLConf(enableSegTree.toSeq: _*) {
+    withConf(enableSegTree.toSeq: _*) {
       val df = baseDF.withColumn("agg", collect_list($"v").over(winSpec))
       val (seg, _) = segTreeCounters(df)
       assert(seg == 0, s"collect_list should not use segment tree (got $seg frames)")
@@ -111,7 +111,7 @@ class WindowSegmentTreeAllowlistSuite
   }
 
   test("collect_set falls through (unbounded buffer)") {
-    withSQLConf(enableSegTree.toSeq: _*) {
+    withConf(enableSegTree.toSeq: _*) {
       val df = baseDF.withColumn("agg", collect_set($"v").over(winSpec))
       val (seg, _) = segTreeCounters(df)
       assert(seg == 0, s"collect_set should not use segment tree (got $seg frames)")
@@ -119,7 +119,7 @@ class WindowSegmentTreeAllowlistSuite
   }
 
   test("approx_count_distinct (HyperLogLog++) falls through (fail-closed)") {
-    withSQLConf(enableSegTree.toSeq: _*) {
+    withConf(enableSegTree.toSeq: _*) {
       val df = baseDF.withColumn("agg", approx_count_distinct($"v").over(winSpec))
       val (seg, _) = segTreeCounters(df)
       assert(seg == 0,
@@ -128,7 +128,7 @@ class WindowSegmentTreeAllowlistSuite
   }
 
   test("percentile_approx falls through (sketch buffer not auditable)") {
-    withSQLConf(enableSegTree.toSeq: _*) {
+    withConf(enableSegTree.toSeq: _*) {
       val df = baseDF.withColumn(
         "agg", percentile_approx($"vd", lit(0.5), lit(100)).over(winSpec))
       val (seg, _) = segTreeCounters(df)
@@ -144,7 +144,7 @@ class WindowSegmentTreeAllowlistSuite
   // (e.g., pushing the predicate into the aggregate function), this test
   // fails and forces an explicit eligibility review.
   test("FILTER (WHERE ...) disables segment-tree path") {
-    withSQLConf(enableSegTree.toSeq: _*) {
+    withConf(enableSegTree.toSeq: _*) {
       withTempView("t") {
         baseDF.createOrReplaceTempView("t")
         val df = spark.sql(
@@ -163,7 +163,7 @@ class WindowSegmentTreeAllowlistSuite
   // Mixed: ANY non-eligible aggregate disqualifies the group
 
   test("mix of allowlisted + non-allowlisted aggregates falls through entirely") {
-    withSQLConf(enableSegTree.toSeq: _*) {
+    withConf(enableSegTree.toSeq: _*) {
       val df = baseDF
         .withColumn("s", sum($"v").over(winSpec))
         .withColumn("cl", collect_list($"v").over(winSpec))

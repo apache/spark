@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 /**
  * SQLMetrics visibility coverage for [[SegmentTreeWindowFunctionFrame]]:
@@ -31,7 +31,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * `numSegmentTreeFallbackFrames`; feature-flag off leaves both at 0.
  */
 class SegmentTreeWindowMetricsSuite
-    extends SharedSparkSession with SQLMetricsTestUtils {
+    extends SessionQueryTest with SQLMetricsTestUtils {
 
   import testImplicits._
 
@@ -69,7 +69,7 @@ class SegmentTreeWindowMetricsSuite
   private val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-3, 3)
 
   test("segment-tree path increments numSegmentTreeFrames (one per frame per partition)") {
-    withSQLConf(
+    withConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
@@ -86,7 +86,7 @@ class SegmentTreeWindowMetricsSuite
   }
 
   test("fallback path increments numSegmentTreeFallbackFrames") {
-    withSQLConf(
+    withConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         // Threshold > partition size (40 rows/partition) forces fallback on every partition.
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1000",
@@ -101,7 +101,7 @@ class SegmentTreeWindowMetricsSuite
   }
 
   test("feature flag off: both segment-tree counters stay at zero") {
-    withSQLConf(
+    withConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = baseDF.select($"id", min($"v").over(winSpec).as("mn"))
@@ -124,7 +124,7 @@ class SegmentTreeWindowMetricsSuite
   // exact shape the existing segtree/fallback fixtures happened to avoid.
 
   test("T1 (G1) numPartitions > numTasks, identical length: every partition counted") {
-    withSQLConf(
+    withConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "64",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1",
@@ -141,7 +141,7 @@ class SegmentTreeWindowMetricsSuite
   }
 
   test("T2 (G2) identical-length partitions across keys") {
-    withSQLConf(
+    withConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "64",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1",
@@ -161,7 +161,7 @@ class SegmentTreeWindowMetricsSuite
   }
 
   test("T3 (G3) all-length-1 unique keys, fallback path: every partition counted") {
-    withSQLConf(
+    withConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "64",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1",
@@ -179,7 +179,7 @@ class SegmentTreeWindowMetricsSuite
   }
 
   test("T4 (G4) mixed segtree + fallback, non-aliasing order") {
-    withSQLConf(
+    withConf(
         SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
         SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "64",
         SQLConf.SHUFFLE_PARTITIONS.key -> "1",

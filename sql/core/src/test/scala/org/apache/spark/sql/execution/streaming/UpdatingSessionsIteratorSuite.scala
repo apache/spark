@@ -26,11 +26,11 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.aggregate.UpdatingSessionsIterator
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class UpdatingSessionsIteratorSuite extends SharedSparkSession {
+class UpdatingSessionsIteratorSuite extends SessionQueryTest {
 
   private val rowSchema = new StructType().add("key1", StringType).add("key2", IntegerType)
     .add("session", new StructType().add("start", LongType).add("end", LongType))

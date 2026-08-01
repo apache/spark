@@ -21,7 +21,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.connector.catalog.{InMemoryBaseTable, SharedInMemoryTableCatalog}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 /**
  * Tests for cross-session column ID detection where an external
@@ -38,7 +38,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * a static [[ConcurrentHashMap]] that all catalog instances share,
  * regardless of which session created them.
  */
-class DataSourceV2ExtSessionColumnIdSuite extends SharedSparkSession {
+class DataSourceV2ExtSessionColumnIdSuite extends SessionQueryTest {
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.ANSI_ENABLED, true)

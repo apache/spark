@@ -49,14 +49,14 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuite extends ParquetTest with SharedSparkSession {
+class ParquetIOSuite extends ParquetTest with SessionQueryTest {
   import testImplicits._
 
   /**
@@ -154,12 +154,12 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     val data = (1 to 4).map(i => Tuple1(i.toString))
     // Property spark.sql.parquet.binaryAsString shouldn't affect Parquet files written by Spark SQL
     // as we store Spark SQL schema in the extra metadata.
-    withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "false")(checkParquetFile(data))
-    withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true")(checkParquetFile(data))
+    withConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "false")(checkParquetFile(data))
+    withConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true")(checkParquetFile(data))
   }
 
   test("SPARK-36182: TimestampNTZ") {
-    withSQLConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> "true") {
+    withConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> "true") {
       val data = Seq("2021-01-01T00:00:00", "1970-07-15T01:02:03.456789")
         .map(ts => Tuple1(LocalDateTime.parse(ts)))
       withAllParquetReaders {
@@ -197,7 +197,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         writer.close
 
         for (inferTimestampNTZ <- Seq(true, false)) {
-          withSQLConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> s"$inferTimestampNTZ") {
+          withConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> s"$inferTimestampNTZ") {
             val timestampNTZType = if (inferTimestampNTZ) TimestampNTZType else TimestampType
 
             withAllParquetReaders {
@@ -238,7 +238,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   test("Write TimestampNTZ type") {
     // The configuration PARQUET_INFER_TIMESTAMP_NTZ_ENABLED doesn't affect the behavior of writes.
     Seq(true, false).foreach { inferTimestampNTZ =>
-      withSQLConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> inferTimestampNTZ.toString) {
+      withConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> inferTimestampNTZ.toString) {
         withTempPath { dir =>
           val data = Seq(LocalDateTime.parse("2021-01-01T00:00:00")).toDF("col")
           data.write.parquet(dir.getCanonicalPath)
@@ -474,7 +474,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
 
   test("vectorized reader: missing array") {
     Seq(true, false).foreach { offheapEnabled =>
-      withSQLConf(
+      withConf(
           SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
           SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
         val data = Seq(
@@ -769,7 +769,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   gridTest("Read external file with UNKNOWN type annotation")(
     Seq(true, false)
   ) { respectUnknown =>
-    withSQLConf(
+    withConf(
       SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key ->
         respectUnknown.toString
     ) {
@@ -789,7 +789,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       offheapEnabled <- Seq(true, false)
       returnNullStructIfAllFieldsMissing <- Seq(true, false)
     } {
-      withSQLConf(
+      withConf(
           SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
           SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
               returnNullStructIfAllFieldsMissing.toString,
@@ -852,7 +852,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         offheapEnabled <- Seq(true, false)
         returnNullStructIfAllFieldsMissing <- Seq(true, false)
       } {
-        withSQLConf(
+        withConf(
           SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
             returnNullStructIfAllFieldsMissing.toString,
           SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
@@ -901,7 +901,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         offheapEnabled <- Seq(true, false)
         returnNullStructIfAllFieldsMissing <- Seq(true, false)
       } {
-        withSQLConf(
+        withConf(
             SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
               returnNullStructIfAllFieldsMissing.toString,
             SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
@@ -952,7 +952,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         offheapEnabled <- Seq(true, false)
         returnNullStructIfAllFieldsMissing <- Seq(true, false)
       } {
-        withSQLConf(
+        withConf(
             SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key ->
               returnNullStructIfAllFieldsMissing.toString,
             SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
@@ -987,7 +987,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
 
     withParquetFile(data) { file =>
       for (offheapEnabled <- Seq(true, false)) {
-        withSQLConf(
+        withConf(
             SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
             SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key -> "false",
             SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
@@ -1006,7 +1006,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
 
   test("vectorized reader: missing some struct fields") {
     Seq(true, false).foreach { offheapEnabled =>
-      withSQLConf(
+      withConf(
           SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
           SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
         val data = Seq(
@@ -1086,7 +1086,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     val data = (0 until 10).map(i => (i, i.toString))
 
     def checkCompressionCodec(codec: ParquetCompressionCodec): Unit = {
-      withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
+      withConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
         withParquetFile(data) { path =>
           assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION.key).toUpperCase(Locale.ROOT)) {
             compressionCodecFor(path, codec.name())
@@ -1428,7 +1428,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overridden") {
-    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+    withConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       val extraOptions = Map(
         SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
@@ -1458,7 +1458,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
-    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+    withConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
       classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       // Using a output committer that always fail when committing a task, so that both
       // `commitTask()` and `abortTask()` are invoked.
@@ -1495,7 +1495,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-11044 Parquet writer version fixed as version1 ") {
-    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+    withConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       // For dictionary encoding, Parquet changes the encoding types according to its writer
       // version. So, this test checks one of the encoding types in order to ensure that
@@ -1510,7 +1510,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
 
       val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
 
-      withSQLConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
+      withConf(ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
         withTempPath { dir =>
           val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
           spark.range(1 << 16).selectExpr("(id % 4) AS i")
@@ -1612,7 +1612,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       var hash1: Int = 0
       var hash2: Int = 0
       (false :: true :: Nil).foreach { v =>
-        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> v.toString) {
+        withConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> v.toString) {
           val df = spark.read.parquet(dir.getCanonicalPath)
           val rows = df.queryExecution.toRdd.map(_.copy()).collect()
           val unsafeRows = rows.map(_.asInstanceOf[UnsafeRow])
@@ -1767,7 +1767,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
-    withSQLConf(
+    withConf(
       SQLConf.PARQUET_COMPRESSION.key -> ParquetCompressionCodec.SNAPPY.lowerCaseName()) {
       val option = new ParquetOptions(
         Map("Compression" -> ParquetCompressionCodec.UNCOMPRESSED.lowerCaseName()),
@@ -1849,7 +1849,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
 
   test("SPARK-49991: Respect 'mapreduce.output.basename' to generate file names") {
     withTempPath { dir =>
-      withSQLConf("mapreduce.output.basename" -> "apachespark") {
+      withConf("mapreduce.output.basename" -> "apachespark") {
         spark.range(1).coalesce(1).write.parquet(dir.getCanonicalPath)
         val df = spark.read.parquet(dir.getCanonicalPath)
         assert(df.inputFiles.head.contains("apachespark"))
@@ -2035,7 +2035,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         }
         writer.close
 
-        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        withConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
           val e = intercept[SparkException] {
             spark.read.schema(readSchema).parquet(tablePath.toString).collect()
           }
@@ -2274,7 +2274,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     // day-count converts to UTC midnight via `DateTimeUtils.daysToMicros`. Both
     // REQUIRED and OPTIONAL columns are covered so that `readValue` and `readValues`
     // are both invoked.
-    withSQLConf(
+    withConf(
         SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> "CORRECTED",
         SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
       withTempPath { file =>

@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.DropPartitions
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSession {
+class AlterTableDropPartitionParserSuite extends AnalysisTest with SessionQueryTest {
 
   test("drop partition") {
     val sql = """

@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.SetTableSerDeProperties
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AlterTableSetSerdeParserSuite extends AnalysisTest with SharedSparkSession {
+class AlterTableSetSerdeParserSuite extends AnalysisTest with SessionQueryTest {
 
   test("SerDe property values must be set") {
     val sql = "ALTER TABLE table_name SET SERDE 'serde' " +

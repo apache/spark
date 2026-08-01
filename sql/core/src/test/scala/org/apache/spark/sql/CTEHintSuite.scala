@@ -20,9 +20,9 @@ package org.apache.spark.sql
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class CTEHintSuite extends SharedSparkSession {
+class CTEHintSuite extends SessionQueryTest {
 
   def verifyCoalesceOrRepartitionHint(df: DataFrame): Unit = {
     def checkContainsRepartition(plan: LogicalPlan): Unit = {

@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.ArrayImplicits._
@@ -45,7 +45,7 @@ import org.apache.spark.util.ArrayImplicits._
  * A test suite that tests Apache ORC filter API based filter pushdown optimization.
  */
 @ExtendedSQLTest
-class OrcFilterSuite extends OrcTest with SharedSparkSession {
+class OrcFilterSuite extends OrcTest with SessionQueryTest {
   import testImplicits.{toRichColumn, ColumnConstructorExt}
 
   override protected def sparkConf: SparkConf =
@@ -302,7 +302,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
     withOrcFile(input.map(Tuple1(_))) { path =>
       Seq(false, true).foreach { java8Api =>
-        withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+        withConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
           readFile(path) { implicit df =>
             val timestamps = input.map(Literal(_))
             checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
@@ -431,7 +431,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     }
     withOrcFile(input.map(Tuple1(_))) { path =>
       Seq(false, true).foreach { java8Api =>
-        withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+        withConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
           readFile(path) { implicit df =>
             val dates = input.map(Literal(_))
             checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
@@ -687,14 +687,14 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       val tableDir1 = s"${dir.getAbsoluteFile}/table1"
 
       // Physical ORC files have both `A` and `a` fields.
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         spark.range(count).repartition(count).selectExpr("id - 1 as A", "id as a")
           .write.mode("overwrite").orc(tableDir1)
       }
 
       // Metastore table has both `A` and `a` fields too.
       withTable(tableName) {
-        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        withConf(SQLConf.CASE_SENSITIVE.key -> "true") {
           sql(
             s"""
                |CREATE TABLE $tableName (A LONG, a LONG) USING ORC LOCATION '$tableDir1'
@@ -710,7 +710,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         }
 
         // Exception thrown for ambiguous case.
-        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        withConf(SQLConf.CASE_SENSITIVE.key -> "false") {
           checkError(
             exception = intercept[AnalysisException] {
               sql(s"select a from $tableName where a < 0").collect()
@@ -731,7 +731,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
       // Metastore table has only `A` field.
       withTable(tableName) {
-        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        withConf(SQLConf.CASE_SENSITIVE.key -> "false") {
           sql(
             s"""
                |CREATE TABLE $tableName (A LONG) USING ORC LOCATION '$tableDir1'
@@ -749,13 +749,13 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
       // Physical ORC files have only `A` field.
       val tableDir2 = s"${dir.getAbsoluteFile}/table2"
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         spark.range(count).repartition(count).selectExpr("id - 1 as A")
           .write.mode("overwrite").orc(tableDir2)
       }
 
       withTable(tableName) {
-        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        withConf(SQLConf.CASE_SENSITIVE.key -> "false") {
           sql(
             s"""
                |CREATE TABLE $tableName (a LONG) USING ORC LOCATION '$tableDir2'
@@ -769,7 +769,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       }
 
       withTable(tableName) {
-        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        withConf(SQLConf.CASE_SENSITIVE.key -> "true") {
           sql(
             s"""
                |CREATE TABLE $tableName (A LONG) USING ORC LOCATION '$tableDir2'
@@ -792,7 +792,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
         filters: Seq[Filter],
         caseSensitive: String): Option[SearchArgument] = {
       var orcFilter: Option[SearchArgument] = None
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+      withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
         orcFilter =
           OrcFilters.createFilter(schema, filters)
       }

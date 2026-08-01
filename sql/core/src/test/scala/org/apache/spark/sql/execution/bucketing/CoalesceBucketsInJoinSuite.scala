@@ -27,10 +27,10 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFil
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.IntegerType
 
-class CoalesceBucketsInJoinSuite extends SharedSparkSession {
+class CoalesceBucketsInJoinSuite extends SessionQueryTest {
   private val SORT_MERGE_JOIN = "sortMergeJoin"
   private val SHUFFLED_HASH_JOIN = "shuffledHashJoin"
   private val BROADCAST_HASH_JOIN = "broadcastHashJoin"
@@ -121,7 +121,7 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
   }
 
   test("bucket coalescing - basic") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
       run(JoinSetting(
         RelationSetting(4, None), RelationSetting(8, Some(4)), joinOperator = SORT_MERGE_JOIN))
       run(JoinSetting(
@@ -129,7 +129,7 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
         shjBuildSide = Some(BuildLeft)))
     }
 
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false") {
+    withConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "false") {
       run(JoinSetting(
         RelationSetting(4, None), RelationSetting(8, None), joinOperator = SORT_MERGE_JOIN))
       run(JoinSetting(
@@ -140,7 +140,7 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
 
   test("bucket coalescing should work only for sort merge join and shuffled hash join") {
     Seq(true, false).foreach { enabled =>
-      withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> enabled.toString) {
+      withConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> enabled.toString) {
         run(JoinSetting(
           RelationSetting(4, None), RelationSetting(8, None), joinOperator = BROADCAST_HASH_JOIN))
       }
@@ -148,7 +148,7 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
   }
 
   test("bucket coalescing shouldn't be applied to shuffled hash join build side") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
       run(JoinSetting(
         RelationSetting(4, None), RelationSetting(8, None), joinOperator = SHUFFLED_HASH_JOIN,
         shjBuildSide = Some(BuildRight)))
@@ -156,7 +156,7 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
   }
 
   test("bucket coalescing shouldn't be applied when the number of buckets are the same") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
       run(JoinSetting(
         RelationSetting(8, None), RelationSetting(8, None), joinOperator = SORT_MERGE_JOIN))
       run(JoinSetting(
@@ -166,7 +166,7 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
   }
 
   test("number of bucket is not divisible by other number of bucket") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
       run(JoinSetting(
         RelationSetting(3, None), RelationSetting(8, None), joinOperator = SORT_MERGE_JOIN))
       run(JoinSetting(
@@ -176,7 +176,7 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
   }
 
   test("the ratio of the number of buckets is greater than max allowed") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+    withConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
       SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.key -> "2") {
       run(JoinSetting(
         RelationSetting(4, None), RelationSetting(16, None), joinOperator = SORT_MERGE_JOIN))
@@ -187,7 +187,7 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
   }
 
   test("join keys should match with output partitioning") {
-    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+    withConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
       val lCols = Seq(
         AttributeReference("l1", IntegerType)(),
         AttributeReference("l2", IntegerType)())

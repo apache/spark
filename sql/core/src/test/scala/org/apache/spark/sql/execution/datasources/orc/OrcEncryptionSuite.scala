@@ -27,9 +27,9 @@ import org.apache.orc.impl.{CryptoUtils, HadoopShimsFactory, KeyProvider}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
+class OrcEncryptionSuite extends OrcTest with SessionQueryTest {
   import testImplicits._
 
   override def sparkConf: SparkConf = {
@@ -74,7 +74,7 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
 
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      withSQLConf(
+      withConf(
         "hadoop.security.key.provider.path" -> "test:///",
         "orc.key.provider" -> "hadoop",
         "orc.encrypt" -> "pii:ssn,email",
@@ -83,7 +83,7 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
         checkAnswer(spark.read.orc(path), df)
       }
 
-      withSQLConf(
+      withConf(
         "orc.key.provider" -> "memory",
         "orc.encrypt" -> "pii:ssn,email",
         "orc.mask" -> "nullify:ssn;sha256:email") {
@@ -203,7 +203,7 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
 
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      withSQLConf(
+      withConf(
         "hadoop.security.key.provider.path" -> "test:///",
         "orc.key.provider" -> "hadoop",
         "orc.encrypt" -> "pii:ssn,email,name") {
@@ -211,7 +211,7 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
         checkAnswer(spark.read.orc(path), df)
       }
 
-      withSQLConf(
+      withConf(
         "orc.key.provider" -> "memory",
         "orc.encrypt" -> "pii:ssn,email,name") {
         checkAnswer(spark.read.orc(path), Row(null, null, null))

@@ -24,9 +24,9 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
 }
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class IdentifierAndCteSubstitutorSuite extends SharedSparkSession {
+class IdentifierAndCteSubstitutorSuite extends SessionQueryTest {
   test("Plan is unchanged") {
     val substitutor = new IdentifierAndCteSubstitutor
 

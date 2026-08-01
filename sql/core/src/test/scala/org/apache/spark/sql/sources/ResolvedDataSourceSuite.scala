@@ -23,9 +23,9 @@ import org.apache.spark.SparkClassNotFoundException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class ResolvedDataSourceSuite extends SharedSparkSession {
+class ResolvedDataSourceSuite extends SessionQueryTest {
   private def getProvidingClass(name: String): Class[_] =
     DataSource(
       sparkSession = spark,

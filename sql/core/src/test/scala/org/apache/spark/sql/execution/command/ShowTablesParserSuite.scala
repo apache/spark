@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CurrentNamespace, U
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{ShowTablePartition, ShowTables, ShowTablesExtended}
 import org.apache.spark.sql.execution.command.ShowTablesJsonCommand
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
+class ShowTablesParserSuite extends AnalysisTest with SessionQueryTest {
   private val catalog = "test_catalog"
 
   test("show tables") {

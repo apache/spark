@@ -41,12 +41,12 @@ import org.apache.spark.sql.execution.window.WindowGroupLimitExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.{AccumulatorContext, JsonProtocol}
 
 // Disable AQE because metric info is different with AQE on/off
-class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
+class SQLMetricsSuite extends SessionQueryTest with SQLMetricsTestUtils
   with DisableAdaptiveExecutionSuite {
   import testImplicits._
 
@@ -109,7 +109,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("SPARK-54749: OneRowRelation metrics") {
     Seq((1L, "false"), (2L, "true")).foreach { case (nodeId, enableWholeStage) =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage) {
+      withConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage) {
         val df = spark.sql("select 1 as c1")
         val oneRowRelation = df.queryExecution.executedPlan.collect {
           case oneRowRelation: OneRowRelationExec => oneRowRelation
@@ -128,7 +128,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("SPARK-57313: Sample numOutputRows metric") {
     Seq(false, true).foreach { withReplacement =>
       Seq("false", "true").foreach { enableWholeStage =>
-        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage) {
+        withConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage) {
           val df = spark.range(0, 1000, 1, 1)
             .sample(withReplacement = withReplacement, fraction = 0.5, seed = 1)
           val expectedRows = df.collect().length
@@ -144,7 +144,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("Recursive CTEs metrics") {
-    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+    withConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
       val df = sql(
         """WITH RECURSIVE t(n) AS(
           | VALUES 1, 2
@@ -321,7 +321,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     )
 
     // 2 partitions and each partition contains 2 keys, with fallback to sort-based aggregation
-    withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+    withConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
       val df3 = testData2.groupBy($"a").agg(collect_set($"a"))
       testSparkPlanMetrics(df3, 1, Map(
         2L -> (("ObjectHashAggregate", Map(
@@ -346,7 +346,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("SortAggregate metrics") {
     // Force use SortAggregateExec instead of HashAggregateExec
-    withSQLConf(SQLConf.USE_HASH_AGG.key -> "false") {
+    withConf(SQLConf.USE_HASH_AGG.key -> "false") {
       // Assume the execution plan is
       // -> SortAggregate(nodeId = 0)
       //     -> Sort(nodeId = 1)
@@ -462,7 +462,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("ShuffledHashJoin metrics") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
+    withConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
       SQLConf.SHUFFLE_PARTITIONS.key -> "2",
       SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
@@ -570,7 +570,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("BroadcastNestedLoopJoin metrics") {
     val testDataForJoin = testData2.filter($"a" < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+    withConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       withTempView("testDataForJoin") {
         // Assume the execution plan is
         // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
@@ -620,7 +620,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("CartesianProduct metrics") {
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+    withConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       val testDataForJoin = testData2.filter($"a" < 2) // TestData2(1, 1) :: TestData2(1, 2)
       testDataForJoin.createOrReplaceTempView("testDataForJoin")
       withTempView("testDataForJoin") {
@@ -712,7 +712,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     assert(res2 === (150L, 0L, 150L) :: (0L, 150L, 10L) :: Nil)
 
     // TODO: test file source V2 as well when its statistics is correctly computed.
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+    withConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempDir { tempDir =>
         withTempView("pqS") {
           val dir = new File(tempDir, "pqS").getCanonicalPath
@@ -743,7 +743,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SPARK-25278: output metrics are wrong for plans repeated in the query") {
-    withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false") {
+    withConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false") {
       val name = "demo_view"
       withView(name) {
         sql(s"CREATE OR REPLACE VIEW $name AS VALUES 1,2")
@@ -759,7 +759,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("UnionExec.numOutputRows reports total row count under fusion") {
-    withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true") {
+    withConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true") {
       val name = "demo_view"
       withView(name) {
         sql(s"CREATE OR REPLACE VIEW $name AS VALUES 1,2")
@@ -809,7 +809,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       assert(ranges.head.metrics("numOutputRows").value == rangeNumOutputs)
     }
 
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+    withConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       val df = spark.range(0, 3000, 1, 2).toDF().filter($"id" % 3 === 0)
       df.collect()
       checkFilterAndRangeMetrics(df, filterNumOutputs = 1000, rangeNumOutputs = 3000)
@@ -830,7 +830,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SPARK-25497: LIMIT within whole stage codegen should not consume all the inputs") {
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+    withConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
         SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false",
         SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false") {
       // A special query that only has one partition, so there is no shuffle and the entire query
@@ -915,7 +915,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("Add numRows to metric of BroadcastExchangeExec") {
-    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+    withConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
       withTable("t1", "t2") {
         spark.range(2).write.saveAsTable("t1")
         spark.range(2).write.saveAsTable("t2")
@@ -934,7 +934,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SPARK-34399: Add job commit duration metrics for DataWritingCommand") {
-    withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+    withConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
       "org.apache.spark.sql.execution.metric.CustomFileCommitProtocol") {
       withTable("t", "t2") {
         sql("CREATE TABLE t(id STRING) USING PARQUET")
@@ -985,8 +985,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("SPARK-41003: BHJ LeftAnti does not update numOutputRows when codegen is disabled") {
     Seq(true, false).foreach { enableWholeStage =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
-        withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true") {
+      withConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
+        withConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true") {
           withTable("t1", "t2") {
             spark.range(4).write.saveAsTable("t1")
             spark.range(2).write.saveAsTable("t2")

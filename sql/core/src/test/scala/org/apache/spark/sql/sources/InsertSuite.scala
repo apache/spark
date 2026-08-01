@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomS
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -57,7 +57,7 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
   }
 }
 
-class InsertSuite extends DataSourceTest with SharedSparkSession {
+class InsertSuite extends DataSourceTest with SessionQueryTest {
   import testImplicits._
 
   private var path: File = null
@@ -300,7 +300,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     "dynamic partition overwrite.") {
     Seq(PartitionOverwriteMode.DYNAMIC.toString,
         PartitionOverwriteMode.STATIC.toString).foreach { mode =>
-      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode) {
+      withConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode) {
         withTable("insertTable") {
           sql(
             """
@@ -445,10 +445,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("SELECT a, b FROM jt")
       )
     }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
+    withConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
       test
     }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+    withConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       test
     }
   }
@@ -572,7 +572,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-20236: dynamic partition overwrite without catalog table") {
-    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+    withConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       withTempPath { path =>
         Seq((1, 1, 1)).toDF("i", "part1", "part2")
           .write.partitionBy("part1", "part2").parquet(path.getAbsolutePath)
@@ -590,7 +590,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-20236: dynamic partition overwrite") {
-    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+    withConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       withTable("t") {
         sql(
           """
@@ -617,7 +617,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-20236: dynamic partition overwrite with customer partition path") {
-    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+    withConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       withTable("t") {
         sql(
           """
@@ -648,7 +648,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Throw exception on unsafe cast with strict casting policy") {
-    withSQLConf(
+    withConf(
       SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
       withTable("t") {
@@ -695,7 +695,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Throw exception on unsafe cast with ANSI casting policy") {
-    withSQLConf(
+    withConf(
       SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
@@ -738,7 +738,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Allow on writing any numeric value to numeric type with ANSI policy") {
-    withSQLConf(
+    withConf(
       SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
@@ -752,7 +752,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Allow on writing timestamp value to date type with ANSI policy") {
-    withSQLConf(
+    withConf(
       SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
@@ -764,7 +764,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Throw exceptions on inserting out-of-range int value with ANSI casting policy") {
-    withSQLConf(
+    withConf(
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("create table t(b int) using parquet")
@@ -795,7 +795,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Throw exceptions on inserting out-of-range long value with ANSI casting policy") {
-    withSQLConf(
+    withConf(
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("create table t(b long) using parquet")
@@ -826,7 +826,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Throw exceptions on inserting out-of-range decimal value with ANSI casting policy") {
-    withSQLConf(
+    withConf(
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("create table t(b decimal(3,2)) using parquet")
@@ -845,7 +845,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-33354: Throw exceptions on inserting invalid cast with ANSI casting policy") {
-    withSQLConf(
+    withConf(
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("CREATE TABLE t(i int, t timestamp) USING parquet")
@@ -1062,7 +1062,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       (1 to 10).map(i => Row(null, s"str$i"))
     )
 
-    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+    withConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
           sql("INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt")
@@ -1421,7 +1421,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // The default value is disabled per configuration.
     withTable("t") {
-      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+      withConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
         checkError(
           exception = intercept[ParseException] {
             sql("create table t(i boolean, s bigint default 42L) using parquet")
@@ -1449,7 +1449,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // The configuration option to append missing NULL values to the end of the INSERT INTO
     // statement is not enabled.
-    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+    withConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
       withTable("t") {
         sql("create table t(i boolean, s bigint) using parquet")
         checkError(
@@ -1539,7 +1539,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is disabled, and no
     // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
     // values than expected, the INSERT INTO command fails to execute.
-    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+    withConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
       withTable("t") {
         sql("create table t(i boolean, s bigint) using parquet")
         checkError(
@@ -1609,7 +1609,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // When the CASE_SENSITIVE configuration is enabled, then using different cases for the required
     // and provided column names results in an analysis error.
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+    withConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTable("t") {
         sql("create table t(i boolean default true, s bigint default 42) using parquet")
         checkError(
@@ -1797,7 +1797,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // The default value is disabled per configuration.
     withTable("t") {
-      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+      withConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
         sql("create table t(i boolean) using parquet")
         checkError(
           exception = intercept[ParseException] {
@@ -1886,7 +1886,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           "defaultValue" -> "false",
           "actualType" -> "\"BOOLEAN\""))
       // The default value is disabled per configuration.
-      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+      withConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
         val sqlText = "alter table t alter column s set default 41 + 1"
         checkError(
           exception = intercept[ParseException] {
@@ -2048,7 +2048,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         // Run the test twice, once using SQL for the INSERT operations and again using DataFrames.
         for (useDataFrames <- Seq(false, true)) {
           config.sqlConf.map { kv: (String, String) =>
-            withSQLConf(kv) {
+            withConf(kv) {
               // Run the test with the pair of custom SQLConf values.
               runTest(testCase.dataSource, config.copy(useDataFrames = useDataFrames))
             }
@@ -2081,7 +2081,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-40001 JSON DEFAULT columns = JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE off") {
     // Check that the JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE config overrides the
     // JSON_GENERATOR_IGNORE_NULL_FIELDS config.
-    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
+    withConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t") {
         sql("create table t (a int default 42, b int) using json")
@@ -2092,7 +2092,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         checkAnswer(spark.table("t"), Row(null, null))
       }
     }
-    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
+    withConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t") {
         sql("create table t (a int default 42, b int) using json")
@@ -2104,7 +2104,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }
     }
     // SPARK-52772 complex types get same null handling.
-    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
+    withConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t") {
         sql("create table t (a struct<x: long> default struct(42), b int) using json")
@@ -2116,7 +2116,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         checkAnswer(spark.table("t"), Row(null, null))
       }
     }
-    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
+    withConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t") {
         sql("""create table t (
@@ -2133,7 +2133,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }
     }
     // SPARK-52772 Should not pick up JSON DEFAULT from source
-    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
+    withConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t", "u") {
         sql("create table t (a int default 42, b int) using json")
@@ -2150,7 +2150,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         checkAnswer(spark.table("u"), Row(null, null))
       }
     }
-    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
+    withConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "false",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t", "u") {
         sql("create table t (a int default null, b int) using json")
@@ -2168,7 +2168,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }
     }
     // SPARK-52772 Should not pick up JSON DEFAULT from source, even after rewrites
-    withSQLConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
+    withConf(SQLConf.JSON_GENERATOR_WRITE_NULL_IF_WITH_DEFAULT_VALUE.key -> "true",
       SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS.key -> "true") {
       withTable("t", "u") {
         sql("create table t (a int default 42, b int) using json")
@@ -2469,7 +2469,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     Seq("csv", "json", "orc", "parquet").foreach { provider =>
       withTable("t1") {
         // Set the allowlist of table providers to include the new table type for all SQL commands.
-        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> provider) {
+        withConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> provider) {
           // It is OK to create a new table with a column DEFAULT value assigned if the table
           // provider is in the allowlist.
           sql(s"create table t1(a int default 42) using $provider")
@@ -2483,7 +2483,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
         // Now update the allowlist of table providers to prohibit ALTER TABLE ADD COLUMN commands
         // from assigning DEFAULT values.
-        withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$provider*") {
+        withConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$provider*") {
           checkError(
             exception = intercept[AnalysisException] {
               // Try to add another column to the existing table again. This fails because the table
@@ -2544,7 +2544,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("Stop task set if FileAlreadyExistsException was thrown") {
     val tableName = "t"
     Seq(true, false).foreach { fastFail =>
-      withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
+      withConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
         "fs.file.impl.disable.cache" -> "true",
         SQLConf.FASTFAIL_ON_FILEFORMAT_OUTPUT.key -> fastFail.toString) {
         withTable(tableName) {
@@ -2709,7 +2709,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-35106: dynamic partition overwrite with custom partition path") {
-    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+    withConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       withTempPath { path =>
         withTable("t") {
           sql(
@@ -2736,7 +2736,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-35106: Throw exception when rename custom partition paths returns false") {
-    withSQLConf(
+    withConf(
       "fs.file.impl" -> classOf[RenameFromSparkStagingToFinalDirAlwaysTurnsFalseFilesystem].getName,
       "fs.file.impl.disable.cache" -> "true") {
       withTempPath { path =>
@@ -2760,7 +2760,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-35106: Throw exception when rename dynamic partition paths returns false") {
-    withSQLConf(
+    withConf(
       "fs.file.impl" -> classOf[RenameFromSparkStagingToFinalDirAlwaysTurnsFalseFilesystem].getName,
       "fs.file.impl.disable.cache" -> "true",
       SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
@@ -2809,7 +2809,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-37294: insert ANSI intervals into a table partitioned by the interval columns") {
     val tbl = "interval_table"
     Seq(PartitionOverwriteMode.DYNAMIC, PartitionOverwriteMode.STATIC).foreach { mode =>
-      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode.toString) {
+      withConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode.toString) {
         withTable(tbl) {
           sql(
             s"""
@@ -2889,7 +2889,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-55716: V1 INSERT rejects null into NOT NULL column for file sources") {
     Seq("parquet", "orc", "json").foreach { format =>
-      withSQLConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
+      withConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
         withTable("t") {
           sql(s"CREATE TABLE t(i INT NOT NULL, s STRING NOT NULL) USING $format")
           // V1 DataSource writes now enforce NOT NULL constraints via AssertNotNull
@@ -2912,7 +2912,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-55716: V1 INSERT NOT NULL enforcement respects storeAssignmentPolicy") {
     Seq("parquet", "orc").foreach { format =>
       // ANSI mode (default): rejects null
-      withSQLConf(
+      withConf(
         SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true",
         SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
         withTable("t") {
@@ -2924,7 +2924,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
       }
       // STRICT mode: also rejects null (fails at analysis with type mismatch)
-      withSQLConf(
+      withConf(
         SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true",
         SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
         withTable("t") {
@@ -2935,7 +2935,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
       }
       // LEGACY mode: allows null (no AssertNotNull injected)
-      withSQLConf(
+      withConf(
         SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString) {
         withTable("t") {
           sql(s"CREATE TABLE t(i INT NOT NULL) USING $format")
@@ -2944,7 +2944,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
       }
       // Legacy config: allows null even in ANSI mode
-      withSQLConf(
+      withConf(
         SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "false") {
         withTable("t") {
           sql(s"CREATE TABLE t(i INT NOT NULL) USING $format")
@@ -2957,7 +2957,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-55716: V1 INSERT rejects null with V2 file source path") {
     Seq("parquet", "orc").foreach { format =>
-      withSQLConf(
+      withConf(
         SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true",
         SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         withTable("t") {
@@ -2973,7 +2973,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-55716: V1 INSERT rejects null array element for NOT NULL element type") {
     Seq("parquet", "orc").foreach { format =>
-      withSQLConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
+      withConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
       withTable("t") {
         val schema = new StructType()
           .add("a", ArrayType(IntegerType, containsNull = false))
@@ -2999,7 +2999,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-55716: V1 INSERT rejects null struct field for NOT NULL field") {
     Seq("parquet", "orc").foreach { format =>
-      withSQLConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
+      withConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
       withTable("t") {
         val schema = new StructType()
           .add("s", new StructType()
@@ -3027,7 +3027,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-55716: V1 INSERT rejects null map value for NOT NULL value type") {
     Seq("parquet", "orc").foreach { format =>
-      withSQLConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
+      withConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL.key -> "true") {
       withTable("t") {
         val schema = new StructType()
           .add("m", MapType(StringType, IntegerType, valueContainsNull = false))
@@ -3091,7 +3091,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-56919: INSERT OVERWRITE should not lose table path when AQE fails") {
-    withSQLConf(
+    withConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true",
       SQLConf.PLANNED_WRITE_ENABLED.key -> "false") {

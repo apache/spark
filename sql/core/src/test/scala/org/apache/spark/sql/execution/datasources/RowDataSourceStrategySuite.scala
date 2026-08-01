@@ -22,10 +22,10 @@ import java.util.Properties
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.util.Utils
 
-class RowDataSourceStrategySuite extends SharedSparkSession with BeforeAndAfter {
+class RowDataSourceStrategySuite extends SessionQueryTest with BeforeAndAfter {
 
   val url = "jdbc:h2:mem:testdb0"
   val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"

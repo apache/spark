@@ -37,11 +37,11 @@ import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
 // writer abstractions. Revisit.
-class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSession {
+class ParquetEncodingSuite extends ParquetCompatibilityTest with SessionQueryTest {
   import testImplicits._
 
   val ROW = ((1).toByte, 2, 3L, "abc", Period.of(1, 1, 0), Duration.ofMillis(100), true)
@@ -121,7 +121,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
   }
 
   test("Read row group containing both dictionary and plain encoded pages") {
-    withSQLConf(ParquetOutputFormat.DICTIONARY_PAGE_SIZE -> "2048",
+    withConf(ParquetOutputFormat.DICTIONARY_PAGE_SIZE -> "2048",
       ParquetOutputFormat.PAGE_SIZE -> "4096") {
       withTempPath { dir =>
         // In order to explicitly test for SPARK-14217, we set the parquet dictionary and page size
@@ -156,7 +156,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
     val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
     withMemoryModes { offHeapMode =>
-      withSQLConf(
+      withConf(
         SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapMode,
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
         ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
@@ -213,7 +213,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
     )
 
     val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
-    withSQLConf(
+    withConf(
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
       ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
       withTempPath { dir =>
@@ -248,7 +248,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
     withTempPath { dir =>
       val path = s"${dir.getCanonicalPath}/test.parquet"
       // Session sets INT96, but the per-write option overrides to TIMESTAMP_MICROS.
-      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "INT96") {
+      withConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "INT96") {
         spark.sql("SELECT TIMESTAMP '2024-01-01 12:00:00' AS ts")
           .write
           .option(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, "TIMESTAMP_MICROS")
@@ -277,7 +277,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
     val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
     withMemoryModes { offHeapMode =>
-      withSQLConf(
+      withConf(
         SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapMode,
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
         ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
@@ -365,7 +365,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
     val schema = MessageTypeParser.parseMessageType(schemaStr)
 
     withMemoryModes { offHeapMode =>
-      withSQLConf(
+      withConf(
         SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapMode,
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
         withTempDir { dir =>
@@ -470,7 +470,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
     val schema = MessageTypeParser.parseMessageType(schemaStr)
 
     withMemoryModes { offHeapMode =>
-      withSQLConf(
+      withConf(
         SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapMode,
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
         withTempDir { dir =>

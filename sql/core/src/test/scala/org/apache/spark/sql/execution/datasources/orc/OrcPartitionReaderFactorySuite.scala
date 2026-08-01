@@ -25,11 +25,11 @@ import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcPartitionReaderFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.EqualTo
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
-class OrcPartitionReaderFactorySuite extends OrcTest with SharedSparkSession {
+class OrcPartitionReaderFactorySuite extends OrcTest with SessionQueryTest {
 
   import testImplicits._
 
@@ -43,7 +43,7 @@ class OrcPartitionReaderFactorySuite extends OrcTest with SharedSparkSession {
       val orcFile = dir.listFiles(_.getName.endsWith(".orc")).headOption
         .getOrElse(fail("No ORC file written"))
 
-      withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         val sqlConf = spark.sessionState.conf
         val hadoopConf = spark.sessionState.newHadoopConf()
         // Route file I/O through DebugFilesystem so we can assert no streams are leaked.

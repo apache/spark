@@ -19,9 +19,9 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{SparkSessionBuilder, StaticProcedureSuiteBase}
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class StaticProcedureSuite extends SharedSparkSession with StaticProcedureSuiteBase {
+class StaticProcedureSuite extends SessionQueryTest with StaticProcedureSuiteBase {
 
   override protected def configure(builder: SparkSessionBuilder): builder.type = {
     builder.config(s"spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)

@@ -18,12 +18,12 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.{AnalysisException, SQLContext}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 
 
 // please note that the META-INF/services had to be modified for the test directory for this to work
-class DDLSourceLoadSuite extends DataSourceTest with SharedSparkSession {
+class DDLSourceLoadSuite extends DataSourceTest with SessionQueryTest {
 
   test("data sources with the same name - internal data sources") {
     checkError(

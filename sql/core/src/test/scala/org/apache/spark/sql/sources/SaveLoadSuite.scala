@@ -25,11 +25,11 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class SaveLoadSuite extends DataSourceTest with SharedSparkSession with BeforeAndAfter {
+class SaveLoadSuite extends DataSourceTest with SessionQueryTest with BeforeAndAfter {
   import testImplicits._
 
   private var originalDefaultSource: String = null
