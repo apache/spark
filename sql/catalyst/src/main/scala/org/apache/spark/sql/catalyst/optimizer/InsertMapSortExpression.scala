@@ -37,8 +37,13 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
  * SELECT _groupingmapsort as map_column, COUNT(*) FROM (
  *   SELECT map_sort(map_column) as _groupingmapsort FROM TABLE
  * ) GROUP BY _groupingmapsort
+ *
+ * SELECT COUNT(DISTINCT map_column) FROM TABLE =>
+ * SELECT COUNT(DISTINCT _distinctmapsort) FROM (
+ *   SELECT map_sort(map_column) as _distinctmapsort FROM TABLE
+ * )
  */
-object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
+object InsertMapSortInAggregateExpressions extends Rule[LogicalPlan] {
   import InsertMapSortExpression._
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -49,12 +54,9 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
       conf.getConf(SQLConf.INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED)
     val shouldRewrite = plan.exists {
       case agg: Aggregate =>
-        val distinctExpressions = if (normalizeDistinctAggregates) {
-          distinctAggregateChildren(agg.aggregateExpressions)
-        } else {
-          Seq.empty
-        }
-        (agg.groupingExpressions ++ distinctExpressions).exists(mapTypeExistsRecursively)
+        agg.groupingExpressions.exists(mapTypeExistsRecursively) ||
+          (normalizeDistinctAggregates &&
+            distinctAggregateChildren(agg.aggregateExpressions).exists(mapTypeExistsRecursively))
       case _ => false
     }
     if (!shouldRewrite) {
@@ -72,12 +74,15 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
         if (!expressionsToNormalize.exists(mapTypeExistsRecursively)) {
           agg -> Nil
         } else {
-          val groupingMapSortAliases = insertMapSortInExpressions(groupingExprs)
-          val distinctExpressionAliases = rawDistinctExpressionAliases(distinctExpressions)
+          val groupingMapSortAliases = insertMapSortInExpressions(
+            expressions = groupingExprs,
+            aliasName = "_groupingmapsort")
+          val distinctInputAliases = createDistinctInputAliases(distinctExpressions)
           val distinctMapSortAliases = insertMapSortInExpressions(
-            distinctExpressions,
-            groupingMapSortAliases,
-            distinctExpressionAliases)
+            expressions = distinctExpressions,
+            aliasName = "_distinctmapsort",
+            reusableAliases = groupingMapSortAliases,
+            inputAliases = distinctInputAliases)
           val newGroupingKeys = groupingExprs.map { expr =>
             groupingMapSortAliases.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
           }
@@ -89,7 +94,9 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
               // This must be top-down so distinct arguments are normalized before their children.
               // Continuing downward also substitutes grouping aliases in other arguments.
               other.transformDown {
-                case ae: AggregateExpression if ae.isDistinct =>
+                case ae: AggregateExpression
+                    if ae.isDistinct &&
+                      !EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction) =>
                   ae.copy(aggregateFunction = ae.aggregateFunction.withNewChildren(
                     ae.aggregateFunction.children.map { child =>
                       distinctMapSortAliases.get(child.canonicalized)
@@ -99,8 +106,10 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
                   groupingMapSortAliases.get(e.canonicalized).map(_.toAttribute).getOrElse(e)
               }.asInstanceOf[NamedExpression]
           }
-          val distinctInput = if (distinctExpressionAliases.nonEmpty) {
-            Project(child.output ++ distinctExpressionAliases.values, child)
+          val distinctInput = if (distinctInputAliases.nonEmpty) {
+            // Project complex inputs once because recursive normalization can reference them
+            // repeatedly.
+            Project(child.output ++ distinctInputAliases.values, child)
           } else {
             child
           }
@@ -117,13 +126,14 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
       aggregateExpressions: Seq[NamedExpression]): Seq[Expression] = {
     aggregateExpressions
       .flatMap(_.collect {
-        case ae: AggregateExpression if ae.isDistinct => ae
+        case ae: AggregateExpression
+            if ae.isDistinct && !EliminateDistinct.isDuplicateAgnostic(ae.aggregateFunction) => ae
       })
       .flatMap(_.aggregateFunction.children)
   }
 
-  private def rawDistinctExpressionAliases(
-      expressions: Seq[Expression]): Map[Expression, NamedExpression] = {
+  private def createDistinctInputAliases(
+      expressions: Seq[Expression]): VectorMap[Expression, NamedExpression] = {
     val aliases = new mutable.LinkedHashMap[Expression, NamedExpression]
     expressions.foreach {
       case _: Attribute =>
@@ -138,18 +148,19 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
 
   private def insertMapSortInExpressions(
       expressions: Seq[Expression],
-      existingAliases: Map[Expression, NamedExpression] = Map.empty,
-      expressionAliases: Map[Expression, NamedExpression] = Map.empty)
-    : Map[Expression, NamedExpression] = {
+      aliasName: String,
+      reusableAliases: Map[Expression, NamedExpression] = Map.empty,
+      inputAliases: Map[Expression, NamedExpression] = Map.empty)
+    : VectorMap[Expression, NamedExpression] = {
     val aliases = new mutable.LinkedHashMap[Expression, NamedExpression]
     expressions.foreach { expr =>
       val canonicalized = expr.canonicalized
-      val input = expressionAliases.get(canonicalized).map(_.toAttribute).getOrElse(expr)
+      val input = inputAliases.get(canonicalized).map(_.toAttribute).getOrElse(expr)
       val inserted = insertMapSortRecursively(input)
       if (input.ne(inserted)) {
         aliases.getOrElseUpdate(
           canonicalized,
-          existingAliases.getOrElse(canonicalized, Alias(inserted, "_groupingmapsort")()))
+          reusableAliases.getOrElse(canonicalized, Alias(inserted, aliasName)()))
       }
     }
     VectorMap.from(aliases)

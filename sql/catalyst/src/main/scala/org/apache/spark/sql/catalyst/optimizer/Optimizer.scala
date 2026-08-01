@@ -351,10 +351,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       NormalizeFloatingNumbers,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
-      // Put `InsertMapSortInGroupingExpressions` after `PullOutGroupingExpressions`,
+      // Put `InsertMapSortInAggregateExpressions` after `PullOutGroupingExpressions`,
       // so grouping keys are attributes or literals. The rule also projects complex distinct
       // aggregate arguments before inserting `MapSort`.
-      InsertMapSortInGroupingExpressions,
+      InsertMapSortInAggregateExpressions,
       InsertMapSortInRepartitionExpressions,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager),

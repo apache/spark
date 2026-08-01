@@ -13,6 +13,9 @@ SELECT SIZE(COLLECT_LIST(DISTINCT m)) FROM distinct_map_data;
 
 SELECT COLLECT_LIST(DISTINCT m) FROM distinct_map_data;
 
+SELECT map_entries(FIRST(DISTINCT m)), map_entries(LAST(DISTINCT m)), COUNT(DISTINCT m)
+FROM VALUES (map('b', 2, 'a', 1)) AS single_map_data(m);
+
 SELECT COUNT(DISTINCT m, id) FROM distinct_map_data;
 
 SELECT COUNT(DISTINCT m), COUNT(DISTINCT id) FROM distinct_map_data;
@@ -21,6 +24,11 @@ SELECT g, COUNT(DISTINCT m)
 FROM distinct_map_data
 GROUP BY g
 ORDER BY g;
+
+SELECT m, COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m)
+FROM distinct_map_data
+GROUP BY m
+ORDER BY element_at(m, 'a');
 
 SELECT COUNT(DISTINCT m) FILTER (WHERE should_keep) FROM distinct_map_data;
 

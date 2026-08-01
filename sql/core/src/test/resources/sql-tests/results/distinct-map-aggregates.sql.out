@@ -37,6 +37,15 @@ struct<collect_list(DISTINCT m):array<map<string,int>>>
 
 
 -- !query
+SELECT map_entries(FIRST(DISTINCT m)), map_entries(LAST(DISTINCT m)), COUNT(DISTINCT m)
+FROM VALUES (map('b', 2, 'a', 1)) AS single_map_data(m)
+-- !query schema
+struct<map_entries(first(DISTINCT m)):array<struct<key:string,value:int>>,map_entries(last(DISTINCT m)):array<struct<key:string,value:int>>,count(DISTINCT m):bigint>
+-- !query output
+[{"key":"b","value":2},{"key":"a","value":1}]	[{"key":"b","value":2},{"key":"a","value":1}]	1
+
+
+-- !query
 SELECT COUNT(DISTINCT m, id) FROM distinct_map_data
 -- !query schema
 struct<count(DISTINCT m, id):bigint>
@@ -62,6 +71,18 @@ struct<g:int,count(DISTINCT m):bigint>
 -- !query output
 1	2
 2	1
+
+
+-- !query
+SELECT m, COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m)
+FROM distinct_map_data
+GROUP BY m
+ORDER BY element_at(m, 'a')
+-- !query schema
+struct<m:map<string,int>,count(DISTINCT m):bigint,collect_list(DISTINCT m):array<map<string,int>>>
+-- !query output
+{"a":1,"b":2}	1	[{"a":1,"b":2}]
+{"a":3}	1	[{"a":3}]
 
 
 -- !query

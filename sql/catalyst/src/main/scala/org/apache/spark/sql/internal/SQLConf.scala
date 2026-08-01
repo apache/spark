@@ -3154,7 +3154,7 @@ object SQLConf {
         "When false, MapSort is not added specifically for distinct aggregate arguments; " +
         "grouping expression normalization is unchanged.")
       .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 

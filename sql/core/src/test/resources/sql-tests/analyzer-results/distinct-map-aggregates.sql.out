@@ -55,6 +55,15 @@ Aggregate [collect_list(distinct m#x, 0, 0, true) AS collect_list(DISTINCT m)#x]
 
 
 -- !query
+SELECT map_entries(FIRST(DISTINCT m)), map_entries(LAST(DISTINCT m)), COUNT(DISTINCT m)
+FROM VALUES (map('b', 2, 'a', 1)) AS single_map_data(m)
+-- !query analysis
+Aggregate [map_entries(first(distinct m#x, false)) AS map_entries(first(DISTINCT m))#x, map_entries(last(distinct m#x, false)) AS map_entries(last(DISTINCT m))#x, count(distinct m#x) AS count(DISTINCT m)#xL]
++- SubqueryAlias single_map_data
+   +- LocalRelation [m#x]
+
+
+-- !query
 SELECT COUNT(DISTINCT m, id) FROM distinct_map_data
 -- !query analysis
 Aggregate [count(distinct m#x, id#x) AS count(DISTINCT m, id)#xL]
@@ -86,6 +95,22 @@ ORDER BY g
 -- !query analysis
 Sort [g#x ASC NULLS FIRST], true
 +- Aggregate [g#x], [g#x, count(distinct m#x) AS count(DISTINCT m)#xL]
+   +- SubqueryAlias distinct_map_data
+      +- View (`distinct_map_data`, [g#x, m#x, id#x, should_keep#x])
+         +- Project [cast(g#x as int) AS g#x, cast(m#x as map<string,int>) AS m#x, cast(id#x as int) AS id#x, cast(should_keep#x as boolean) AS should_keep#x]
+            +- Project [g#x, m#x, id#x, should_keep#x]
+               +- SubqueryAlias distinct_map_data
+                  +- LocalRelation [g#x, m#x, id#x, should_keep#x]
+
+
+-- !query
+SELECT m, COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m)
+FROM distinct_map_data
+GROUP BY m
+ORDER BY element_at(m, 'a')
+-- !query analysis
+Sort [element_at(m#x, a, None, true) ASC NULLS FIRST], true
++- Aggregate [m#x], [m#x, count(distinct m#x) AS count(DISTINCT m)#xL, collect_list(distinct m#x, 0, 0, true) AS collect_list(DISTINCT m)#x]
    +- SubqueryAlias distinct_map_data
       +- View (`distinct_map_data`, [g#x, m#x, id#x, should_keep#x])
          +- Project [cast(g#x as int) AS g#x, cast(m#x as map<string,int>) AS m#x, cast(id#x as int) AS id#x, cast(should_keep#x as boolean) AS should_keep#x]

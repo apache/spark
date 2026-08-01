@@ -24,6 +24,7 @@ license: |
 
 ## Upgrading from Spark SQL 4.2 to 4.3
 
+- Since Spark 4.3, map-typed arguments to distinct aggregates are normalized by key order. As a result, `COUNT(DISTINCT m)` treats maps with the same entries in different orders as the same value, and aggregates that return distinct input values, such as `COLLECT_LIST(DISTINCT m)`, return maps sorted by key. To restore the previous behavior, set `spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled` to `false`.
 - Since Spark 4.3, [ASOF JOIN](sql-ref-syntax-qry-select-asof-join.html) is available as an opt-in SQL feature gated by `spark.sql.join.asofJoin.enabled` (default `false`). When disabled, `ASOF JOIN` fails at parse time with `UNSUPPORTED_FEATURE.ASOF_JOIN`.
 - Since Spark 4.3, zero-length files are skipped during Parquet schema inference instead of failing with a `FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER` error.
 - Since Spark 4.3, metrics produced by `Dataset.observe` include values from only the last successful task attempts instead of aggregating values from all attempts. To restore the previous behavior, set `spark.sql.legacy.observeMetricsAggregateAllAttempts` to `true`.
