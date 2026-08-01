@@ -404,7 +404,9 @@ public final class XXH3 {
     return hash128Hex(input, 0L);
   }
 
-  /** Returns the XXH3 128-bit hash as a 32-character lowercase hex string (canonical big-endian). */
+  /**
+   * Returns the XXH3 128-bit hash as a 32-character lowercase hex string (canonical big-endian).
+   */
   public static UTF8String hash128Hex(byte[] input, long seed) {
     long[] h = hash128(input, seed);
     byte[] out = new byte[16];
