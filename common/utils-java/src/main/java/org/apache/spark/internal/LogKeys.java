@@ -366,6 +366,7 @@ public enum LogKeys implements LogKey {
   LOG_TYPE,
   LOSSES,
   LOWER_BOUND,
+  MAINTENANCE_TASK_TYPE,
   MALFORMATTED_STRING,
   MAP_ID,
   MASTER_URL,
