@@ -21,7 +21,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
-import org.apache.spark.sql.connector.catalog.InMemoryScanMergingPartitionFilterCatalog
+import org.apache.spark.sql.connector.catalog.{InMemoryScanMergingPartitionFilterCatalog, InMemoryScanMergingReportingCatalog}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -44,11 +44,14 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
   before {
     spark.conf.set("spark.sql.catalog.scanmerge",
       classOf[InMemoryScanMergingPartitionFilterCatalog].getName)
+    spark.conf.set("spark.sql.catalog.scanmergereport",
+      classOf[InMemoryScanMergingReportingCatalog].getName)
   }
 
   after {
     spark.sessionState.catalogManager.reset()
     spark.conf.unset("spark.sql.catalog.scanmerge")
+    spark.conf.unset("spark.sql.catalog.scanmergereport")
   }
 
   private def v2Scans(df: DataFrame): Seq[DataSourceV2ScanRelation] =
@@ -165,6 +168,41 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
           s"the two scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
         assert(scans.head.output.map(_.name).toSet == Set("c1", "c2"),
           s"the merged scan should read the union of both columns; got ${scans.head.output}")
+        assertNoPlaceholderRelation(df)
+      }
+    }
+  }
+
+  test("SPARK-40259: a scan merge preserves the sources' reported key-grouped partitioning") {
+    val t = "scanmergereport.t2"
+    withTable(t) {
+      withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+        sql(s"CREATE TABLE $t (c1 int, c2 int) USING $v2Source PARTITIONED BY (c1)")
+        sql(s"INSERT INTO $t VALUES (1, 10), (2, 20), (3, 30)")
+
+        // Both scalar subqueries read the partition column c1, so each scan reports
+        // KeyGroupedPartitioning on c1; they differ in the extra column read, so PlanMerger fuses
+        // them into one scan reading {c1, c2}. c1 survives in the union, so the merged scan
+        // re-derives the same partitioning -- not a degradation, so the merge proceeds by default.
+        val df = sql(
+          s"""
+             |SELECT
+             |  (SELECT max(c1) FROM $t) AS m1,
+             |  (SELECT max(c1 + c2) FROM $t) AS m2
+             |""".stripMargin)
+        checkAnswer(df, Row(3, 33))
+
+        val scans = v2Scans(df)
+        assert(scans.map(_.canonicalized).distinct.length == 1,
+          s"the two scans should be fused into one:\n${df.queryExecution.optimizedPlan}")
+        val scan = scans.head
+        assert(scan.output.map(_.name).toSet == Set("c1", "c2"),
+          s"the merged scan should read the union of both columns; got ${scan.output}")
+        assert(scan.keyGroupedPartitioning.exists(_.nonEmpty),
+          s"the merged scan should preserve the reported key-grouped partitioning; " +
+            s"got ${scan.keyGroupedPartitioning}")
+        assert(scan.keyGroupedPartitioning.get.flatMap(_.references).exists(_.name == "c1"),
+          s"the preserved partitioning should be on c1; got ${scan.keyGroupedPartitioning}")
         assertNoPlaceholderRelation(df)
       }
     }
