@@ -1,0 +1,71 @@
+<!--
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+
+ Copyright 2026 Jonathan Combs
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="titleDesc">
+  <title>Combs Contracting LLC - Starry Night Logo</title>
+  <desc>Abstract starry night company logo for Combs Contracting LLC with Apache License attribution.</desc>
+  <defs>
+    <linearGradient id="skyGradient" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0b1d4a"/>
+      <stop offset="50%" stop-color="#162a63"/>
+      <stop offset="100%" stop-color="#1f3b7e"/>
+    </linearGradient>
+    <radialGradient id="starGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f8f3d4" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#f8f3d4" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#skyGradient)"/>
+  <g opacity="0.95">
+    <ellipse cx="300" cy="680" rx="470" ry="120" fill="#14294c"/>
+    <path d="M1200 620 C920 550 720 680 560 640 C470 610 380 700 260 650 C140 600 60 680 0 640 L0 800 L1200 800 Z" fill="#0f1e3a"/>
+    <path d="M1200 680 C940 620 800 740 620 700 C520 680 440 760 320 730 C220 705 140 780 0 740 L0 800 L1200 800 Z" fill="#10264a"/>
+  </g>
+  <g>
+    <circle cx="950" cy="140" r="22" fill="#f5e48b"/>
+    <circle cx="950" cy="140" r="44" fill="url(#starGlow)"/>
+    <circle cx="860" cy="90" r="8" fill="#ffffff" opacity="0.9"/>
+    <circle cx="1040" cy="90" r="10" fill="#ffffff" opacity="0.9"/>
+    <circle cx="760" cy="160" r="6" fill="#b5c7fd" opacity="0.8"/>
+    <circle cx="620" cy="100" r="7" fill="#cbe3ff" opacity="0.85"/>
+    <circle cx="520" cy="200" r="5" fill="#9db8ff" opacity="0.85"/>
+    <circle cx="300" cy="120" r="8" fill="#ffffff" opacity="0.9"/>
+    <circle cx="160" cy="200" r="5" fill="#d9e9ff" opacity="0.8"/>
+    <circle cx="1080" cy="240" r="6" fill="#fff7e7" opacity="0.9"/>
+    <circle cx="720" cy="260" r="7" fill="#c5d2ff" opacity="0.8"/>
+  </g>
+  <g>
+    <path d="M120 520 C200 460 340 470 420 420 C500 370 580 420 660 390 C740 360 820 420 900 380 C980 340 1080 430 1200 380 L1200 800 L0 800 Z" fill="#1f3d80" opacity="0.7"/>
+    <path d="M0 580 C120 540 260 590 340 560 C420 530 510 620 620 560 C720 510 820 620 920 570 C1020 520 1140 620 1200 590 L1200 800 L0 800 Z" fill="#2f4b90" opacity="0.8"/>
+  </g>
+  <g>
+    <path d="M240 620 C340 560 430 560 550 520 C630 495 690 520 780 490 C870 460 980 520 1080 480" stroke="#f8f3d4" stroke-width="8" fill="none" opacity="0.5" stroke-linecap="round"/>
+    <path d="M280 660 C360 620 470 640 560 610 C640 585 720 620 820 590 C900 565 980 610 1080 580" stroke="#b5c7fd" stroke-width="6" fill="none" opacity="0.5" stroke-linecap="round"/>
+  </g>
+  <text x="50%" y="60%" text-anchor="middle" fill="#ffffff" font-family="Verdana, Geneva, sans-serif" font-size="64" font-weight="700" letter-spacing="2">
+    Combs Contracting LLC
+  </text>
+  <text x="50%" y="68%" text-anchor="middle" fill="#c7d9ff" font-family="Verdana, Geneva, sans-serif" font-size="28" letter-spacing="1">
+    Building brighter spaces under a starry night.
+  </text>
+  <g transform="translate(80, 80)">
+    <rect x="0" y="0" width="300" height="120" rx="24" fill="#153268" opacity="0.88"/>
+    <text x="150" y="45" text-anchor="middle" fill="#f9f6e6" font-family="Tahoma, Geneva, sans-serif" font-size="22" font-weight="700">Combs Contracting</text>
+    <text x="150" y="80" text-anchor="middle" fill="#d1e0ff" font-family="Tahoma, Geneva, sans-serif" font-size="16">Licensed Apache style design by Jonathan Combs</text>
+  </g>
+  <text x="60" y="780" fill="#a8b8e0" font-family="Arial, Helvetica, sans-serif" font-size="14">
+    Licensed under Apache License 2.0 • Copyright 2026 Jonathan Combs
+  </text>
+</svg>
