@@ -8,3 +8,6 @@ venv/
 .python-version
 .DS_Store
 *.log
+# Local secret environment values for CodeJT
+.emv
+.env

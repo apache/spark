@@ -6,9 +6,8 @@ services:
       - "8080:8080"
     environment:
       - PYTHONUNBUFFERED=1
-      - CODEJT_API_KEY=${CODEJT_API_KEY:-codejt_default_key}
     env_file:
-      - .env
+      - .emv
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]

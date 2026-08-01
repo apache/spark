@@ -39,12 +39,17 @@ docker build -t codejt ./codejt
 5. Run with Docker Compose:
 
 ```bash
+cp codejt/.emv.example codejt/.emv
+# edit codejt/.emv and set CODEJT_API_KEY
+
 docker compose -f codejt/docker-compose.yml up --build
 ```
 
 ## API Authentication
 
 The CodeJT API uses an API key for production requests.
+On startup, the app will load `codejt/.emv` if present, and it also supports the `CODEJT_API_KEY` environment variable.
+For local development, copy `codejt/.emv.example` to `codejt/.emv` and populate the value there.
 Set the key using `CODEJT_API_KEY` before starting the service.
 
 Example request header:
@@ -53,7 +58,7 @@ Example request header:
 X-API-Key: your-secret-key
 ```
 
-If using Docker Compose, place the key in `codejt/.env`.
+If using Docker Compose, place the key in `codejt/.emv`.
 
 ## OpenAPI / Examples
 
@@ -65,7 +70,7 @@ Example: check health
 curl -i http://localhost:8080/
 ```
 
-Example: create a source (replace `<API_KEY>` with the value from `codejt/.env`):
+Example: create a source (replace `<API_KEY>` with the value from `codejt/.emv`):
 
 ```bash
 curl -i -H "X-API-Key: <API_KEY>" -H "Content-Type: application/json" \

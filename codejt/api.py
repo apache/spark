@@ -1,11 +1,13 @@
+import logging
 import os
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Depends, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from uuid import uuid4
 from typing import List
-from codejt.models import SourcePayload, SourceResponse
-from codejt.db import (
+from models import SourcePayload, SourceResponse
+from db import (
     init_db,
     create_source as db_create_source,
     get_source as db_get_source,
@@ -14,6 +16,26 @@ from codejt.db import (
     delete_source as db_delete_source,
 )
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+
+def load_env_file(path: str = ".emv") -> None:
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+load_env_file()
 
 # OpenAPI / docs metadata
 tags_metadata = [
@@ -26,7 +48,9 @@ api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 
 def get_api_key(api_key_header: str | None = Security(api_key_header)):
-    expected_key = os.getenv("CODEJT_API_KEY", "codejt_default_key")
+    expected_key = os.getenv("CODEJT_API_KEY")
+    if expected_key is None:
+        raise HTTPException(status_code=500, detail="CODEJT_API_KEY is not configured")
     if api_key_header == expected_key:
         return api_key_header
     raise HTTPException(status_code=401, detail="Unauthorized")
@@ -53,6 +77,10 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_event():
     init_db()
+    if os.getenv("CODEJT_API_KEY") is None:
+        logger.warning(
+            "CODEJT_API_KEY is not configured. API routes requiring authentication will respond with 500 until it is set."
+        )
 
 
 @app.get("/", tags=["health"], summary="Service health and OpenAPI")
@@ -62,6 +90,7 @@ def root():
         "message": "CodeJT API is running",
         "docs": "/docs",
         "openapi": "/openapi.json",
+        "api_key_configured": bool(os.getenv("CODEJT_API_KEY")),
     }
 
 
