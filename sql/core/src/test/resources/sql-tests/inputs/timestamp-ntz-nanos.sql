@@ -144,11 +144,19 @@ SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ntz(9)>;
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND;
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1 00:04:00.000321' DAY TO SECOND;
 SELECT TIMESTAMP_NTZ '1960-01-02 03:04:05.123456789' + INTERVAL '0 00:00:00.000001' DAY TO SECOND;
--- SPARK-57501: nanos timestamps support only ANSI day-time intervals. A (legacy) calendar interval
--- is rejected by TimestampAddInterval's type check, and a year-month interval has no supported
--- operator overload.
-SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0);
+-- SPARK-57825: TIMESTAMP_NTZ(p) +/- ANSI year-month interval keeps the nanos type/precision and
+-- carries the whole fraction (including the sub-microsecond digits) through unchanged; a month
+-- shift never touches the time of day.
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' YEAR;
+-- The interval-first operand order resolves to the same addition.
+SELECT INTERVAL '1' YEAR + TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789';
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH;
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1-2' YEAR TO MONTH;
+-- Jan-31 -> Feb-29 day clamp on a pre-epoch (leap-year) value.
+SELECT TIMESTAMP_NTZ '1960-01-31 03:04:05.123456789' + INTERVAL '1' MONTH;
+-- SPARK-57501, SPARK-57825: nanos timestamps support ANSI day-time and year-month intervals; the
+-- legacy calendar interval is still rejected by TimestampAddInterval's type check.
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0);
 
 -- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_NTZ. The aggregate preserves the
 -- nanosecond type and orders by the sub-microsecond remainder (two values share the same
@@ -268,6 +276,34 @@ SELECT v, lead(v) OVER (ORDER BY v) AS next_v FROM (
     SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900' AS v
     UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'
     UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') ORDER BY v;
+
+-- SPARK-57811: a string operand is coerced to the nanosecond timestamp type in comparisons and
+-- predicates (not truncated to micros, not promoted to string). The 9th fractional digit is
+-- significant, so an off-by-one-nanosecond literal does not compare equal.
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c = '2020-01-02 03:04:05.123456788',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') AS t(c);
+
+-- BETWEEN over nanosecond timestamps: only the value inside the sub-microsecond range qualifies.
+SELECT c FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-02 03:04:05.000000001'),
+  (TIMESTAMP_NTZ '2020-01-02 03:04:05.000000009') AS t(c)
+  WHERE c BETWEEN '2020-01-02 03:04:05.000000001' AND '2020-01-02 03:04:05.000000005';
+
+-- SPARK-57811: TIMESTAMP_NTZ(p) mirrors micros TimestampNTZType under legacy castDatetimeToString.
+-- Micros TimestampNTZType has no arm in findCommonTypeForBinaryComparison, so it stays config-blind
+-- and casts the string to the timestamp type even under the legacy flag; nanos NTZ has no arm
+-- either and does the same. (Only the LTZ family, like micros TimestampType, promotes the range
+-- comparison to string under this flag -- see timestamp-ltz-nanos.sql.) So with both flags set the
+-- NTZ range comparison still casts the string to the nanos type, identical to the default config.
+SET spark.sql.ansi.enabled=false;
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=true;
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') AS t(c);
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=false;
+SET spark.sql.ansi.enabled=true;
 
 -- SPARK-57814: unix_seconds / unix_millis / unix_micros over nanosecond-precision values. The result
 -- is a whole BIGINT count of the unit; sub-unit digits (incl. the sub-microsecond remainder) are

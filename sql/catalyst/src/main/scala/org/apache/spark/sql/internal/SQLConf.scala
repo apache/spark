@@ -3100,13 +3100,28 @@ object SQLConf {
   val NUM_STATE_STORE_MAINTENANCE_THREADS =
     buildConf("spark.sql.streaming.stateStore.numStateStoreMaintenanceThreads")
       .internal()
-      .doc("Number of threads in the thread pool that perform clean up and snapshotting tasks " +
-        "for stateful streaming queries. The default value is the number of cores * 0.25 " +
-        "so that this thread pool doesn't take too many resources " +
-        "away from the query and affect performance.")
+      .doc("Total number of threads split between the snapshot and cleanup " +
+        "maintenance pools for stateful streaming queries. Each pool needs at least " +
+        "1 thread, so the minimum is 2. The default value is the number of " +
+        "cores * 0.25 so that the pools don't take too many resources away from the " +
+        "query and affect performance. Use snapshotToCleanupThreadRatio to " +
+        "configure the split between snapshot and cleanup pools.")
       .intConf
-      .checkValue(_ > 0, "Must be greater than 0")
-      .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 1))
+      .checkValue(_ > 1, "Must be greater than 1")
+      .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 2))
+
+  val STATE_STORE_MAINTENANCE_SNAPSHOT_THREAD_RATIO =
+    buildConf("spark.sql.streaming.stateStore.snapshotToCleanupThreadRatio")
+      .internal()
+      .version("5.0.0")
+      .doc("Ratio of total maintenance threads allocated to the snapshot " +
+        "pool. The remainder goes to the cleanup pool. The snapshot " +
+        "count is rounded to the nearest integer and clamped so each " +
+        "pool gets at least 1 thread and the total is never exceeded.")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doubleConf
+      .checkValue(v => v > 0 && v < 1, "Must be between 0 and 1 (exclusive)")
+      .createWithDefault(0.5)
 
   val STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT =
     buildConf("spark.sql.streaming.stateStore.maintenanceShutdownTimeout")
@@ -7263,6 +7278,21 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val MERGE_SUBPLANS_DSV2_SYMMETRIC_FILTER_PROPAGATION_ENABLED = buildConf(
+    "spark.sql.optimizer.mergeSubplans.filterPropagation.dsv2SymmetricFilterPropagation.enabled")
+    .doc("When true, two DataSource V2 scan subplans that pushed the same strict filters but " +
+      "carry different best-effort (post-scan) filters can merge into one scan even when " +
+      s"${MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key} is false. The strict filters " +
+      "are equal (re-enforced on the rebuilt scan) and the differing filters are pushed only as " +
+      "best-effort row-group/partition pruning (OR-widened), with the enclosing Filter " +
+      "re-checking exactness above the scan. Unlike the general symmetric case, OR-widening " +
+      "cannot change the strict (enforced) row set. Has no effect when " +
+      s"${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
   val MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED =
     buildConf("spark.sql.optimizer.mergeSubplans.filterPropagation.throughJoin.enabled")
       .doc("When set to true, filter attributes can propagate through Join nodes during subplan " +
@@ -8036,6 +8066,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PROTOBUF_DESCRIPTOR_CACHE_SIZE =
+    buildConf("spark.sql.protobuf.descriptorCacheSize")
+      .internal()
+      .doc("Maximum number of entries in the per-JVM cache of parsed Protobuf FileDescriptor " +
+        "graphs built from a binary FileDescriptorSet, used by from_protobuf/to_protobuf. This " +
+        "knob only bounds memory (each graph can be hundreds of KB). Setting it to 0 disables " +
+        "the cache entirely and acts as an immediate kill-switch; a non-zero size bound is fixed " +
+        "when the cache is first built for a JVM, so changing it has no effect on an " +
+        "already-built cache.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "descriptorCacheSize must be non-negative; 0 disables the cache")
+      .createWithDefault(8)
+
   val LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER =
     buildConf("spark.sql.listagg.allowDistinctCastWithOrder.enabled")
       .internal()
@@ -8249,6 +8294,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
 
   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
+
+  def snapshotToCleanupThreadRatio: Double =
+    getConf(STATE_STORE_MAINTENANCE_SNAPSHOT_THREAD_RATIO)
 
   def numStateStoreInstanceMetricsToReport: Int =
     getConf(STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
