@@ -172,6 +172,16 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
     assert(df.filter("f <= 10.0").count() == 9)
   }
 
+  test("SPARK-58482: cached table pruning should retain NaN values") {
+    val df = Seq((1, 1.5d), (2, Double.NaN), (3, 0.0d)).toDF("id", "v").cache()
+    try {
+      df.count()
+      checkAnswer(df.filter($"v" === Double.NaN).select("id"), Row(2))
+    } finally {
+      df.unpersist(blocking = true)
+    }
+  }
+
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
     val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(new TestCachedBatchSerializer(useCompression = true, 5),
