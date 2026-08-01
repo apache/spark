@@ -1555,11 +1555,7 @@ class DataFrameWriter(OptionUtils):
         """
         from pyspark.sql.classic.column import _to_seq
 
-        if (
-            len(cols) == 1
-            and not isinstance(cols[0], str)
-            and isinstance(cols[0], Sequence)
-        ):
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
             cols = tuple(cols[0])
         self._jwrite = self._jwrite.partitionBy(
             _to_seq(self._spark._sc, cast(Iterable["ColumnOrName"], cols))
@@ -1674,9 +1670,7 @@ class DataFrameWriter(OptionUtils):
     @overload
     def sortBy(self, col: Sequence[str]) -> "DataFrameWriter": ...
 
-    def sortBy(
-        self, col: Union[str, Sequence[str]], *cols: Optional[str]
-    ) -> "DataFrameWriter":
+    def sortBy(self, col: Union[str, Sequence[str]], *cols: Optional[str]) -> "DataFrameWriter":
         """Sorts the output in each bucket by the given columns on the file system.
 
         .. versionadded:: 2.3.0
@@ -1780,11 +1774,7 @@ class DataFrameWriter(OptionUtils):
         """
         from pyspark.sql.classic.column import _to_seq
 
-        if (
-            len(cols) == 1
-            and not isinstance(cols[0], str)
-            and isinstance(cols[0], Sequence)
-        ):
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
             cols = tuple(cols[0])
         assert len(cols) > 0, "clusterBy needs one or more clustering columns."
         self._jwrite = self._jwrite.clusterBy(cols[0], _to_seq(self._spark._sc, cols[1:]))

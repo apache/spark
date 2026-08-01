@@ -511,11 +511,7 @@ class DataStreamWriter:
     def partitionBy(self, __cols: Sequence[str]) -> "DataStreamWriter": ...
 
     def partitionBy(self, *cols: Union[str, Sequence[str]]) -> "DataStreamWriter":
-        if (
-            len(cols) == 1
-            and not isinstance(cols[0], str)
-            and isinstance(cols[0], Sequence)
-        ):
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
             cols = tuple(cols[0])
         # Clear any existing columns (if any).
         while len(self._write_proto.partitioning_column_names) > 0:
@@ -532,11 +528,7 @@ class DataStreamWriter:
     def clusterBy(self, __cols: Sequence[str]) -> "DataStreamWriter": ...
 
     def clusterBy(self, *cols: Union[str, Sequence[str]]) -> "DataStreamWriter":
-        if (
-            len(cols) == 1
-            and not isinstance(cols[0], str)
-            and isinstance(cols[0], Sequence)
-        ):
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
             cols = tuple(cols[0])
         # Clear any existing columns (if any).
         while len(self._write_proto.clustering_column_names) > 0:

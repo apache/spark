@@ -622,11 +622,7 @@ class DataFrameWriter(OptionUtils):
     def partitionBy(self, __cols: Sequence[str]) -> "DataFrameWriter": ...
 
     def partitionBy(self, *cols: Union[str, Sequence[str]]) -> "DataFrameWriter":
-        if (
-            len(cols) == 1
-            and not isinstance(cols[0], str)
-            and isinstance(cols[0], Sequence)
-        ):
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
             cols = tuple(cols[0])
 
         self._write.partitioning_cols = cast(List[str], cols)
@@ -696,9 +692,7 @@ class DataFrameWriter(OptionUtils):
     @overload
     def sortBy(self, col: Sequence[str]) -> "DataFrameWriter": ...
 
-    def sortBy(
-        self, col: Union[str, Sequence[str]], *cols: Optional[str]
-    ) -> "DataFrameWriter":
+    def sortBy(self, col: Union[str, Sequence[str]], *cols: Optional[str]) -> "DataFrameWriter":
         if not isinstance(col, str) and isinstance(col, Sequence):
             if cols:
                 raise PySparkValueError(
@@ -742,11 +736,7 @@ class DataFrameWriter(OptionUtils):
     def clusterBy(self, __cols: Sequence[str]) -> "DataFrameWriter": ...
 
     def clusterBy(self, *cols: Union[str, Sequence[str]]) -> "DataFrameWriter":
-        if (
-            len(cols) == 1
-            and not isinstance(cols[0], str)
-            and isinstance(cols[0], Sequence)
-        ):
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
             cols = tuple(cols[0])
         assert len(cols) > 0, "clusterBy needs one or more clustering columns."
         self._write.clustering_cols = cast(List[str], cols)

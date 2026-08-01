@@ -1240,11 +1240,7 @@ class DataStreamWriter:
         """
         from pyspark.sql.classic.column import _to_seq
 
-        if (
-            len(cols) == 1
-            and not isinstance(cols[0], str)
-            and isinstance(cols[0], Sequence)
-        ):
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
             cols = tuple(cols[0])
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
         return self
@@ -1301,11 +1297,7 @@ class DataStreamWriter:
         """
         from pyspark.sql.classic.column import _to_seq
 
-        if (
-            len(cols) == 1
-            and not isinstance(cols[0], str)
-            and isinstance(cols[0], Sequence)
-        ):
+        if len(cols) == 1 and not isinstance(cols[0], str) and isinstance(cols[0], Sequence):
             cols = tuple(cols[0])
         self._jwrite = self._jwrite.clusterBy(_to_seq(self._spark._sc, cols))
         return self
