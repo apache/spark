@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+echo "CODEJT_API_KEY=supersecretkey" > codejt/.env#!/usr/bin/env bash
 #
 
 # A library to simplify using the SBT launcher from other packages.
