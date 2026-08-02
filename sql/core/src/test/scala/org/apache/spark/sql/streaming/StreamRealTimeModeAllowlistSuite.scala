@@ -131,29 +131,11 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
     }
   }
 
-  // A stateful aggregation is still rejected under RTM because HashAggregateExec is not in the
-  // allowlist, even though the pipelined shuffle and the StateStore operators now are. When RTM
-  // supports aggregation (SPARK-54236), remove this test.
-  test("stateful queries not allowed") {
-    val inputData = LowLatencyMemoryStream[Int](2)
-
-    val df = inputData.toDF()
-      .select(col("value").as("key"))
-      .groupBy(col("key"))
-      .count()
-      .select(concat(col("key"), lit("-"), col("count")))
-
-    val query = runStreamingQuery("stateful_allowlist", df)
-
-    eventually(timeout(60.seconds)) {
-      checkError(
-        exception = query.exception.get.getCause.asInstanceOf[SparkIllegalArgumentException],
-        condition = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
-        parameters = Map(
-          "errorType" -> "operator",
-          "message" -> "org.apache.spark.sql.execution.aggregate.HashAggregateExec is"
-        )
-      )
-    }
-  }
+  // The "stateful queries not allowed" test that used to live here asserted that a streaming
+  // aggregation was rejected, because it planned into the micro-batch aggregation operators and
+  // HashAggregateExec is not allowlisted. A Real-Time Mode aggregation is now planned as the
+  // streamline aggregate operator, which is allowlisted, so there is no rejection left to assert --
+  // including for a global aggregation with no grouping keys. StreamlineStreamingAggregation-
+  // RealTimeSuite covers the aggregation itself end to end, and the generic operator-allowlist test
+  // above still guards the operators that remain unsupported.
 }
