@@ -39,6 +39,7 @@ license: |
 - Since Spark 4.3, `unix_seconds`, `unix_millis`, and `unix_micros` accept `TIMESTAMP_NTZ` and the nanosecond-precision timestamp types directly, reading them with no time-zone shift. Previously these functions accepted only `TIMESTAMP_LTZ`; a `TIMESTAMP_NTZ` or nanosecond-timestamp argument was rejected with a `DATATYPE_MISMATCH` error. This is a new capability and does not change the result of any query that previously succeeded.
 - Since Spark 4.3, `hash()` and `xxhash64()` include the `days` field of `CalendarInterval` when computing the hash, so their output for interval values differs from earlier releases. Previously the codegen path dropped `days`, disagreeing with interpreted evaluation.
 - Since Spark 4.3, when a `SELECT` or `INSERT` statement references the same table more than once with different `WITH (...)` options (for example a self-join, or `INSERT INTO t WITH (...) SELECT * FROM t WITH (...)`), each reference now uses its own options instead of the second reference silently inheriting the first reference's options via the analyzer's relation cache.
+- Since Spark 4.3, `HAVING` is evaluated before window functions when the `SELECT` list also contains generator functions such as `explode`. Previously, window functions could include groups removed by `HAVING` and produce incorrect results.
 
 ## Upgrading from Spark SQL 4.1 to 4.2
 
