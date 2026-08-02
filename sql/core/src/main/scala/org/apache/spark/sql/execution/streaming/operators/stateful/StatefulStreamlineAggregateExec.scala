@@ -430,10 +430,14 @@ class StatefulStreamlineAggregationProcessor(
   }
 
   def process(newInput: InternalRow): UnsafeRow = {
-    val groupingKey = groupingProjection.apply(newInput)
+    // groupingProjection hands back the same UnsafeRow on every call, overwriting its bytes, so the
+    // key has to be copied before the cache can store it. Without the copy, one shared row becomes
+    // the key of every entry: each entry is then only findable through the hash captured when it
+    // was inserted, and the equality check that should discriminate between keys degenerates to a
+    // reference match against that one row.
+    val groupingKey = groupingProjection.apply(newInput).copy()
     val buffer = newAggregationBuffer()
 
-    // You shouldn't use getOrUpdate - we need to copy the key before we put
     val existingValueRef = dirtyWrites.get(groupingKey)
 
     if (existingValueRef.getRow != null) {
