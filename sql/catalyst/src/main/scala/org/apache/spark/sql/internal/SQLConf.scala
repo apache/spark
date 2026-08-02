@@ -3759,6 +3759,31 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
+  val STREAMING_USE_STREAMLINE_AGGREGATOR =
+    buildConf("spark.sql.streaming.useStreamlineAggregator")
+      .internal()
+      .doc("When true, plan a streaming aggregation with the streamline aggregation operator, " +
+        "which merges each input row against state and emits immediately, instead of the " +
+        "microbatch operators that only emit once the batch ends. Real-Time Mode queries use " +
+        "the streamline operator regardless of this config; this exists so the operator can " +
+        "also be exercised under a microbatch trigger.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR =
+    buildConf("spark.sql.streaming.statefulOperator.incrementalCleanupFactor")
+      .internal()
+      .doc("Specifies the number of records that are evicted from a stateful operator state " +
+        "store for every input record. When 0, no incremental cleanup is enabled, so all " +
+        "cleanup will happen at the end of the micro-batch. When k, k records are evicted for " +
+        "every input that is processed. If records remain in the state store at the end in " +
+        "the batch even after incremental cleanup, they will be synchronously removed before " +
+        "the batch completes.")
+      .version("4.3.0")
+      .longConf
+      .createWithDefault(0L)
+
   val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =
     buildConf("spark.sql.streaming.stopActiveRunOnRestart")
     .doc("Running multiple runs of the same streaming query concurrently is not supported. " +

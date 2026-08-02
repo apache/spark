@@ -1677,6 +1677,7 @@ object StatefulOperatorsUtils {
   )
   val SYMMETRIC_HASH_JOIN_EXEC_OP_NAME = "symmetricHashJoin"
   val STATE_STORE_SAVE_EXEC_OP_NAME = "stateStoreSave"
+  val STATEFUL_STREAMLINE_AGGREGATE_EXEC_OP_NAME = "StatefulStreamlineAggregate"
   val DEDUPLICATE_EXEC_OP_NAME = "dedupe"
   val DEDUPLICATE_WITHIN_WATERMARK_EXEC_OP_NAME = "dedupeWithinWatermark"
   val SESSION_WINDOW_STATE_STORE_SAVE_EXEC_OP_NAME = "sessionWindowStateStoreSaveExec"
