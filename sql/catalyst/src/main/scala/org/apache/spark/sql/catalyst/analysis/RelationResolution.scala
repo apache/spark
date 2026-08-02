@@ -354,7 +354,7 @@ class RelationResolution(
         val relation = if (u.isStreaming) {
           StreamingRelationV2(
             None, changelogTable.name, changelogTable, u.options,
-            changelogTable.columns.toAttributes, Some(catalog), Some(ident), None)
+            changelogTable.columns.toOutputAttributes, Some(catalog), Some(ident), None)
         } else {
           DataSourceV2Relation.create(changelogTable, Some(catalog), Some(ident), u.options)
         }
@@ -454,7 +454,7 @@ class RelationResolution(
               table.name,
               table,
               options,
-              table.columns.toAttributes,
+              table.columns.toOutputAttributes,
               Some(catalog),
               Some(ident),
               v1Fallback

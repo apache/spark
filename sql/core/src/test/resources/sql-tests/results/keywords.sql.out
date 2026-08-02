@@ -277,6 +277,7 @@ OPTION	false
 OPTIONS	false
 OR	false
 ORDER	false
+ORDINALITY	false
 OUT	false
 OUTER	false
 OUTPUTFORMAT	false
@@ -412,6 +413,7 @@ UNION	false
 UNIQUE	false
 UNKNOWN	false
 UNLOCK	false
+UNNEST	false
 UNPIVOT	false
 UNSET	false
 UNTIL	false

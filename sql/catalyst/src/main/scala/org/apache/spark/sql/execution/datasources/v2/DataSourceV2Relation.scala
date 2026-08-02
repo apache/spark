@@ -160,8 +160,22 @@ case class DataSourceV2Relation(
  * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
  *                               rows in the scan across different partitions
  * @param ordering if set, the ordering provided by the scan
- * @param pushedFilters Catalyst expressions for filters that were fully pushed to the data
- *                      source and do not appear as post-scan filters
+ * @param pushedFilters Catalyst expressions for filters that were fully pushed to the data source
+ *                      and do not appear as post-scan filters. These reference the relation's
+ *                      (pre-pruning) output, so they may reference columns pruned out of `output`
+ *                      (e.g. an unselected partition column the source enforces internally). This
+ *                      complete set is what lets `PlanMerger` soundly compare and re-enforce a
+ *                      scan's filters when fusing two scans via a Spark-side scan merge
+ *                      (`TableCapability.SCAN_MERGING`).
+ * @param mergeableScan whether this scan may be fused with an equivalent scan by a Spark-side scan
+ *                      merge (see `TableCapability.SCAN_MERGING`).
+ *                      Default false (not mergeable): only the plain column-pruning + filter
+ *                      pushdown path in `V2ScanRelationPushDown` sets this true, and only when the
+ *                      scan carries nothing a rebuilt scan cannot reproduce. A scan with a
+ *                      non-reproducible pushdown (aggregate, join, variant extraction, limit,
+ *                      offset, top-N, sample) or by any other rule stays not-mergeable by default,
+ *                      so merging is safe by construction -- a new scan-relation build site need
+ *                      not opt out.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -169,10 +183,13 @@ case class DataSourceV2ScanRelation(
     output: Seq[AttributeReference],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
-    pushedFilters: Seq[Expression] = Seq.empty) extends LeafNode with NamedRelation {
+    pushedFilters: Seq[Expression] = Seq.empty,
+    mergeableScan: Boolean = false) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
+  // Note: pushedFilters may reference columns pruned out of `output`, so constraint use must first
+  // intersect with `outputSet` (a constraint has to reference the node's output).
   // This changes which filters InferFiltersFromConstraints adds or removes (e.g., it may
   // skip adding IsNotNull when the scan already implies it, or infer new filters across
   // joins), so plan stability testing is needed first.
@@ -190,6 +207,14 @@ case class DataSourceV2ScanRelation(
   }
 
   override def name: String = relation.name
+
+  // A leaf relation references no upstream attributes. `pushedFilters` (and, for that matter,
+  // partitioning/ordering) are scan metadata, not references to resolve, and `pushedFilters` may
+  // reference columns pruned out of `output` (e.g. an unselected partition column). Without this
+  // override those would surface as `missingInput`, which the optimizer's plan-change validation
+  // flags as dangling references. `mapExpressions`/`transformExpressions` still rewrite the
+  // metadata expressions -- they iterate the product directly, independent of `references`.
+  override def references: AttributeSet = AttributeSet.empty
 
   override def simpleString(maxFields: Int): String = {
     val outputString = truncatedString(output, "[", ", ", "]", maxFields)
@@ -239,7 +264,9 @@ case class DataSourceV2ScanRelation(
       ordering = ordering.map(
         _.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
       ),
-      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, output))
+      // pushedFilters may reference columns pruned out of `output` (see the field doc), so they are
+      // normalized against the relation's full output rather than `output`.
+      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
     )
   }
 }
