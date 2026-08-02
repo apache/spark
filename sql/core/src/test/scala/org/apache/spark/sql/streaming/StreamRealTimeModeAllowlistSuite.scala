@@ -106,6 +106,31 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
     }
   }
 
+  // A repartitionByRange produces a range-partitioned shuffle. Building its RangePartitioner runs a
+  // separate job that samples the input to compute range bounds, which cannot complete while the
+  // source keeps producing, so it must be rejected up front rather than stalling the query.
+  test("range-partitioned shuffle not allowed") {
+    val inputData = LowLatencyMemoryStream[Int](2)
+
+    val df = inputData.toDF()
+      .select(col("value").as("key"))
+      .repartitionByRange(3, col("key"))
+      .select(col("key"))
+
+    val query = runStreamingQuery("range_shuffle_allowlist", df)
+
+    eventually(timeout(60.seconds)) {
+      checkError(
+        exception = query.exception.get.getCause.asInstanceOf[SparkIllegalArgumentException],
+        condition = "STREAMING_REAL_TIME_MODE.OPERATOR_OR_SINK_NOT_IN_ALLOWLIST",
+        parameters = Map(
+          "errorType" -> "operator",
+          "message" -> "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec is"
+        )
+      )
+    }
+  }
+
   // A stateful aggregation is still rejected under RTM because HashAggregateExec is not in the
   // allowlist, even though the pipelined shuffle and the StateStore operators now are. When RTM
   // supports aggregation (SPARK-54236), remove this test.
