@@ -35,14 +35,20 @@ import org.apache.spark.internal.{config, Logging}
  * Optionally provisions a dedicated Kubernetes Service exposing only the Spark driver's Web UI
  * port.
  *
- * When the user requests a random UI port (`spark.ui.port=0`), the actual port is unknown at
- * submission time, so the Service's `targetPort` uses a placeholder. To avoid routing traffic
- * to the wrong endpoint during that window (in `hostNetwork` mode a pod endpoint is the node IP,
- * so the placeholder `targetPort` could reach an unrelated driver co-located on the same node),
- * the Service is created *without* a selector, leaving it endpointless. Once the driver's Jetty
- * server has bound, `K8sDriverUIServicePatcher` patches the selector and the actual `targetPort`
- * together. When the port is fixed up front, the Service is created with its selector and final
- * `targetPort` immediately.
+ * The actual UI port is never known at submission time: even with a fixed `spark.ui.port`, Jetty
+ * may bind a different port after a collision (`Utils.startServiceOnPort` retries the next ports),
+ * and when TLS is enabled the reachable port is the secure connector's port, not the configured
+ * one. Routing to a stale port is especially dangerous in `hostNetwork` mode, where a pod endpoint
+ * is the node IP, so a wrong `targetPort` could reach an unrelated driver co-located on the same
+ * node. To avoid that window, the Service is always created *without* a selector, leaving it
+ * endpointless, with the configured (or default) UI port as a placeholder `port`/`targetPort`
+ * purely to satisfy Kubernetes' Service port validation (must be > 0). Once the driver's Jetty
+ * server has bound, [[org.apache.spark.scheduler.cluster.k8s.K8sDriverUIServicePatcher]] patches
+ * the selector and the actual `targetPort` (`SparkUI.boundPort`) together, so the Service only
+ * starts routing once it points at the correct port. When the Spark UI is disabled the Service is
+ * not created at all; and if the driver dies before its UI binds, the created Service simply stays
+ * endpointless and routes nowhere. This reconciliation requires `patch services` RBAC on the
+ * driver's ServiceAccount whenever the feature is enabled.
  */
 private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep with Logging {
@@ -52,18 +58,27 @@ private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriver
   private lazy val serviceType = kubernetesConf.get(KUBERNETES_DRIVER_UI_SERVICE_TYPE)
   private lazy val configuredUIPort = kubernetesConf.get(config.UI.UI_PORT)
 
+  private val active: Boolean = if (enabled && !kubernetesConf.get(config.UI.UI_ENABLED)) {
+    logWarning(s"Ignoring ${KUBERNETES_DRIVER_UI_SERVICE_ENABLED.key}=true because " +
+      s"${config.UI.UI_ENABLED.key}=false; no driver UI Service will be created.")
+    false
+  } else {
+    enabled
+  }
+
   /**
-   * Port value used when building the Service. When the user has requested a random UI port
-   * (`spark.ui.port=0`), the actual port is only known after the driver's Jetty server binds,
-   * so we substitute the default UI port (typically 4040) purely as a placeholder to satisfy
-   * Kubernetes' Service port validation (must be > 0). After the driver JVM starts,
+   * Placeholder port used when building the Service. The real bound port is only known after the
+   * driver's Jetty server binds (and may differ from `configuredUIPort` after a collision or when
+   * TLS is enabled), so we substitute the configured UI port, or the default (typically 4040) when
+   * a random port was requested (`spark.ui.port=0`), purely to satisfy Kubernetes' Service port
+   * validation (must be > 0). After the driver JVM starts,
    * [[org.apache.spark.scheduler.cluster.k8s.K8sDriverUIServicePatcher]] updates the Service's
    * `targetPort` to the real bound port.
    */
-  private lazy val servicePort: Int = if (configuredUIPort == 0) {
-    config.UI.UI_PORT.defaultValue.get
-  } else {
+  private lazy val servicePort: Int = if (configuredUIPort > 0) {
     configuredUIPort
+  } else {
+    config.UI.UI_PORT.defaultValue.get
   }
 
   private lazy val serviceName: String = kubernetesConf.get(KUBERNETES_DRIVER_UI_SERVICE_NAME)
@@ -77,9 +92,10 @@ private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriver
   override def configurePod(pod: SparkPod): SparkPod = pod
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
-    // These properties exist solely to drive the runtime patch, which only happens for a random
-    // port. A fixed-port Service is already complete, so nothing needs to reach the driver.
-    if (enabled && configuredUIPort == 0) {
+    // These properties drive the runtime patch that installs the withheld selector and the actual
+    // bound `targetPort` once the driver's UI has bound. They are always needed while the feature
+    // is active, since the Service is created endpointless regardless of the configured port.
+    if (active) {
       Map(
         KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL -> serviceName,
         KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL -> servicePort.toString,
@@ -90,9 +106,9 @@ private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriver
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    if (!enabled) return Seq.empty
+    if (!active) return Seq.empty
 
-    val spec = new ServiceBuilder()
+    val uiService = new ServiceBuilder()
       .withNewMetadata()
         .withName(serviceName)
         .addToAnnotations(kubernetesConf.serviceAnnotations.asJava)
@@ -108,14 +124,8 @@ private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriver
           .withPort(servicePort)
           .withNewTargetPort(servicePort)
           .endPort()
-
-    val specWithSelector = if (configuredUIPort == 0) {
-      spec
-    } else {
-      spec.withSelector(kubernetesConf.labels.asJava)
-    }
-
-    val uiService = specWithSelector.endSpec().build()
+        .endSpec()
+      .build()
     Seq(uiService)
   }
 }
@@ -138,10 +148,9 @@ private[spark] object DriverUIServiceFeatureStep {
     "spark.kubernetes.driver.ui.service.port.internal"
 
   /**
-   * Internal spark conf key carrying the Service selector that was withheld at creation time
-   * (only set when `spark.ui.port=0`). `K8sDriverUIServicePatcher` installs it together with the
-   * actual `targetPort` once the driver's UI has bound. Absent when the selector was already set
-   * on the Service.
+   * Internal spark conf key carrying the Service selector that was withheld at creation time.
+   * `K8sDriverUIServicePatcher` installs it together with the actual `targetPort` once the driver's
+   * UI has bound.
    */
   val KUBERNETES_DRIVER_UI_SERVICE_SELECTOR_INTERNAL =
     "spark.kubernetes.driver.ui.service.selector.internal"

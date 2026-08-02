@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.jdk.CollectionConverters._
-
 import io.fabric8.kubernetes.api.model.Service
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -38,7 +36,7 @@ class DriverUIServiceFeatureStepSuite extends SparkFunSuite {
       .contains(DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL))
   }
 
-  test("SPARK-58203: dedicated UI service is created when enabled") {
+  test("SPARK-58203: dedicated UI service is created endpointless even for a fixed port") {
     val sparkConf = new SparkConf(false)
       .set(UI_PORT, 4080)
       .set(KUBERNETES_DRIVER_UI_SERVICE_ENABLED, true)
@@ -52,11 +50,30 @@ class DriverUIServiceFeatureStepSuite extends SparkFunSuite {
     assert(uiSvc.getMetadata.getName ===
       s"${kconf.resourceNamePrefix}${DRIVER_UI_SVC_POSTFIX}")
     assert(uiSvc.getSpec.getType === "ClusterIP")
-    assert(uiSvc.getSpec.getSelector.asScala === kconf.labels)
+    assert(uiSvc.getSpec.getSelector === null || uiSvc.getSpec.getSelector.isEmpty)
     assert(uiSvc.getSpec.getPorts.size === 1)
     assert(uiSvc.getSpec.getPorts.get(0).getName === UI_PORT_NAME)
     assert(uiSvc.getSpec.getPorts.get(0).getPort.intValue() === 4080)
     assert(uiSvc.getSpec.getPorts.get(0).getTargetPort.getIntVal === 4080)
+
+    val props = step.getAdditionalPodSystemProperties()
+    assert(props.get(DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL)
+      === Some("4080"))
+    val encoded = props.get(
+      DriverUIServiceFeatureStep.KUBERNETES_DRIVER_UI_SERVICE_SELECTOR_INTERNAL)
+    assert(encoded.isDefined)
+    assert(DriverUIServiceFeatureStep.decodeSelector(encoded.get) === kconf.labels)
+  }
+
+  test("SPARK-58203: no UI service is created when the Spark UI is disabled") {
+    val sparkConf = new SparkConf(false)
+      .set(UI_ENABLED, false)
+      .set(KUBERNETES_DRIVER_UI_SERVICE_ENABLED, true)
+    val kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val step = new DriverUIServiceFeatureStep(kconf)
+
+    // The enable flag is ignored (not fatal) when the UI is off: no Service, no runtime metadata.
+    assert(step.getAdditionalKubernetesResources().isEmpty)
     assert(step.getAdditionalPodSystemProperties().isEmpty)
   }
 
