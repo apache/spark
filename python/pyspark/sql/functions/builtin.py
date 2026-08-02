@@ -15005,6 +15005,7 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.hash`
+    :meth:`pyspark.sql.functions.xxh3_64`
 
     Examples
     --------
