@@ -352,7 +352,7 @@ class ResolutionValidator {
   }
 
   private def validateAsOfJoin(asOfJoin: AsOfJoin): Unit = {
-    // The inner scope keeps the per-child output overwrites done by [[handleOperatorOutput]] out
+    // The inner scope keeps the per-child output overwrites done by `handleOperatorOutput` out
     // of the outer scope, which holds the combined join output the join expressions resolve
     // against.
     attributeScopeStack.pushScope()

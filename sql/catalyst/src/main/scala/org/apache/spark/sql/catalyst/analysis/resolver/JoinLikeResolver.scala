@@ -105,12 +105,13 @@ trait JoinLikeResolver extends SQLConfHelper with QueryErrorsBase {
   }
 
   /**
-   * Resolves the join condition by __all__ attributes from child scopes. We overwrite the current
-   * scope first to prepare for [[ExpressionResolver.resolveExpressionTreeInOperator]]. The join
-   * will actually produce a different output than the one set here, so an additional overwrite with
-   * the correct values is needed afterwards. Two overwrites are necessary because the condition is
-   * resolved from original children outputs, whereas the join output will either not contain all
-   * attributes or their nullabilities will be different.
+   * Resolves the join condition against __all__ attributes from child scopes. We overwrite the
+   * current scope first to prepare for
+   * [[ExpressionResolver.resolveExpressionTreeInOperator]]. The join will actually produce a
+   * different output than the one set here, so an additional overwrite with the correct values is
+   * needed afterwards. Two overwrites are necessary because the condition is resolved from
+   * original children outputs, whereas the join output will either not contain all attributes or
+   * their nullabilities will be different.
    *
    * `collectInvalidExpressions` controls whether unsupported expressions (aggregate / window /
    * generator, etc.) found in the just-resolved condition are thrown immediately as
