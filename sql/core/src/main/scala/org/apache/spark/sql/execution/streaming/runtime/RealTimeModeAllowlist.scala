@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.streaming.runtime
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.{Logging, LogKeys, MessageWithContext}
-import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
