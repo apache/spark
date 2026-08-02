@@ -58,6 +58,14 @@ public class CollationAwareUTF8String {
   private static final int INITIAL_MATCH_RING_CAPACITY = 16;
 
   /**
+   * The initial size, in UTF-16 code units, of the trailing window searched by
+   * `findIndexFromEnd`, and the factor by which that window grows when it does not hold enough
+   * matches. A target no longer than the initial window is searched in a single pass.
+   */
+  private static final int INITIAL_BACKWARD_SEARCH_WINDOW = 64;
+  private static final int BACKWARD_SEARCH_WINDOW_GROWTH = 4;
+
+  /**
    * `COMBINED_ASCII_SMALL_I_COMBINING_DOT` is an internal representation of the combined
    * lowercase code point for ASCII lowercase letter i with an additional combining dot character
    * (U+0307). This integer value is not a valid code point itself, but rather an artificial code
@@ -1011,9 +1019,22 @@ public class CollationAwareUTF8String {
    * The matches are enumerated forward with next() because StringSearch.previous() does not
    * visit the same match set as next(): it skips overlapping matches, and it skips or misaligns
    * matches when a character maps to multiple collation elements (see the note in
-   * collationTrimRight). Only the last {@code count} positions are retained, in a ring buffer
-   * that grows on demand so that a {@code count} far larger than the number of matches does not
-   * allocate up front.
+   * collationTrimRight).
+   *
+   * Enumerating from the start of the target would cost the length of the target on every call,
+   * even when the requested match is the last one. Instead the search runs over a trailing
+   * window that starts at {@code INITIAL_BACKWARD_SEARCH_WINDOW} code units and grows until it
+   * holds {@code count} matches or reaches the start of the target, so the cost tracks the
+   * distance back to the requested match. Once a window holds that many the answer is final:
+   * every remaining match starts before the window, so it precedes all of the window's matches
+   * and cannot be one of the last {@code count}. Only the search's start index moves; the target
+   * and its collation context stay the whole string, so unlike searching a substring a window
+   * boundary can never split a contraction or a combining sequence and report a match that does
+   * not exist in the target.
+   *
+   * Only the last {@code count} positions of a window are retained, in a ring buffer that grows
+   * on demand so that a {@code count} far larger than the number of matches does not allocate up
+   * front.
    */
   private static int findIndexFromEnd(final StringSearch stringSearch, final String text,
       final int count, final int maxStartIndex, final boolean matchEnd) {
@@ -1024,27 +1045,41 @@ public class CollationAwareUTF8String {
     // Match starts are distinct text offsets, so there can be at most text.length() matches.
     if (count > text.length()) return MATCH_NOT_FOUND;
     int[] lastMatches = new int[Math.min(count, INITIAL_MATCH_RING_CAPACITY)];
-    int found = 0;
-    int index = -1;
-    int nextIndex;
-    while ((nextIndex = stringSearch.next()) != StringSearch.DONE && nextIndex <= maxStartIndex) {
-      if (nextIndex == index) {
-        advancePastStuckMatch(stringSearch, text, nextIndex);
-        continue;
+    int window = INITIAL_BACKWARD_SEARCH_WINDOW;
+    while (true) {
+      int windowStart = Math.max(0, maxStartIndex - window);
+      // Never start the search inside a surrogate pair; widening the window is always safe.
+      if (windowStart > 0 && Character.isLowSurrogate(text.charAt(windowStart))) --windowStart;
+      stringSearch.setIndex(windowStart);
+      int found = 0;
+      int index = -1;
+      int nextIndex;
+      while ((nextIndex = stringSearch.next()) != StringSearch.DONE
+          && nextIndex <= maxStartIndex) {
+        if (nextIndex == index) {
+          advancePastStuckMatch(stringSearch, text, nextIndex);
+          continue;
+        }
+        // While the buffer is shorter than `count` no entry has been evicted yet, so `found` is
+        // below its length and indexes it directly; grow before the first write that would wrap.
+        if (found == lastMatches.length && lastMatches.length < count) {
+          lastMatches =
+            Arrays.copyOf(lastMatches, (int) Math.min(count, 2L * lastMatches.length));
+        }
+        lastMatches[found % lastMatches.length] =
+          matchEnd ? nextIndex + stringSearch.getMatchLength() : nextIndex;
+        found++;
+        index = nextIndex;
       }
-      // While the buffer is shorter than `count` no entry has been evicted yet, so `found` is
-      // below its length and indexes it directly; grow before the first write that would wrap.
-      if (found == lastMatches.length && lastMatches.length < count) {
-        lastMatches = Arrays.copyOf(lastMatches, (int) Math.min(count, 2L * lastMatches.length));
-      }
-      lastMatches[found % lastMatches.length] =
-        matchEnd ? nextIndex + stringSearch.getMatchLength() : nextIndex;
-      found++;
-      index = nextIndex;
+      // The buffer has grown to `count` entries by the time `found` reaches it, so the oldest
+      // entry still in the ring buffer is the {@code count}-th match from the end.
+      if (found >= count) return lastMatches[found % lastMatches.length];
+      // The window already reached the start of the target, so there really are fewer matches.
+      if (windowStart == 0) return MATCH_NOT_FOUND;
+      // Capping at the target length keeps the growth from overflowing and guarantees that the
+      // next window starts at 0, so the loop always terminates.
+      window = (int) Math.min((long) window * BACKWARD_SEARCH_WINDOW_GROWTH, text.length());
     }
-    if (found < count) return MATCH_NOT_FOUND;
-    // The count-th match from the end is the oldest entry still in the ring buffer.
-    return lastMatches[found % count];
   }
 
   public static UTF8String subStringIndex(final UTF8String string, final UTF8String delimiter,
