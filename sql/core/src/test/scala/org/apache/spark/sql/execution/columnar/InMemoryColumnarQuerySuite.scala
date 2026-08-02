@@ -173,12 +173,20 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
   }
 
   test("SPARK-58482: cached table pruning should retain NaN values") {
-    val df = Seq((1, 1.5d), (2, Double.NaN), (3, 0.0d)).toDF("id", "v").cache()
+    val doubleDf = Seq((1, 1.5d), (2, Double.NaN), (3, 0.0d)).toDF("id", "v").cache()
     try {
-      df.count()
-      checkAnswer(df.filter($"v" === Double.NaN).select("id"), Row(2))
+      doubleDf.count()
+      checkAnswer(doubleDf.filter($"v" === Double.NaN).select("id"), Row(2))
     } finally {
-      df.unpersist(blocking = true)
+      doubleDf.unpersist(blocking = true)
+    }
+
+    val floatDf = Seq((1, 1.5f), (2, Float.NaN), (3, 0.0f)).toDF("id", "v").cache()
+    try {
+      floatDf.count()
+      checkAnswer(floatDf.filter($"v" === Float.NaN).select("id"), Row(2))
+    } finally {
+      floatDf.unpersist(blocking = true)
     }
   }
 
