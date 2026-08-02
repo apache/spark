@@ -930,6 +930,121 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     (inputData2, aggregated2)
   }
 
+  // Streaming aggregation planned as StatefulStreamlineAggregateExec, which merges each input row
+  // against the state store and emits as it goes, rather than the micro-batch operators that emit
+  // once the batch ends. Real-Time Mode always plans it; here the config selects it so the operator
+  // can be covered under a micro-batch trigger too. See StreamlineStreamingAggregationRealTimeSuite
+  // for the Real-Time Mode coverage.
+  private val streamlineEnabled =
+    SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR.key -> "true"
+
+  testWithAllStateVersions("streamline aggregation: update mode emits per input row",
+    streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .groupBy($"value")
+      .agg(count("*"))
+      .as[(Int, Long)]
+
+    testStream(aggregated, Update)(
+      AddData(inputData, 3),
+      CheckLastBatch((3, 1)),
+      AddData(inputData, 3, 2),
+      CheckLastBatch((3, 2), (2, 1)),
+      StopStream,
+      StartStream(),
+      AddData(inputData, 3, 2, 1),
+      CheckLastBatch((3, 3), (2, 2), (1, 1)),
+      // The distinguishing behaviour: four rows for the same key produce four outputs, one per
+      // input. Micro-batch aggregation would emit only the final (4, 4) for this batch.
+      AddData(inputData, 4, 4, 4, 4),
+      CheckLastBatch((4, 1), (4, 2), (4, 3), (4, 4))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: complete mode outputs the whole result table",
+    streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .groupBy($"value")
+      .agg(count("*"))
+      .as[(Int, Long)]
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 3),
+      CheckLastBatch((3, 1)),
+      AddData(inputData, 2),
+      CheckLastBatch((3, 1), (2, 1)),
+      StopStream,
+      StartStream(),
+      AddData(inputData, 3, 2),
+      CheckLastBatch((3, 2), (2, 2))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: sum, min, max and avg", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .selectExpr("value % 2 AS key", "value")
+      .groupBy($"key")
+      .agg(sum("value"), min("value"), max("value"), avg("value"))
+      .as[(Int, Long, Int, Int, Double)]
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 1, 2, 3, 4),
+      // key 1: values 1, 3 -> sum 4, min 1, max 3, avg 2.0
+      // key 0: values 2, 4 -> sum 6, min 2, max 4, avg 3.0
+      CheckLastBatch((1, 4L, 1, 3, 2.0), (0, 6L, 2, 4, 3.0)),
+      AddData(inputData, 5, 6),
+      // key 1 gains 5 -> sum 9, max 5, avg 3.0; key 0 gains 6 -> sum 12, max 6, avg 4.0
+      CheckLastBatch((1, 9L, 1, 5, 3.0), (0, 12L, 2, 6, 4.0))
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: multiple grouping keys", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .selectExpr("value", "value % 2 AS k1", "value % 3 AS k2")
+      .groupBy($"k1", $"k2")
+      .agg(count("*"))
+      .as[(Int, Int, Long)]
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 1, 2, 3, 4, 5, 6),
+      CheckLastBatch(
+        (1, 1, 1), // 1
+        (0, 2, 1), // 2
+        (1, 0, 1), // 3
+        (0, 1, 1), // 4
+        (1, 2, 1), // 5
+        (0, 0, 1)) // 6
+    )
+  }
+
+  testWithAllStateVersions("streamline aggregation: recovery from a restart keeps state",
+    streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggregated = inputData.toDF()
+      .groupBy($"value")
+      .agg(count("*"))
+      .as[(Int, Long)]
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 1, 1, 2),
+      CheckLastBatch((1, 2), (2, 1)),
+      StopStream,
+      StartStream(),
+      // The counts continue from the committed state rather than restarting at 1.
+      AddData(inputData, 1, 2),
+      CheckLastBatch((1, 3), (2, 2))
+    )
+  }
+
   @tailrec
   private def findStateSchemaNotCompatible(exc: Throwable):
     Option[SparkUnsupportedOperationException] = {
