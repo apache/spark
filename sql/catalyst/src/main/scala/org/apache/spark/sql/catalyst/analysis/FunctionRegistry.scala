@@ -721,7 +721,7 @@ object FunctionRegistry {
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
-    expressionBuilder("now", CurrentTimestampExpressionBuilder),
+    expressionBuilder("now", CurrentTimestampExpressionBuilder, since = Some("1.6.0")),
     expression[Quarter]("quarter"),
     expressionBuilder("second", SecondExpressionBuilder),
     expression[ParseToTimestamp]("to_timestamp"),
