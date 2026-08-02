@@ -1045,6 +1045,24 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
+  testWithAllStateVersions("streamline aggregation: computed grouping key", streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+    // The grouping key is a COMPUTED expression, not a bare column reference. The final stage is
+    // planned with the original groupingExpressions rather than the post-shuffle attributes, so if
+    // that is wrong this is where it shows: the final stage would try to re-evaluate `value % 3`
+    // against its child's output, which only carries the already-grouped attribute.
+    val aggregated = inputData.toDF()
+      .groupBy(($"value" % 3).as("k"))
+      .agg(count("*"), sum("value"))
+      .as[(Int, Long, Long)]
+
+    testStream(aggregated, Complete)(
+      AddData(inputData, 1, 2, 3, 4, 5, 6),
+      // k=1: 1,4 -> count 2 sum 5 ; k=2: 2,5 -> count 2 sum 7 ; k=0: 3,6 -> count 2 sum 9
+      CheckLastBatch((1, 2L, 5L), (2, 2L, 7L), (0, 2L, 9L))
+    )
+  }
+
   @tailrec
   private def findStateSchemaNotCompatible(exc: Throwable):
     Option[SparkUnsupportedOperationException] = {

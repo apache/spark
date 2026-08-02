@@ -499,7 +499,11 @@ object AggUtils {
       ProjectAggregationBufferExec(
         requiredChildDistributionExpressions = Some(groupingAttributes),
         numShufflePartitions = None,
-        groupingExpressions = groupingExpressions,
+        // The child here is the post-shuffle output of the stateful aggregate, whose grouping
+        // columns are already resolved attributes, so group by those rather than by the original
+        // expressions. This matches planStreamingAggregation's final stage and the stateful
+        // aggregate above, both of which group by the attributes.
+        groupingExpressions = groupingAttributes,
         aggregateExpressions = finalAggregateExpressions,
         aggregateAttributes = finalAggregateAttributes,
         initialInputBufferOffset = groupingAttributes.length,
