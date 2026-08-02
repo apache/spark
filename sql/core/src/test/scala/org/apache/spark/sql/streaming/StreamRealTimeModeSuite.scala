@@ -26,9 +26,9 @@ import scala.concurrent.duration.Duration
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException, TaskContext}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted, SparkListenerStageSubmitted}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted}
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.RealTimeTrigger
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
@@ -269,7 +269,17 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
     testStream(df2, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
       AddData(inputData, 1, 2, 3),
       StartStream(),
-      CheckAnswerWithTimeout(30000, (1, "a", "a"), (2, "b", "b"), (3, "c", "c"))
+      CheckAnswerWithTimeout(30000, (1, "a", "a"), (2, "b", "b"), (3, "c", "c")),
+      Execute { q =>
+        val plan = q.lastExecution.executedPlan
+        // Verify the shape this test is about, not just the answer: the second broadcast is reused,
+        // and the marking rule left it alone because it only marks shuffle exchanges.
+        assert(plan.exists(_.isInstanceOf[ReusedExchangeExec]),
+          s"expected the second broadcast to be reused, got:\n$plan")
+        assert(plan.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+          "a broadcast stream-static join should introduce no shuffle exchange")
+      },
+      StopStream
     )
   }
 }
@@ -484,10 +494,24 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
     // schedule never exceeds one running stage at a time; >= 2 proves genuine co-scheduling.
     val runningStages = ConcurrentHashMap.newKeySet[Int]()
     val maxConcurrentStages = new AtomicInteger(0)
+    val queryStageIds = ConcurrentHashMap.newKeySet[Int]()
+    // Count only stages belonging to the query under test. The suite shares one SparkContext, so
+    // an unrelated concurrent stage would otherwise satisfy the co-scheduling assertion below even
+    // if this query's producer and consumer actually ran one after the other. StreamExecution sets
+    // the job group to the query's runId, which the job-start event carries.
     val listener = new SparkListener {
+      override def onJobStart(e: SparkListenerJobStart): Unit = {
+        // StreamExecution tags every streaming job with the query id; a batch/unrelated job has
+        // no such property, so this keeps unrelated stages out of the count.
+        if (e.properties.getProperty(StreamExecution.QUERY_ID_KEY) != null) {
+          e.stageIds.foreach(queryStageIds.add(_))
+        }
+      }
       override def onStageSubmitted(e: SparkListenerStageSubmitted): Unit = {
-        runningStages.add(e.stageInfo.stageId)
-        maxConcurrentStages.accumulateAndGet(runningStages.size(), Math.max)
+        if (queryStageIds.contains(e.stageInfo.stageId)) {
+          runningStages.add(e.stageInfo.stageId)
+          maxConcurrentStages.accumulateAndGet(runningStages.size(), Math.max)
+        }
       }
       override def onStageCompleted(e: SparkListenerStageCompleted): Unit = {
         runningStages.remove(e.stageInfo.stageId)
@@ -564,10 +588,24 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
     // group scenario: more than one pipelined shuffle in a single Real-Time Mode job.
     val runningStages = ConcurrentHashMap.newKeySet[Int]()
     val maxConcurrentStages = new AtomicInteger(0)
+    val queryStageIds = ConcurrentHashMap.newKeySet[Int]()
+    // Count only stages belonging to the query under test. The suite shares one SparkContext, so
+    // an unrelated concurrent stage would otherwise satisfy the co-scheduling assertion below even
+    // if this query's producer and consumer actually ran one after the other. StreamExecution sets
+    // the job group to the query's runId, which the job-start event carries.
     val listener = new SparkListener {
+      override def onJobStart(e: SparkListenerJobStart): Unit = {
+        // StreamExecution tags every streaming job with the query id; a batch/unrelated job has
+        // no such property, so this keeps unrelated stages out of the count.
+        if (e.properties.getProperty(StreamExecution.QUERY_ID_KEY) != null) {
+          e.stageIds.foreach(queryStageIds.add(_))
+        }
+      }
       override def onStageSubmitted(e: SparkListenerStageSubmitted): Unit = {
-        runningStages.add(e.stageInfo.stageId)
-        maxConcurrentStages.accumulateAndGet(runningStages.size(), Math.max)
+        if (queryStageIds.contains(e.stageInfo.stageId)) {
+          runningStages.add(e.stageInfo.stageId)
+          maxConcurrentStages.accumulateAndGet(runningStages.size(), Math.max)
+        }
       }
       override def onStageCompleted(e: SparkListenerStageCompleted): Unit = {
         runningStages.remove(e.stageInfo.stageId)
