@@ -29,7 +29,7 @@ import org.apache.spark.LocalSparkContext._
 import org.apache.spark.internal.config
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.Utils.createArray
 
 class MapStatusSuite extends SparkFunSuite {
@@ -363,20 +363,98 @@ class MapStatusSuite extends SparkFunSuite {
         tiedBlockSize * (tiedBlocksLength - maxAccurateSkewedBlockNumber)) / numSmallBlocks
 
     val loc = BlockManagerId("a", "b", 10)
-    val status = compressAndDecompressMapStatus(MapStatus(loc, allBlocks, 5))
+    val mapTaskId = 5L
+    val status = compressAndDecompressMapStatus(MapStatus(loc, allBlocks, mapTaskId))
     assert(status.isInstanceOf[HighlyCompressedMapStatus])
-    // Ties are broken by block index, so the first maxAccurateSkewedBlockNumber tied blocks are
-    // the ones recorded accurately.
-    val firstAccurateBlock = smallBlocksLength
-    for (i <- 0 until firstAccurateBlock) {
+    for (i <- 0 until smallBlocksLength) {
       assert(status.getSizeForBlock(i) === avg)
     }
-    for (i <- firstAccurateBlock until firstAccurateBlock + maxAccurateSkewedBlockNumber) {
-      assert(status.getSizeForBlock(i) === compressAndDecompressSize(tiedBlockSize))
-    }
-    for (i <- firstAccurateBlock + maxAccurateSkewedBlockNumber until allBlocks.length) {
-      assert(status.getSizeForBlock(i) === avg,
+    // The recorded ties are a window of maxAccurateSkewedBlockNumber tied blocks, in block index
+    // order, starting at the offset the map task id rotates to.
+    val firstAccurateTie = (mapTaskId % tiedBlocksLength).toInt
+    for (i <- 0 until tiedBlocksLength) {
+      val isAccurate =
+        i >= firstAccurateTie && i < firstAccurateTie + maxAccurateSkewedBlockNumber
+      val expected = if (isAccurate) compressAndDecompressSize(tiedBlockSize) else avg
+      assert(status.getSizeForBlock(smallBlocksLength + i) === expected,
         "no more than maxAccurateSkewedBlockNumber blocks may be recorded accurately")
     }
+  }
+
+  test("SPARK-48290: blocks tied at the cutoff size rotate across map tasks so that no reducer " +
+    "is hidden") {
+    // One more reducer is tied at the cutoff than may be recorded per map task. Every map task
+    // sees the same distribution, so a fixed tie break would hide the same reducer in every map
+    // status, and MapOutputTracker.getStatistics would report it as the average block size.
+    val smallBlocksLength = 1900
+    val tiedBlocksLength = 101
+    val smallBlockSize = 10 * 1024L
+    val tiedBlockSize = 100 * 1024L
+    val numMapTasks = 2000
+    val maxAccurateSkewedBlockNumber =
+      config.SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.defaultValue.get
+    assert(tiedBlocksLength > maxAccurateSkewedBlockNumber)
+
+    // No skew related config is set: this asserts the out of the box behavior.
+    val conf = new SparkConf()
+    val env = mock(classOf[SparkEnv])
+    doReturn(conf).when(env).conf
+    SparkEnv.set(env)
+
+    val allBlocks = createArray(smallBlocksLength, smallBlockSize) ++:
+      createArray(tiedBlocksLength, tiedBlockSize)
+    val loc = BlockManagerId("a", "b", 10)
+    val statuses = (0 until numMapTasks).map { mapTaskId =>
+      compressAndDecompressMapStatus(MapStatus(loc, allBlocks, mapTaskId))
+    }
+
+    val accurateSize = compressAndDecompressSize(tiedBlockSize)
+    statuses.foreach { status =>
+      val numAccurate =
+        (smallBlocksLength until allBlocks.length).count(status.getSizeForBlock(_) == accurateSize)
+      assert(numAccurate === maxAccurateSkewedBlockNumber,
+        "the accurate skewed block limit must still hold for every map task")
+    }
+
+    // Summing a reducer over the map statuses is what AQE sees. Each tied reducer loses the tie on
+    // one map task out of tiedBlocksLength, so its total is off by that fraction at worst, instead
+    // of collapsing to the average block size.
+    val realTotal = numMapTasks * accurateSize
+    for (i <- smallBlocksLength until allBlocks.length) {
+      val total = statuses.map(_.getSizeForBlock(i)).sum
+      assert(total > realTotal * 0.98,
+        s"reducer $i must not be hidden behind the average block size")
+      assert(total <= realTotal)
+    }
+  }
+
+  test("SPARK-48290: recorded skewed block sizes are held in compact storage") {
+    // The driver retains one map status per map task for the lifetime of the shuffle, so the
+    // accurately recorded sizes must not cost more than a few bytes each. A mutable.Map[Int, Byte]
+    // costs an order of magnitude more, through its nodes, bucket array and boxed reduce ids.
+    val smallBlocksLength = 1900
+    val skewedBlocksLength = 100
+    val smallBlockSize = 10 * 1024L
+    val skewedBlockSize = 100 * 1024L
+    val maxRetainedBytesPerBlock = 16
+
+    val allBlocks = createArray(smallBlocksLength, smallBlockSize) ++:
+      createArray(skewedBlocksLength, skewedBlockSize)
+    val loc = BlockManagerId("a", "b", 10)
+
+    def retainedBytes(accurateBlockSkewedFactor: Double): Long = {
+      val conf = new SparkConf()
+        .set(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR.key, accurateBlockSkewedFactor.toString)
+      val env = mock(classOf[SparkEnv])
+      doReturn(conf).when(env).conf
+      SparkEnv.set(env)
+      SizeEstimator.estimate(compressAndDecompressMapStatus(MapStatus(loc, allBlocks, 5)))
+    }
+
+    val withoutSkewedSizes = retainedBytes(-1.0)
+    val withSkewedSizes = retainedBytes(5.0)
+    val perBlock = (withSkewedSizes - withoutSkewedSizes).toDouble / skewedBlocksLength
+    assert(perBlock < maxRetainedBytesPerBlock,
+      s"recording $skewedBlocksLength skewed block sizes retained $perBlock bytes each")
   }
 }
