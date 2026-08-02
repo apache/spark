@@ -81,7 +81,8 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
   }
 
   test("SPARK-57161: nanosecond timestamp DataType proto round-trip across precisions") {
-    for (precision <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+    for (precision <-
+        TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
       for (dt <- Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision))) {
         val protoType = DataTypeProtoConverter.toConnectProtoType(dt)
         assertResult(dt)(DataTypeProtoConverter.toCatalystType(protoType))
@@ -144,8 +145,9 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     assert(ltzProto.getTimestampLtzNanos.getNanosWithinMicro == 500)
   }
 
-  test("SPARK-57161: nanosecond timestamp literal with out-of-range nanos_within_micro is " +
-    "rejected") {
+  test(
+    "SPARK-57161: nanosecond timestamp literal with out-of-range nanos_within_micro is " +
+      "rejected") {
     // nanos_within_micro is an int32 on the wire but must be in [0, 999]. Build literals directly
     // with out-of-range values, including 65536 which would truncate to 0 if narrowed to Short
     // before validation, and confirm the read path rejects them instead of wrapping.

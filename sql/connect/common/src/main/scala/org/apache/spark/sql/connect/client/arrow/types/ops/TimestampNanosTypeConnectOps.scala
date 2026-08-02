@@ -56,10 +56,13 @@ private[connect] abstract class TimestampNanosTypeConnectOps extends ConnectType
   /**
    * Rebuilds the physical value from the two proto components. `nanosWithinMicro` is an int32 on
    * the wire, so its range is checked here before narrowing to `Short`: without the check
-   * `.toShort` would truncate an out-of-range value modulo 2^16 (e.g. 65536 -> 0) and slip it past
-   * the `[0, 999]` guard in `fromParts`, yielding a silently wrong value instead of a clear error.
+   * `.toShort` would truncate an out-of-range value modulo 2^16 (e.g. 65536 -> 0) and slip it
+   * past the `[0, 999]` guard in `fromParts`, yielding a silently wrong value instead of a clear
+   * error.
    */
-  protected def toTimestampNanosVal(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal = {
+  protected def toTimestampNanosVal(
+      epochMicros: Long,
+      nanosWithinMicro: Int): TimestampNanosVal = {
     if (nanosWithinMicro < 0 || nanosWithinMicro > TimestampNanosVal.MAX_NANOS_WITHIN_MICRO) {
       throw InvalidPlanInput(
         s"nanos_within_micro must be in [0, ${TimestampNanosVal.MAX_NANOS_WITHIN_MICRO}], got: " +
@@ -74,7 +77,8 @@ private[connect] abstract class TimestampNanosTypeConnectOps extends ConnectType
     throw new UnsupportedOperationException(
       s"Arrow serialization is not supported for ${dataType.sql} over Spark Connect.")
 
-  override def createArrowSerializer(vector: AnyRef): ArrowSerializer.Serializer = arrowUnsupported
+  override def createArrowSerializer(vector: AnyRef): ArrowSerializer.Serializer =
+    arrowUnsupported
 
   override def createArrowDeserializer(
       enc: AgnosticEncoder[_],
@@ -93,7 +97,7 @@ private[connect] abstract class TimestampNanosTypeConnectOps extends ConnectType
  * @since 4.3.0
  */
 private[connect] class TimestampNTZNanosTypeConnectOps(val t: TimestampNTZNanosType)
-  extends TimestampNanosTypeConnectOps {
+    extends TimestampNanosTypeConnectOps {
 
   override def dataType: DataType = t
 
@@ -162,7 +166,7 @@ private[connect] class TimestampNTZNanosTypeConnectOps(val t: TimestampNTZNanosT
  * @since 4.3.0
  */
 private[connect] class TimestampLTZNanosTypeConnectOps(val t: TimestampLTZNanosType)
-  extends TimestampNanosTypeConnectOps {
+    extends TimestampNanosTypeConnectOps {
 
   override def dataType: DataType = t
 
