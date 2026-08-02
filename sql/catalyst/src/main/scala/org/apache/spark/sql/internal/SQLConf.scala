@@ -580,6 +580,7 @@ object SQLConf {
       .doc("When true, enables ASOF JOIN resolution in single-pass analyzer. " +
         "Otherwise, resolution falls back to fixed-point analyzer.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
