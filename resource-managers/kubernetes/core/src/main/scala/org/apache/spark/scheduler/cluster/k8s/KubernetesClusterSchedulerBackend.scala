@@ -126,9 +126,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   /**
    * Bring the dedicated UI Service online once the driver's Jetty server has bound: install its
-   * selector and patch its `targetPort` to the actual bound port. The internal properties driving
-   * this are only set for a pending port (`spark.ui.port=0`); a fixed-port Service is created
-   * complete, so this is a no-op. Requires `patch services` RBAC on the driver's ServiceAccount.
+   * selector and patch its `targetPort` to the actual bound port.
    */
   private def maybePatchDriverUIService(): Unit = {
     for {

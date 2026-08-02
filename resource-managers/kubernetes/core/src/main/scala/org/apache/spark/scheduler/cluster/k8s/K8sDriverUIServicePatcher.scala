@@ -35,8 +35,7 @@ private[k8s] object K8sDriverUIServicePatcher extends Logging {
   /**
    * Bring the endpointless placeholder Service online: set its `spark-ui` `targetPort` to the
    * actual bound port and install the `selector` in the same patch, so it only starts routing
-   * once it points at the correct port. Called only for a pending port (`spark.ui.port=0`); a
-   * fixed-port Service is created complete and never patched.
+   * once it points at the correct port.
    *
    * @param client       Kubernetes client to use (typically the one already held by the backend).
    * @param namespace    Namespace where the Service lives.
