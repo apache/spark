@@ -382,12 +382,20 @@ class MicroBatchExecution(
       //
       // Determinism is not needed here: Real-Time Mode does not retry tasks (TaskSetManager caps a
       // pipelined task set at one attempt, and its group is aborted as a unit rather than
-      // recomputed), so the hazard the sort guards against does not arise. Only set the config when
-      // the user has not made an explicit choice.
-      if (!sparkSessionForStream.conf.contains(SQLConf.SORT_BEFORE_REPARTITION.key)) {
-        logInfo("Disabling sort before repartition for Real-Time Mode")
-        sparkSessionForStream.conf.set(SQLConf.SORT_BEFORE_REPARTITION.key, "false")
+      // recomputed), so the hazard the sort guards against does not arise.
+      //
+      // This overrides an explicit `true` as well. Honouring it would reintroduce the hang above,
+      // and a query that never produces a row is worse than silently ignoring a config that only
+      // guards against a retry that cannot happen here. Log at warning level when overriding an
+      // explicit setting so the operator can see their config is not the one in force.
+      if (sparkSessionForStream.conf.contains(SQLConf.SORT_BEFORE_REPARTITION.key) &&
+        sparkSessionForStream.conf.get(SQLConf.SORT_BEFORE_REPARTITION)) {
+        logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, SQLConf.SORT_BEFORE_REPARTITION.key)}=true " +
+          log"for this Real-Time Mode query: the local sort it inserts before a round-robin " +
+          log"repartition never completes on an unbounded stream. It is not needed because a " +
+          log"Real-Time Mode task is not retried.")
       }
+      sparkSessionForStream.conf.set(SQLConf.SORT_BEFORE_REPARTITION.key, "false")
     }
 
     // Initializing TriggerExecutor relies on `sources`, hence calling this after initializing
