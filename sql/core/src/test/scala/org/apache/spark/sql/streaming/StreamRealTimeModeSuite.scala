@@ -17,18 +17,22 @@
 
 package org.apache.spark.sql.streaming
 
-import java.util.concurrent.TimeUnit
+import java.io.IOException
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration.Duration
 
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException, TaskContext}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException, TaskContext}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted, SparkListenerStageSubmitted}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.RealTimeTrigger
-import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.execution.streaming.state.{FailureInjectionCheckpointFileManager, FailureInjectionFileSystem}
+import org.apache.spark.sql.functions.{broadcast, concat, lit, udf}
 import org.apache.spark.sql.internal.SQLConf
 
 class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
@@ -207,6 +211,22 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
       AddData(inputData, 6),
       CheckAnswerWithTimeout(10000, (1, 0), (2, 1), (3, 2), (4, 0), (5, 1), (6, 2)),
       StopStream
+    )
+  }
+
+  test("multiple broadcast joins with the same static table run in Real-Time Mode") {
+    // Two broadcast joins against the SAME static table -- exchange reuse collapses the second
+    // broadcast into a ReusedExchangeExec. This is the supported reuse shape in Real-Time Mode: a
+    // reused BROADCAST exchange (allowlisted), NOT a reused shuffle. The RTM marking rule only
+    // marks ShuffleExchangeExec, so it correctly leaves the broadcast reuse alone.
+    val inputData = LowLatencyMemoryStream.singlePartition[Int]
+    val staticData = Seq((1, "a"), (2, "b"), (3, "c")).toDF("key", "value")
+    val df = inputData.toDS().toDF("key").join(broadcast(staticData), Seq("key"), "left")
+    val df2 = df.join(broadcast(staticData), Seq("key"), "left")
+    testStream(df2, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+      AddData(inputData, 1, 2, 3),
+      StartStream(),
+      CheckAnswerWithTimeout(30000, (1, "a", "a"), (2, "b", "b"), (3, "c", "c"))
     )
   }
 }
@@ -393,4 +413,240 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
       StopStream
     )
   }
+
+  // ========================================================================================
+  // Pipelined (streaming) shuffle: a stateful/repartition Real-Time Mode query whose shuffle is a
+  // PipelinedShuffleDependency, so the producer (source scan) and consumer stages are co-scheduled
+  // and stream records through a transient shuffle instead of the consumer waiting for the producer
+  // to fully materialize.
+  // ========================================================================================
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    StreamRealTimeModeSuite.failTasks = false
+  }
+
+  /** Assert every shuffle exchange in the query's last executed plan is pipelined. */
+  private def assertAllExchangesPipelined(q: StreamExecution): Unit = {
+    val exchanges = q.lastExecution.executedPlan.collect { case s: ShuffleExchangeExec => s }
+    assert(exchanges.nonEmpty, "expected at least one shuffle exchange in the plan")
+    assert(exchanges.forall(_.pipelined),
+      "expected all Real-Time Mode shuffle exchanges to be pipelined, got: " +
+        exchanges.map(e => s"pipelined=${e.pipelined}").mkString(", "))
+  }
+
+  test("pipelined shuffle: stateful dedup runs in Real-Time Mode and co-schedules its stages") {
+    // Track, from the driver, whether the producer (source scan) and consumer (dedup) stages of the
+    // pipelined group were ever RUNNING simultaneously. A sequential producer-then-consumer
+    // schedule never exceeds one running stage at a time; >= 2 proves genuine co-scheduling.
+    val runningStages = ConcurrentHashMap.newKeySet[Int]()
+    val maxConcurrentStages = new AtomicInteger(0)
+    val listener = new SparkListener {
+      override def onStageSubmitted(e: SparkListenerStageSubmitted): Unit = {
+        runningStages.add(e.stageInfo.stageId)
+        maxConcurrentStages.accumulateAndGet(runningStages.size(), Math.max)
+      }
+      override def onStageCompleted(e: SparkListenerStageCompleted): Unit = {
+        runningStages.remove(e.stageInfo.stageId)
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+    try {
+      val inputData = LowLatencyMemoryStream[(String, Int)]
+      // scan --shuffle(repartition by key)--> streaming dropDuplicates --> sink.
+      val result = inputData.toDF().select($"_1".as("key")).dropDuplicates("key").select($"key")
+      testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        AddData(inputData, ("a", 1), ("b", 1), ("c", 1), ("a", 2), ("b", 2), ("c", 2)),
+        StartStream(),
+        CheckAnswerWithTimeout(60000, "a", "b", "c"),
+        advanceRealTimeClock,
+        WaitUntilBatchProcessed(0),
+        AddData(inputData, ("a", 3), ("b", 3), ("c", 3), ("d", 1)),
+        CheckAnswerWithTimeout(60000, "a", "b", "c", "d"),
+        Execute { q =>
+          assertAllExchangesPipelined(q)
+          assert(maxConcurrentStages.get() >= 2,
+            s"expected >= 2 stages running concurrently, saw max ${maxConcurrentStages.get()}")
+        },
+        StopStream
+      )
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("pipelined shuffle: multi-key dedup runs in Real-Time Mode over a pipelined shuffle") {
+    // dropDuplicates on more than one column: the hash-partitioning is by the composite key.
+    // Confirms the pipelined path is not specific to a single dedup column.
+    val inputData = LowLatencyMemoryStream[(String, Int)]
+    val result = inputData.toDF().select($"_1".as("k1"), $"_2".as("k2"))
+      .dropDuplicates("k1", "k2")
+      .select(concat($"k1", lit("-"), $"k2").as("out"))
+    testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+      // (a,1) twice -> once; (a,2) is a distinct composite key -> also emitted.
+      AddData(inputData, ("a", 1), ("a", 1), ("a", 2), ("b", 1)),
+      StartStream(),
+      CheckAnswerWithTimeout(60000, "a-1", "a-2", "b-1"),
+      advanceRealTimeClock,
+      WaitUntilBatchProcessed(0),
+      AddData(inputData, ("a", 1), ("a", 2), ("b", 2)),
+      CheckAnswerWithTimeout(60000, "a-1", "a-2", "b-1", "b-2"),
+      Execute { q => assertAllExchangesPipelined(q) },
+      StopStream
+    )
+  }
+
+  test("pipelined shuffle: an explicit repartition-by-key runs in Real-Time Mode") {
+    // A stateless repartition (no dedup): the ShuffleExchangeExec is still marked pipelined in RTM.
+    val inputData = LowLatencyMemoryStream[Int]
+    val result = inputData.toDF().repartition(4, $"value").select($"value")
+    testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+      AddData(inputData, 1, 2, 3, 4, 5),
+      StartStream(),
+      CheckAnswerWithTimeout(60000, 1, 2, 3, 4, 5),
+      Execute { q => assertAllExchangesPipelined(q) },
+      advanceRealTimeClock,
+      WaitUntilBatchProcessed(0),
+      AddData(inputData, 6, 7),
+      CheckAnswerWithTimeout(60000, 1, 2, 3, 4, 5, 6, 7),
+      StopStream
+    )
+  }
+
+  test("pipelined shuffle: a chain of two shuffles is a single co-scheduled pipelined group") {
+    // A round-robin repartition (RoundRobinPartitioning) feeding a dropDuplicates (HashPartitioning
+    // on the dedup key) produces TWO distinct shuffle exchanges -- neither distribution satisfies
+    // the other, so they are not collapsed. BOTH must be marked pipelined and the all-pipelined job
+    // co-schedules as one group (>= 2 stages running at once). This is the multi-shuffle-per-
+    // group scenario: more than one pipelined shuffle in a single Real-Time Mode job.
+    val runningStages = ConcurrentHashMap.newKeySet[Int]()
+    val maxConcurrentStages = new AtomicInteger(0)
+    val listener = new SparkListener {
+      override def onStageSubmitted(e: SparkListenerStageSubmitted): Unit = {
+        runningStages.add(e.stageInfo.stageId)
+        maxConcurrentStages.accumulateAndGet(runningStages.size(), Math.max)
+      }
+      override def onStageCompleted(e: SparkListenerStageCompleted): Unit = {
+        runningStages.remove(e.stageInfo.stageId)
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+    // Keep the shuffle partition count small: the whole group (scan + 2 shuffles) must fit in the
+    // test cluster's slots at once (gang admission), so a 2-shuffle chain at the default 200
+    // partitions would fail with CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT.
+    try {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+        val inputData = LowLatencyMemoryStream[(String, Int)]
+        val result = inputData.toDF().select($"_1".as("key"))
+          .repartition(4)          // RoundRobinPartitioning -> shuffle #1
+          .dropDuplicates("key")   // HashPartitioning(key) -> shuffle #2
+          .select($"key")
+        testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+          AddData(inputData, ("a", 1), ("b", 1), ("c", 1), ("a", 2)),
+          StartStream(),
+          CheckAnswerWithTimeout(60000, "a", "b", "c"),
+          Execute { q =>
+            val exchanges = q.lastExecution.executedPlan.collect {
+              case s: ShuffleExchangeExec => s
+            }
+            assert(exchanges.size >= 2, s"expected >= 2 shuffle exchanges, got ${exchanges.size}")
+            assert(exchanges.forall(_.pipelined),
+              "every exchange in the chain must be pipelined, got: " +
+                exchanges.map(_.pipelined).mkString(", "))
+            assert(maxConcurrentStages.get() >= 2,
+              s"a 2-shuffle chain must co-schedule >= 2 stages, saw ${maxConcurrentStages.get()}")
+          },
+          StopStream
+        )
+      }
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("pipelined shuffle: dedup recovers from a task failure via checkpoint restart") {
+    withTempDir { checkpointDir =>
+      // A UDF that throws on demand, placed after the dedup so the failure lands in the pipelined
+      // consumer stage while the query runs. RTM does not retry tasks, so one failure fails it.
+      val failUDF = udf { (key: String) =>
+        if (StreamRealTimeModeSuite.failTasks) {
+          throw new RuntimeException(s"forced task failure on $key")
+        }
+        key
+      }
+      val inputData = LowLatencyMemoryStream[(String, Int)]
+      val result = inputData.toDF().select($"_1".as("key")).dropDuplicates("key")
+        .select(failUDF($"key").as("key"))
+      testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        AddData(inputData, ("a", 1), ("b", 1), ("a", 2)),
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        CheckAnswerWithTimeout(60000, "a", "b"),
+        advanceRealTimeClock,
+        WaitUntilBatchProcessed(0),
+        Execute { _ => StreamRealTimeModeSuite.failTasks = true },
+        AddData(inputData, ("c", 1)),
+        advanceRealTimeClock,
+        ExpectFailure[SparkException] { ex =>
+          val msg = Option(ex.getCause).map(_.getMessage).getOrElse(ex.getMessage)
+          assert(msg != null && msg.contains("forced task failure"),
+            s"expected a forced task failure, got: $msg")
+        }
+      )
+      // Restart from the same checkpoint: batch-0 dedup state must survive (a, b not re-emitted),
+      // only the genuinely-new c, d appear -- recovery to the last committed batch.
+      StreamRealTimeModeSuite.failTasks = false
+      testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        AddData(inputData, ("a", 3), ("b", 3), ("c", 3), ("d", 1)),
+        CheckAnswerWithTimeout(60000, "c", "d"),
+        advanceRealTimeClock,
+        StopStream
+      )
+    }
+  }
+
+  test("pipelined shuffle: dedup recovers from a commit-log write failure") {
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        classOf[FailureInjectionCheckpointFileManager].getName) {
+      withTempDir { checkpointDir =>
+        val injectionState = FailureInjectionFileSystem.registerTempPath(checkpointDir.getPath)
+        try {
+          val inputData = LowLatencyMemoryStream[(String, Int)]
+          val result = inputData.toDF().select($"_1".as("key")).dropDuplicates("key").select($"key")
+          // Batch 0 dedups a, b and commits. Then fail the close() of batch 1's commit-log write so
+          // batch 1 cannot commit and the query fails after processing.
+          injectionState.createAtomicDelayCloseRegex = Seq(".*/commits/1")
+          testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+            AddData(inputData, ("a", 1), ("b", 1)),
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            CheckAnswerWithTimeout(60000, "a", "b"),
+            advanceRealTimeClock,
+            WaitUntilBatchProcessed(0),
+            AddData(inputData, ("c", 1)),
+            CheckAnswerWithTimeout(60000, "a", "b", "c"),
+            advanceRealTimeClock,
+            ExpectFailure[IOException]()
+          )
+          // Clear injection, restart: batch-0 state survives (a, b seen); uncommitted batch 1
+          // re-runs so its new key c is still emitted, plus a further new key d.
+          injectionState.createAtomicDelayCloseRegex = Seq.empty
+          testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            AddData(inputData, ("a", 2), ("b", 2), ("c", 2), ("d", 1)),
+            CheckAnswerWithTimeout(60000, "c", "d"),
+            advanceRealTimeClock,
+            StopStream
+          )
+        } finally {
+          FailureInjectionFileSystem.removePathFromTempToInjectionState(checkpointDir.getPath)
+        }
+      }
+    }
+  }
+}
+
+/** Driver-side switch a UDF reads on executors to fail a task on demand (fault-tolerance tests). */
+object StreamRealTimeModeSuite {
+  @volatile var failTasks: Boolean = false
 }
