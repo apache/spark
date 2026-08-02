@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.util.Arrays
 
 import scala.collection.mutable
 
@@ -187,7 +188,9 @@ private[spark] class CompressedMapStatus(
  * @param numNonEmptyBlocks the number of non-empty blocks
  * @param emptyBlocks a bitmap tracking which blocks are empty
  * @param avgSize average size of the non-empty and non-huge blocks
- * @param hugeBlockSizes sizes of huge blocks by their reduceId.
+ * @param hugeBlockIds reduceIds of the accurately recorded blocks, in increasing order
+ * @param hugeBlockSizes compressed sizes of the accurately recorded blocks, aligned with
+ *                       hugeBlockIds
  * @param _mapTaskId unique task id for the task
  * @param _checksumVal checksum value for the task
  */
@@ -196,17 +199,22 @@ private[spark] class HighlyCompressedMapStatus private (
     private[this] var numNonEmptyBlocks: Int,
     private[this] var emptyBlocks: RoaringBitmap,
     private[this] var avgSize: Long,
-    private[this] var hugeBlockSizes: scala.collection.Map[Int, Byte],
+    // The driver retains one map status per map task for the lifetime of the shuffle, so the
+    // accurate sizes are held as two parallel primitive arrays rather than as a boxed
+    // Map[Int, Byte], whose nodes, bucket array and boxed keys cost an order of magnitude more
+    // heap per entry.
+    private[this] var hugeBlockIds: Array[Int],
+    private[this] var hugeBlockSizes: Array[Byte],
     private[this] var _mapTaskId: Long,
     private[this] var _checksumVal: Long = 0)
   extends MapStatus with Externalizable {
 
   // loc could be null when the default constructor is called during deserialization
-  require(loc == null || avgSize > 0 || hugeBlockSizes.size > 0
+  require(loc == null || avgSize > 0 || hugeBlockIds.length > 0
     || numNonEmptyBlocks == 0 || _mapTaskId > 0,
     "Average size can only be zero for map stages that produced no output")
 
-  protected def this() = this(null, -1, null, -1, null, -1, 0)  // For deserialization only
+  protected def this() = this(null, -1, null, -1, null, null, -1, 0)  // For deserialization only
 
   override def location: BlockManagerId = loc
 
@@ -215,14 +223,12 @@ private[spark] class HighlyCompressedMapStatus private (
   }
 
   override def getSizeForBlock(reduceId: Int): Long = {
-    assert(hugeBlockSizes != null)
+    assert(hugeBlockIds != null)
     if (emptyBlocks.contains(reduceId)) {
       0
     } else {
-      hugeBlockSizes.get(reduceId) match {
-        case Some(size) => MapStatus.decompressSize(size)
-        case None => avgSize
-      }
+      val i = Arrays.binarySearch(hugeBlockIds, reduceId)
+      if (i >= 0) MapStatus.decompressSize(hugeBlockSizes(i)) else avgSize
     }
   }
 
@@ -234,10 +240,12 @@ private[spark] class HighlyCompressedMapStatus private (
     loc.writeExternal(out)
     emptyBlocks.serialize(out)
     out.writeLong(avgSize)
-    out.writeInt(hugeBlockSizes.size)
-    hugeBlockSizes.foreach { kv =>
-      out.writeInt(kv._1)
-      out.writeByte(kv._2)
+    out.writeInt(hugeBlockIds.length)
+    var i = 0
+    while (i < hugeBlockIds.length) {
+      out.writeInt(hugeBlockIds(i))
+      out.writeByte(hugeBlockSizes(i))
+      i += 1
     }
     out.writeLong(_mapTaskId)
     out.writeLong(_checksumVal)
@@ -250,13 +258,28 @@ private[spark] class HighlyCompressedMapStatus private (
     emptyBlocks.deserialize(in)
     avgSize = in.readLong()
     val count = in.readInt()
-    val hugeBlockSizesImpl = mutable.Map.empty[Int, Byte]
-    (0 until count).foreach { _ =>
-      val block = in.readInt()
-      val size = in.readByte()
-      hugeBlockSizesImpl(block) = size
+    val blockIds = new Array[Int](count)
+    val blockSizes = new Array[Byte](count)
+    var isSorted = true
+    var i = 0
+    while (i < count) {
+      blockIds(i) = in.readInt()
+      blockSizes(i) = in.readByte()
+      if (i > 0 && blockIds(i) <= blockIds(i - 1)) {
+        isSorted = false
+      }
+      i += 1
     }
-    hugeBlockSizes = hugeBlockSizesImpl
+    if (isSorted) {
+      hugeBlockIds = blockIds
+      hugeBlockSizes = blockSizes
+    } else {
+      // writeExternal emits the entries in increasing reduceId order, but a status written by an
+      // older version may be in any order, and getSizeForBlock binary searches the ids.
+      val order = (0 until count).sortBy(blockIds).toArray
+      hugeBlockIds = order.map(blockIds)
+      hugeBlockSizes = order.map(blockSizes)
+    }
     _mapTaskId = in.readLong()
     _checksumVal = in.readLong()
   }
@@ -290,7 +313,9 @@ private[spark] object HighlyCompressedMapStatus {
     // only recorded while `numTiedSkewedBlocksToRecord` lasts, because there can be arbitrarily
     // many of them and recording them all would blow past SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.
     var skewCutoff = Long.MaxValue
+    var numTiedSkewedBlocks = 0
     var numTiedSkewedBlocksToRecord = 0
+    var tieRotationStart = 0
     val threshold =
       if (accurateBlockSkewedFactor > 0) {
         val maxAccurateSkewedBlockNumber =
@@ -318,13 +343,33 @@ private[spark] object HighlyCompressedMapStatus {
         numTiedSkewedBlocksToRecord = maxAccurateSkewedBlockNumber - numLargerSizes
         val skewSizeThreshold =
           Math.max(medianSize * accurateBlockSkewedFactor, skewCutoff.toDouble)
-        Math.min(shuffleAccurateBlockThreshold.toDouble, skewSizeThreshold)
+        val skewThreshold = Math.min(shuffleAccurateBlockThreshold.toDouble, skewSizeThreshold)
+        // Every map task of a shuffle sees the same block size distribution, so always recording
+        // the lowest tied reduce ids would hide the reducers that lose the tie behind `avgSize` in
+        // every map status, and MapOutputTracker sums those. Rotating the recorded window with the
+        // map task id spreads the loss over all of the tied reducers instead. This costs one more
+        // pass over the sizes, so it is only paid when blocks tied at the cutoff can be recorded
+        // at all, which is not the case when the blocks above the cutoff already fill the budget
+        // or when the skew threshold is above the cutoff.
+        if (numTiedSkewedBlocksToRecord > 0 && skewThreshold <= skewCutoff.toDouble) {
+          j = 0
+          while (j < totalNumBlocks) {
+            if (sizes(j) == skewCutoff && sizes(j) > 0) numTiedSkewedBlocks += 1
+            j += 1
+          }
+          if (numTiedSkewedBlocks > 0) {
+            tieRotationStart = Math.floorMod(mapTaskId, numTiedSkewedBlocks.toLong).toInt
+          }
+        }
+        skewThreshold
       } else {
         // Disable skew detection if accurateBlockSkewedFactor <= 0
         shuffleAccurateBlockThreshold.toDouble
       }
 
-    val hugeBlockSizes = mutable.Map.empty[Int, Byte]
+    val hugeBlockIds = mutable.ArrayBuilder.make[Int]
+    val hugeBlockSizes = mutable.ArrayBuilder.make[Byte]
+    var numTiedSkewedBlocksSeen = 0
     while (i < totalNumBlocks) {
       val size = uncompressedSizes(i)
       if (size > 0) {
@@ -335,14 +380,20 @@ private[spark] object HighlyCompressedMapStatus {
         if (!isAccurate && size >= threshold) {
           if (size > skewCutoff) {
             isAccurate = true
-          } else if (numTiedSkewedBlocksToRecord > 0) {
-            // Ties are broken by block index so that the map status stays deterministic.
-            numTiedSkewedBlocksToRecord -= 1
-            isAccurate = true
+          } else if (numTiedSkewedBlocks > 0) {
+            // `size` is exactly `skewCutoff` here, since `threshold >= skewCutoff` whenever a
+            // block below `shuffleAccurateBlockThreshold` can reach this branch. The tied blocks
+            // that this map task records are the `numTiedSkewedBlocksToRecord` ones starting at
+            // `tieRotationStart`, wrapping around, which keeps the map status deterministic.
+            val rank =
+              Math.floorMod(numTiedSkewedBlocksSeen - tieRotationStart, numTiedSkewedBlocks)
+            isAccurate = rank < numTiedSkewedBlocksToRecord
+            numTiedSkewedBlocksSeen += 1
           }
         }
         if (isAccurate) {
-          hugeBlockSizes(i) = MapStatus.compressSize(size)
+          hugeBlockIds += i
+          hugeBlockSizes += MapStatus.compressSize(size)
         } else {
           totalSmallBlockSize += size
           numSmallBlocks += 1
@@ -360,6 +411,6 @@ private[spark] object HighlyCompressedMapStatus {
     emptyBlocks.trim()
     emptyBlocks.runOptimize()
     new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize,
-      hugeBlockSizes, mapTaskId, checksumVal)
+      hugeBlockIds.result(), hugeBlockSizes.result(), mapTaskId, checksumVal)
   }
 }
