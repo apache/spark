@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
   AttributeSet,
   Expression,
+  LambdaFunction,
   NamedExpression
 }
 import org.apache.spark.sql.catalyst.plans.JoinType
@@ -246,6 +247,8 @@ class AsOfJoinResolver(
       unresolvedAsOfJoin: AsOfJoin,
       partiallyResolved: AsOfJoin,
       materialized: MaterializedMatchCondition): AsOfJoin = {
+    throwIfLambdaBasedOrdering(materialized.orderExpression)
+
     val asOfCondition = resolveExpressionInJoin(unresolvedAsOfJoin, materialized.asOfCondition)
     val orderExpression =
       resolveExpressionInJoin(unresolvedAsOfJoin, materialized.orderExpression)
@@ -268,6 +271,8 @@ class AsOfJoinResolver(
   private def resolvePreMaterializedExpressions(
       unresolvedAsOfJoin: AsOfJoin,
       partiallyResolved: AsOfJoin): AsOfJoin = {
+    throwIfLambdaBasedOrdering(partiallyResolved.orderExpression)
+
     val resolvedTolerance =
       partiallyResolved.toleranceAssertion.map(resolveExpressionInJoin(unresolvedAsOfJoin, _))
     validateTolerance(unresolvedAsOfJoin, resolvedTolerance)
@@ -288,6 +293,26 @@ class AsOfJoinResolver(
       leftSortExprs = leftSortExpressions,
       rightSortExprs = rightSortExpressions
     )
+  }
+
+  /**
+   * `MATCH_CONDITION` operands that are ordered element-wise (`ARRAY` operands) materialize into
+   * an ordering expression built on top of a [[LambdaFunction]]:
+   *
+   * {{{
+   * -- MATCH_CONDITION (t.a >= r.a) with ARRAY<INT> operands
+   * zip_with(t.a, r.a, lambdafunction((lambda left_elem - lambda right_elem), ...))
+   * }}}
+   *
+   * The single-pass [[ExpressionResolver]] doesn't support lambda expressions, so bail out and
+   * let the fixed-point analyzer resolve those queries.
+   */
+  private def throwIfLambdaBasedOrdering(orderExpression: Expression): Unit = {
+    if (orderExpression.exists(_.isInstanceOf[LambdaFunction])) {
+      throw new ExplicitlyUnsupportedResolverFeature(
+        "MATCH_CONDITION with a lambda-based ordering expression"
+      )
+    }
   }
 
   private def resolveExpressionInJoin(
