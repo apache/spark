@@ -475,4 +475,32 @@ class UserCredentialManagerSuite extends SparkFunSuite {
       manager.stop()
     }
   }
+
+  test("stop() closes initialized credential providers") {
+    val conf = createSparkConf()
+    val ctx = createUserContext()
+    val callbackRef = new AtomicReference[Array[Byte]]()
+
+    conf.set("spark.security.oidc.provider.fake",
+      "org.apache.spark.security.FakeCredentialProvider")
+
+    val manager = new UserCredentialManager(
+      conf,
+      createIngestor(ctx),
+      bytes => callbackRef.set(bytes))
+
+    manager.start()
+
+    // Get the FakeCredentialProvider instance to verify close was called
+    val providerOpt = CredentialProviderLoader.providerFor("fake",
+      new util.HashMap[String, String]())
+    assert(providerOpt.isPresent)
+    val fakeProvider = providerOpt.get().asInstanceOf[FakeCredentialProvider]
+    assert(fakeProvider.getCloseCount === 0, "close() not yet called before stop()")
+
+    manager.stop()
+
+    assert(fakeProvider.getCloseCount === 1,
+      "stop() should close initialized providers exactly once")
+  }
 }

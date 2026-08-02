@@ -367,6 +367,70 @@ public class CredentialProviderLoaderSuite {
   }
 
   @Test
+  public void testCloseAllClosesInitializedProviders() throws Exception {
+    // Initialize a provider by calling providerFor
+    Map<String, String> conf = Map.of();
+    Optional<CredentialProvider> result = CredentialProviderLoader.providerFor("fake", conf);
+    assertTrue(result.isPresent());
+    FakeCredentialProvider fake = (FakeCredentialProvider) result.get();
+    assertEquals(0, fake.getCloseCount(), "close() not yet called");
+
+    // Call closeAll
+    CredentialProviderLoader.closeAll();
+
+    assertEquals(1, fake.getCloseCount(), "close() should be called exactly once");
+  }
+
+  @Test
+  public void testCloseAllSuppressesExceptionsAndClosesAll() throws Exception {
+    // Two providers: first throws on close, second should still be closed
+    CredentialProvider throwingProvider = new CredentialProvider() {
+      @Override
+      public void init(Map<String, String> conf) {}
+
+      @Override
+      public Set<String> supportedSchemes() {
+        return Set.of("throwing");
+      }
+
+      @Override
+      public ServiceCredential resolve(UserContext user, URI target) {
+        return new ServiceCredential(Map.of(), Instant.now().plusSeconds(60));
+      }
+
+      @Override
+      public void close() throws Exception {
+        throw new RuntimeException("Simulated close failure");
+      }
+    };
+
+    FakeCredentialProvider fakeProvider = new FakeCredentialProvider();
+
+    CredentialProviderLoader.setProvidersForTesting(
+        List.of(throwingProvider, fakeProvider));
+
+    // Initialize both by selecting them
+    Map<String, String> conf = new HashMap<>();
+    conf.put("spark.security.oidc.provider.throwing", throwingProvider.getClass().getName());
+    CredentialProviderLoader.providerFor("throwing", conf);
+    CredentialProviderLoader.providerFor("fake", conf);
+
+    // closeAll should throw (from throwingProvider) but still close fakeProvider
+    Exception e = assertThrows(Exception.class,
+        () -> CredentialProviderLoader.closeAll());
+    assertTrue(e.getMessage().contains("Simulated close failure"));
+    assertEquals(1, fakeProvider.getCloseCount(),
+        "Second provider should still be closed even when first throws");
+  }
+
+  @Test
+  public void testCloseAllWithNoInitializedProvidersIsNoOp() throws Exception {
+    // No providers initialized — closeAll should not throw
+    CredentialProviderLoader.closeAll();
+    // If we reach here, no exception was thrown — success
+  }
+
+  @Test
   public void testInitRetryAfterFailure() {
     // A provider whose init() throws on the first call then succeeds on the second.
     // First providerFor should propagate the failure; second providerFor should retry
