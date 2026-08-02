@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, CollationAwareXxHash64, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
@@ -516,6 +516,48 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "bf1.c1 = bf2.c2 where square(bf2.a2) = 62" )
       assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on " +
         "bf1.c1 = square(bf2.c2) where bf2.a2 = 62" )
+    }
+  }
+
+  test("SPARK-58486: runtime bloom filters use collation-aware hashing") {
+    withTable("runtime_filter_dim", "runtime_filter_fact") {
+      sql("""
+        |CREATE TABLE runtime_filter_dim(
+        |  key STRING COLLATE UTF8_LCASE,
+        |  category STRING) USING parquet
+        |""".stripMargin)
+      sql("INSERT INTO runtime_filter_dim VALUES ('ABC', 'x')")
+      sql("""
+        |CREATE TABLE runtime_filter_fact USING parquet AS
+        |SELECT concat('abc', CAST(id AS STRING)) COLLATE UTF8_LCASE AS key
+        |FROM range(5000)
+        |""".stripMargin)
+
+      val query =
+        """
+          |SELECT count(*)
+          |FROM runtime_filter_fact fact JOIN runtime_filter_dim dim
+          |ON substr(fact.key, 1, 3) = dim.key
+          |WHERE dim.category = 'x'
+          |""".stripMargin
+
+      withSQLConf(
+        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        assertRewroteWithBloomFilter(query)
+
+        val plan = sql(query).queryExecution.optimizedPlan
+        val bloomFilterHashes = plan.collectWithSubqueries {
+          case node => node.expressions.flatMap(_.collect {
+            case BloomFilterMightContain(_, hash) => hash
+            case AggregateExpression(
+                BloomFilterAggregate(hash, _, _, _, _), _, _, _, _) => hash
+          })
+        }.flatten
+        assert(bloomFilterHashes.size == 2)
+        assert(bloomFilterHashes.forall(_.isInstanceOf[CollationAwareXxHash64]))
+      }
     }
   }
 

@@ -61,9 +61,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val rowCount = filterCreationSidePlan.stats.rowCount
     val bloomFilterAgg =
       if (rowCount.isDefined && rowCount.get.longValue > 0L) {
-        new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideKey)), rowCount.get.longValue)
+        new BloomFilterAggregate(
+          new CollationAwareXxHash64(Seq(filterCreationSideKey)), rowCount.get.longValue)
       } else {
-        new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideKey)))
+        new BloomFilterAggregate(new CollationAwareXxHash64(Seq(filterCreationSideKey)))
       }
 
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
@@ -76,7 +77,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
     val filter = BloomFilterMightContain(bloomFilterSubquery,
-      new XxHash64(Seq(filterApplicationSideKey)))
+      new CollationAwareXxHash64(Seq(filterApplicationSideKey)))
     Filter(filter, filterApplicationSidePlan)
   }
 
@@ -275,7 +276,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     plan.exists {
       case Filter(condition, _) =>
         splitConjunctivePredicates(condition).exists {
-          case BloomFilterMightContain(_, XxHash64(Seq(valueExpression), _))
+          case BloomFilterMightContain(_, CollationAwareXxHash64(Seq(valueExpression), _))
             if valueExpression.fastEquals(key) => true
           case _ => false
         }
