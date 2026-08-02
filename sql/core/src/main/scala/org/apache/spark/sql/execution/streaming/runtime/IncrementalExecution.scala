@@ -699,10 +699,37 @@ class IncrementalExecution(
       if (!isRealTimeMode) {
         plan
       } else {
-        plan.transformUp {
-          case s: ShuffleExchangeExec if !s.pipelined => s.copy(pipelined = true)
-        }
+        markStreamingPath(plan)._1
       }
+    }
+
+    /**
+     * Marks the shuffles that are on the streaming path -- those whose subtree reaches a
+     * [[RealTimeStreamScanExec]] -- and returns the rewritten plan along with whether this
+     * subtree reaches one.
+     *
+     * A plan can hold a static subtree alongside the streaming one: the static side of a
+     * broadcast stream-static join is planned in the same physical plan and may contain its own
+     * shuffle. That shuffle materializes normally and is not part of the pipelined group -- and
+     * cannot be, since a static side runs to completion rather than streaming. Marking it
+     * pipelined would pull it into the group and demand slots for stages that must instead
+     * finish, which fails admission (CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT). This mirrors the
+     * streaming-path detection the operator allowlist uses (RealTimeModeAllowlist), which only
+     * inspects nodes whose subtree reaches the real-time scan; marking a wider set than the
+     * allowlist checks would flip shuffles it never validated.
+     */
+    private def markStreamingPath(plan: SparkPlan): (SparkPlan, Boolean) = plan match {
+      case rts: RealTimeStreamScanExec => (rts, true)
+      case p if p.children.isEmpty => (p, false)
+      case p =>
+        val results = p.children.map(markStreamingPath)
+        val onStreamingPath = results.exists(_._2)
+        val newPlan = p.withNewChildren(results.map(_._1))
+        newPlan match {
+          case s: ShuffleExchangeExec if onStreamingPath && !s.pipelined =>
+            (s.copy(pipelined = true), true)
+          case other => (other, onStreamingPath)
+        }
     }
   }
 

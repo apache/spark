@@ -27,6 +27,7 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException, TaskContext}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted, SparkListenerStageSubmitted}
+import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.RealTimeTrigger
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
@@ -212,6 +213,48 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
       CheckAnswerWithTimeout(10000, (1, 0), (2, 1), (3, 2), (4, 0), (5, 1), (6, 2)),
       StopStream
     )
+  }
+
+  test("pipelined shuffle: a static-side shuffle is not marked pipelined") {
+    // A broadcast stream-static join can carry a shuffle on its STATIC side, in a subtree with no
+    // RealTimeStreamScanExec. That shuffle must materialize normally: a static side runs to
+    // completion rather than streaming, so pulling it into the pipelined group would demand
+    // concurrent slots for a stage that must instead finish, failing admission. Only shuffles on
+    // the streaming path are marked, matching what the operator allowlist actually validates.
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
+      val staticData = spark.range(0, 3).selectExpr("id as sk", "id * 10 as sv")
+        .repartition(3, $"sk")
+      val inputData = LowLatencyMemoryStream[(String, Int)](2)
+      val streamDf = inputData.toDF().select($"_1".as("key"), $"_2".cast("long").as("sk"))
+      val result = streamDf
+        .repartition(2, $"sk")
+        .join(broadcast(staticData), Seq("sk"), "left")
+        .select($"key")
+      testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        AddData(inputData, ("a", 1), ("b", 2)),
+        StartStream(),
+        CheckAnswerWithTimeout(60000, "a", "b"),
+        Execute { q =>
+          val exchanges = q.lastExecution.executedPlan.collect {
+            case s: ShuffleExchangeExec => s
+          }
+          // The streaming-side repartition is pipelined; a static-side shuffle, if it survives
+          // into this plan, must not be.
+          val streamingSide = exchanges.filter(_.exists {
+            case _: RealTimeStreamScanExec => true
+            case _ => false
+          })
+          assert(streamingSide.nonEmpty, "expected a shuffle on the streaming path")
+          assert(streamingSide.forall(_.pipelined),
+            "a streaming-path shuffle must be pipelined")
+          assert(exchanges.filterNot(streamingSide.contains).forall(!_.pipelined),
+            "a static-side shuffle must not be marked pipelined")
+        },
+        StopStream
+      )
+    }
   }
 
   test("multiple broadcast joins with the same static table run in Real-Time Mode") {
@@ -592,6 +635,27 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
             "every exchange in the chain must be pipelined, got: " +
               exchanges.map(_.pipelined).mkString(", "))
         },
+        StopStream
+      )
+    }
+  }
+
+  test("pipelined shuffle: an explicit sortBeforeRepartition=true does not stall the query") {
+    // The deterministic local sort before a round-robin repartition never drains an unbounded
+    // stream, so Real-Time Mode overrides this config even when it is set explicitly -- honouring
+    // it would hang the query forever. See MicroBatchExecution.
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.SORT_BEFORE_REPARTITION.key -> "true") {
+      val inputData = LowLatencyMemoryStream[(String, Int)](2)
+      val result = inputData.toDF().select($"_1".as("key"))
+        .repartition(4)
+        .dropDuplicates("key")
+        .select($"key")
+      testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        AddData(inputData, ("a", 1), ("b", 1), ("c", 1), ("a", 2)),
+        StartStream(),
+        CheckAnswerWithTimeout(60000, "a", "b", "c"),
         StopStream
       )
     }
