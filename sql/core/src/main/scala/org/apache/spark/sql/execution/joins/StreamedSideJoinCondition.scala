@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Expression, ExprUtils, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, JoinType, LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.SparkPlan
 
@@ -38,12 +38,14 @@ private[joins] object StreamedSideJoinCondition extends PredicateHelper {
    * The streamed-only part can be evaluated once per streamed row before probing/walking the
    * buffered matches. Returns `(None, condition)` unchanged otherwise.
    *
-   * Only deterministic, non-throwable conjuncts are hoisted: the hoisted part runs for every
-   * streamed row, including rows that have no buffered match and would never evaluate the
-   * conjunct otherwise, so hoisting a throwable conjunct could turn a valid outer/anti
-   * result into an exception, and hoisting a non-deterministic conjunct would change how
-   * many times it is evaluated per streamed row. This mirrors the guard used for the
-   * analogous relocation in the optimizer rule PushPredicateThroughJoin.
+   * Only conjuncts that can be evaluated unconditionally are hoisted (see
+   * [[ExprUtils.canEvaluateUnconditionally]]): the hoisted part runs for every streamed
+   * row, including rows that have no buffered match and would never evaluate the conjunct
+   * otherwise, so hoisting a conjunct that can throw could turn a valid outer/anti result
+   * into an exception, and hoisting a non-deterministic conjunct would change how many
+   * times it is evaluated per streamed row. A whitelist of total expression families is
+   * used instead of [[Expression.throwable]], which is opt-in metadata that UDFs such as
+   * ScalaUDF do not override, so a throwing UDF would report non-throwable.
    */
   def split(
       condition: Option[Expression],
@@ -57,7 +59,7 @@ private[joins] object StreamedSideJoinCondition extends PredicateHelper {
     if (condition.isDefined && splitEnabled && supported) {
       val conjuncts = splitConjunctivePredicates(condition.get)
       val (streamedOnly, rest) = conjuncts.partition(p =>
-        p.deterministic && !p.throwable && p.references.subsetOf(streamedPlan.outputSet))
+        ExprUtils.canEvaluateUnconditionally(p) && p.references.subsetOf(streamedPlan.outputSet))
       (streamedOnly.reduceOption(And), rest.reduceOption(And))
     } else {
       (None, condition)

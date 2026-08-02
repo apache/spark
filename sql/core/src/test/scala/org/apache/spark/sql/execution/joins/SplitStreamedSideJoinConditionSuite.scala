@@ -18,10 +18,8 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, LessThan, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, LessThan, Literal, Rand}
 import org.apache.spark.sql.catalyst.plans.LeftOuter
-import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
-import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -51,7 +49,6 @@ import org.apache.spark.sql.test.SharedSparkSession
  * query terminate (with wrong results).
  */
 class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSession {
-  import testImplicits.toRichColumn
 
   // streamed_t: (id, a, pad) with id 0..7, a = id, pad = id * 10
   // build_t:    (bid, b) with bid 0..3, b = bid * 100
@@ -106,15 +103,20 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
   // residual: hoisting evaluates the hoisted part for every streamed row, including rows
   // that have no buffered match and would never evaluate the conjunct otherwise.
 
-  test("split does not hoist throwable conjuncts") {
+  test("split does not hoist conjuncts that can throw") {
     val streamed = spark.range(8).selectExpr("id", "id AS a").queryExecution.executedPlan
     val a = streamed.output.find(_.name == "a").get
     val hoistable = LessThan(a, Literal(5L))
-    val throwableConjunct = TestThrowableUDF(LessThan(a, Literal(4L)))
+    // Add can throw on overflow in ANSI mode but inherits throwable = false from its
+    // non-throwing children. It must stay in the residual, which is why a !throwable
+    // gate is not sufficient and the hoisted part is restricted to expression families
+    // with a reliable non-throwing contract.
+    val unmarkedThrowable = LessThan(Add(a, Literal(1L)), Literal(5L))
+    assert(!unmarkedThrowable.throwable)
     val (streamedOnly, rest) = StreamedSideJoinCondition.split(
-      Some(And(hoistable, throwableConjunct)), LeftOuter, streamed, splitEnabled = true)
+      Some(And(hoistable, unmarkedThrowable)), LeftOuter, streamed, splitEnabled = true)
     assert(streamedOnly.contains(hoistable))
-    assert(rest.contains(throwableConjunct))
+    assert(rest.contains(unmarkedThrowable))
   }
 
   test("split does not hoist non-deterministic conjuncts") {
@@ -217,26 +219,27 @@ class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSess
     codegenOnly = true)
 
   // Left outer join whose ON clause has two streamed-side-only conjuncts: a hoistable
-  // a < 5 and a throwable TestThrowableUDF(a < 4). The throwable conjunct holds for the
-  // matched rows (ids 0..3) and throws for the unmatched ones (ids 4..7), so it throws
-  // exactly when it is wrongly hoisted and evaluated before probing.
-  private def throwableConjunctJoin: DataFrame = {
-    val s = spark.table("streamed_t")
-    val b = spark.table("build_t").hint("broadcast")
-    val condition = And(
-      EqualTo(s.col("id").expr, b.col("bid").expr),
-      And(
-        LessThan(s.col("a").expr, Literal(5L)),
-        TestThrowableUDF(LessThan(s.col("a").expr, Literal(4L)))))
-    val join = Join(s.logicalPlan, b.logicalPlan, LeftOuter, Some(condition), JoinHint.NONE)
-    Dataset.ofRows(spark, join).select("id", "a", "bid", "b")
+  // a < 5 and a real registered UDF that returns true when its input is true and throws
+  // when it is false or null. The UDF conjunct holds for the matched rows (ids 0..3) and
+  // throws for the unmatched ones (ids 4..7), so it throws exactly when it is wrongly
+  // hoisted and evaluated before probing. A ScalaUDF does not override `throwable`, so
+  // the old !throwable gate hoisted it; the whitelist keeps it in the residual.
+  private def throwingUdfJoin: DataFrame = {
+    spark.udf.register("throw_unless_true", (v: Boolean) =>
+      if (v) true else throw new RuntimeException("throw_unless_true evaluated to false"))
+    spark.sql("""
+      |SELECT /*+ BROADCAST(b) */ s.id, s.a, b.bid, b.b
+      |FROM streamed_t s
+      |LEFT OUTER JOIN build_t b
+      |ON s.id = b.bid AND s.a < 5 AND throw_unless_true(s.a < 4)
+    """.stripMargin)
   }
 
-  // End-to-end: the throwable conjunct must not run for streamed rows 4..7, which have no
-  // buffered match. The hoistable conjunct a < 5 keeps the hoisted guard on the path so
-  // the test proves the throwable conjunct is excluded from it, not that hoisting is off.
-  // Before the fix, rows 4..7 evaluate the hoisted throwable conjunct and throw.
+  // End-to-end: the throwing UDF conjunct must not run for streamed rows 4..7, which have
+  // no buffered match. The hoistable conjunct a < 5 keeps the hoisted guard on the path
+  // so the test proves the UDF conjunct is excluded from it, not that hoisting is off.
+  // Before the fix, rows 4..7 evaluate the hoisted UDF conjunct and throw.
   testWithCodegenOnAndOff(
-    "throwable streamed-side conjunct is not evaluated for unmatched rows")(
-    throwableConjunctJoin)
+    "throwing UDF conjunct is not evaluated for unmatched rows")(
+    throwingUdfJoin)
 }
