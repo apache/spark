@@ -6074,10 +6074,10 @@ object functions {
    *
    * @param e
    *   the value to truncate. A column that evaluates to a numeric.
-   * @group math_funcs
-   * @since 4.3.0
    * @return
    *   Returns a column of the same type as the input.
+   * @group math_funcs
+   * @since 4.3.0
    */
   def truncate(e: Column): Column = truncate(e, 0)
 
@@ -6090,10 +6090,10 @@ object functions {
    * @param scale
    *   the number of decimal places to keep. A column that evaluates to an integral. Must be a
    *   constant.
-   * @group math_funcs
-   * @since 4.3.0
    * @return
    *   Returns a column of the same type as the input.
+   * @group math_funcs
+   * @since 4.3.0
    */
   def truncate(e: Column, scale: Int): Column = Column.fn("truncate", e, lit(scale))
 
@@ -6106,10 +6106,10 @@ object functions {
    * @param scale
    *   the number of decimal places to keep. A column that evaluates to an integral. Must be a
    *   constant.
-   * @group math_funcs
-   * @since 4.3.0
    * @return
    *   Returns a column of the same type as the input.
+   * @group math_funcs
+   * @since 4.3.0
    */
   def truncate(e: Column, scale: Column): Column = Column.fn("truncate", e, scale)
 

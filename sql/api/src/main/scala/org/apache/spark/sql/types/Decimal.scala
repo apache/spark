@@ -434,7 +434,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
                 lv += (if (droppedDigits < 0) -1L else 1L)
               }
             case ROUND_DOWN =>
-            // Truncation toward zero: `lv /= pow10diff` already dropped the fractional part.
+              // Truncation toward zero: `lv /= pow10diff` already dropped the fractional part.
             case _ =>
               throw DataTypeErrors.unsupportedRoundingMode(roundMode)
           }

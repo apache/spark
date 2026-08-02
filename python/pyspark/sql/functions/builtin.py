@@ -8334,12 +8334,15 @@ def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) ->
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A column for the truncated value.
-        Returns a column of the same type as the input.
+        A column for the truncated value, of the same type as the input, except that a decimal
+        input may return a decimal of different precision and scale.
 
     See Also
     --------
     :meth:`pyspark.sql.functions.round`
+    :meth:`pyspark.sql.functions.trunc`
+    :meth:`pyspark.sql.functions.floor`
+    :meth:`pyspark.sql.functions.ceil`
 
     Examples
     --------
@@ -8354,6 +8357,12 @@ def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) ->
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(sf.truncate(sf.lit(-2.99), sf.lit(0)).alias("r")).collect()
     [Row(r=-2.0)]
+
+    Example 3: The scale argument defaults to 0 when omitted
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.truncate(sf.lit(1234.5678)).alias("r")).collect()
+    [Row(r=1234.0)]
     """
     if scale is None:
         return _invoke_function_over_columns("truncate", col)

@@ -1999,7 +1999,11 @@ case class BRound(
 case class Truncate(
     child: Expression,
     scale: Expression,
+    // Kept for symmetry with Round/BRound, which do need it. Truncation toward zero can never
+    // increase magnitude, so the ANSI overflow checks inherited from RoundBase never trigger.
     override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  // Also inherits RoundBase's one-digit decimal precision widening, needed for rounding modes
+  // that can carry (e.g. ceil(9.9, 0) = 10) but never exercised here since truncation cannot.
   extends RoundBase(child, scale, BigDecimal.RoundingMode.DOWN, "ROUND_DOWN") {
   def this(child: Expression) = this(child, Literal(0), SQLConf.get.ansiEnabled)
 
