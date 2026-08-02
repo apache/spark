@@ -65,9 +65,9 @@ case class ProjectAggregationBufferExec(
         (expressions, inputSchema) =>
           MutableProjection.create(expressions, inputSchema))
 
-      iter.map {
+      iter.map { row =>
         numOutputRows += 1
-        aggProcessor.process _
+        aggProcessor.process(row)
       }
     }
   }
