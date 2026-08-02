@@ -4702,11 +4702,56 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
  * `UnresolvedHaving` in the main batch.
  */
 object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
+  /**
+   * Searches through Project and Generate nodes for a Window chain and places HAVING below every
+   * Window in that chain. This restores SQL clause order for plans produced by queries such as:
+   *
+   * {{{
+   * SELECT explode(array(a)), count(*) OVER ()
+   * FROM VALUES (1), (2), (NULL) AS t(a)
+   * GROUP BY a
+   * HAVING a IS NOT NULL
+   * }}}
+   *
+   * Returns None unless the condition can be evaluated below every Window in the chain.
+   */
+  private def insertFilterBeforeWindow(
+      condition: Expression,
+      plan: LogicalPlan): Option[LogicalPlan] = plan match {
+    case project: Project =>
+      insertFilterBeforeWindow(condition, project.child)
+        .map(child => project.withNewChildren(Seq(child)))
+    case generate: Generate =>
+      insertFilterBeforeWindow(condition, generate.child)
+        .map(child => generate.withNewChildren(Seq(child)))
+    case window: Window =>
+      insertFilterBeforeWindowChain(condition, window)
+    case _ =>
+      None
+  }
+
+  private def insertFilterBeforeWindowChain(
+      condition: Expression,
+      window: Window): Option[LogicalPlan] = {
+    if (!condition.references.subsetOf(window.child.outputSet)) {
+      None
+    } else {
+      val child = window.child match {
+        case childWindow: Window =>
+          insertFilterBeforeWindowChain(condition, childWindow)
+        case child =>
+          Some(Filter(condition, child))
+      }
+      child.map(child => window.withNewChildren(Seq(child)))
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(_.containsPattern(UNRESOLVED_HAVING), ruleId) {
       case u @ UnresolvedHaving(havingCondition, child)
         if havingCondition.resolved && child.resolved =>
-        Filter(condition = havingCondition, child = child)
+        insertFilterBeforeWindow(havingCondition, child)
+          .getOrElse(Filter(condition = havingCondition, child = child))
     }
   }
 }
