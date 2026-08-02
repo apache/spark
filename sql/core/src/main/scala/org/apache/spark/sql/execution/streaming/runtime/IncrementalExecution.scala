@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOperatorAttributeNullability
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, RangePartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.classic.SparkSession
@@ -726,10 +727,25 @@ class IncrementalExecution(
         val onStreamingPath = results.exists(_._2)
         val newPlan = p.withNewChildren(results.map(_._1))
         newPlan match {
-          case s: ShuffleExchangeExec if onStreamingPath && !s.pipelined =>
+          case s: ShuffleExchangeExec
+              if onStreamingPath && !s.pipelined && canBePipelined(s.outputPartitioning) =>
             (s.copy(pipelined = true), true)
           case other => (other, onStreamingPath)
         }
+    }
+
+    /**
+     * Whether a shuffle with this partitioning can be pipelined.
+     *
+     * `RangePartitioning` cannot: building its `RangePartitioner` runs a separate job that samples
+     * the input to compute range bounds (see `ShuffleExchangeExec.prepareShuffleDependency`), which
+     * cannot complete on an unbounded stream. Leaving it unmarked keeps it a normal materializing
+     * shuffle rather than silently pulling a sampling job into a pipelined group. Such a query does
+     * not run in Real-Time Mode either way -- this only avoids mislabelling the shuffle.
+     */
+    private def canBePipelined(partitioning: Partitioning): Boolean = partitioning match {
+      case _: RangePartitioning => false
+      case _ => true
     }
   }
 
