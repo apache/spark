@@ -250,6 +250,36 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
     }
   }
 
+  test("rewrite is not applied to error-prone base expressions (ANSI divide by zero)") {
+    withTempView("t") {
+      // Rows with x = 0 make both conditions false, so the IF branches short-circuit
+      // and 10 / x is never evaluated for them.
+      spark.range(5)
+        .selectExpr(
+          "cast(id % 2 + 1 as int) as key",
+          "cast(id % 2 as int) as x")
+        .createOrReplaceTempView("t")
+
+      // Two conditional distinct counts on the same error-prone base so that rewrite()
+      // is reached; the canonicalization must NOT fire for such a base.
+      val sqlText =
+        """SELECT key,
+          |  COUNT(DISTINCT IF(x <> 0, 10 / x, NULL)),
+          |  COUNT(DISTINCT IF(x > 0, 10 / x, NULL))
+          |FROM t GROUP BY key""".stripMargin
+
+      withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+        // Must not raise DIVIDE_BY_ZERO: the canonicalization must leave the IFs intact
+        // so that their branch short-circuiting is preserved.
+        checkAnswer(spark.sql(sqlText), Seq(Row(1, 0L, 0L), Row(2, 1L, 1L)))
+        assert(!hasUserConditionFilter(spark.sql(sqlText).queryExecution.optimizedPlan),
+          "error-prone base should not produce a user-condition FILTER clause")
+      }
+    }
+  }
+
   test("rewrite is present in optimized plan") {
     withTempView("t") {
       spark.range(2)

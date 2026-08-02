@@ -1586,7 +1586,9 @@ object SQLConf {
         "COUNT(DISTINCT CASE WHEN cond THEN base END) into " +
         "COUNT(DISTINCT base) FILTER (WHERE cond). This reduces the Expand factor " +
         "in RewriteDistinctAggregates from Nx to 1x when multiple conditional distinct " +
-        "counts share the same base column.")
+        "counts share the same base column. The rewrite is only applied to base " +
+        "expressions that are safe to evaluate unconditionally (e.g. plain columns), " +
+        "so the short-circuit semantics of IF/CASE WHEN are preserved.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

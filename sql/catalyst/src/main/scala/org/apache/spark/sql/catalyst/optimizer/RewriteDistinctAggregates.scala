@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, CASE_WHEN, IF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, CASE_WHEN, IF, PLAN_EXPRESSION}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.collection.Utils
@@ -426,6 +426,13 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
    * COUNT(DISTINCT CASE WHEN cond THEN base END) to COUNT(DISTINCT base) FILTER (WHERE cond).
    * This reduces the number of distinct groups: multiple conditional counts on the same base
    * column collapse into one group, shrinking the Expand fan-out from Nx to 1x.
+   *
+   * Note that the rewrite moves `base` out of the protective conditional branch: after the
+   * rewrite the Expand operator evaluates the distinct child for every input row, while
+   * originally it was only evaluated on rows where `cond` holds. To preserve the
+   * short-circuit semantics of IF/CASE WHEN, the rewrite is restricted to branch-safe base
+   * expressions that cannot raise errors or change results when evaluated on extra rows
+   * (see [[isBranchSafe]]).
    */
   private def normalizeCountDistinctConditional(a: Aggregate): Aggregate = {
     if (!SQLConf.get.rewriteCountDistinctConditionalEnabled) return a
@@ -447,15 +454,45 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
    * Matches IF(cond, base, null), CASE WHEN cond THEN base END, and
    * CASE WHEN cond THEN base ELSE NULL END (including null wrapped in Cast).
    * Multi-branch CaseWhen is intentionally not rewritten -- Or-flattening is out of scope.
+   * The base must be branch-safe (see [[isBranchSafe]]); the condition needs no check
+   * because it is evaluated unconditionally as the IF/CASE WHEN predicate anyway.
    * Returns None for anything else.
    */
   private def extractCondAndBase(expr: Expression): Option[(Expression, Expression)] =
     expr match {
-      case If(cond, base, e) if isNullExpr(e) => Some((cond, base))
-      case CaseWhen(Seq((cond, base)), None) => Some((cond, base))
-      case CaseWhen(Seq((cond, base)), Some(e)) if isNullExpr(e) => Some((cond, base))
+      case If(cond, base, e) if isNullExpr(e) && isBranchSafe(base) => Some((cond, base))
+      case CaseWhen(Seq((cond, base)), None) if isBranchSafe(base) => Some((cond, base))
+      case CaseWhen(Seq((cond, base)), Some(e)) if isNullExpr(e) && isBranchSafe(base) =>
+        Some((cond, base))
       case _ => None
     }
+
+  /**
+   * Returns true if `e` is safe to evaluate on rows where the original conditional branch
+   * would not have been taken: evaluating it must not raise an error and must not change
+   * the query result. Only a whitelist of total, deterministic expressions qualifies:
+   *   - leaves: attribute references and literals;
+   *   - total accessors: GetStructField, GetArrayStructFields and GetMapValue never throw.
+   *     Note that GetArrayItem/ElementAt are NOT included: they throw on invalid ordinals
+   *     when ANSI mode is on;
+   *   - logic/predicates: And, Or, Not, comparisons, IsNull, IsNotNull, IsNaN, NullIf,
+   *     Coalesce, In and InSet are total boolean functions.
+   * Anything else (arithmetic, casts, string functions, UDFs, nested IF/CASE WHEN, ...)
+   * conservatively disables the rewrite. On top of the whitelist, the expression must be
+   * deterministic and must not contain subqueries.
+   */
+  private def isBranchSafe(e: Expression): Boolean =
+    e.deterministic && !e.containsPattern(PLAN_EXPRESSION) && isBranchSafeInternal(e)
+
+  private def isBranchSafeInternal(e: Expression): Boolean = e match {
+    case _: AttributeReference | _: Literal => true
+    case _: GetStructField | _: GetArrayStructFields | _: GetMapValue =>
+      e.children.forall(isBranchSafeInternal)
+    case _: And | _: Or | _: Not | _: BinaryComparison | _: IsNull | _: IsNotNull |
+         _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet =>
+      e.children.forall(isBranchSafeInternal)
+    case _ => false
+  }
 
   private def isNullExpr(e: Expression): Boolean = e match {
     case Literal(null, _) => true

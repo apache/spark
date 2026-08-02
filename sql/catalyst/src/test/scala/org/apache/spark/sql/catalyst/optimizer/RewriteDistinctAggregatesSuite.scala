@@ -18,12 +18,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Expression, If, Literal, Round}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CaseWhen, Cast, Coalesce, Expression, GetMapValue, GetStructField, If, Literal, Lower, Round}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, CollectSet, Count, Sum}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
 
 class RewriteDistinctAggregatesSuite extends PlanTest {
   val nullInt = Literal(null, IntegerType)
@@ -342,5 +342,89 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     val expands = optimized.collect { case e: Expand => e }
     // 2 groups - SUM(DISTINCT IF) is not canonicalized
     assert(expands.head.projections.size == 2)
+  }
+
+  /**
+   * Asserts that two conditional distinct counts over `base` collapse into a single
+   * distinct group with a FILTER clause, i.e. the conditional canonicalization fired.
+   */
+  private def assertCanonicalized(relation: LocalRelation, base: Expression): Unit = {
+    val input = relation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, base).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, base).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    assert(expand.projections.size == 1,
+      s"branch-safe base should collapse to 1 distinct group: $base")
+    // The Expand rewrite adds gid-routing filters to every distinct aggregate; the
+    // canonicalization additionally introduces filters referencing the user condition.
+    val hasUserConditionFilter = collectAggregateExpressions(optimized)
+      .flatMap(_.filter)
+      .exists(_.references.exists(_.name != "gid"))
+    assert(hasUserConditionFilter,
+      s"expected a user-condition FILTER clause after canonicalizing base: $base")
+  }
+
+  /**
+   * Asserts that two conditional distinct counts over `base` are rewritten by the
+   * general Expand path but are NOT canonicalized, i.e. they stay 2 distinct groups
+   * and no FILTER clause is introduced.
+   */
+  private def assertNotCanonicalized(relation: LocalRelation, base: Expression): Unit = {
+    val input = relation
+      .groupBy(Symbol("a"))(
+        countDistinctIf(Symbol("b") > 1, base).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, base).as("cnt2"))
+      .analyze
+    val optimized = RewriteDistinctAggregates(input)
+    checkRewrite(optimized)
+    val expand = optimized.collectFirst { case e: Expand => e }.get
+    assert(expand.projections.size == 2,
+      s"non-branch-safe base should stay 2 distinct groups: $base")
+    // The Expand rewrite adds gid-routing filters to every distinct aggregate; a
+    // user-condition filter introduced by the canonicalization would reference the
+    // condition's columns instead of only gid.
+    val hasUserConditionFilter = collectAggregateExpressions(optimized)
+      .flatMap(_.filter)
+      .exists(_.references.exists(_.name != "gid"))
+    assert(!hasUserConditionFilter,
+      s"non-branch-safe base should not produce a user-condition FILTER clause: $base")
+  }
+
+  test("conditional: do not rewrite when base is not branch-safe") {
+    val unsafeBases = Seq(
+      // Division may throw (e.g. divide-by-zero under ANSI mode) on rows where the
+      // original IF branch is not taken.
+      Symbol("c") / Symbol("b"),
+      // Cast may throw under ANSI mode.
+      Cast(Symbol("c"), StringType),
+      // String functions are not in the branch-safe whitelist.
+      Lower(Symbol("d")))
+    unsafeBases.foreach { base =>
+      assertNotCanonicalized(conditionalTestRelation, base)
+    }
+  }
+
+  test("conditional: rewrite branch-safe expression bases") {
+    // Predicate and null-handling bases on the flat test relation.
+    Seq(
+      Symbol("b") > Symbol("c"),
+      Coalesce(Seq(Symbol("b"), Literal(0, IntegerType))))
+      .foreach { base =>
+        assertCanonicalized(conditionalTestRelation, base)
+      }
+
+    // Total accessor bases need struct/map attributes.
+    val structAttr = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
+    val mapAttr = AttributeReference("m", MapType(IntegerType, StringType))()
+    val richRelation = LocalRelation(Symbol("a").int, Symbol("b").int, structAttr, mapAttr)
+    Seq(
+      GetStructField(structAttr, 0),
+      GetMapValue(mapAttr, Literal(1, IntegerType)))
+      .foreach { base =>
+        assertCanonicalized(richRelation, base)
+      }
   }
 }
