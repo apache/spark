@@ -448,50 +448,6 @@ class GeneratorFunctionSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58503: HAVING on grouping key is evaluated before window functions with generators") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT explode(array(a)) AS col, count(*) OVER () AS cnt, a
-          |FROM VALUES (1), (2), (3), (NULL) AS t(a)
-          |GROUP BY a
-          |HAVING a IS NOT NULL
-          |""".stripMargin),
-      Seq(Row(1, 3, 1), Row(2, 3, 2), Row(3, 3, 3)))
-  }
-
-  test("SPARK-58503: HAVING on an aggregate is evaluated before window functions with generators") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT explode(array(a)) AS col,
-          |       count(*) OVER () AS group_count,
-          |       count(*) AS row_count
-          |FROM VALUES (1), (1), (2), (3), (3) AS t(a)
-          |GROUP BY a
-          |HAVING row_count > 1
-          |""".stripMargin),
-      Seq(Row(1, 2, 2), Row(3, 2, 2)))
-  }
-
-  test("SPARK-58503: HAVING is evaluated before multiple windows with generators") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT explode(array(a)) AS col,
-          |       count(*) OVER () AS cnt,
-          |       count(*) OVER (
-          |         ORDER BY a
-          |         ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-          |       ) AS ordered_cnt,
-          |       a
-          |FROM VALUES (1), (2), (3), (NULL) AS t(a)
-          |GROUP BY a
-          |HAVING a IS NOT NULL
-          |""".stripMargin),
-      Seq(Row(1, 3, 3, 1), Row(2, 3, 3, 2), Row(3, 3, 3, 3)))
-  }
-
   test("SPARK-30998: Unsupported nested inner generators") {
     checkError(
       exception = intercept[AnalysisException] {

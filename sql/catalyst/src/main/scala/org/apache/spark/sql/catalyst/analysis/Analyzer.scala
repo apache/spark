@@ -4702,6 +4702,15 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
  * `UnresolvedHaving` in the main batch.
  */
 object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveOperatorsWithPruning(_.containsPattern(UNRESOLVED_HAVING), ruleId) {
+      case u @ UnresolvedHaving(havingCondition, child)
+        if havingCondition.resolved && child.resolved =>
+        val filter = Filter(condition = havingCondition, child = child)
+        insertFilterBeforeWindow(filter).getOrElse(filter)
+    }
+  }
+
   /**
    * Searches through Project and Generate nodes for a Window chain and places HAVING below every
    * Window in that chain. This restores SQL clause order for plans produced by queries such as:
@@ -4715,43 +4724,32 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
    *
    * Returns None unless the condition can be evaluated below every Window in the chain.
    */
-  private def insertFilterBeforeWindow(
-      condition: Expression,
-      plan: LogicalPlan): Option[LogicalPlan] = plan match {
+  private def insertFilterBeforeWindow(filter: Filter): Option[LogicalPlan] = filter.child match {
     case project: Project =>
-      insertFilterBeforeWindow(condition, project.child)
+      insertFilterBeforeWindow(filter.copy(child = project.child))
         .map(child => project.withNewChildren(Seq(child)))
     case generate: Generate =>
-      insertFilterBeforeWindow(condition, generate.child)
+      insertFilterBeforeWindow(filter.copy(child = generate.child))
         .map(child => generate.withNewChildren(Seq(child)))
     case window: Window =>
-      insertFilterBeforeWindowChain(condition, window)
+      insertFilterBeforeWindowChain(filter, window)
     case _ =>
       None
   }
 
   private def insertFilterBeforeWindowChain(
-      condition: Expression,
+      filter: Filter,
       window: Window): Option[LogicalPlan] = {
-    if (!condition.references.subsetOf(window.child.outputSet)) {
+    if (!filter.condition.references.subsetOf(window.child.outputSet)) {
       None
     } else {
       val child = window.child match {
         case childWindow: Window =>
-          insertFilterBeforeWindowChain(condition, childWindow)
+          insertFilterBeforeWindowChain(filter, childWindow)
         case child =>
-          Some(Filter(condition, child))
+          Some(filter.copy(child = child))
       }
       child.map(child => window.withNewChildren(Seq(child)))
-    }
-  }
-
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsWithPruning(_.containsPattern(UNRESOLVED_HAVING), ruleId) {
-      case u @ UnresolvedHaving(havingCondition, child)
-        if havingCondition.resolved && child.resolved =>
-        insertFilterBeforeWindow(havingCondition, child)
-          .getOrElse(Filter(condition = havingCondition, child = child))
     }
   }
 }
