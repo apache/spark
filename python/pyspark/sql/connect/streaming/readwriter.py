@@ -681,7 +681,7 @@ class DataStreamWriter:
         tableName: Optional[str] = None,
         format: Optional[str] = None,
         outputMode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
     ) -> StreamingQuery:
@@ -727,7 +727,7 @@ class DataStreamWriter:
         path: Optional[str] = None,
         format: Optional[str] = None,
         outputMode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
     ) -> "StreamingQuery":
@@ -748,7 +748,7 @@ class DataStreamWriter:
         tableName: str,
         format: Optional[str] = None,
         outputMode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
     ) -> "StreamingQuery":

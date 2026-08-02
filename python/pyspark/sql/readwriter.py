@@ -1785,7 +1785,7 @@ class DataFrameWriter(OptionUtils):
         path: Optional[str] = None,
         format: Optional[str] = None,
         mode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         **options: "OptionalPrimitiveType",
     ) -> None:
         """Saves the contents of the :class:`DataFrame` to a data source.
@@ -1902,7 +1902,7 @@ class DataFrameWriter(OptionUtils):
         name: str,
         format: Optional[str] = None,
         mode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         **options: "OptionalPrimitiveType",
     ) -> None:
         """Saves the content of the :class:`DataFrame` as the specified table.
@@ -2046,7 +2046,7 @@ class DataFrameWriter(OptionUtils):
         self,
         path: str,
         mode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         compression: Optional[str] = None,
     ) -> None:
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
@@ -2331,7 +2331,7 @@ class DataFrameWriter(OptionUtils):
         self,
         path: str,
         mode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         compression: Optional[str] = None,
     ) -> None:
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.

@@ -18,7 +18,7 @@
 import re
 import sys
 from collections.abc import Iterator
-from typing import cast, overload, Any, Callable, List, Optional, Sequence, TYPE_CHECKING, Union
+from typing import cast, overload, Any, Callable, Optional, Sequence, TYPE_CHECKING, Union
 
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.streaming.query import StreamingQuery
@@ -1754,7 +1754,7 @@ class DataStreamWriter:
         path: Optional[str] = None,
         format: Optional[str] = None,
         outputMode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
     ) -> "StreamingQuery":
@@ -1842,7 +1842,7 @@ class DataStreamWriter:
         tableName: str,
         format: Optional[str] = None,
         outputMode: Optional[str] = None,
-        partitionBy: Optional[Union[str, List[str]]] = None,
+        partitionBy: Optional[Union[str, Sequence[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
     ) -> "StreamingQuery":
