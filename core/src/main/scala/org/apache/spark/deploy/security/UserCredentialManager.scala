@@ -137,6 +137,9 @@ private[spark] class UserCredentialManager(
     try {
       CredentialProviderLoader.closeAll()
     } catch {
+      case e: InterruptedException =>
+        Thread.currentThread().interrupt()
+        logWarning(log"Interrupted while closing credential providers during shutdown.", e)
       case NonFatal(e) =>
         logWarning(log"Error closing credential providers during shutdown.", e)
     }

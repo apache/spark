@@ -109,6 +109,12 @@ public interface CredentialProvider extends AutoCloseable {
    * is a no-op; providers that allocate long-lived resources in {@link #init(Map)} should
    * override this method to clean them up.
    * <p>
+   * {@code close()} may be invoked while another thread is still executing
+   * {@link #resolve(UserContext, URI)}: shutdown interrupts the renewal thread but does
+   * not wait for in-flight calls to complete. Implementations must tolerate a concurrent
+   * or subsequent {@code resolve()} failing after resources have been released, and
+   * {@code close()} itself must not block indefinitely.
+   * <p>
    * Implementations that do not throw checked exceptions may narrow the {@code throws}
    * clause in their override (e.g., declare {@code close()} with no {@code throws} or
    * with a more specific exception type).
