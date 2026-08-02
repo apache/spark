@@ -25,16 +25,42 @@ on:
     - '**'
 
 jobs:
+  count-commits:
+    name: Count commits
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+    outputs:
+      commit-count: ${{ steps.count.outputs.commit-count }}
+    steps:
+      - name: Check out the full branch history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Count commits on the pushed branch
+        id: count
+        run: echo "commit-count=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
   call-build-and-test:
     permissions:
       packages: write
     name: Run
-    # Skip:
-    #   - pushes to `branch-4.x` on apache/spark: post-merge CI on this
-    #     integration/staging branch is disabled to save resources.
-    #   - pushes to `master` on forks: the "Sync fork" button mirrors
-    #     apache/spark and would otherwise re-run the full build on every sync.
+    needs: count-commits
+    # GitHub Actions expressions do not support modulo. A non-negative decimal
+    # count is divisible by ten when it ends in 0.
+    # `branch-4.x` remains disabled to save post-merge CI resources. Fork master
+    # remains disabled because the Sync fork button would rerun the full build.
     if: >-
-      (github.repository == 'apache/spark' && github.ref != 'refs/heads/branch-4.x')
-      || (github.repository != 'apache/spark' && github.ref != 'refs/heads/master')
+      github.repository == 'apache/spark' && (
+        (
+          github.ref == 'refs/heads/master'
+          && endsWith(needs.count-commits.outputs.commit-count, '0')
+        ) || (
+          github.ref != 'refs/heads/master'
+          && github.ref != 'refs/heads/branch-4.x'
+        )
+      ) || (
+        github.repository != 'apache/spark'
+        && github.ref != 'refs/heads/master'
+      )
     uses: ./.github/workflows/build_and_test.yml
