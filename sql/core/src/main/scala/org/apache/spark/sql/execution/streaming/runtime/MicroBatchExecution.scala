@@ -371,6 +371,23 @@ class MicroBatchExecution(
             messageParameters = Map("className" -> s.getClass.getName)
           )
       }
+
+      // `repartition(n)` uses RoundRobinPartitioning, and by default (SPARK-23207) Spark inserts a
+      // local sort before a round-robin shuffle so the row-to-partition assignment is deterministic
+      // -- otherwise a retried task could emit rows in a different order and lose data. That sort
+      // is fully blocking: it drains its whole input before emitting a row. A Real-Time Mode task
+      // reads an unbounded stream, so the input never ends, the producer never emits, and the query
+      // makes no progress at all. Note this sort is not a SortExec node (it lives inside
+      // ShuffleExchangeExec's RDD), so the Real-Time Mode operator allowlist cannot catch it.
+      //
+      // Determinism is not needed here: Real-Time Mode does not retry tasks (TaskSetManager caps a
+      // pipelined task set at one attempt, and its group is aborted as a unit rather than
+      // recomputed), so the hazard the sort guards against does not arise. Only set the config when
+      // the user has not made an explicit choice.
+      if (!sparkSessionForStream.conf.contains(SQLConf.SORT_BEFORE_REPARTITION.key)) {
+        logInfo("Disabling sort before repartition for Real-Time Mode")
+        sparkSessionForStream.conf.set(SQLConf.SORT_BEFORE_REPARTITION.key, "false")
+      }
     }
 
     // Initializing TriggerExecutor relies on `sources`, hence calling this after initializing
