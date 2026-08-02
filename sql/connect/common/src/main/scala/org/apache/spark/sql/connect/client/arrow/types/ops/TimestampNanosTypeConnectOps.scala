@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
 import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer, ArrowVectorReader}
+import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
@@ -52,9 +53,20 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  */
 private[connect] abstract class TimestampNanosTypeConnectOps extends ConnectTypeOps {
 
-  /** Rebuilds the physical value from the two proto components. */
-  protected def toTimestampNanosVal(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
+  /**
+   * Rebuilds the physical value from the two proto components. `nanosWithinMicro` is an int32 on
+   * the wire, so its range is checked here before narrowing to `Short`: without the check
+   * `.toShort` would truncate an out-of-range value modulo 2^16 (e.g. 65536 -> 0) and slip it past
+   * the `[0, 999]` guard in `fromParts`, yielding a silently wrong value instead of a clear error.
+   */
+  protected def toTimestampNanosVal(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal = {
+    if (nanosWithinMicro < 0 || nanosWithinMicro > TimestampNanosVal.MAX_NANOS_WITHIN_MICRO) {
+      throw InvalidPlanInput(
+        s"nanos_within_micro must be in [0, ${TimestampNanosVal.MAX_NANOS_WITHIN_MICRO}], got: " +
+          nanosWithinMicro)
+    }
     TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+  }
 
   // ==================== Arrow Serialization (unsupported) ====================
 
