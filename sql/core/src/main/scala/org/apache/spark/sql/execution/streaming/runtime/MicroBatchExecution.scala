@@ -31,7 +31,7 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2TableReference}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, CurrentTimestampNanos, FileSourceMetadataAttribute, LocalTimestamp, LocalTimestampNanos}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, Unassigned, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -1190,7 +1190,17 @@ class MicroBatchExecution(
         // dummy string to prevent UnresolvedException and to prevent to be used in the future.
         CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
           ct.dataType, Some("Dummy TimeZoneId"))
+      case ct: CurrentTimestampNanos =>
+        // Like CurrentTimestamp, the nanosecond current_timestamp(p) is not
+        // TimeZoneAwareExpression, so supply the dummy time zone. The batch timestamp is
+        // millisecond resolution, so the folded TIMESTAMP_LTZ(p) literal has zero
+        // nanos-within-micro.
+        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
+          ct.dataType, Some("Dummy TimeZoneId"))
       case lt: LocalTimestamp =>
+        CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
+          lt.dataType, lt.timeZoneId)
+      case lt: LocalTimestampNanos =>
         CurrentBatchTimestamp(execCtx.offsetSeqMetadata.batchTimestampMs,
           lt.dataType, lt.timeZoneId)
       case cd: CurrentDate =>

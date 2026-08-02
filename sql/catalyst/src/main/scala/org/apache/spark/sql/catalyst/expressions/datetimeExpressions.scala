@@ -446,6 +446,14 @@ case class CurrentBatchTimestamp(
       case _: TimestampType => Literal(timestampUs, TimestampType)
       case _: TimestampNTZType =>
         Literal(convertTz(timestampUs, ZoneOffset.UTC, zoneId), TimestampNTZType)
+      // The batch timestamp is millisecond resolution, so nanos-within-micro is always 0.
+      // TIMESTAMP_LTZ is instant-based (zone-independent); TIMESTAMP_NTZ takes the wall clock
+      // in the session zone, mirroring the micro TimestampNTZType branch above.
+      case ltz: TimestampLTZNanosType =>
+        Literal(TimestampNanosVal.fromParts(timestampUs, 0), ltz)
+      case ntz: TimestampNTZNanosType =>
+        Literal(
+          TimestampNanosVal.fromParts(convertTz(timestampUs, ZoneOffset.UTC, zoneId), 0), ntz)
       case _: DateType => Literal(microsToDays(timestampUs, zoneId), DateType)
     }
   }
