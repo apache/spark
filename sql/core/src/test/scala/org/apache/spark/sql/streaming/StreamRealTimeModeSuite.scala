@@ -564,6 +564,39 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
     }
   }
 
+  test("pipelined shuffle: a chain of two round-robin repartitions runs in Real-Time Mode") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      val inputData = LowLatencyMemoryStream[(String, Int)](2)
+      // Two round-robin repartitions with a map between them; consecutive repartitions collapse to
+      // the last one, so the map is what keeps both shuffles in the plan. Both are pipelined, and
+      // the second one's producer reads the first one's output -- an UNORDERED input. A round-robin
+      // shuffle is order-sensitive once the deterministic local sort is off, which would escalate
+      // that producer to INDETERMINATE and get the group rejected; a pipelined shuffle is exempt
+      // from the order-sensitive marking precisely so this shape runs.
+      val result = inputData.toDS()
+        .repartition(3)
+        .map(row => row)
+        .repartition(2)
+        .map(row => row)
+        .toDF().select($"_1".as("key"))
+      testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        AddData(inputData, ("a", 1), ("b", 2), ("c", 3)),
+        StartStream(),
+        CheckAnswerWithTimeout(60000, "a", "b", "c"),
+        Execute { q =>
+          val exchanges = q.lastExecution.executedPlan.collect {
+            case s: ShuffleExchangeExec => s
+          }
+          assert(exchanges.size >= 2, s"expected >= 2 shuffle exchanges, got ${exchanges.size}")
+          assert(exchanges.forall(_.pipelined),
+            "every exchange in the chain must be pipelined, got: " +
+              exchanges.map(_.pipelined).mkString(", "))
+        },
+        StopStream
+      )
+    }
+  }
+
   test("pipelined shuffle: dedup recovers from a task failure via checkpoint restart") {
     withTempDir { checkpointDir =>
       // A UDF that throws on demand, placed after the dedup so the failure lands in the pipelined

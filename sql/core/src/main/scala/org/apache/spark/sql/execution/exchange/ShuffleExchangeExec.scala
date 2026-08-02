@@ -512,8 +512,16 @@ object ShuffleExchangeExec {
 
       // round-robin function is order sensitive if we don't sort the input.
       // Stateful partition assignment is order-sensitive when it depends on row visitation order.
-      val isOrderSensitive =
-        (isRoundRobin || isNullAwareHashPartitioning) && !SQLConf.get.sortBeforeRepartition
+      //
+      // A pipelined shuffle is exempt. Marking the map RDD order-sensitive only serves to make it
+      // INDETERMINATE when its own input is UNORDERED (see
+      // MapPartitionsRDD.getOutputDeterministicLevel), which tells the scheduler a retry cannot be
+      // trusted and the stage must be rolled back and recomputed. A pipelined stage is never
+      // retried (a pipelined task set gets a single attempt) and never recomputed, and the
+      // DAGScheduler rejects an indeterminate pipelined producer outright -- so keeping the flag
+      // would reject a chain of round-robin repartitions rather than protect anything.
+      val isOrderSensitive = (isRoundRobin || isNullAwareHashPartitioning) &&
+        !SQLConf.get.sortBeforeRepartition && !pipelined
       if (needToCopyObjectsBeforeShuffle(part)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
