@@ -574,6 +574,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION =
+    buildConf("spark.sql.analyzer.singlePassResolver.enableAsOfJoinResolution")
+      .internal()
+      .doc("When true, enables ASOF JOIN resolution in single-pass analyzer. " +
+        "Otherwise, resolution falls back to fixed-point analyzer.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
@@ -969,6 +979,18 @@ object SQLConf {
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val SPLIT_STREAMED_SIDE_JOIN_CONDITION =
+    buildConf("spark.sql.join.splitStreamedSideJoinCondition")
+      .internal()
+      .doc("When true, split join conditions for LeftAnti, LeftOuter, RightOuter, and " +
+        "ExistenceJoin by referenced side, evaluating streamed-side-only conjuncts before " +
+        "the hash-bucket or merge walk. This avoids evaluating expensive streamed-side-only " +
+        "predicates once per matched buffered row.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val SORT_MERGE_AS_OF_JOIN_ENABLED =
     buildConf("spark.sql.join.sortMergeAsOfJoin.enabled")
@@ -1576,6 +1598,21 @@ object SQLConf {
       .internal()
       .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
         "VALUES lists (UnresolvedInlineTable) by eagerly evaluating it in the AST Builder.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED =
+    buildConf("spark.sql.optimizer.rewriteCountDistinctConditional.enabled")
+      .internal()
+      .doc("When true, rewrites COUNT(DISTINCT IF(cond, base, NULL)) and " +
+        "COUNT(DISTINCT CASE WHEN cond THEN base END) into " +
+        "COUNT(DISTINCT base) FILTER (WHERE cond). This reduces the Expand factor " +
+        "in RewriteDistinctAggregates from Nx to 1x when multiple conditional distinct " +
+        "counts share the same base column. The rewrite is only applied to base " +
+        "expressions that are safe to evaluate unconditionally (e.g. plain columns), " +
+        "so the short-circuit semantics of IF/CASE WHEN are preserved.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -8772,6 +8809,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
+  def splitStreamedSideJoinCondition: Boolean = getConf(SPLIT_STREAMED_SIDE_JOIN_CONDITION)
+
   def sortMergeAsOfJoinEnabled: Boolean = getConf(SORT_MERGE_AS_OF_JOIN_ENABLED)
 
   def sqlAsOfJoinEnabled: Boolean = getConf(SQL_ASOF_JOIN_ENABLED)
@@ -9314,6 +9353,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def decorrelateInnerQueryEnabledForExistsIn: Boolean =
     !getConf(SQLConf.DECORRELATE_EXISTS_IN_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED)
+
+  def rewriteCountDistinctConditionalEnabled: Boolean =
+    getConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED)
 
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 

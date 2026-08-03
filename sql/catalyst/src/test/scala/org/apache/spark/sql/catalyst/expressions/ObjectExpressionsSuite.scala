@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.util.concurrent.ExecutionException
 
 import scala.collection.immutable
 import scala.collection.mutable
@@ -37,6 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, Genera
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -245,22 +247,47 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val initializeWithNonexistingMethod = InitializeJavaBean(
       Literal.fromObject(new java.util.LinkedList[Int]),
       Map("nonexistent" -> Literal(1)))
-    // Assert on the missing method name rather than a compiler-specific phrasing: under
-    // codegen the message depends on the configured compiler backend (Janino reports
-    // `A method named "nonexistent" is not declared ...`, the JDK compiler reports
-    // `cannot find symbol ... method nonexistent`), while the non-codegen path throws a
-    // Spark error that embeds the method name. The method name is the common token.
-    checkExceptionInExpression[Exception](initializeWithNonexistingMethod, "nonexistent")
+    // The two evaluation paths report this differently: interpreted execution raises Spark's own
+    // INTERNAL_ERROR from `methodNotDeclaredError`, while codegen fails when the Java compiler
+    // resolves the setter call in the generated source. Assert each on its own rather than
+    // through one shared substring.
+    checkError(
+      exception = intercept[SparkException] {
+        evaluateWithoutCodegen(initializeWithNonexistingMethod, InternalRow.fromSeq(Seq()))
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        ("""A method named "nonexistent" is not declared in any enclosing class """ +
+          "nor any supertype")),
+      sqlState = "XX000")
+    withSQLConf(
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+      // What Spark owns on this path is the wrapping - an ExecutionException around the
+      // CompileException that `compilerError` builds - and the "Failed to compile: " prefix from
+      // `failedToCompileMsg`. The diagnostic after the prefix is the compiler's own wording, so
+      // the setter name below is only a sanity check that it names the offending member: the
+      // name is also the input, and Spark echoes whole expressions into other errors, so on its
+      // own it would match unrelated failures too.
+      val errMsg = intercept[ExecutionException] {
+        evaluateWithMutableProjection(initializeWithNonexistingMethod, InternalRow.fromSeq(Seq()))
+      }.getMessage
+      assert(errMsg.contains("Failed to compile:"))
+      assert(errMsg.contains("nonexistent"))
+    }
 
     val initializeWithWrongParamType = InitializeJavaBean(
       Literal.fromObject(new TestBean),
       Map("setX" -> Literal("1")))
-    // This exercises the interpreted path, so the message is backend-independent.
-    assert(intercept[Exception] {
-      evaluateWithoutCodegen(initializeWithWrongParamType, InternalRow.fromSeq(Seq()))
-    }.getMessage.contains(
-      """A method named "setX" is not declared in any enclosing class """ +
-        "nor any supertype"))
+    // Same error as above, reached only through interpreted execution.
+    checkError(
+      exception = intercept[SparkException] {
+        evaluateWithoutCodegen(initializeWithWrongParamType, InternalRow.fromSeq(Seq()))
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        ("""A method named "setX" is not declared in any enclosing class """ +
+          "nor any supertype")),
+      sqlState = "XX000")
   }
 
   test("InitializeJavaBean doesn't call setters if input in null") {
