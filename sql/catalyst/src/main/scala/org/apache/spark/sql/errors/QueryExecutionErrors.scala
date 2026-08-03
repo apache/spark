@@ -1217,12 +1217,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotAcquireMemoryForWindowAggregateError(
       requestedBytes: Long,
-      receivedBytes: Long): SparkOutOfMemoryError = {
+      receivedBytes: Long,
+      consumerBreakdown: String): SparkOutOfMemoryError = {
     new SparkOutOfMemoryError(
       "UNABLE_TO_ACQUIRE_MEMORY",
       java.util.Map.of(
         "requestedBytes", requestedBytes.toString,
-        "receivedBytes", receivedBytes.toString))
+        "receivedBytes", receivedBytes.toString,
+        "consumerBreakdown", consumerBreakdown))
   }
 
   def rowLargerThan256MUnsupportedError(): SparkUnsupportedOperationException = {

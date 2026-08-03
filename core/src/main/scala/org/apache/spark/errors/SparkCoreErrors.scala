@@ -448,12 +448,16 @@ private[spark] object SparkCoreErrors {
       cause = null)
   }
 
-  def outOfMemoryError(requestedBytes: Long, receivedBytes: Long): OutOfMemoryError = {
+  def outOfMemoryError(
+      requestedBytes: Long,
+      receivedBytes: Long,
+      consumerBreakdown: String): OutOfMemoryError = {
     new SparkOutOfMemoryError(
       "UNABLE_TO_ACQUIRE_MEMORY",
       Map(
         "requestedBytes" -> requestedBytes.toString,
-        "receivedBytes" -> receivedBytes.toString).asJava)
+        "receivedBytes" -> receivedBytes.toString,
+        "consumerBreakdown" -> consumerBreakdown).asJava)
   }
 
   def failedRenameTempFileError(srcFile: File, dstFile: File): Throwable = {
