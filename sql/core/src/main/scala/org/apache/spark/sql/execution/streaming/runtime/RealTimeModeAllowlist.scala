@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.runtime
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.{Logging, LogKeys, MessageWithContext}
-import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, RangePartitioning}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
@@ -144,9 +144,20 @@ object RealTimeModeAllowlist extends Logging {
    */
   private def isAllowed(node: SparkPlan): Boolean = {
     allowedOperators.contains(node.getClass.getName) && (node match {
-      case e: ShuffleExchangeExec => !e.outputPartitioning.isInstanceOf[RangePartitioning]
+      case e: ShuffleExchangeExec => supportsPartitioning(e.outputPartitioning)
       case _ => true
     })
+  }
+
+  /**
+   * Whether a shuffle with this partitioning is supported in Real-Time Mode. See `isAllowed` for
+   * why range partitioning is not.
+   *
+   * The marking rule that turns a shuffle into a pipelined one shares this predicate, so the set of
+   * shuffles it marks cannot drift from the set this allowlist admits.
+   */
+  private[runtime] def supportsPartitioning(partitioning: Partitioning): Boolean = {
+    !partitioning.isInstanceOf[RangePartitioning]
   }
 
   def checkAllowedPhysicalOperator(operator: SparkPlan, throwException: Boolean): Unit = {

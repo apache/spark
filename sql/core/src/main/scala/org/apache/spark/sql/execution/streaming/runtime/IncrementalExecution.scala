@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.WidenStatefulOperatorAttributeNullability
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, RangePartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.classic.SparkSession
@@ -688,11 +688,16 @@ class IncrementalExecution(
    * field, not a tree child), so a REUSED shuffle exchange would keep pipelined=false while its
    * standalone twin flips to true. That divergence is not reachable: a reused shuffle requires
    * referencing the same streaming source more than once (self-join / self-union / CTE read twice),
-   * which Real-Time Mode rejects up front (MicroBatchExecution, IDENTICAL_SOURCES_IN_UNION_NOT_
-   * SUPPORTED) before this rule runs. The only ReusedExchangeExec that reaches an RTM plan wraps a
-   * BROADCAST exchange (multiple broadcast joins on the same static table, SC-209926), which this
-   * rule does not match. A pipelined shuffle read by more than one consumer (fan-out) is likewise
-   * rejected up front by the DAGScheduler (checkPipelinedGroupsSupportedInRDDGraph).
+   * which Real-Time Mode rejects when the query starts (MicroBatchExecution,
+   * IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED) before this rule runs. The only ReusedExchangeExec
+   * that reaches an RTM plan wraps a BROADCAST exchange (multiple broadcast joins on the same
+   * static table, SC-209926), which this rule does not match.
+   *
+   * A pipelined shuffle read by more than one consumer (fan-out) is rejected by the DAGScheduler
+   * (checkPipelinedGroupsSupportedInRDDGraph). Note that check runs in handleJobSubmitted, so it
+   * rejects the batch's job rather than the query: such a query fails the same way on every batch
+   * instead of failing once when it is planned. Marking is not what makes the shape unsupported, so
+   * a plan-time guard here would only improve the failure mode, not the outcome.
    */
   object MarkPipelinedShuffleForRealTimeMode extends Rule[SparkPlan] {
     override def apply(plan: SparkPlan): SparkPlan = {
@@ -743,9 +748,8 @@ class IncrementalExecution(
      * shuffle rather than silently pulling a sampling job into a pipelined group. Such a query does
      * not run in Real-Time Mode either way -- this only avoids mislabelling the shuffle.
      */
-    private def canBePipelined(partitioning: Partitioning): Boolean = partitioning match {
-      case _: RangePartitioning => false
-      case _ => true
+    private def canBePipelined(partitioning: Partitioning): Boolean = {
+      RealTimeModeAllowlist.supportsPartitioning(partitioning)
     }
   }
 
