@@ -361,7 +361,7 @@ private[spark] case class ConfigBuilder(key: String) {
       // use toPlainString to avoid scientific notation. For extreme exponents (e.g. 1e100000000,
       // as can be rendered in a checkValue rejection message) toPlainString would materialize
       // one character per zero, so fall back to scientific notation there.
-      { v: BigDecimal =>
+      { (v: BigDecimal) =>
         val stripped = v.bigDecimal.stripTrailingZeros()
         if (stripped.scale > 100 || stripped.scale < -100) {
           stripped.toString
