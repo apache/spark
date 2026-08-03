@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Insert a runtime filter on one side of the join (we call this side the application side) if
@@ -35,6 +36,14 @@ import org.apache.spark.sql.internal.SQLConf
  * bloom filter but we may add other physical implementations in the future.
  */
 object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
+
+  private def bloomFilterHash(key: Expression): Expression = {
+    if (SchemaUtils.hasNonUTF8BinaryCollation(key.dataType)) {
+      new CollationAwareXxHash64(Seq(key))
+    } else {
+      new XxHash64(Seq(key))
+    }
+  }
 
   private def injectFilter(
       filterApplicationSideKey: Expression,
@@ -61,10 +70,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val rowCount = filterCreationSidePlan.stats.rowCount
     val bloomFilterAgg =
       if (rowCount.isDefined && rowCount.get.longValue > 0L) {
-        new BloomFilterAggregate(
-          new CollationAwareXxHash64(Seq(filterCreationSideKey)), rowCount.get.longValue)
+        new BloomFilterAggregate(bloomFilterHash(filterCreationSideKey), rowCount.get.longValue)
       } else {
-        new BloomFilterAggregate(new CollationAwareXxHash64(Seq(filterCreationSideKey)))
+        new BloomFilterAggregate(bloomFilterHash(filterCreationSideKey))
       }
 
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
@@ -76,8 +84,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       return filterApplicationSidePlan
     }
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
-    val filter = BloomFilterMightContain(bloomFilterSubquery,
-      new CollationAwareXxHash64(Seq(filterApplicationSideKey)))
+    val filter = BloomFilterMightContain(
+      bloomFilterSubquery, bloomFilterHash(filterApplicationSideKey))
     Filter(filter, filterApplicationSidePlan)
   }
 
@@ -276,6 +284,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     plan.exists {
       case Filter(condition, _) =>
         splitConjunctivePredicates(condition).exists {
+          case BloomFilterMightContain(_, XxHash64(Seq(valueExpression), _))
+            if valueExpression.fastEquals(key) => true
           case BloomFilterMightContain(_, CollationAwareXxHash64(Seq(valueExpression), _))
             if valueExpression.fastEquals(key) => true
           case _ => false
