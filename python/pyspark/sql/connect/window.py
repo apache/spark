@@ -32,7 +32,7 @@ __all__ = ["Window", "WindowSpec"]
 
 def _to_cols(cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...]) -> List[Column]:
     if len(cols) == 1 and isinstance(cols[0], list):
-        cols = cols[0]  # type: ignore[assignment]
+        cols = tuple(cols[0])
     return [F._to_col(c) for c in cast(Iterable["ColumnOrName"], cols)]
 
 

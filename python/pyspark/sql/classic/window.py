@@ -37,7 +37,7 @@ def _to_java_cols(
     from pyspark.sql.classic.column import _to_seq, _to_java_column
 
     if len(cols) == 1 and isinstance(cols[0], list):
-        cols = cols[0]  # type: ignore[assignment]
+        cols = tuple(cols[0])
     sc = get_active_spark_context()
     return _to_seq(sc, cast(Iterable["ColumnOrName"], cols), _to_java_column)
 
