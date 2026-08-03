@@ -301,8 +301,6 @@ def verify_result_row_count(result_length: int, expected: int) -> None:
                 "output_length": str(result_length),
                 "input_length": str(expected),
             },
-            message=f"The number of output rows ({result_length}) must match the number of input rows ({expected}). "
-            f"Result vector from pandas_udf was not the required length: expected {expected}, got {result_length}.",
         )
 
 
@@ -327,16 +325,7 @@ def verify_scalar_result(result: Any, num_rows: int) -> Any:
                 "actual": type(result).__name__,
             },
         )
-    if result_length != num_rows:
-        raise PySparkRuntimeError(
-            errorClass="RESULT_ROWS_MISMATCH",
-            messageParameters={
-                "output_length": str(result_length),
-                "input_length": str(num_rows),
-            },
-            message=f"The number of output rows ({result_length}) must match the number of input rows ({num_rows}). "
-            f"Result vector from pandas_udf was not the required length: expected {num_rows}, got {result_length}.",
-        )
+    verify_result_row_count(result_length, num_rows)
     return result
 
 
@@ -364,10 +353,9 @@ def verify_output_row_limit(
         yield element
 
 
-def verify_output_row_count(
+def verify_iter_result_row_count(
     iterator: Iterator,
     expected_rows: Union[int, Callable[[], int]],
-    error_class: str,
 ) -> Iterator:
     """Yield elements and verify final row count matches expected exactly."""
     actual_rows = 0
@@ -376,25 +364,7 @@ def verify_output_row_count(
         yield element
 
     expected = expected_rows() if callable(expected_rows) else expected_rows
-    if actual_rows != expected:
-        if error_class == "RESULT_ROWS_MISMATCH":
-            raise PySparkRuntimeError(
-                errorClass=error_class,
-                messageParameters={
-                    "output_length": str(actual_rows),
-                    "input_length": str(expected),
-                },
-                message=f"The number of output rows ({actual_rows}) must match the number of input rows ({expected}). "
-                f"Result vector from pandas_udf was not the required length: expected {expected}, got {actual_rows}.",
-            )
-        else:
-            raise PySparkRuntimeError(
-                errorClass=error_class,
-                messageParameters={
-                    "output_length": str(actual_rows),
-                    "input_length": str(expected),
-                },
-            )
+    verify_result_row_count(actual_rows, expected)
 
 
 def wrap_udf(f, args_offsets, kwargs_offsets, return_type):
@@ -2043,10 +2013,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             )
 
             # Apply row count match check (final)
-            matched = verify_output_row_count(
+            matched = verify_iter_result_row_count(
                 limited,
                 lambda: num_input_rows,
-                error_class="RESULT_ROWS_MISMATCH",
             )
 
             # Yield batches
@@ -3070,16 +3039,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                                 "actual": type(result).__name__,
                             },
                         )
-                    if len(result) != num_rows:
-                        raise PySparkRuntimeError(
-                            errorClass="RESULT_ROWS_MISMATCH",
-                            messageParameters={
-                                "output_length": str(len(result)),
-                                "input_length": str(num_rows),
-                            },
-                            message=f"The number of output rows ({len(result)}) must match the number of input rows ({num_rows}). "
-                            f"Result vector from pandas_udf was not the required length: expected {num_rows}, got {len(result)}.",
-                        )
+                    verify_result_row_count(len(result), num_rows)
                     # struct_in_pandas="dict": UDF must return DataFrame for struct types
                     if isinstance(udf_return_type, StructType) and not isinstance(
                         result, pd.DataFrame
@@ -3169,10 +3129,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             )
 
             # Apply row count match check (final)
-            matched = verify_output_row_count(
+            matched = verify_iter_result_row_count(
                 limited,
                 lambda: num_input_rows,
-                error_class="RESULT_ROWS_MISMATCH",
             )
 
             # Yield batches
