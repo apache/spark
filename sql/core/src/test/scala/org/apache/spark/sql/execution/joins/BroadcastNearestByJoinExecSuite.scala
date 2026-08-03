@@ -30,9 +30,7 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
 
   private def withStreamingHeap(f: => Unit): Unit = {
     withSQLConf(
-      SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true",
-      SQLConf.CROSS_JOINS_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") { // 10MB
+      SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true") {
       f
     }
   }
@@ -158,14 +156,12 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
   }
 
   test("asymmetric - right exceeds broadcast threshold, broadcast still used (flag ON)") {
-    // Under option (a): when the broadcast flag is ON, BroadcastNearestByJoinExec is always
-    // used regardless of right-side size. The size decision is deferred to runtime -- the
-    // operator broadcasts unconditionally. This gives up automatic large-right fallback but
-    // avoids reading stats in the optimizer before pushdown completes (SPARK-57091).
+    // When the broadcast flag is ON, BroadcastNearestByJoinExec is always used regardless
+    // of right-side size. There is no size decision and no fallback; an oversized right
+    // side will fail the query at runtime (SPARK-57091).
     withSQLConf(
       SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
-      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
       val left = spark.range(10).toDF("id").withColumn("x", col("id").cast("double"))
       val right = spark.range(50).toDF("rid").withColumn("y", col("rid").cast("double"))
       val df = left.nearestByJoin(right, abs(col("x") - col("y")),
@@ -468,9 +464,7 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
   test("SPARK-57091: AQE re-optimization works with BroadcastNearestByJoinExec") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true",
-      SQLConf.CROSS_JOINS_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
+      SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true") {
       val left = Seq((1, 10.0), (2, 20.0), (3, 30.0)).toDF("id", "x")
       val right = Seq((10, 9.0), (11, 15.0), (12, 21.0), (13, 29.0)).toDF("rid", "y")
       val df = left.nearestByJoin(right, abs(col("x") - col("y")),
@@ -485,18 +479,21 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("SPARK-57091: StringType ranking - buffer corruption with UnsafeProjection reuse") {
+  test("SPARK-57091: StringType ranking - buffer retention with heap eviction") {
     withStreamingHeap {
       // Use StringType as the ranking column. UnsafeProjection reuses its output buffer,
       // so UTF8String values point into the mutable buffer. Without .copy(), earlier
       // heap entries get corrupted when the buffer is overwritten on subsequent iterations.
-      // We need enough right rows to force heap evictions, triggering the corruption.
+      // Data is ordered so that LATER rows have BETTER (smaller) ranking values and
+      // DISPLACE earlier retained entries, exercising the variable-length .copy() path.
       val left = Seq((1, "ref")).toDF("id", "x")
       val right = Seq(
-        (10, "aaa"), (11, "bbb"), (12, "ccc"), (13, "ddd"),
-        (14, "eee"), (15, "fff"), (16, "ggg"), (17, "hhh")
+        (10, "hhh"), (11, "ggg"), (12, "fff"), (13, "eee"),
+        (14, "ddd"), (15, "ccc"), (16, "bbb"), (17, "aaa")
       ).toDF("rid", "label")
       // direction=distance: smallest string wins (lexicographic). k=2 -> "aaa", "bbb"
+      // The first entries in the heap are "hhh","ggg" which get displaced by later
+      // better values, forcing .copy() of the retained ranking values.
       val result = left.nearestByJoin(right, col("label"),
         numResults = 2, mode = "exact", direction = "distance")
         .orderBy("label")
@@ -504,8 +501,8 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
       assert(plan.treeString.contains("BroadcastNearestByJoin"),
         "Expected BroadcastNearestByJoinExec in plan but got:\n" + plan.treeString)
       checkAnswer(result, Seq(
-        Row(1, "ref", 10, "aaa"),
-        Row(1, "ref", 11, "bbb")
+        Row(1, "ref", 17, "aaa"),
+        Row(1, "ref", 16, "bbb")
       ))
     }
   }
@@ -578,9 +575,7 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
     withSQLConf(
       "spark.sql.catalog.testcat" ->
         classOf[org.apache.spark.sql.connector.catalog.InMemoryTableCatalog].getName,
-      SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true",
-      SQLConf.CROSS_JOINS_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
+      SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true") {
       spark.sql(
         """CREATE TABLE testcat.right_tbl (rid INT, y DOUBLE)
           |USING foo""".stripMargin)
@@ -606,10 +601,9 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
   }
 
   test("SPARK-57091: partitioned right table with flag ON uses BroadcastNearestByJoin") {
-    // Regression: before the stats-free fix, partitioned file tables reported
-    // sizeInBytes = Long.MaxValue before filter pushdown, so the old canBroadcastRight
-    // check always failed and the broadcast operator never fired. With the fix, the
-    // planner unconditionally plans BroadcastNearestByJoinExec when the flag is ON.
+    // Regression: before the stats-free fix, partitioned file tables reported inflated
+    // sizeInBytes before filter pushdown. With the unconditional broadcast contract,
+    // the planner always plans BroadcastNearestByJoinExec when the flag is ON.
     withStreamingHeap {
       withTempPath { dir =>
         // Create partitioned parquet data
@@ -629,5 +623,122 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
         assert(result.count() == 6)
       }
     }
+  }
+
+  // ==========================================================================
+  // F7: crossJoin.enabled divergence -- operator path does not require it
+  // ==========================================================================
+
+  test("SPARK-57091: flag ON succeeds without crossJoin.enabled") {
+    // When the broadcast flag is ON, no Join node is built so CheckCartesianProducts
+    // does not apply. NEAREST BY should succeed even with crossJoin.enabled = false.
+    withSQLConf(
+      SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> "true",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      val left = Seq((1, 10.0), (2, 20.0)).toDF("id", "x")
+      val right = Seq((10, 9.0), (11, 15.0), (12, 21.0)).toDF("rid", "y")
+      val result = left.nearestByJoin(right, abs(col("x") - col("y")),
+        numResults = 2, mode = "exact", direction = "distance")
+      val plan = result.queryExecution.executedPlan
+      assert(plan.treeString.contains("BroadcastNearestByJoin"),
+        "Expected BroadcastNearestByJoinExec in plan but got:\n" + plan.treeString)
+      checkAnswer(result.filter(col("id") === 1).orderBy(abs(col("x") - col("y"))), Seq(
+        Row(1, 10.0, 10, 9.0),
+        Row(1, 10.0, 11, 15.0)
+      ))
+      checkAnswer(result.filter(col("id") === 2).orderBy(abs(col("x") - col("y"))), Seq(
+        Row(2, 20.0, 12, 21.0),
+        Row(2, 20.0, 11, 15.0)
+      ))
+    }
+  }
+
+  // ==========================================================================
+  // uros-b :62: EXPLAIN FORMATTED output
+  // ==========================================================================
+
+  test("SPARK-57091: EXPLAIN FORMATTED shows ranking, k, and direction") {
+    withStreamingHeap {
+      val left = Seq((1, 10.0)).toDF("id", "x")
+      val right = Seq((10, 9.0)).toDF("rid", "y")
+      val df = left.nearestByJoin(right, abs(col("x") - col("y")),
+        numResults = 3, mode = "exact", direction = "distance")
+      val explain = df.queryExecution.explainString(
+        org.apache.spark.sql.execution.FormattedMode)
+      assert(explain.contains("NumResults: 3"),
+        s"EXPLAIN FORMATTED should contain 'NumResults: 3'\n$explain")
+      assert(explain.contains("Direction: NearestByDistance"),
+        s"EXPLAIN FORMATTED should contain 'Direction: NearestByDistance'\n$explain")
+      assert(explain.contains("Ranking:"),
+        s"EXPLAIN FORMATTED should contain 'Ranking:'\n$explain")
+      assert(explain.contains("JoinType: Inner"),
+        s"EXPLAIN FORMATTED should contain 'JoinType: Inner'\n$explain")
+    }
+  }
+
+  // ==========================================================================
+  // :47 parity test: rewrite vs operator produce identical results
+  // ==========================================================================
+
+  test("SPARK-57091: rewrite-vs-operator parity") {
+    val left = Seq((1, 10.0), (2, 20.0), (3, 0.0)).toDF("id", "x")
+    val right = Seq((10, 9.0), (11, 15.0), (12, 21.0), (13, 0.5), (14, 100.0))
+      .toDF("rid", "y")
+
+    // Case 1: INNER join, distance
+    def innerDistance(flagOn: Boolean): Array[Row] = {
+      withSQLConf(
+        SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> flagOn.toString,
+        SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        left.nearestByJoin(right, abs(col("x") - col("y")),
+          numResults = 2, mode = "exact", direction = "distance")
+          .orderBy("id", "rid").collect()
+      }
+    }
+    assert(innerDistance(true).toSeq == innerDistance(false).toSeq,
+      "INNER DISTANCE: operator and rewrite should produce identical results")
+
+    // Case 2: INNER join, similarity
+    def innerSimilarity(flagOn: Boolean): Array[Row] = {
+      withSQLConf(
+        SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> flagOn.toString,
+        SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        left.nearestByJoin(right, abs(col("x") - col("y")),
+          numResults = 2, mode = "exact", direction = "similarity")
+          .orderBy("id", "rid").collect()
+      }
+    }
+    assert(innerSimilarity(true).toSeq == innerSimilarity(false).toSeq,
+      "INNER SIMILARITY: operator and rewrite should produce identical results")
+
+    // Case 3: LEFT OUTER with right whose ranking values are ALL NULL
+    val rightAllNull = Seq((10, None: Option[Double]), (11, None: Option[Double]))
+      .toDF("rid", "y")
+    def leftOuterAllNull(flagOn: Boolean): Array[Row] = {
+      withSQLConf(
+        SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> flagOn.toString,
+        SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        left.nearestByJoin(rightAllNull, col("y"),
+          numResults = 2, mode = "exact", direction = "distance",
+          joinType = "left_outer")
+          .orderBy("id").collect()
+      }
+    }
+    assert(leftOuterAllNull(true).toSeq == leftOuterAllNull(false).toSeq,
+      "LEFT OUTER ALL-NULL: operator and rewrite should produce identical results")
+
+    // Case 4: Per-left-row result ordering (best-first)
+    def orderedResults(flagOn: Boolean): Array[Row] = {
+      withSQLConf(
+        SQLConf.NEAREST_BY_BROADCAST_ENABLED.key -> flagOn.toString,
+        SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        val singleLeft = Seq((1, 10.0)).toDF("id", "x")
+        singleLeft.nearestByJoin(right, abs(col("x") - col("y")),
+          numResults = 3, mode = "exact", direction = "distance")
+          .orderBy(abs(col("x") - col("y")), col("rid")).collect()
+      }
+    }
+    assert(orderedResults(true).toSeq == orderedResults(false).toSeq,
+      "ORDERED RESULTS: operator and rewrite should produce identical results")
   }
 }

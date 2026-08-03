@@ -38,7 +38,7 @@ object NearestByJoinBenchmark extends SqlBasedBenchmark {
   private val k = 5
 
   private def streamingHeapVsRewrite(): Unit = {
-    val size = 30000
+    val size = 10000
     val left = spark.range(0, size).toDF("id").withColumn("x", rand(42) * 1000.0)
     val right = spark.range(0, size).toDF("rid").withColumn("y", rand(43) * 1000.0)
     left.cache().count()
@@ -66,6 +66,8 @@ object NearestByJoinBenchmark extends SqlBasedBenchmark {
     }
 
     benchmark.run()
+    left.unpersist()
+    right.unpersist()
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
