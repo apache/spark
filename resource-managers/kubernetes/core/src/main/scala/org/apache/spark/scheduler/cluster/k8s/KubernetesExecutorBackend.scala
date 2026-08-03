@@ -129,8 +129,8 @@ private[spark] object KubernetesExecutorBackend extends Logging {
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
       // Apply initial user credentials to the executor credential store.
-      cfg.userCredentials.foreach { credentials =>
-        env.userCredentials.set(credentials)
+      cfg.userCredentials.foreach { case (version, credentials) =>
+        env.userCredentials.set(VersionedCredentials(version, credentials))
       }
 
       val backend = backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile, execId)

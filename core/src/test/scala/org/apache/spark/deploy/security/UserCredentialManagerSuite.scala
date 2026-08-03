@@ -80,10 +80,10 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val manager = new UserCredentialManager(
       conf,
       createIngestor(ctx),
-      bytes => callbackRef.set(bytes))
+      (_, bytes) => callbackRef.set(bytes))
 
     try {
-      val result = manager.start()
+      val (_, result) = manager.start()
       assert(result != null, "start() should return serialized credentials")
       assert(callbackRef.get() != null, "callback should have been invoked")
 
@@ -105,7 +105,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val manager = new UserCredentialManager(
       conf,
       createFailingIngestor(),
-      _ => ())
+      (_: Long, _: Array[Byte]) => ())
 
     try {
       val ex = intercept[IllegalStateException] {
@@ -129,7 +129,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val original = new UserCredentials(credsMap)
 
     val conf = createSparkConf()
-    val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
+    val manager = new UserCredentialManager(conf, createFailingIngestor(), (_: Long, _: Array[Byte]) => ())
 
     try {
       val serialized = UserCredentialManager.serializeUserCredentials(original)
@@ -168,7 +168,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
       .set(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN, 10000L) // 10s
       .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 5000L)   // 5s
 
-    val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
+    val manager = new UserCredentialManager(conf, createFailingIngestor(), (_: Long, _: Array[Byte]) => ())
     try {
       // Token expires in 60s, credential expires in 30s
       // Expected: min(60s, 30s) - 10s = 20s
@@ -189,7 +189,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
       .set(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN, 10000L)
       .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 5000L)
 
-    val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
+    val manager = new UserCredentialManager(conf, createFailingIngestor(), (_: Long, _: Array[Byte]) => ())
     try {
       // Token expires in 5s, safetyMargin is 10s -> computed delay would be negative
       // Should be bounded by minInterval (5s)
@@ -208,7 +208,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
       .set(SECURITY_OIDC_RENEWAL_SAFETY_MARGIN, 10000L) // 10s
       .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 5000L)   // 5s
 
-    val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
+    val manager = new UserCredentialManager(conf, createFailingIngestor(), (_: Long, _: Array[Byte]) => ())
     try {
       // Token expires in 60s, no credential expiry
       // Expected: 60s - 10s = 50s
@@ -224,7 +224,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
   test("computeRenewalDelay returns default when no expiry information") {
     val conf = createSparkConf()
-    val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
+    val manager = new UserCredentialManager(conf, createFailingIngestor(), (_: Long, _: Array[Byte]) => ())
     try {
       // UserContext with null expiresAt
       val ctx = new UserContext(
@@ -243,7 +243,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val conf = createSparkConf()
       .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 1000L)
 
-    val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
+    val manager = new UserCredentialManager(conf, createFailingIngestor(), (_: Long, _: Array[Byte]) => ())
     try {
       val failuresField = classOf[UserCredentialManager].getDeclaredField("consecutiveFailures")
       failuresField.setAccessible(true)
@@ -274,7 +274,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val conf = createSparkConf()
       .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 1000L)
 
-    val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
+    val manager = new UserCredentialManager(conf, createFailingIngestor(), (_: Long, _: Array[Byte]) => ())
     try {
       val failuresField = classOf[UserCredentialManager].getDeclaredField("consecutiveFailures")
       failuresField.setAccessible(true)
@@ -293,7 +293,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val conf = createSparkConf()
       .set(SECURITY_OIDC_RENEWAL_MIN_INTERVAL, 1000L)
 
-    val manager = new UserCredentialManager(conf, createFailingIngestor(), _ => ())
+    val manager = new UserCredentialManager(conf, createFailingIngestor(), (_: Long, _: Array[Byte]) => ())
     try {
       val failuresField = classOf[UserCredentialManager].getDeclaredField("consecutiveFailures")
       failuresField.setAccessible(true)
@@ -314,13 +314,13 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val conf = new SparkConf(loadDefaults = false)
       .set(SECURITY_OIDC_ENABLED, false)
 
-    val result = UserCredentialManager.create(conf, _ => ())
+    val result = UserCredentialManager.create(conf, (_: Long, _: Array[Byte]) => ())
     assert(result.isEmpty)
   }
 
   test("UserCredentialManager.create returns Some when enabled with valid config") {
     val conf = createSparkConf()
-    val result = UserCredentialManager.create(conf, _ => ())
+    val result = UserCredentialManager.create(conf, (_: Long, _: Array[Byte]) => ())
     assert(result.isDefined)
   }
 
@@ -330,7 +330,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     // Deliberately not setting SECURITY_OIDC_IDENTITY_TOKEN_FILE
 
     val ex = intercept[IllegalArgumentException] {
-      UserCredentialManager.create(conf, _ => ())
+      UserCredentialManager.create(conf, (_: Long, _: Array[Byte]) => ())
     }
     assert(ex.getMessage.contains("spark.security.oidc.identityToken.file"))
   }
@@ -345,10 +345,10 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val manager = new UserCredentialManager(
       conf,
       createIngestor(ctx),
-      _ => { callbackCount += 1 })
+      (_: Long, _: Array[Byte]) => { callbackCount += 1 })
 
     try {
-      val result = manager.start()
+      val (_, result) = manager.start()
       assert(result != null)
       assert(callbackCount === 1, "callback should be invoked once on start")
     } finally {
@@ -362,7 +362,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
       "org.apache.spark.security.FakeCredentialProvider")
     val ctx = createUserContext()
 
-    val manager = new UserCredentialManager(conf, createIngestor(ctx), _ => ())
+    val manager = new UserCredentialManager(conf, createIngestor(ctx), (_: Long, _: Array[Byte]) => ())
     manager.start()
     // Should not throw
     manager.stop()
@@ -386,10 +386,10 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val manager = new UserCredentialManager(
       conf,
       createIngestor(ctx),
-      bytes => callbackRef.set(bytes))
+      (_, bytes) => callbackRef.set(bytes))
 
     try {
-      val result = manager.start()
+      val (_, result) = manager.start()
       assert(result != null, "start() should return serialized credentials")
 
       // Verify that "fake" credentials were resolved despite "shared" failing
@@ -412,7 +412,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
 
     val ctx = createUserContext()
 
-    val manager = new UserCredentialManager(conf, createIngestor(ctx), _ => ())
+    val manager = new UserCredentialManager(conf, createIngestor(ctx), (_: Long, _: Array[Byte]) => ())
 
     try {
       val ex = intercept[IllegalStateException] {
@@ -454,10 +454,10 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val manager = new UserCredentialManager(
       conf,
       rotatingIngestor,
-      bytes => callbacks.add(bytes))
+      (_, bytes) => callbacks.add(bytes))
 
     try {
-      val initial = manager.start()
+      val (_, initial) = manager.start()
       assert(initial != null)
       assert(callbacks.size() === 1, "Should have one callback from start()")
 

@@ -61,7 +61,16 @@ private[spark] class TaskDescription(
     // Eg, Map("gpu" -> Map("0" -> ResourceAmountUtils.toInternalResource(0.7))):
     // assign 0.7 of the gpu address "0" to this task
     val resources: immutable.Map[String, immutable.Map[String, Long]],
-    val userCredentials: Option[Array[Byte]],
+    // OIDC credentials with version for stale-update prevention.
+    // The version is a monotonic counter from UserCredentialManager; executors only apply
+    // credentials if the version is newer than what they already have. This prevents a
+    // delayed TaskDescription from overwriting fresher credentials delivered via RPC.
+    // Trade-off: every TaskDescription carries the full serialized UserCredentials (a few KB).
+    // This is acceptable because OIDC credentials are short-lived (minutes) unlike Hadoop
+    // delegation tokens (hours/days), making the race between RPC broadcast and task dispatch
+    // a practical concern. For short-task-heavy workloads, the overhead is bounded by
+    // credential size × tasks-in-flight (not total task count).
+    val userCredentials: Option[(Long, Array[Byte])],
     val serializedTask: ByteBuffer) {
 
   assert(cpus > 0, "CPUs per task should be > 0")
@@ -124,8 +133,9 @@ private[spark] object TaskDescription {
 
     // Write user credentials (OIDC).
     taskDescription.userCredentials match {
-      case Some(creds) =>
+      case Some((version, creds)) =>
         dataOut.writeBoolean(true)
+        dataOut.writeLong(version)
         dataOut.writeInt(creds.length)
         dataOut.write(creds)
       case None =>
@@ -241,10 +251,11 @@ private[spark] object TaskDescription {
 
     // Read user credentials (OIDC).
     val userCredentials = if (dataIn.readBoolean()) {
+      val version = dataIn.readLong()
       val length = dataIn.readInt()
       val creds = new Array[Byte](length)
       dataIn.readFully(creds)
-      Some(creds)
+      Some((version, creds))
     } else {
       None
     }

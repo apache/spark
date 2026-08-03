@@ -223,10 +223,13 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo(log"Received tokens of ${MDC(LogKeys.NUM_BYTES, tokenBytes.length)} bytes")
       SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
 
-    case UpdateUserCredentials(credentials) =>
+    case UpdateUserCredentials(version, credentials) =>
       logInfo(log"Received user credentials of " +
-        log"${MDC(LogKeys.NUM_BYTES, credentials.length)} bytes")
-      env.userCredentials.set(credentials)
+        log"${MDC(LogKeys.NUM_BYTES, credentials.length)} bytes (version ${MDC(LogKeys.COUNT, version)})")
+      val newValue = VersionedCredentials(version, credentials)
+      env.userCredentials.updateAndGet { current =>
+        if (current == null || version > current.version) newValue else current
+      }
 
     case DecommissionExecutor =>
       decommissionSelf()
@@ -512,8 +515,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
       // Apply initial user credentials to the executor credential store.
-      cfg.userCredentials.foreach { credentials =>
-        env.userCredentials.set(credentials)
+      cfg.userCredentials.foreach { case (version, credentials) =>
+        env.userCredentials.set(VersionedCredentials(version, credentials))
       }
 
       // Set the application attemptId in the BlockStoreClient if available.

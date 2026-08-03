@@ -270,13 +270,17 @@ class SparkEnv (
   private[spark] var executorBackend: Option[ExecutorBackend] = None
 
   /**
-   * Credential store for OIDC-based user credentials on executors.
+   * Versioned credential store for OIDC-based user credentials on both driver and executors.
    * Updated via `UpdateUserCredentials` RPC and `TaskDescription` credential delivery.
    * Read by connector-specific credential providers (e.g., SparkOidcAwsCredentialsProvider).
    * Contains serialized `UserCredentials` (no raw identity token).
+   *
+   * The version field is a monotonically increasing counter assigned by `UserCredentialManager`
+   * on each credential renewal. It is used to guard against stale credentials from delayed
+   * `TaskDescription` delivery overwriting fresher credentials delivered via RPC broadcast.
    */
-  private[spark] val userCredentials: AtomicReference[Array[Byte]] =
-    new AtomicReference[Array[Byte]]()
+  private[spark] val userCredentials: AtomicReference[VersionedCredentials] =
+    new AtomicReference[VersionedCredentials]()
 
   private[spark] def stop(): Unit = {
 
@@ -835,3 +839,13 @@ object SparkEnv extends Logging {
       "Metrics Properties" -> metricsProperties.toSeq.sorted)
   }
 }
+
+/**
+ * Container for versioned OIDC user credentials.
+ *
+ * @param version Monotonically increasing counter assigned by `UserCredentialManager` on each
+ *                credential renewal. Used to prevent stale credentials from overwriting fresher
+ *                ones on executors.
+ * @param bytes   Serialized `UserCredentials` payload (no raw identity token).
+ */
+private[spark] case class VersionedCredentials(version: Long, bytes: Array[Byte])

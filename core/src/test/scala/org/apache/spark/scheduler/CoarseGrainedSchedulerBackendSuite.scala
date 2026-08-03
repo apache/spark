@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -634,7 +634,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     // Send UpdateUserCredentials via DriverEndpoint
     val testCredentials = Array[Byte](1, 2, 3, 4, 5)
-    backend.driverEndpoint.send(UpdateUserCredentials(testCredentials))
+    backend.driverEndpoint.send(UpdateUserCredentials(1L, testCredentials))
 
     // Wait for the message to be processed
     eventually(timeout(5 seconds)) {
@@ -642,11 +642,11 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       assert(mockEndpointRef2.receivedUserCredentials.isDefined)
     }
 
-    assert(mockEndpointRef1.receivedUserCredentials.get === testCredentials)
-    assert(mockEndpointRef2.receivedUserCredentials.get === testCredentials)
+    assert(mockEndpointRef1.receivedUserCredentials.get._2 === testCredentials)
+    assert(mockEndpointRef2.receivedUserCredentials.get._2 === testCredentials)
 
     // Verify SparkEnv credential store is also updated
-    assert(SparkEnv.get.userCredentials.get() === testCredentials)
+    assert(SparkEnv.get.userCredentials.get().bytes === testCredentials)
   }
 
   test("SparkAppConfig includes current user credentials for late-registering executors") {
@@ -659,7 +659,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     // Simulate credential acquisition by setting credentials before any executor registers
     val testCredentials = Array[Byte](10, 20, 30, 40, 50)
-    backend.driverEndpoint.send(UpdateUserCredentials(testCredentials))
+    backend.driverEndpoint.send(UpdateUserCredentials(1L, testCredentials))
 
     // Wait for the message to be processed
     eventually(timeout(5 seconds)) {
@@ -673,7 +673,77 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     // Verify that userCredentials is present in the response
     assert(appConfig.userCredentials.isDefined,
       "SparkAppConfig should include user credentials for late-registering executors")
-    assert(appConfig.userCredentials.get === testCredentials)
+    assert(appConfig.userCredentials.get._2 === testCredentials)
+  }
+
+  test("version guard prevents stale credentials from overwriting newer ones") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    // Send version 3 credentials first
+    val credsV3 = Array[Byte](30, 30, 30)
+    backend.driverEndpoint.send(UpdateUserCredentials(3L, credsV3))
+
+    eventually(timeout(5 seconds)) {
+      assert(SparkEnv.get.userCredentials.get() != null)
+      assert(SparkEnv.get.userCredentials.get().version === 3L)
+    }
+
+    // Now send version 1 (stale) — should be rejected
+    val credsV1 = Array[Byte](10, 10, 10)
+    backend.driverEndpoint.send(UpdateUserCredentials(1L, credsV1))
+
+    // Send version 5 (newer) — should be accepted
+    val credsV5 = Array[Byte](50, 50, 50)
+    backend.driverEndpoint.send(UpdateUserCredentials(5L, credsV5))
+
+    eventually(timeout(5 seconds)) {
+      assert(SparkEnv.get.userCredentials.get().version === 5L)
+    }
+
+    // Verify version 5 credentials are in the store (not v1 or v3)
+    assert(SparkEnv.get.userCredentials.get().bytes === credsV5)
+  }
+
+  test("executor-side credential store version guard rejects stale and accepts newer") {
+    // This tests the same updateAndGet logic used in CoarseGrainedExecutorBackend.receive
+    // and Executor.TaskRunner for applying credentials from RPC and TaskDescription.
+    val store = new AtomicReference[VersionedCredentials]()
+
+    // Initial write to null store should succeed
+    val v2 = VersionedCredentials(2L, Array[Byte](20, 20))
+    store.updateAndGet { current =>
+      if (current == null || 2L > current.version) v2 else current
+    }
+    assert(store.get().version === 2L)
+    assert(store.get().bytes === Array[Byte](20, 20))
+
+    // Stale version (1) should be rejected
+    val v1 = VersionedCredentials(1L, Array[Byte](10, 10))
+    store.updateAndGet { current =>
+      if (current == null || 1L > current.version) v1 else current
+    }
+    assert(store.get().version === 2L, "Stale version should not overwrite newer")
+
+    // Same version (2) should also be rejected (strict >)
+    val v2b = VersionedCredentials(2L, Array[Byte](22, 22))
+    store.updateAndGet { current =>
+      if (current == null || 2L > current.version) v2b else current
+    }
+    assert(store.get().version === 2L)
+    assert(store.get().bytes === Array[Byte](20, 20), "Same version should not overwrite")
+
+    // Newer version (5) should be accepted
+    val v5 = VersionedCredentials(5L, Array[Byte](50, 50))
+    store.updateAndGet { current =>
+      if (current == null || 5L > current.version) v5 else current
+    }
+    assert(store.get().version === 5L)
+    assert(store.get().bytes === Array[Byte](50, 50))
   }
 
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {
@@ -737,14 +807,14 @@ private[spark] class MockExecutorRpcEndpointRef(conf: SparkConf) extends RpcEndp
   // scalastyle:on executioncontextglobal
 
   var decommissionReceived = false
-  var receivedUserCredentials: Option[Array[Byte]] = None
+  var receivedUserCredentials: Option[(Long, Array[Byte])] = None
 
   override def address: RpcAddress = null
   override def name: String = "executor"
   override def send(message: Any): Unit =
     message match {
       case DecommissionExecutor => decommissionReceived = true
-      case UpdateUserCredentials(creds) => receivedUserCredentials = Some(creds)
+      case UpdateUserCredentials(version, creds) => receivedUserCredentials = Some((version, creds))
       case _ =>
     }
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {

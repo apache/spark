@@ -150,7 +150,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
       properties,
       cpus = 1,
       Map.empty,
-      Some(credentialBytes),
+      Some((1L, credentialBytes)),
       taskBuffer
     )
 
@@ -160,7 +160,8 @@ class TaskDescriptionSuite extends SparkFunSuite {
     assert(decoded.taskId === 42)
     assert(decoded.name === "task with credentials")
     assert(decoded.userCredentials.isDefined)
-    assert(decoded.userCredentials.get === credentialBytes)
+    assert(decoded.userCredentials.get._1 === 1L)
+    assert(decoded.userCredentials.get._2 === credentialBytes)
     assert(decoded.serializedTask.equals(taskBuffer))
   }
 

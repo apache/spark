@@ -850,10 +850,14 @@ private[spark] class Executor(
         // Apply user credentials from TaskDescription to the executor credential store.
         // This ensures credentials are available before any task code runs, avoiding
         // the race between RPC broadcast and task dispatch.
-        // All tasks in a Spark application belong to the same user, so last-writer-wins
-        // is acceptable when multiple task threads update concurrently.
-        taskDescription.userCredentials.foreach { creds =>
-          env.userCredentials.set(creds)
+        // Only apply if the version is newer than what the store already has, preventing
+        // a delayed TaskDescription from overwriting fresher credentials delivered via RPC.
+        // Uses updateAndGet for atomic compare-and-set across concurrent task threads.
+        taskDescription.userCredentials.foreach { case (version, creds) =>
+          val newValue = VersionedCredentials(version, creds)
+          env.userCredentials.updateAndGet { current =>
+            if (current == null || version > current.version) newValue else current
+          }
         }
 
         updateDependencies(
