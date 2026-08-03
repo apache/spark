@@ -854,7 +854,7 @@ class Resolver(
 object Resolver {
 
   /**
-   * Fails with [[MISSING_ATTRIBUTES]] because `operator` references attributes its child does not
+   * Fails with `MISSING_ATTRIBUTES` because `operator` references attributes its child does not
    * produce.
    */
   def throwMissingAttributesError(
