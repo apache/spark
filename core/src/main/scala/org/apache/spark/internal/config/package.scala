@@ -503,6 +503,20 @@ package object config {
     .doubleConf
     .createWithDefault(0.6)
 
+  private[spark] val MEMORY_OOM_ERROR_CONSUMER_BREAKDOWN_LIMIT =
+    ConfigBuilder("spark.memory.oomErrorConsumerBreakdownLimit")
+      .internal()
+      .doc("The maximum number of memory consumers listed individually in the per-consumer " +
+        "memory breakdown attached to an UNABLE_TO_ACQUIRE_MEMORY error. The largest consumers " +
+        "are listed first; any beyond this limit are collapsed into a single summary line. This " +
+        "bounds the size of the error message that is sent to the driver and shown in the UI. " +
+        "It does not affect the full breakdown written to the executor logs. Set to 0 to omit " +
+        "the breakdown from the error message entirely.")
+      .version("4.3.0")
+      .intConf
+      .checkValue(_ >= 0, "The consumer breakdown limit must not be negative")
+      .createWithDefault(5)
+
   private[spark] val UNMANAGED_MEMORY_POLLING_INTERVAL =
     ConfigBuilder("spark.memory.unmanagedMemoryPollingInterval")
       .doc("Interval for polling unmanaged memory users to track their memory usage. " +
