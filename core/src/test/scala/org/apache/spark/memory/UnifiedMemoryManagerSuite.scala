@@ -249,14 +249,44 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set(TEST_MEMORY, systemMemory)
       .set(TEST_RESERVED_MEMORY, reservedMemory)
 
-    val mm = UnifiedMemoryManager(conf, numCores = 1)
+    val mm = UnifiedMemoryManager(conf, numCores = 1, isDriver = false)
 
     // Try using an executor memory that's too small
     val conf2 = conf.clone().set(EXECUTOR_MEMORY.key, (reservedMemory / 2).toString)
     val exception = intercept[IllegalArgumentException] {
-      UnifiedMemoryManager(conf2, numCores = 1)
+      UnifiedMemoryManager(conf2, numCores = 1, isDriver = false)
     }
     assert(exception.getMessage.contains("increase executor memory"))
+  }
+
+  test("executor does not validate driver heap") {
+    val systemMemory = 400L * 1024
+    val reservedMemory = 300L * 1024
+    val memoryFraction = 0.8
+    val conf = new SparkConf()
+      .set(MEMORY_FRACTION, memoryFraction)
+      .set(TEST_MEMORY, systemMemory)
+      .set(TEST_RESERVED_MEMORY, reservedMemory)
+      .set(EXECUTOR_MEMORY.key, (500L * 1024).toString)
+
+    val mm = UnifiedMemoryManager(conf, numCores = 1, isDriver = false)
+    val expectedMaxMemory = ((systemMemory - reservedMemory) * memoryFraction).toLong
+    assert(mm.maxHeapMemory === expectedMaxMemory)
+  }
+
+  test("driver does not validate executor memory") {
+    val systemMemory = 1024L * 1024
+    val reservedMemory = 300L * 1024
+    val memoryFraction = 0.8
+    val conf = new SparkConf()
+      .set(MEMORY_FRACTION, memoryFraction)
+      .set(TEST_MEMORY, systemMemory)
+      .set(TEST_RESERVED_MEMORY, reservedMemory)
+      .set(EXECUTOR_MEMORY.key, (reservedMemory / 2).toString)
+
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
+    val expectedMaxMemory = ((systemMemory - reservedMemory) * memoryFraction).toLong
+    assert(mm.maxHeapMemory === expectedMaxMemory)
   }
 
   test("execution can evict cached blocks when there are multiple active tasks (SPARK-12155)") {
