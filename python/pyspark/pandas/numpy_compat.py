@@ -23,6 +23,7 @@ from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
 
+
 unary_np_spark_mappings = {
     "abs": F.abs,
     "absolute": F.abs,
@@ -78,7 +79,15 @@ unary_np_spark_mappings = {
     "square": lambda c: c.cast("double") * c,
     "tan": F.tan,
     "tanh": F.tanh,
-    "trunc": pandas_udf(lambda s: np.trunc(s), DoubleType()),  # type: ignore[call-overload]
+    "trunc": lambda c: F.when(
+        c.cast("double").isNull()
+        | F.isnan(c.cast("double"))
+        | c.cast("double").isin(float("-inf"), float("inf")),
+        c.cast("double"),
+    ).otherwise(
+        F.signum(c.cast("double"))
+        * (F.abs(c.cast("double")) - (F.abs(c.cast("double")) % F.lit(1.0)))
+    ),
 }
 
 binary_np_spark_mappings = {
