@@ -686,7 +686,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   override def visitFailSetRole(ctx: FailSetRoleContext): LogicalPlan = withOrigin(ctx) {
-    invalidStatement("SET ROLE", ctx);
+    invalidStatement("SET ROLE", ctx)
   }
 
   /**

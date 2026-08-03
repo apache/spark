@@ -1065,7 +1065,7 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
   override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
     CollationSupport.StringReplace.exec(srcEval.asInstanceOf[UTF8String],
-      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String], collationId);
+      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String], collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2008,7 +2008,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
 
   override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
     CollationSupport.SubstringIndex.exec(str.asInstanceOf[UTF8String],
-      delim.asInstanceOf[UTF8String], count.asInstanceOf[Int], collationId);
+      delim.asInstanceOf[UTF8String], count.asInstanceOf[Int], collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2092,7 +2092,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
             0
           } else {
             CollationSupport.StringLocate.exec(l.asInstanceOf[UTF8String],
-              r.asInstanceOf[UTF8String], s.asInstanceOf[Int] - 1, collationId) + 1;
+              r.asInstanceOf[UTF8String], s.asInstanceOf[Int] - 1, collationId) + 1
           }
         }
       }

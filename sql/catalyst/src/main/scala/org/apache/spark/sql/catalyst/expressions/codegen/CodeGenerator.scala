@@ -797,7 +797,7 @@ class CodegenContext extends Logging {
     val isNullA = freshName("isNullA")
     val elementB = freshName("elementB")
     val isNullB = freshName("isNullB")
-    val jt = javaType(elementType);
+    val jt = javaType(elementType)
     s"""
        |boolean $isNullA = $arrayA.isNullAt($i);
        |boolean $isNullB = $arrayB.isNullAt($i);

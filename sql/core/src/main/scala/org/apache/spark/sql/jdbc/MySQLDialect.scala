@@ -360,7 +360,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
           } else {
             // The only property we are building here is `COMMENT` because it's the only one
             // we can get from `SHOW INDEXES`.
-            val properties = new util.Properties();
+            val properties = new util.Properties()
             if (indexComment.nonEmpty) properties.put("COMMENT", indexComment)
             val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
               new util.HashMap[NamedReference, util.Properties](), properties)

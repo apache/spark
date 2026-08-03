@@ -2815,7 +2815,7 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     case d @ Deduplicate(keys, child, _) if !child.isStreaming =>
       val keyExprIds = keys.map(_.exprId)
-      val generatedAliasesMap = new mutable.HashMap[Attribute, Alias]();
+      val generatedAliasesMap = new mutable.HashMap[Attribute, Alias]()
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {
           attr
