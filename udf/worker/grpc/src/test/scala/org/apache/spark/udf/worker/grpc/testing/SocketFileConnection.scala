@@ -14,26 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.udf.worker.core
+package org.apache.spark.udf.worker.grpc.testing
 
 import java.io.File
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.udf.worker.core.WorkerConnection
 
 /**
- * :: Experimental ::
- * A [[WorkerConnection]] over a Unix domain socket. Owns the socket
- * path and removes the socket file on [[close]]. Subclasses provide the
- * protocol-specific channel (e.g. gRPC over UDS) and may override
- * [[close]] to add transport-level shutdown -- they should call
- * `super.close()` to ensure the socket file is removed.
+ * A [[WorkerConnection]] test implementation that treats the connection
+ * as active as long as the worker's UDS file exists on disk. The socket
+ * file is removed on close.
  *
- * [[close]] is idempotent: deleting an already-removed file is a no-op.
+ * Suitable for dispatcher-lifecycle tests that don't need to drive the
+ * gRPC protocol -- e.g. verifying that a worker spec spawns a real
+ * worker process that creates the expected socket.
  */
-@Experimental
-abstract class UnixSocketWorkerConnection(val socketPath: String)
-  extends WorkerConnection {
-
+class SocketFileConnection(val socketPath: String) extends WorkerConnection {
+  override def isActive: Boolean = new File(socketPath).exists()
   override def close(): Unit = {
     val f = new File(socketPath)
     if (f.exists()) f.delete()
