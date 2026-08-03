@@ -211,7 +211,7 @@ case class KllSketchAggBigint(
   arguments = """
     Arguments:
       * expr - The expression to aggregate into the KLL sketch.
-        An expression that evaluates to a float or double.
+        An expression that evaluates to a float.
       * k - The parameter controlling the size and accuracy of the sketch.
         An expression that evaluates to an integer. Must be a constant.
   """,
