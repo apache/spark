@@ -68,6 +68,7 @@ FROM   t1
 WHERE  t1a IN (SELECT t2a
                FROM   t2
                WHERE  t1d = t2d
+               ORDER BY date ASC
                LIMIT 10)
 LIMIT  2;
 
@@ -88,6 +89,7 @@ FROM   t1
 WHERE  t1a IN (SELECT t2a
                FROM   t2
                WHERE  t1d = t2d
+               ORDER BY date DESC
                LIMIT 10
                OFFSET 2)
 LIMIT  2
@@ -200,6 +202,7 @@ FROM   t1
 WHERE  t1c IN (SELECT t2c
                FROM   t2
                WHERE  t2b >= 8
+               ORDER BY t2c DESC
                LIMIT  2
                OFFSET 2)
 LIMIT 4
@@ -233,6 +236,7 @@ FROM   t1
 WHERE  t1b NOT IN (SELECT t2b
                    FROM   t2
                    WHERE  t2b <= t1d
+                   ORDER BY t2b DESC
                    LIMIT  2);
 
 SELECT *
@@ -355,6 +359,7 @@ FROM t1
 WHERE t1d IN (SELECT t2d
               FROM   t2
               WHERE t1a IS NOT NULL
+              ORDER BY t2c
               LIMIT 10);
 
 SELECT COUNT(DISTINCT(t1a))
@@ -362,6 +367,7 @@ FROM t1
 WHERE t1d IN (SELECT MAX(t2d)
               FROM   t2
               WHERE t1a IS NOT NULL
+              ORDER BY t2c DESC
               LIMIT 10);
 
 SELECT COUNT(DISTINCT(t1a))
@@ -369,6 +375,7 @@ FROM t1
 WHERE t1d IN (SELECT DISTINCT t2d
               FROM   t2
               WHERE t1a IS NOT NULL
+              ORDER BY t2d ASC
               LIMIT 10);
 
 set spark.sql.optimizer.decorrelateExistsIn.enabled = false;
@@ -379,6 +386,7 @@ FROM   t1
 WHERE  t1b NOT IN (SELECT t2b
                    FROM   t2
                    WHERE  t2b = t1b
+                   ORDER BY t2b DESC
                    LIMIT  2
                    OFFSET 2);
 set spark.sql.optimizer.decorrelateExistsIn.enabled = true;
