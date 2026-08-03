@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, CollationAwareXxHash64, Expression, Literal, XxHash64}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
@@ -277,6 +277,16 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
     numMightContains
   }
 
+  def getBloomFilterHashes(plan: LogicalPlan): Seq[Expression] = {
+    plan.collectWithSubqueries {
+      case node => node.expressions.flatMap(_.collect {
+        case BloomFilterMightContain(_, hash) => hash
+        case AggregateExpression(
+            BloomFilterAggregate(hash, _, _, _, _), _, _, _, _) => hash
+      })
+    }.flatten
+  }
+
   def columnPruningTakesEffect(plan: LogicalPlan): Boolean = {
     def takesEffect(plan: LogicalPlan): Boolean = {
       val result = org.apache.spark.sql.catalyst.optimizer.ColumnPruning.apply(plan)
@@ -302,8 +312,11 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
   test("Runtime bloom filter join: simple") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertRewroteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
-        "where bf2.a2 = 62")
+      val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62"
+      assertRewroteWithBloomFilter(query)
+      val bloomFilterHashes = getBloomFilterHashes(sql(query).queryExecution.optimizedPlan)
+      assert(bloomFilterHashes.size == 2)
+      assert(bloomFilterHashes.forall(_.isInstanceOf[XxHash64]))
       assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2")
     }
   }
@@ -516,6 +529,45 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "bf1.c1 = bf2.c2 where square(bf2.a2) = 62" )
       assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on " +
         "bf1.c1 = square(bf2.c2) where bf2.a2 = 62" )
+    }
+  }
+
+  Seq("UTF8_LCASE", "UNICODE_CI").foreach { collation =>
+    test(s"SPARK-58486: runtime bloom filters use collation-aware hashing ($collation)") {
+      withTable("runtime_filter_dim", "runtime_filter_fact") {
+        sql(s"""
+          |CREATE TABLE runtime_filter_dim(
+          |  key STRING COLLATE $collation,
+          |  category STRING) USING parquet
+          |""".stripMargin)
+        sql("INSERT INTO runtime_filter_dim VALUES ('ABC', 'x')")
+        sql(s"""
+          |CREATE TABLE runtime_filter_fact USING parquet AS
+          |SELECT concat('abc', CAST(id AS STRING)) COLLATE $collation AS key
+          |FROM range(5000)
+          |""".stripMargin)
+
+        val query =
+          """
+            |SELECT count(*)
+            |FROM runtime_filter_fact fact JOIN runtime_filter_dim dim
+            |ON substr(fact.key, 1, 3) = dim.key
+            |WHERE dim.category = 'x'
+            |""".stripMargin
+
+        withSQLConf(
+          SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
+          SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          assertRewroteWithBloomFilter(query)
+          checkAnswer(sql(query), Seq(Row(5000L)))
+
+          val bloomFilterHashes =
+            getBloomFilterHashes(sql(query).queryExecution.optimizedPlan)
+          assert(bloomFilterHashes.size == 2)
+          assert(bloomFilterHashes.forall(_.isInstanceOf[CollationAwareXxHash64]))
+        }
+      }
     }
   }
 
