@@ -15243,6 +15243,7 @@ def base64(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.unbase64`
+    :meth:`pyspark.sql.functions.to_base32`
 
     Examples
     --------
@@ -15320,6 +15321,7 @@ def unbase64(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.base64`
+    :meth:`pyspark.sql.functions.from_base32`
 
     Examples
     --------
