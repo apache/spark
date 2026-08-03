@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import scala.collection.AbstractIterator
+
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -27,8 +29,16 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * An Iterator to walk through the InternalRows from a CachedBatch
+ *
+ * Extends `AbstractIterator` rather than mixing in `Iterator` directly. Mixing a trait into a
+ * class that fixes its type parameter makes scalac copy the trait's forwarders here and emit them
+ * raw, with no `Signature` attribute: the class file grows, and javac cannot subclass it, seeing
+ * `Object minBy(Function1, Ordering)` clash with `IterableOnceOps`'
+ * `<B> A minBy(Function1<A, B>, Ordering<B>)`. `AbstractIterator` keeps its element type generic,
+ * so the forwarders stay in it, with their signatures. The subclass generated below is compiled
+ * as Java source under the javac codegen backend (SPARK-57403); Janino skips this check.
  */
-abstract class ColumnarIterator extends Iterator[InternalRow] {
+abstract class ColumnarIterator extends AbstractIterator[InternalRow] {
   def initialize(input: Iterator[DefaultCachedBatch], columnTypes: Array[DataType],
     columnIndexes: Array[Int]): Unit
 }
@@ -165,7 +175,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       import java.nio.ByteOrder;
       import scala.collection.Iterator;
       import org.apache.spark.sql.types.DataType;
-      import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
       import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
 
