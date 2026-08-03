@@ -23,15 +23,6 @@ from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
 
-
-def _reciprocal(c):
-    c = c.cast("double")
-    return F.when(c.isNull(), c).when(
-        c == 0,
-        F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
-    ).otherwise(F.lit(1.0) / c)
-
-
 unary_np_spark_mappings = {
     "abs": F.abs,
     "absolute": F.abs,
@@ -74,7 +65,14 @@ unary_np_spark_mappings = {
     "positive": F.positive,
     "rad2deg": F.degrees,
     "radians": F.radians,
-    "reciprocal": _reciprocal,
+    "reciprocal": lambda c: F.when(c.cast("double").isNull(), c.cast("double"))
+    .when(
+        c.cast("double") == 0,
+        F.when(c.cast("double").cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(
+            F.lit(float("inf"))
+        ),
+    )
+    .otherwise(F.lit(1.0) / c.cast("double")),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
     "signbit": lambda c: F.when(c < 0, True).otherwise(False),
