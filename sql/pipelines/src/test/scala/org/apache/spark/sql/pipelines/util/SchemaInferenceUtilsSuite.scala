@@ -270,4 +270,52 @@ class SchemaInferenceUtilsSuite extends SparkFunSuite {
     assert(addedColumnNames === Set("full_name", "email"))
     assert(deletedColumnNames === Set("first_name", "last_name"))
   }
+
+  test("determineColumnChanges - case-only difference is a distinct column when case-sensitive") {
+    // Default (case-sensitive) behavior: `value` and `Value` are distinct columns. Diffing the two
+    // schemas directly therefore drops `value` and adds `Value`. (On the real evolution path the
+    // target is the MERGED union of current + desired, so `value` is never dropped; the point here
+    // is only that diffSchemas keys column identity case-sensitively by default -- the pre-SPARK-
+    // 58517 behavior.)
+    val currentSchema = new StructType().add("id", IntegerType).add("value", StringType)
+    val targetSchema = new StructType().add("id", IntegerType).add("Value", StringType)
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema, caseSensitive = true)
+
+    val addChanges = changes.collect { case ac: TableChange.AddColumn => ac.fieldNames()(0) }
+    val deleteChanges = changes.collect { case dc: TableChange.DeleteColumn => dc.fieldNames()(0) }
+    assert(addChanges === Seq("Value"))
+    assert(deleteChanges === Seq("value"))
+  }
+
+  test("determineColumnChanges - case-only difference is a no-op when case-insensitive") {
+    // With caseSensitive = false, `Value` matches the existing `value`: same type, nullability, and
+    // comment, so there is no change at all -- crucially NOT a drop-then-add, and no rename.
+    val currentSchema = new StructType().add("id", IntegerType).add("value", StringType)
+    val targetSchema = new StructType().add("id", IntegerType).add("Value", StringType)
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema, caseSensitive = false)
+
+    assert(changes.isEmpty, s"expected no changes, got: $changes")
+  }
+
+  test("determineColumnChanges - case-insensitive match addresses the current column name for a " +
+    "type change") {
+    // The target field differs from the current one only in case AND changes type. Under
+    // case-insensitive matching this is a single in-place update, and the change must address the
+    // column by its CURRENT (already-persisted) name `value`, not the target's `Value`.
+    val currentSchema = new StructType().add("value", IntegerType)
+    val targetSchema = new StructType().add("Value", LongType)
+
+    val changes =
+      SchemaInferenceUtils.diffSchemas(currentSchema, targetSchema, caseSensitive = false)
+
+    assert(changes.length === 1)
+    val typeChange = changes.collect { case tc: TableChange.UpdateColumnType => tc }
+    assert(typeChange.length === 1)
+    assert(typeChange.head.fieldNames() === Array("value"))
+    assert(typeChange.head.newDataType() === LongType)
+  }
 }

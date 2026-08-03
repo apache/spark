@@ -315,11 +315,11 @@ class AutoCdcScd1KeyDriftSuite
     // case-sensitive resolver in the validator is caught.
     //
     // Note that only the *key declaration* (`Seq("Id")`) has different casing here -- the
-    // source DF column name still matches the target's `id` exactly. Differing the source DF
-    // column casing as well would not exercise drift: [[SchemaMergingUtils.mergeSchemas]] is
-    // case-sensitive on column names and would add `Id` as a new column to the target,
-    // producing AMBIGUOUS_REFERENCE during the streaming write rather than letting drift
-    // validation make the call.
+    // source DF column name still matches the target's `id` exactly. This keeps the test focused
+    // on the drift validator: whether the source DF column were `id` or `Id`, under the default
+    // (case-insensitive) resolver schema evolution folds it onto the existing `id` (SPARK-58517),
+    // so the streaming write itself would not fail either way and drift validation remains the
+    // sole decision-maker.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"

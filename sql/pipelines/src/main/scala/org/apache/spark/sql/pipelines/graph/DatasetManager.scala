@@ -397,7 +397,8 @@ object DatasetManager extends Logging {
           existingTable = existingTable,
           desiredSchema = outputSchema,
           properties = mergedProperties,
-          mergeWithExistingSchema = isTableIncrementallyUpdated
+          mergeWithExistingSchema = isTableIncrementallyUpdated,
+          caseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
         )
       case None =>
         createTable(
@@ -511,7 +512,8 @@ object DatasetManager extends Logging {
             existingTable = existingAuxTable,
             desiredSchema = auxiliaryTableSpec.schema,
             properties = auxiliaryTableSpec.properties,
-            mergeWithExistingSchema = true
+            mergeWithExistingSchema = true,
+            caseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
           )
         case None =>
           createTable(
@@ -626,6 +628,12 @@ object DatasetManager extends Logging {
    * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
+   * @param caseSensitive           whether schema evolution treats field names differing only in
+   *                                case as distinct columns. Threaded from the session's
+   *                                `spark.sql.caseSensitive` so evolution matches how the rest of
+   *                                the engine resolves the same names; when `false`, an incoming
+   *                                column differing from an existing one only in case is folded
+   *                                onto it rather than added as a duplicate.
    */
   private def evolveTable(
       catalog: TableCatalog,
@@ -633,14 +641,15 @@ object DatasetManager extends Logging {
       existingTable: V2Table,
       desiredSchema: StructType,
       properties: Map[String, String],
-      mergeWithExistingSchema: Boolean): Unit = {
+      mergeWithExistingSchema: Boolean,
+      caseSensitive: Boolean): Unit = {
     val currentSchema = v2ColumnsToStructType(existingTable.columns())
     val targetSchema = if (mergeWithExistingSchema) {
-      SchemaMergingUtils.mergeSchemas(currentSchema, desiredSchema)
+      SchemaMergingUtils.mergeSchemas(currentSchema, desiredSchema, caseSensitive)
     } else {
       desiredSchema
     }
-    val columnChanges = diffSchemas(currentSchema, targetSchema)
+    val columnChanges = diffSchemas(currentSchema, targetSchema, caseSensitive)
 
     val existingProperties = existingTable.properties()
 

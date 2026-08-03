@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.{
 }
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, FieldReference}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.DatasetManager.TableMaterializationException
 import org.apache.spark.sql.pipelines.utils.{BaseCoreExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1211,6 +1212,54 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
             new StructType().add("id", IntegerType).add("value", StringType)
           )
       )
+    }
+  }
+
+  test("SPARK-58517: re-materializing with a case-only column difference is a no-op under " +
+    "case-insensitive resolution") {
+    withRecordingCatalog {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        // Create the table with `value`, then re-materialize with the same column cased as `Value`.
+        // Under case-insensitive resolution these are the same column, so schema evolution must
+        // fold `Value` onto the existing `value`: no alterTable, and the persisted column keeps its
+        // original name/case. Before SPARK-58517 the case-sensitive merge instead added a second
+        // `Value` column, corrupting the table.
+        materializeStreamingTable(
+          "t", new StructType().add("id", IntegerType).add("value", StringType), Map.empty)
+        assert(recordingCatalog.recordedAlters.isEmpty)
+
+        materializeStreamingTable(
+          "t", new StructType().add("id", IntegerType).add("Value", StringType), Map.empty)
+        assert(recordingCatalog.recordedAlters.isEmpty,
+          s"expected no alter, got: ${recordingCatalog.recordedAlters}")
+
+        assert(
+          loadTableFromRecordingCatalog("t").columns() sameElements
+            CatalogV2Util.structTypeToV2Columns(
+              new StructType().add("id", IntegerType).add("value", StringType)
+            ),
+          "the persisted schema should keep the original `value` column, not gain a `Value` column"
+        )
+      }
+    }
+  }
+
+  test("re-materializing with a case-only column difference adds a column under case-sensitive " +
+    "resolution") {
+    withRecordingCatalog {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        // The case-sensitive counterpart: `value` and `Value` are distinct, so `Value` is added.
+        materializeStreamingTable(
+          "t", new StructType().add("id", IntegerType).add("value", StringType), Map.empty)
+        assert(recordingCatalog.recordedAlters.isEmpty)
+
+        materializeStreamingTable(
+          "t", new StructType().add("id", IntegerType).add("Value", StringType), Map.empty)
+        assert(recordingCatalog.recordedAlters.size == 1)
+        val changes = recordingCatalog.recordedAlters.flatten
+        assert(changes.collect { case ac: TableChange.AddColumn => ac.fieldNames()(0) } ==
+          Seq("Value"))
+      }
     }
   }
 

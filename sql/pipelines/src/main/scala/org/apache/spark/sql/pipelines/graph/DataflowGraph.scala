@@ -177,7 +177,7 @@ case class DataflowGraph(
         .map { flow =>
           resolvedFlow(flow.identifier).schema
         }
-        .reduce(SchemaMergingUtils.mergeSchemas)
+        .reduce(SchemaMergingUtils.mergeSchemas(_, _))
     }.toMap
   }
 
