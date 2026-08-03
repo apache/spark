@@ -536,7 +536,7 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-47232: createProxyHandler forwards X-Forwarded-Context header") {
+  test("SPARK-58521: createProxyHandler forwards X-Forwarded-Context header") {
     val (conf, securityMgr, sslOptions) = sslDisabledConf()
     val targetServer = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
     val proxyServer = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
