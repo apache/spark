@@ -1545,7 +1545,7 @@ class GrpcWorkerSessionConcurrencySuite
       override def next(): DataRequest = {
         inputNextEntered.countDown()
         neverReleaseInput.await()
-        throw new AssertionError("blocked input unexpectedly resumed")
+        throw new IllegalStateException("blocked input unexpectedly resumed")
       }
     }
     val thrown = new AtomicReference[Throwable]()
