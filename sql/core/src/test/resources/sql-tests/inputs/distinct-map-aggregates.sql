@@ -81,7 +81,7 @@ FROM VALUES
 AS grouped_distinct_map_data(m, n)
 GROUP BY m;
 
-SET spark.sql.legacy.mapSortInDistinctAggregates.enabled=false;
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=false;
 
 SELECT COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m) FROM distinct_map_data;
 
@@ -92,4 +92,4 @@ FROM distinct_map_data
 GROUP BY m
 ORDER BY element_at(m, 'a');
 
-SET spark.sql.legacy.mapSortInDistinctAggregates.enabled=true;
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=true;

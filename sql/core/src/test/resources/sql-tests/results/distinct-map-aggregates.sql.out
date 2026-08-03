@@ -207,11 +207,11 @@ struct<count(DISTINCT named_struct(m, m, n, n)):bigint>
 
 
 -- !query
-SET spark.sql.legacy.mapSortInDistinctAggregates.enabled=false
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.legacy.mapSortInDistinctAggregates.enabled	false
+spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled	false
 
 
 -- !query
@@ -243,8 +243,8 @@ struct<m:map<string,int>,count(DISTINCT m):bigint>
 
 
 -- !query
-SET spark.sql.legacy.mapSortInDistinctAggregates.enabled=true
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=true
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.legacy.mapSortInDistinctAggregates.enabled	true
+spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled	true

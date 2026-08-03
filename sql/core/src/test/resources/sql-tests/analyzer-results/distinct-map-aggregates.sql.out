@@ -289,9 +289,9 @@ Aggregate [m#x], [count(distinct named_struct(m, m#x, n, n#x)) AS count(DISTINCT
 
 
 -- !query
-SET spark.sql.legacy.mapSortInDistinctAggregates.enabled=false
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=false
 -- !query analysis
-SetCommand (spark.sql.legacy.mapSortInDistinctAggregates.enabled,Some(false))
+SetCommand (spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled,Some(false))
 
 
 -- !query
@@ -335,6 +335,6 @@ Sort [element_at(m#x, a, None, true) ASC NULLS FIRST], true
 
 
 -- !query
-SET spark.sql.legacy.mapSortInDistinctAggregates.enabled=true
+SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=true
 -- !query analysis
-SetCommand (spark.sql.legacy.mapSortInDistinctAggregates.enabled,Some(true))
+SetCommand (spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled,Some(true))

@@ -3148,7 +3148,7 @@ object SQLConf {
     .createWithDefault(true)
 
   val INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED =
-    buildConf("spark.sql.legacy.mapSortInDistinctAggregates.enabled")
+    buildConf("spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled")
       .internal()
       .doc("When true, map-typed arguments of distinct aggregates are normalized with MapSort. " +
         "When false, MapSort is not added solely for distinct aggregate arguments; arguments " +
