@@ -191,6 +191,8 @@ private[spark] class CompressedMapStatus(
  * @param hugeBlockIds reduceIds of the accurately recorded blocks, in increasing order
  * @param hugeBlockSizes compressed sizes of the accurately recorded blocks, aligned with
  *                       hugeBlockIds
+ * @param skewedBlocks a bitmap tracking which blocks are exactly `skewedBlockSize` bytes
+ * @param skewedBlockSize the compressed size shared by every block in `skewedBlocks`
  * @param _mapTaskId unique task id for the task
  * @param _checksumVal checksum value for the task
  */
@@ -205,16 +207,22 @@ private[spark] class HighlyCompressedMapStatus private (
     // heap per entry.
     private[this] var hugeBlockIds: Array[Int],
     private[this] var hugeBlockSizes: Array[Byte],
+    // Blocks tied at the skew cutoff all have the same size, so only their membership has to be
+    // recorded. A bitmap costs a fraction of what an id per block would, which is what allows
+    // every tied block to be recorded rather than a capped subset of them.
+    private[this] var skewedBlocks: RoaringBitmap,
+    private[this] var skewedBlockSize: Byte,
     private[this] var _mapTaskId: Long,
     private[this] var _checksumVal: Long = 0)
   extends MapStatus with Externalizable {
 
   // loc could be null when the default constructor is called during deserialization
-  require(loc == null || avgSize > 0 || hugeBlockIds.length > 0
+  require(loc == null || avgSize > 0 || hugeBlockIds.length > 0 || !skewedBlocks.isEmpty
     || numNonEmptyBlocks == 0 || _mapTaskId > 0,
     "Average size can only be zero for map stages that produced no output")
 
-  protected def this() = this(null, -1, null, -1, null, null, -1, 0)  // For deserialization only
+  // For deserialization only
+  protected def this() = this(null, -1, null, -1, null, null, null, 0, -1, 0)
 
   override def location: BlockManagerId = loc
 
@@ -228,7 +236,13 @@ private[spark] class HighlyCompressedMapStatus private (
       0
     } else {
       val i = Arrays.binarySearch(hugeBlockIds, reduceId)
-      if (i >= 0) MapStatus.decompressSize(hugeBlockSizes(i)) else avgSize
+      if (i >= 0) {
+        MapStatus.decompressSize(hugeBlockSizes(i))
+      } else if (skewedBlocks.contains(reduceId)) {
+        MapStatus.decompressSize(skewedBlockSize)
+      } else {
+        avgSize
+      }
     }
   }
 
@@ -247,6 +261,8 @@ private[spark] class HighlyCompressedMapStatus private (
       out.writeByte(hugeBlockSizes(i))
       i += 1
     }
+    skewedBlocks.serialize(out)
+    out.writeByte(skewedBlockSize)
     out.writeLong(_mapTaskId)
     out.writeLong(_checksumVal)
   }
@@ -280,12 +296,21 @@ private[spark] class HighlyCompressedMapStatus private (
       hugeBlockIds = order.map(blockIds)
       hugeBlockSizes = order.map(blockSizes)
     }
+    val skewed = new RoaringBitmap()
+    skewed.deserialize(in)
+    skewedBlocks = if (skewed.isEmpty) HighlyCompressedMapStatus.noSkewedBlocks else skewed
+    skewedBlockSize = in.readByte()
     _mapTaskId = in.readLong()
     _checksumVal = in.readLong()
   }
 }
 
 private[spark] object HighlyCompressedMapStatus {
+  // Most shuffles record no skewed blocks at all, and the driver retains one map status per map
+  // task, so those statuses share one empty bitmap rather than each allocating their own. It is
+  // never mutated, which is what makes sharing it safe.
+  private val noSkewedBlocks = new RoaringBitmap()
+
   def apply(
       loc: BlockManagerId,
       uncompressedSizes: Array[Long],
@@ -309,13 +334,12 @@ private[spark] object HighlyCompressedMapStatus {
       Option(SparkEnv.get)
         .map(_.conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD))
         .getOrElse(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD.defaultValue.get)
-    // Sizes at or above `threshold` are recorded accurately. Blocks of exactly `skewCutoff` are
-    // only recorded while `numTiedSkewedBlocksToRecord` lasts, because there can be arbitrarily
-    // many of them and recording them all would blow past SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.
+    // Sizes at or above `threshold` are recorded accurately. At most
+    // SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER of them are strictly larger than `skewCutoff`, and
+    // those are held as ids and sizes. There can be arbitrarily many blocks of exactly
+    // `skewCutoff`, but they all share that one size, so only their membership is recorded.
     var skewCutoff = Long.MaxValue
-    var numTiedSkewedBlocks = 0
-    var numTiedSkewedBlocksToRecord = 0
-    var tieRotationStart = 0
+    var recordSkewedTies = false
     val threshold =
       if (accurateBlockSkewedFactor > 0) {
         val maxAccurateSkewedBlockNumber =
@@ -331,36 +355,15 @@ private[spark] object HighlyCompressedMapStatus {
         val medianSize: Long = Utils.medianInPlace(sizes)
         val firstAccurateIdx = totalNumBlocks - maxAccurateSkewedBlockNumber
         skewCutoff = Utils.nthSmallest(sizes, firstAccurateIdx)
-        // At most `maxAccurateSkewedBlockNumber` sizes are strictly larger than `skewCutoff`, and
-        // they all sit above `firstAccurateIdx` now, so counting them bounds how many blocks of
-        // exactly `skewCutoff` may still be recorded.
-        var numLargerSizes = 0
-        var j = firstAccurateIdx
-        while (j < totalNumBlocks) {
-          if (sizes(j) > skewCutoff) numLargerSizes += 1
-          j += 1
-        }
-        numTiedSkewedBlocksToRecord = maxAccurateSkewedBlockNumber - numLargerSizes
         val skewSizeThreshold =
           Math.max(medianSize * accurateBlockSkewedFactor, skewCutoff.toDouble)
         val skewThreshold = Math.min(shuffleAccurateBlockThreshold.toDouble, skewSizeThreshold)
-        // Every map task of a shuffle sees the same block size distribution, so always recording
-        // the lowest tied reduce ids would hide the reducers that lose the tie behind `avgSize` in
-        // every map status, and MapOutputTracker sums those. Rotating the recorded window with the
-        // map task id spreads the loss over all of the tied reducers instead. This costs one more
-        // pass over the sizes, so it is only paid when blocks tied at the cutoff can be recorded
-        // at all, which is not the case when the blocks above the cutoff already fill the budget
-        // or when the skew threshold is above the cutoff.
-        if (numTiedSkewedBlocksToRecord > 0 && skewThreshold <= skewCutoff.toDouble) {
-          j = 0
-          while (j < totalNumBlocks) {
-            if (sizes(j) == skewCutoff && sizes(j) > 0) numTiedSkewedBlocks += 1
-            j += 1
-          }
-          if (numTiedSkewedBlocks > 0) {
-            tieRotationStart = Math.floorMod(mapTaskId, numTiedSkewedBlocks.toLong).toInt
-          }
-        }
+        // Every map task of a shuffle sees the same block size distribution, so any rule that
+        // records only some of the blocks tied at the cutoff hides the same reducers in every map
+        // status, and MapOutputTracker sums those. The hidden ones fall back to `avgSize`, which
+        // they raise in the process, so AQE's skew threshold moves up along with the sizes it is
+        // compared against. Recording all of the ties is what keeps them visible.
+        recordSkewedTies = skewCutoff > 0 && skewThreshold <= skewCutoff.toDouble
         skewThreshold
       } else {
         // Disable skew detection if accurateBlockSkewedFactor <= 0
@@ -369,31 +372,22 @@ private[spark] object HighlyCompressedMapStatus {
 
     val hugeBlockIds = mutable.ArrayBuilder.make[Int]
     val hugeBlockSizes = mutable.ArrayBuilder.make[Byte]
-    var numTiedSkewedBlocksSeen = 0
+    val skewedBlocks = new RoaringBitmap()
     while (i < totalNumBlocks) {
       val size = uncompressedSizes(i)
       if (size > 0) {
         numNonEmptyBlocks += 1
         // Huge blocks are not included in the calculation for average size, thus size for smaller
-        // blocks is more accurate.
-        var isAccurate = size >= shuffleAccurateBlockThreshold
-        if (!isAccurate && size >= threshold) {
-          if (size > skewCutoff) {
-            isAccurate = true
-          } else if (numTiedSkewedBlocks > 0) {
-            // `size` is exactly `skewCutoff` here, since `threshold >= skewCutoff` whenever a
-            // block below `shuffleAccurateBlockThreshold` can reach this branch. The tied blocks
-            // that this map task records are the `numTiedSkewedBlocksToRecord` ones starting at
-            // `tieRotationStart`, wrapping around, which keeps the map status deterministic.
-            val rank =
-              Math.floorMod(numTiedSkewedBlocksSeen - tieRotationStart, numTiedSkewedBlocks)
-            isAccurate = rank < numTiedSkewedBlocksToRecord
-            numTiedSkewedBlocksSeen += 1
-          }
-        }
-        if (isAccurate) {
+        // blocks is more accurate. Blocks tied at the cutoff are excluded from it as well: they
+        // are recorded accurately, so folding them into the average would both lose nothing and
+        // inflate the size reported for the blocks that really are average.
+        val isHuge = size >= shuffleAccurateBlockThreshold ||
+          (size >= threshold && size > skewCutoff)
+        if (isHuge) {
           hugeBlockIds += i
           hugeBlockSizes += MapStatus.compressSize(size)
+        } else if (recordSkewedTies && size == skewCutoff) {
+          skewedBlocks.add(i)
         } else {
           totalSmallBlockSize += size
           numSmallBlocks += 1
@@ -410,7 +404,15 @@ private[spark] object HighlyCompressedMapStatus {
     }
     emptyBlocks.trim()
     emptyBlocks.runOptimize()
+    val hasSkewedBlocks = !skewedBlocks.isEmpty
+    if (hasSkewedBlocks) {
+      skewedBlocks.trim()
+      skewedBlocks.runOptimize()
+    }
     new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize,
-      hugeBlockIds.result(), hugeBlockSizes.result(), mapTaskId, checksumVal)
+      hugeBlockIds.result(), hugeBlockSizes.result(),
+      if (hasSkewedBlocks) skewedBlocks else noSkewedBlocks,
+      if (hasSkewedBlocks) MapStatus.compressSize(skewCutoff) else 0.toByte,
+      mapTaskId, checksumVal)
   }
 }
