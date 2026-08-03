@@ -28,8 +28,8 @@ import org.apache.spark.sql.sources.Filter;
  * filter initially planned {@link InputPartition}s using predicates Spark infers at runtime.
  * This interface is very similar to {@link SupportsRuntimeFiltering} except it uses
  * data source V2 {@link Predicate} instead of data source V1 {@link Filter}.
- * {@link SupportsRuntimeV2Filtering} is preferred over {@link SupportsRuntimeFiltering}
- * and only one of them should be implemented by the data sources.
+ * {@link SupportsRuntimeV2Filtering} is preferred over {@link SupportsRuntimeFiltering}.
+ * Only one runtime filtering interface should be implemented by a data source.
  * <p>
  * <b>Iterative filtering:</b> When {@link #supportsIterativePushdown()} returns true,
  * {@link #filter(Predicate[])} may be called <i>multiple times</i> on the same
@@ -81,6 +81,10 @@ public interface SupportsRuntimeV2Filtering extends Scan {
   /**
    * Returns the predicates that are pushed to the data source via
    * {@link #filter(Predicate[])}.
+   * <p>
+   * These are not fully pushed predicates: Spark may still evaluate them after the scan.
+   * They are predicates that fully or partially help the data source prune initially planned
+   * {@link InputPartition}s.
    * <p>
    * When iterative filtering is supported and {@link #filter(Predicate[])} was called
    * multiple times, this method must return predicates from <i>all</i> calls.

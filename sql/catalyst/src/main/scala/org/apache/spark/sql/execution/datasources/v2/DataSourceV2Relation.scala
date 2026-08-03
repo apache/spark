@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
-import org.apache.spark.sql.internal.connector.V2StatisticsUtils
+import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystRuntimeFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -196,14 +196,30 @@ case class DataSourceV2ScanRelation(
 
   /**
    * Resolved attributes that the scan declares for runtime filtering via
-   * [[SupportsRuntimeV2Filtering.filterAttributes]]. Empty when the scan
-   * does not implement [[SupportsRuntimeV2Filtering]] or exposes no attributes.
+   * [[SupportsRuntimeV2Filtering.filterAttributes]] or
+   * [[SupportsPushDownCatalystRuntimeFiltering.filterAttributes]]. Empty when the scan
+   * implements neither interface or exposes no attributes.
    */
-  lazy val runtimeFilterAttrs: AttributeSet = scan match {
-    case s: SupportsRuntimeV2Filtering =>
-      AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
-        s.filterAttributes.toImmutableArraySeq, this))
-    case _ => AttributeSet.empty
+  lazy val runtimeFilterAttrs: AttributeSet = {
+    val filterAttrs = scan match {
+      case s: SupportsRuntimeV2Filtering => s.filterAttributes
+      case s: SupportsPushDownCatalystRuntimeFiltering => s.filterAttributes
+      case _ => Array.empty[NamedReference]
+    }
+    AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
+      filterAttrs.toImmutableArraySeq, this))
+  }
+
+  /**
+   * Resolved attributes for which a Catalyst runtime-filtering scan fully evaluates predicates.
+   */
+  lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
+    val filterAttrs = scan match {
+      case s: SupportsPushDownCatalystRuntimeFiltering => s.fullyPushedFilterAttributes()
+      case _ => Array.empty[NamedReference]
+    }
+    AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
+      filterAttrs.toImmutableArraySeq, this))
   }
 
   override def name: String = relation.name

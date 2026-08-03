@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystRuntimeFiltering
 /**
  * Dynamic partition pruning optimization is performed based on the type and
  * selectivity of the join operation. During query optimization, we insert a
@@ -79,6 +80,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           None
         }
       case (resExp, r @ ExtractV2Scan(scan: SupportsRuntimeV2Filtering)) =>
+        val filterAttrs = V2ExpressionUtils.resolveAttributeRefs(
+          scan.filterAttributes, r.output)
+        if (resExp.references.subsetOf(filterAttrs)) {
+          Some(r)
+        } else {
+          None
+        }
+      case (resExp, r @ ExtractV2Scan(scan: SupportsPushDownCatalystRuntimeFiltering)) =>
         val filterAttrs = V2ExpressionUtils.resolveAttributeRefs(
           scan.filterAttributes, r.output)
         if (resExp.references.subsetOf(filterAttrs)) {
