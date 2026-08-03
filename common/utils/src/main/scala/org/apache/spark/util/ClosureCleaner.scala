@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.lang.invoke.{LambdaMetafactory, MethodHandle, MethodHandleInfo, MethodHandles, MethodType, SerializedLambda}
 import java.lang.reflect.{Field, Modifier}
 
+import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, Map, Queue, Set, Stack}
 import scala.jdk.CollectionConverters._
 
@@ -34,6 +35,54 @@ import org.apache.spark.internal.Logging
  * A cleaner that renders closures serializable if they can be done so safely.
  */
 private[spark] object ClosureCleaner extends Logging {
+  /**
+   * Per-class memo of which closure methods contain a non-local return, i.e. allocate a
+   * `scala/runtime/NonLocalReturnControl`. The verdict is a pure function of a class's immutable
+   * bytecode, and the classes declaring the closures passed to `runJob` repeat heavily across
+   * jobs (`SparkContext`, `RDD`, `Dataset`, ...), so memoizing avoids a full ASM parse of the
+   * same bytecode on every `clean()` call.
+   *
+   * `ClassValue` rather than a `Map[Class[_], _]` so entries are reclaimed with the class itself;
+   * closure classes are frequently generated at runtime (REPL lines, Ammonite commands, codegen)
+   * and must not be pinned. Note `computeValue` may run more than once concurrently with a single
+   * result installed - harmless, since parsing is idempotent - and if it throws, nothing is
+   * memoized, so the failure recurs rather than being cached.
+   */
+  private val methodsWithNonLocalReturn = new ClassValue[immutable.Set[String]] {
+    override def computeValue(cls: Class[_]): immutable.Set[String] = {
+      val collector = new ReturnStatementCollector
+      val reader = getClassReader(cls)
+      if (reader != null) {
+        reader.accept(collector, 0)
+      } else {
+        // Bytecode unavailable (getClassReader's contract; cf. getInnerClosureClasses). The
+        // fail-fast return check is best-effort, so skip it rather than fail the job.
+        logDebug(s"Cannot get class bytes for ${cls.getName}; skipping return-statement check")
+      }
+      // toSet yields the shared empty-set singleton in the overwhelmingly common "no non-local
+      // return" case, so the memo costs nothing per class beyond the ClassValue entry itself.
+      collector.found.toSet
+    }
+  }
+
+  /**
+   * Whether `cls` declares a closure method with a non-local return. `implMethodName` restricts
+   * the question to one method; `None` asks whether *any* closure method qualifies.
+   */
+  private[util] def hasReturnStatement(cls: Class[_], implMethodName: Option[String]): Boolean = {
+    val found = methodsWithNonLocalReturn.get(cls)
+    implMethodName match {
+      case None => found.nonEmpty
+      case Some(target) =>
+        // A method with suffix "$adapted" will be generated in cases like
+        // { _:Int => return; Seq()} but not { _:Int => return; true}
+        // closure passed is $anonfun$t$1$adapted while actual code resides in $anonfun$s$1
+        // the class file only contains $anonfun$s$1, so we remove the suffix, see
+        // https://github.com/scala/scala-dev/issues/109
+        found.contains(target) || found.contains(target.stripSuffix("$adapted"))
+    }
+  }
+
   // Get an ASM class reader for a given class from the JAR that loaded it
   private[util] def getClassReader(cls: Class[_]): ClassReader = {
     // Copy data over, before delegating to ClassReader - else we can run out of open file handles.
@@ -226,6 +275,16 @@ private[spark] object ClosureCleaner extends Logging {
 
       logDebug(s"Cleaning indylambda closure: $implMethodName")
 
+      // A closure that captures nothing has nothing to clean, and this check is O(1) on a
+      // SerializedLambda we already hold - so decide it BEFORE loading and parsing the capturing
+      // class. Skipping the return-statement check below is safe for such closures: a non-local
+      // return compiles to `throw new NonLocalReturnControl(key, value)` where `key` is allocated
+      // in the enclosing method, so a closure containing one necessarily captures that key and
+      // cannot reach here.
+      if (lambdaProxy.getCapturedArgCount == 0) {
+        return None
+      }
+
       // capturing class is the class that declared this lambda
       val capturingClassName = lambdaProxy.getCapturingClass.replace('/', '.')
       val classLoader = func.getClass.getClassLoader // this is the safest option
@@ -234,15 +293,12 @@ private[spark] object ClosureCleaner extends Logging {
       // scalastyle:on classforname
 
       // Fail fast if we detect return statements in closures
-      val capturingClassReader = getClassReader(capturingClass)
-      capturingClassReader.accept(new ReturnStatementFinder(Option(implMethodName)), 0)
-
-      val outerThis = if (lambdaProxy.getCapturedArgCount > 0) {
-        // only need to clean when there is an enclosing non-null "this" captured by the closure
-        Option(lambdaProxy.getCapturedArg(0)).getOrElse(return None)
-      } else {
-        return None
+      if (hasReturnStatement(capturingClass, Option(implMethodName))) {
+        throw new ReturnStatementInClosureException
       }
+
+      // only need to clean when there is an enclosing non-null "this" captured by the closure
+      val outerThis = Option(lambdaProxy.getCapturedArg(0)).getOrElse(return None)
 
       // clean only if enclosing "this" is something cleanable, i.e. a Scala REPL line object or
       // Ammonite command helper object.
@@ -312,7 +368,9 @@ private[spark] object ClosureCleaner extends Logging {
     }
 
     // Fail fast if we detect return statements in closures
-    getClassReader(func.getClass).accept(new ReturnStatementFinder(), 0)
+    if (hasReturnStatement(func.getClass, None)) {
+      throw new ReturnStatementInClosureException
+    }
 
     // If accessed fields is not populated yet, we assume that
     // the closure we are trying to clean is the starting one
@@ -1075,26 +1133,23 @@ private[spark] object IndylambdaScalaClosures extends Logging {
 private[spark] class ReturnStatementInClosureException
   extends SparkException("Return statements aren't allowed in Spark closures")
 
-private class ReturnStatementFinder(targetMethodName: Option[String] = None)
-  extends ClassVisitor(Opcodes.ASM9) {
+/**
+ * Collects the names of all closure methods that contain a non-local return, rather than checking
+ * a single method, so that one parse can answer the question for every method on the class and
+ * the result can be memoized per class (see `ClosureCleaner.methodsWithNonLocalReturn`).
+ */
+private class ReturnStatementCollector extends ClassVisitor(Opcodes.ASM9) {
+  val found = Set.empty[String]
+
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
 
     // $anonfun$ covers indylambda closures
     if (name.contains("apply") || name.contains("$anonfun$")) {
-      // A method with suffix "$adapted" will be generated in cases like
-      // { _:Int => return; Seq()} but not { _:Int => return; true}
-      // closure passed is $anonfun$t$1$adapted while actual code resides in $anonfun$s$1
-      // visitor will see only $anonfun$s$1$adapted, so we remove the suffix, see
-      // https://github.com/scala/scala-dev/issues/109
-      val isTargetMethod = targetMethodName.isEmpty ||
-        name == targetMethodName.get || name == targetMethodName.get.stripSuffix("$adapted")
-
       new MethodVisitor(Opcodes.ASM9) {
         override def visitTypeInsn(op: Int, tp: String): Unit = {
-          if (op == Opcodes.NEW && tp.contains("scala/runtime/NonLocalReturnControl") &&
-              isTargetMethod) {
-            throw new ReturnStatementInClosureException
+          if (op == Opcodes.NEW && tp.contains("scala/runtime/NonLocalReturnControl")) {
+            found += name
           }
         }
       }
