@@ -49,9 +49,11 @@ private class HttpSecurityFilter(
     val hres = res.asInstanceOf[HttpServletResponse]
     hres.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
 
+    val isProxyRequest = hreq.getContextPath == "/proxy"
+
     val cspNonce = CspNonce.generate()
     try {
-      if (conf.get(UI_CONTENT_SECURITY_POLICY_ENABLED)) {
+      if (conf.get(UI_CONTENT_SECURITY_POLICY_ENABLED) && !isProxyRequest) {
         hres.setHeader("Content-Security-Policy",
           s"default-src 'self'; script-src 'self' 'nonce-$cspNonce'; " +
           s"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
