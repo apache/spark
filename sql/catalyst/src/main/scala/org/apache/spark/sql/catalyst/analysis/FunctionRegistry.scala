@@ -551,6 +551,7 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectList]("array_agg", true, Some("3.3.0")),
     expression[CollectSet]("collect_set"),
+    expression[CollectUnion]("collect_union"),
     expression[ListAgg]("listagg"),
     expression[ListAgg]("string_agg", setAlias = true),
     expressionBuilder("count_min_sketch", CountMinSketchAggExpressionBuilder),
@@ -851,6 +852,7 @@ object FunctionRegistry {
     expression[Sha2]("sha2"),
     expression[AesEncrypt]("aes_encrypt"),
     expression[AesDecrypt]("aes_decrypt"),
+    expression[Hmac]("hmac"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[InputFileBlockStart]("input_file_block_start"),
@@ -989,7 +991,9 @@ object FunctionRegistry {
     expressionBuilder("variant_insert", VariantInsertExpressionBuilder),
     expressionBuilder("try_variant_insert", TryVariantInsertExpressionBuilder),
     expressionBuilder("variant_set", VariantSetExpressionBuilder),
-    expression[VariantArrayAppend]("variant_array_append"),
+    expressionBuilder("try_variant_set", TryVariantSetExpressionBuilder),
+    expressionBuilder("variant_array_append", VariantArrayAppendExpressionBuilder),
+    expressionBuilder("try_variant_array_append", TryVariantArrayAppendExpressionBuilder),
 
     // Spatial
     expression[ST_AsBinary]("st_asbinary"),

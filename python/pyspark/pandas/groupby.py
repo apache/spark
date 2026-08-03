@@ -2459,8 +2459,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkey_names = ["__groupkey_{}__".format(i) for i in range(len(self._groupkeys))]
 
         sdf = self._psdf._internal.spark_frame
-        for s, name in zip(self._groupkeys, groupkey_names):
-            sdf = sdf.withColumn(name, s.spark.column)
+        if groupkey_names:
+            sdf = sdf.withColumns(
+                {name: s.spark.column for s, name in zip(self._groupkeys, groupkey_names)}
+            )
         index = self._psdf._internal.index_spark_column_names[0]
         index_spark_type = self._psdf._internal.index_fields[0].spark_type
 
@@ -2554,8 +2556,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkey_names = ["__groupkey_{}__".format(i) for i in range(len(self._groupkeys))]
 
         sdf = self._psdf._internal.spark_frame
-        for s, name in zip(self._groupkeys, groupkey_names):
-            sdf = sdf.withColumn(name, s.spark.column)
+        if groupkey_names:
+            sdf = sdf.withColumns(
+                {name: s.spark.column for s, name in zip(self._groupkeys, groupkey_names)}
+            )
         index = self._psdf._internal.index_spark_column_names[0]
         index_spark_type = self._psdf._internal.index_fields[0].spark_type
 
@@ -4067,12 +4071,14 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         # Split "quartiles" columns into first, second, and third quartiles.
         for label in agg_column_labels:
             quartiles_col = name_like_string(tuple(list(label) + ["quartiles"]))
-            for i, percentile in enumerate(formatted_percentiles):
-                sdf = sdf.withColumn(
-                    name_like_string(tuple(list(label) + [percentile])),
-                    scol_for(sdf, quartiles_col)[i],
-                )
-            sdf = sdf.drop(quartiles_col)
+            sdf = sdf.withColumns(
+                {
+                    name_like_string(tuple(list(label) + [percentile])): scol_for(
+                        sdf, quartiles_col
+                    )[i]
+                    for i, percentile in enumerate(formatted_percentiles)
+                }
+            ).drop(quartiles_col)
 
         # Reorder columns lexicographically by agg column followed by stats.
         stats = ["count", "mean", "std", "min"] + formatted_percentiles + ["max"]

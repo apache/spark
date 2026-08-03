@@ -161,6 +161,17 @@ case class StructField(
   }
 
   /**
+   * Clears the StructField of its comment, if any.
+   */
+  def clearComment(): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .remove("comment")
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
    * Return the comment of this StructField.
    */
   def getComment(): Option[String] = {

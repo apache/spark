@@ -54,7 +54,7 @@ def build_spark_if_necessary
 
   print_header "Building Spark"
   cd(SPARK_PROJECT_ROOT)
-  command = "NO_PROVIDED_SPARK_JARS=0 build/sbt -Phive -Pkinesis-asl clean package"
+  command = "NO_PROVIDED_SPARK_JARS=0 build/sbt -Phive -Pkinesis-asl -Pcredential-aws clean package"
   puts "Running '#{command}'; this may take a few minutes..."
   system(command) || raise("Failed to build Spark")
   # SPARK-53327: Use the modified ResourceImpl.class in spark-catalyst which is compatible with Java 25
@@ -133,7 +133,7 @@ def copy_and_update_java_docs(source, dest, scala_source)
 end
 
 def build_unidoc
-  command = "build/sbt -Pkinesis-asl unidoc"
+  command = "build/sbt -Pkinesis-asl -Pcredential-aws unidoc"
   puts "Running '#{command}'..."
 
   # Two filter passes on the unidoc output, plus an additive fatal-error summary:

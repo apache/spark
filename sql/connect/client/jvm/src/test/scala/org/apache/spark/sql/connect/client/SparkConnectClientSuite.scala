@@ -898,6 +898,34 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     }
   }
 
+  test("transport errors preserve the original gRPC status exception as the cause") {
+    val failingService = new DummySparkConnectService {
+      override def analyzePlan(
+          request: AnalyzePlanRequest,
+          responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+        responseObserver.onError(
+          Status.UNAVAILABLE.withDescription("injected failure").asRuntimeException())
+      }
+    }
+    server = NettyServerBuilder.forPort(0).addService(failingService).build().start()
+    service = failingService
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
+      .build()
+
+    val ex = intercept[SparkException] {
+      client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build())
+    }
+    // The original StatusRuntimeException must survive as the cause so that callers
+    // can programmatically inspect the gRPC status code instead of parsing the message.
+    assert(ex.getCause.isInstanceOf[StatusRuntimeException])
+    assert(
+      ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
+        Status.Code.UNAVAILABLE)
+  }
+
   test(
     "SPARK-58094: gRPC keepalive surfaces a bounded failure on a silently dropped " +
       "connection instead of hanging forever") {
@@ -963,9 +991,8 @@ class SparkConnectClientSuite extends ConnectFunSuite {
         scala.concurrent.Await.result(resultPromise.future, FiniteDuration(15, TimeUnit.SECONDS))
       }
       // scalastyle:on awaitresult
-      // A keepalive-triggered UNAVAILABLE carries no wrapped cause (same as DEADLINE_EXCEEDED,
-      // see GrpcExceptionConverter.toThrowable), so the status code/description is only in the
-      // message.
+      // The status code/description of a keepalive-triggered UNAVAILABLE is part of the
+      // message (see GrpcExceptionConverter.toThrowable).
       assert(ex.getMessage.contains("UNAVAILABLE"))
       assert(ex.getMessage.contains("Keepalive failed"))
     } finally {
@@ -1114,6 +1141,48 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     } finally {
       executeLatch.countDown()
     }
+  }
+
+  test(
+    "SPARK-58162: maxRetryExceptionElapsedTime set via Builder bounds the " +
+      "RetryException retry loop end-to-end") {
+    // Every attempt (the initial ExecutePlan and every subsequent ReattachExecute) never
+    // responds at all, so the client's reattach deadline fires every time -- DEADLINE_EXCEEDED
+    // -> RetryException, on every attempt, forever -- unless the elapsed-time bound kicks in.
+    // The point of this test is that the bound is configured only through the real
+    // Builder -> Configuration -> SparkConnectStubState -> GrpcRetryHandler wiring (unlike
+    // SparkConnectClientRetriesSuite, which constructs GrpcRetryHandler directly), so it guards
+    // against a regression that silently drops the maxRetryExceptionElapsedTime passthrough in
+    // SparkConnectStubState.
+    val stallingService = new DummySparkConnectService {
+      override def executePlan(
+          request: ExecutePlanRequest,
+          responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {}
+
+      override def reattachExecute(
+          request: proto.ReattachExecuteRequest,
+          responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {}
+    }
+    server = NettyServerBuilder.forPort(0).addService(stallingService).build().start()
+    service = stallingService
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .rpcDeadlines(
+        RpcDeadlines(
+          reattachableExecutePlan = Some(FiniteDuration(50, TimeUnit.MILLISECONDS)),
+          reattachExecute = Some(FiniteDuration(50, TimeUnit.MILLISECONDS))))
+      .maxRetryExceptionElapsedTime(FiniteDuration(200, TimeUnit.MILLISECONDS))
+      .enableReattachableExecute()
+      .build()
+
+    val ex = intercept[SparkException] {
+      val iter = client.execute(buildPlan("select 1"))
+      iter.foreach(_ => ())
+    }
+    assert(
+      ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
+        Status.Code.DEADLINE_EXCEEDED)
   }
 
   test("non-reattachable executePlan has no client-side deadline") {

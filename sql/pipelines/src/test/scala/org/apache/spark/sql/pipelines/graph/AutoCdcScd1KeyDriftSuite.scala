@@ -48,7 +48,7 @@ class AutoCdcScd1KeyDriftSuite
     // declaration differs between the two pipelines.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, region STRING NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, region STRING NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1 declares one key (`id`). Aux table is created with schema (id, _cdc_metadata).
@@ -83,7 +83,7 @@ class AutoCdcScd1KeyDriftSuite
     "KEY_SCHEMA_DRIFT") {
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(region STRING NOT NULL, id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(region STRING NOT NULL, id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1 declares two keys [region, id]. Without strict-equality, the dropped `region`
@@ -119,7 +119,7 @@ class AutoCdcScd1KeyDriftSuite
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, region STRING NOT NULL, country STRING NOT NULL, " +
-      s"version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1 declares [id, region].
@@ -156,10 +156,10 @@ class AutoCdcScd1KeyDriftSuite
     "triggers KEY_SCHEMA_DRIFT") {
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     spark.sql(
-      s"""CREATE TABLE ${auxTableNameFor("target")} (id BIGINT NOT NULL, $cdcMetadataDdl) """ +
+      s"""CREATE TABLE ${auxTableNameFor("target")} (id BIGINT NOT NULL, $scd1MetadataDdl) """ +
       s"""TBLPROPERTIES ('${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = '["id"]')"""
     )
 
@@ -184,7 +184,7 @@ class AutoCdcScd1KeyDriftSuite
   test("a composite key reorder ([a,b] -> [b,a]) does NOT trigger drift validation") {
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(a INT NOT NULL, b STRING NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(a INT NOT NULL, b STRING NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1 declares keys [a, b] (in that order). Drift validation is order-independent:
@@ -209,7 +209,7 @@ class AutoCdcScd1KeyDriftSuite
     // Target's `id` is nullable so the second pipeline's nullable-`id` source is accepted.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Pipeline #1: source carries `id INT NOT NULL` (Scala primitive `Int`), no metadata.
@@ -236,7 +236,7 @@ class AutoCdcScd1KeyDriftSuite
     // adding or removing backticks around the same logical column must NOT be detected as drift.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long)]
@@ -256,7 +256,7 @@ class AutoCdcScd1KeyDriftSuite
     // pipeline #2's expected keys are matched against the recorded set).
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long)]
@@ -277,7 +277,7 @@ class AutoCdcScd1KeyDriftSuite
     // `id` are distinct identifiers under that resolver, drift validation must fail.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long)]
@@ -322,7 +322,7 @@ class AutoCdcScd1KeyDriftSuite
     // validation make the call.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream1 = MemoryStream[(Int, Long)]
@@ -341,10 +341,10 @@ class AutoCdcScd1KeyDriftSuite
     // surface a structured AUTOCDC_INVALID_STATE error rather than silently mis-validating keys.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     spark.sql(
-      s"CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $cdcMetadataDdl)"
+      s"CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, Long)]
@@ -372,10 +372,10 @@ class AutoCdcScd1KeyDriftSuite
     val malformedKeysArray = "not-a-json-array"
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     spark.sql(
-      s"CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $cdcMetadataDdl) " +
+      s"CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $scd1MetadataDdl) " +
       s"TBLPROPERTIES ('${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = '$malformedKeysArray')"
     )
 
@@ -406,10 +406,10 @@ class AutoCdcScd1KeyDriftSuite
     // validator cannot run without resolving every recorded key first.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     spark.sql(
-      s"""CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $cdcMetadataDdl) """ +
+      s"""CREATE TABLE ${auxTableNameFor("target")} (id INT NOT NULL, $scd1MetadataDdl) """ +
       s"""TBLPROPERTIES ('${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = '["region"]')"""
     )
 

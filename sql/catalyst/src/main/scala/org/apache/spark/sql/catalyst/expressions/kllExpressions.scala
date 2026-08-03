@@ -33,6 +33,11 @@ import org.apache.spark.unsafe.types.UTF8String
   usage = """
     _FUNC_(expr) - Returns human readable summary information about this sketch.
   """,
+  arguments = """
+    Arguments:
+      * expr - The sketch to return summary information about.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT LENGTH(_FUNC_(kll_sketch_agg_bigint(col))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
@@ -61,6 +66,11 @@ case class KllSketchToStringBigint(child: Expression) extends KllSketchToStringB
   usage = """
     _FUNC_(expr) - Returns human readable summary information about this sketch.
   """,
+  arguments = """
+    Arguments:
+      * expr - The sketch to return summary information about.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT LENGTH(_FUNC_(kll_sketch_agg_float(col))) > 0 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
@@ -88,6 +98,11 @@ case class KllSketchToStringFloat(child: Expression) extends KllSketchToStringBa
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Returns human readable summary information about this sketch.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The sketch to return summary information about.
+        An expression that evaluates to a binary.
   """,
   examples = """
     Examples:
@@ -127,6 +142,11 @@ abstract class KllSketchToStringBase
   usage = """
     _FUNC_(expr) - Returns the number of items collected in the sketch.
   """,
+  arguments = """
+    Arguments:
+      * expr - The sketch to return the number of collected items from.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(kll_sketch_agg_bigint(col)) FROM VALUES (1), (2), (3), (4), (5) tab(col);
@@ -155,6 +175,11 @@ case class KllSketchGetNBigint(child: Expression) extends KllSketchGetNBase {
   usage = """
     _FUNC_(expr) - Returns the number of items collected in the sketch.
   """,
+  arguments = """
+    Arguments:
+      * expr - The sketch to return the number of collected items from.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(kll_sketch_agg_float(col)) FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
@@ -182,6 +207,11 @@ case class KllSketchGetNFloat(child: Expression) extends KllSketchGetNBase {
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Returns the number of items collected in the sketch.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The sketch to return the number of collected items from.
+        An expression that evaluates to a binary.
   """,
   examples = """
     Examples:
@@ -221,6 +251,13 @@ abstract class KllSketchGetNBase
   usage = """
     _FUNC_(left, right) - Merges two sketch buffers together into one.
   """,
+  arguments = """
+    Arguments:
+      * left - The first sketch buffer to merge.
+        An expression that evaluates to a binary.
+      * right - The second sketch buffer to merge.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT LENGTH(kll_sketch_to_string_bigint(_FUNC_(kll_sketch_agg_bigint(col), kll_sketch_agg_bigint(col)))) > 0 FROM VALUES (1), (2), (3), (4), (5) tab(col);
@@ -252,6 +289,13 @@ case class KllSketchMergeBigint(left: Expression, right: Expression) extends Kll
   usage = """
     _FUNC_(left, right) - Merges two sketch buffers together into one.
   """,
+  arguments = """
+    Arguments:
+      * left - The first sketch buffer to merge.
+        An expression that evaluates to a binary.
+      * right - The second sketch buffer to merge.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(kll_sketch_agg_float(col), kll_sketch_agg_float(col)))) > 0 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
@@ -282,6 +326,13 @@ case class KllSketchMergeFloat(left: Expression, right: Expression) extends KllS
 @ExpressionDescription(
   usage = """
     _FUNC_(left, right) - Merges two sketch buffers together into one.
+  """,
+  arguments = """
+    Arguments:
+      * left - The first sketch buffer to merge.
+        An expression that evaluates to a binary.
+      * right - The second sketch buffer to merge.
+        An expression that evaluates to a binary.
   """,
   examples = """
     Examples:
@@ -327,6 +378,13 @@ abstract class KllSketchMergeBase
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
   """,
+  arguments = """
+    Arguments:
+      * left - The sketch buffer to extract the quantile from.
+        An expression that evaluates to a binary.
+      * right - The input rank, or array of ranks, to compute the quantile for.
+        An expression that evaluates to a double or array. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(kll_sketch_agg_bigint(col), 0.5) > 1 FROM VALUES (1), (2), (3), (4), (5) tab(col);
@@ -359,6 +417,13 @@ case class KllSketchGetQuantileBigint(left: Expression, right: Expression)
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
   """,
+  arguments = """
+    Arguments:
+      * left - The sketch buffer to extract the quantile from.
+        An expression that evaluates to a binary.
+      * right - The input rank, or array of ranks, to compute the quantile for.
+        An expression that evaluates to a double or array. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(kll_sketch_agg_float(col), 0.5) > 1 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
@@ -390,6 +455,13 @@ case class KllSketchGetQuantileFloat(left: Expression, right: Expression)
     desired quantile given the input rank. The desired quantile can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+  """,
+  arguments = """
+    Arguments:
+      * left - The sketch buffer to extract the quantile from.
+        An expression that evaluates to a binary.
+      * right - The input rank, or array of ranks, to compute the quantile for.
+        An expression that evaluates to a double or array. Must be a constant.
   """,
   examples = """
     Examples:
@@ -523,6 +595,13 @@ abstract class KllSketchGetQuantileBase
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
   """,
+  arguments = """
+    Arguments:
+      * left - The sketch buffer to extract the rank from.
+        An expression that evaluates to a binary.
+      * right - The input quantile, or array of quantiles, to compute the rank for.
+        An expression that evaluates to a long or array. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(kll_sketch_agg_bigint(col), 3) > 0.3 FROM VALUES (1), (2), (3), (4), (5) tab(col);
@@ -551,6 +630,13 @@ case class KllSketchGetRankBigint(left: Expression, right: Expression)
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
   """,
+  arguments = """
+    Arguments:
+      * left - The sketch buffer to extract the rank from.
+        An expression that evaluates to a binary.
+      * right - The input quantile, or array of quantiles, to compute the rank for.
+        An expression that evaluates to a float or array. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(kll_sketch_agg_float(col), 3.0) > 0.3 FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)), (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)) tab(col);
@@ -578,6 +664,13 @@ case class KllSketchGetRankFloat(left: Expression, right: Expression)
     desired rank given the input quantile. The desired rank can either be a single value
     or an array. In the latter case, the function will return an array of results of equal
     length to the input array.
+  """,
+  arguments = """
+    Arguments:
+      * left - The sketch buffer to extract the rank from.
+        An expression that evaluates to a binary.
+      * right - The input quantile, or array of quantiles, to compute the rank for.
+        An expression that evaluates to a double or array. Must be a constant.
   """,
   examples = """
     Examples:

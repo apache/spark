@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
@@ -86,6 +87,14 @@ class InMemoryRowLevelOperationTable private (
   // used in row-level operation tests to verify passed records
   // (operation, id, metadata, row)
   var lastWriteLog: Seq[InternalRow] = Seq.empty
+  // used in delete-with-options tests to verify options reach the connector on the deleteWhere path
+  var lastDeleteOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+
+  override def deleteWhere(
+      predicates: Array[Predicate], options: CaseInsensitiveStringMap): Unit = {
+    lastDeleteOptions = options
+    deleteWhere(predicates)
+  }
 
   override def copy(): Table = {
     val copied = InMemoryRowLevelOperationTable.withColumns(
@@ -321,5 +330,47 @@ object InMemoryRowLevelOperationTable {
       tableId: String = java.util.UUID.randomUUID().toString): InMemoryRowLevelOperationTable = {
     new InMemoryRowLevelOperationTable(
       name, columns, partitioning, properties, constraints, tableId)
+  }
+}
+
+/**
+ * An in-memory table that implements only [[TruncatableTable]] (NOT [[SupportsDeleteV2]]).
+ * Used to exercise the [[TruncateTableExec]] planning path for DELETE statements with no WHERE.
+ */
+class InMemoryTruncatableOnlyTable(
+    name: String,
+    columns: Array[Column],
+    partitioning: Array[Transform],
+    properties: util.Map[String, String],
+    constraints: Array[Constraint])
+  extends InMemoryBaseTable(name, columns, partitioning, properties, constraints)
+  with TruncatableTable {
+
+  var lastTruncateOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    InMemoryBaseTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
+    InMemoryBaseTable.maybeSimulateFailedTableWrite(info.options)
+    new InMemoryWriterBuilder(info) {
+      override def truncate(): WriteBuilder = {
+        writer = new TruncateAndAppend(this.info)
+        streamingWriter = new StreamingTruncateAndAppend(this.info)
+        this
+      }
+    }
+  }
+
+  override def truncateTable(): Boolean = {
+    lastTruncateOptions = CaseInsensitiveStringMap.empty()
+    dataMap.synchronized { dataMap.clear() }
+    increaseVersion()
+    true
+  }
+
+  override def truncateTable(options: CaseInsensitiveStringMap): Boolean = {
+    lastTruncateOptions = options
+    dataMap.synchronized { dataMap.clear() }
+    increaseVersion()
+    true
   }
 }

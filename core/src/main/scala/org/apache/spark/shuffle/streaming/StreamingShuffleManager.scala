@@ -76,7 +76,7 @@ object StreamingShuffleManager extends Logging {
   }
 }
 
-private[spark] class StreamingShuffleManager extends ShuffleManager with Logging {
+private[spark] class StreamingShuffleManager extends PipelinedShuffleManager with Logging {
 
   logInfo(log"Using StreamingShuffleManager")
 
@@ -113,15 +113,9 @@ private[spark] class StreamingShuffleManager extends ShuffleManager with Logging
 
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     // No manager-side state to release here: the driver's StreamingShuffleOutputTracker is
-    // unregistered in BlockManagerStorageEndpoint's RemoveShuffle handler, and per-task writer
-    // and reader resources are released via task completion listeners.
+    // unregistered in ContextCleaner.doCleanupShuffle (its state is driver-only), and per-task
+    // writer and reader resources are released via task completion listeners.
     true
-  }
-
-  override def shuffleBlockResolver: ShuffleBlockResolver = {
-    // don't need to support this for the streaming shuffle implementation
-    // since block manager is not used
-    throw new UnsupportedOperationException()
   }
 
   override def stop(): Unit = {}

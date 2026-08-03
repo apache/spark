@@ -275,9 +275,10 @@ class SqlGraphRegistrationContext(
    * into the [[ChangeArgs]] consumed by an [[AutoCdcFlow]]. Shared by the two SQL AUTO CDC entry
    * points: `CREATE STREAMING TABLE ... FLOW AUTO CDC ...` and `CREATE FLOW ... AS AUTO CDC INTO`.
    *
-   * SQL AUTO CDC syntax only supports SCD Type 1, so [[ChangeArgs.storedAsScdType]] is always
-   * [[ScdType.Type1]]. [[includeColumns]] and [[excludeColumns]] are mutually exclusive at the
-   * grammar level; the guard here is defensive.
+   * `STORED AS SCD TYPE <n>` selects [[ScdType]] (defaulting to [[ScdType.Type1]] when absent).
+   * `TRACK HISTORY ON ...` populates the SCD2-only [[ChangeArgs.trackHistorySelection]] and is
+   * rejected under SCD1. [[includeColumns]]/[[excludeColumns]] and the two track-history lists are
+   * each mutually exclusive at the grammar level; the guards here are defensive.
    */
   private def buildChangeArgs(
       keys: Seq[UnresolvedAttribute],
@@ -285,6 +286,9 @@ class SqlGraphRegistrationContext(
       deleteCondition: Option[Expression],
       includeColumns: Option[Seq[UnresolvedAttribute]],
       excludeColumns: Option[Seq[UnresolvedAttribute]],
+      storedAsScdType: Int,
+      trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
+      trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]],
       queryOrigin: QueryOrigin): ChangeArgs = {
     val columnSelection: Option[ColumnSelection] = (includeColumns, excludeColumns) match {
       case (Some(_), Some(_)) =>
@@ -300,12 +304,50 @@ class SqlGraphRegistrationContext(
         None
     }
 
+    val scdType: ScdType = storedAsScdType match {
+      case 1 => ScdType.Type1
+      case 2 => ScdType.Type2
+      case other =>
+        throw SqlGraphElementRegistrationException(
+          msg = s"Unsupported AUTO CDC SCD type: $other. Only SCD TYPE 1 and SCD TYPE 2 are " +
+            "supported.",
+          queryOrigin = queryOrigin
+        )
+    }
+
+    // TRACK HISTORY is only meaningful under SCD2; reject it for SCD1 before interpreting the
+    // clause. The grammar allows the clause regardless of the STORED AS type, so this is where
+    // the SCD2 requirement is enforced.
+    if (scdType != ScdType.Type2 &&
+      (trackHistoryColumns.isDefined || trackHistoryExceptColumns.isDefined)) {
+      throw SqlGraphElementRegistrationException(
+        msg = "AUTO CDC TRACK HISTORY requires STORED AS SCD TYPE 2.",
+        queryOrigin = queryOrigin
+      )
+    }
+
+    val trackHistorySelection: Option[ColumnSelection] =
+      (trackHistoryColumns, trackHistoryExceptColumns) match {
+        case (Some(_), Some(_)) =>
+          throw SqlGraphElementRegistrationException(
+            msg = "AUTO CDC cannot specify both TRACK HISTORY ON and TRACK HISTORY ON * EXCEPT.",
+            queryOrigin = queryOrigin
+          )
+        case (Some(tracked), None) =>
+          Option(ColumnSelection.IncludeColumns(tracked.map(toUnqualifiedColumnName)))
+        case (None, Some(nonTracked)) =>
+          Option(ColumnSelection.ExcludeColumns(nonTracked.map(toUnqualifiedColumnName)))
+        case (None, None) =>
+          None
+      }
+
     ChangeArgs(
       keys = keys.map(toUnqualifiedColumnName),
       sequencing = Column(sequenceByExpr),
-      storedAsScdType = ScdType.Type1,
+      storedAsScdType = scdType,
       deleteCondition = deleteCondition.map(Column(_)),
-      columnSelection = columnSelection
+      columnSelection = columnSelection,
+      trackHistorySelection = trackHistorySelection
     )
   }
 
@@ -374,6 +416,9 @@ class SqlGraphRegistrationContext(
             deleteCondition = cst.deleteCondition,
             includeColumns = cst.includeColumns,
             excludeColumns = cst.excludeColumns,
+            storedAsScdType = cst.storedAsScdType,
+            trackHistoryColumns = cst.trackHistoryColumns,
+            trackHistoryExceptColumns = cst.trackHistoryExceptColumns,
             queryOrigin = queryOrigin
           )
         )
@@ -588,6 +633,9 @@ class SqlGraphRegistrationContext(
                 deleteCondition = a.deleteCondition,
                 includeColumns = a.includeColumns,
                 excludeColumns = a.excludeColumns,
+                storedAsScdType = a.storedAsScdType,
+                trackHistoryColumns = a.trackHistoryColumns,
+                trackHistoryExceptColumns = a.trackHistoryExceptColumns,
                 queryOrigin = queryOrigin
               )
             )

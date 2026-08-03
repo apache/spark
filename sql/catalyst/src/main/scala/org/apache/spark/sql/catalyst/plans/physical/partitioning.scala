@@ -913,6 +913,15 @@ object PartitioningCollection {
     }
     new PartitioningCollection(partitionings.map(intern))
   }
+
+  /**
+   * Flattens a partitioning into its leaf partitionings: a [[PartitioningCollection]] is
+   * recursively replaced by its members, and any other partitioning yields itself.
+   */
+  def flatten(partitioning: Partitioning): Seq[Partitioning] = partitioning match {
+    case PartitioningCollection(partitionings) => partitionings.flatMap(flatten)
+    case other => other +: Nil
+  }
 }
 
 /**

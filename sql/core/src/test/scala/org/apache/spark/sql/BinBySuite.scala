@@ -259,6 +259,111 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("BIN BY places multi-bin civil-time boundaries on the absolute grid across DST") {
+    val la = ZoneId.of("America/Los_Angeles")
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      // Boundaries of a 36h width must lie on the grid bin_start(k) = ALIGN_TO + k * 36h. Across
+      // the 2024-03-10 spring-forward, a forward walk would drift 1h off the grid from bin 1 on.
+      // This range spans four bins.
+      val df = spark.sql(
+        """SELECT bin_start, bin_end, bin_distribute_ratio, value
+          |FROM VALUES
+          |  (TIMESTAMP '2024-03-09 06:00:00', TIMESTAMP '2024-03-13 18:00:00', 100.0D)
+          |  AS metrics(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '36' HOUR
+          |  ALIGN TO TIMESTAMP '2024-03-09 00:00:00' DISTRIBUTE UNIFORM (value))
+          |ORDER BY bin_start""".stripMargin)
+      val h = 3600L * 1000000L
+      val total = 107 * h      // 30h + 35h + 36h + 6h
+      // Bin 2 starts at 2024-03-12 00:00 LA (07:00 UTC); a forward walk would report 08:00 UTC.
+      checkAnswer(df, Seq(
+        Row(tsAt("2024-03-09 00:00:00", la), tsAt("2024-03-10 13:00:00", la),
+          ratio(30 * h, total), 100.0 * ratio(30 * h, total)),
+        Row(tsAt("2024-03-10 13:00:00", la), tsAt("2024-03-12 00:00:00", la),
+          ratio(35 * h, total), 100.0 * ratio(35 * h, total)),
+        Row(tsAt("2024-03-12 00:00:00", la), tsAt("2024-03-13 12:00:00", la),
+          ratio(36 * h, total), 100.0 * ratio(36 * h, total)),
+        Row(tsAt("2024-03-13 12:00:00", la), tsAt("2024-03-15 00:00:00", la),
+          ratio(6 * h, total), 100.0 * ratio(6 * h, total))))
+    }
+  }
+
+  test("BIN BY reports the same civil-time bin boundary regardless of where a row starts") {
+    val la = ZoneId.of("America/Los_Angeles")
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      // Both rows span the bin starting 2024-03-12 00:00 LA: one walks into it from bin 0, the
+      // other starts inside it. Both must report the same bin_start; a forward walk would report it
+      // an hour apart, splitting GROUP BY bin_start.
+      val df = spark.sql(
+        """SELECT ts_start, bin_start, bin_end
+          |FROM VALUES
+          |  (TIMESTAMP '2024-03-09 06:00:00', TIMESTAMP '2024-03-13 06:00:00', 1.0D),
+          |  (TIMESTAMP '2024-03-12 03:00:00', TIMESTAMP '2024-03-13 06:00:00', 1.0D)
+          |  AS metrics(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '36' HOUR
+          |  ALIGN TO TIMESTAMP '2024-03-09 00:00:00' DISTRIBUTE UNIFORM (value))
+          |WHERE bin_start = TIMESTAMP '2024-03-12 00:00:00'
+          |ORDER BY ts_start""".stripMargin)
+      checkAnswer(df, Seq(
+        Row(tsAt("2024-03-09 06:00:00", la), tsAt("2024-03-12 00:00:00", la),
+          tsAt("2024-03-13 12:00:00", la)),
+        Row(tsAt("2024-03-12 03:00:00", la), tsAt("2024-03-12 00:00:00", la),
+          tsAt("2024-03-13 12:00:00", la))))
+    }
+  }
+
+  test("BIN BY emits a zero-width bin at a whole-day zone skip") {
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Pacific/Apia") {
+      // Apia skipped all of 2011-12-30 (UTC-11 -> UTC+13), so two grid boundaries land on the same
+      // instant, emitting a zero-width ratio-0 bin (bin_start == bin_end). The real bins still tile
+      // the range, so ratios sum to 1.0. Compared as UTC instants: a civil label on the skipped day
+      // is ambiguous.
+      val utc = ZoneOffset.UTC
+      val df = spark.sql(
+        """SELECT bin_start, bin_end, bin_distribute_ratio, value
+          |FROM VALUES
+          |  (TIMESTAMP '2011-12-29 12:00:00', TIMESTAMP '2011-12-31 12:00:00', 100.0D)
+          |  AS metrics(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '1' DAY
+          |  ALIGN TO TIMESTAMP '2011-12-25 00:00:00' DISTRIBUTE UNIFORM (value))
+          |ORDER BY bin_start, bin_end""".stripMargin)
+      checkAnswer(df, Seq(
+        Row(tsAt("2011-12-29 10:00:00", utc), tsAt("2011-12-30 10:00:00", utc), 0.5, 50.0),
+        Row(tsAt("2011-12-30 10:00:00", utc), tsAt("2011-12-30 10:00:00", utc), 0.0, 0.0),
+        Row(tsAt("2011-12-30 10:00:00", utc), tsAt("2011-12-31 10:00:00", utc), 0.5, 50.0)))
+    }
+  }
+
+  test("BIN BY places the zero-length range bin on the grid for a non-whole-day width") {
+    val la = ZoneId.of("America/Los_Angeles")
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      // A zero-length range emits one ratio-1.0 row for its bin. Its bin's 36h step crosses the
+      // spring-forward, so bin_end must be the grid boundary (2024-03-12 00:00), not the walked
+      // bin_start + 36h (2024-03-12 01:00).
+      val df = spark.sql(
+        """SELECT bin_start, bin_end, bin_distribute_ratio, value
+          |FROM VALUES
+          |  (TIMESTAMP '2024-03-11 12:00:00', TIMESTAMP '2024-03-11 12:00:00', 100.0D)
+          |  AS metrics(ts_start, ts_end, value)
+          |BIN BY (
+          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '36' HOUR
+          |  ALIGN TO TIMESTAMP '2024-03-09 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin)
+      checkAnswer(df, Seq(
+        Row(tsAt("2024-03-10 13:00:00", la), tsAt("2024-03-12 00:00:00", la), 1.0, 100.0)))
+    }
+  }
+
   test("BIN BY executes on NTZ inputs with the epoch default origin") {
     withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
       val df = spark.sql(

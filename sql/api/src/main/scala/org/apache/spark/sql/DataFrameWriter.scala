@@ -236,7 +236,7 @@ abstract class DataFrameWriter[T] {
   def save(path: String): Unit
 
   /**
-   * Saves the content of the `DataFrame` as the specified table.
+   * Saves the content of the `DataFrame`.
    *
    * @since 1.4.0
    */

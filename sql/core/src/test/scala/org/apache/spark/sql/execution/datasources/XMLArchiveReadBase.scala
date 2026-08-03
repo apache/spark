@@ -133,3 +133,18 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
       schema = corruptSchema)
   }
 }
+
+class XMLTarArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with XMLArchiveReadBase
+  with TarArchiveReadBase
+
+class XMLZipArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with XMLArchiveReadBase
+  with ZipArchiveReadBase
+
+class XMLSevenZArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with XMLArchiveReadBase
+  with SevenZArchiveReadBase

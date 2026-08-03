@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
 private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url : String): Boolean =
-    url.toLowerCase(Locale.ROOT).matches("jdbc:(.*:)?mysql.*")
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
 
   private val distinctUnsupportedAggregateFunctions =
     Set("VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
@@ -350,7 +350,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
           } else {
             // The only property we are building here is `COMMENT` because it's the only one
             // we can get from `SHOW INDEXES`.
-            val properties = new util.Properties();
+            val properties = new util.Properties()
             if (indexComment.nonEmpty) properties.put("COMMENT", indexComment)
             val index = new TableIndex(indexName, indexType, Array(FieldReference(colName)),
               new util.HashMap[NamedReference, util.Properties](), properties)
