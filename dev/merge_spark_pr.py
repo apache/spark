@@ -458,8 +458,13 @@ def post_merge_comment(pr_num, merged_commits):
         "- merged into %s %s/%s" % (ref, GITHUB_COMMIT_BASE, commit_hash)
         for ref, commit_hash in merged_commits
     ]
-    body = "**Merge Summary:**\n" + "\n".join(lines) + "\n\n*Posted by `merge_spark_pr.py`*"
-    print("\n%s\n\n%s" % (bold("Posting merge comment on PR #%s:" % pr_num), body))
+    summary = "**Merge Summary:**\n" + "\n".join(lines)
+    attribution = "*Posted by `merge_spark_pr.py`*"
+    body = "%s\n%s" % (summary, attribution)
+    print(
+        "\n%s\n\n%s\n%s"
+        % (bold("Posting merge comment on PR #%s:" % pr_num), bold(summary), attribution)
+    )
     if not GITHUB_OAUTH_KEY:
         print_error("GITHUB_OAUTH_KEY is not set; skipping the merge comment.")
         return
