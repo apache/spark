@@ -36,6 +36,12 @@ import org.apache.spark.udf.worker.core.WorkerSession.SessionState
 class WorkerSessionSuite extends AnyFunSuite {
 // scalastyle:on funsuite
 
+  /** A no-op [[WorkerConnection]] for handles whose transport is never used. */
+  private val stubConnection: WorkerConnection = new WorkerConnection {
+    override def isActive: Boolean = false
+    override def close(): Unit = ()
+  }
+
   /** A [[WorkerHandle]] that counts the lifecycle callbacks made against it. */
   private final class RecordingHandle extends WorkerHandle {
     var released = 0
@@ -43,6 +49,7 @@ class WorkerSessionSuite extends AnyFunSuite {
     override def id: String = "test-worker"
     override def markInvalid(): Unit = invalidated += 1
     override def releaseSession(): Unit = released += 1
+    override def connection: WorkerConnection = stubConnection
   }
 
   /**
@@ -224,6 +231,7 @@ class WorkerSessionSuite extends AnyFunSuite {
       override def id: String = "boom"
       override def markInvalid(): Unit = throw new RuntimeException("markInvalid boom")
       override def releaseSession(): Unit = throw new RuntimeException("releaseSession boom")
+      override def connection: WorkerConnection = stubConnection
     }
     val cause = new RuntimeException("transport down")
     // A TransportFailed terminal makes the worker unsalvageable, so close()
@@ -246,6 +254,7 @@ class WorkerSessionSuite extends AnyFunSuite {
       override def id: String = "throws-on-invalidate"
       override def markInvalid(): Unit = throw new RuntimeException("markInvalid boom")
       override def releaseSession(): Unit = released += 1
+      override def connection: WorkerConnection = stubConnection
     }
     val cause = new RuntimeException("transport down")
     val s = new FakeWorkerSession(handle = handle, onCloseHook = (self, _) => {

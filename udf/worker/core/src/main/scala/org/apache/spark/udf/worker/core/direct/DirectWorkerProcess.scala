@@ -72,8 +72,8 @@ class DirectWorkerProcess(
   /** The OS process handle for this worker. */
   def process: Process = artifacts.process
 
-  /** The transport connection for this worker. */
-  def connection: WorkerConnection = artifacts.connection
+  /** The transport connection for this worker (see [[WorkerHandle.connection]]). */
+  override def connection: WorkerConnection = artifacts.connection
 
   /** Path to the merged stdout/stderr log for this worker. */
   def outputFile: Path = artifacts.outputFile
