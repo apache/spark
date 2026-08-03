@@ -28,7 +28,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.udf.worker.{Cancel, CancelResponse, DataRequest, DataResponse,
   ExecutionError, Finish, FinishResponse, Init, InitResponse, UdfControlRequest,
-  UdfControlResponse, UdfPayload, UdfRequest, UdfResponse, UdfWorkerGrpc}
+  UdfControlResponse, UdfRequest, UdfResponse, UdfWorkerGrpc}
 import org.apache.spark.udf.worker.core.{Termination, WorkerHandle, WorkerLogger, WorkerSession}
 import org.apache.spark.udf.worker.core.WorkerSession.SessionState
 import org.apache.spark.udf.worker.grpc.GrpcWorkerSession._
@@ -93,7 +93,7 @@ import org.apache.spark.udf.worker.grpc.GrpcWorkerSession._
  *    and terminates the request side.
  *
  * TODO [SPARK-55278]: this class does not yet implement payload chunking;
- * the entire [[UdfPayload]] is sent inline. Chunking will be added
+ * the entire [[org.apache.spark.udf.worker.UdfPayload]] is sent inline. Chunking will be added
  * when a UDF payload large enough to exceed gRPC's default message size
  * limit is introduced.
  *
@@ -873,10 +873,15 @@ class GrpcWorkerSession(
      * worker awaiting more input with no terminator owed on the wire; with it the
      * worker tears down and the exception still propagates to the engine. Setting
      * `cancelRequested` also suppresses any further Data/Finish this loop might
-     * otherwise attempt (see [[sendRequest]]).
+     * otherwise attempt (see [[sendRequest]]). An [[InterruptedException]] uses
+     * [[handleInterrupt]] so its CancelResponse drain remains bounded by
+     * [[interruptCancelTimeoutMs]].
      */
     private def cancelOnThrow[T](reason: String)(op: => T): T =
       try op catch {
+        case _: InterruptedException =>
+          handleInterrupt(reason)
+          throw new InterruptedException(s"interrupted while $reason")
         case NonFatal(e) =>
           sendCancelInternal(() => cancelWithReason(reason))
           throw e
@@ -1123,7 +1128,7 @@ object GrpcWorkerSession {
     def await(timeoutMs: Long): Unit =
       if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
         throw new TimeoutException(
-          s"timed out waiting for InitResponse after ${timeoutMs}ms")
+          s"timed out waiting for value after ${timeoutMs}ms")
       }
 
     /** The published value, or None if none was ever set. */

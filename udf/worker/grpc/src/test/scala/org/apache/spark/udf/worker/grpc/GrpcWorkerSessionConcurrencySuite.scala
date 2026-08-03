@@ -1429,10 +1429,11 @@ class GrpcWorkerSessionConcurrencySuite
 
   // ---------------------------------------------------------------------------
   // Interrupt handling (cancelled query / killed task). An interrupt while
-  // blocked on init sends a best-effort Cancel and waits interruptCancelTimeoutMs
-  // for the CancelResponse: a responsive worker settles a clean, salvageable
-  // Cancelled; an unresponsive one falls back to Interrupted and is invalidated
-  // because no acknowledgement or liveness proof makes it safe to reuse.
+  // blocked on init or pulling input sends a best-effort Cancel and waits
+  // interruptCancelTimeoutMs for the CancelResponse: a responsive worker settles
+  // a clean, salvageable Cancelled; an unresponsive one falls back to Interrupted
+  // and is invalidated because no acknowledgement or liveness proof makes it safe
+  // to reuse.
   // ---------------------------------------------------------------------------
 
   test("interrupt during init: responsive worker settles Cancelled, worker salvageable") {
@@ -1506,13 +1507,73 @@ class GrpcWorkerSessionConcurrencySuite
     // Bounded by interruptCancelTimeoutMs (500ms), not terminalTimeoutMs (10min):
     // if init parked on the wrong timeout this join would fail.
     initThread.join(10000)
-    assert(!initThread.isAlive, "init() must return within interruptCancelTimeoutMs of the interrupt")
+    assert(!initThread.isAlive,
+      "init() must return within interruptCancelTimeoutMs of the interrupt")
     assert(thrown.get().isInstanceOf[InterruptedException],
       s"init() must rethrow InterruptedException, got: ${thrown.get()}")
 
     val termination = session.close(emptyCancel)
     assert(termination.isInstanceOf[Termination.Interrupted],
       s"an unresponsive worker should settle Interrupted, got: $termination")
+    assert(handle.invalidated.get(),
+      "an unacknowledged Interrupted outcome must invalidate the worker")
+    assert(handle.released.get(), "close() must release the worker handle")
+  }
+
+  test("interrupt while pulling input: bounded Cancel drain settles Interrupted") {
+    // Worker accepts Init but ignores Cancel. The interrupted input pull must use
+    // interruptCancelTimeoutMs rather than leaving close() to wait terminalTimeoutMs.
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        if (req.hasControl && req.getControl.hasInit) {
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setInit(
+              InitResponse.getDefaultInstance).build()).build())
+        }
+      })
+    val (_, channel) = startServer(service)
+    val session = newSession(channel,
+      terminalTimeoutMs = NeverReachedTimeoutMs,
+      interruptCancelTimeoutMs = 500L)
+    val handle = handleOf(session)
+    session.init(basicInit())
+
+    val inputNextEntered = new CountDownLatch(1)
+    val neverReleaseInput = new CountDownLatch(1)
+    val input = new Iterator[DataRequest] {
+      override def hasNext: Boolean = true
+      override def next(): DataRequest = {
+        inputNextEntered.countDown()
+        neverReleaseInput.await()
+        throw new AssertionError("blocked input unexpectedly resumed")
+      }
+    }
+    val thrown = new AtomicReference[Throwable]()
+    val termination = new AtomicReference[Termination]()
+    val processThread = new Thread(() => {
+      try {
+        session.process(input, emptyFinish).hasNext
+      } catch {
+        case t: Throwable => thrown.set(t)
+      } finally {
+        termination.set(session.close(emptyCancel))
+      }
+    }, "interrupt-input-pull")
+    processThread.setDaemon(true)
+    processThread.start()
+    assert(inputNextEntered.await(5, TimeUnit.SECONDS), "input.next() was never entered")
+
+    processThread.interrupt()
+    // Bounded by interruptCancelTimeoutMs (500ms), not terminalTimeoutMs (10min).
+    processThread.join(10000)
+    assert(!processThread.isAlive,
+      "input interruption must unwind within interruptCancelTimeoutMs")
+    assert(thrown.get().isInstanceOf[InterruptedException],
+      s"processing must rethrow InterruptedException, got: ${thrown.get()}")
+    assert(termination.get().isInstanceOf[Termination.Interrupted],
+      s"an unresponsive worker should settle Interrupted, got: ${termination.get()}")
+    assert(service.captured.asScala.exists(r => r.hasControl && r.getControl.hasCancel),
+      "interrupting an input pull must send Cancel")
     assert(handle.invalidated.get(),
       "an unacknowledged Interrupted outcome must invalidate the worker")
     assert(handle.released.get(), "close() must release the worker handle")
