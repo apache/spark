@@ -1601,6 +1601,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED =
+    buildConf("spark.sql.optimizer.rewriteCountDistinctConditional.enabled")
+      .internal()
+      .doc("When true, rewrites COUNT(DISTINCT IF(cond, base, NULL)) and " +
+        "COUNT(DISTINCT CASE WHEN cond THEN base END) into " +
+        "COUNT(DISTINCT base) FILTER (WHERE cond). This reduces the Expand factor " +
+        "in RewriteDistinctAggregates from Nx to 1x when multiple conditional distinct " +
+        "counts share the same base column. The rewrite is only applied to base " +
+        "expressions that are safe to evaluate unconditionally (e.g. plain columns), " +
+        "so the short-circuit semantics of IF/CASE WHEN are preserved.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -9313,6 +9328,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def decorrelateInnerQueryEnabledForExistsIn: Boolean =
     !getConf(SQLConf.DECORRELATE_EXISTS_IN_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED)
+
+  def rewriteCountDistinctConditionalEnabled: Boolean =
+    getConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED)
 
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
