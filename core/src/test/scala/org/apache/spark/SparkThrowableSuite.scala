@@ -679,6 +679,22 @@ class SparkThrowableSuite extends SparkFunSuite {
     }
   }
 
+  test("INVALID_HANDLE session sub-conditions carry SQLSTATE 08003") {
+    val sessionSubConditions = Seq("SESSION_CHANGED", "SESSION_CLOSED", "SESSION_NOT_FOUND")
+    sessionSubConditions.foreach { sub =>
+      assert(errorReader.getSqlState(s"INVALID_HANDLE.$sub") == "08003", sub)
+    }
+    // Every other sub-condition concerns a single operation on a healthy session and keeps
+    // the condition's SQLSTATE.
+    val otherSubConditions =
+      errorReader.errorInfoMap("INVALID_HANDLE").subClass.get.keys.toSeq.diff(sessionSubConditions)
+    assert(otherSubConditions.nonEmpty)
+    otherSubConditions.foreach { sub =>
+      assert(errorReader.getSqlState(s"INVALID_HANDLE.$sub") == "HY000", sub)
+    }
+    assert(errorReader.getSqlState("INVALID_HANDLE") == "HY000")
+  }
+
   test("detect unused message parameters") {
     checkError(
       exception = intercept[SparkException] {
