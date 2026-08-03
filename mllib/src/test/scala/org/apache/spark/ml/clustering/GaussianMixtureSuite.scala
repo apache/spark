@@ -87,6 +87,14 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(copiedModel.hasSummary)
   }
 
+  test("GaussianMixtureModel estimated size") {
+    val model = new GaussianMixture().setK(2).fit(dataset)
+    val maxSize = 1024 * 16
+    assert(
+      model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("GaussianMixture validate input dataset") {
     testInvalidWeights(new GaussianMixture().setWeightCol("weight").fit(_))
     testInvalidVectors(new GaussianMixture().fit(_))

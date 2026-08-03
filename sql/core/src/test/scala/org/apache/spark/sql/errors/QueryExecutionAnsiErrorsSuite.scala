@@ -195,6 +195,14 @@ class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
       context = ExpectedContext(
         fragment = "apply",
         callSitePattern = getCurrentClassCallSitePattern))
+
+    checkError(
+      exception = intercept[SparkArrayIndexOutOfBoundsException] {
+        sql("select array(id, 2, 3)[5] from range(1)").collect()
+      },
+      condition = "INVALID_ARRAY_INDEX",
+      parameters = Map("indexValue" -> "5", "arraySize" -> "3"),
+      context = ExpectedContext(fragment = "array(id, 2, 3)[5]", start = 7, stop = 24))
   }
 
   test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT: element_at from array") {

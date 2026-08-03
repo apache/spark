@@ -546,6 +546,16 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "LOCAL_CONNECT_RUNTIME_DIR_UNAVAILABLE": {
+    "message": [
+      "Cannot claim the per-user runtime directory <path> (was it created by another user?); remove it or point SPARK_LOCAL_CONNECT_DISCOVERY at a path you own."
+    ]
+  },
+  "LOCAL_CONNECT_SERVER_START_FAILED": {
+    "message": [
+      "Failed to start a persistent local Spark Connect server: <reason>."
+    ]
+  },
   "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED": {
     "message": [
       "Local relation size (<actualSize> bytes) exceeds the limit (<sizeLimit> bytes)."
@@ -1083,11 +1093,6 @@
       "Unexpected tuple <tuple> with StructType."
     ]
   },
-  "UNKNOWN_EXPLAIN_MODE": {
-    "message": [
-      "Unknown explain mode: '<explain_mode>'. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
-    ]
-  },
   "UNKNOWN_INTERRUPT_TYPE": {
     "message": [
       "Unknown interrupt type: '<interrupt_type>'. Accepted interrupt types are 'all'."
@@ -1206,11 +1211,6 @@
   "VALUE_NOT_NON_EMPTY_STR": {
     "message": [
       "Value for `<arg_name>` must be a non-empty string, got '<arg_value>'."
-    ]
-  },
-  "VALUE_NOT_PEARSON": {
-    "message": [
-      "Value for `<arg_name>` only supports 'pearson', got '<arg_value>'."
     ]
   },
   "VALUE_NOT_PLAIN_COLUMN_REFERENCE": {

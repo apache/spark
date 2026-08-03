@@ -23,6 +23,7 @@ import java.util.{Base64, Locale, UUID}
 import java.util.concurrent.{Executor, TimeUnit}
 
 import scala.collection.mutable
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.Properties
 import scala.util.control.NonFatal
@@ -809,6 +810,20 @@ object SparkConnectClient {
       this
     }
 
+    /**
+     * Sets the maximum cumulative wall-clock time the client will keep retrying a
+     * [[GrpcRetryHandler.RetryException]] (raised internally when a reattach attempt keeps
+     * hitting DEADLINE_EXCEEDED, or when the initial ExecutePlan never reached the server) before
+     * giving up and surfacing the underlying error. Defaults to 1 hour.
+     *
+     * @return
+     *   this builder.
+     */
+    def maxRetryExceptionElapsedTime(duration: FiniteDuration): Builder = {
+      _configuration = _configuration.copy(maxRetryExceptionElapsedTime = duration)
+      this
+    }
+
     private object URIParams {
       val PARAM_USER_ID = "user_id"
       val PARAM_USE_SSL = "use_ssl"
@@ -1094,6 +1109,8 @@ object SparkConnectClient {
         sys.env.getOrElse("SPARK_CONNECT_USER_AGENT", DEFAULT_USER_AGENT)),
       retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies(),
       rpcDeadlines: RpcDeadlines = RpcDeadlines(),
+      maxRetryExceptionElapsedTime: FiniteDuration =
+        GrpcRetryHandler.DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None,

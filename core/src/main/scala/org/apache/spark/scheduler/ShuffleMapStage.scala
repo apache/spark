@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.HashSet
 
-import org.apache.spark.{MapOutputTrackerMaster, ShuffleDependency}
+import org.apache.spark.{MapOutputTrackerMaster, PipelinedShuffleDependency, ShuffleDependency}
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.util.CallSite
 
@@ -59,6 +59,34 @@ private[spark] class ShuffleMapStage(
    */
   val pendingPartitions = new HashSet[Int]
 
+  /** Whether this stage produces a pipelined (incrementally-readable) shuffle. */
+  val isPipelined: Boolean = shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]
+
+  /**
+   * Availability tracking for a pipelined shuffle. A pipelined shuffle produces no durable,
+   * addressable map output. `createShuffleMapStage` still calls `MapOutputTracker.registerShuffle`
+   * for it (it is a `ShuffleDependency`, and an empty shuffle-status entry keeps the tracker's
+   * `containsShuffle` / `unregisterShuffle` bookkeeping uniform), but no map output is ever
+   * registered into that entry -- `registerMapOutput` runs only on the non-pipelined completion
+   * path -- so the entry stays empty. Its map-stage availability therefore cannot be read from the
+   * tracker; instead we track completed partitions here, monotonically: a partition is added when
+   * its map task succeeds and is NEVER removed on executor/host loss.
+   *
+   * This is the crux of avoiding the streaming-writer resubmit hang: if a pipelined shuffle's
+   * availability were read from the `MapOutputTracker`, losing an executor that held a completed
+   * (already-consumed) pipelined output would strip it there, flip `isAvailable` to false, and make
+   * the DAGScheduler resubmit the producer -- whose streaming writer then blocks forever waiting
+   * for termination acks from reducers that already finished. Keeping availability local and
+   * monotonic means executor loss never triggers such a resubmit; a genuine mid-group failure is
+   * handled group-atomically instead. Unused (and empty) for a non-pipelined stage.
+   */
+  private[this] val pipelinedCompletedPartitions = new HashSet[Int]
+
+  /** Record a successful map task's partition as completed (pipelined stages only). */
+  private[scheduler] def addPipelinedCompletedPartition(partitionId: Int): Unit = {
+    pipelinedCompletedPartitions += partitionId
+  }
+
   override def toString: String = "ShuffleMapStage " + id
 
   /**
@@ -81,7 +109,12 @@ private[spark] class ShuffleMapStage(
    * Number of partitions that have shuffle outputs.
    * When this reaches [[numPartitions]], this map stage is ready.
    */
-  def numAvailableOutputs: Int = mapOutputTrackerMaster.getNumAvailableOutputs(shuffleDep.shuffleId)
+  def numAvailableOutputs: Int = {
+    // A pipelined shuffle's outputs are never populated in the MapOutputTracker (its entry stays
+    // empty; see pipelinedCompletedPartitions); read its locally-tracked, monotonic completed set.
+    if (isPipelined) pipelinedCompletedPartitions.size
+    else mapOutputTrackerMaster.getNumAvailableOutputs(shuffleDep.shuffleId)
+  }
 
   /**
    * Returns true if the map stage is ready, i.e. all partitions have shuffle outputs.
@@ -90,9 +123,13 @@ private[spark] class ShuffleMapStage(
 
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   override def findMissingPartitions(): Seq[Int] = {
-    mapOutputTrackerMaster
-      .findMissingPartitions(shuffleDep.shuffleId)
-      .getOrElse(0 until numPartitions)
+    if (isPipelined) {
+      (0 until numPartitions).filterNot(pipelinedCompletedPartitions.contains)
+    } else {
+      mapOutputTrackerMaster
+        .findMissingPartitions(shuffleDep.shuffleId)
+        .getOrElse(0 until numPartitions)
+    }
   }
 
   /**

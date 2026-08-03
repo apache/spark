@@ -248,7 +248,9 @@ package object util extends Logging {
     FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY,
     MetadataColumn.PRESERVE_ON_DELETE,
     MetadataColumn.PRESERVE_ON_UPDATE,
-    MetadataColumn.PRESERVE_ON_REINSERT
+    MetadataColumn.PRESERVE_ON_REINSERT,
+    GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY,
+    GeneratedColumn.AUTO_FILLED_GENERATED_COLUMN_METADATA_KEY
   )
 
   def removeInternalMetadata(schema: StructType, keepFieldIds: Boolean = false): StructType = {

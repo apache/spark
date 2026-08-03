@@ -351,6 +351,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
           event match {
             case e: SparkListenerSQLExecutionStart =>
               sqlJobTags = e.jobTags
+            case _ =>
           }
         }
       })
@@ -383,6 +384,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
           event match {
             case e: SparkListenerSQLExecutionStart =>
               sqlJobGroupIdOpt = e.jobGroupId
+            case _ =>
           }
         }
       })

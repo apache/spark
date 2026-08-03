@@ -111,6 +111,13 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
     ParamsSuite.checkParams(model)
   }
 
+  test("model estimated size") {
+    val model = getIndexer.fit(densePoints1)
+    val maxSize = 1024 * 4
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("Cannot fit an empty DataFrame") {
     val rdd = Array.empty[Vector].map(FeatureData).toSeq.toDF()
     val vectorIndexer = getIndexer

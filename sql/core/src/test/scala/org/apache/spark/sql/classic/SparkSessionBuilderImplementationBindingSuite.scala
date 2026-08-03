@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.classic
 
-import org.apache.spark.sql
+import org.apache.spark.sql.{SparkSession => BaseSparkSession}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -24,4 +24,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SparkSessionBuilderImplementationBindingSuite
   extends SharedSparkSession
-  with sql.SparkSessionBuilderImplementationBindingSuite
+  with org.apache.spark.sql.SparkSessionBuilderImplementationBindingSuite {
+
+  override protected def implementationSpecificBuilder: BaseSparkSession.Builder =
+    BaseSparkSession.builder().classic()
+}

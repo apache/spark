@@ -589,6 +589,59 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Row(null, null, null, null, null))
   }
 
+  test("SPARK-58291: empty-buffer merge must not overflow to NaN for statistical aggregates") {
+    // A single-partition group with two equal, very large finite values has zero variance, so
+    // var_pop / covar_pop / regr_sxy must be 0.0. Previously, when adjacent Partial/Final
+    // aggregates were NOT combined (the old default), the Final merge of the non-empty Partial
+    // buffer into the empty Final buffer computed `delta * deltaN * n1 * n2` where `n1 == 0`;
+    // `delta * deltaN` overflowed to Infinity and `Infinity * 0 = NaN`, corrupting the moments.
+    // CombineAdjacentAggregation (Complete mode) sidesteps the merge and returned 0.0, so the two
+    // configurations disagreed. The merge fix makes both paths return 0.0.
+    // This must hold with and without AQE, and with combining on and off.
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val df = Seq(1e155, 1e155).toDF("a").repartition(1)
+        Seq(true, false).foreach { combine =>
+          withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString) {
+            checkAnswer(
+              df.selectExpr("var_pop(a)", "covar_pop(a, a)", "regr_sxy(a, a)"),
+              Row(0.0, 0.0, 0.0))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58291: empty-buffer merge must not overflow to NaN for Pearson correlation") {
+    // Two finite points are perfectly linearly correlated, so corr / regr_r2 are finite. The
+    // Pearson merge computes `dx * dxN * n1 * n2` (and the dy variant) for xMk / yMk. When one
+    // side is an empty buffer (n1 == 0 or n2 == 0) and the other has a large average, `dx * dxN`
+    // overflows to Infinity before being multiplied by the zero count, and `Infinity * 0 = NaN`
+    // corrupts the merged moments. The old default (no combining) hit this Final-merge path and
+    // returned NaN, while CombineAdjacentAggregation (Complete mode) sidestepped the merge, so the
+    // two configurations disagreed. The merge fix makes both paths return the same finite result.
+    // This must hold with and without AQE, and with combining on and off.
+    val data = Seq((1.0e155, 1.0e-150), (1.000000000000001e155, 2.0e-150))
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val df = data.toDF("x", "y").repartition(1)
+        // Reference result from the combined (Complete-mode) path, which never runs the merge.
+        val expected = withSQLConf(
+            SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+          df.selectExpr("corr(x, y)", "regr_r2(y, x)").collect()
+        }
+        expected.head.toSeq.foreach { v =>
+          assert(!v.asInstanceOf[Double].isNaN, "corr / regr_r2 must be finite, not NaN")
+        }
+        Seq(true, false).foreach { combine =>
+          withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString) {
+            checkAnswer(df.selectExpr("corr(x, y)", "regr_r2(y, x)"), expected.toSeq)
+          }
+        }
+      }
+    }
+  }
+
   test("collect functions") {
     val df = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
     checkAnswer(
@@ -621,6 +674,72 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df.select(array_agg($"a"), array_agg($"b")),
       Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
     )
+  }
+
+  test("collect_union function") {
+    // Distinct union of array elements across rows.
+    val df = Seq(Seq(1, 2), Seq(2, 3), Seq(1)).toDF("arr")
+    checkDataset(
+      df.select(collect_union($"arr").as("u")).as[Set[Int]],
+      Set(1, 2, 3))
+    checkAnswer(
+      df.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2, 3))))
+    checkAnswer(
+      df.selectExpr("sort_array(collect_union(arr))"),
+      Seq(Row(Seq(1, 2, 3))))
+
+    // NULL array inputs are always skipped.
+    val dfNulls = Seq(Seq(1, 2), null, Seq(2, 3)).toDF("arr")
+    checkAnswer(
+      dfNulls.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2, 3))))
+
+    // NULL elements: dropped by default (IGNORE NULLS, matching collect_set) ...
+    val dfNullElem = Seq(Seq(Integer.valueOf(1), null), Seq(Integer.valueOf(2))).toDF("arr")
+    checkAnswer(
+      dfNullElem.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2))))
+    // ... and kept (a single null) with RESPECT NULLS, matching
+    // array_distinct(flatten(collect_list(...))). sort_array puts null first in asc order.
+    checkAnswer(
+      dfNullElem.selectExpr("sort_array(collect_union(arr) RESPECT NULLS)"),
+      Seq(Row(Seq(null, 1, 2))))
+    // Equivalent to array_distinct(flatten(collect_list(...))) under RESPECT NULLS. Compare
+    // order-insensitively via sort_array, since element order in either result is unspecified.
+    checkAnswer(
+      dfNullElem.selectExpr("sort_array(collect_union(arr) RESPECT NULLS)"),
+      dfNullElem.selectExpr("sort_array(array_distinct(flatten(collect_list(arr))))"))
+
+    // Per-group union.
+    val g = Seq(("a", Seq(1, 2)), ("a", Seq(2, 3)), ("b", Seq(4))).toDF("k", "arr")
+    checkAnswer(
+      g.groupBy("k").agg(sort_array(collect_union($"arr"))).orderBy("k"),
+      Seq(Row("a", Seq(1, 2, 3)), Row("b", Seq(4))))
+
+    // Empty result: only-NULL arrays produce an empty array, not null.
+    val dfEmpty = Seq[Seq[Int]](null, null).toDF("arr")
+    checkAnswer(
+      dfEmpty.select(collect_union($"arr")),
+      Seq(Row(Seq.empty[Int])))
+  }
+
+  test("collect_union requires an array input") {
+    // A non-array (scalar) input is rejected at analysis time.
+    val df = Seq(1, 2, 3).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(collect_union($"a")).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"collect_union(a)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"ARRAY\""),
+      context = ExpectedContext(
+        fragment = "collect_union", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-55256: array_agg and collect_list skip nulls by default") {

@@ -101,6 +101,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveCursors" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveFetchCursor" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveBinBy" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveAsOfJoin" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveSetVariable" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableConstraints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableSpec" ::
@@ -161,6 +162,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.PruneFilters" ::
+      "org.apache.spark.sql.catalyst.optimizer.PullUpProjectAliasThroughWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownJoinThroughUnion" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::

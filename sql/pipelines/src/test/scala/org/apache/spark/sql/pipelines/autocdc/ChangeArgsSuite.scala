@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{functions => F, AnalysisException, Row}
+import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -36,7 +37,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
         schemaName = "test",
         schema = sourceSchema,
         columnSelection = None,
-        caseSensitive = true
+        resolver = caseSensitiveResolution
       ) == sourceSchema)
   }
 
@@ -48,7 +49,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
         schemaName = "test",
         schema = sourceSchema,
         columnSelection = Some(ColumnSelection.IncludeColumns(Seq.empty)),
-        caseSensitive = true
+        resolver = caseSensitiveResolution
       ) == new StructType())
   }
 
@@ -60,7 +61,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
         schemaName = "test",
         schema = sourceSchema,
         columnSelection = Some(ColumnSelection.ExcludeColumns(Seq.empty)),
-        caseSensitive = true
+        resolver = caseSensitiveResolution
       ) == sourceSchema)
   }
 
@@ -73,7 +74,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
           Seq(UnqualifiedColumnName("age"), UnqualifiedColumnName("Name"))
         )
       ),
-      caseSensitive = true
+      resolver = caseSensitiveResolution
     )
 
     assert(filteredSchema == new StructType()
@@ -88,7 +89,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
       columnSelection = Some(
         ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("id")))
       ),
-      caseSensitive = true
+      resolver = caseSensitiveResolution
     )
 
     assert(filteredSchema == new StructType()
@@ -108,7 +109,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
               Seq(UnqualifiedColumnName("name"), UnqualifiedColumnName("missing"))
             )
           ),
-          caseSensitive = true
+          resolver = caseSensitiveResolution
         )
       },
       condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
@@ -134,7 +135,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
               Seq(UnqualifiedColumnName("NAME"), UnqualifiedColumnName("missing"))
             )
           ),
-          caseSensitive = true
+          resolver = caseSensitiveResolution
         )
       },
       condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
@@ -159,7 +160,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
           Seq(UnqualifiedColumnName("AGE"), UnqualifiedColumnName("NAME"))
         )
       ),
-      caseSensitive = false
+      resolver = caseInsensitiveResolution
     )
 
     // The retained fields keep their original casing from the schema, not the user's input.
@@ -180,7 +181,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
           Seq(UnqualifiedColumnName("name"), UnqualifiedColumnName("NAME"))
         )
       ),
-      caseSensitive = false
+      resolver = caseInsensitiveResolution
     )
 
     assert(filteredSchema == new StructType().add("Name", StringType))
@@ -193,7 +194,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
       columnSelection = Some(
         ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name")))
       ),
-      caseSensitive = false
+      resolver = caseInsensitiveResolution
     )
 
     assert(filteredSchema == new StructType()
@@ -215,7 +216,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
               Seq(UnqualifiedColumnName("NAME"), UnqualifiedColumnName("Missing"))
             )
           ),
-          caseSensitive = false
+          resolver = caseInsensitiveResolution
         )
       },
       condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
@@ -301,7 +302,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
       columnSelection = Some(
         ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("`a.b`")))
       ),
-      caseSensitive = true
+      resolver = caseSensitiveResolution
     )
 
     assert(filteredSchema == new StructType().add("a.b", IntegerType))
@@ -314,7 +315,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
       columnSelection = Some(
         ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("`Name`")))
       ),
-      caseSensitive = true
+      resolver = caseSensitiveResolution
     )
 
     assert(filteredSchema == new StructType().add("Name", StringType))
@@ -375,6 +376,46 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
       sqlState = "22023",
       parameters = Map.empty
     )
+  }
+
+  test("ChangeArgs rejects trackHistorySelection under SCD1") {
+    // SCD1 has no run concept, so a non-None trackHistorySelection is meaningless. User-facing
+    // validation is expected at the API layer; this defensive internal guard raises an internal
+    // error so downstream SCD1 code can assume the selection is None.
+    val ex = intercept[SparkException] {
+      ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1,
+        trackHistorySelection = Some(
+          ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("Name")))
+        )
+      )
+    }
+    assert(ex.getCondition == "INTERNAL_ERROR")
+  }
+
+  test("ChangeArgs allows trackHistorySelection under SCD2") {
+    // The same selection is valid under SCD2, where tracking columns define a run.
+    val args = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type2,
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("Name")))
+      )
+    )
+    assert(args.trackHistorySelection.isDefined)
+  }
+
+  test("ChangeArgs allows None trackHistorySelection under SCD1") {
+    // The default None selection is always valid under SCD1.
+    val args = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1
+    )
+    assert(args.trackHistorySelection.isEmpty)
   }
 
   test("UnqualifiedColumnName lets a ParseException from the SQL parser propagate") {

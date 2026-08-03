@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.binaryfile
 
+import java.io.InputStream
 import java.sql.Timestamp
 
 import com.google.common.io.Closeables
@@ -25,13 +26,15 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile, SupportsArchiveFormat}
 import org.apache.spark.sql.internal.SessionStateHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
 import org.apache.spark.sql.types._
@@ -57,6 +60,7 @@ import org.apache.spark.util.SerializableConfiguration
  * }}}
  */
 case class BinaryFileFormat() extends FileFormat
+  with SupportsArchiveFormat
   with DataSourceRegister with SessionStateHelper {
 
   import BinaryFileFormat._
@@ -104,34 +108,29 @@ case class BinaryFileFormat() extends FileFormat
     val filterFuncs = filters.flatMap(filter => createFilterFunction(filter))
     val maxLength = getSqlConf(sparkSession).getConf(SOURCES_BINARY_FILE_MAX_LENGTH)
 
+    // `wholeFile=false` reads an archive as one row per inner entry; the default keeps the whole
+    // archive as a single record.
+    val caseInsensitiveOptions = CaseInsensitiveMap(options)
+    val archiveReadEnabled = !caseInsensitiveOptions.get(WHOLE_FILE).forall(_.toBoolean) &&
+      getSqlConf(sparkSession).getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+
     file: PartitionedFile => {
       val path = file.toPath
       val fs = path.getFileSystem(broadcastedHadoopConf.value.value)
       val status = fs.getFileStatus(path)
-      if (filterFuncs.forall(_.apply(status))) {
-        val writer = new UnsafeRowWriter(requiredSchema.length)
-        writer.resetRowWriter()
-        requiredSchema.fieldNames.zipWithIndex.foreach {
-          case (PATH, i) => writer.write(i, UTF8String.fromString(status.getPath.toString))
-          case (LENGTH, i) => writer.write(i, status.getLen)
-          case (MODIFICATION_TIME, i) =>
-            writer.write(i, DateTimeUtils.millisToMicros(status.getModificationTime))
-          case (CONTENT, i) =>
-            if (status.getLen > maxLength) {
-              throw QueryExecutionErrors.fileLengthExceedsMaxLengthError(status, maxLength)
-            }
-            val stream = fs.open(status.getPath)
-            try {
-              writer.write(i, stream.readAllBytes())
-            } finally {
-              Closeables.close(stream, true)
-            }
-          case (other, _) =>
-            throw QueryExecutionErrors.unsupportedFieldNameError(other)
+      if (archiveReadEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+        val ignoredPathSegmentRegex =
+          new FileSourceOptions(caseInsensitiveOptions).ignoredPathSegmentRegexPattern
+        SupportsArchiveFormat.readArchiveEntries(
+            path, broadcastedHadoopConf.value.value, ignoredPathSegmentRegex) { (entry, in) =>
+          val entryStatus = new FileStatus(
+            entry.getSize, false, 0, 0, status.getModificationTime,
+            new Path(s"${status.getPath}!/${entry.getName}"))
+          BinaryFileFormat.parse(() => in, entryStatus, requiredSchema, maxLength, filterFuncs)
         }
-        Iterator.single(writer.getRow)
       } else {
-        Iterator.empty
+        BinaryFileFormat.parse(
+          () => fs.open(status.getPath), status, requiredSchema, maxLength, filterFuncs)
       }
     }
   }
@@ -144,6 +143,48 @@ object BinaryFileFormat {
   private[binaryfile] val LENGTH = "length"
   private[binaryfile] val CONTENT = "content"
   private[binaryfile] val BINARY_FILE = "binaryFile"
+  private[binaryfile] val WHOLE_FILE = "wholeFile"
+
+  /**
+   * Builds one row from `status` (path/length/modificationTime) and the bytes of `getContent`,
+   * skipping the row when `filterFuncs` reject `status`. Used for both a standalone file and a
+   * single archive entry (whose `status` describes the entry).
+   */
+  def parse(
+      getContent: () => InputStream,
+      status: FileStatus,
+      schema: StructType,
+      maxLength: Int,
+      filterFuncs: Seq[FileStatus => Boolean]): Iterator[InternalRow] = {
+    if (filterFuncs.forall(_.apply(status))) {
+      val writer = new UnsafeRowWriter(schema.length)
+      writer.resetRowWriter()
+      schema.fieldNames.zipWithIndex.foreach {
+        case (PATH, i) => writer.write(i, UTF8String.fromString(status.getPath.toString))
+        case (LENGTH, i) => writer.write(i, status.getLen)
+        case (MODIFICATION_TIME, i) =>
+          writer.write(i, DateTimeUtils.millisToMicros(status.getModificationTime))
+        case (CONTENT, i) =>
+          // Skipped when the size is unknown (`status.getLen < 0`), which is the case for a
+          // streaming-zip entry sized only by a trailing data descriptor; such an entry is read
+          // unbounded until zip reads move to ZipFile (which exposes entry sizes up front).
+          if (status.getLen > maxLength) {
+            throw QueryExecutionErrors.fileLengthExceedsMaxLengthError(status, maxLength)
+          }
+          val content = getContent()
+          try {
+            writer.write(i, content.readAllBytes())
+          } finally {
+            Closeables.close(content, true)
+          }
+        case (other, _) =>
+          throw QueryExecutionErrors.unsupportedFieldNameError(other)
+      }
+      Iterator.single(writer.getRow)
+    } else {
+      Iterator.empty
+    }
+  }
 
   /**
    * Schema for the binary file data source.
