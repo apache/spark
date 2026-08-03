@@ -3451,7 +3451,7 @@ object UnBase32 {
   private lazy val codec = new CommonsBase32()
 
   def decode(input: UTF8String): Array[Byte] = {
-    codec.decode(input.toString)
+    codec.decode(input.getBytes)
   }
 }
 
