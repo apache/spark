@@ -71,9 +71,7 @@ unary_np_spark_mappings = {
         F.when(c.isNull(), c.cast("double"))
         .when(
             c == 0,
-            F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(
-                F.lit(float("inf"))
-            ),
+            F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
         )
         .otherwise(F.lit(1.0) / c),
     ).otherwise(
