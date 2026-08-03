@@ -109,6 +109,24 @@ class NumPyCompatTestsMixin:
             (np.sinh, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
             (np.square, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
             (np.tanh, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (
+                np.trunc,
+                [
+                    -np.inf,
+                    -64.0,
+                    -2.0,
+                    -1.5,
+                    -0.5,
+                    -0.0,
+                    0.0,
+                    0.5,
+                    1.5,
+                    2.0,
+                    64.0,
+                    np.inf,
+                    np.nan,
+                ],
+            ),
         ):
             with self.subTest(name=np_func.__name__, values=values):
                 pdf = pd.DataFrame({"a": values})
