@@ -42,8 +42,11 @@ import org.apache.spark.util.ArrayImplicits.SparkArrayOps
  * SELECT COUNT(DISTINCT _distinctmapsort) FROM (
  *   SELECT map_sort(map_column) as _distinctmapsort FROM TABLE
  * )
+ *
+ * Distinct arguments are normalized here instead of in [[RewriteDistinctAggregates]] because a
+ * single distinct group without a filter bypasses that rule and is handled by the physical planner.
  */
-object InsertMapSortInAggregateExpressions extends Rule[LogicalPlan] {
+object InsertMapSortInAggregate extends Rule[LogicalPlan] {
   import InsertMapSortExpression._
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -106,7 +109,8 @@ object InsertMapSortInAggregateExpressions extends Rule[LogicalPlan] {
           }
           val distinctInput = if (distinctInputAliases.nonEmpty) {
             // Project complex inputs once because recursive normalization can reference them
-            // repeatedly.
+            // repeatedly. The operator optimization batch later removes these temporary projection
+            // layers with CollapseProject and ColumnPruning.
             Project(child.output ++ distinctInputAliases.values, child)
           } else {
             child

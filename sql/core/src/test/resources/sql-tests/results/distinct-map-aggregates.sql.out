@@ -29,11 +29,17 @@ struct<size(collect_list(DISTINCT m)):int>
 
 
 -- !query
-SELECT COLLECT_LIST(DISTINCT m) FROM distinct_map_data
+SELECT map_entries(m)
+FROM (
+  SELECT EXPLODE(COLLECT_LIST(DISTINCT m)) AS m
+  FROM distinct_map_data
+) AS collected_maps
+ORDER BY element_at(m, 'a')
 -- !query schema
-struct<collect_list(DISTINCT m):array<map<string,int>>>
+struct<map_entries(m):array<struct<key:string,value:int>>>
 -- !query output
-[{"a":1,"b":2},{"a":3}]
+[{"key":"a","value":1},{"key":"b","value":2}]
+[{"key":"a","value":3}]
 
 
 -- !query
@@ -201,11 +207,11 @@ struct<count(DISTINCT named_struct(m, m, n, n)):bigint>
 
 
 -- !query
-SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=false
+SET spark.sql.legacy.mapSortInDistinctAggregates.enabled=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled	false
+spark.sql.legacy.mapSortInDistinctAggregates.enabled	false
 
 
 -- !query
@@ -225,8 +231,20 @@ struct<count(DISTINCT named_struct(m, m)):bigint>
 
 
 -- !query
-SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=true
+SELECT m, COUNT(DISTINCT m)
+FROM distinct_map_data
+GROUP BY m
+ORDER BY element_at(m, 'a')
+-- !query schema
+struct<m:map<string,int>,count(DISTINCT m):bigint>
+-- !query output
+{"a":1,"b":2}	1
+{"a":3}	1
+
+
+-- !query
+SET spark.sql.legacy.mapSortInDistinctAggregates.enabled=true
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled	true
+spark.sql.legacy.mapSortInDistinctAggregates.enabled	true

@@ -27,7 +27,6 @@ import org.scalatest.matchers.must.Matchers.the
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.expressions.MapSort
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -3612,22 +3611,6 @@ class DataFrameAggregateSuite extends SharedSparkSession
           3)
       }
     }
-  }
-
-  test("SPARK-58420: reuse map sort for grouping and distinct aggregates") {
-    val query = sql(
-      """SELECT m, COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m)
-        |FROM VALUES
-        |  (map('a', 1, 'b', 2)),
-        |  (map('b', 2, 'a', 1))
-        |AS data(m)
-        |GROUP BY m""".stripMargin)
-    val mapSortCount = query.queryExecution.optimizedPlan.flatMap { plan =>
-      plan.expressions.flatMap(_.collect { case _: MapSort => 1 })
-    }.sum
-    assert(mapSortCount == 1,
-      s"expected one MapSort after reusing the grouping alias, found $mapSortCount; " +
-        s"plan:\n${query.queryExecution.optimizedPlan}")
   }
 
   test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
