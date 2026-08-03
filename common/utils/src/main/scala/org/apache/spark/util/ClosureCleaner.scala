@@ -37,16 +37,8 @@ import org.apache.spark.internal.Logging
 private[spark] object ClosureCleaner extends Logging {
   /**
    * Per-class memo of which closure methods contain a non-local return, i.e. allocate a
-   * `scala/runtime/NonLocalReturnControl`. The verdict is a pure function of a class's immutable
-   * bytecode, and the classes declaring the closures passed to `runJob` repeat heavily across
-   * jobs (`SparkContext`, `RDD`, `Dataset`, ...), so memoizing avoids a full ASM parse of the
-   * same bytecode on every `clean()` call.
-   *
-   * `ClassValue` rather than a `Map[Class[_], _]` so entries are reclaimed with the class itself;
-   * closure classes are frequently generated at runtime (REPL lines, Ammonite commands, codegen)
-   * and must not be pinned. Note `computeValue` may run more than once concurrently with a single
-   * result installed - harmless, since parsing is idempotent - and if it throws, nothing is
-   * memoized, so the failure recurs rather than being cached.
+   * `scala/runtime/NonLocalReturnControl`. The verdict is a pure function of the class's
+   * immutable bytecode, so one ASM parse per class answers for every `clean()` call.
    */
   private val methodsWithNonLocalReturn = new ClassValue[immutable.Set[String]] {
     override def computeValue(cls: Class[_]): immutable.Set[String] = {
@@ -55,20 +47,13 @@ private[spark] object ClosureCleaner extends Logging {
       if (reader != null) {
         reader.accept(collector, 0)
       } else {
-        // Bytecode unavailable (getClassReader's contract; cf. getInnerClosureClasses). The
-        // fail-fast return check is best-effort, so skip it rather than fail the job.
         logDebug(s"Cannot get class bytes for ${cls.getName}; skipping return-statement check")
       }
-      // toSet yields the shared empty-set singleton in the overwhelmingly common "no non-local
-      // return" case, so the memo costs nothing per class beyond the ClassValue entry itself.
       collector.found.toSet
     }
   }
 
-  /**
-   * Whether `cls` declares a closure method with a non-local return. `implMethodName` restricts
-   * the question to one method; `None` asks whether *any* closure method qualifies.
-   */
+  /** Whether `implMethodName` (any closure method, if `None`) of `cls` has a non-local return. */
   private[util] def hasReturnStatement(cls: Class[_], implMethodName: Option[String]): Boolean = {
     val found = methodsWithNonLocalReturn.get(cls)
     implMethodName match {
@@ -275,12 +260,9 @@ private[spark] object ClosureCleaner extends Logging {
 
       logDebug(s"Cleaning indylambda closure: $implMethodName")
 
-      // A closure that captures nothing has nothing to clean, and this check is O(1) on a
-      // SerializedLambda we already hold - so decide it BEFORE loading and parsing the capturing
-      // class. Skipping the return-statement check below is safe for such closures: a non-local
-      // return compiles to `throw new NonLocalReturnControl(key, value)` where `key` is allocated
-      // in the enclosing method, so a closure containing one necessarily captures that key and
-      // cannot reach here.
+      // A closure with no captured arguments needs no cleaning, and cannot contain a non-local
+      // return (the `NonLocalReturnControl` key is allocated in the enclosing method and would
+      // be captured), so return before loading and parsing the capturing class.
       if (lambdaProxy.getCapturedArgCount == 0) {
         return None
       }
@@ -1133,11 +1115,7 @@ private[spark] object IndylambdaScalaClosures extends Logging {
 private[spark] class ReturnStatementInClosureException
   extends SparkException("Return statements aren't allowed in Spark closures")
 
-/**
- * Collects the names of all closure methods that contain a non-local return, rather than checking
- * a single method, so that one parse can answer the question for every method on the class and
- * the result can be memoized per class (see `ClosureCleaner.methodsWithNonLocalReturn`).
- */
+/** Collects the names of all closure methods that contain a non-local return. */
 private class ReturnStatementCollector extends ClassVisitor(Opcodes.ASM9) {
   val found = Set.empty[String]
 

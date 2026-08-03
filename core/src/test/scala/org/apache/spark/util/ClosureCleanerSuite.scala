@@ -84,8 +84,8 @@ class ClosureCleanerSuite extends SparkFunSuite {
     assert(ClosureCleaner.hasReturnStatement(cls, None))
     // Targeted query with the exact impl method name.
     assert(ClosureCleaner.hasReturnStatement(cls, Some(implMethodName)))
-    // An "$adapted" wrapper name must resolve to the underlying method, matching the previous
-    // ReturnStatementFinder rule (see https://github.com/scala/scala-dev/issues/109).
+    // An "$adapted" wrapper name resolves to the underlying method that holds the closure body
+    // (see https://github.com/scala/scala-dev/issues/109).
     assert(ClosureCleaner.hasReturnStatement(cls, Some(implMethodName + "$adapted")))
     // A method that does not exist on the class must not match.
     assert(!ClosureCleaner.hasReturnStatement(cls, Some("$anonfun$doesNotExist$1")))
