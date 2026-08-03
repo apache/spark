@@ -32,8 +32,8 @@ operations.
 
 ```sql
 UPDATE table_identifier [ [ AS ] table_alias ]
-    [ WITH ( option_key = option_value [ , ... ] ) ]
-    SET column = expression [ , ... ]
+    [ WITH ( key = value [ , ... ] ) ]
+    SET column = value [ , ... ]
     [ WHERE boolean_expression ]
 ```
 
@@ -50,14 +50,19 @@ UPDATE table_identifier [ [ AS ] table_alias ]
     Specifies an optional alias for the target table. The alias may be introduced with or without
     the `AS` keyword.
 
-* **WITH ( option_key = option_value [ , ... ] )**
+* **WITH ( key = value [ , ... ] )**
 
-    Specifies dynamic table options for this `UPDATE` operation. These options are passed to the
-    data source connector when writing to the table. The supported options depend on the connector.
+    Specifies an optional list of dynamic table options passed to the Data Source V2 connector for
+    this statement only. The options allow per-statement tuning without changing the table's
+    persistent configuration. Keys and values are treated as strings; a key that is not a valid
+    identifier can be quoted with backticks. Spark passes options through without validating their
+    names, and connectors may ignore options they do not recognize.
 
-* **SET column = expression [ , ... ]**
+* **SET column = value [ , ... ]**
 
-    Assigns a value to one or more columns. Each value may be an expression or `DEFAULT`. A nested
+    Specifies the columns to update and the values to assign to them. Each `value` is an expression,
+    typically referencing columns of the target table, but it may also be `DEFAULT` or an
+    uncorrelated scalar subquery over another table. A comma separates each assignment. A nested
     field may be targeted by using a qualified column name.
 
 * **WHERE boolean_expression**
@@ -103,5 +108,6 @@ UPDATE employees SET status = 'active';
 ### Related Statements
 
 * [DELETE FROM statement](sql-ref-syntax-dml-delete-from.html)
+* [INSERT TABLE statement](sql-ref-syntax-dml-insert-table.html)
 * [MERGE INTO statement](sql-ref-syntax-dml-merge-into.html)
 * [SELECT statement](sql-ref-syntax-qry-select.html)
