@@ -355,16 +355,20 @@ def verify_output_row_limit(
 
 def verify_iter_result_row_count(
     iterator: Iterator,
-    expected_rows: Union[int, Callable[[], int]],
+    expected_rows: Callable[[], int],
 ) -> Iterator:
-    """Yield elements and verify final row count matches expected exactly."""
+    """Yield elements and verify final row count matches expected exactly.
+
+    ``expected_rows`` is a callable because the expected count is only known once
+    the iterator is fully consumed (input rows are counted lazily as a side effect
+    of pulling batches), so it must be read after this generator is exhausted.
+    """
     actual_rows = 0
     for element in iterator:
         actual_rows += len(element)
         yield element
 
-    expected = expected_rows() if callable(expected_rows) else expected_rows
-    verify_result_row_count(actual_rows, expected)
+    verify_result_row_count(actual_rows, expected_rows())
 
 
 def wrap_udf(f, args_offsets, kwargs_offsets, return_type):
