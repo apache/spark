@@ -29,6 +29,84 @@ framework currently provides **direct worker creation** (local OS
 processes) and is designed for future **indirect creation** (via a
 provisioning service or daemon).
 
+## Architecture
+
+The framework factors into three layers, separating *what the engine sees*
+(transport-agnostic API), *how a worker is provisioned* (local subprocess
+today, pooled / remote later), and *how bytes are moved* (gRPC over UDS
+today).
+
+```
+                       Engine
+                          │
+                          ▼
+              ┌──────────────────────┐
+              │  UDFDispatcherManager│   caches one dispatcher per worker spec
+              └──────────┬───────────┘
+                         │
+                         ▼
+              ┌──────────────────────┐   engine-facing API
+              │  WorkerDispatcher    │   (transport- and provisioning-agnostic)
+              └──────────┬───────────┘
+                         │ creates
+                         ▼
+              ┌──────────────────────┐   holds    ┌─────────────────┐
+              │   WorkerSession      │ ─────────▶ │  WorkerHandle   │
+              │  (one UDF execution) │            │ (release hook)  │
+              └──────────┬───────────┘            └─────────────────┘
+                         │ uses
+                         ▼
+              ┌──────────────────────┐   1 per worker process;
+              │   WorkerConnection   │   shared across all sessions on that worker
+              └──────────────────────┘
+
+   ── Direct mode (core.direct) ─────────────────────────────────────────────
+              DirectWorkerDispatcher   (abstract: spawn / wait / SIGTERM-SIGKILL)
+                   │
+                   └─▶ DirectWorkerProcess  (live subprocess; implements WorkerHandle)
+
+   ── gRPC over UDS (grpc) ─────────────────────────────────────────────
+              DirectGrpcDispatcher     (extends DirectWorkerDispatcher)
+                   │
+                   ├─▶ GrpcWorkerSession    (drives bidi Execute stream)
+                   ├─▶ GrpcWorkerChannel    (ManagedChannel + Netty event loop)
+                   └─▶ UnixDomainSocketTransport  (epoll / kqueue detection)
+```
+
+### Cardinality
+
+| Relationship | Cardinality | Notes |
+|---|---|---|
+| `UDFDispatcherManager` ↔ `WorkerDispatcher` | 1 ↔ N | One dispatcher per worker spec, cached |
+| `WorkerDispatcher` ↔ `WorkerSession` | 1 ↔ N | Sessions are short-lived; dispatcher outlives them |
+| `WorkerDispatcher` ↔ worker process | 1 ↔ N | In direct mode the dispatcher manages a fleet of subprocesses |
+| worker process ↔ `WorkerConnection` | 1 ↔ 1 | One transport per worker |
+| worker process ↔ `WorkerSession` | 1 ↔ N | Future via gRPC stream multiplexing; today effectively 1 ↔ 1 (no pooling yet) |
+| `WorkerSession` ↔ `WorkerHandle` | 1 ↔ 1 | Each session holds one handle; released exactly once on session close |
+| `GrpcWorkerSession` ↔ `Execute` stream | 1 ↔ 1 | One bidi gRPC stream per UDF execution |
+
+### Key ideas
+
+- **Three independent lifecycle scopes.** Dispatcher (per spec), connection
+  (per worker process), session (per UDF execution). The split lets a worker
+  be reused across many UDFs without conflating the transport with the
+  per-execution state machine.
+- **Engine doesn't know the transport.** It sees only `WorkerSession`. A new
+  transport (TCP, named pipe, future remote workers) plugs in via fresh
+  `WorkerDispatcher` / `WorkerConnection` / `WorkerSession` implementations;
+  engine code is unchanged.
+- **Engine doesn't know how the worker was provisioned.** Sessions hold a
+  `WorkerHandle`, not a worker. A future pooled or remotely-leased worker
+  model supplies a different `WorkerHandle` without touching session code.
+- **Lifecycle guards live in base classes; protocol lives in subclasses.**
+  `WorkerSession.init / process / close` are `final` and own the AtomicBoolean
+  guards; subclasses fill `doInit / doProcess / doClose` and do not re-check
+  the contract.
+- **The wire protocol is language-agnostic.** `udf_message.proto` (message
+  types) and `udf_service.proto` (the gRPC service) define it; any worker
+  (Python, Scala, Rust, ...) implementing the proto is consumable by this
+  stack.
+
 ## Sub-packages
 
 ```
@@ -39,26 +117,34 @@ udf/worker/
 │     udf_service.proto           -- UdfWorker gRPC service (Execute, Manage)
 │     common.proto                -- shared enums (UDFWorkerDataFormat, etc.)
 │
-├── core/                         -- abstract interfaces
+├── core/                         -- abstract interfaces (no gRPC dependency)
 │     WorkerDispatcher.scala      -- creates sessions, manages worker lifecycle
 │     WorkerSession.scala         -- per-UDF init/process/cancel/close
 │     WorkerConnection.scala      -- transport channel abstraction
+│     WorkerHandle.scala          -- release hook used by sessions
 │     WorkerSecurityScope.scala   -- security boundary for worker pooling
+│     UDFDispatcherManager.scala  -- caches one dispatcher per worker spec
 │     │
 │     └── direct/                 -- "direct" creation: local OS processes
 │           DirectWorkerDispatcher.scala  -- spawns processes, env lifecycle
-│           DirectWorkerProcess.scala     -- OS process + connection + UDS socket
-│           DirectWorkerSession.scala     -- session backed by a direct process
+│           DirectWorkerProcess.scala     -- OS process + connection + WorkerHandle
 │
-└── grpc/                         -- gRPC transport (gRPC runtime confined here)
-      (generated)                 -- UdfWorkerGrpc service stubs from proto/udf_service.proto
+└── grpc/                         -- gRPC over UDS transport (gRPC runtime confined here)
+      (generated)                    -- UdfWorkerGrpc service stubs from proto/udf_service.proto
+      DirectGrpcDispatcher.scala     -- direct dispatcher speaking gRPC/UDS
+      GrpcWorkerSession.scala        -- drives one bidi Execute stream
+      GrpcWorkerChannel.scala        -- ManagedChannel + Netty event loop
+      UnixDomainSocketTransport.scala -- epoll/kqueue detection
 ```
 
 The `core/` package defines abstract interfaces that are independent of how
-workers are created. The `core/direct/` sub-package implements "direct"
-worker creation where Spark spawns local OS processes. Future packages
-(e.g., `core/indirect/`) can implement alternative creation modes such as
-obtaining workers from a provisioning service or daemon.
+workers are created and what transport carries the protocol. `core/direct/`
+implements "direct" worker creation where Spark spawns local OS processes.
+The `grpc/` module provides the gRPC-over-UDS transport on top of the direct
+provisioning model. Future packages (e.g., `core/indirect/`) can implement
+alternative creation modes such as obtaining workers from a provisioning
+service or daemon, and additional transports can be added alongside `grpc/`
+without touching the engine-facing API.
 
 The `grpc/` module owns the gRPC service-stub generation (from
 `proto/`'s `udf_service.proto`) and the gRPC runtime dependencies. Keeping
@@ -130,9 +216,10 @@ val spec = UDFWorkerSpecification.newBuilder()
     .build())
   .build()
 
-// 2. Create a dispatcher. Use a protocol-specific subclass of
-//    DirectWorkerDispatcher (e.g., gRPC over UDS).
-val dispatcher: WorkerDispatcher = ...
+// 2. Create a dispatcher. DirectGrpcDispatcher is the shipped concrete
+//    implementation (gRPC over UDS).
+val dispatcher: WorkerDispatcher =
+  new org.apache.spark.udf.worker.grpc.DirectGrpcDispatcher(spec)
 
 // 3. Create a session for one UDF execution.
 val session = dispatcher.createSession(securityScope = None)
@@ -184,14 +271,17 @@ build/sbt "udf-worker-core/test" "udf-worker-grpc/test"
 
 ## Current status
 
-This is the **first MVP** providing the core abstraction layer and the
-direct worker dispatcher.
+The framework ships the core abstraction layer, the direct worker dispatcher,
+and the first concrete transport (**gRPC over UDS** via `DirectGrpcDispatcher`).
 The following are left as TODOs:
 
 - **Connection pooling** -- reuse workers across sessions
 - **Security scope isolation** -- partition pools by `WorkerSecurityScope`
 - **Indirect worker creation** -- obtain workers from a service or daemon
-- **Protocol-specific implementations** -- e.g., gRPC over UDS
+- **Protocol-level flow control** -- complement gRPC's transport-level flow
+  control with worker-side acks so the engine can bound in-flight input
+  batches (useful for reduce-style UDFs that hold input without producing
+  output)
 
 ## Design references
 
