@@ -109,6 +109,13 @@ Project [cast(variant_from_entries(array(named_struct(k, a, v, 1), named_struct(
 
 
 -- !query
+select cast(variant_from_entries(cast(array() as array<struct<k:string,v:int>>)) as string)
+-- !query analysis
+Project [cast(variant_from_entries(cast(array() as array<struct<k:string,v:int>>)) as string) AS CAST(variant_from_entries(array()) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
 select cast(variant_from_entries(array(named_struct('k', 'a', 'v', cast(null as int)))) as string)
 -- !query analysis
 Project [cast(variant_from_entries(array(named_struct(k, a, v, cast(null as int)))) as string) AS CAST(variant_from_entries(array(named_struct(k, a, v, CAST(NULL AS INT)))) AS STRING)#x]
@@ -163,6 +170,54 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 40,
     "fragment" : "variant_from_entries(array(1, 2))"
+  } ]
+}
+
+
+-- !query
+select variant_from_entries(array(named_struct('k', 'a')))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"array(named_struct(k, a))\"",
+    "inputType" : "\"ARRAY<STRUCT<k: STRING NOT NULL>>\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"ARRAY\" of pair \"STRUCT\"",
+    "sqlExpr" : "\"variant_from_entries(array(named_struct(k, a)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 58,
+    "fragment" : "variant_from_entries(array(named_struct('k', 'a')))"
+  } ]
+}
+
+
+-- !query
+select variant_from_entries(array(named_struct('k', 1, 'v', 'a')))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"array(named_struct(k, 1, v, a))\"",
+    "inputType" : "\"ARRAY<STRUCT<k: INT NOT NULL, v: STRING NOT NULL>>\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"ARRAY\" of pair \"STRUCT\"",
+    "sqlExpr" : "\"variant_from_entries(array(named_struct(k, 1, v, a)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 66,
+    "fragment" : "variant_from_entries(array(named_struct('k', 1, 'v', 'a')))"
   } ]
 }
 

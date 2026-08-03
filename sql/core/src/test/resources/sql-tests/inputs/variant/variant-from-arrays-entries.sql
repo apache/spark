@@ -25,6 +25,8 @@ select variant_from_arrays(array('a'), array(map(1, 2)));
 
 -- Basic object construction from key/value struct entries.
 select cast(variant_from_entries(array(named_struct('k', 'a', 'v', 1), named_struct('k', 'b', 'v', 2))) as string);
+-- Empty input produces an empty object.
+select cast(variant_from_entries(cast(array() as array<struct<k:string,v:int>>)) as string);
 -- Null values are kept as variant null.
 select cast(variant_from_entries(array(named_struct('k', 'a', 'v', cast(null as int)))) as string);
 -- A null entry makes the whole result null.
@@ -37,5 +39,9 @@ select variant_from_entries(array(named_struct('k', cast(null as string), 'v', 1
 select variant_from_entries(array(named_struct('k', 'a', 'v', 1), named_struct('k', 'a', 'v', 2)));
 -- A non-array-of-pair-struct input is rejected.
 select variant_from_entries(array(1, 2));
+-- A struct with the wrong number of fields is rejected.
+select variant_from_entries(array(named_struct('k', 'a')));
+-- A non-string key type is rejected.
+select variant_from_entries(array(named_struct('k', 1, 'v', 'a')));
 -- A value type that cannot be cast to variant is rejected.
 select variant_from_entries(array(named_struct('k', 'a', 'v', map(1, 2))));
