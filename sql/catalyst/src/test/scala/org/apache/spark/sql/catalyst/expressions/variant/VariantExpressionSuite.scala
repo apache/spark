@@ -686,6 +686,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on nonascii
     testVariantGet("[1, 2, 3]", "$[2147483647]", IntegerType, null)
 
+    Seq("variant_get" -> true, "try_variant_get" -> false).foreach {
+      case (name, failOnError) =>
+        checkErrorInExpression[SparkRuntimeException](
+          VariantGet(BoundReference(0, VariantType, nullable = true), Literal(".a"),
+            IntegerType, failOnError),
+          InternalRow(null),
+          "INVALID_VARIANT_GET_PATH",
+          Map("path" -> ".a", "functionName" -> s"`$name`"))
+    }
+
     checkInvalidPath("")
     checkInvalidPath(".a")
     checkInvalidPath("$1")
@@ -1487,6 +1497,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "abc", "functionName" -> s"`$name`"))
 
+    Seq("variant_insert" -> true, "try_variant_insert" -> false).foreach {
+      case (name, failOnError) =>
+        checkErrorInExpression[SparkRuntimeException](
+          VariantInsert(BoundReference(0, VariantType, nullable = true),
+            Literal.create("abc", StringType), Literal(1), failOnError),
+          InternalRow(null),
+          "INVALID_VARIANT_PATH",
+          Map("path" -> "abc", "functionName" -> s"`$name`"))
+    }
+
     val tooBig = "x".repeat(16 * 1024 * 1024)
     checkInsertUnrecoverableError("{}", "$.a[2000000000]", Literal(1),
       "VARIANT_SIZE_LIMIT",
@@ -1840,6 +1860,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkAppendUnrecoverableError("[]", "abc", Literal(1),
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "abc", "functionName" -> s"`$name`"))
+
+    Seq("variant_array_append" -> true, "try_variant_array_append" -> false).foreach {
+      case (name, failOnError) =>
+        checkErrorInExpression[SparkRuntimeException](
+          VariantArrayAppend(BoundReference(0, VariantType, nullable = true),
+            Literal.create("abc", StringType), Literal(1), failOnError),
+          InternalRow(null),
+          "INVALID_VARIANT_PATH",
+          Map("path" -> "abc", "functionName" -> s"`$name`"))
+    }
     checkErrorInExpression[SparkRuntimeException](
       VariantArrayAppend(Literal(parseJson("[]")), Literal(""), Literal(1)),
       "INVALID_VARIANT_PATH",
