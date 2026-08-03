@@ -24,9 +24,7 @@ from pyspark.sql.types import DoubleType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
 
 
-_pandas_udf_reciprocal = pandas_udf(
-    lambda s: np.reciprocal(s), DoubleType()
-)  # type: ignore[call-overload]
+_pandas_udf_reciprocal = pandas_udf(np.reciprocal, DoubleType())  # type: ignore[call-overload]
 
 
 unary_np_spark_mappings = {
@@ -76,9 +74,7 @@ unary_np_spark_mappings = {
         F.when(c.isNull(), c.cast("double"))
         .when(
             c == 0,
-            F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(
-                F.lit(float("inf"))
-            ),
+            F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
         )
         .otherwise(F.lit(1.0) / c),
     ).otherwise(_pandas_udf_reciprocal(c)),
