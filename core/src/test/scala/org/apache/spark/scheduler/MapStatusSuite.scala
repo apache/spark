@@ -330,19 +330,20 @@ class MapStatusSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-48290: blocks tied at the cutoff size do not bypass the accurate skewed block " +
-    "limit") {
-    // The small blocks are the majority, so the median block size is smallBlockSize. Without the
-    // limit, all of the tied blocks would be recorded, which for a stage of 10000 map tasks would
-    // add more than a gigabyte of map status entries.
+  test("SPARK-48290: every block tied at the cutoff size is recorded, at a bounded cost") {
+    // The small blocks are the majority, so the median block size is smallBlockSize. All of the
+    // tied blocks share one size, so recording them costs a bitmap and that single size, rather
+    // than an id and a size per block, and the number of them does not have to be capped.
     val smallBlocksLength = 25001
     val tiedBlocksLength = 24999
     val smallBlockSize = 1024L
-    // Far more blocks share this size than may be recorded, and it is the cutoff size itself:
-    // it is above the median times the skew factor, so the skew threshold is exactly this size.
+    // Far more blocks share this size than the accurate block number would allow to be recorded
+    // individually, and it is the cutoff size itself: it is above the median times the skew
+    // factor, so the skew threshold is exactly this size.
     val tiedBlockSize = 8 * 1024L
-    val maxAccurateSkewedBlockNumber =
-      config.SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.defaultValue.get
+    // A bitmap over 50000 block ids costs at most 6.25 KiB even when it degenerates to a dense
+    // container, and this one is a single run.
+    val maxRetainedBytes = 8 * 1024
 
     // No skew related config is set: this asserts the out of the box behavior.
     val conf = new SparkConf()
@@ -357,43 +358,44 @@ class MapStatusSuite extends SparkFunSuite {
     assert(Utils.median(allBlocks, false) *
       conf.get(config.SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR) < tiedBlockSize,
       "the cutoff size, not the median times the skew factor, must set the skew threshold")
-    val numSmallBlocks = allBlocks.length - maxAccurateSkewedBlockNumber
-    val avg =
-      (smallBlockSize * smallBlocksLength +
-        tiedBlockSize * (tiedBlocksLength - maxAccurateSkewedBlockNumber)) / numSmallBlocks
 
     val loc = BlockManagerId("a", "b", 10)
-    val mapTaskId = 5L
-    val status = compressAndDecompressMapStatus(MapStatus(loc, allBlocks, mapTaskId))
+    val status = compressAndDecompressMapStatus(MapStatus(loc, allBlocks, 5L))
     assert(status.isInstanceOf[HighlyCompressedMapStatus])
     for (i <- 0 until smallBlocksLength) {
-      assert(status.getSizeForBlock(i) === avg)
+      assert(status.getSizeForBlock(i) === smallBlockSize,
+        "the average size must not be inflated by the tied blocks")
     }
-    // The recorded ties are a window of maxAccurateSkewedBlockNumber tied blocks, in block index
-    // order, starting at the offset the map task id rotates to.
-    val firstAccurateTie = (mapTaskId % tiedBlocksLength).toInt
     for (i <- 0 until tiedBlocksLength) {
-      val isAccurate =
-        i >= firstAccurateTie && i < firstAccurateTie + maxAccurateSkewedBlockNumber
-      val expected = if (isAccurate) compressAndDecompressSize(tiedBlockSize) else avg
-      assert(status.getSizeForBlock(smallBlocksLength + i) === expected,
-        "no more than maxAccurateSkewedBlockNumber blocks may be recorded accurately")
+      assert(status.getSizeForBlock(smallBlocksLength + i) ===
+        compressAndDecompressSize(tiedBlockSize),
+        "every tied block must be recorded so that AQE sees the skew")
     }
+    val retained = SizeEstimator.estimate(status.asInstanceOf[AnyRef])
+    assert(retained < maxRetainedBytes,
+      s"recording $tiedBlocksLength tied blocks retained $retained bytes")
   }
 
-  test("SPARK-48290: blocks tied at the cutoff size rotate across map tasks so that no reducer " +
-    "is hidden") {
-    // One more reducer is tied at the cutoff than may be recorded per map task. Every map task
-    // sees the same distribution, so a fixed tie break would hide the same reducer in every map
-    // status, and MapOutputTracker.getStatistics would report it as the average block size.
-    val smallBlocksLength = 1900
-    val tiedBlocksLength = 101
-    val smallBlockSize = 10 * 1024L
-    val tiedBlockSize = 100 * 1024L
-    val numMapTasks = 2000
-    val maxAccurateSkewedBlockNumber =
-      config.SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.defaultValue.get
-    assert(tiedBlocksLength > maxAccurateSkewedBlockNumber)
+  /**
+   * Asserts that a stage whose skewed reducers are all the same size stays visible to AQE.
+   *
+   * The sizes a reducer is reported to have are what `MapOutputTracker.getStatistics` sums out of
+   * the map statuses, and AQE splits a partition when that sum exceeds
+   * `max(spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes,
+   * spark.sql.adaptive.skewJoin.skewedPartitionFactor * medianPartitionSize)`. Both sides of that
+   * comparison come out of the map statuses, so asserting on the recorded sizes alone can pass
+   * while the skew stays invisible: a skewed block that is not recorded falls back to `avgSize`,
+   * which raises the median, which raises the threshold.
+   */
+  private def assertSkewIsVisibleToAqe(
+      numSmallBlocks: Int,
+      smallBlockSize: Long,
+      numSkewedBlocks: Int,
+      skewedBlockSize: Long,
+      numMapTasks: Int): Unit = {
+    // Defaults of the two AQE configs named above. This suite is in core and cannot read them.
+    val aqeSkewedPartitionThreshold = 256 * 1024 * 1024L
+    val aqeSkewedPartitionFactor = 5
 
     // No skew related config is set: this asserts the out of the box behavior.
     val conf = new SparkConf()
@@ -401,38 +403,73 @@ class MapStatusSuite extends SparkFunSuite {
     doReturn(conf).when(env).conf
     SparkEnv.set(env)
 
-    val allBlocks = createArray(smallBlocksLength, smallBlockSize) ++:
-      createArray(tiedBlocksLength, tiedBlockSize)
+    val numBlocks = numSmallBlocks + numSkewedBlocks
+    val allBlocks = createArray(numSmallBlocks, smallBlockSize) ++:
+      createArray(numSkewedBlocks, skewedBlockSize)
+    assert(skewedBlockSize < conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD),
+      "the skewed blocks must not be recorded as huge blocks")
     val loc = BlockManagerId("a", "b", 10)
     val statuses = (0 until numMapTasks).map { mapTaskId =>
       compressAndDecompressMapStatus(MapStatus(loc, allBlocks, mapTaskId))
     }
+    assert(statuses.head.isInstanceOf[HighlyCompressedMapStatus],
+      s"this distribution must exercise HighlyCompressedMapStatus, got " +
+        statuses.head.getClass.getSimpleName)
 
-    val accurateSize = compressAndDecompressSize(tiedBlockSize)
-    statuses.foreach { status =>
-      val numAccurate =
-        (smallBlocksLength until allBlocks.length).count(status.getSizeForBlock(_) == accurateSize)
-      assert(numAccurate === maxAccurateSkewedBlockNumber,
-        "the accurate skewed block limit must still hold for every map task")
+    val reportedSizes = (0 until numBlocks).map(i => statuses.map(_.getSizeForBlock(i)).sum)
+    val medianReportedSize = reportedSizes.sorted.apply(numBlocks / 2)
+    val skewThreshold = Math.max(aqeSkewedPartitionThreshold,
+      aqeSkewedPartitionFactor * medianReportedSize)
+    val realSize = numMapTasks * skewedBlockSize
+    assert(realSize > skewThreshold,
+      "the test itself is wrong if the skewed reducers do not exceed the threshold in reality")
+    for (i <- numSmallBlocks until numBlocks) {
+      assert(reportedSizes(i) > skewThreshold,
+        s"reducer $i holds $realSize bytes but is reported as ${reportedSizes(i)}, below the " +
+          s"AQE skew threshold of $skewThreshold, so it would never be split")
     }
+  }
 
-    // Summing a reducer over the map statuses is what AQE sees. Each tied reducer loses the tie on
-    // one map task out of tiedBlocksLength, so its total is off by that fraction at worst, instead
-    // of collapsing to the average block size.
-    val realTotal = numMapTasks * accurateSize
-    for (i <- smallBlocksLength until allBlocks.length) {
-      val total = statuses.map(_.getSizeForBlock(i)).sum
-      assert(total > realTotal * 0.98,
-        s"reducer $i must not be hidden behind the average block size")
-      assert(total <= realTotal)
-    }
+  test("SPARK-48290: skewed reducers stay visible to AQE when they outnumber the accurate " +
+    "block limit") {
+    val maxAccurateSkewedBlockNumber =
+      config.SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER.defaultValue.get
+
+    // Every map task sees the same block size distribution, so any rule that records only some of
+    // the blocks tied at the cutoff hides the same reducers in every map status. The cases below
+    // cover the two ways that shows up: too few map tasks for a rotation to reach every tied
+    // reducer, and enough map tasks to reach all of them but never all at once.
+    assertSkewIsVisibleToAqe(
+      numSmallBlocks = 1881,
+      smallBlockSize = 5 * 1024 * 1024L,
+      numSkewedBlocks = maxAccurateSkewedBlockNumber + 20,
+      skewedBlockSize = 50 * 1024 * 1024L,
+      numMapTasks = 10)
+    assertSkewIsVisibleToAqe(
+      numSmallBlocks = 1801,
+      smallBlockSize = 10 * 1024L,
+      numSkewedBlocks = 2 * maxAccurateSkewedBlockNumber,
+      skewedBlockSize = 100 * 1024L,
+      numMapTasks = 10000)
+    // One more tied reducer than may be recorded individually, and far more map tasks than tied
+    // reducers, which is the case a rotation covers most easily.
+    assertSkewIsVisibleToAqe(
+      numSmallBlocks = 1900,
+      smallBlockSize = 10 * 1024L,
+      numSkewedBlocks = maxAccurateSkewedBlockNumber + 1,
+      skewedBlockSize = 100 * 1024L,
+      numMapTasks = 5000)
   }
 
   test("SPARK-48290: recorded skewed block sizes are held in compact storage") {
     // The driver retains one map status per map task for the lifetime of the shuffle, so the
     // accurately recorded sizes must not cost more than a few bytes each. A mutable.Map[Int, Byte]
     // costs an order of magnitude more, through its nodes, bucket array and boxed reduce ids.
-    val smallBlocksLength = 1900
+    // MapStatus.apply only selects HighlyCompressedMapStatus above
+    // spark.shuffle.minNumPartitionsToHighlyCompress, so a status built out of exactly that many
+    // blocks would be a CompressedMapStatus, which ignores the skew factor entirely and would let
+    // this test pass without ever exercising the storage it is about.
+    val smallBlocksLength = 1901
     val skewedBlocksLength = 100
     val smallBlockSize = 10 * 1024L
     val skewedBlockSize = 100 * 1024L
@@ -440,6 +477,9 @@ class MapStatusSuite extends SparkFunSuite {
 
     val allBlocks = createArray(smallBlocksLength, smallBlockSize) ++:
       createArray(skewedBlocksLength, skewedBlockSize)
+    assert(allBlocks.length >
+      new SparkConf().get(config.SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS),
+      "the status under test must be a HighlyCompressedMapStatus")
     val loc = BlockManagerId("a", "b", 10)
 
     def retainedBytes(accurateBlockSkewedFactor: Double): Long = {
@@ -448,7 +488,14 @@ class MapStatusSuite extends SparkFunSuite {
       val env = mock(classOf[SparkEnv])
       doReturn(conf).when(env).conf
       SparkEnv.set(env)
-      SizeEstimator.estimate(compressAndDecompressMapStatus(MapStatus(loc, allBlocks, 5)))
+      val status = compressAndDecompressMapStatus(MapStatus(loc, allBlocks, 5))
+      assert(status.isInstanceOf[HighlyCompressedMapStatus],
+        s"expected a HighlyCompressedMapStatus, got ${status.getClass.getSimpleName}")
+      val numAccurate = (smallBlocksLength until allBlocks.length)
+        .count(status.getSizeForBlock(_) === compressAndDecompressSize(skewedBlockSize))
+      assert(numAccurate === (if (accurateBlockSkewedFactor > 0) skewedBlocksLength else 0),
+        "the skewed sizes must actually be recorded, or this measures nothing")
+      SizeEstimator.estimate(status.asInstanceOf[AnyRef])
     }
 
     val withoutSkewedSizes = retainedBytes(-1.0)
