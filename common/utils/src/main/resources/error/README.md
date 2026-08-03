@@ -157,6 +157,11 @@ Spark prefers to re-use existing SQLSTATEs, preferably used by multiple vendors.
 For extension Spark claims the `K**` sub-class range.
 If a new class is needed it will also claim the `K0` class.
 
+A SQLSTATE is assigned at the error condition level and applies to all of the condition's
+sub-conditions. A sub-condition that belongs to a different error state than its condition may
+override it by declaring its own `sqlState`; Spark resolves the sub-condition's SQLSTATE first
+and falls back to the condition's.
+
 Internal errors should use the `XX` class. You can subdivide internal errors by component.
 For example: The existing `XXKD0` is used for an internal analyzer error.
 
