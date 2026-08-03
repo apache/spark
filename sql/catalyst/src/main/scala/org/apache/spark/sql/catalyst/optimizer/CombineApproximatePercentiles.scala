@@ -81,6 +81,7 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
 
   private case class PhysicalCompatibilityKey(
       child: Expression,
+      percentage: Expression,
       accuracy: Expression,
       mode: AggregateMode,
       isDistinct: Boolean,
@@ -98,9 +99,10 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
 
   private def physicalCompatibilityKey(
       key: CompatibilityKey,
-      accuracy: Expression): PhysicalCompatibilityKey = PhysicalCompatibilityKey(
+      percentile: ApproximatePercentile): PhysicalCompatibilityKey = PhysicalCompatibilityKey(
     key.child.canonicalized,
-    accuracy.canonicalized,
+    percentile.percentageExpression.canonicalized,
+    percentile.accuracyExpression.canonicalized,
     key.mode,
     key.isDistinct,
     key.filter.map(_.canonicalized))
@@ -150,7 +152,7 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
           isDistinct,
           filter)
         physicalCompatibilityKeys.getOrElseUpdate(
-          physicalCompatibilityKey(key, percentile.accuracyExpression),
+          physicalCompatibilityKey(key, percentile),
           mutable.HashSet.empty) += key
         if (percentile.percentageExpression.dataType == DoubleType) {
           compatible.getOrElseUpdate(key, mutable.ArrayBuffer.empty) += expression
@@ -171,7 +173,7 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
     }.filter { case (key, expressions) =>
       hasSafePhysicalFusion(expressions) && expressions.forall { expression =>
         val percentile = expression.aggregateFunction.asInstanceOf[ApproximatePercentile]
-        val physicalKey = physicalCompatibilityKey(key, percentile.accuracyExpression)
+        val physicalKey = physicalCompatibilityKey(key, percentile)
         // OptimizeOneRowPlan can erase DISTINCT after fusion. Across distinctness boundaries,
         // canonical matches are safe only when their original inputs and filters also match.
         physicalCompatibilityKeys(physicalKey).sizeCompare(1) == 0 &&

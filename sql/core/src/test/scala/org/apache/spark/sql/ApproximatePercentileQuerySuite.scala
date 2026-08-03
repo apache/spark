@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
-import org.apache.spark.{SparkArithmeticException, SparkConf}
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
   ApproximatePercentile, Final, Partial}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DoubleType, TimeType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, TimeType}
 import org.apache.spark.tags.SlowSQLTest
 
 /**
@@ -42,12 +42,15 @@ import org.apache.spark.tags.SlowSQLTest
 class ApproximatePercentileQuerySuite extends SharedSparkSession {
   import testImplicits._
 
-  override protected def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key, "true")
-
   private val table = "percentile_approx"
   private val constantFoldingRule =
     "org.apache.spark.sql.catalyst.optimizer.ConstantFolding"
+
+  private def fusionTest(name: String)(body: => Unit): Unit = test(name) {
+    withSQLConf(SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key -> "true") {
+      body
+    }
+  }
 
   private def excludedRules: Seq[String] = {
     spark.sessionState.conf.optimizerExcludedRules.toSeq
@@ -91,7 +94,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
   }
 
-  test("compatible scalar percentiles share one physical percentile digest") {
+  fusionTest("compatible scalar percentiles share one physical percentile digest") {
     withTempView(table) {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       val query = spark.sql(
@@ -120,7 +123,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
   }
 
-  test("do not fuse duplicate percentages already shared by physical planning") {
+  fusionTest("do not fuse duplicate percentages already shared by physical planning") {
     withTempView(table) {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       val query = spark.sql(
@@ -143,7 +146,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
   }
 
-  test("preserve structural input and filter evaluation") {
+  fusionTest("preserve structural input and filter evaluation") {
     checkAnswer(
       spark.sql(
         """SELECT
@@ -190,21 +193,20 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
   }
 
-  test("do not fuse canonical input or filter collisions") {
-    checkAnswer(
-      spark.sql(
-        """SELECT
-          |  percentile_approx(a + (b + c), 0.5D),
-          |  percentile_approx((a + b) + c, 0.5D),
-          |  percentile_approx((a + b) + c, 0.9D),
-          |  percentile_approx(a + (b + c), 0.9D)
-          |FROM VALUES (
-          |  CAST(10000000000000000 AS DOUBLE),
-          |  CAST(-10000000000000000 AS DOUBLE),
-          |  CAST(1 AS DOUBLE)
-          |) AS t(a, b, c)
-          |""".stripMargin),
-      Row(0.0d, 0.0d, 1.0d, 1.0d))
+  fusionTest("do not fuse canonical input or filter collisions") {
+    checkMatchesUnfusedBaseline(
+      """SELECT
+        |  percentile_approx(a + (b + c), 0.5D),
+        |  percentile_approx((a + b) + c, 0.5D),
+        |  percentile_approx((a + b) + c, 0.9D),
+        |  percentile_approx(a + (b + c), 0.9D)
+        |FROM VALUES (
+        |  CAST(10000000000000000 AS DOUBLE),
+        |  CAST(-10000000000000000 AS DOUBLE),
+        |  CAST(1 AS DOUBLE)
+        |) AS t(a, b, c)
+        |""".stripMargin,
+      expectedDigests = 2)
 
     val crossDistinctCollision =
       """SELECT
@@ -224,9 +226,8 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
     checkAnswer(spark.sql(crossDistinctCollision), unfusedBaseline)
 
-    checkAnswer(
-      spark.sql(
-        """SELECT
+    val filteredArrayCollision = spark.sql(
+      """SELECT
           |  percentile_approx(v, array(0.5D, 0.9D))
           |    FILTER (WHERE a + (b + c) = 0D),
           |  percentile_approx(v, 0.5D)
@@ -239,11 +240,12 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
           |  CAST(-10000000000000000 AS DOUBLE),
           |  CAST(1 AS DOUBLE)
           |) AS t(v, a, b, c)
-          |""".stripMargin),
-      Row(Seq(7, 7), null, null))
+          |""".stripMargin)
+    checkAnswer(filteredArrayCollision, Row(Seq(7, 7), null, null))
+    assertPercentileDigestCount(filteredArrayCollision, 2)
   }
 
-  test("preserve canonically colliding parameters") {
+  fusionTest("preserve canonically colliding parameters") {
     val cases = Seq(
       (
         """SELECT
@@ -274,10 +276,9 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
   }
 
-  test("do not fuse with an existing array that collides after distinct removal") {
-    checkAnswer(
-      spark.sql(
-        """SELECT
+  fusionTest("preserve existing arrays that collide after distinct removal") {
+    val query = spark.sql(
+      """SELECT
           |  percentile_approx(
           |    DISTINCT a + (b + c), array(0.5D, 0.9D)),
           |  percentile_approx(DISTINCT a + (b + c), 0.1D),
@@ -288,26 +289,32 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
           |  CAST(-10000000000000000 AS DOUBLE),
           |  CAST(1 AS DOUBLE)
           |) AS t(a, b, c)
-          |""".stripMargin),
-      Row(Seq(0.0d, 0.0d), 0.0d, 1.0d, 1.0d))
+          |""".stripMargin)
+    checkAnswer(query, Row(Seq(0.0d, 0.0d), 0.0d, 1.0d, 1.0d))
+    assertPercentileDigestCount(query, 3)
   }
 
-  test("fused percentiles use fresh result IDs across CTE references") {
-    checkAnswer(
-      spark.sql(
-        """WITH c AS (
+  fusionTest("fused percentiles use fresh result IDs across CTE references") {
+    val query = spark.sql(
+      """WITH c AS (
           |  SELECT
           |    percentile_approx(v, 0.5D) AS a,
           |    percentile_approx(v, 0.9D) AS b
-          |  FROM VALUES (1), (2), (3), (4), (5) AS t(v)
+          |  FROM range(1, 6) AS t(v)
           |)
           |SELECT c1.a, c1.b, c2.a
           |FROM c AS c1 JOIN c AS c2
-          |""".stripMargin),
-      Row(3, 5, 3))
+          |""".stripMargin)
+    checkAnswer(query, Row(3L, 5L, 3L))
+    val optimizedPlan = query.queryExecution.optimizedPlan
+    assert(optimizedPlan.subqueriesAll.exists(_.exists(_.expressions.exists(_.exists {
+      case percentile: ApproximatePercentile =>
+        percentile.percentageExpression.dataType.isInstanceOf[ArrayType]
+      case _ => false
+    }))), optimizedPlan.numberedTreeString)
   }
 
-  test("preserve percentile inputs across scalar subquery reuse") {
+  fusionTest("preserve percentile inputs across scalar subquery reuse") {
     val query =
       """SELECT
         |  (SELECT named_struct(
@@ -340,7 +347,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
   }
 
-  test("preserve pre-fusion identity across exchange reuse") {
+  fusionTest("preserve pre-fusion identity across exchange reuse") {
     val parameterPairs = Seq(
       ("(1e16D + -1e16D) + 0.5D", "100"),
       ("0.5D", "CAST((1e16D + -1e16D) + 100D AS INT)"),
@@ -391,7 +398,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
   }
 
-  test("identical fused percentiles remain reusable") {
+  fusionTest("identical fused percentiles remain reusable") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.SUBQUERY_REUSE_ENABLED.key -> "true") {
@@ -410,7 +417,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }
   }
 
-  test("fused distinct percentiles keep a single distinct group") {
+  fusionTest("fused distinct percentiles keep a single distinct group") {
     val query = spark.sql(
       """SELECT
         |  count(DISTINCT id),
@@ -426,7 +433,7 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
     }.isEmpty)
   }
 
-  test("combined scalar percentiles preserve empty-input nulls") {
+  fusionTest("combined scalar percentiles preserve empty-input nulls") {
     withTempView(table) {
       Seq.empty[Int].toDF("col").createOrReplaceTempView(table)
       val query = spark.sql(
@@ -438,6 +445,58 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
       checkAnswer(query, Row(null, null))
       assertPercentileDigestCount(query, 1)
     }
+  }
+
+  fusionTest("preserve compressed and merged low-accuracy percentile digests") {
+    val sql =
+      """SELECT
+        |  percentile_approx(id, 0.1D, 100),
+        |  percentile_approx(id, 0.5D, 100),
+        |  percentile_approx(id, 0.9D, 100)
+        |FROM range(0, 50000, 1, 4)
+        |""".stripMargin
+    val baseline = withSQLConf(
+      SQLConf.COMBINE_APPROXIMATE_PERCENTILES_ENABLED.key -> "false") {
+      spark.sql(sql).collect().toSeq
+    }
+
+    val query = spark.sql(sql)
+    checkAnswer(query, baseline)
+    assertPercentileDigestCount(query, 1)
+  }
+
+  fusionTest("fuse compatible percentiles introduced by merged scalar subqueries") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.SUBQUERY_REUSE_ENABLED.key -> "true") {
+      val query = spark.sql(
+        """SELECT
+          |  (SELECT percentile_approx(id, 0.5D) FROM range(10)),
+          |  (SELECT percentile_approx(id, 0.9D) FROM range(10))
+          |""".stripMargin)
+
+      checkAnswer(query, Row(4L, 8L))
+      val digestCounts = query.queryExecution.executedPlan.collectWithSubqueries {
+        case aggregate: ObjectHashAggregateExec =>
+          aggregate.aggregateExpressions.count(
+            _.aggregateFunction.isInstanceOf[ApproximatePercentile])
+      }
+      assert(digestCounts.nonEmpty && digestCounts.forall(_ == 1), digestCounts)
+    }
+  }
+
+  fusionTest("fuse canonical input groups with disjoint percentages independently") {
+    val query = spark.sql(
+      """SELECT
+        |  percentile_approx(a + b, 0.5D),
+        |  percentile_approx(a + b, 0.9D),
+        |  percentile_approx(b + a, 0.25D),
+        |  percentile_approx(b + a, 0.75D)
+        |FROM VALUES (1D, 2D), (3D, 4D), (5D, 6D) AS t(a, b)
+        |""".stripMargin)
+
+    checkAnswer(query, Row(7.0d, 11.0d, 3.0d, 11.0d))
+    assertPercentileDigestCount(query, 2)
   }
 
   test("percentile_approx, single percentile value") {

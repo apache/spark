@@ -71,6 +71,7 @@ class SparkOptimizer(
       InjectRuntimeFilter),
     Batch("MergeSubplans", Once,
       MergeSubplans,
+      CombineApproximatePercentiles,
       RewriteDistinctAggregates),
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates),

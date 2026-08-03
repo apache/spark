@@ -194,6 +194,15 @@ class CombineApproximatePercentilesSuite extends PlanTest {
     assert(firstInput.canonicalized == secondInput.canonicalized)
     assertNotCombined(inputResult)
 
+    val disjointInputPercentages = optimizedAggregate(
+      Alias(percentile(firstInput, 0.5), "first_p50")(),
+      Alias(percentile(firstInput, 0.9), "first_p90")(),
+      Alias(percentile(secondInput, 0.25), "second_p25")(),
+      Alias(percentile(secondInput, 0.75), "second_p75")())
+    assert(percentileAggregates(disjointInputPercentages).map(_.resultId).distinct.size == 2)
+    assert(ordinals(disjointInputPercentages) ==
+      Seq(Some(0), Some(1), Some(0), Some(1)))
+
     val crossDistinctInput = optimizedAggregate(
       Alias(percentile(firstInput, 0.5), "first_p50")(),
       Alias(percentile(firstInput, 0.9), "first_p90")(),
