@@ -417,7 +417,7 @@ object PositionResult {
  * Row-source and column extraction for the SQL `JSON_TABLE` function. Given the JSON input, the
  * (wildcard-free) container path, and whether the row path ended in `[*]`, it produces the
  * per-row JSON documents that the [[org.apache.spark.sql.catalyst.expressions.JsonTable]]
- * generator then projects into columns via [[navigate]].
+ * generator then projects into columns via [[navigateColumns]].
  *
  *   - `$.items[*]` (containerPath `$.items`, `explodeRoot` = true): the container must be an
  *     array; each element becomes a row.
@@ -485,9 +485,10 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
 
   /**
    * Navigates `path` and leaves the parser positioned at the first token of the matched value
-   * (returning `AtValue`), or returns `Missing`/`NullValue`. Unlike [[navigateTo]] this does not
-   * serialize the value or finish consuming the enclosing containers -- the caller either streams
-   * from the current position (array row source) or serializes the single matched value.
+   * (returning `AtValue`), or returns `Missing`/`NullValue`. Unlike the column projection traversal
+   * ([[navigateColumns]]), this does not serialize the value or finish consuming the enclosing
+   * containers -- the caller either streams from the current position (array row source) or
+   * serializes the single matched value.
    */
   private def positionAt(parser: JsonParser, path: Seq[PathInstruction]): PositionResult = {
     path match {
@@ -597,8 +598,10 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
         descendInto(sub, trie, out)
       }
     } else {
-      // Columns only extend deeper (terminals here, if any over a JSON null, stay Missing since a
-      // null has no children to descend into).
+      // Descend for the deeper columns. Any terminal ending at this node resolves to `NullValue`:
+      // the earlier `!isNull` branch already handled non-null terminals, so a terminal reaching
+      // here means the value is a JSON null. Descendant-only slots that do not match stay `Missing`
+      // (a null has no children, so `descendInto` skips it and leaves them untouched).
       if (trie.terminals.nonEmpty) trie.terminals.foreach(out(_) = JsonPathResult.NullValue)
       descendInto(parser, trie, out)
     }
@@ -672,7 +675,10 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
   private def serializeCurrentValue(parser: JsonParser): UTF8String = {
     val output = new ByteArrayOutputStream()
     Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) {
-      generator => generator.copyCurrentStructure(parser)
+      // `copyCurrentStructureExact` preserves floating-point tokens byte-for-byte; the plain
+      // `copyCurrentStructure` may round them for textual formats, which would corrupt a
+      // high-precision fraction before JSON_TABLE casts the reserialized text to DECIMAL/STRING.
+      generator => generator.copyCurrentStructureExact(parser)
     }
     UTF8String.fromBytes(output.toByteArray)
   }
@@ -734,8 +740,13 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
    * If `raw` is a JSON string literal (e.g. `"hi"`), returns its unquoted, unescaped value;
    * otherwise (numbers, booleans, objects, arrays) returns the raw JSON text unchanged. Used to
    * give a value column the string's content rather than its quoted JSON form.
+   *
+   * `raw` is a Jackson-serialized fragment with no leading whitespace, so only a fragment whose
+   * first byte is `"` can be a string literal. Non-string values (the common case) are returned
+   * without constructing a parser at all.
    */
   def unquotedString(raw: UTF8String): UTF8String = {
+    if (raw.numBytes() == 0 || raw.getByte(0) != '"') return raw
     try {
       Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, raw)) { parser =>
         if (parser.nextToken() == JsonToken.VALUE_STRING) {

@@ -436,6 +436,23 @@ class JsonTableSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Seq(Row(1L, 1), Row(2L, 2), Row(3L, 3)))
   }
 
+  test("high-precision fractional value is preserved exactly, not rounded to a double") {
+    // The matched fragment is reserialized before JSON_TABLE casts it. The number carries more
+    // significant digits than a double can hold, so serializing via a lossy float copy would round
+    // it before the DECIMAL/STRING cast sees it. Exact structure copying keeps the digits verbatim.
+    val json = """{"v":123456789.123456789123456789}"""
+    val df = sql(
+      s"""
+        |SELECT * FROM json_table(
+        |  '$json',
+        |  '$$'
+        |  COLUMNS (d DECIMAL(38, 18) PATH '$$.v', s STRING PATH '$$.v')
+        |) AS t
+      """.stripMargin)
+    checkAnswer(df,
+      Seq(Row(BigDecimal("123456789.123456789123456789"), "123456789.123456789123456789")))
+  }
+
   test("array of strings as the row source keeps string content") {
     val df = sql(
       """
