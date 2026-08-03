@@ -70,7 +70,7 @@ class PushDownJoinThroughUnionSuite
     withTempView("fact1", "fact2", "fact3", "dim") {
       withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10485760") {
-        // Twelve rows per branch keeps every branch strictly larger than the dimension table in
+        // Twelve rows per branch keep every branch strictly larger than the dimension table in
         // bytes; the extra ids join with nothing and leave the expected rows unchanged.
         val fact1 = ((1, 10) +: (2, 20) +: (21 to 30).map(i => (i, i * 10))).toDF("id", "amount")
         val fact2 = ((3, 30) +: (4, 40) +: (31 to 40).map(i => (i, i * 10))).toDF("id", "amount")
