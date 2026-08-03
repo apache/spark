@@ -113,6 +113,9 @@ jobs:
             docker=`./dev/is-changed.py -m docker-integration-tests`
             # Skip PySpark, SparkR, TPC-DS when only static UI resources (JS/CSS/HTML) changed.
             # These tests are unaffected by UI static resource modifications.
+            # Also we only run the very slow transpile changes when that logic changes
+            transpile=false
+            static_only=false
             changed_files=$(git diff --name-only "$APACHE_SPARK_REF" HEAD 2>/dev/null)
             if [ -n "$changed_files" ]; then
               static_only=true
@@ -122,8 +125,11 @@ jobs:
                   *) static_only=false; break ;;
                 esac
               done
-            else
-              static_only=false
+              for f in $changed_files; do
+                case "$f" in
+                  *transpile*) transpile=true; break ;;
+                esac
+              done
             fi
             if [ "$static_only" = "true" ]; then
               pyspark=false
@@ -150,7 +156,7 @@ jobs:
             docs=false
             java25=false
           fi
-          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,credential-aws,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
           build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,network-common,network-shuffle,sketch,variant,launcher"`
           precondition="
             {
@@ -170,6 +176,7 @@ jobs:
               \"k8s-integration-tests\" : \"$kubernetes\",
               \"buf\" : \"$buf\",
               \"ui\" : \"$ui\",
+              \"transpile\": \"$transpile\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -276,7 +283,7 @@ jobs:
             mllib-local, mllib, graphx, profiler, pipelines, repl, examples
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
-            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
+            credential-aws, kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
           - yarn
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
@@ -598,7 +605,7 @@ jobs:
     - name: Build Spark
       run: |
         ./build/sbt -Phadoop-3 -Pyarn -Pspark-ganglia-lgpl -Phadoop-cloud -Phive \
-          -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Phive-thriftserver \
+          -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Pcredential-aws -Phive-thriftserver \
           -Pdocker-integration-tests -Pkubernetes-integration-tests -Pvolcano \
           Test/package streaming-kinesis-asl-assembly/assembly connect/assembly assembly/package
     - name: Package compile output
@@ -678,6 +685,11 @@ jobs:
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
       PYSPARK_TEST_TIMEOUT: 450
+      RUN_HYPOTHESIS: ${{ fromJson(needs.precondition.outputs.required).transpile }}
+      # Each generated example runs two full Spark jobs (transpiled vs. interpreted
+      # differential), so the local default of 1000 blows past PYSPARK_TEST_TIMEOUT.
+      # Cap CI fuzz volume; the explicit @example edge seeds still always run.
+      RUN_HYPOTHESIS_MAX_EXAMPLES: 50
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v6
@@ -1125,7 +1137,7 @@ jobs:
       run: |
         export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl clean install
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws clean install
 
   # Documentation build
   docs:

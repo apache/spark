@@ -271,11 +271,15 @@ case class CachedRDDBuilder(
   // partition has been computed -- which otherwise let AQE read rowCount 0 on a non-empty cache and
   // propagate an empty relation, silently dropping rows -- and also yields exact, de-duplicated row
   // count / size.
-  private val partitionStats: PartitionKeyedAccumulator[(Long, Long)] = {
+  private def newPartitionStats(): PartitionKeyedAccumulator[(Long, Long)] = {
     val acc = new PartitionKeyedAccumulator[(Long, Long)]
     cachedPlan.session.sparkContext.register(acc)
     acc
   }
+
+  // Old tasks can still finish after unpersist; isolating each buffer generation prevents their
+  // late updates from making a rebuilt cache appear complete.
+  private var partitionStats = newPartitionStats()
 
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(Utils.abbreviate(cachedPlan.toString, 1024))
@@ -296,11 +300,11 @@ case class CachedRDDBuilder(
     if (_cachedColumnBuffers != null) {
       _cachedColumnBuffers.unpersist(blocking)
       _cachedColumnBuffers = null
-      // The buffers no longer back a live RDD. Reset the one-way "loaded" latch and the keyed
-      // bookkeeping so a rebuild on this builder does not inherit a stale "loaded" state or stale
-      // statistics. Safe to reset in place: every read of the accumulator is under this monitor.
+      // The buffers no longer back a live RDD. Reset the one-way "loaded" latch and install new
+      // bookkeeping so a rebuild on this builder does not inherit stale state or late updates from
+      // tasks that captured the previous generation's accumulator.
       _cachedColumnBuffersAreLoaded = false
-      partitionStats.reset()
+      partitionStats = newPartitionStats()
     }
   }
 
@@ -338,7 +342,9 @@ case class CachedRDDBuilder(
 
   // The id of the accumulator backing this cache's materialization bookkeeping. Exposed only so
   // `CachedTableSuite`'s accumulator-cleanup test can verify it is cleared after uncache + GC.
-  private[sql] def materializationAccumulatorId: Long = partitionStats.id
+  private[sql] def materializationAccumulatorId: Long = synchronized {
+    partitionStats.id
+  }
 
   private def buildBuffers(): RDD[CachedBatch] = {
     val cb = try {
@@ -376,13 +382,18 @@ case class CachedRDDBuilder(
       // no batches).
       var localRows = 0L
       var localBytes = 0L
+      var fullyConsumed = false
       taskContext.addTaskCompletionListener[Unit] { context =>
-        if (!context.isFailed() && !context.isInterrupted()) {
+        if (fullyConsumed && !context.isFailed() && !context.isInterrupted()) {
           accumulator.add((partitionId, (localRows, localBytes)))
         }
       }
       new Iterator[CachedBatch] {
-        override def hasNext: Boolean = it.hasNext
+        override def hasNext: Boolean = {
+          val more = it.hasNext
+          if (!more) fullyConsumed = true
+          more
+        }
         override def next(): CachedBatch = {
           val batch = it.next()
           localBytes += batch.sizeInBytes

@@ -2546,14 +2546,8 @@ case class AsOfJoin(
 
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(5)
 
-  override def output: Seq[Attribute] = {
-    joinType match {
-      case LeftOuter =>
-        left.output ++ right.output.map(_.withNullability(true))
-      case _ =>
-        left.output ++ right.output
-    }
-  }
+  override def output: Seq[Attribute] =
+    AsOfJoin.computeOutput(joinType, left.output, right.output)
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
@@ -2581,6 +2575,19 @@ case class AsOfJoin(
 }
 
 object AsOfJoin {
+
+  /**
+   * Computes the output attributes of an [[AsOfJoin]] given its join type and child outputs.
+   */
+  def computeOutput(
+      joinType: JoinType,
+      leftOutput: Seq[Attribute],
+      rightOutput: Seq[Attribute]): Seq[Attribute] = joinType match {
+    case LeftOuter =>
+      leftOutput ++ rightOutput.map(_.withNullability(true))
+    case _ =>
+      leftOutput ++ rightOutput
+  }
 
   def apply(
       left: LogicalPlan,
@@ -2750,13 +2757,11 @@ object AsOfJoin {
     operand.isInstanceOf[CreateNamedStruct]
 
   private[catalyst] def normalizeMatchOperands(
-      left: LogicalPlan,
-      right: LogicalPlan,
+      leftSet: AttributeSet,
+      rightSet: AttributeSet,
       expr1: Expression,
       operator: MatchComparisonOperator,
       expr2: Expression): (Expression, Expression, MatchComparisonOperator) = {
-    val leftSet = left.outputSet
-    val rightSet = right.outputSet
     val expr1Side = operandJoinSide(expr1, leftSet, rightSet, syntacticIsLeft = true)
     val expr2Side = operandJoinSide(expr2, leftSet, rightSet, syntacticIsLeft = false)
     (expr1Side, expr2Side) match {

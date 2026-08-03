@@ -733,19 +733,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   test(
-    "the reserved framework-column check runs before the SCD2-not-supported gate"
-  ) {
-    // The reserved-name error is more actionable than AUTOCDC_SCD2_NOT_SUPPORTED, so it must win
-    // for an SCD2 flow that both is unsupported and carries a colliding source column. This also
-    // keeps the check meaningful today (before SCD2 is supported) and correct once it lands.
-    val sourceDf = sourceDfWithExtraColumns(Scd2BatchProcessor.startAtColName -> StringType)
-    val ex = intercept[AnalysisException] {
-      newAutoCdcMergeFlow(sourceDf, storedAsScdType = ScdType.Type2)
-    }
-    assert(ex.getCondition == "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT")
-  }
-
-  test(
     "an SCD1 flow with a source column matching an SCD2-only reserved name is allowed"
   ) {
     // SCD1 targets carry no non-prefixed framework columns, so __START_AT / __END_AT are ordinary

@@ -23,10 +23,11 @@ import org.apache.spark.annotation.DeveloperApi;
 
 /**
  * :: DeveloperApi ::
- * Read an OIDC identity token and produces a {@link UserContext}.
+ * Reads an OIDC identity token and produces a {@link UserContext}.
  * <p>
  * Implementation should be stateless with respect to Spark configuration;
  * configuration is passed at construction time.
+ * Implementations must be thread-safe because {@link #load()} may be called concurrently.
  *
  * @since 4.3.0
  */
@@ -35,6 +36,8 @@ public interface TokenIngestor {
 
   /**
    * Attempt to load the current identity token and parse it into a UserContext.
+   * This method may be called repeatedly. Implementations may cache parsed tokens, but must
+   * detect changes to the underlying token source and return the current identity.
    *
    * @return a present Optional containing the UserContext if a valid token is available,
    * or empty if unavailable (e.g. empty content / missing file).

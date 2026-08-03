@@ -99,19 +99,55 @@ class NumPyCompatTestsMixin:
             (np.fabs, [np.iinfo(np.int64).min, -2, 0, 2]),
             (np.fabs, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
             (np.invert, [np.iinfo(np.int64).min, -2, -1, 0, 1, 2, np.iinfo(np.int64).max]),
+            (np.isfinite, [-np.inf, -64.0, -0.0, 0.0, 64.0, np.inf, np.nan]),
+            (np.isinf, [-np.inf, -64.0, -0.0, 0.0, 64.0, np.inf, np.nan]),
             (np.negative, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
             (np.positive, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
             (np.rad2deg, [-np.inf, -64.0, -np.pi, 0.0, np.pi, 64.0, np.inf, np.nan]),
+            (np.rint, [-np.inf, -2.5, -1.5, -0.5, -0.0, 0.0, 0.5, 1.5, 2.5, np.inf, np.nan]),
             (np.sign, [-np.inf, -64.0, -2.0, -0.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
             (np.sinh, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
             (np.square, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
             (np.tanh, [-np.inf, -64.0, -2.0, 0.0, 2.0, 64.0, np.inf, np.nan]),
+            (
+                np.trunc,
+                [
+                    -np.inf,
+                    -64.0,
+                    -2.0,
+                    -1.5,
+                    -0.5,
+                    -0.0,
+                    0.0,
+                    0.5,
+                    1.5,
+                    2.0,
+                    64.0,
+                    np.inf,
+                    np.nan,
+                ],
+            ),
         ):
             with self.subTest(name=np_func.__name__, values=values):
                 pdf = pd.DataFrame({"a": values})
                 psdf = ps.from_pandas(pdf)
 
                 self.assert_eq(np_func(psdf.a), np_func(pdf.a), almost=True)
+
+    def test_np_bitwise_shift_functions(self):
+        pdf = pd.DataFrame(
+            {
+                "value": [np.iinfo(np.int64).min, -2, -1, 0, 1, 2, np.iinfo(np.int64).max],
+                "bits": [-1, 0, 1, 63, 64, 65, 2],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        for np_func in (np.left_shift, np.right_shift):
+            with self.subTest(name=np_func.__name__):
+                self.assert_eq(
+                    np_func(psdf.value, psdf.bits), np_func(pdf.value, pdf.bits), almost=True
+                )
 
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings

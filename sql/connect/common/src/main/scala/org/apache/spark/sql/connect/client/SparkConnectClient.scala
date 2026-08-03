@@ -1207,7 +1207,7 @@ object SparkConnectClient {
           applier.apply(headers)
         } catch {
           case e: Throwable =>
-            applier.fail(Status.UNAUTHENTICATED.withCause(e));
+            applier.fail(Status.UNAUTHENTICATED.withCause(e))
         }
       })
     }

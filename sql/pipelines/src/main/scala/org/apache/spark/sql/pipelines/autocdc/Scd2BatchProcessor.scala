@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
@@ -199,7 +199,7 @@ case class Scd2BatchProcessor(
   private def projectTargetColumnsOntoMicrobatch(
       microbatch: DataFrame
   ): DataFrame = {
-    val caseSensitive = microbatch.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val resolver = microbatch.sparkSession.sessionState.conf.resolver
 
     // Strip the framework columns through the same case-aware path as the user selection, for
     // consistency with Scd1BatchProcessor.projectTargetColumnsOntoMicrobatch.
@@ -211,14 +211,14 @@ case class Scd2BatchProcessor(
           Scd2BatchProcessor.reservedFrameworkColNames.toSeq.map(UnqualifiedColumnName(_))
         )
       ),
-      caseSensitive = caseSensitive
+      resolver = resolver
     )
     val userSelectedDataSchema =
       ColumnSelection.applyToSchema(
         schemaName = "microbatch",
         schema = dataSchema,
         columnSelection = changeArgs.columnSelection,
-        caseSensitive = caseSensitive
+        resolver = resolver
       )
     val finalColumnsToSelect: Seq[Column] =
       userSelectedDataSchema.fieldNames.toSeq.map(colName => {
@@ -927,7 +927,7 @@ case class Scd2BatchProcessor(
     Scd2BatchProcessor.computeTrackedHistoryColumns(
       schema = df.schema,
       changeArgs = changeArgs,
-      caseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+      resolver = df.sparkSession.sessionState.conf.resolver
     )
 
   /**
@@ -1335,7 +1335,7 @@ object Scd2BatchProcessor {
    * CDC metadata column field that represents the exact time (sequence) of the CDC event that
    * produced this row. Null only for synthetic decomposition tails.
    */
-  private[autocdc] val recordStartAtFieldName: String = "__RECORD_START_AT"
+  private[pipelines] val recordStartAtFieldName: String = "__RECORD_START_AT"
 
   /**
    * Aux-table only column that holds the microbatch id by which a row was logically
@@ -1413,8 +1413,7 @@ object Scd2BatchProcessor {
   private[pipelines] def computeTrackedHistoryColumns(
       schema: StructType,
       changeArgs: ChangeArgs,
-      caseSensitive: Boolean): Seq[String] = {
-    val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+      resolver: Resolver): Seq[String] = {
     val keyColNames = changeArgs.keys.map(_.name)
 
     val eligibleSchema = StructType(schema.fields.filterNot { field =>
@@ -1427,7 +1426,7 @@ object Scd2BatchProcessor {
         schemaName = "trackHistorySelection",
         schema = eligibleSchema,
         columnSelection = changeArgs.trackHistorySelection,
-        caseSensitive = caseSensitive
+        resolver = resolver
       )
       .fieldNames
       .toImmutableArraySeq

@@ -673,6 +673,85 @@ class PlanParserSuite extends AnalysisTest {
         stop = 115))
   }
 
+  test("unnest in FROM clause") {
+    def unnest(
+        exprs: Seq[Expression],
+        withOrdinality: Boolean = false): LogicalPlan =
+      Generate(
+        Unnest(exprs, withOrdinality),
+        unrequiredChildIndex = Nil,
+        outer = false,
+        qualifier = None,
+        generatorOutput = Nil,
+        child = OneRowRelation())
+
+    // Single array.
+    assertEqual(
+      "select * from unnest(array(1, 2, 3))",
+      unnest(Seq(UnresolvedFunction("array", Seq(Literal(1), Literal(2), Literal(3)),
+        isDistinct = false))).select(star()))
+
+    // Multiple arrays.
+    assertEqual(
+      "select * from unnest(a, b)",
+      unnest(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b"))).select(star()))
+
+    // WITH ORDINALITY.
+    assertEqual(
+      "select * from unnest(a) with ordinality",
+      unnest(Seq(UnresolvedAttribute("a")), withOrdinality = true).select(star()))
+
+    // Table alias only.
+    assertEqual(
+      "select * from unnest(a) t",
+      unnest(Seq(UnresolvedAttribute("a"))).as("t").select(star()))
+
+    // Table alias with column aliases.
+    assertEqual(
+      "select * from unnest(a, b) t(x, y)",
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("x", "y"),
+          unnest(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b"))))).select(star()))
+
+    // Correlated via LATERAL, with WITH ORDINALITY and column aliases.
+    assertEqual(
+      "select * from t, lateral unnest(t.arr) with ordinality u(v, o)",
+      table("t").lateralJoin(
+        SubqueryAlias(
+          "u",
+          UnresolvedSubqueryColumnAliases(
+            Seq("v", "o"),
+            unnest(Seq(UnresolvedAttribute(Seq("t", "arr"))), withOrdinality = true))))
+        .select(star()))
+
+    // With no arguments the dedicated UNNEST relation rule does not match; the statement instead
+    // parses as a generic table-valued function call named `unnest`, which is not registered and
+    // therefore fails later during analysis rather than at parse time.
+    assertEqual(
+      "select * from unnest()",
+      UnresolvedTableValuedFunction("unnest", Nil).select(star()))
+
+    // `UNNEST` and `ORDINALITY` are non-reserved keywords, so they remain usable as regular
+    // table and column identifiers for backwards compatibility.
+    assertEqual(
+      "select ordinality from unnest",
+      table("unnest").select($"ordinality"))
+    assertEqual(
+      "select unnest.ordinality from unnest",
+      table("unnest").select($"unnest.ordinality"))
+
+    // Quoting the name bypasses the UNNEST relation syntax, so a table-valued function named
+    // `unnest` can still be invoked. This is the escape hatch for the non-reserved keyword.
+    assertEqual(
+      "select * from `unnest`(array(1, 2))",
+      UnresolvedTableValuedFunction(
+        "unnest",
+        Seq(UnresolvedFunction("array", Seq(Literal(1), Literal(2)), isDistinct = false)))
+        .select(star()))
+  }
+
   test("joins") {
     // Test single joins.
     val testUnconditionalJoin = (sql: String, jt: JoinType) => {

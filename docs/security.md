@@ -982,6 +982,23 @@ The following options provides finer-grained control for this feature:
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.security.directCredentialProviders.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    When true, enables credential collection and renewal without Kerberos. Providers
+    registered via <code>HadoopDelegationTokenProvider</code> are called directly (without
+    <code>doLogin</code>/<code>doAs</code>) and participate in the same renewal and
+    distribution lifecycle as Kerberos delegation token providers. Providers that require
+    Kerberos self-gate via their <code>delegationTokensRequired</code> method.
+    Requires RPC channel encryption: either <code>spark.ssl.rpc.enabled=true</code>,
+    or <code>spark.authenticate=true</code> together with
+    <code>spark.network.crypto.enabled</code> or
+    <code>spark.authenticate.enableSaslEncryption</code>.
+    Supported on YARN, Kubernetes, and local mode. Not supported on standalone clusters.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.kerberos.access.hadoopFileSystems</code></td>
   <td>(none)</td>
   <td>
