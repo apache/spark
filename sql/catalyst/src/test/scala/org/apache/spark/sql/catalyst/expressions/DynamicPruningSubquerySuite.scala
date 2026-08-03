@@ -26,6 +26,7 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
 
   private val validDynamicPruningSubquery = DynamicPruningSubquery(
     pruningKey = pruningKeyExpression,
+    pruningPlanOutput = Seq.empty,
     buildQuery = Project(Seq(AttributeReference("id", IntegerType)()),
       LocalRelation(AttributeReference("id", IntegerType)())),
     buildKeys = Seq(pruningKeyExpression),
@@ -95,6 +96,7 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
 
     val dpq1 = DynamicPruningSubquery(
       pruningKey = Literal(1),
+      Seq.empty,
       buildQuery = LocalRelation(attr1),
       buildKeys = Seq(attr1),
       broadcastKeyIndices = Seq(0),
@@ -102,6 +104,7 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
 
     val dpq2 = DynamicPruningSubquery(
       pruningKey = Literal(1),
+      Seq.empty,
       buildQuery = LocalRelation(attr2),
       buildKeys = Seq(attr2),
       broadcastKeyIndices = Seq(0),
