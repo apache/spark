@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect
 
 import scala.util.matching.Regex
 
-import org.apache.spark.{sql => sqlCore}
+import org.apache.spark.sql
 
 /**
  * Overrides test utils to implement 'connect variants' of suites declared in sql/core:
@@ -40,7 +40,7 @@ trait SessionQueryTest extends sqlCore.SessionQueryTest with SparkSessionBinder 
   /**
    * Approximates [[sql.SessionQueryTest.isDfSorted]] by inspecting the explain string.
    */
-  override def isDfSorted(df: sqlCore.DataFrame): Boolean = df match {
+  override def isDfSorted(df: org.apache.spark.sql.DataFrame): Boolean = df match {
     case df: DataFrame => sortOperator.unanchored.matches(df.explainString(extended = false))
     case df => super.isDfSorted(df)
   }
