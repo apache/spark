@@ -113,8 +113,8 @@ private[spark] class StreamingShuffleManager extends PipelinedShuffleManager wit
 
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     // No manager-side state to release here: the driver's StreamingShuffleOutputTracker is
-    // unregistered in BlockManagerStorageEndpoint's RemoveShuffle handler, and per-task writer
-    // and reader resources are released via task completion listeners.
+    // unregistered in ContextCleaner.doCleanupShuffle (its state is driver-only), and per-task
+    // writer and reader resources are released via task completion listeners.
     true
   }
 
