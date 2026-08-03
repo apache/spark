@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
-import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystRuntimeFiltering, V2StatisticsUtils}
+import org.apache.spark.sql.internal.connector.{SupportsRuntimeCatalystFiltering, V2StatisticsUtils}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -197,13 +197,13 @@ case class DataSourceV2ScanRelation(
   /**
    * Resolved attributes that the scan declares for runtime filtering via
    * [[SupportsRuntimeV2Filtering.filterAttributes]] or
-   * [[SupportsPushDownCatalystRuntimeFiltering.filterAttributes]]. Empty when the scan
+   * [[SupportsRuntimeCatalystFiltering.filterAttributes]]. Empty when the scan
    * implements neither interface or exposes no attributes.
    */
   lazy val runtimeFilterAttrs: AttributeSet = {
     val filterAttrs = scan match {
       case s: SupportsRuntimeV2Filtering => s.filterAttributes
-      case s: SupportsPushDownCatalystRuntimeFiltering => s.filterAttributes
+      case s: SupportsRuntimeCatalystFiltering => s.filterAttributes
       case _ => Array.empty[NamedReference]
     }
     AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
@@ -215,7 +215,7 @@ case class DataSourceV2ScanRelation(
    */
   lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
     val filterAttrs = scan match {
-      case s: SupportsPushDownCatalystRuntimeFiltering => s.fullyPushedFilterAttributes()
+      case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes
       case _ => Array.empty[NamedReference]
     }
     AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](

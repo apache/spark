@@ -26,14 +26,14 @@ import InMemoryCatalystRuntimeFilterTable._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
-import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystRuntimeFiltering
+import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
  * In-memory table whose batch scan implements
- * [[SupportsPushDownCatalystRuntimeFiltering]], so runtime filters arrive as Catalyst
+ * [[SupportsRuntimeCatalystFiltering]], so runtime filters arrive as Catalyst
  * [[Expression]]s rather than connector predicates.
  *
  * Table properties:
@@ -74,7 +74,7 @@ class InMemoryCatalystRuntimeFilterTable(
       tableSchema: StructType,
       options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema)
-    with SupportsPushDownCatalystRuntimeFiltering {
+    with SupportsRuntimeCatalystFiltering {
 
     private val _catalystPredicates = ArrayBuffer.empty[Expression]
 
@@ -91,7 +91,7 @@ class InMemoryCatalystRuntimeFilterTable(
       }
     }
 
-    override def fullyPushedFilterAttributes(): Array[NamedReference] = {
+    override def fullyPushedFilterAttributes: Array[NamedReference] = {
       val fullyPushedFilterAttrs = Option(
         InMemoryCatalystRuntimeFilterTable.this.properties.get(FullyPushedFilterAttributesKey))
         .map(_.split(",").map(_.trim).toSet)
@@ -104,7 +104,7 @@ class InMemoryCatalystRuntimeFilterTable(
     override def filter(expressions: Array[Expression]): Unit =
       _catalystPredicates ++= expressions
 
-    override def pushedPredicates(): Array[Expression] =
+    override def pushedPredicates: Array[Expression] =
       _catalystPredicates.toArray
   }
 }

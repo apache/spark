@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.read.Scan
  *
  * Note that Spark will push runtime filters only if they are beneficial.
  */
-trait SupportsPushDownCatalystRuntimeFiltering extends Scan {
+trait SupportsRuntimeCatalystFiltering extends Scan {
 
   /**
    * Returns attributes this scan can be filtered by at runtime.
@@ -49,7 +49,7 @@ trait SupportsPushDownCatalystRuntimeFiltering extends Scan {
    * and will not be evaluated again after the scan. These attributes must also be returned by
    * [[filterAttributes]].
    */
-  def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
+  def fullyPushedFilterAttributes: Array[NamedReference] = Array.empty
 
   /**
    * Filters this scan using runtime Catalyst expressions.
@@ -73,5 +73,5 @@ trait SupportsPushDownCatalystRuntimeFiltering extends Scan {
    * It's possible that there are no runtime predicates and [[filter]] is never called;
    * an empty array should be returned for this case.
    */
-  def pushedPredicates(): Array[Expression] = Array.empty
+  def pushedPredicates: Array[Expression] = Array.empty
 }

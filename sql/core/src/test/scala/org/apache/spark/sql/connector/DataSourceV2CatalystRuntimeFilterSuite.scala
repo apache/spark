@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.IntegerType
 
 /**
  * Tests for scans that implement
- * [[org.apache.spark.sql.internal.connector.SupportsPushDownCatalystRuntimeFiltering]],
+ * [[org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering]],
  * where runtime filters are pushed once as Catalyst expressions instead of connector
  * predicates.
  */
@@ -245,7 +245,7 @@ class DataSourceV2CatalystRuntimeFilterSuite
   private def getPushedCatalystPredicates(df: DataFrame): Seq[Expression] = {
     collectBatchScan(df).scan match {
       case s: InMemoryCatalystRuntimeFilterTable#InMemoryCatalystRuntimeFilterBatchScan =>
-        s.pushedPredicates().toSeq
+        s.pushedPredicates.toSeq
       case _ => Seq.empty
     }
   }

@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, Sam
 import org.apache.spark.sql.execution.{InSubqueryExec, ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters, SupportsPushDownCatalystRuntimeFiltering}
+import org.apache.spark.sql.internal.connector.{PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters, SupportsRuntimeCatalystFiltering}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
@@ -175,7 +175,7 @@ object PushDownUtils extends Logging {
    * evaluate it twice with different results. `DataSourceV2Strategy` enforces this where
    * `runtimeFilters` is built (SPARK-58207).
    *
-   * A scan implementing [[SupportsPushDownCatalystRuntimeFiltering]] takes a separate path: all
+   * A scan implementing [[SupportsRuntimeCatalystFiltering]] takes a separate path: all
    * runtime filters are pushed as Catalyst expressions in a single call, with no translation to
    * connector predicates and no `filterAttributes` gating. The two paths are mutually exclusive.
    *
@@ -223,7 +223,7 @@ object PushDownUtils extends Logging {
 
         translatedFiltersPushed || partPredicatesPushed
 
-      case catalystScan: SupportsPushDownCatalystRuntimeFiltering if runtimeFilters.nonEmpty =>
+      case catalystScan: SupportsRuntimeCatalystFiltering if runtimeFilters.nonEmpty =>
         // A DPP filter degrades to TrueLiteral when its subquery is pruned away; it carries no
         // information for the source. The V2 path above drops these implicitly because
         // translateRuntimeFilterV2 returns None; here we push Catalyst expressions directly,
