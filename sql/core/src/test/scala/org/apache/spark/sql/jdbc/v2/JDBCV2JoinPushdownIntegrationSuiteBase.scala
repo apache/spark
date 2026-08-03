@@ -229,8 +229,6 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
 
   protected val supportsColumnPruning: Boolean = true
 
-  protected val supportsJoinPushdown: Boolean = true
-
   // Condition-less joins are not supported in join pushdown
   test("Test that 2-way join without condition should not have join pushed down") {
     val sqlQuery =
@@ -507,48 +505,42 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
          |GROUP BY t1.id, t1.address
          |""".stripMargin
 
-    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+    val rowsNoPushdown = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
       sql(sqlQuery).collect().toSeq
     }
 
-    assert(rows.nonEmpty)
+    assert(rowsNoPushdown.nonEmpty)
 
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
-
-      if (supportsJoinPushdown) {
-        checkJoinPushed(df)
-        checkAggregateRemoved(df, supportsAggregatePushdown)
-      }
-      checkAnswer(df, rows)
+      checkJoinPushed(df)
+      checkAggregateRemoved(df, supportsAggregatePushdown)
+      checkAnswer(df, rowsNoPushdown)
     }
   }
 
-  test("Test multi-way left outer join with function in join condition") {
+  test("Test multi-way join with function in join condition") {
     val sqlQuery =
       s"""
          |SELECT a.id, c.address, d.address, a.amount
          |FROM $catalogAndNamespace.$casedJoinTableName1 a
-         |LEFT JOIN $catalogAndNamespace.$casedJoinTableName1 c
+         |JOIN $catalogAndNamespace.$casedJoinTableName1 c
          |  ON a.address = c.address
-         |LEFT JOIN $catalogAndNamespace.$casedJoinTableName1 d
+         |JOIN $catalogAndNamespace.$casedJoinTableName1 d
          |  ON LOWER(a.address) = LOWER(d.address)
          |WHERE a.amount >= 1000
          |""".stripMargin
 
-    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+    val rowsNoPushdown = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
       sql(sqlQuery).collect().toSeq
     }
 
-    assert(rows.nonEmpty)
+    assert(rowsNoPushdown.nonEmpty)
 
     withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
       val df = sql(sqlQuery)
-
-      if (supportsJoinPushdown) {
-        checkJoinPushed(df)
-      }
-      checkAnswer(df, rows)
+      checkJoinPushed(df)
+      checkAnswer(df, rowsNoPushdown)
     }
   }
 
