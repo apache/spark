@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.plans.MatchComparisonOperator
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -73,24 +74,23 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
       }
       val resolvedJoin = (matchLeft, matchOp, matchRight) match {
         case (Some(leftExpr), Some(operator), Some(rightExpr)) =>
-          AsOfJoinValidation.validateMatchConditionTableReferences(
-            joinBase, left, right, leftExpr, rightExpr)
-          if (leftExpr.resolved && rightExpr.resolved) {
-            AsOfJoinValidation.validateMatchConditionOperands(joinBase, leftExpr, rightExpr)
-            val (leftOperand, rightOperand, normalizedOp) =
-              AsOfJoin.normalizeMatchOperands(left, right, leftExpr, operator, rightExpr)
-            val (asOfCondition, orderExpression, leftSortExprs, rightSortExprs) =
-              AsOfJoin.materializeMatchComparison(leftOperand, rightOperand, normalizedOp)
-            joinBase.copy(
-              asOfCondition = asOfCondition,
-              orderExpression = orderExpression,
-              leftSortExprs = leftSortExprs,
-              rightSortExprs = rightSortExprs,
-              matchLeftOperand = None,
-              matchOperator = None,
-              matchRightOperand = None)
-          } else {
-            joinBase
+          AsOfJoinMatchConditionResolution.materialize(
+            join = joinBase,
+            leftSet = left.outputSet,
+            rightSet = right.outputSet,
+            leftOperand = leftExpr,
+            operator = operator,
+            rightOperand = rightExpr) match {
+            case Some(materialized) =>
+              joinBase.copy(
+                asOfCondition = materialized.asOfCondition,
+                orderExpression = materialized.orderExpression,
+                leftSortExprs = materialized.leftSortExpressions,
+                rightSortExprs = materialized.rightSortExpressions,
+                matchLeftOperand = None,
+                matchOperator = None,
+                matchRightOperand = None)
+            case None => joinBase
           }
         case (None, None, None) => joinBase
         case _ => joinBase
@@ -107,17 +107,75 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
   }
 }
 
+/**
+ * The executable [[AsOfJoin]] fields that a SQL `MATCH_CONDITION` clause materializes into.
+ */
+private[analysis] case class MaterializedMatchCondition(
+    asOfCondition: Expression,
+    orderExpression: Expression,
+    leftSortExpressions: Seq[Expression],
+    rightSortExpressions: Seq[Expression])
+
+/**
+ * Validates a SQL `MATCH_CONDITION` clause and materializes it into the executable [[AsOfJoin]]
+ * fields, shared by the fixed-point [[ResolveAsOfJoin]] rule and the single-pass
+ * [[org.apache.spark.sql.catalyst.analysis.resolver.AsOfJoinResolver]] so the two analyzers
+ * cannot diverge on match-condition validation or normalization.
+ */
+private[analysis] object AsOfJoinMatchConditionResolution {
+
+  /**
+   * Returns [[None]] while either operand is still unresolved, which the fixed-point analyzer
+   * reaches on iterations before the operands resolve. Table-reference validation runs
+   * regardless, as it only needs the operands' attribute references.
+   */
+  def materialize(
+      join: AsOfJoin,
+      leftSet: AttributeSet,
+      rightSet: AttributeSet,
+      leftOperand: Expression,
+      operator: MatchComparisonOperator,
+      rightOperand: Expression): Option[MaterializedMatchCondition] = {
+    AsOfJoinValidation.validateMatchConditionTableReferences(
+      join = join,
+      leftSet = leftSet,
+      rightSet = rightSet,
+      leftExpr = leftOperand,
+      rightExpr = rightOperand)
+
+    if (leftOperand.resolved && rightOperand.resolved) {
+      AsOfJoinValidation.validateMatchConditionOperands(join, leftOperand, rightOperand)
+      val (normalizedLeft, normalizedRight, normalizedOperator) =
+        AsOfJoin.normalizeMatchOperands(
+          leftSet = leftSet,
+          rightSet = rightSet,
+          expr1 = leftOperand,
+          operator = operator,
+          expr2 = rightOperand)
+      val (asOfCondition, orderExpression, leftSortExpressions, rightSortExpressions) =
+        AsOfJoin.materializeMatchComparison(
+          leftOperand = normalizedLeft,
+          rightOperand = normalizedRight,
+          normalizedOp = normalizedOperator)
+      Some(MaterializedMatchCondition(
+        asOfCondition = asOfCondition,
+        orderExpression = orderExpression,
+        leftSortExpressions = leftSortExpressions,
+        rightSortExpressions = rightSortExpressions))
+    } else {
+      None
+    }
+  }
+}
+
 private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
 
   def validateMatchConditionTableReferences(
       join: AsOfJoin,
-      left: LogicalPlan,
-      right: LogicalPlan,
+      leftSet: AttributeSet,
+      rightSet: AttributeSet,
       leftExpr: Expression,
       rightExpr: Expression): Unit = {
-    val leftSet = left.outputSet
-    val rightSet = right.outputSet
-
     def referencesBothJoinSides(refs: AttributeSet): Boolean = {
       refs.nonEmpty &&
         refs.intersect(leftSet).nonEmpty &&

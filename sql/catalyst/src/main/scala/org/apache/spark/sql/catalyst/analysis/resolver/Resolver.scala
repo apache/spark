@@ -118,6 +118,7 @@ class Resolver(
   private val filterResolver = new FilterResolver(this, expressionResolver)
   private val sortResolver = new SortResolver(this, expressionResolver)
   private val joinResolver = new JoinResolver(this, expressionResolver)
+  private val asOfJoinResolver = new AsOfJoinResolver(this, expressionResolver)
   private val havingResolver = new HavingResolver(this, expressionResolver)
 
   /**
@@ -265,6 +266,8 @@ class Resolver(
         unresolvedPlan match {
           case unresolvedJoin: Join =>
             joinResolver.resolve(unresolvedJoin)
+          case unresolvedAsOfJoin: AsOfJoin =>
+            asOfJoinResolver.resolve(unresolvedAsOfJoin)
           case unresolvedWith: UnresolvedWith =>
             resolveWith(unresolvedWith)
           case withCte: WithCTE =>
@@ -871,7 +874,7 @@ class Resolver(
       summary = operator.origin.context.summary()
     )
 
-  private def throwUnsupportedExprForOperator(
+  private[resolver] def throwUnsupportedExprForOperator(
       operator: LogicalPlan,
       invalidExpressions: Seq[Expression]): Nothing = {
     throw new AnalysisException(
