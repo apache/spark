@@ -20,7 +20,12 @@ package org.apache.spark.sql.pipelines.graph
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
-import org.apache.spark.sql.pipelines.autocdc.{Scd2BatchProcessor, ScdType}
+import org.apache.spark.sql.pipelines.autocdc.{
+  ColumnSelection,
+  Scd2BatchProcessor,
+  ScdType,
+  UnqualifiedColumnName
+}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -242,10 +247,13 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
     stream.addData((1, 2L))
     runPipeline(buildCtx())
 
-    // The dropped auxiliary table must be transparently recreated. The seq=1 record still lives
-    // in the target, and SCD2 reconciliation reads affected rows from the target as well as the
-    // aux table, so the seq=2 event closes the seq=1 record and opens a new one -- the recorded
-    // history survives the aux-table drop.
+    // The dropped auxiliary table must be transparently recreated. Here the seq=1 record also
+    // lives in the target as a visible row, and SCD2 reconciliation reads affected rows from the
+    // target as well as the aux table, so this particular history survives the drop: the seq=2
+    // event still closes the seq=1 record and opens a new one. (This is NOT a general guarantee
+    // that the aux table is disposable -- state the aux holds that is NOT mirrored in the target,
+    // e.g. a tombstone from a delete-only run, is lost on a drop; see the aux-sole-holder test
+    // below.)
     assert(spark.catalog.tableExists(auxTableNameFor("target")))
     checkAnswer(
       spark.table(s"$catalog.$namespace.target"),
@@ -253,6 +261,56 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
         Row(1, 1L, 1L, 2L, scd2Meta(1L)),
         Row(1, 2L, 2L, null, scd2Meta(2L))
       )
+    )
+  }
+
+  test("the auxiliary table durably holds state absent from the target: a tombstone from a " +
+    "delete-only run closes a later lower-sequence upsert") {
+    val session = spark
+    import session.implicits._
+
+    // Unlike the transparently-recreated test above (where the surviving state also lived in the
+    // target as a visible row), here the auxiliary table is the SOLE holder of the state. A
+    // delete-only first run leaves the target empty but records a tombstone at seq=10 in the aux;
+    // the durability of THAT aux-only row is what lets a later, lower-sequence upsert land as a
+    // closed prior record. Drop the aux and this history is gone (the upsert would instead open a
+    // current record) -- which is exactly why the aux is not disposable.
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
+    )
+
+    // Single MemoryStream reused across both runs so the streaming checkpoint can resume.
+    val stream = MemoryStream[(Int, String, Long, Boolean)]
+    def buildCtx(): TestGraphRegistrationContext =
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = stream.toDF().toDF("id", "name", "version", "is_delete"),
+        keys = Seq("id"),
+        sequencing = functions.col("version"),
+        deleteCondition = Some(functions.col("is_delete") === true),
+        columnSelection = Some(ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("is_delete"))
+        )),
+        scdType = ScdType.Type2)
+
+    // Run #1: a delete at seq=10. The target stays empty; the aux records a tombstone at seq=10.
+    stream.addData((1, "alice", 10L, true))
+    runPipeline(buildCtx())
+    checkAnswer(spark.table(s"$catalog.$namespace.target"), Seq.empty)
+    // The tombstone lives only in the aux (marker column set), with no matching visible target row.
+    assert(spark.table(auxTableNameFor("target")).count() == 1,
+      "the delete-only run should record exactly one aux tombstone row")
+
+    // Run #2 (aux retained): a later upsert at seq=5, BELOW the recorded seq=10. Because the aux
+    // still holds the seq=10 tombstone, reconciliation weaves seq=5 in as a closed prior record
+    // ending at 10 rather than an open current record -- state the target alone could not supply.
+    stream.addData((1, "early", 5L, false))
+    runPipeline(buildCtx())
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.target"),
+      Seq(Row(1, "early", 5L, 5L, 10L, scd2Meta(5L)))
     )
   }
 

@@ -30,16 +30,24 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Tests covering SCD Type 2 AutoCDC's interaction with non-key schema evolution across pipeline
  * runs. The SCD2 analog of [[AutoCdcScd1SchemaEvolutionSuite]]; documents the supported additive
- * cases (new top-level columns, broadening column selection) and the cases that fail loudly
- * (incompatible type changes, case-only renames).
+ * cases (new top-level columns, a new field inside an array<struct> element, broadening column
+ * selection) and the cases that fail loudly (incompatible type changes, case-only renames).
  *
  * Unlike SCD1, an SCD2 upsert to an existing key does not overwrite the row: it closes the prior
  * record and opens a new one, so evolution assertions carry the full interval history.
  *
- * Note: the *narrowing* / dropped-column cases (a microbatch narrower than the already-evolved
- * target, incl. dropped nested struct/array fields) are covered by
- * [[AutoCdcScd2ColumnEvolutionSuite]] under SPARK-58418, which makes them reconcile correctly, so
- * they are intentionally not duplicated here.
+ * Scope notes -- cases intentionally covered elsewhere rather than duplicated here:
+ *   - The *narrowing* / dropped-column cases (a microbatch narrower than the already-evolved
+ *     target, incl. dropped nested struct/array fields) live in [[AutoCdcScd2ColumnEvolutionSuite]]
+ *     under SPARK-58418, which makes them reconcile correctly.
+ *   - Changing `trackHistorySelection` between runs -- the SCD2-only evolution axis, which decides
+ *     whether an upsert opens a new record -- is also exercised end-to-end in
+ *     [[AutoCdcScd2ColumnEvolutionSuite]], so it is not repeated here.
+ *
+ * Two SCD1 evolution cases have no SCD2 analog and so are absent here by design: "extra columns on
+ * the target that the AutoCDC flow does not emit are preserved" relies on SCD1's in-place overwrite
+ * (an SCD2 upsert instead reads unemitted target columns as NULL onto the newly-opened record), and
+ * there is no SCD2-specific preservation invariant to assert.
  */
 class AutoCdcScd2SchemaEvolutionSuite
     extends ExecutionTest
@@ -264,6 +272,70 @@ class AutoCdcScd2SchemaEvolutionSuite
     assert(spark.table(auxTableNameFor("target")).schema.fieldNames.contains("name"))
   }
 
+  test("a new field added inside an array<struct> element between runs is added to the " +
+    "target") {
+    val session = spark
+    import session.implicits._
+
+    // SCD2 analog of AutoCdcScd1SchemaEvolutionSuite's array<struct> additive case: unlike the
+    // top-level scalar additions above, this exercises unionByName / mergeSchemas recursing into
+    // an array element struct. Unlike SCD1's overwrite-in-place, the SCD2 upsert closes the prior
+    // record (which never saw `vals.element.b.d`, so it reads NULL there) and opens a new one
+    // carrying the widened value.
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(key INT NOT NULL, version BIGINT NOT NULL, " +
+      s"vals ARRAY<STRUCT<a:INT,b:STRUCT<c:INT>>>, $scd2MetadataDdl)"
+    )
+
+    val stream = MemoryStream[(Int, Long, Int, Int, Int)]
+    def buildCtx(includeD: Boolean): TestGraphRegistrationContext = {
+      val src = stream.toDF().toDF("key", "version", "a", "b_c", "b_d")
+      val inner = if (includeD) {
+        functions.struct(functions.col("b_c").as("c"), functions.col("b_d").as("d"))
+      } else {
+        functions.struct(functions.col("b_c").as("c"))
+      }
+      val projected = src.select(
+        functions.col("key"),
+        functions.col("version"),
+        functions.array(
+          functions.struct(functions.col("a"), inner.as("b"))
+        ).as("vals")
+      )
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projected,
+        keys = Seq("key"),
+        sequencing = functions.col("version"),
+        scdType = ScdType.Type2)
+    }
+
+    // Run #1: element struct is (a, b.c); no b.d yet. Opens key=1's current record at version=1.
+    stream.addData((1, 1L, 1, 1, 99))
+    runPipeline(buildCtx(includeD = false))
+
+    // Run #2 widens the element struct with b.d. The version=2 upsert to key=1 closes its
+    // version=1 record (which predates b.d, so reads NULL) and opens a new one with b.d=2; the
+    // new key=3 lands as an open record with the full widened struct.
+    stream.addData((1, 2L, 1, 1, 2), (3, 1L, 3, 3, 3))
+    runPipeline(buildCtx(includeD = true))
+
+    // Inline-explode flattens the array<struct>; carry the interval bounds to prove the closed
+    // prior record reads NULL for the newly-added nested field.
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.target")
+        .selectExpr("key", "__START_AT", "__END_AT", "inline(vals) as (a, b)")
+        .select("key", "__START_AT", "__END_AT", "a", "b.c", "b.d"),
+      Seq(
+        Row(1, 1L, 2L, 1, 1, null),
+        Row(1, 2L, null, 1, 1, 2),
+        Row(3, 1L, null, 3, 3, 3)
+      )
+    )
+  }
+
   test("broadening the column selection between runs adds the newly-included column to " +
     "the target") {
     val session = spark
@@ -314,10 +386,13 @@ class AutoCdcScd2SchemaEvolutionSuite
     import session.implicits._
 
     // DatasetManager's schema-merge compares schemas case-sensitively, so a target `value` and a
-    // source `Value` are treated as distinct and the merge tries to add `Value` alongside the
-    // existing `value`. Under case-insensitive resolution that collides, and (unlike SCD1, which
-    // surfaces AMBIGUOUS_REFERENCE deeper in the MERGE plan) the SCD2 write path reports
-    // COLUMN_ALREADY_EXISTS when adding the duplicate column.
+    // source `Value` are treated as distinct and the target is evolved to carry both columns.
+    // The failure then surfaces during microbatch reconciliation, not at table/aux creation:
+    // Scd2ForeachBatchHandler.reconcileMicrobatch reads that now-two-column target back and folds
+    // it into the affected-rows `unionByName`; ResolveUnion runs a case-insensitive
+    // duplicate-column check over the union's schema and reports COLUMN_ALREADY_EXISTS. SCD1 has no
+    // such reconcile union and instead surfaces AMBIGUOUS_REFERENCE deeper in the MERGE plan -- so
+    // the same user mistake maps to two different conditions across the SCD types.
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       spark.sql(
         s"CREATE TABLE $catalog.$namespace.target " +

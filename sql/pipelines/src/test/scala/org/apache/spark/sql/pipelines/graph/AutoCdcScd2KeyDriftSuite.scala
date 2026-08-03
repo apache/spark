@@ -424,6 +424,44 @@ class AutoCdcScd2KeyDriftSuite
     )
   }
 
+  test("a pipeline execution whose recorded SCD type differs from the flow's SCD type triggers " +
+    "SCD_TYPE_DRIFT") {
+    // SCD_TYPE_DRIFT is reachable end-to-end from DatasetManager (validateNoScdTypeDrift runs
+    // right after validateNoKeyColumnDrift when evolving the aux table), but the SCD1 suite
+    // structurally cannot cover it, so this SCD2 suite is its home. Pre-create an SCD2-shaped aux
+    // table whose recorded scd-type property is Type1, with matching keys so key-drift validation
+    // passes and the scd-type check is the one that fires, then run a Type2 flow.
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd2MetadataDdl)"
+    )
+    spark.sql(
+      s"""CREATE TABLE ${auxTableNameFor("target")} """ +
+      s"""(id INT NOT NULL, version BIGINT NOT NULL, $scd2MetadataDdl, """ +
+      s"""${Scd2BatchProcessor.deletedByBatchIdColName} BIGINT) """ +
+      s"""TBLPROPERTIES (""" +
+      s"""'${AutoCdcAuxiliaryTable.scdTypePropertyKey}' = '${ScdType.Type1.label}', """ +
+      s"""'${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = '[\"id\"]')"""
+    )
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 1L))
+    val ctx = buildPipeline("flow", stream.toDF().toDF("id", "version"), Seq("id"))
+
+    val ex = intercept[RuntimeException] { runPipeline(ctx) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "AUTOCDC_INVALID_STATE.SCD_TYPE_DRIFT",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
+        "expectedScdType" -> ScdType.Type2.label,
+        "recordedScdType" -> ScdType.Type1.label
+      )
+    )
+  }
+
   /**
    * Build a single-flow SCD2 pipeline targeting `cat.ns1.target` with the given source DF and key
    * column list. Thin wrapper over [[singleAutoCdcFlowPipeline]] since every drift test targets
