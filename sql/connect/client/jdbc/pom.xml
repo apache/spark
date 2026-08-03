@@ -53,6 +53,7 @@
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-api</artifactId>
+      <version>${io.grpc.version}</version>
       <scope>provided</scope>
     </dependency>
   </dependencies>
