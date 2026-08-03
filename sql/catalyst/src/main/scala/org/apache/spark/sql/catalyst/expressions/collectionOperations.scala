@@ -3534,8 +3534,6 @@ case class Sequence(
     val resultCode = {
       val arr = ctx.freshName("arr")
       val arrElemType = CodeGenerator.javaType(dataType.elementType)
-      // `$arr` is reassigned by `impl.genCode` below, so it must not be `final`
-      // (the JDK compiler rejects assigning to a final local; Janino tolerates it).
       s"""
          |$arrElemType[] $arr = null;
          |${impl.genCode(ctx, startGen.value, stopGen.value, stepGen.value, arr, arrElemType)}
