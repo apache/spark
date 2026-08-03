@@ -460,7 +460,7 @@ def post_merge_comment(pr_num, merged_commits):
     ]
     summary = "**Merge Summary:**\n" + "\n".join(lines)
     attribution = "*Posted by `merge_spark_pr.py`*"
-    body = "%s\n%s" % (summary, attribution)
+    body = "%s\n\n%s" % (summary, attribution)
     print(
         "\n%s\n\n%s\n%s"
         % (bold("Posting merge comment on PR #%s:" % pr_num), bold(summary), attribution)
