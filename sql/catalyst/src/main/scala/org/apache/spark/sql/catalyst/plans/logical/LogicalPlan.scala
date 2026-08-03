@@ -243,6 +243,44 @@ trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
 }
 
 /**
+ * A single observation of a fully materialized leaf's current cache generation.
+ */
+private[sql] case class MaterializedLeafMetadata(
+    rowCount: BigInt,
+    sizeInBytes: BigInt,
+    isOutputRepeatable: Boolean,
+    isDurable: Boolean) {
+  def statsAvailable: Boolean = isOutputRepeatable && isDurable
+}
+
+/**
+ * A leaf node that exposes materialization metadata used by
+ * [[org.apache.spark.sql.catalyst.optimizer.InjectRuntimeFilter]] to determine whether its output
+ * can be scanned again safely and profitably to build a runtime filter.
+ */
+private[sql] trait MaterializedLeafNode extends LeafNode {
+  /** A complete, generation-consistent snapshot, if the leaf is fully materialized. */
+  def materializedMetadata: Option[MaterializedLeafMetadata]
+
+  /** Cheap prerequisite for reading potentially usable materialization metadata. */
+  def mayHaveUsableMaterializedStats: Boolean
+
+  /**
+   * Whether the current materialized output has complete, accurate statistics and durable storage
+   * for another scan. This excludes memory-only storage levels, whose blocks may be discarded
+   * under memory pressure and recomputed.
+   */
+  def statsAvailable: Boolean =
+    mayHaveUsableMaterializedStats && materializedMetadata.exists(_.statsAvailable)
+
+  /** Whether scanning the materialized output again returns the same rows. */
+  def isOutputRepeatable: Boolean = materializedMetadata.exists(_.isOutputRepeatable)
+
+  /** Whether the original plan contains a predicate that is likely to be selective. */
+  def hasSelectivePredicate: Boolean
+}
+
+/**
  * A abstract class for LogicalQueryStage that is visible in logical rewrites.
  */
 abstract class LogicalQueryStage extends LeafNode {
