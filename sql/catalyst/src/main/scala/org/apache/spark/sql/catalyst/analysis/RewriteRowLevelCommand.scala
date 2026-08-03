@@ -62,7 +62,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       relation: DataSourceV2Relation,
       command: Command): Unit = {
     if (GeneratedColumn.supportsGeneratedColumnsOnWrite(
-        relation.catalog, relation.table.columns())) {
+        relation.table, relation.table.columns())) {
       throw QueryCompilationErrors.unsupportedTableOperationError(
         relation.catalog.get, relation.identifier.get,
         s"${command.toString} with generated columns")

@@ -478,6 +478,18 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
       `lgNomEntries` is the log-base-2 of nominal entries, with nominal entries deciding
       the number buckets or slots for the TupleSketch. Default is 12.
       `mode` is the aggregation mode for numeric summaries (sum, min, max, alwaysone). Default is sum. """,
+  arguments = """
+    Arguments:
+      * key - The expression used for counting unique values.
+        An expression that evaluates to an array, binary, double, float, integer, long, or string.
+      * summary - The double value to be aggregated as the summary.
+        An expression that evaluates to a double.
+      * lgNomEntries - The log-base-2 of nominal entries, which sets the number of buckets for the
+        TupleSketch.
+        An expression that evaluates to an integer. Must be a constant.
+      * mode - The aggregation mode for numeric summaries (sum, min, max, alwaysone).
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(key, summary, 12, 'sum')) FROM VALUES (1, 5.0D), (1, 1.0D), (2, 2.0D), (2, 3.0D), (3, 2.2D) tab(key, summary);
@@ -510,6 +522,18 @@ object TupleSketchAggDoubleExpressionBuilder extends ExpressionBuilder {
       `lgNomEntries` is the log-base-2 of nominal entries, with nominal entries deciding
       the number buckets or slots for the TupleSketch. Default is 12.
       `mode` is the aggregation mode for numeric summaries (sum, min, max, alwaysone). Default is sum. """,
+  arguments = """
+    Arguments:
+      * key - The expression used for counting unique values.
+        An expression that evaluates to an array, binary, double, float, integer, long, or string.
+      * summary - The integer value to be aggregated as the summary.
+        An expression that evaluates to an integer.
+      * lgNomEntries - The log-base-2 of nominal entries, which sets the number of buckets for the
+        TupleSketch.
+        An expression that evaluates to an integer. Must be a constant.
+      * mode - The aggregation mode for numeric summaries (sum, min, max, alwaysone).
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(key, summary, 12, 'sum')) FROM VALUES (1, 5), (1, 1), (2, 2), (2, 3), (3, 2) tab(key, summary);

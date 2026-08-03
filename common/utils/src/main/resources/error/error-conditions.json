@@ -221,6 +221,12 @@
     ],
     "sqlState" : "42613"
   },
+  "AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST" : {
+    "message" : [
+      "AutoCDC flow specifies both `track_history_column_list` and `track_history_except_column_list`; at most one may be provided."
+    ],
+    "sqlState" : "42613"
+  },
   "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
       "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
@@ -325,17 +331,17 @@
     ],
     "sqlState" : "22023"
   },
+  "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT" : {
+    "message" : [
+      "The column `<columnName>` in the <schemaName> schema collides with a reserved AutoCDC <scdType> column name (using <caseSensitivity> column name comparison). The following column names are reserved by AutoCDC and cannot appear in the source: <reservedColumnNames>. Rename or remove the column."
+    ],
+    "sqlState" : "42710"
+  },
   "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
     "message" : [
       "The column `<columnName>` in the <schemaName> schema collides with the reserved AutoCDC column name prefix `<reservedColumnNamePrefix>` (using <caseSensitivity> column name comparison). Rename or remove the column."
     ],
     "sqlState" : "42710"
-  },
-  "AUTOCDC_SCD2_NOT_SUPPORTED" : {
-    "message" : [
-      "AutoCDC flows do not currently support SCD Type 2 transformations."
-    ],
-    "sqlState" : "0A000"
   },
   "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE" : {
     "message" : [
@@ -343,12 +349,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "AUTOCDC_TRACK_HISTORY_REQUIRES_SCD2" : {
+    "message" : [
+      "AutoCDC flow specifies `track_history_column_list` or `track_history_except_column_list` but is not stored as SCD Type 2; history-tracking columns are only supported for SCD Type 2 target tables."
+    ],
+    "sqlState" : "42613"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
       "To allow null value for this field, specify its avro schema as a union type with \"null\" using `avroSchema` option."
     ],
     "sqlState" : "22004"
+  },
+  "AVRO_DATA_SOURCE_NOT_ENABLED" : {
+    "message" : [
+      "Failed to find data source: <provider>. Avro is built-in but external data source module since Spark 2.4. Please deploy the application as per the deployment section of Apache Avro Data Source Guide."
+    ],
+    "sqlState" : "42K02"
   },
   "AVRO_INCOMPATIBLE_READ_TYPE" : {
     "message" : [
@@ -538,6 +556,44 @@
       "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
     ],
     "sqlState" : "0A000"
+  },
+  "CANNOT_LOAD_CATALOG" : {
+    "message" : [
+      "Cannot load catalog '<name>' with the plugin class '<pluginClassName>':"
+    ],
+    "subClass" : {
+      "ABSTRACT_CLASS" : {
+        "message" : [
+          "the class is abstract and cannot be instantiated."
+        ]
+      },
+      "CONSTRUCTOR_FAILURE" : {
+        "message" : [
+          "the constructor threw an exception during instantiation."
+        ]
+      },
+      "CONSTRUCTOR_NOT_ACCESSIBLE" : {
+        "message" : [
+          "failed to call the public no-arg constructor."
+        ]
+      },
+      "CONSTRUCTOR_NOT_FOUND" : {
+        "message" : [
+          "failed to find the public no-arg constructor."
+        ]
+      },
+      "NOT_A_CATALOG_PLUGIN" : {
+        "message" : [
+          "the class does not implement CatalogPlugin."
+        ]
+      },
+      "PLUGIN_CLASS_NOT_FOUND" : {
+        "message" : [
+          "cannot find the plugin class."
+        ]
+      }
+    },
+    "sqlState" : "46103"
   },
   "CANNOT_LOAD_CHECKPOINT_FILE_MANAGER" : {
     "message" : [
@@ -1064,6 +1120,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "COLUMN_IS_NOT_VARIANT_TYPE" : {
+    "message" : [
+      "The semi-structured extraction operator (`:`) can only be applied to a column of the VARIANT type."
+    ],
+    "sqlState" : "42K09"
+  },
   "COLUMN_NOT_DEFINED_IN_TABLE" : {
     "message" : [
       "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
@@ -1119,6 +1181,12 @@
       "Another instance of this query was just started by a concurrent session."
     ],
     "sqlState" : "0A000"
+  },
+  "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT" : {
+    "message" : [
+      "Cannot run the pipelined stage group: it needs <numTasks> concurrent task slots to run all its stages together, but only <numSlots> are currently free. The stages of a pipelined group must run concurrently, so the cluster must have enough free slots for all of them at once. Provision more executors, or reduce the parallelism of the query."
+    ],
+    "sqlState" : "53000"
   },
   "CONCURRENT_STREAM_LOG_UPDATE" : {
     "message" : [
@@ -1623,6 +1691,12 @@
     ],
     "sqlState" : "22023"
   },
+  "CREATE_EXTERNAL_TABLE_WITHOUT_LOCATION" : {
+    "message" : [
+      "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
+    ],
+    "sqlState" : "42601"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -2043,6 +2117,12 @@
       "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
     ],
     "sqlState" : "42K01"
+  },
+  "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE" : {
+    "message" : [
+      "The <parameter> value <value> of the <type> data type is out of the range of a 32-bit integer."
+    ],
+    "sqlState" : "22003"
   },
   "DATA_SOURCE_ALREADY_EXISTS" : {
     "message" : [
@@ -3235,6 +3315,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "INSERT_REPLACE_ON_COLUMN_LIST_NOT_ALLOWED" : {
+    "message" : [
+      "A column list is not allowed with INSERT INTO ... REPLACE ON."
+    ],
+    "sqlState" : "42000"
+  },
   "INSERT_REPLACE_ON_NOT_ENABLED" : {
     "message" : [
       "INSERT INTO ... REPLACE ON is not enabled. Set 'spark.sql.insertIntoReplaceOn.enabled' to true to enable it."
@@ -3250,6 +3336,12 @@
   "INSERT_REPLACE_USING_NOT_ENABLED" : {
     "message" : [
       "INSERT INTO ... REPLACE USING is not enabled. Set 'spark.sql.insertIntoReplaceUsing.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_WHERE_COLUMN_LIST_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... (column_list) REPLACE WHERE is not enabled. Set 'spark.sql.insertIntoReplaceWhereColumnList.enabled' to true to enable it."
     ],
     "sqlState" : "0A000"
   },
@@ -4577,6 +4669,16 @@
           "Invalid extension: <invalidValue>. Extension is limited to exactly 3 letters (e.g. csv, tsv, etc...)"
         ]
       },
+      "HMAC_ALGORITHM" : {
+        "message" : [
+          "expects one of the algorithms 'SHA-224', 'SHA-256', 'SHA-384', 'SHA-512', 'SHA-1', 'MD5', but got <algorithm>."
+        ]
+      },
+      "HMAC_CRYPTO_ERROR" : {
+        "message" : [
+          "detail message: <detailMessage>"
+        ]
+      },
       "INTEGER" : {
         "message" : [
           "expects an integer literal, but got <invalidValue>."
@@ -4878,6 +4980,11 @@
       "ANALYZE_TABLE_UNEXPECTED_NOSCAN" : {
         "message" : [
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
+        ]
+      },
+      "COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER" : {
+        "message" : [
+          "COMMENT ON COLUMN requires an identifier with at least two parts. Please qualify the column with the table name (e.g. `table.column`, `database.table.column`, or `catalog.database.table.column`)."
         ]
       },
       "CREATE_FUNC_WITH_COLUMN_CONSTRAINTS" : {
@@ -5346,6 +5453,12 @@
     },
     "sqlState" : "42000"
   },
+  "INVALID_XML_SCHEMA_MAP_TYPE" : {
+    "message" : [
+      "Input schema <xmlSchema> can only contain STRING as a key type for a MAP."
+    ],
+    "sqlState" : "2200N"
+  },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
       "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. <externalEngineError>."
@@ -5375,6 +5488,12 @@
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
     ],
     "sqlState" : "42K0E"
+  },
+  "KAFKA_DATA_SOURCE_NOT_ENABLED" : {
+    "message" : [
+      "Failed to find data source: <provider>. Please deploy the application as per the deployment section of Structured Streaming + Kafka Integration Guide."
+    ],
+    "sqlState" : "42K02"
   },
   "KLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
@@ -5667,6 +5786,12 @@
       "Flow with multipart name '<flowName>' is not supported."
     ],
     "sqlState" : "0A000"
+  },
+  "MULTIPLE_DATA_SOURCES" : {
+    "message" : [
+      "Multiple sources found for <provider> (<sourceNames>), please specify the fully qualified class name."
+    ],
+    "sqlState" : "42710"
   },
   "MULTIPLE_EVENT_TIME_COLUMNS" : {
     "message" : [
@@ -6140,6 +6265,12 @@
     ],
     "sqlState" : "22023"
   },
+  "ORC_DATA_SOURCE_REQUIRES_HIVE_SUPPORT" : {
+    "message" : [
+      "Hive built-in ORC data source must be used with Hive support enabled. Please use the native ORC data source by setting 'spark.sql.orc.impl' to 'native'."
+    ],
+    "sqlState" : "0A000"
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
@@ -6534,6 +6665,12 @@
       "<sessionCatalog> requires a single-part namespace, but got identifier <identifier>."
     ],
     "sqlState" : "42K05"
+  },
+  "RESERVED_DATABASE_NAME" : {
+    "message" : [
+      "Cannot create the database <database> because the name is reserved for system use."
+    ],
+    "sqlState" : "42939"
   },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
@@ -7300,6 +7437,30 @@
     ],
     "sqlState" : "42K09"
   },
+  "STREAMING_ASYNC_OPERATION_FAILED" : {
+    "message" : [
+      "Asynchronous streaming operation failed with exception: <message>"
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_CHECKPOINT_LOG_WRITE_FAILURE" : {
+    "message" : [
+      "Failed to write a streaming query checkpoint log entry."
+    ],
+    "subClass" : {
+      "COMMIT_LOG" : {
+        "message" : [
+          "Failed to write commit log entry for batch <batchId> at checkpoint location <checkpointLocation>. Check that the checkpoint location is writable and retry the query."
+        ]
+      },
+      "OFFSET_LOG" : {
+        "message" : [
+          "Failed to write offset log entry for batch <batchId> at checkpoint location <checkpointLocation>. Check that the checkpoint location is writable and retry the query."
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
     "message" : [
       "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
@@ -7362,6 +7523,11 @@
           "Cannot enable streaming source evolution on a checkpoint that was created without it. The existing checkpoint uses offset log format version <existingVersion>, which does not support the named source tracking required by streaming source evolution. To use source evolution, start the query with a fresh checkpoint."
         ]
       },
+      "CONTINUOUS_PROCESSING_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming sink evolution cannot be used together with continuous processing. Continuous processing persists only V1 commit metadata and would silently drop the per-sink metadata that sink evolution requires. Disable sink evolution by setting spark.sql.streaming.queryEvolution.enableSinkEvolution to false, or use a micro-batch trigger instead of Trigger.Continuous."
+        ]
+      },
       "DUPLICATE_SOURCE_NAMES" : {
         "message" : [
           "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
@@ -7400,9 +7566,9 @@
       "Streaming real-time mode has the following limitation:"
     ],
     "subClass" : {
-      "ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED" : {
+      "ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_NON_ZERO" : {
         "message" : [
-          "Async progress tracking is not supported in real-time mode. Set option asyncProgressTrackingEnabled to false and retry your query."
+          "The checkpointing interval for async progress tracking must be set to 0, which means each progress update is checkpointed. Set option asyncProgressTrackingCheckpointIntervalMs to 0 in DataStreamWriter options and retry your query."
         ]
       },
       "IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED" : {
@@ -8058,6 +8224,12 @@
       }
     },
     "sqlState" : "42000"
+  },
+  "UNSUPPORTED_BUILT_IN_JDBC_DIALECT" : {
+    "message" : [
+      "`<name>` is not a supported built-in JDBC dialect. Supported dialects are: <supportedNames>."
+    ],
+    "sqlState" : "22023"
   },
   "UNSUPPORTED_CALL" : {
     "message" : [
@@ -8757,6 +8929,11 @@
       "RAW_MAP" : {
         "message" : [
           "raw java.util.Map. Spark cannot infer the key and value types."
+        ]
+      },
+      "UNKNOWN_TYPE" : {
+        "message" : [
+          "<c>."
         ]
       },
       "WILDCARD" : {
@@ -9619,19 +9796,9 @@
       "<command> does not support nested column: <column>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1066" : {
-    "message" : [
-      "<database> is a system preserved database, you cannot create a database with this name."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1068" : {
     "message" : [
       "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1069" : {
-    "message" : [
-      "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
     ]
   },
   "_LEGACY_ERROR_TEMP_1071" : {
@@ -9759,26 +9926,6 @@
   "_LEGACY_ERROR_TEMP_1137" : {
     "message" : [
       "Unable to resolve <name> given [<outputStr>]."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1138" : {
-    "message" : [
-      "Hive built-in ORC data source must be used with Hive support enabled. Please use the native ORC data source by setting 'spark.sql.orc.impl' to 'native'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1139" : {
-    "message" : [
-      "Failed to find data source: <provider>. Avro is built-in but external data source module since Spark 2.4. Please deploy the application as per the deployment section of Apache Avro Data Source Guide."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1140" : {
-    "message" : [
-      "Failed to find data source: <provider>. Please deploy the application as per the deployment section of Structured Streaming + Kafka Integration Guide."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1141" : {
-    "message" : [
-      "Multiple sources found for <provider> (<sourceNames>), please specify the fully qualified class name."
     ]
   },
   "_LEGACY_ERROR_TEMP_1143" : {
@@ -10866,36 +11013,6 @@
       "Invalid catalog name: <name>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2214" : {
-    "message" : [
-      "Plugin class for catalog '<name>' does not implement CatalogPlugin: <pluginClassName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2215" : {
-    "message" : [
-      "Cannot find catalog plugin class for catalog '<name>': <pluginClassName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2216" : {
-    "message" : [
-      "Failed to find public no-arg constructor for catalog '<name>': <pluginClassName>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2217" : {
-    "message" : [
-      "Failed to call public no-arg constructor for catalog '<name>': <pluginClassName>)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2218" : {
-    "message" : [
-      "Cannot instantiate abstract catalog plugin class for catalog '<name>': <pluginClassName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2219" : {
-    "message" : [
-      "Failed during instantiating constructor for catalog '<name>': <pluginClassName>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2220" : {
     "message" : [
       ""
@@ -11495,21 +11612,6 @@
   "_LEGACY_ERROR_TEMP_3089" : {
     "message" : [
       "Corrupted <typeName> in catalog: <numCols> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3093" : {
-    "message" : [
-      "Unsupported java type <c>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3094" : {
-    "message" : [
-      "<dt> is not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3095" : {
-    "message" : [
-      "<dt> cannot be converted to Hive TypeInfo"
     ]
   },
   "_LEGACY_ERROR_TEMP_3096" : {

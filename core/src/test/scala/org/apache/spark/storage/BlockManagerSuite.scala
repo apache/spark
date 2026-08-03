@@ -62,7 +62,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, MergeStatus, Spar
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{DeserializationStream, JavaSerializer, KryoDeserializationStream, KryoSerializer, KryoSerializerInstance, SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
+import org.apache.spark.shuffle.{BlockingShuffleManager, MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.storage.LogBlockType.LogBlockType
@@ -199,7 +199,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     liveListenerBus = spy[LiveListenerBus](new LiveListenerBus(conf))
     master = spy[BlockManagerMaster](new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        liveListenerBus, None, blockManagerInfo, mapOutputTracker, shuffleManager,
+        liveListenerBus, None, blockManagerInfo, mapOutputTracker,
         isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))
@@ -2056,7 +2056,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("we reject putting blocks when we have the wrong shuffle resolver") {
-    val badShuffleManager = mock(classOf[ShuffleManager])
+    val badShuffleManager = mock(classOf[BlockingShuffleManager])
     val badShuffleResolver = mock(classOf[ShuffleBlockResolver])
     when(badShuffleManager.shuffleBlockResolver).thenReturn(badShuffleResolver)
     val shuffleBlockId = ShuffleDataBlockId(0, 0, 0)
@@ -2091,7 +2091,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // Retry initialization should succeed once ShuffleManager is initialized
     when(mockEnv.isShuffleManagerInitialized).thenReturn(true)
     when(mockEnv.waitForShuffleManagerInit(mc.anyLong())).thenReturn(true)
-    when(mockEnv.shuffleManager).thenReturn(sortShuffleMgr)
+    when(mockEnv.blockingShuffleManager).thenReturn(sortShuffleMgr)
+    when(mockEnv.shuffleBlockResolver).thenReturn(Some(sortShuffleMgr.shuffleBlockResolver))
     assert(bm.migratableResolver != null)
   }
 
@@ -2511,6 +2512,63 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(master.getSealedChecksum(RDDBlockId(9, 0)).isEmpty)
   }
 
+  test("verifyRddChecksumSeal holds after a normal seal and detects an unsealed block") {
+    val store1 = makeBlockManager(20000, "exec1")
+    val store2 = makeBlockManager(20000, "exec2")
+    // No blocks for this rdd: nothing to check.
+    assert(master.verifyRddChecksumSeal(12) === None)
+
+    // Two agreeing replicas, sealed: every tracked replica carries the sealed checksum -> holds.
+    val sealedBlock = RDDBlockId(12, 0)
+    master.updateBlockInfo(
+      store1.blockManagerId, sealedBlock, StorageLevel.DISK_ONLY, 0, 100, Some(77L))
+    master.updateBlockInfo(
+      store2.blockManagerId, sealedBlock, StorageLevel.DISK_ONLY, 0, 100, Some(77L))
+    assert(master.sealRddChecksums(12) === 0)
+    assert(master.verifyRddChecksumSeal(12) === None)
+
+    // A second block present in the directory but never sealed (e.g. sealing was skipped) is a
+    // violation: it is present but not sealed.
+    val unsealedBlock = RDDBlockId(12, 1)
+    master.updateBlockInfo(
+      store1.blockManagerId, unsealedBlock, StorageLevel.DISK_ONLY, 0, 100, Some(88L))
+    val violation = master.verifyRddChecksumSeal(12)
+    assert(violation.exists(_.contains("present but not sealed")), violation)
+    // The divergent-tracked-replica branch is defense-in-depth: the directory rejects a divergent
+    // registration for a sealed block (see the reject test above), so it is not reachable here.
+  }
+
+  test("verifyRddChecksumSeal ignores the external-shuffle-service pseudo-replica") {
+    // The ESS pseudo-replica is tracked in blockLocations but has no checksum entry.
+    conf.set(SHUFFLE_SERVICE_ENABLED, true)
+    conf.set(SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
+    val essBlockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
+    val essMaster = new BlockManagerMaster(
+      rpcEnv.setupEndpoint("blockmanager-ess",
+        new BlockManagerMasterEndpoint(rpcEnv, isLocal = true, conf, liveListenerBus,
+          Some(mock(classOf[ExternalBlockStoreClient])), essBlockManagerInfo, mapOutputTracker,
+          isDriver = true)),
+      rpcEnv.setupEndpoint("blockmanagerHeartbeat-ess",
+        new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, essBlockManagerInfo)),
+      conf, true)
+    val bmRef = rpcEnv.setupEndpoint("bm-ess", new RpcEndpoint {
+      override val rpcEnv: RpcEnv = BlockManagerSuite.this.rpcEnv
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case _ => context.reply(true)
+      }
+    })
+    val bmId = essMaster.registerBlockManager(
+      BlockManagerId("exec1", "localhost", 1234, None), Array.empty, 2000, 0, bmRef)
+
+    val blockId = RDDBlockId(13, 0)
+    essMaster.updateBlockInfo(bmId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(55L))
+    // The directory now tracks both the executor and the ESS pseudo-replica for the block.
+    assert(essMaster.getLocations(blockId).exists(_.port == conf.get(SHUFFLE_SERVICE_PORT)))
+    assert(essMaster.sealRddChecksums(13) === 0)
+    // Only the executor replica carries a checksum; the ESS pseudo-replica must not be flagged.
+    assert(essMaster.verifyRddChecksumSeal(13) === None)
+  }
+
   test("sealed checksums are cleared when the RDD is removed") {
     val store = makeBlockManager(20000, "exec1")
     val blockId = RDDBlockId(10, 0)
@@ -2519,6 +2577,63 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     master.sealRddChecksums(10)
     assert(master.getSealedChecksum(blockId) === Some(7L))
     master.removeRdd(10, blocking = true)
+    assert(master.getSealedChecksum(blockId).isEmpty)
+  }
+
+  test("sealed checksum tombstone rejects a divergent late copy after the last replica is lost") {
+    val store1 = makeBlockManager(20000, "exec1")
+    val store2 = makeBlockManager(20000, "exec2")
+    val blockId = RDDBlockId(20, 0)
+    // store1 materializes and the block is sealed to checksum 42.
+    master.updateBlockInfo(
+      store1.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(42L))
+    assert(master.sealRddChecksums(20) === 0)
+    assert(master.getSealedChecksum(blockId) === Some(42L))
+    // store1's only replica is lost (invalid storage level empties its locations).
+    master.updateBlockInfo(store1.blockManagerId, blockId, StorageLevel.NONE, 0, 0, Some(42L))
+    assert(master.getLocations(blockId).isEmpty)
+    // The seal is a tombstone: it survives the loss of the last replica.
+    assert(master.getSealedChecksum(blockId) === Some(42L))
+    // A late divergent copy (e.g. a zombie task) is still rejected by the tombstone.
+    master.updateBlockInfo(
+      store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(99L))
+    assert(!master.getLocations(blockId).contains(store2.blockManagerId))
+    assert(master.getSealedChecksum(blockId) === Some(42L))
+    // A late copy matching the seal is admitted.
+    master.updateBlockInfo(
+      store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(42L))
+    assert(master.getLocations(blockId).contains(store2.blockManagerId))
+  }
+
+  test("sealed checksum tombstone survives losing the last replica via executor removal") {
+    val store1 = makeBlockManager(20000, "exec1")
+    val store2 = makeBlockManager(20000, "exec2")
+    val blockId = RDDBlockId(21, 0)
+    master.updateBlockInfo(
+      store1.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(42L))
+    assert(master.sealRddChecksums(21) === 0)
+    // The only replica's executor dies (removeBlockManager empties the block's locations).
+    master.removeExecutor(store1.blockManagerId.executorId)
+    assert(master.getLocations(blockId).isEmpty)
+    assert(master.getSealedChecksum(blockId) === Some(42L))
+    // A divergent late copy is still rejected.
+    master.updateBlockInfo(
+      store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(99L))
+    assert(!master.getLocations(blockId).contains(store2.blockManagerId))
+  }
+
+  test("removeRdd reclaims a sealed checksum tombstone whose last replica was lost") {
+    val store = makeBlockManager(20000, "exec1")
+    val blockId = RDDBlockId(22, 0)
+    master.updateBlockInfo(
+      store.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(42L))
+    assert(master.sealRddChecksums(22) === 0)
+    // Lose the last replica; the tombstone remains even though the block has no location.
+    master.updateBlockInfo(store.blockManagerId, blockId, StorageLevel.NONE, 0, 0, Some(42L))
+    assert(master.getLocations(blockId).isEmpty)
+    assert(master.getSealedChecksum(blockId) === Some(42L))
+    // removeRdd reclaims the tombstone via the sealedBlocksByRdd index (not blockLocations).
+    master.removeRdd(22, blocking = true)
     assert(master.getSealedChecksum(blockId).isEmpty)
   }
 
@@ -2543,6 +2658,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(master.getLocations(blockId).toSet ===
       Set(diskStore.blockManagerId, serStore.blockManagerId))
     assert(master.getSealedChecksum(blockId).isDefined)
+    // The seal is internally consistent: both tracked replicas carry the sealed checksum.
+    assert(master.verifyRddChecksumSeal(11) === None)
   }
 
   test("UpdateBlockInfo Externalizable round-trip preserves the checksum field") {
@@ -2589,6 +2706,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // The seal keeps the plurality (dataA, two copies) and evicts the divergent dataB copy.
     assert(master.sealRddChecksums(20) === 0)
     assert(master.getLocations(blockId).toSet === Set(store1.blockManagerId, store3.blockManagerId))
+    // After evicting the minority, the directory is internally consistent: every tracked replica
+    // carries the sealed checksum.
+    assert(master.verifyRddChecksumSeal(20) === None)
     // The diverged executor no longer serves its stale local copy -- it was evicted, or the
     // read-side self-check skips it because its checksum != the sealed one (so reads converge).
     assert(store2.getLocalValues(blockId).isEmpty)
@@ -2697,6 +2817,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(master.getLocations(blockId).size === 2)
     assert(store1.getLocalValues(blockId).isDefined)
     assert(store2.getLocalValues(blockId).isDefined)
+    // Primary and replica are both tracked with the sealed checksum: the invariant holds.
+    assert(master.verifyRddChecksumSeal(30) === None)
   }
 
   test("SPARK-41497: mark rdd block as visible") {

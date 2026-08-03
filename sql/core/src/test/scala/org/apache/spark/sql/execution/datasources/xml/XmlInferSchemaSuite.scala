@@ -652,6 +652,42 @@ class XmlInferSchemaSuite
     checkAnswer(xmlDF, expectedAns)
   }
 
+  test("SPARK-58133: empty values are not skipped during inference (no data loss)") {
+    // An attribute that mixes empty ("") and numeric values across rows must infer as StringType,
+    // not LongType. With the default nullValue (null), the parser does NOT read "" as null, so if
+    // the column inferred LongType, convertTo("", LongType) would throw NumberFormatException and
+    // PERMISSIVE-mode error recovery could silently drop sibling records. Inference therefore lets
+    // an empty value fall through the cascade to StringType, keeping it consistent with the parser.
+    val rows = Seq(
+      """<ROW><entry Code="001">first</entry><entry Code="002">second</entry></ROW>""",
+      """<ROW><entry Code="">third</entry><entry Code="003">fourth</entry></ROW>""",
+      """<ROW><entry Code="004">fifth</entry><entry Code="">sixth</entry></ROW>""")
+    val df = readData(rows)
+    val entryStruct = df.schema("entry").dataType match {
+      case ArrayType(s: StructType, _) => s
+      case s: StructType => s
+      case other => fail(s"Expected ArrayType(StructType) or StructType for `entry`, got $other")
+    }
+    assert(entryStruct("_Code").dataType === StringType)
+    // All three rows (six entries) must survive -- the empty attribute must not trigger the
+    // PERMISSIVE error-recovery path that drops sibling records.
+    assert(df.count() === 3)
+    assert(df.selectExpr("sum(size(entry))").head().getLong(0) === 6)
+  }
+
+  test("SPARK-58133: empty and numeric element values still infer via NullType") {
+    // Empty *elements* (<c/>) are read as NullType by the parser's EndElement branch, so a column
+    // mixing empty and numeric elements infers LongType and reads the empty element as null. This
+    // documents the element/attribute asymmetry (only attribute empties fall through to String).
+    val rows = Seq(
+      """<ROW><c>1</c></ROW>""",
+      """<ROW><c/></ROW>""",
+      """<ROW><c>3</c></ROW>""")
+    val df = readData(rows)
+    assert(df.schema("c").dataType === LongType)
+    checkAnswer(df, Seq(Row(1L), Row(null), Row(3L)))
+  }
+
   test("TIME type inference") {
     val xmlString = Seq("""<ROW><t>13:31:24.123456</t></ROW>""")
     val df = readData(xmlString)

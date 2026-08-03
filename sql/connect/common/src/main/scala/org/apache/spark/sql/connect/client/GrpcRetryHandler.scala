@@ -17,17 +17,21 @@
 
 package org.apache.spark.sql.connect.client
 
+import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
 
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{ERROR, NUM_RETRY, POLICY, RETRY_WAIT_TIME}
+import org.apache.spark.internal.LogKeys.{ELAPSED_TIME, ERROR, NUM_RETRY, POLICY, RETRY_WAIT_TIME}
 import org.apache.spark.sql.util.{CloseableIterator, WrappedCloseableIterator}
 
 private[sql] class GrpcRetryHandler(
     private val policies: Seq[RetryPolicy],
-    private val sleep: Long => Unit = Thread.sleep) {
+    private val sleep: Long => Unit = Thread.sleep,
+    private val maxRetryExceptionElapsedTime: FiniteDuration =
+      GrpcRetryHandler.DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+    private val nowNanos: () => Long = () => System.nanoTime()) {
 
   def this(policy: RetryPolicy, sleep: Long => Unit) = this(List(policy), sleep)
   def this(policy: RetryPolicy) = this(policy, Thread.sleep)
@@ -35,7 +39,9 @@ private[sql] class GrpcRetryHandler(
   /**
    * Retries the given function with exponential backoff according to the client's retryPolicy.
    */
-  def retry[T](fn: => T): T = new GrpcRetryHandler.Retrying(policies, sleep, fn).retry()
+  def retry[T](fn: => T): T =
+    new GrpcRetryHandler.Retrying(policies, sleep, fn, maxRetryExceptionElapsedTime, nowNanos)
+      .retry()
 
   /**
    * Generalizes the retry logic for RPC calls that return an iterator.
@@ -151,6 +157,11 @@ private[sql] class GrpcRetryHandler(
 
 private[sql] object GrpcRetryHandler extends Logging {
 
+  // Default cumulative elapsed-time bound for RetryException-driven retries (see
+  // Retrying.waitAfterAttempt below). Single source of truth for this default; please keep the
+  // Python side (retries.py's DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME) in sync with this value.
+  val DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME: FiniteDuration = FiniteDuration(1, "hour")
+
   /**
    * Class managing the state of the retrying logic during a single retryable block.
    * @param retryPolicies
@@ -159,13 +170,28 @@ private[sql] object GrpcRetryHandler extends Logging {
    *   typically Thread.sleep
    * @param fn
    *   the function to compute
+   * @param maxRetryExceptionElapsedTime
+   *   maximum cumulative wall-clock time to keep retrying a [[RetryException]] (which is
+   *   otherwise retried unconditionally, without consulting any [[RetryPolicy]]) before giving
+   *   up. Measured from the first [[RetryException]] seen by this instance.
+   * @param nowNanos
+   *   typically System.nanoTime, used to measure maxRetryExceptionElapsedTime
    * @tparam T
    *   result of function fn
    */
-  class Retrying[T](retryPolicies: Seq[RetryPolicy], sleep: Long => Unit, fn: => T) {
+  class Retrying[T](
+      retryPolicies: Seq[RetryPolicy],
+      sleep: Long => Unit,
+      fn: => T,
+      maxRetryExceptionElapsedTime: FiniteDuration = DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+      nowNanos: () => Long = () => System.nanoTime()) {
     private var currentRetryNum: Int = 0
     private var exceptionList: Seq[Throwable] = Seq.empty
     private val policies: Seq[RetryPolicy.RetryPolicyState] = retryPolicies.map(_.toState)
+
+    // Set to the result of nowNanos() when the first RetryException is observed; used to bound
+    // the total time spent in RetryException-driven retries (see waitAfterAttempt below).
+    private var retryExceptionStartNanos: Option[Long] = None
 
     def canRetry(throwable: Throwable): Boolean = {
       throwable.isInstanceOf[RetryException] || policies.exists(p => p.canRetry(throwable))
@@ -187,7 +213,26 @@ private[sql] object GrpcRetryHandler extends Logging {
       val lastException = exceptionList.head
 
       if (lastException.isInstanceOf[RetryException]) {
-        // retry exception is considered immediately retriable without any policies.
+        val startNanos = retryExceptionStartNanos.getOrElse {
+          val now = nowNanos()
+          retryExceptionStartNanos = Some(now)
+          now
+        }
+        val elapsedNanos = nowNanos() - startNanos
+        if (elapsedNanos >= maxRetryExceptionElapsedTime.toNanos) {
+          logWarning(
+            log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
+              log"exceeded maxRetryExceptionElapsedTime " +
+              log"(elapsed=${MDC(ELAPSED_TIME, elapsedNanos / 1000000)} ms, " +
+              log"currentRetryNum=${MDC(NUM_RETRY, currentRetryNum)})")
+          logWarning(log"[RETRIES_EXCEEDED] The maximum number of retries has been exceeded.")
+          // Unwrap the underlying cause (both throw sites in
+          // ExecutePlanResponseReattachableIterator attach it via addSuppressed) so the
+          // caller sees a real, actionable error instead of the bare RetryException marker.
+          throw lastException.getSuppressed.headOption.getOrElse(lastException)
+        }
+        // retry exception is considered immediately retriable without any policies, as long
+        // as the cumulative elapsed time above has not been exceeded.
         logWarning(
           log"Non-Fatal error during RPC execution: ${MDC(ERROR, lastException)}, " +
             log"retrying (currentRetryNum=${MDC(NUM_RETRY, currentRetryNum)})")
@@ -232,7 +277,7 @@ private[sql] object GrpcRetryHandler extends Logging {
 
   /**
    * An exception that can be thrown upstream when inside retry and which will be always retryable
-   * without any policies.
+   * without any policies, bounded by Retrying's maxRetryExceptionElapsedTime.
    */
   class RetryException extends Throwable
 }

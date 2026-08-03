@@ -1862,6 +1862,14 @@ struct<>
 
 
 -- !query
+COMMENT ON TABLE IDENTIFIER('test_comment') COLUMN (c1 IS 'c1 comment', c2 IS 'c2 comment')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP TABLE test_comment
 -- !query schema
 struct<>
