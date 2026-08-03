@@ -40,7 +40,7 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    *
    * Spark will call [[filter]] if it can derive a runtime filter for any of these attributes.
    */
-  def filterAttributes: Array[NamedReference]
+  def filterAttributes(): Array[NamedReference]
 
   /**
    * Returns attributes for which this scan fully evaluates runtime predicates.
@@ -49,7 +49,7 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * and will not be evaluated again after the scan. These attributes must also be returned by
    * [[filterAttributes]].
    */
-  def fullyPushedFilterAttributes: Array[NamedReference] = Array.empty
+  def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 
   /**
    * Filters this scan using runtime Catalyst expressions.
@@ -73,5 +73,5 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * It's possible that there are no runtime predicates and [[filter]] is never called;
    * an empty array should be returned for this case.
    */
-  def pushedPredicates: Array[Expression] = Array.empty
+  def pushedPredicates(): Array[Expression] = Array.empty
 }

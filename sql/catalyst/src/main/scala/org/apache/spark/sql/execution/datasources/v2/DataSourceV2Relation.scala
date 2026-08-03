@@ -203,7 +203,7 @@ case class DataSourceV2ScanRelation(
   lazy val runtimeFilterAttrs: AttributeSet = {
     val filterAttrs = scan match {
       case s: SupportsRuntimeV2Filtering => s.filterAttributes
-      case s: SupportsRuntimeCatalystFiltering => s.filterAttributes
+      case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
       case _ => Array.empty[NamedReference]
     }
     AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](
@@ -215,7 +215,7 @@ case class DataSourceV2ScanRelation(
    */
   lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
     val filterAttrs = scan match {
-      case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes
+      case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
       case _ => Array.empty[NamedReference]
     }
     AttributeSet(V2ExpressionUtils.resolveRefs[Attribute](

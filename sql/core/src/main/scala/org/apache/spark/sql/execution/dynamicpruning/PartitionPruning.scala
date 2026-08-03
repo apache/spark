@@ -89,7 +89,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
         }
       case (resExp, r @ ExtractV2Scan(scan: SupportsRuntimeCatalystFiltering)) =>
         val filterAttrs = V2ExpressionUtils.resolveAttributeRefs(
-          scan.filterAttributes, r.output)
+          scan.filterAttributes(), r.output)
         if (resExp.references.subsetOf(filterAttrs)) {
           Some(r)
         } else {

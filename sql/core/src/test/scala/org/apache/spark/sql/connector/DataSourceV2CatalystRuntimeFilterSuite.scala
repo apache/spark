@@ -245,7 +245,7 @@ class DataSourceV2CatalystRuntimeFilterSuite
   private def getPushedCatalystPredicates(df: DataFrame): Seq[Expression] = {
     collectBatchScan(df).scan match {
       case s: InMemoryCatalystRuntimeFilterTable#InMemoryCatalystRuntimeFilterBatchScan =>
-        s.pushedPredicates.toSeq
+        s.pushedPredicates().toSeq
       case _ => Seq.empty
     }
   }

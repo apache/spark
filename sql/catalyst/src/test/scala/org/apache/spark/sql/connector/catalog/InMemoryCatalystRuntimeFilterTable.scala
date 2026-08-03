@@ -82,7 +82,7 @@ class InMemoryCatalystRuntimeFilterTable(
       Option(InMemoryCatalystRuntimeFilterTable.this.properties.get(FilterAttributesKey))
         .map(_.split(",").map(_.trim).toSet)
 
-    override def filterAttributes: Array[NamedReference] = {
+    override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
       partitioning.flatMap(_.references()).filter { ref =>
         val name = ref.fieldNames.mkString(".")
@@ -91,12 +91,12 @@ class InMemoryCatalystRuntimeFilterTable(
       }
     }
 
-    override def fullyPushedFilterAttributes: Array[NamedReference] = {
+    override def fullyPushedFilterAttributes(): Array[NamedReference] = {
       val fullyPushedFilterAttrs = Option(
         InMemoryCatalystRuntimeFilterTable.this.properties.get(FullyPushedFilterAttributesKey))
         .map(_.split(",").map(_.trim).toSet)
         .getOrElse(Set.empty)
-      filterAttributes.filter { ref =>
+      filterAttributes().filter { ref =>
         fullyPushedFilterAttrs.contains(ref.fieldNames.mkString("."))
       }
     }
@@ -104,7 +104,7 @@ class InMemoryCatalystRuntimeFilterTable(
     override def filter(expressions: Array[Expression]): Unit =
       _catalystPredicates ++= expressions
 
-    override def pushedPredicates: Array[Expression] =
+    override def pushedPredicates(): Array[Expression] =
       _catalystPredicates.toArray
   }
 }
