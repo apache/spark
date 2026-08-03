@@ -221,7 +221,25 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   // See https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    "42000".equals(exception.getSQLState)
+    "42000".equals(exception.getSQLState) &&
+    !isPermissionDeniedErrorBestEffort(exception)
+  }
+
+  // See https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
+  private def isPermissionDeniedErrorBestEffort(exception: SQLException): Boolean = {
+    val permissionSubstrings = Set(
+      "command denied to user",
+      "access denied",
+      "must have privileges"
+    )
+    val nonSyntaxErrorCodes = Set(
+      1148, // ER_NOT_ALLOWED_COMMAND
+      1203, // ER_TOO_MANY_USER_CONNECTIONS
+      1226 // ER_USER_LIMIT_REACHED
+    )
+    "42000".equals(exception.getSQLState) &&
+    (nonSyntaxErrorCodes.contains(exception.getErrorCode) ||
+      permissionSubstrings.exists(exception.getMessage.toLowerCase(Locale.ROOT).contains))
   }
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
