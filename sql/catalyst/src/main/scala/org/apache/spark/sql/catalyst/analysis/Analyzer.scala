@@ -638,7 +638,8 @@ class Analyzer(
       Seq(
         ResolveWithCTE,
         ExtractDistributedSequenceID,
-        ResolveAsOfJoin) ++
+        ResolveAsOfJoin,
+        ResolveTranspiledPythonUDFOptions) ++
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),
