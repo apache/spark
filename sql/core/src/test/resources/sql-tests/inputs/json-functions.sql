@@ -120,6 +120,8 @@ select json_typeof('[1, 2, 3]');
 select json_typeof('"hello"');
 select json_typeof('123');
 select json_typeof('1.5');
+select json_typeof('-123');
+select json_typeof('-1.5');
 select json_typeof('true');
 select json_typeof('false');
 select json_typeof('null');

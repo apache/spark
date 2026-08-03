@@ -23543,6 +23543,8 @@ def json_typeof(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.json_object_keys`
+    :meth:`pyspark.sql.functions.get_json_object`
+    :meth:`pyspark.sql.functions.json_array_length`
 
     Examples
     --------

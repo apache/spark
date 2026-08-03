@@ -853,6 +853,20 @@ Project [json_typeof(1.5) AS json_typeof(1.5)#x]
 
 
 -- !query
+select json_typeof('-123')
+-- !query analysis
+Project [json_typeof(-123) AS json_typeof(-123)#x]
++- OneRowRelation
+
+
+-- !query
+select json_typeof('-1.5')
+-- !query analysis
+Project [json_typeof(-1.5) AS json_typeof(-1.5)#x]
++- OneRowRelation
+
+
+-- !query
 select json_typeof('true')
 -- !query analysis
 Project [json_typeof(true) AS json_typeof(true)#x]

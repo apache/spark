@@ -923,6 +923,8 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("\"hello\"", "string"),
       ("123", "number"),
       ("1.5", "number"),
+      ("-123", "number"),
+      ("-1.5", "number"),
       ("true", "boolean"),
       ("false", "boolean"),
       ("null", "null")
