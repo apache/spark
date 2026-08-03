@@ -497,6 +497,61 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
     }
   }
 
+  test("Test aggregate with group by on top of join") {
+    val sqlQuery =
+      s"""
+         |SELECT t1.id, t1.address, min(t2.salary), count(1)
+         |FROM $catalogAndNamespace.$casedJoinTableName1 t1
+         |JOIN $catalogAndNamespace.$casedJoinTableName2 t2 ON t1.id = t2.id
+         |WHERE t1.amount > 1000
+         |GROUP BY t1.id, t1.address
+         |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    assert(rows.nonEmpty)
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+
+      if (supportsJoinPushdown) {
+        checkJoinPushed(df)
+        checkAggregateRemoved(df, supportsAggregatePushdown)
+      }
+      checkAnswer(df, rows)
+    }
+  }
+
+  test("Test multi-way left outer join with function in join condition") {
+    val sqlQuery =
+      s"""
+         |SELECT a.id, c.address, d.address, a.amount
+         |FROM $catalogAndNamespace.$casedJoinTableName1 a
+         |LEFT JOIN $catalogAndNamespace.$casedJoinTableName1 c
+         |  ON a.address = c.address
+         |LEFT JOIN $catalogAndNamespace.$casedJoinTableName1 d
+         |  ON LOWER(a.address) = LOWER(d.address)
+         |WHERE a.amount >= 1000
+         |""".stripMargin
+
+    val rows = withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "false") {
+      sql(sqlQuery).collect().toSeq
+    }
+
+    assert(rows.nonEmpty)
+
+    withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+      val df = sql(sqlQuery)
+
+      if (supportsJoinPushdown) {
+        checkJoinPushed(df)
+      }
+      checkAnswer(df, rows)
+    }
+  }
+
   test("Test sort limit on top of join is pushed down") {
     val sqlQuery = s"""
       |SELECT min(a.id + b.id), a.id, b.id
