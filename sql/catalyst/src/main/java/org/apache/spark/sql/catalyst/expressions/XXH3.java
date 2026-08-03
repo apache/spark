@@ -399,6 +399,10 @@ public final class XXH3 {
     return new long[] {low, high};
   }
 
+  private static final byte[] HEX_DIGITS = {
+      '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
+  };
+
   /** Returns the XXH3 128-bit hash as a 32-character lowercase hex string (default seed 0). */
   public static UTF8String hash128Hex(byte[] input) {
     return hash128Hex(input, 0L);
@@ -412,7 +416,13 @@ public final class XXH3 {
     byte[] out = new byte[16];
     writeBE64(out, 0, h[1]);
     writeBE64(out, 8, h[0]);
-    return UTF8String.fromString(HexFormat.of().formatHex(out));
+    byte[] hex = new byte[32];
+    for (int i = 0; i < 16; i++) {
+      int b = out[i] & 0xFF;
+      hex[i * 2] = HEX_DIGITS[b >>> 4];
+      hex[i * 2 + 1] = HEX_DIGITS[b & 0x0F];
+    }
+    return UTF8String.fromBytes(hex);
   }
 
   private static void writeBE64(byte[] out, int offset, long value) {
