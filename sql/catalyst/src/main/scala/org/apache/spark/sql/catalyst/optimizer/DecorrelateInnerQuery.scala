@@ -728,7 +728,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               // The ORDER BY was peeled off the Sort above; re-apply it as a global Sort below
               // the limit so that ORDER BY ... LIMIT (and ORDER BY ... LIMIT ... OFFSET) is
               // order-preserving. Otherwise the ordering is dropped and the limit returns an
-              // arbitrary (non-deterministic) row.
+              // arbitrary (non-deterministic) rows.
               val orderedChild =
                 if (ordering.nonEmpty && !SQLConf.get.getConf(
                     SQLConf.DECORRELATE_LIMIT_OFFSET_LEGACY_INCORRECT_ORDER_HANDLING_ENABLED)) {
