@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import scala.collection.AbstractIterator
+
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -26,20 +28,18 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * Walks through the InternalRows from a CachedBatch.
+ * An Iterator to walk through the InternalRows from a CachedBatch
  *
- * Intentionally NOT a `scala.collection.Iterator`: the subclass of this type is
- * produced by runtime codegen, and the JDK compiler (the alternative codegen
- * backend) cannot compile a subclass of a Scala collection trait - its rich
- * generic method hierarchy (e.g. `minBy`) produces raw-vs-generic override
- * clashes that javac rejects (Janino does not). Declaring only the three methods
- * the generated class implements keeps the javac-visible ancestry rooted at
- * `Object`. Callers adapt instances to `Iterator[InternalRow]` (see
- * InMemoryRelation).
+ * Extends `AbstractIterator` rather than mixing in `Iterator` directly. A subclass of this type
+ * is produced by runtime codegen, and javac (the alternative codegen backend) cannot subclass a
+ * scalac-compiled class that fixes a trait's type parameter while mixing the trait in directly:
+ * the mixin forwarders scalac emits on such a class are raw, carrying no `Signature` attribute,
+ * so javac sees e.g. `Object minBy(Function1, Ordering)` clash with `IterableOnceOps`'
+ * `<B> A minBy(Function1<A, B>, Ordering<B>)`. `AbstractIterator` stays generic in its element
+ * type, so its forwarders keep their signatures and no clash arises. Janino does not perform
+ * this check, so the direct form worked there.
  */
-abstract class ColumnarIterator {
-  def hasNext: Boolean
-  def next(): InternalRow
+abstract class ColumnarIterator extends AbstractIterator[InternalRow] {
   def initialize(input: Iterator[DefaultCachedBatch], columnTypes: Array[DataType],
     columnIndexes: Array[Int]): Unit
 }
@@ -176,7 +176,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       import java.nio.ByteOrder;
       import scala.collection.Iterator;
       import org.apache.spark.sql.types.DataType;
-      import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
       import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
 

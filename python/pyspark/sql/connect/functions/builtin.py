@@ -1082,6 +1082,13 @@ def collect_set(col: "ColumnOrName") -> Column:
 collect_set.__doc__ = pysparkfuncs.collect_set.__doc__
 
 
+def collect_union(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("collect_union", col)
+
+
+collect_union.__doc__ = pysparkfuncs.collect_union.__doc__
+
+
 def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None) -> Column:
     if delimiter is None:
         return _invoke_function_over_columns("listagg", col)

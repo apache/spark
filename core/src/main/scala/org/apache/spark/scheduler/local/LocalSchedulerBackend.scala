@@ -129,6 +129,10 @@ private[spark] class LocalSchedulerBackend(
     Some(new HadoopDelegationTokenManager(conf, scheduler.sc.hadoopConfiguration, localEndpoint))
   }
 
+  override protected def tokenManagerRequired(): Boolean = {
+    super.tokenManagerRequired() || conf.get(config.DIRECT_CREDENTIAL_PROVIDERS_ENABLED)
+  }
+
   override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
     SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
   }

@@ -16,7 +16,7 @@
 #
 
 """
-Unit tests for the ``pyspark.testing.df_golden`` write/validation machinery.
+Unit tests for the ``pyspark.sql.tests.df_golden.df_golden`` write/validation machinery.
 
 These exercise the pure ``.test`` file plumbing -- parsing, serialization,
 validation, output normalization and result rendering -- without a Spark
@@ -28,7 +28,7 @@ import os
 import tempfile
 import unittest
 
-from pyspark.testing.df_golden import (
+from pyspark.sql.tests.df_golden.df_golden import (
     _compare_case,
     _regenerate_case,
     _validate_test_file,
@@ -448,7 +448,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
             from pyspark.sql.types import DoubleType, FloatType
         except Exception:
             self.skipTest("pyspark.sql.types unavailable in this environment")
-        from pyspark.testing.df_golden import _format_value
+        from pyspark.sql.tests.df_golden.df_golden import _format_value
 
         with self.assertRaisesRegex(AssertionError, "not supported yet"):
             _format_value(0.1, FloatType())
@@ -501,7 +501,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
             from pyspark.sql.types import StringType
         except Exception:
             self.skipTest("pyspark.sql.types unavailable in this environment")
-        from pyspark.testing.df_golden import _format_value
+        from pyspark.sql.tests.df_golden.df_golden import _format_value
 
         self.assertEqual(_format_value("ok", StringType()), "ok")
         for bad in ("a\tb", "a\nb"):

@@ -246,12 +246,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       columnarIterator.initialize(cachedBatchIterator.asInstanceOf[Iterator[DefaultCachedBatch]],
         columnTypes,
         requestedColumnIndices.toArray)
-      // ColumnarIterator is not a scala.collection.Iterator (see its scaladoc for why);
-      // adapt it here for the mapPartitions return type.
-      new Iterator[InternalRow] {
-        override def hasNext: Boolean = columnarIterator.hasNext
-        override def next(): InternalRow = columnarIterator.next()
-      }
+      columnarIterator
     }
   }
 }

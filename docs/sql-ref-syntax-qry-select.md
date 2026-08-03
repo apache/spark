@@ -94,6 +94,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      * [Unpivot relation](sql-ref-syntax-qry-select-unpivot.html)
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
+     * [UNNEST relation](sql-ref-syntax-qry-select-unnest.html)
      * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )
      * [File](sql-ref-syntax-qry-select-file.html)
      

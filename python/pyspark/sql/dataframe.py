@@ -3351,7 +3351,7 @@ class DataFrame:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
-                    "expected_type": "Column, int or str",
+                    "expected_type": "bool, int or list",
                     "arg_name": "ascending",
                     "arg_type": type(ascending).__name__,
                 },

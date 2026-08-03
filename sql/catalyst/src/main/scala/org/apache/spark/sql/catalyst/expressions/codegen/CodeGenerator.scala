@@ -293,9 +293,8 @@ class CodegenContext extends Logging {
    *                 e.g. InternalRow, UnsafeRow, UnsafeArrayData, etc. Other types will have to
    *                 specify the fully-qualified Java type name. See
    *                 `CodeCompiler.DefaultImports` for the list of default imports available.
-   *                 Generic type arguments are kept in the field declaration but erased
-   *                 from array creation expressions (the standard
-   *                 `Foo&lt;X&gt;[] f = new Foo[n]` idiom).
+   *                 Also, generic type arguments are kept in field declarations, but stripped
+   *                 from array creation expressions because Java forbids generic array creation.
    * @param variableName Name of the field.
    * @param initFunc Function includes statement(s) to put into the init() method to initialize
    *                 this field. The argument is the name of the mutable state variable.
@@ -394,19 +393,22 @@ class CodegenContext extends Logging {
   }
 
   def declareMutableStates(): String = {
+    def rawJavaType(javaType: String): String = {
+      val builder = new StringBuilder
+      var depth = 0
+      javaType.foreach {
+        case '<' => depth += 1
+        case '>' => depth -= 1
+        case c if depth == 0 => builder.append(c)
+        case _ =>
+      }
+      builder.toString
+    }
+
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
     val inlinedStates = inlinedMutableStates.distinct.map { case (javaType, variableName) =>
       s"private $javaType $variableName;"
-    }
-
-    // Strip type parameters from a type used in array CREATION: `Foo<X>` -> `Foo`.
-    // Java forbids "generic array creation" (`new Foo<X>[n]`), though Janino allows
-    // it; the field declaration keeps the parameterized element type while the
-    // `new` uses the raw type (the standard `Foo<X>[] a = new Foo[n]` idiom).
-    def erasedType(t: String): String = {
-      val lt = t.indexOf('<')
-      if (lt < 0) t else t.substring(0, lt)
     }
 
     val arrayStates = arrayCompactedMutableStates.flatMap { case (javaType, mutableStateArrays) =>
@@ -420,10 +422,10 @@ class CodegenContext extends Logging {
         if (javaType.contains("[]")) {
           // initializer had an one-dimensional array variable
           val baseType = javaType.substring(0, javaType.length - 2)
-          s"private $javaType[] $arrayName = new ${erasedType(baseType)}[$length][];"
+          s"private $javaType[] $arrayName = new ${rawJavaType(baseType)}[$length][];"
         } else {
           // initializer had a scalar variable
-          s"private $javaType[] $arrayName = new ${erasedType(javaType)}[$length];"
+          s"private $javaType[] $arrayName = new ${rawJavaType(javaType)}[$length];"
         }
       }
     }

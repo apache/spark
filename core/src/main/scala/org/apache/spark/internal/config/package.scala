@@ -1730,6 +1730,18 @@ package object config {
       .checkValue(_ > 0, "The minimum renewal interval must be a positive time value.")
       .createWithDefaultString("30s")
 
+  private[spark] val DIRECT_CREDENTIAL_PROVIDERS_ENABLED =
+    ConfigBuilder("spark.security.directCredentialProviders.enabled")
+      .doc(
+        "When true, enables delegation token collection and renewal without Kerberos. " +
+        "Providers are called directly (without doLogin/doAs) and participate in the " +
+        "same renewal and distribution lifecycle as Kerberos delegation token providers. " +
+        "Providers that require Kerberos self-gate via delegationTokensRequired.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val SHUFFLE_SORT_INIT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.sort.initialBufferSize")
       .internal()

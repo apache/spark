@@ -3989,6 +3989,12 @@ object Sequence {
       estimatedStep: String,
       len: String): String = {
     val calcFn = classOf[Sequence].getName + ".sequenceLength"
+    // `$start` and `$stop` are numeric expressions and `$step` is numeric or a
+    // CalendarInterval reference, so they have to be converted before going into a
+    // `Map<String, String>`. Janino, which compiles the generated code, erases the type
+    // arguments and binds `put` to `put(Object, Object)`, which lets the raw values through
+    // and leaves the parameter map holding non-String values that
+    // `SparkThrowable.getMessageParameters` then hands out as Strings.
     s"""
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
        |  ($estimatedStep < 0 && $start >= $stop) ||
@@ -4469,8 +4475,6 @@ case class ArrayDistinct(child: Expression)
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
-        // Dotted source form (ArrayBuilder.ofInt), not the binary ArrayBuilder$ofInt:
-        // the JDK compiler cannot resolve the lowercase-led inner class in binary form.
         val arrayBuilderClass = s"$arrayBuilder.of$ptName"
 
         // Only need to track null element index when array's element is nullable.
@@ -4672,8 +4676,6 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
-        // Dotted source form (ArrayBuilder.ofInt), not the binary ArrayBuilder$ofInt:
-        // the JDK compiler cannot resolve the lowercase-led inner class in binary form.
         val arrayBuilderClass = s"$arrayBuilder.of$ptName"
 
         val body =
@@ -4899,8 +4901,6 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
         val hashSet = ctx.freshName("hashSet")
         val hashSetResult = ctx.freshName("hashSetResult")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
-        // Dotted source form (ArrayBuilder.ofInt), not the binary ArrayBuilder$ofInt:
-        // the JDK compiler cannot resolve the lowercase-led inner class in binary form.
         val arrayBuilderClass = s"$arrayBuilder.of$ptName"
 
         val withArray2NaNCheckCodeGenerator =
@@ -5126,8 +5126,6 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
         val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
         val hashSet = ctx.freshName("hashSet")
         val arrayBuilder = classOf[mutable.ArrayBuilder[_]].getName
-        // Dotted source form (ArrayBuilder.ofInt), not the binary ArrayBuilder$ofInt:
-        // the JDK compiler cannot resolve the lowercase-led inner class in binary form.
         val arrayBuilderClass = s"$arrayBuilder.of$ptName"
 
         val withArray2NaNCheckCodeGenerator =
