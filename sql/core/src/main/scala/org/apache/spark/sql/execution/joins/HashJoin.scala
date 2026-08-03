@@ -253,7 +253,7 @@ trait HashJoin extends JoinCodegenSupport {
               val nextBuildRow = buildIter.next()
               if (boundRestCondition(joinedRow.withRight(nextBuildRow))) {
                 if (found && singleJoin) {
-                  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+                  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows()
                 }
                 found = true
                 return true

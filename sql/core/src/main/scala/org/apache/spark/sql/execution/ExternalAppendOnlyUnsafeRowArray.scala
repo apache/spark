@@ -122,7 +122,7 @@ class ExternalAppendOnlyUnsafeRowArray(
       spillableArray = null
     } else if (inMemoryBuffer != null) {
       inMemoryBuffer.clear()
-      inMemoryBufferSizeInBytes = 0;
+      inMemoryBufferSizeInBytes = 0
     }
     numFieldsPerRow = 0
     numRows = 0

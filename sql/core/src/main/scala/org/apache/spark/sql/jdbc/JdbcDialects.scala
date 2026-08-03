@@ -587,7 +587,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
     val rs = conn.getMetaData.getSchemas(null, schema)
     while (rs.next()) {
-      if (rs.getString(1) == schema) return true;
+      if (rs.getString(1) == schema) return true
     }
     false
   }
