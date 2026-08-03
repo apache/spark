@@ -22,10 +22,10 @@ import java.nio.file.{Files, Path, Paths}
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.sql.Artifact
+import org.apache.spark.sql.{AnalysisException, Artifact}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.storage.CacheId
@@ -251,6 +251,18 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
     val copiedClassFile = Paths.get(destFSDir.toString, "smallClassFileCopied.class").toFile
     assert(copiedClassFile.exists())
+  }
+
+  test("SPARK-58531: allowDestLocal cannot be set from a session") {
+    // The conf gates writes to a local filesystem destination on the driver, so it must stay a
+    // static conf: a session that could turn it on would be able to write to arbitrary paths on
+    // the driver. Guard against it being made session-settable again.
+    val key = StaticSQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key
+    assert(SQLConf.isStaticConfigKey(key))
+    checkError(
+      exception = intercept[AnalysisException](spark.conf.set(key, "true")),
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> s""""$key""""))
   }
 
   test("Removal of resources") {
