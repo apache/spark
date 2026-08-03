@@ -20,8 +20,9 @@ import numpy as np
 
 from pyspark.sql import functions as F
 from pyspark.sql.pandas.functions import pandas_udf
-from pyspark.sql.types import DoubleType, LongType, BooleanType
+from pyspark.sql.types import DoubleType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
+
 
 unary_np_spark_mappings = {
     "abs": F.abs,
@@ -49,9 +50,11 @@ unary_np_spark_mappings = {
     "floor": F.floor,
     "frexp": lambda _: NotImplemented,  # 'frexp' output lengths become different
     # and it cannot be supported via pandas UDF.
-    "invert": pandas_udf(lambda s: np.invert(s), DoubleType()),  # type: ignore[call-overload]
-    "isfinite": lambda c: c != float("inf"),
-    "isinf": lambda c: c == float("inf"),
+    "invert": F.bitwise_not,
+    "isfinite": lambda c: F.coalesce(
+        ~(F.isnan(c) | (c == float("inf")) | (c == float("-inf"))), F.lit(False)
+    ),
+    "isinf": lambda c: F.coalesce((c == float("inf")) | (c == float("-inf")), F.lit(False)),
     "isnan": F.isnan,
     "isnat": lambda c: NotImplemented,  # pandas-on-Spark and PySpark does not have Nat concept.
     "log": F.log,
@@ -66,7 +69,7 @@ unary_np_spark_mappings = {
     "reciprocal": pandas_udf(  # type: ignore[call-overload]
         lambda s: np.reciprocal(s), DoubleType()
     ),
-    "rint": pandas_udf(lambda s: np.rint(s), DoubleType()),  # type: ignore[call-overload]
+    "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
     "signbit": lambda c: F.when(c < 0, True).otherwise(False),
     "sin": F.sin,
@@ -76,7 +79,15 @@ unary_np_spark_mappings = {
     "square": lambda c: c.cast("double") * c,
     "tan": F.tan,
     "tanh": F.tanh,
-    "trunc": pandas_udf(lambda s: np.trunc(s), DoubleType()),  # type: ignore[call-overload]
+    "trunc": lambda c: F.when(
+        c.cast("double").isNull()
+        | F.isnan(c.cast("double"))
+        | c.cast("double").isin(float("-inf"), float("inf")),
+        c.cast("double"),
+    ).otherwise(
+        F.signum(c.cast("double"))
+        * (F.abs(c.cast("double")) - (F.abs(c.cast("double")) % F.lit(1.0)))
+    ),
 }
 
 binary_np_spark_mappings = {
@@ -105,8 +116,10 @@ binary_np_spark_mappings = {
     "ldexp": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.ldexp(s1, s2), DoubleType()
     ),
-    "left_shift": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.left_shift(s1, s2), LongType()
+    # F.shiftleft accepts literal counts only; call_function also accepts a column.
+    # NumPy returns zero for counts outside an int64's bit width, unlike JVM shifts.
+    "left_shift": lambda c1, c2: F.when((c2 < 0) | (c2 >= 64), F.lit(0)).otherwise(
+        F.call_function("shiftleft", c1, c2)
     ),
     "logaddexp": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.logaddexp(s1, s2), DoubleType()
@@ -127,9 +140,11 @@ binary_np_spark_mappings = {
     "nextafter": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.nextafter(s1, s2), DoubleType()
     ),
-    "right_shift": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.right_shift(s1, s2), LongType()
-    ),
+    # F.shiftright accepts literal counts only; call_function also accepts a column.
+    # NumPy sign-extends counts outside an int64's bit width, unlike JVM shifts.
+    "right_shift": lambda c1, c2: F.when(
+        (c2 < 0) | (c2 >= 64), F.call_function("shiftright", c1, F.lit(63))
+    ).otherwise(F.call_function("shiftright", c1, c2)),
 }
 
 

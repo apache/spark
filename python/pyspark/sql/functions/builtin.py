@@ -6285,6 +6285,74 @@ def collect_set(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def collect_union(col: "ColumnOrName") -> Column:
+    """
+    Aggregate function: given an array-typed column, collects the distinct union of the
+    elements of the arrays across rows and returns it as an array.
+
+    The aggregation buffer holds only the distinct elements, so its size is bounded by the
+    element universe rather than by the number of input rows. Null elements are dropped by
+    default (``IGNORE NULLS``), matching :func:`collect_set`. With ``RESPECT NULLS`` a single
+    null element is kept, in which case this is equivalent to
+    ``array_distinct(flatten(collect_list(col)))``. The ``RESPECT NULLS`` clause is only
+    available through SQL, e.g. ``expr("collect_union(col) RESPECT NULLS")``.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The target array column on which the function is computed.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new Column object representing the distinct union of the array elements.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.collect_set`
+    :meth:`pyspark.sql.functions.collect_list`
+    :meth:`pyspark.sql.functions.array_distinct`
+    :meth:`pyspark.sql.functions.flatten`
+
+    Notes
+    -----
+    This function is non-deterministic as the order of collected results depends
+    on the order of the rows, which may be non-deterministic after any shuffle operations.
+
+    Examples
+    --------
+    Example 1: Union the elements of array columns across rows
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [([1, 2],), ([2, 3],), ([1],)], ('value',))
+    >>> df.select(sf.sort_array(sf.collect_union('value')).alias('u')).show()
+    +---------+
+    |        u|
+    +---------+
+    |[1, 2, 3]|
+    +---------+
+
+    Example 2: Union per group
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("a", [1, 2]), ("a", [2, 3]), ("b", [4])], ("k", "value"))
+    >>> df = df.groupBy("k").agg(sf.sort_array(sf.collect_union('value')).alias('u'))
+    >>> df.orderBy("k").show()
+    +---+---------+
+    |  k|        u|
+    +---+---------+
+    |  a|[1, 2, 3]|
+    |  b|      [4]|
+    +---+---------+
+    """
+    return _invoke_function_over_columns("collect_union", col)
+
+
+@_try_remote_functions
 def degrees(col: "ColumnOrName") -> Column:
     """
     Converts an angle measured in radians to an approximately equivalent angle
@@ -19892,9 +19960,9 @@ def array(
 @_try_remote_functions
 def array_contains(col: "ColumnOrName", value: Any) -> Column:
     """
-    Collection function: This function returns a boolean indicating whether the array
-    contains the given value, returning null if the array is null, true if the array
-    contains the given value, and false otherwise.
+    Collection function: Returns true if the array contains the value, false if not. Returns
+    null if the array or value is null, or if the value is not found and the array contains a
+    null element.
 
     .. versionadded:: 1.5.0
 
@@ -19971,6 +20039,17 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     |array_contains(data, a)|
     +-----------------------+
     |                   true|
+    +-----------------------+
+
+    Example 5: Value absent from an array that contains a null element returns NULL.
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(["a", None, "c"],)], ['data'])
+    >>> df.select(sf.array_contains(df.data, "b")).show()
+    +-----------------------+
+    |array_contains(data, b)|
+    +-----------------------+
+    |                   NULL|
     +-----------------------+
     """
     return _invoke_function_over_columns("array_contains", col, lit(value))
@@ -22846,6 +22925,71 @@ def variant_set(
     path_col = path if isinstance(path, Column) else lit(path)
     return _invoke_function(
         "variant_set",
+        _to_java_column(v),
+        _to_java_column(path_col),
+        _to_java_column(value),
+        _enum_to_value(create_if_missing),
+    )
+
+
+@_try_remote_functions
+def try_variant_set(
+    v: "ColumnOrName",
+    path: Union[Column, str],
+    value: "ColumnOrName",
+    create_if_missing: bool = True,
+) -> Column:
+    """
+    Sets or upserts a value in a variant at the given JSONPath location. An existing object field
+    or array element at the target is replaced. A missing field, array index, or intermediate path
+    is created, unless `create_if_missing` is false, in which case the variant is left unchanged.
+    Returns NULL if a path segment hits a value of an incompatible type, or if any argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : :class:`~pyspark.sql.Column` or str
+        the JSONPath set target. A `str` is a literal path; a :class:`~pyspark.sql.Column` supplies
+        the path at runtime. A valid path should start with `$` and is followed by one or more
+        segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
+    value : :class:`~pyspark.sql.Column` or str
+        the value to set. Any expression castable to variant.
+    create_if_missing : bool, optional
+        whether to create missing keys or out-of-range array indices (default True).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with `value` set at `path`
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, try_variant_set
+    >>> df = spark.createDataFrame([{'json': '''{"a": 1, "arr": [1, 2, 3]}'''}])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(try_variant_set(v, "$.a", lit(9))).alias("r")).collect()
+    [Row(r='{"a":9,"arr":[1,2,3]}')]
+    >>> df.select(to_json(try_variant_set(v, "$.b", lit(2))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":[1,2,3],"b":2}')]
+    >>> df.select(to_json(try_variant_set(v, "$.arr[1]", lit(9))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":[1,9,3]}')]
+    >>> df.select(to_json(try_variant_set(v, "$.arr[5]", lit(9))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":[1,2,3,null,null,9]}')]
+    >>> df.select(to_json(try_variant_set(v, "$.b", lit(2), False)).alias("r")).collect()
+    [Row(r='{"a":1,"arr":[1,2,3]}')]
+    >>> df.select(to_json(try_variant_set(v, "$.a.b", lit(9))).alias("r")).collect()
+    [Row(r=None)]
+    >>> df.select(to_json(try_variant_set(v, "$.a", lit(None))).alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "try_variant_set",
         _to_java_column(v),
         _to_java_column(path_col),
         _to_java_column(value),

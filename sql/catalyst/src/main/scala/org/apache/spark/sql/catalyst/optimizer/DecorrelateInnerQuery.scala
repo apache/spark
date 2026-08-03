@@ -1006,7 +1006,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               // predicate does, and the correlations can not be replaced via equivalences.
               // Introduce a domain join on the left side of the join
               // (chosen arbitrarily) to provide values for the correlated attribute reference.
-              shouldPushToLeft = true;
+              shouldPushToLeft = true
             }
             val (newLeft, leftJoinCond, leftOuterReferenceMap) = if (shouldPushToLeft) {
               decorrelate(left, newOuterReferences, aggregated, underSetOp)

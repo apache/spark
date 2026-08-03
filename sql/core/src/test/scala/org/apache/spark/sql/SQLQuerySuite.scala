@@ -1676,7 +1676,7 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       exception = intercept[AnalysisException] {
         sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
       },
-      condition = "_LEGACY_ERROR_TEMP_1138"
+      condition = "ORC_DATA_SOURCE_REQUIRES_HIVE_SUPPORT"
     )
 
     e = intercept[AnalysisException] {
@@ -5062,7 +5062,8 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
 
       for (confValue <- Seq(false, true)) {
         withSQLConf(
-          SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> confValue.toString
+          SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED.key -> confValue.toString,
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> confValue.toString
         ) {
           val analyzedPlan = sql(
             """SELECT
@@ -5133,7 +5134,11 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       checkAnswer(sql(query), Row(1, 1))
     }
 
-    withSQLConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "false") {
+    withSQLConf(
+      SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "false",
+      // Single-pass analyzer doesn't support this legacy behavior.
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false"
+    ) {
       checkAnswer(sql(query), Row(1, 2))
     }
   }

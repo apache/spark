@@ -121,7 +121,8 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
-    ['avro', 'catalyst', 'connect', 'core', 'docker-integration-tests', 'examples', 'graphx',
+    ['avro', 'catalyst', 'connect', 'core', 'credential-aws', 'docker-integration-tests',
+     'examples', 'graphx',
      'hive', 'hive-thriftserver', 'mllib', 'mllib-local', 'pipelines', 'protobuf',
      'pyspark-connect', 'pyspark-core', 'pyspark-errors', 'pyspark-ml', 'pyspark-ml-connect',
      'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',

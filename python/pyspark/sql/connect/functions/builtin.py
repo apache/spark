@@ -1082,6 +1082,13 @@ def collect_set(col: "ColumnOrName") -> Column:
 collect_set.__doc__ = pysparkfuncs.collect_set.__doc__
 
 
+def collect_union(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("collect_union", col)
+
+
+collect_union.__doc__ = pysparkfuncs.collect_union.__doc__
+
+
 def listagg(col: "ColumnOrName", delimiter: Optional[Union[Column, str, bytes]] = None) -> Column:
     if delimiter is None:
         return _invoke_function_over_columns("listagg", col)
@@ -2250,6 +2257,21 @@ def variant_set(
 
 
 variant_set.__doc__ = pysparkfuncs.variant_set.__doc__
+
+
+def try_variant_set(
+    v: "ColumnOrName",
+    path: Union[Column, str],
+    value: "ColumnOrName",
+    create_if_missing: bool = True,
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "try_variant_set", _to_col(v), path_col, _to_col(value), lit(create_if_missing)
+    )
+
+
+try_variant_set.__doc__ = pysparkfuncs.try_variant_set.__doc__
 
 
 def variant_array_append(

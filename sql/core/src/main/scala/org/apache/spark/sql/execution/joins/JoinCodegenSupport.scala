@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.{BindReferences, BoundReference}
+import org.apache.spark.sql.catalyst.expressions.{BindReferences, BoundReference, Expression}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
@@ -40,6 +40,25 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
       streamPlan: SparkPlan,
       buildPlan: SparkPlan,
       buildRow: Option[String] = None): (String, String, Seq[ExprCode]) = {
+    if (condition.isDefined) {
+      getJoinCondition(ctx, condition.get, streamVars, streamPlan, buildPlan, buildRow)
+    } else {
+      val buildSideRow = buildRow.getOrElse(ctx.freshName("buildRow"))
+      val buildVars = genOneSideJoinVars(ctx, buildSideRow, buildPlan, setDefaultValue = false)
+      (buildSideRow, "", buildVars)
+    }
+  }
+
+  /**
+   * Generate the (non-equi) condition used to filter joined rows from an explicit expression.
+   */
+  protected def getJoinCondition(
+      ctx: CodegenContext,
+      conditionExpr: Expression,
+      streamVars: Seq[ExprCode],
+      streamPlan: SparkPlan,
+      buildPlan: SparkPlan,
+      buildRow: Option[String]): (String, String, Seq[ExprCode]) = {
     val buildSideRow = buildRow.getOrElse(ctx.freshName("buildRow"))
     val buildVars = genOneSideJoinVars(ctx, buildSideRow, buildPlan, setDefaultValue = false)
     // We want to evaluate the passed streamVars. However, evaluation modifies the contained
@@ -47,25 +66,21 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
     // full outer join will want to evaluate streamVars in a different scope than the
     // condition check). Because of this, we first make a copy.
     val streamVars2 = streamVars.map(_.copy())
-    val checkCondition = if (condition.isDefined) {
-      val expr = condition.get
-      // evaluate the variables that are used by the condition
-      val eval = evaluateRequiredVariables(streamPlan.output ++ buildPlan.output,
-        streamVars2 ++ buildVars, expr.references)
+    // evaluate the variables that are used by the condition
+    val eval = evaluateRequiredVariables(streamPlan.output ++ buildPlan.output,
+      streamVars2 ++ buildVars, conditionExpr.references)
 
-      // filter the output via condition
-      ctx.currentVars = streamVars2 ++ buildVars
-      val ev =
-        BindReferences.bindReference(expr, streamPlan.output ++ buildPlan.output).genCode(ctx)
-      val skipRow = s"${ev.isNull} || !${ev.value}"
+    // filter the output via condition
+    ctx.currentVars = streamVars2 ++ buildVars
+    val ev = BindReferences.bindReference(
+      conditionExpr, streamPlan.output ++ buildPlan.output).genCode(ctx)
+    val skipRow = s"${ev.isNull} || !${ev.value}"
+    val checkCondition =
       s"""
          |$eval
          |${ev.code}
          |if (!($skipRow))
        """.stripMargin
-    } else {
-      ""
-    }
     (buildSideRow, checkCondition, buildVars)
   }
 

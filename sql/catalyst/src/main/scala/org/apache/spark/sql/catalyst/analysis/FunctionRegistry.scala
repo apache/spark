@@ -551,6 +551,7 @@ object FunctionRegistry {
     expression[CollectList]("collect_list"),
     expression[CollectList]("array_agg", true, Some("3.3.0")),
     expression[CollectSet]("collect_set"),
+    expression[CollectUnion]("collect_union"),
     expression[ListAgg]("listagg"),
     expression[ListAgg]("string_agg", setAlias = true),
     expressionBuilder("count_min_sketch", CountMinSketchAggExpressionBuilder),
@@ -990,6 +991,7 @@ object FunctionRegistry {
     expressionBuilder("variant_insert", VariantInsertExpressionBuilder),
     expressionBuilder("try_variant_insert", TryVariantInsertExpressionBuilder),
     expressionBuilder("variant_set", VariantSetExpressionBuilder),
+    expressionBuilder("try_variant_set", TryVariantSetExpressionBuilder),
     expressionBuilder("variant_array_append", VariantArrayAppendExpressionBuilder),
     expressionBuilder("try_variant_array_append", TryVariantArrayAppendExpressionBuilder),
 

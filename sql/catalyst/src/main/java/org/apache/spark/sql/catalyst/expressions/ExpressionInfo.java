@@ -150,36 +150,39 @@ public class ExpressionInfo {
         if (!note.isEmpty()) {
             if (!note.contains("    ") || !note.endsWith("  ")) {
                 throw new SparkIllegalArgumentException(
-                  "_LEGACY_ERROR_TEMP_3201", Map.of("exprName", this.name, "note", note));
+                  "MALFORMED_EXPRESSION_INFO.NOTE",
+                  Map.of("fieldName", "note", "exprName", this.name, "note", note));
             }
             this.extended += "\n    Note:\n      " + note.trim() + "\n";
         }
         if (!group.isEmpty() && !validGroups.contains(group)) {
             throw new SparkIllegalArgumentException(
-              "_LEGACY_ERROR_TEMP_3202",
-              Map.of("exprName", this.name,
+              "MALFORMED_EXPRESSION_INFO.GROUP",
+              Map.of("fieldName", "group", "exprName", this.name,
                 "validGroups", String.valueOf(validGroups.stream().sorted().toList()),
                 "group", group));
         }
         if (!source.isEmpty() && !validSources.contains(source)) {
             throw new SparkIllegalArgumentException(
-              "_LEGACY_ERROR_TEMP_3203",
-              Map.of("exprName", this.name,
+              "MALFORMED_EXPRESSION_INFO.SOURCE",
+              Map.of("fieldName", "source", "exprName", this.name,
                 "validSources", String.valueOf(validSources.stream().sorted().toList()),
                 "source", source));
         }
         if (!since.isEmpty()) {
             if (Integer.parseInt(since.split("\\.")[0]) < 0) {
                 throw new SparkIllegalArgumentException(
-                  "_LEGACY_ERROR_TEMP_3204", Map.of("exprName", this.name, "since", since));
+                  "MALFORMED_EXPRESSION_INFO.SINCE",
+                  Map.of("fieldName", "since", "exprName", this.name, "since", since));
             }
             this.extended += "\n    Since: " + since + "\n";
         }
         if (!deprecated.isEmpty()) {
             if (!deprecated.contains("    ") || !deprecated.endsWith("  ")) {
                 throw new SparkIllegalArgumentException(
-                  "_LEGACY_ERROR_TEMP_3205",
-                  Map.of("exprName", this.name, "deprecated", deprecated));
+                  "MALFORMED_EXPRESSION_INFO.DEPRECATED",
+                  Map.of("fieldName", "deprecated", "exprName", this.name,
+                    "deprecated", deprecated));
             }
             this.extended += "\n    Deprecated:\n      " + deprecated.trim() + "\n";
         }

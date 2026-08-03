@@ -69,6 +69,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate =
       ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
+    // Runtime filters are introduced after subquery optimization, so Python UDFs in a new
+    // creation-side subquery cannot be extracted into a Python evaluation operator.
+    if (aggregate.containsPattern(PYTHON_UDF)) {
+      return filterApplicationSidePlan
+    }
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
     val filter = BloomFilterMightContain(bloomFilterSubquery,
       new XxHash64(Seq(filterApplicationSideKey)))

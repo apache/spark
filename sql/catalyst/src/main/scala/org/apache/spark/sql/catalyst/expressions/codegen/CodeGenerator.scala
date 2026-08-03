@@ -303,7 +303,8 @@ class CodegenContext extends Logging {
    *                 e.g. InternalRow, UnsafeRow, UnsafeArrayData, etc. Other types will have to
    *                 specify the fully-qualified Java type name. See the code in doCompile() for
    *                 the list of default imports available.
-   *                 Also, generic type arguments are accepted but ignored.
+   *                 Also, generic type arguments are kept in field declarations, but stripped
+   *                 from array creation expressions because Java forbids generic array creation.
    * @param variableName Name of the field.
    * @param initFunc Function includes statement(s) to put into the init() method to initialize
    *                 this field. The argument is the name of the mutable state variable.
@@ -402,6 +403,18 @@ class CodegenContext extends Logging {
   }
 
   def declareMutableStates(): String = {
+    def rawJavaType(javaType: String): String = {
+      val builder = new StringBuilder
+      var depth = 0
+      javaType.foreach {
+        case '<' => depth += 1
+        case '>' => depth -= 1
+        case c if depth == 0 => builder.append(c)
+        case _ =>
+      }
+      builder.toString
+    }
+
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
     val inlinedStates = inlinedMutableStates.distinct.map { case (javaType, variableName) =>
@@ -419,10 +432,10 @@ class CodegenContext extends Logging {
         if (javaType.contains("[]")) {
           // initializer had an one-dimensional array variable
           val baseType = javaType.substring(0, javaType.length - 2)
-          s"private $javaType[] $arrayName = new $baseType[$length][];"
+          s"private $javaType[] $arrayName = new ${rawJavaType(baseType)}[$length][];"
         } else {
           // initializer had a scalar variable
-          s"private $javaType[] $arrayName = new $javaType[$length];"
+          s"private $javaType[] $arrayName = new ${rawJavaType(javaType)}[$length];"
         }
       }
     }
@@ -794,7 +807,7 @@ class CodegenContext extends Logging {
     val isNullA = freshName("isNullA")
     val elementB = freshName("elementB")
     val isNullB = freshName("isNullB")
-    val jt = javaType(elementType);
+    val jt = javaType(elementType)
     s"""
        |boolean $isNullA = $arrayA.isNullAt($i);
        |boolean $isNullB = $arrayB.isNullAt($i);

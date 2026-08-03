@@ -324,13 +324,17 @@ class FPGrowthModel private[ml] (
   }
 
   private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    // freqItemsets: DataFrame("items": Array, "freq": Long)
     freqItemsets match {
       case df: org.apache.spark.sql.classic.DataFrame =>
-        df.toArrowBatchRdd.map(_.length.toLong).reduce(_ + _) +
-          SizeEstimator.estimate(itemSupport)
+        size += df.toArrowBatchRdd.map(_.length.toLong).reduce(_ + _)
       case o => throw new UnsupportedOperationException(
         s"Unsupported dataframe type: ${o.getClass.getName}")
     }
+    // itemSupport: scala.collection.Map[Any, Double]
+    size += SizeEstimator.estimate(itemSupport)
+    size
   }
 }
 

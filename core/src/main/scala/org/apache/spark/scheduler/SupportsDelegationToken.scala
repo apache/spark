@@ -33,7 +33,7 @@ private[spark] trait SupportsDelegationToken {
   /**
    * Create the delegation token manager to be used for the application. This method is called
    * once during the start of the scheduler backend (so after the object has already been
-   * fully constructed), only if security is enabled in the Hadoop configuration.
+   * fully constructed), when security is enabled or direct credential providers are configured.
    */
   protected def createTokenManager(): Option[HadoopDelegationTokenManager] = None
 
@@ -42,8 +42,14 @@ private[spark] trait SupportsDelegationToken {
    */
   protected def updateDelegationTokens(tokens: Array[Byte]): Unit
 
+  /**
+   * Whether the token manager should be started. Returns true if Hadoop security is enabled
+   * or if direct credential providers are configured.
+   */
+  protected def tokenManagerRequired(): Boolean = UserGroupInformation.isSecurityEnabled
+
   protected def setupTokenManager(): Unit = {
-    if (UserGroupInformation.isSecurityEnabled) {
+    if (tokenManagerRequired()) {
       delegationTokenManager = createTokenManager()
       delegationTokenManager.foreach { dtm =>
         val ugi = UserGroupInformation.getCurrentUser
