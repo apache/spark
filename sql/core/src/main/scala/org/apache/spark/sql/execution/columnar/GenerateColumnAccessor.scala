@@ -30,13 +30,10 @@ import org.apache.spark.unsafe.types.CalendarInterval
 /**
  * An Iterator to walk through the InternalRows from a CachedBatch
  *
- * Extends `AbstractIterator` rather than mixing in `Iterator` directly. Mixing a trait into a
+ * Extends `AbstractIterator` rather than mixing in `Iterator` directly. Mixing the trait into a
  * class that fixes its type parameter makes scalac copy the trait's forwarders here and emit them
- * raw, with no `Signature` attribute: the class file grows, and javac cannot subclass it, seeing
- * `Object minBy(Function1, Ordering)` clash with `IterableOnceOps`'
- * `<B> A minBy(Function1<A, B>, Ordering<B>)`. `AbstractIterator` keeps its element type generic,
- * so the forwarders stay in it, with their signatures. The subclass generated below is compiled
- * as Java source under the javac codegen backend (SPARK-57403); Janino skips this check.
+ * raw, with no `Signature` attribute: the class file bloats, and javac rejects any subclass of it,
+ * including the one generated below. Janino does not check this. See SPARK-58516.
  */
 abstract class ColumnarIterator extends AbstractIterator[InternalRow] {
   def initialize(input: Iterator[DefaultCachedBatch], columnTypes: Array[DataType],
