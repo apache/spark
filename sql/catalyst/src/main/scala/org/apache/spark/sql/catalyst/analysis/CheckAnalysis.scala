@@ -710,7 +710,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "NEAREST_BY_JOIN.STREAMING_NOT_SUPPORTED",
               messageParameters = Map.empty)
 
-          case j: NearestByJoin if !conf.crossJoinEnabled =>
+          case j: NearestByJoin if !conf.crossJoinEnabled &&
+              !conf.nearestByBroadcastEnabled =>
+            // The cross-join check only applies on the REWRITE path (flag OFF) where
+            // a synthetic unconditioned Join node is created. On the OPERATOR path
+            // (flag ON), no Join node is built and the operator produces at most k rows
+            // per left row, so it is not a true cross product.
             j.failAnalysis(
               errorClass = "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
               messageParameters = Map.empty)

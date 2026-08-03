@@ -40,12 +40,16 @@ private[joins] case class HeapEntry(index: Int, rankingValue: Any)
  * For each left row, iterates all broadcast right rows maintaining a bounded priority
  * queue of size k, then emits the top-k matches directly.
  *
- * The right side is fully broadcast to all partitions. This operator only fires when
- * the right side fits within the broadcast join threshold
- * ([[org.apache.spark.sql.internal.SQLConf.autoBroadcastJoinThreshold]]). For right tables
- * exceeding this threshold, the existing cross-product + aggregate rewrite is used as
- * fallback. Tie-breaking among equal ranking values is non-deterministic (matches the
- * existing rewrite behavior).
+ * The right side is fully broadcast unconditionally when
+ * `spark.sql.join.nearestBy.broadcast.enabled` is on. [[RewriteNearestByJoin]] leaves
+ * every [[NearestByJoin]] intact for this operator; there is no size test and no fallback.
+ * A right side too large to broadcast will fail the query. Tie-breaking among equal
+ * ranking values is non-deterministic (matches the rewrite).
+ *
+ * Because no `Join` node is built on the operator path, `CheckCartesianProducts` does not
+ * apply and `spark.sql.crossJoin.enabled = false` does not reject NEAREST BY queries.
+ * This is intentional: the operator produces at most k rows per left row (bounded), not a
+ * true cross product.
  */
 case class BroadcastNearestByJoinExec(
     left: SparkPlan,
@@ -62,6 +66,16 @@ case class BroadcastNearestByJoinExec(
   override def simpleStringWithNodeId(): String = {
     val opId = ExplainUtils.getOpId(this)
     s"$nodeName $joinType k=$numResults $direction ($opId)".trim
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    s"""
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Ranking", rankingExpression.sql)}
+       |${ExplainUtils.generateFieldString("NumResults", numResults.toString)}
+       |${ExplainUtils.generateFieldString("Direction", direction.toString)}
+       |${ExplainUtils.generateFieldString("JoinType", joinType.toString)}
+       |""".stripMargin
   }
 
   override def output: Seq[Attribute] = joinType match {
@@ -108,15 +122,18 @@ case class BroadcastNearestByJoinExec(
         val resultProj = UnsafeProjection.create(allOutput, allOutput)
         val rankingNeedsCopy = !UnsafeRow.isFixedLength(rankExpr.dataType)
 
-        // Hoist heap outside flatMap to reduce GC pressure
+        // Hoist heap outside flatMap to reduce GC pressure.
+        // Size the heap to min(k, rightRows.length) + 1 to avoid over-allocating when
+        // the right side is smaller than k.
+        val heapCapacity = math.min(k, rightRows.length) + 1
         val heap = if (isDistance) {
-          new JPriorityQueue[HeapEntry](k + 1,
+          new JPriorityQueue[HeapEntry](heapCapacity,
             new Comparator[HeapEntry] {
               override def compare(a: HeapEntry, b: HeapEntry): Int =
                 ordering.compare(b.rankingValue, a.rankingValue)
             })
         } else {
-          new JPriorityQueue[HeapEntry](k + 1,
+          new JPriorityQueue[HeapEntry](heapCapacity,
             new Comparator[HeapEntry] {
               override def compare(a: HeapEntry, b: HeapEntry): Int =
                 ordering.compare(a.rankingValue, b.rankingValue)
@@ -139,12 +156,12 @@ case class BroadcastNearestByJoinExec(
               // immediately evicted, and reduces PriorityQueue churn.
               // For distance (isDistance=true): smaller is better, worst=largest on peek.
               // For similarity: larger is better, worst=smallest on peek.
-              val dominated = heap.size() < k || (if (isDistance) {
+              val shouldRetain = heap.size() < k || (if (isDistance) {
                 ordering.compare(rawValue, heap.peek().rankingValue) < 0
               } else {
                 ordering.compare(rawValue, heap.peek().rankingValue) > 0
               })
-              if (dominated) {
+              if (shouldRetain) {
                 val rankingValue = if (rankingNeedsCopy) {
                   rankingRow.copy().get(0, rankExpr.dataType)
                 } else {
