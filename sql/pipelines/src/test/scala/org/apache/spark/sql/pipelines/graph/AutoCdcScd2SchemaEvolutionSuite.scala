@@ -385,14 +385,18 @@ class AutoCdcScd2SchemaEvolutionSuite
     val session = spark
     import session.implicits._
 
-    // DatasetManager's schema-merge compares schemas case-sensitively, so a target `value` and a
-    // source `Value` are treated as distinct and the target is evolved to carry both columns.
-    // The failure then surfaces during microbatch reconciliation, not at table/aux creation:
+    // This pins current (buggy) behavior, tracked by SPARK-58517: DatasetManager's schema
+    // evolution ignores spark.sql.caseSensitive and merges case-sensitively, so a target `value`
+    // and a source `Value` are wrongly treated as distinct and the target is evolved to carry both
+    // columns -- a schema self-inconsistent under the (default) case-insensitive resolver. The
+    // failure then surfaces during microbatch reconciliation, not at table/aux creation:
     // Scd2ForeachBatchHandler.reconcileMicrobatch reads that now-two-column target back and folds
     // it into the affected-rows `unionByName`; ResolveUnion runs a case-insensitive
     // duplicate-column check over the union's schema and reports COLUMN_ALREADY_EXISTS. SCD1 has no
     // such reconcile union and instead surfaces AMBIGUOUS_REFERENCE deeper in the MERGE plan -- so
-    // the same user mistake maps to two different conditions across the SCD types.
+    // the same user mistake maps to two different conditions across the SCD types. Once SPARK-58517
+    // is fixed the merge should be a no-op (source `Value` maps onto target `value`) and this test
+    // should be updated to assert success.
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       spark.sql(
         s"CREATE TABLE $catalog.$namespace.target " +
