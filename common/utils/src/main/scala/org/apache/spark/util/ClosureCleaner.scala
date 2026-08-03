@@ -59,11 +59,12 @@ private[spark] object ClosureCleaner extends Logging {
     implMethodName match {
       case None => found.nonEmpty
       case Some(target) =>
-        // A method with suffix "$adapted" will be generated in cases like
-        // { _:Int => return; Seq()} but not { _:Int => return; true}
-        // closure passed is $anonfun$t$1$adapted while actual code resides in $anonfun$s$1
-        // the class file only contains $anonfun$s$1, so we remove the suffix, see
-        // https://github.com/scala/scala-dev/issues/109
+        // Some lambdas get an "$adapted" boxing bridge (e.g. { _: Int => return; Seq() }) while
+        // others do not ({ _: Int => return; true }, fully specialized). When the bridge
+        // exists, the SerializedLambda's impl method is the bridge, which only delegates: the
+        // `new NonLocalReturnControl` instruction is emitted in the underlying unadapted
+        // method, so also match with the suffix stripped.
+        // See https://github.com/scala/scala-dev/issues/109.
         found.contains(target) || found.contains(target.stripSuffix("$adapted"))
     }
   }
