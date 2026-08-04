@@ -149,7 +149,7 @@ public interface MergedShuffleFileManager {
    * @param checksumByReader the checksum of the chunk calculated by the reducer
    * @param algorithm the checksum algorithm the reducer used
    * @return the cause of the corruption
-   * @since 4.3.0
+   * @since 4.4.0
    */
   default Cause diagnoseShuffleChunkCorruption(
       String appId,
