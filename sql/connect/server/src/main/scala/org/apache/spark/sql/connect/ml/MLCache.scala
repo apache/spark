@@ -76,7 +76,6 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   }
 
   private case class ModelMetadata(
-      uid: String,
       className: String,
       modelString: String,
       estimatedSizeBytes: Option[Long])
@@ -180,7 +179,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
       }
       cachedModelMetadata.put(
         objectId,
-        ModelMetadata(model.uid, model.getClass.getName, model.toString, estimatedSizeBytes))
+        ModelMetadata(model.getClass.getName, model.toString, estimatedSizeBytes))
       inMemoryModelIds.add(objectId)
       cachedModel.put(objectId, CacheItem(model, estimatedSizeBytes.getOrElse(0L)))
       estimatedSizeBytes.foreach { sizeBytes =>
@@ -321,7 +320,6 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     cachedModelMetadata.asScala.foreach { case (id, metadata) =>
       models += MLCacheModelInfo(
         id = id,
-        uid = metadata.uid,
         className = metadata.className,
         modelString = metadata.modelString,
         estimatedSizeBytes = metadata.estimatedSizeBytes,
@@ -340,7 +338,6 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
 private[connect] case class MLCacheModelInfo(
     id: String,
-    uid: String,
     className: String,
     modelString: String,
     estimatedSizeBytes: Option[Long],

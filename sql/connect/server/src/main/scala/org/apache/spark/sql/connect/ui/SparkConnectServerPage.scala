@@ -564,7 +564,6 @@ private[ui] class MLCacheModelStatsPagedTable(
       ("User", true, None),
       ("Session ID", true, None),
       ("Model ID", true, None),
-      ("UID", true, None),
       ("Model Class", true, None),
       ("Model Details", true, Some(SPARK_CONNECT_ML_CACHE_MODEL_DETAILS)),
       ("Estimated Size", true, Some(SPARK_CONNECT_ML_CACHE_ESTIMATED_SIZE)),
@@ -592,7 +591,6 @@ private[ui] class MLCacheModelStatsPagedTable(
       <td>{row.userId}</td>
       <td><a href={sessionLink}>{row.sessionId}</a></td>
       <td>{model.id}</td>
-      <td>{model.uid}</td>
       <td>{model.className}</td>
       <td>{model.modelString}</td>
       <td>{model.estimatedSizeBytes.map(Utils.bytesToString).getOrElse("N/A")}</td>
@@ -621,7 +619,6 @@ private[ui] class MLCacheModelTableDataSource(
       case "User" => Ordering.by(_.userId)
       case "Session ID" => Ordering.by(_.sessionId)
       case "Model ID" => Ordering.by(_.model.id)
-      case "UID" => Ordering.by(_.model.uid)
       case "Model Class" => Ordering.by(_.model.className)
       case "Model Details" => Ordering.by(_.model.modelString)
       case "Estimated Size" =>

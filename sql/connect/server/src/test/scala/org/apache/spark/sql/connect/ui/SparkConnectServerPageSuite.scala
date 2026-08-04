@@ -161,14 +161,12 @@ class SparkConnectServerPageSuite
           models = Seq(
             MLCacheModelInfo(
               id = "model-id-1",
-              uid = "logreg-1",
               className = "org.apache.spark.ml.classification.LogisticRegressionModel",
               modelString = "LogisticRegressionModel: uid=logreg-1",
               estimatedSizeBytes = Some(1024),
               inMemory = true),
             MLCacheModelInfo(
               id = "model-id-2",
-              uid = "logreg-2",
               className = "org.apache.spark.ml.classification.LogisticRegressionModel",
               modelString = "LogisticRegressionModel: uid=logreg-2",
               estimatedSizeBytes = Some(1024),
@@ -185,7 +183,6 @@ class SparkConnectServerPageSuite
     assert(html.contains("1.0 kib / 4.0 kib"))
     assert(html.contains("2.0 kib / 8.0 kib"))
     assert(html.contains("model-id-1"))
-    assert(html.contains("logreg-1"))
     assert(html.contains("logisticregressionmodel: uid=logreg-1"))
     assert(html.contains("in memory"))
     assert(html.contains("offloaded"))
