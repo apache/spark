@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 
 import java.io.IOException
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.concurrent.duration.Duration
 
@@ -495,15 +495,16 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
     val runningStages = ConcurrentHashMap.newKeySet[Int]()
     val maxConcurrentStages = new AtomicInteger(0)
     val queryStageIds = ConcurrentHashMap.newKeySet[Int]()
-    // Count only stages belonging to the query under test. The suite shares one SparkContext, so
-    // an unrelated concurrent stage would otherwise satisfy the co-scheduling assertion below even
-    // if this query's producer and consumer actually ran one after the other. StreamExecution sets
-    // the job group to the query's runId, which the job-start event carries.
+    // Count only stages belonging to the query under test. The suite shares one SparkContext, so a
+    // stage from any other streaming query would otherwise satisfy the co-scheduling assertion
+    // below even if this query's producer and consumer actually ran one after the other. The id is
+    // captured from the query once it is running, and every job is matched against it.
+    val queryId = new AtomicReference[String](null)
     val listener = new SparkListener {
       override def onJobStart(e: SparkListenerJobStart): Unit = {
-        // StreamExecution tags every streaming job with the query id; a batch/unrelated job has
-        // no such property, so this keeps unrelated stages out of the count.
-        if (e.properties.getProperty(StreamExecution.QUERY_ID_KEY) != null) {
+        // StreamExecution tags every streaming job with its query id.
+        val id = queryId.get()
+        if (id != null && e.properties.getProperty(StreamExecution.QUERY_ID_KEY) == id) {
           e.stageIds.foreach(queryStageIds.add(_))
         }
       }
@@ -525,6 +526,9 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
       testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
         AddData(inputData, ("a", 1), ("b", 1), ("c", 1), ("a", 2), ("b", 2), ("c", 2)),
         StartStream(),
+        // Record the id before any batch is awaited, so the listener attributes this query's jobs
+        // from the first one.
+        Execute(q => queryId.set(q.id.toString)),
         CheckAnswerWithTimeout(60000, "a", "b", "c"),
         advanceRealTimeClock,
         WaitUntilBatchProcessed(0),
@@ -589,15 +593,16 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
     val runningStages = ConcurrentHashMap.newKeySet[Int]()
     val maxConcurrentStages = new AtomicInteger(0)
     val queryStageIds = ConcurrentHashMap.newKeySet[Int]()
-    // Count only stages belonging to the query under test. The suite shares one SparkContext, so
-    // an unrelated concurrent stage would otherwise satisfy the co-scheduling assertion below even
-    // if this query's producer and consumer actually ran one after the other. StreamExecution sets
-    // the job group to the query's runId, which the job-start event carries.
+    // Count only stages belonging to the query under test. The suite shares one SparkContext, so a
+    // stage from any other streaming query would otherwise satisfy the co-scheduling assertion
+    // below even if this query's producer and consumer actually ran one after the other. The id is
+    // captured from the query once it is running, and every job is matched against it.
+    val queryId = new AtomicReference[String](null)
     val listener = new SparkListener {
       override def onJobStart(e: SparkListenerJobStart): Unit = {
-        // StreamExecution tags every streaming job with the query id; a batch/unrelated job has
-        // no such property, so this keeps unrelated stages out of the count.
-        if (e.properties.getProperty(StreamExecution.QUERY_ID_KEY) != null) {
+        // StreamExecution tags every streaming job with its query id.
+        val id = queryId.get()
+        if (id != null && e.properties.getProperty(StreamExecution.QUERY_ID_KEY) == id) {
           e.stageIds.foreach(queryStageIds.add(_))
         }
       }
@@ -625,6 +630,9 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
         testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
           AddData(inputData, ("a", 1), ("b", 1), ("c", 1), ("a", 2)),
           StartStream(),
+          // Record the id before any batch is awaited, so the listener attributes this query's jobs
+          // from the first one.
+          Execute(q => queryId.set(q.id.toString)),
           CheckAnswerWithTimeout(60000, "a", "b", "c"),
           Execute { q =>
             val exchanges = q.lastExecution.executedPlan.collect {

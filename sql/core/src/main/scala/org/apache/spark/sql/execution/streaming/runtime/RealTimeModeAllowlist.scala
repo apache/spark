@@ -152,11 +152,8 @@ object RealTimeModeAllowlist extends Logging {
   /**
    * Whether a shuffle with this partitioning is supported in Real-Time Mode. See `isAllowed` for
    * why range partitioning is not.
-   *
-   * The marking rule that turns a shuffle into a pipelined one shares this predicate, so the set of
-   * shuffles it marks cannot drift from the set this allowlist admits.
    */
-  private[runtime] def supportsPartitioning(partitioning: Partitioning): Boolean = {
+  private def supportsPartitioning(partitioning: Partitioning): Boolean = {
     !partitioning.isInstanceOf[RangePartitioning]
   }
 
