@@ -66,8 +66,16 @@ unary_np_spark_mappings = {
     "positive": F.positive,
     "rad2deg": F.degrees,
     "radians": F.radians,
-    "reciprocal": pandas_udf(  # type: ignore[call-overload]
-        lambda s: np.reciprocal(s), DoubleType()
+    "reciprocal": lambda c: F.when(
+        F.typeof(c).isin("float", "double"),
+        F.when(c.isNull(), c.cast("double"))
+        .when(
+            c == 0,
+            F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
+        )
+        .otherwise(F.lit(1.0) / c),
+    ).otherwise(
+        pandas_udf(np.reciprocal, DoubleType())(c)  # type: ignore[call-overload]
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
