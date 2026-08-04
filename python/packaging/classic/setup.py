@@ -342,14 +342,7 @@ try:
         package_data={
             "pyspark.jars": ["*.jar"],
             "pyspark.bin": ["*"],
-            "pyspark.sbin": [
-                "spark-config.sh",
-                "spark-daemon.sh",
-                "start-connect-server.sh",
-                "start-history-server.sh",
-                "stop-connect-server.sh",
-                "stop-history-server.sh",
-            ],
+            "pyspark.sbin": ["*"],
             "pyspark.python.lib": ["*.zip"],
             "pyspark.data": ["*.txt", "*.data"],
             "pyspark.licenses": ["*"],

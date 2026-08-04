@@ -19,7 +19,7 @@
 recursive-include pyspark *.pyi py.typed *.json
 recursive-include deps/jars *.jar
 graft deps/bin
-recursive-include deps/sbin spark-config.sh spark-daemon.sh start-history-server.sh stop-history-server.sh
+graft deps/sbin
 recursive-include deps/data *.data *.txt
 graft deps/licenses
 recursive-include deps/examples *.py
