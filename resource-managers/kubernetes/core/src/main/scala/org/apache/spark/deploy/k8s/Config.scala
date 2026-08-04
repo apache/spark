@@ -125,16 +125,6 @@ private[spark] object Config extends Logging {
       .checkValues(Set("ClusterIP", "NodePort", "LoadBalancer"))
       .createWithDefault("ClusterIP")
 
-  val KUBERNETES_DRIVER_UI_SERVICE_NAME =
-    ConfigBuilder("spark.kubernetes.driver.ui.service.name")
-      .doc("Optional override for the dedicated Spark driver Web UI Service name " +
-        s"(only applies when ${KUBERNETES_DRIVER_UI_SERVICE_ENABLED.key}=true). " +
-        "If unset, Spark derives the name as `<resourceNamePrefix>-ui-svc`.")
-      .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .stringConf
-      .createOptional
-
   val KUBERNETES_DRIVER_OWN_PVC =
     ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")
       .doc("If true, driver pod becomes the owner of on-demand persistent volume claims " +

@@ -25,7 +25,6 @@ import org.apache.spark.deploy.k8s.Config.{
   KUBERNETES_DRIVER_SERVICE_IP_FAMILIES,
   KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY,
   KUBERNETES_DRIVER_UI_SERVICE_ENABLED,
-  KUBERNETES_DRIVER_UI_SERVICE_NAME,
   KUBERNETES_DRIVER_UI_SERVICE_TYPE
 }
 import org.apache.spark.deploy.k8s.Constants._
@@ -81,8 +80,7 @@ private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriver
     config.UI.UI_PORT.defaultValue.get
   }
 
-  private lazy val serviceName: String = kubernetesConf.get(KUBERNETES_DRIVER_UI_SERVICE_NAME)
-    .getOrElse(kubernetesConf.driverUIServiceName)
+  private lazy val resolvedServiceName: String = kubernetesConf.driverUIServiceName
 
   // The UI Service reuses the driver Service IP family settings to keep the same IP family.
   private lazy val ipFamilyPolicy = kubernetesConf.get(KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY)
@@ -97,7 +95,7 @@ private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriver
     // is active, since the Service is created endpointless regardless of the configured port.
     if (active) {
       Map(
-        KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL -> serviceName,
+        KUBERNETES_DRIVER_UI_SERVICE_NAME_INTERNAL -> resolvedServiceName,
         KUBERNETES_DRIVER_UI_SERVICE_PORT_INTERNAL -> servicePort.toString,
         KUBERNETES_DRIVER_UI_SERVICE_SELECTOR_INTERNAL -> encodeSelector(kubernetesConf.labels))
     } else {
@@ -110,7 +108,7 @@ private[spark] class DriverUIServiceFeatureStep(kubernetesConf: KubernetesDriver
 
     val uiService = new ServiceBuilder()
       .withNewMetadata()
-        .withName(serviceName)
+        .withName(resolvedServiceName)
         .addToAnnotations(kubernetesConf.serviceAnnotations.asJava)
         .addToLabels(SPARK_APP_ID_LABEL, kubernetesConf.appId)
         .addToLabels(kubernetesConf.serviceLabels.asJava)

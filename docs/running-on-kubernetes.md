@@ -1643,16 +1643,6 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>4.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.driver.ui.service.name</code></td>
-  <td>(none)</td>
-  <td>
-    Optional override for the dedicated Spark driver Web UI Service name (only applies when
-    <code>spark.kubernetes.driver.ui.service.enabled=true</code>). If unset, Spark derives the
-    name as <code>&lt;resourceNamePrefix&gt;-ui-svc</code>.
-  </td>
-  <td>4.3.0</td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.securityContext.allowPrivilegeEscalation</code></td>
   <td><code>false</code></td>
   <td>
