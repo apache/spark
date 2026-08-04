@@ -628,12 +628,15 @@ object DatasetManager extends Logging {
    * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
-   * @param caseSensitive           whether schema evolution treats field names differing only in
-   *                                case as distinct columns. Threaded from the session's
-   *                                `spark.sql.caseSensitive` so evolution matches how the rest of
+   * @param caseSensitive           whether the additive schema merge treats field names differing
+   *                                only in case as distinct columns. Threaded from the session's
+   *                                `spark.sql.caseSensitive` so the merge matches how the rest of
    *                                the engine resolves the same names; when `false`, an incoming
    *                                column differing from an existing one only in case is folded
-   *                                onto it rather than added as a duplicate.
+   *                                onto it rather than added as a duplicate. Only affects the merge
+   *                                (i.e. `mergeWithExistingSchema = true`); the subsequent diff
+   *                                always keys columns on their exact names, so a case-only rename
+   *                                on a non-merging path stays an explicit drop-then-add.
    */
   private def evolveTable(
       catalog: TableCatalog,
@@ -649,7 +652,13 @@ object DatasetManager extends Logging {
     } else {
       desiredSchema
     }
-    val columnChanges = diffSchemas(currentSchema, targetSchema, caseSensitive)
+    // NOTE: `caseSensitive` deliberately does not reach `diffSchemas`. On the incremental path the
+    // merge above has already folded a case-only-differing incoming field onto the persisted one,
+    // so there is nothing left for `diffSchemas` to match case-insensitively; on the non-merging
+    // paths (materialized views, full refresh) `targetSchema` is the declared schema as-is, where
+    // matching case-insensitively would make a case-only rename invisible and freeze the persisted
+    // spelling.
+    val columnChanges = diffSchemas(currentSchema, targetSchema)
 
     val existingProperties = existingTable.properties()
 

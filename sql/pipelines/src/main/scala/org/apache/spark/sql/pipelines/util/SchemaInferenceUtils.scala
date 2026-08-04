@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.pipelines.util
 
-import java.util.Locale
-
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.SparkSession
@@ -123,37 +121,29 @@ object SchemaInferenceUtils {
    * 1. New columns that need to be added
    * 2. Existing columns that need type updates
    *
+   * Column identity is keyed on the exact field name, deliberately NOT on a case-normalized one.
+   * Two consequences worth being explicit about, since both were considered and rejected:
+   *   - On the incremental (streaming table) path this is not where case-insensitivity belongs:
+   *     `targetSchema` is the merge of the current and desired schemas, and
+   *     [[SchemaMergingUtils.mergeSchemas]] has already folded an incoming case-only-differing
+   *     field onto the persisted one, so a case-differing pair never reaches here.
+   *   - On the non-merging paths (materialized views and any full refresh) `targetSchema` is the
+   *     run's declared schema as-is, so normalizing here would make a case-only rename invisible
+   *     and freeze the persisted spelling forever, with the table permanently disagreeing with its
+   *     definition. Exact-name keying keeps such a rename an explicit drop-then-add.
+   * Exact keying also avoids silently collapsing two genuinely distinct declared columns that
+   * differ only in case (`value` and `Value`) into an arbitrary one of the two.
+   *
    * @param currentSchema The current schema of the table
    * @param targetSchema The target schema that we want the table to have
-   * @param caseSensitive Whether two field names that differ only in case identify distinct
-   *                      columns. When `false` (mirroring a case-insensitive session), a target
-   *                      field is matched to the current field it differs from only in case -- so
-   *                      it is treated as the same column (an in-place update against the current
-   *                      column's name) rather than a spurious drop-then-add. Callers on a
-   *                      schema-evolution path should pass the session's `spark.sql.caseSensitive`;
-   *                      the default `true` preserves the historical case-sensitive behavior.
    * @return A sequence of TableChange objects representing the necessary changes
    */
-  def diffSchemas(
-      currentSchema: StructType,
-      targetSchema: StructType,
-      caseSensitive: Boolean = true): Seq[TableChange] = {
+  def diffSchemas(currentSchema: StructType, targetSchema: StructType): Seq[TableChange] = {
     val changes = scala.collection.mutable.ArrayBuffer.empty[TableChange]
 
-    // Normalize a field name to its lookup key: identity when case-sensitive, lower-cased when not,
-    // so that a target field is matched to the current field it differs from only in case. Lower-
-    // case with Locale.ROOT to match StructType.merge and Spark's analyzer resolver; a locale-
-    // sensitive fold (e.g. Turkish dotless-i) would diverge from how the rest of the engine
-    // compares the same names.
-    def normalize(name: String): String = {
-      if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
-    }
-
-    // Map each schema by its normalized name. Column identity (add vs. delete vs. update) is keyed
-    // off the normalized name, while the current column's original-cased name is what we emit in
-    // the change so we address the column as it actually exists in the catalog.
+    // Helper function to get a map of field name to field
     def getFieldMap(schema: StructType): Map[String, StructField] = {
-      schema.fields.map(field => normalize(field.name) -> field).toMap
+      schema.fields.map(field => field.name -> field).toMap
     }
 
     val currentFields = getFieldMap(currentSchema)
@@ -161,10 +151,10 @@ object SchemaInferenceUtils {
 
     // Find columns to add (in target but not in current)
     val columnsToAdd = targetFields.keySet.diff(currentFields.keySet)
-    columnsToAdd.foreach { normalizedName =>
-      val field = targetFields(normalizedName)
+    columnsToAdd.foreach { columnName =>
+      val field = targetFields(columnName)
       changes += TableChange.addColumn(
-        Array(field.name),
+        Array(columnName),
         field.dataType,
         field.nullable,
         field.getComment().orNull
@@ -173,18 +163,15 @@ object SchemaInferenceUtils {
 
     // Find columns to delete (in current but not in target)
     val columnsToDelete = currentFields.keySet.diff(targetFields.keySet)
-    columnsToDelete.foreach { normalizedName =>
-      changes += TableChange.deleteColumn(Array(currentFields(normalizedName).name), false)
+    columnsToDelete.foreach { columnName =>
+      changes += TableChange.deleteColumn(Array(columnName), false)
     }
 
     // Find columns with type changes (in both but with different types)
     val commonColumns = currentFields.keySet.intersect(targetFields.keySet)
-    commonColumns.foreach { normalizedName =>
-      val currentField = currentFields(normalizedName)
-      val targetField = targetFields(normalizedName)
-      // Address the column by its current (already-persisted) name; under case-insensitive matching
-      // the target field may differ from it only in case, and renaming is not part of a diff.
-      val columnName = currentField.name
+    commonColumns.foreach { columnName =>
+      val currentField = currentFields(columnName)
+      val targetField = targetFields(columnName)
 
       // If data types are different, add a type update change
       if (currentField.dataType != targetField.dataType) {

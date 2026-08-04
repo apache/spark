@@ -1274,9 +1274,16 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         }
 
         val inferred = ctx.resolveToDataflowGraph().inferredSchema.values.head
+        // The two spellings must fold into a SINGLE column. Which spelling survives depends on the
+        // order the flows are merged in, which the graph does not define, so assert the invariant
+        // (one column, case-insensitively named `value`) rather than a particular casing.
         assert(
-          inferred.fieldNames.toSeq === Seq("id", "value"),
-          s"inference should contribute a single `value` column, got ${inferred.fieldNames.toSeq}")
+          inferred.fieldNames.length === 2,
+          s"expected `id` plus a single value column, got ${inferred.fieldNames.toSeq}")
+        assert(inferred.fieldNames.head === "id")
+        assert(
+          inferred.fieldNames(1).equalsIgnoreCase("value"),
+          s"expected a single value column, got ${inferred.fieldNames.toSeq}")
       }
     }
   }
@@ -1308,8 +1315,100 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         }
 
         val inferred = ctx.resolveToDataflowGraph().inferredSchema.values.head
-        assert(inferred.fieldNames.toSeq === Seq("id", "value", "Value"))
+        // Both spellings survive as distinct columns. The flows' merge order is not defined by the
+        // graph, so compare as a set rather than a sequence.
+        assert(inferred.fieldNames.toSet === Set("id", "value", "Value"))
       }
+    }
+  }
+
+  test("SPARK-58517: a materialized view's case-only column rename is applied under " +
+    "case-insensitive resolution") {
+    // The non-merging path: for a materialized view `targetSchema` is the run's declared schema
+    // as-is (no merge with the persisted schema), so a case-only rename must remain visible to
+    // `diffSchemas` as a drop-then-add. Case-insensitive matching here would emit no change at all
+    // and freeze the persisted spelling forever -- the table would permanently disagree with its
+    // definition, with no error pointing at the discrepancy, and a colleague materializing the same
+    // definition against a fresh table would get the declared casing instead.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      materializeGraph(
+        new TestGraphRegistrationContext(spark) {
+          registerView("src", query = dfFlowFunc(Seq((1, 2L)).toDF("id", "total")))
+          registerMaterializedView("mv", query = sqlFlowFunc(spark, "SELECT id, total FROM src"))
+        }.resolveToDataflowGraph(),
+        storageRoot = storageRoot
+      )
+
+      val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+      val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "mv")
+      assert(
+        catalog.loadTable(identifier).columns() sameElements CatalogV2Util.structTypeToV2Columns(
+          new StructType().add("id", IntegerType).add("total", LongType))
+      )
+
+      // Re-materialize with the column cased as `Total`. The table must follow the definition.
+      materializeGraph(
+        new TestGraphRegistrationContext(spark) {
+          registerView("src", query = dfFlowFunc(Seq((1, 2L)).toDF("id", "total")))
+          registerMaterializedView(
+            "mv", query = sqlFlowFunc(spark, "SELECT id, total AS Total FROM src"))
+        }.resolveToDataflowGraph(),
+        storageRoot = storageRoot
+      )
+      assert(
+        catalog.loadTable(identifier).columns() sameElements CatalogV2Util.structTypeToV2Columns(
+          new StructType().add("id", IntegerType).add("Total", LongType)),
+        "the materialized view should adopt the declared `Total` casing, not keep `total`"
+      )
+    }
+  }
+
+  test("SPARK-58517: a full-refreshed streaming table's case-only column rename is applied " +
+    "under case-insensitive resolution") {
+    // The streaming-table analog of the materialized-view case above: a full refresh also takes
+    // `targetSchema` as the declared schema without merging, so the same case-only rename must be
+    // applied rather than silently ignored.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val graph = materializeGraph(
+        new TestGraphRegistrationContext(spark) {
+          registerView("src", query = dfFlowFunc(Seq((1, 2L)).toDF("id", "total")))
+          registerTable("st", query = Option(sqlFlowFunc(spark, "SELECT id, total FROM src")))
+        }.resolveToDataflowGraph(),
+        storageRoot = storageRoot
+      )
+
+      val catalog = spark.sessionState.catalogManager.currentCatalog.asInstanceOf[TableCatalog]
+      val identifier = Identifier.of(Array(TestGraphRegistrationContext.DEFAULT_DATABASE), "st")
+      assert(
+        catalog.loadTable(identifier).columns() sameElements CatalogV2Util.structTypeToV2Columns(
+          new StructType().add("id", IntegerType).add("total", LongType))
+      )
+
+      val renamedGraph =
+        new TestGraphRegistrationContext(spark) {
+          registerView("src", query = dfFlowFunc(Seq((1, 2L)).toDF("id", "total")))
+          registerTable(
+            "st", query = Option(sqlFlowFunc(spark, "SELECT id, total AS Total FROM src")))
+        }.resolveToDataflowGraph()
+
+      materializeGraph(
+        renamedGraph,
+        contextOpt = Option(
+          TestPipelineUpdateContext(
+            spark = spark,
+            unresolvedGraph = graph,
+            refreshTables = NoTables,
+            fullRefreshTables = AllTables,
+            storageRoot = storageRoot
+          )
+        ),
+        storageRoot = storageRoot
+      )
+      assert(
+        catalog.loadTable(identifier).columns() sameElements CatalogV2Util.structTypeToV2Columns(
+          new StructType().add("id", IntegerType).add("Total", LongType)),
+        "a full-refreshed streaming table should adopt the declared `Total` casing"
+      )
     }
   }
 

@@ -173,9 +173,10 @@ case class DataflowGraph(
    * of all flows writing to that table.
    *
    * The merge honors the session's `spark.sql.caseSensitive`: under case-insensitive analysis two
-   * flows emitting column names that differ only in case contribute a single column (the first
-   * flow's spelling wins) rather than both, which would otherwise produce a target schema the
-   * engine's own resolver cannot disambiguate.
+   * flows emitting column names that differ only in case contribute a single column rather than
+   * both, which would otherwise produce a target schema the engine's own resolver cannot
+   * disambiguate. Which of the two spellings survives follows the order the flows are merged in,
+   * which this map does not define, so callers should not depend on a particular casing.
    */
   lazy val inferredSchema: Map[TableIdentifier, StructType] = {
     val caseSensitive = SparkSession.active.sessionState.conf.caseSensitiveAnalysis
