@@ -45,7 +45,7 @@ from pyspark.sql.datasource import (
 )
 from pyspark.sql.types import StructType, VariantVal, _parse_datatype_json_string
 from pyspark.sql.worker.plan_data_source_read import write_read_func_and_partitions
-from pyspark.sql.worker.utils import worker_run
+from pyspark.sql.worker.utils import is_method_overridden, worker_run
 from pyspark.worker_util import (
     get_sock_file_to_executor,
     pickleSer,
@@ -113,24 +113,30 @@ def deserializeFilter(jsonDict: dict) -> Filter:
 
 def _main(infile: IO, outfile: IO) -> None:
     """
-    Main method for planning a data source read with filter pushdown.
+    Main method for planning a data source read with filter and limit pushdown.
 
     This process is invoked from the `UserDefinedPythonDataSourceReadRunner.runInPython`
     method in the optimizer rule `PlanPythonDataSourceScan` in JVM. This process is responsible
-    for creating a `DataSourceReader` object, applying filter pushdown, and sending the
-    information needed back to the JVM.
+    for creating a `DataSourceReader` object, applying filter and limit pushdown, and sending
+    the information needed back to the JVM.
 
     The infile and outfile are connected to the JVM via a socket. The JVM sends the following
     information to this process via the socket:
     - a `DataSource` instance representing the data source
     - a `StructType` instance representing the output schema of the data source
     - a list of filters to be pushed down
+    - the limit to be pushed down, or -1 if there is none
     - configuration values
 
     This process then creates a `DataSourceReader` instance by calling the `reader` method
     on the `DataSource` instance. It applies the filters by calling the `pushFilters` method
     on the reader and determines which filters are supported. The indices of the supported
     filters are sent back to the JVM, along with the list of partitions and the read function.
+
+    When a limit is sent, it is pushed down by calling the `pushLimit` method on the reader
+    after `pushFilters`, and whether the reader accepted it is sent back to the JVM. The JVM
+    replays the same filters when pushing down a limit, so that the reader reaches the same
+    state as it did during filter pushdown before `pushLimit` is called on it.
     """
     # Receive the data source instance.
     data_source = read_command(pickleSer, infile)
@@ -173,9 +179,12 @@ def _main(infile: IO, outfile: IO) -> None:
         filter_dicts = json.loads(json_str)
         filters = [FilterRef(deserializeFilter(f)) for f in filter_dicts]
 
-        # Push down the filters and get the indices of the unsupported filters.
+        # Push down the filters and get the indices of the unsupported filters. `pushFilters` is
+        # not called when there is nothing to push, so that a reader planning a limit-only scan
+        # does not observe a spurious empty pushFilters call.
         unsupported_filters = set(
-            FilterRef(f) for f in reader.pushFilters([ref.filter for ref in filters])
+            FilterRef(f)
+            for f in (reader.pushFilters([ref.filter for ref in filters]) if filters else [])
         )
         supported_filter_indices = []
         for i, filter in enumerate(filters):
@@ -195,13 +204,45 @@ def _main(infile: IO, outfile: IO) -> None:
                 },
             )
 
+        # Receive the limit to push down. -1 means there is no limit.
+        limit = read_int(infile)
+
         # Receive the max arrow batch size.
         max_arrow_batch_size = read_int(infile)
         assert max_arrow_batch_size > 0, (
             "The maximum arrow batch size should be greater than 0, but got "
             f"'{max_arrow_batch_size}'"
         )
+        enable_limit_pushdown = read_bool(infile)
         binary_as_bytes = read_bool(infile)
+
+        if not enable_limit_pushdown and is_method_overridden(reader, "pushLimit"):
+            # Do not silently ignore pushLimit when limit pushdown is disabled. This worker also
+            # runs for filter-only pushdown, where no limit is ever sent, so the check has to
+            # happen here as well as in `plan_data_source_read`.
+            raise PySparkAssertionError(
+                errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
+                messageParameters={
+                    "type": type(reader).__name__,
+                    "method": "pushLimit",
+                    "conf": "spark.sql.python.limitPushdown.enabled",
+                },
+            )
+
+        # Push down the limit, if any. This must happen after pushFilters, matching the
+        # operator order that DSv2 uses on the JVM side.
+        is_limit_pushed = False
+        if limit >= 0:
+            is_limit_pushed = reader.pushLimit(limit)
+            if not isinstance(is_limit_pushed, bool):
+                raise PySparkValueError(
+                    errorClass="DATA_SOURCE_INVALID_RETURN_TYPE",
+                    messageParameters={
+                        "type": type(is_limit_pushed).__name__,
+                        "name": type(reader).__name__ + ".pushLimit",
+                        "supported_types": "bool",
+                    },
+                )
 
         # Return the read function and partitions. Doing this in the same worker
         # as filter pushdown helps reduce the number of Python worker calls.
@@ -218,6 +259,9 @@ def _main(infile: IO, outfile: IO) -> None:
     write_int(len(supported_filter_indices), outfile)
     for index in supported_filter_indices:
         write_int(index, outfile)
+
+    # Return whether the limit was pushed down, as 1 or 0.
+    write_int(int(is_limit_pushed), outfile)
 
 
 def main(infile: IO, outfile: IO) -> None:
