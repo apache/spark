@@ -332,7 +332,7 @@ case class TryToBinary(
   arguments = """
     Arguments:
       * class - A string literal with the fully qualified name of the class.
-      * method - A string literal with the name of the method to invoke.
+      * method - A string literal with the name of the static method to invoke.
       * arg1, arg2, ... - Optional arguments passed to the invoked method.
   """,
   examples = """

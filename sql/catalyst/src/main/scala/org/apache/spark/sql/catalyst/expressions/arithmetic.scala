@@ -1322,8 +1322,9 @@ object Pmod {
   usage = "_FUNC_(expr, ...) - Returns the least value of all parameters, skipping null values.",
   arguments = """
     Arguments:
-      * expr - An expression of any orderable type. All arguments must share a common type.
-        Null values are skipped; the result is null only when all arguments are null.
+      * expr - An expression of any orderable type. At least two expressions must be given,
+        and all arguments must share a common type. Null values are skipped; the result is
+        null only when all arguments are null.
   """,
   examples = """
     Examples:
@@ -1416,8 +1417,9 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
   usage = "_FUNC_(expr, ...) - Returns the greatest value of all parameters, skipping null values.",
   arguments = """
     Arguments:
-      * expr - An expression of any orderable type. All arguments must share a common type.
-        Null values are skipped; the result is null only when all arguments are null.
+      * expr - An expression of any orderable type. At least two expressions must be given,
+        and all arguments must share a common type. Null values are skipped; the result is
+        null only when all arguments are null.
   """,
   examples = """
     Examples:

@@ -57,7 +57,7 @@ trait NoThrow
   usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
   arguments = """
     Arguments:
-      * expr - An expression of any type to include as an array element. One or more
+      * expr - An expression of any type to include as an array element. Zero or more
           expressions can be given, and they must share a common type.
   """,
   examples = """
@@ -438,7 +438,7 @@ object CreateStruct {
       "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
       """
         |    Arguments:
-        |      * colN - The field values of the struct. There can be one or more of them,
+        |      * colN - The field values of the struct. There can be zero or more of them,
         |          each an expression of any type. Field names are assigned as `colN` by
         |          default unless the value is a named expression.
         |  """.stripMargin,

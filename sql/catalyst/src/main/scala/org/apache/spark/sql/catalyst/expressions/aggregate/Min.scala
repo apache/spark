@@ -29,7 +29,8 @@ import org.apache.spark.sql.types._
   usage = "_FUNC_(expr) - Returns the minimum value of `expr`.",
   arguments = """
     Arguments:
-      * expr - An expression of any comparable type whose minimum value is returned.
+      * expr - An expression of any orderable type whose minimum value across the group is
+          returned. NULL values are ignored.
   """,
   examples = """
     Examples:

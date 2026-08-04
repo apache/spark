@@ -58,8 +58,9 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, ByteType, DataT
     Arguments:
       * expr - The expression to aggregate into the KLL sketch.
         An expression that evaluates to an integral.
-      * k - The parameter controlling the size and accuracy of the sketch.
-        An expression that evaluates to an integer. Must be a constant.
+      * k - Optional. The parameter controlling the size and accuracy of the sketch.
+        An expression that evaluates to an integer between 8 and 65535. Must be a
+        constant. Defaults to 200.
   """,
   examples = """
     Examples:
@@ -212,8 +213,9 @@ case class KllSketchAggBigint(
     Arguments:
       * expr - The expression to aggregate into the KLL sketch.
         An expression that evaluates to a float.
-      * k - The parameter controlling the size and accuracy of the sketch.
-        An expression that evaluates to an integer. Must be a constant.
+      * k - Optional. The parameter controlling the size and accuracy of the sketch.
+        An expression that evaluates to an integer between 8 and 65535. Must be a
+        constant. Defaults to 200.
   """,
   examples = """
     Examples:
@@ -355,8 +357,9 @@ case class KllSketchAggFloat(
     Arguments:
       * expr - The expression to aggregate into the KLL sketch.
         An expression that evaluates to a float or double.
-      * k - The parameter controlling the size and accuracy of the sketch.
-        An expression that evaluates to an integer. Must be a constant.
+      * k - Optional. The parameter controlling the size and accuracy of the sketch.
+        An expression that evaluates to an integer between 8 and 65535. Must be a
+        constant. Defaults to 200.
   """,
   examples = """
     Examples:
@@ -504,8 +507,9 @@ case class KllSketchAggDouble(
     Arguments:
       * expr - The expression to merge into the KLL sketch.
         An expression that evaluates to a binary KLL sketch representation.
-      * k - The parameter controlling the size and accuracy of the merged sketch.
-        An expression that evaluates to an integer. Must be a constant.
+      * k - Optional. The parameter controlling the size and accuracy of the merged
+        sketch. An expression that evaluates to an integer between 8 and 65535. Must be
+        a constant. Defaults to the k value of the first input sketch.
   """,
   examples = """
     Examples:
@@ -584,8 +588,9 @@ case class KllMergeAggBigint(
     Arguments:
       * expr - The expression to merge into the KLL sketch.
         An expression that evaluates to a binary KLL sketch representation.
-      * k - The parameter controlling the size and accuracy of the merged sketch.
-        An expression that evaluates to an integer. Must be a constant.
+      * k - Optional. The parameter controlling the size and accuracy of the merged
+        sketch. An expression that evaluates to an integer between 8 and 65535. Must be
+        a constant. Defaults to the k value of the first input sketch.
   """,
   examples = """
     Examples:
@@ -664,8 +669,9 @@ case class KllMergeAggFloat(
     Arguments:
       * expr - The expression to merge into the KLL sketch.
         An expression that evaluates to a binary KLL sketch representation.
-      * k - The parameter controlling the size and accuracy of the merged sketch.
-        An expression that evaluates to an integer. Must be a constant.
+      * k - Optional. The parameter controlling the size and accuracy of the merged
+        sketch. An expression that evaluates to an integer between 8 and 65535. Must be
+        a constant. Defaults to the k value of the first input sketch.
   """,
   examples = """
     Examples:
