@@ -501,7 +501,7 @@ class SparkEnv (
     _memoryManager = UnifiedMemoryManager(
       memoryManagerConf,
       numUsableCores,
-      isDriver = SparkContext.isDriver(executorId))
+      isDriver = Some(SparkContext.isDriver(executorId)))
   }
 }
 

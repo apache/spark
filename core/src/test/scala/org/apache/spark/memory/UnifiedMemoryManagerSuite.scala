@@ -249,12 +249,12 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set(TEST_MEMORY, systemMemory)
       .set(TEST_RESERVED_MEMORY, reservedMemory)
 
-    val mm = UnifiedMemoryManager(conf, numCores = 1, isDriver = false)
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
 
     // Try using an executor memory that's too small
     val conf2 = conf.clone().set(EXECUTOR_MEMORY.key, (reservedMemory / 2).toString)
     val exception = intercept[IllegalArgumentException] {
-      UnifiedMemoryManager(conf2, numCores = 1, isDriver = false)
+      UnifiedMemoryManager(conf2, numCores = 1)
     }
     assert(exception.getMessage.contains("increase executor memory"))
   }
@@ -269,7 +269,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set(TEST_RESERVED_MEMORY, reservedMemory)
       .set(EXECUTOR_MEMORY.key, (500L * 1024).toString)
 
-    val mm = UnifiedMemoryManager(conf, numCores = 1, isDriver = false)
+    val mm = UnifiedMemoryManager(conf, numCores = 1, isDriver = Some(false))
     val expectedMaxMemory = ((systemMemory - reservedMemory) * memoryFraction).toLong
     assert(mm.maxHeapMemory === expectedMaxMemory)
   }
@@ -284,7 +284,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set(TEST_RESERVED_MEMORY, reservedMemory)
       .set(EXECUTOR_MEMORY.key, (reservedMemory / 2).toString)
 
-    val mm = UnifiedMemoryManager(conf, numCores = 1)
+    val mm = UnifiedMemoryManager(conf, numCores = 1, isDriver = Some(true))
     val expectedMaxMemory = ((systemMemory - reservedMemory) * memoryFraction).toLong
     assert(mm.maxHeapMemory === expectedMaxMemory)
   }
