@@ -693,11 +693,11 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       assert(SparkEnv.get.userCredentials.get().version === 3L)
     }
 
-    // Now send version 1 (stale) — should be rejected
+    // Now send version 1 (stale) -- should be rejected
     val credsV1 = Array[Byte](10, 10, 10)
     backend.driverEndpoint.send(UpdateUserCredentials(1L, credsV1))
 
-    // Send version 5 (newer) — should be accepted
+    // Send version 5 (newer) -- should be accepted
     val credsV5 = Array[Byte](50, 50, 50)
     backend.driverEndpoint.send(UpdateUserCredentials(5L, credsV5))
 
