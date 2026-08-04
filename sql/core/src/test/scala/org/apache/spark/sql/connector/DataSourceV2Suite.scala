@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import test.org.apache.spark.sql.connector._
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
@@ -53,7 +53,7 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
+import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.sources.{BaseRelation, Filter, GreaterThan, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -1687,6 +1687,48 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     }
   }
 
+  test("SPARK-57225: DSv2 source without batch write capability throws clear error") {
+    val cls = classOf[ReadOnlyV2DataSource].getName
+    val df = spark.range(1).toDF("i")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.format(cls).mode("append").save()
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map(
+        "tableName" -> "`read_only_v2_test`",
+        "operation" -> "batch write"
+      )
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.write.format(cls).save()
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map(
+        "tableName" -> "`read_only_v2_test`",
+        "operation" -> "batch write"
+      )
+    )
+  }
+
+  test("SPARK-57225: DSv2 source with V1_BATCH_WRITE still falls back to V1 path") {
+    val cls = classOf[V1BatchWriteV2DataSource].getName
+    val df = spark.range(1).toDF("i")
+    // V1_BATCH_WRITE sources should fall through to saveToV1SourceCommand, which calls
+    // DataSource.planForWriting. Since our test source doesn't implement
+    // CreatableRelationProvider or FileFormat, planForWriting hits the case _ branch
+    // and throws INTERNAL_ERROR with "does not allow create table as select".
+    // This proves V1_BATCH_WRITE reached the V1 write path.
+    val ex = intercept[SparkException] {
+      df.write.format(cls).mode("append").save()
+    }
+    assert(ex.getCondition == "INTERNAL_ERROR",
+      "V1_BATCH_WRITE source should reach DataSource.planForWriting (V1 path)")
+    assert(ex.getMessage.contains("does not allow create table as select"))
+  }
+
 }
 
 case class RangeInputPartition(start: Int, end: Int) extends InputPartition
@@ -2544,4 +2586,42 @@ class InvalidDataSource extends TestingV2Source {
   throw new IllegalArgumentException("test error")
 
   override def getTable(options: CaseInsensitiveStringMap): Table = null
+}
+
+/**
+ * A read-only DSv2 data source that only declares BATCH_READ capability.
+ * Used to test that write attempts produce a clear error instead of falling through to V1.
+ */
+class ReadOnlyV2DataSource extends SimpleTableProvider {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new ReadOnlyV2Table
+  }
+}
+
+class ReadOnlyV2Table extends Table with SupportsRead {
+  override def name(): String = "read_only_v2_test"
+  override def schema(): StructType = new StructType().add("i", "long")
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(TableCapability.BATCH_READ)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    throw new UnsupportedOperationException("scan not needed for write tests")
+}
+
+/**
+ * A DSv2 data source that declares V1_BATCH_WRITE, simulating the JDBC pattern.
+ * Used to verify that V1 fallback is preserved for sources that opt into it.
+ */
+class V1BatchWriteV2DataSource extends SimpleTableProvider {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new V1BatchWriteV2Table
+  }
+}
+
+class V1BatchWriteV2Table extends Table with SupportsRead {
+  override def name(): String = "v1_batch_write_test"
+  override def schema(): StructType = new StructType().add("i", "long")
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(TableCapability.BATCH_READ, TableCapability.V1_BATCH_WRITE)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    throw new UnsupportedOperationException("scan not needed for write tests")
 }
