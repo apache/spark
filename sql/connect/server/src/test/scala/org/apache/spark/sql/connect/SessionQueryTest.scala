@@ -33,7 +33,7 @@ import org.apache.spark.sql
  * This trait overrides [[spark]] to use a [[SparkSession connect.SparkSession]], which executes
  * via the gRPC API using an in-process connect server.
  */
-trait SessionQueryTest extends sqlCore.SessionQueryTest with SparkSessionBinder {
+trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
 
   private val sortOperator: Regex = """\b(?:Photon)?Sort\b""".r
 
