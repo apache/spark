@@ -73,6 +73,27 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       driverService)
   }
 
+  test("SPARK-58203: omit the UI service port when spark.ui.port=0") {
+    val sparkConf = new SparkConf(false)
+      .set(DRIVER_PORT, 9000)
+      .set(DRIVER_BLOCK_MANAGER_PORT, 8080)
+      .set(UI_PORT, 0)
+    val kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf, labels = DRIVER_LABELS)
+    val driverService = new DriverServiceFeatureStep(kconf)
+      .getAdditionalKubernetesResources()
+      .head
+      .asInstanceOf[Service]
+    val ports = driverService.getSpec.getPorts.asScala
+    // No invalid port=0/targetPort=0 entry, and the UI port is dropped (resolved at runtime).
+    assert(ports.forall(_.getPort.intValue() != 0))
+    assert(ports.forall(_.getTargetPort.getIntVal != 0))
+    assert(!ports.exists(_.getName == UI_PORT_NAME))
+    // The other well-known ports are still declared.
+    assert(ports.exists(_.getName == DRIVER_PORT_NAME))
+    assert(ports.exists(_.getName == BLOCK_MANAGER_PORT_NAME))
+    assert(ports.exists(_.getName == SPARK_CONNECT_SERVER_PORT_NAME))
+  }
+
   test("Hostname and ports are set according to the service name.") {
     val sparkConf = new SparkConf(false)
       .set(DRIVER_PORT, 9000)
