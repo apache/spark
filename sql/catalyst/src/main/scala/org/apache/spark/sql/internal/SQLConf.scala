@@ -2960,9 +2960,11 @@ object SQLConf {
       "When 'jdk' is requested but javax.tools.JavaCompiler is unavailable " +
       "(e.g. JRE-only image) Spark falls back to 'janino' with a warning. " +
       "Regardless of this setting, codegen in REPL / interactive sessions (spark-shell, " +
-      "Spark Connect session artifacts) and generated code referencing a class nested in " +
-      "a Scala package object always compile with 'janino', because the JDK compiler " +
-      "cannot resolve such classes; a one-time INFO log records each such routing.")
+      "Spark Connect session artifacts), generated code referencing a class nested in " +
+      "a Scala package object, and generated code referencing an anonymous or local class " +
+      "that cannot be rewritten to a nameable supertype always compile with 'janino', " +
+      "because the JDK compiler cannot resolve such classes; a one-time INFO log records " +
+      "each such routing.")
     .version("4.3.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .stringConf
