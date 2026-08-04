@@ -48,8 +48,7 @@ class SparkConnectServerPageSuite
   /**
    * Run a dummy session and return the store
    */
-  private def getStatusStore(
-      closeSession: Boolean = true): SparkConnectServerAppStatusStore = {
+  private def getStatusStore(closeSession: Boolean = true): SparkConnectServerAppStatusStore = {
     kvstore = new ElementTrackingStore(new InMemoryStore, new SparkConf())
     // val server = mock(classOf[SparkConnectServer], RETURNS_SMART_NULLS)
     val sparkConf = new SparkConf
@@ -152,25 +151,25 @@ class SparkConnectServerPageSuite
     when(tab.getMLCacheStatuses).thenReturn(
       Seq(
         SessionKey("userId", "sessionId") ->
-        MLCacheStatus(
-          memoryControlEnabled = true,
-          inMemorySizeBytes = 1024,
-          maxInMemorySizeBytes = 4096,
-          totalSizeBytes = 2048,
-          maxTotalSizeBytes = 8192,
-          models = Seq(
-            MLCacheModelInfo(
-              id = "model-id-1",
-              className = "org.apache.spark.ml.classification.LogisticRegressionModel",
-              modelString = "LogisticRegressionModel: uid=logreg-1",
-              estimatedSizeBytes = Some(1024),
-              inMemory = true),
-            MLCacheModelInfo(
-              id = "model-id-2",
-              className = "org.apache.spark.ml.classification.LogisticRegressionModel",
-              modelString = "LogisticRegressionModel: uid=logreg-2",
-              estimatedSizeBytes = Some(1024),
-              inMemory = false)))))
+          MLCacheStatus(
+            memoryControlEnabled = true,
+            inMemorySizeBytes = 1024,
+            maxInMemorySizeBytes = 4096,
+            totalSizeBytes = 2048,
+            maxTotalSizeBytes = 8192,
+            models = Seq(
+              MLCacheModelInfo(
+                id = "model-id-1",
+                className = "org.apache.spark.ml.classification.LogisticRegressionModel",
+                modelString = "LogisticRegressionModel: uid=logreg-1",
+                estimatedSizeBytes = Some(1024),
+                inMemory = true),
+              MLCacheModelInfo(
+                id = "model-id-2",
+                className = "org.apache.spark.ml.classification.LogisticRegressionModel",
+                modelString = "LogisticRegressionModel: uid=logreg-2",
+                estimatedSizeBytes = Some(1024),
+                inMemory = false)))))
 
     val page = new SparkConnectServerPage(tab)
     val html = page.render(request).toString().toLowerCase(Locale.ROOT)
@@ -181,7 +180,7 @@ class SparkConnectServerPageSuite
     assert(sessionStatsIndex < requestStatsIndex && requestStatsIndex < mlCacheStatsIndex)
     assert(html.contains("2 (1 in memory, 1 offloaded)"))
     assert(html.contains("estimated size (in-memory)"))
-    assert(html.contains("1.0 kib / 4.0 kib"))
+    assert(html.contains("1024.0 b / 4.0 kib"))
     assert(html.contains("estimated size (in-memory and offloaded data)"))
     assert(html.contains("2.0 kib / 8.0 kib"))
     assert(html.contains("model-id-1"))

@@ -194,23 +194,24 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
 
     val tableTag = "mlcachemodels"
     val tablePage = Option(request.getParameter(s"$tableTag.page")).map(_.toInt).getOrElse(1)
-    val table = try {
-      new MLCacheModelStatsPagedTable(
-        request,
-        parent,
-        models,
-        "connect",
-        UIUtils.prependBaseUri(request, parent.basePath),
-        tableTag).table(tablePage)
-    } catch {
-      case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-        <div class="alert alert-danger">
+    val table =
+      try {
+        new MLCacheModelStatsPagedTable(
+          request,
+          parent,
+          models,
+          "connect",
+          UIUtils.prependBaseUri(request, parent.basePath),
+          tableTag).table(tablePage)
+      } catch {
+        case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
+          <div class="alert alert-danger">
           <p>Error while rendering ML cache table:</p>
           <pre>
             {Utils.exceptionString(e)}
           </pre>
         </div>
-    }
+      }
 
     val inMemoryModels = models.count(_.model.inMemory)
     val memoryControlledStatuses = cacheStatuses.map(_._2).filter(_.memoryControlEnabled)
@@ -566,14 +567,7 @@ private[ui] class MLCacheModelStatsPagedTable(
       ("Storage", true, Some(SPARK_CONNECT_ML_CACHE_STORAGE)))
 
     isSortColumnValid(headersAndTooltips, sortColumn)
-    headerRow(
-      headersAndTooltips,
-      desc,
-      pageSize,
-      sortColumn,
-      parameterPath,
-      tableTag,
-      tableTag)
+    headerRow(headersAndTooltips, desc, pageSize, sortColumn, parameterPath, tableTag, tableTag)
   }
 
   override def row(row: MLCacheModelTableRow): Seq[Node] = {
@@ -608,9 +602,7 @@ private[ui] class MLCacheModelTableDataSource(
 
   override def sliceData(from: Int, to: Int): Seq[MLCacheModelTableRow] = data.slice(from, to)
 
-  private def ordering(
-      sortColumn: String,
-      desc: Boolean): Ordering[MLCacheModelTableRow] = {
+  private def ordering(sortColumn: String, desc: Boolean): Ordering[MLCacheModelTableRow] = {
     val ordering: Ordering[MLCacheModelTableRow] = sortColumn match {
       case "User" => Ordering.by(_.userId)
       case "Session ID" => Ordering.by(_.sessionId)
