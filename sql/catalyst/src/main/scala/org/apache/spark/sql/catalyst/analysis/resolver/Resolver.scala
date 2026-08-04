@@ -55,7 +55,6 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The Resolver implements a single-pass bottom-up analysis algorithm in the Catalyst.
@@ -810,7 +809,7 @@ class Resolver(
     if (operator.children.nonEmpty) {
       val missingInput = operator.missingInput
       if (missingInput.nonEmpty) {
-        throwMissingAttributesError(operator, missingInput)
+        Resolver.throwMissingAttributesError(operator, missingInput)
       }
     }
   }
@@ -827,42 +826,6 @@ class Resolver(
       ValidateSubqueryExpression(
         plan = operator,
         expr = subqueryExpression
-      )
-    }
-  }
-
-  private def throwMissingAttributesError(
-      operator: LogicalPlan,
-      missingInput: AttributeSet): Nothing = {
-    val inputSet = operator.inputSet
-
-    val inputAttributesByName = new IdentifierMap[Attribute]
-    for (attribute <- inputSet) {
-      inputAttributesByName.put(attribute.name, attribute)
-    }
-
-    val attributesWithSameName = missingInput.filter { missingAttribute =>
-      inputAttributesByName.contains(missingAttribute.name)
-    }
-
-    if (attributesWithSameName.nonEmpty) {
-      operator.failAnalysis(
-        errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-        messageParameters = Map(
-          "missingAttributes" -> makeCommaSeparatedExpressionString(missingInput.toSeq),
-          "input" -> makeCommaSeparatedExpressionString(inputSet.toSeq),
-          "operator" -> operator.simpleString(SQLConf.get.maxToStringFields),
-          "operation" -> makeCommaSeparatedExpressionString(attributesWithSameName.toSeq)
-        )
-      )
-    } else {
-      operator.failAnalysis(
-        errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-        messageParameters = Map(
-          "missingAttributes" -> makeCommaSeparatedExpressionString(missingInput.toSeq),
-          "input" -> makeCommaSeparatedExpressionString(inputSet.toSeq),
-          "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
-        )
       )
     }
   }
@@ -892,6 +855,30 @@ class Resolver(
 }
 
 object Resolver {
+
+  /**
+   * Fails with `MISSING_ATTRIBUTES` because `operator` references attributes its child does not
+   * produce.
+   */
+  def throwMissingAttributesError(
+      operator: LogicalPlan,
+      missingInput: AttributeSet): Nothing = {
+    val inputAttributesByName = new IdentifierMap[Attribute]
+    for (attribute <- operator.inputSet) {
+      inputAttributesByName.put(attribute.name, attribute)
+    }
+
+    val attributesWithSameName = missingInput.filter { missingAttribute =>
+      inputAttributesByName.contains(missingAttribute.name)
+    }.toSeq
+
+    throw QueryCompilationErrors.missingAttributesError(
+      operator = operator,
+      missingInput = missingInput.toSeq,
+      input = operator.inputSet.toSeq,
+      attributesWithSameName = attributesWithSameName
+    )
+  }
 
   /**
    * Create a new instance of the [[RelationResolution]].
