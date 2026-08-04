@@ -696,11 +696,15 @@ class IncrementalExecution(
    * that reaches an RTM plan wraps a BROADCAST exchange (multiple broadcast joins on the same
    * static table, SC-209926), which this rule does not match.
    *
-   * A pipelined shuffle read by more than one consumer (fan-out) is rejected by the DAGScheduler
-   * (checkPipelinedGroupsSupportedInRDDGraph). Note that check runs in handleJobSubmitted, so it
-   * rejects the batch's job rather than the query: such a query fails the same way on every batch
-   * instead of failing once when it is planned. Marking is not what makes the shape unsupported, so
-   * a plan-time guard here would only improve the failure mode, not the outcome.
+   * Fan-out -- one shuffle read by more than one consumer -- is a limitation that marking a shuffle
+   * here introduces, not one that was already there. A regular materialized shuffle serves any
+   * number of consumers; a pipelined one is transient and read once, so the DAGScheduler rejects
+   * fan-out for a PipelinedShuffleDependency specifically (checkPipelinedGroupsSupportedInRDDGraph,
+   * inert for a regular ShuffleDependency). So a fan-out query that runs fine unmarked is rejected
+   * once this rule marks it. The check runs in handleJobSubmitted, so it rejects the batch's job
+   * rather than the query: such a query fails the same way on every batch instead of failing once
+   * when it is planned. A plan-time guard here would improve only where the failure is reported,
+   * not whether the query can run.
    */
   object MarkPipelinedShuffleForRealTimeMode extends Rule[SparkPlan] {
     override def apply(plan: SparkPlan): SparkPlan = {
