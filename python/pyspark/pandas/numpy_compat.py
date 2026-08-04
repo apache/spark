@@ -60,14 +60,23 @@ unary_np_spark_mappings = {
     "log": F.log,
     "log10": F.log10,
     "log1p": F.log1p,
+    "log2": lambda c: F.when(c == 0, F.lit(float("-inf"))).otherwise(F.log2(c)),
     "logical_not": lambda c: ~(c.cast(BooleanType())),
     "matmul": lambda _: NotImplemented,  # Can return a NumPy array in pandas.
     "negative": F.negative,
     "positive": F.positive,
     "rad2deg": F.degrees,
     "radians": F.radians,
-    "reciprocal": pandas_udf(  # type: ignore[call-overload]
-        lambda s: np.reciprocal(s), DoubleType()
+    "reciprocal": lambda c: F.when(
+        F.typeof(c).isin("float", "double"),
+        F.when(c.isNull(), c.cast("double"))
+        .when(
+            c == 0,
+            F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
+        )
+        .otherwise(F.lit(1.0) / c),
+    ).otherwise(
+        pandas_udf(np.reciprocal, DoubleType())(c)  # type: ignore[call-overload]
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
@@ -98,9 +107,7 @@ binary_np_spark_mappings = {
     "copysign": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.copysign(s1, s2), DoubleType()
     ),
-    "float_power": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.float_power(s1, s2), DoubleType()
-    ),
+    "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
     "floor_divide": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.floor_divide(s1, s2), DoubleType()
     ),
