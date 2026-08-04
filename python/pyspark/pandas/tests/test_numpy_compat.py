@@ -159,13 +159,12 @@ class NumPyCompatTestsMixin:
                 }
             ),
         ):
-            with self.subTest(base=pdf.base.tolist(), exponent=pdf.exponent.tolist()):
-                psdf = ps.from_pandas(pdf)
-                self.assert_eq(
-                    np.float_power(psdf.base, psdf.exponent),
-                    np.float_power(pdf.base, pdf.exponent),
-                    almost=True,
-                )
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(
+                np.float_power(psdf.base, psdf.exponent),
+                np.float_power(pdf.base, pdf.exponent),
+                almost=True,
+            )
 
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
