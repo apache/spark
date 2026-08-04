@@ -1023,9 +1023,12 @@ public class CollationAwareUTF8String {
    *
    * Enumerating from the start of the target would cost the length of the target on every call,
    * even when the requested match is the last one. Instead the search runs over a trailing
-   * window that starts at {@code INITIAL_BACKWARD_SEARCH_WINDOW} code units and grows until it
-   * holds {@code count} matches or reaches the start of the target, so the cost tracks the
-   * distance back to the requested match. Once a window holds that many the answer is final:
+   * window that starts at {@code INITIAL_BACKWARD_SEARCH_WINDOW} code units and grows by
+   * {@code BACKWARD_SEARCH_WINDOW_GROWTH} until it holds {@code count} matches or reaches the
+   * start of the target, so the cost tracks the distance back to the requested match. A pass
+   * that runs off the end of the target instead widens straight to the start of the target: it
+   * has already enumerated every match from its own start onward, and growing geometrically
+   * would re-walk that stretch once per step. Once a window holds that many the answer is final:
    * every remaining match starts before the window, so it precedes all of the window's matches
    * and cannot be one of the last {@code count}. Only the search's start index moves; the target
    * and its collation context stay the whole string, so unlike searching a substring a window
@@ -1040,7 +1043,7 @@ public class CollationAwareUTF8String {
       final int count, final int maxStartIndex, final boolean matchEnd) {
     // The buffer sizing and ring arithmetic below both need a positive count, so reject any
     // other value here rather than relying on an assertion, which is disabled outside of test
-    // JVMs. This also covers a caller that negated Integer.MIN_VALUE and got it back unchanged.
+    // JVMs.
     if (count <= 0) return MATCH_NOT_FOUND;
     // Match starts are distinct text offsets, so there can be at most text.length() matches.
     if (count > text.length()) return MATCH_NOT_FOUND;
@@ -1053,9 +1056,15 @@ public class CollationAwareUTF8String {
       stringSearch.setIndex(windowStart);
       int found = 0;
       int index = -1;
-      int nextIndex;
-      while ((nextIndex = stringSearch.next()) != StringSearch.DONE
-          && nextIndex <= maxStartIndex) {
+      // Whether the pass ran off the end of the target instead of stopping past `maxStartIndex`.
+      boolean reachedEnd = false;
+      while (true) {
+        int nextIndex = stringSearch.next();
+        if (nextIndex == StringSearch.DONE) {
+          reachedEnd = true;
+          break;
+        }
+        if (nextIndex > maxStartIndex) break;
         if (nextIndex == index) {
           advancePastStuckMatch(stringSearch, text, nextIndex);
           continue;
@@ -1076,9 +1085,18 @@ public class CollationAwareUTF8String {
       if (found >= count) return lastMatches[found % lastMatches.length];
       // The window already reached the start of the target, so there really are fewer matches.
       if (windowStart == 0) return MATCH_NOT_FOUND;
-      // Capping at the target length keeps the growth from overflowing and guarantees that the
-      // next window starts at 0, so the loop always terminates.
-      window = (int) Math.min((long) window * BACKWARD_SEARCH_WINDOW_GROWTH, text.length());
+      if (reachedEnd) {
+        // The pass enumerated every match from `windowStart` to the end of the target, so the
+        // stretch it just walked holds nothing a wider window could add. Growing geometrically
+        // would walk that same stretch again on every step, which costs O(n log n) over a target
+        // whose tail holds no match; widening straight to the start bounds the total at two
+        // passes over the target.
+        window = text.length();
+      } else {
+        // Capping at the target length keeps the growth from overflowing and guarantees that the
+        // next window starts at 0, so the loop always terminates.
+        window = (int) Math.min((long) window * BACKWARD_SEARCH_WINDOW_GROWTH, text.length());
+      }
     }
   }
 
