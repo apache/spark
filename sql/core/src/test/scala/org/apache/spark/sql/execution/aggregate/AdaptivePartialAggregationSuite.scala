@@ -1,0 +1,770 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.aggregate
+
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Partial
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
+
+/**
+ * Tests for runtime adaptive partial aggregation
+ * (see [[SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED]]). When a partial aggregate is not reducing
+ * rows, the operator stops aggregating and streams the remaining rows through as single-row partial
+ * buffers for the Final aggregate to merge. It must never change results.
+ *
+ * The suite has two halves:
+ *   1. Correctness: output is identical to the reference (feature-off) run across the full matrix
+ *      of codegen on/off, two-level map on/off, and spill/no-spill, over a range of aggregate
+ *      shapes, key types, and `Expand`-bearing plans (ROLLUP / CUBE / GROUPING SETS /
+ *      multi-distinct).
+ *   2. Triggering: the `numBypassingRows` metric proves the bypass actually fires when (and only
+ *      when) it should -- high-cardinality input bypasses, low-cardinality input keeps aggregating,
+ *      the feature switch and eligibility rules are honored, and both decision tiers work.
+ */
+class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
+
+  import testImplicits._
+
+  // A `testFallbackStartsAt` setting ("fastMapCounter, regularMapCounter") that makes the regular
+  // map fall back (spill) periodically, exercising the on-spill (Tier 2) decision path in both the
+  // codegen and interpreted aggregation paths. Kept moderate so low-cardinality inputs (which are
+  // never bypassed and therefore really spill) do not open an unbounded number of spill readers.
+  private val forceSpillFallback = "4, 16"
+
+  // The upstream `CombineAdjacentAggregation` and `ReplaceHashWithSortAgg` rules would change the
+  // plan of these small single-partition queries away from a Partial+Final `HashAggregateExec`:
+  // the former merges the two adjacent phases (no shuffle in between) into a single `Complete`
+  // aggregate, and the latter converts a hash aggregate to a sort aggregate when the input is
+  // already sorted by the grouping key (a `Range` over an ascending `id` key). The adaptive
+  // feature lives in the partial hash aggregation, so both rules are disabled to keep that
+  // structure in the tests.
+  private val fixedPlanConfs = Seq(
+    SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false",
+    SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false")
+
+  /**
+   * Runs `df` with adaptive partial aggregation disabled (the reference) and then across the full
+   * configuration matrix with it enabled, asserting every enabled run matches the reference.
+   */
+  private def checkAdaptiveMatchesReference(build: () => DataFrame): Unit = {
+    val reference = withSQLConf(
+      (SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "false") +: fixedPlanConfs: _*) {
+      build().collect().toSeq
+    }
+    for {
+      wholeStage <- Seq(true, false)
+      twoLevelMap <- Seq(true, false)
+      forceSpill <- Seq(true, false)
+    } {
+      val spillConf = if (forceSpill) {
+        Seq("spark.sql.TungstenAggregate.testFallbackStartsAt" -> forceSpillFallback)
+      } else {
+        Nil
+      }
+      withSQLConf(
+        (Seq(
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
+          // Small sample so the no-spill (Tier 1) path triggers on modest inputs.
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key -> "8") ++
+          spillConf ++ fixedPlanConfs): _*) {
+        val msg = s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap forceSpill=$forceSpill"
+        withClue(msg) {
+          checkAnswer(build(), reference)
+        }
+      }
+    }
+  }
+
+  /**
+   * The observable per-run counters we assert on, all read from the partial `HashAggregateExec` in
+   * a single execution so the metrics are not double-counted:
+   *   - `skipped`: our self-reported `numBypassingRows` metric.
+   *   - `partialOutputRows`: the partial aggregate's own `numOutputRows`. An independent,
+   *     pre-existing counter driven by the normal output path, so it is the ground truth for
+   *     whether rows were streamed through -- it equals the distinct key count when aggregation is
+   *     effective and climbs toward the input row count once the operator bypasses.
+   *   - `spillBytes`: the partial aggregate's `spillSize`. Reliable only when no fallback is
+   *     forced: on the interpreted path this is derived from the task-cumulative memory-spill
+   *     counter, so a forced fallback (or downstream shuffle-write spill) can inflate it. Asserted
+   *     only by the Tier 1 test, which forces no fallback; use `tasksFallBacked` otherwise.
+   *   - `tasksFallBacked`: the partial aggregate's `numTasksFallBacked`, incremented only when the
+   *     regular map actually falls back into sort-based aggregation. When Tier 2 bypasses at the
+   *     spill boundary the sorter is never created, so this stays 0 -- direct, per-operator
+   *     evidence the bypass replaced the sort fallback.
+   */
+  private case class AggCounters(
+      skipped: Long,
+      partialOutputRows: Long,
+      spillBytes: Long,
+      tasksFallBacked: Long)
+
+  // Verifies `df` (an already-collected bypassing run) produces the same results as the feature-off
+  // reference. `build` is re-run for the reference so it gets a genuinely non-adaptive plan rather
+  // than reusing the bypassing run's cached one.
+  private def checkAgainstReference(df: DataFrame, build: () => DataFrame): Unit = {
+    val reference = withSQLConf(
+      SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "false") {
+      build().collect().toSeq
+    }
+    checkAnswer(df, reference)
+  }
+
+  private def runAndReadCounters(build: () => DataFrame): AggCounters = {
+    // The triggering tests assert on metrics, so also verify the bypassing run produces the same
+    // results as the feature-off reference.
+    val df = build()
+    df.collect()
+    val partialAggs = collect(df.queryExecution.executedPlan) {
+      case agg: HashAggregateExec if agg.aggregateExpressions.forall(_.mode == Partial) => agg
+    }
+    // A partial aggregate is always present for the grouped queries these tests use.
+    assert(partialAggs.nonEmpty, "expected a partial HashAggregateExec in the plan")
+    val counters = AggCounters(
+      skipped = partialAggs.map(_.metrics("numBypassingRows").value).sum,
+      partialOutputRows = partialAggs.map(_.metrics("numOutputRows").value).sum,
+      spillBytes = partialAggs.map(_.metrics("spillSize").value).sum,
+      tasksFallBacked = partialAggs.map(_.metrics("numTasksFallBacked").value).sum)
+    checkAgainstReference(df, build)
+    counters
+  }
+
+  private def numBypassingRows(build: () => DataFrame): Long = runAndReadCounters(build).skipped
+
+  // Returns the bypassed-row count per Partial-mode `HashAggregateExec`, keyed by the number of
+  // grouping keys, and verifies the run matches the feature-off reference. A `count(DISTINCT ...)`
+  // group-by has two such Partial phases -- the de-duplication partial (grouping on key + distinct
+  // columns) and the distinct partial (grouping on the keys only) -- so their bypasses can be told
+  // apart by the grouping key count.
+  private def bypassRowsByGroupingKeyCount(build: () => DataFrame): Map[Int, Long] = {
+    val df = build()
+    df.collect()
+    val byKeyCount = collect(df.queryExecution.executedPlan) {
+      case agg: HashAggregateExec if agg.aggregateExpressions.forall(_.mode == Partial) =>
+        agg.groupingExpressions.length -> agg.metrics("numBypassingRows").value
+    }.groupBy(_._1).map { case (n, pairs) => n -> pairs.map(_._2).sum }
+    checkAgainstReference(df, build)
+    byKeyCount
+  }
+
+  /**
+   * Runs `body` once per (wholeStage, twoLevelMap) combination with the feature enabled and a small
+   * sample, threading a descriptive clue for failure messages.
+   *
+   * The fast (first-level) map is append-only and never spills; adaptive partial aggregation
+   * governs only the regular (second-level) map. With the default fast-map capacity (2^16) a small
+   * high-cardinality input would be fully absorbed by the fast map and never reach the regular map,
+   * so nothing could ever bypass. To make the triggering tests meaningful when the two-level map is
+   * on, we shrink the fast map via the first field of `testFallbackStartsAt` so rows fall through
+   * to the regular map. `regularFallback` optionally sets the second field to also force the
+   * regular map to spill (for the on-spill tier); when 0 the regular map does not spill.
+   */
+  private def forEachCodegenAndMap(sampleRows: Int = 8, regularFallback: Int = 0)(
+      body: String => Unit): Unit = {
+    for {
+      wholeStage <- Seq(true, false)
+      twoLevelMap <- Seq(true, false)
+    } {
+      // Shrink the fast map to 4 keys when it is on so rows reach the regular map. The second field
+      // controls regular-map spilling; 0 means "never" (a large sentinel).
+      val fallbackConf = if (twoLevelMap || regularFallback > 0) {
+        val fastCap = if (twoLevelMap) 4 else 1
+        val regular = if (regularFallback > 0) regularFallback else Int.MaxValue
+        Seq("spark.sql.TungstenAggregate.testFallbackStartsAt" -> s"$fastCap, $regular")
+      } else {
+        Nil
+      }
+      withSQLConf(
+        (Seq(
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key -> sampleRows.toString) ++
+          fallbackConf ++ fixedPlanConfs): _*) {
+        body(s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap")
+      }
+    }
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Part 1: Correctness -- results identical to the feature-off reference.
+  /////////////////////////////////////////////////////////////////////////////
+
+  test("results unchanged for high-cardinality input that bypasses partial aggregation") {
+    // Every grouping key is distinct, so partial aggregation reduces nothing and should be
+    // bypassed by both tiers.
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 200, 1, 1)
+        .select($"id" as "k", ($"id" * 2) as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s", count(lit(1)) as "c", max($"v") as "m")
+    }
+  }
+
+  test("results unchanged for low-cardinality input that keeps partial aggregation") {
+    // Few distinct keys, high reduction: partial aggregation is effective and should be kept.
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 600, 1, 1)
+        .select(($"id" % 5) as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s", count(lit(1)) as "c", min($"v") as "mn", max($"v") as "mx")
+    }
+  }
+
+  test("results unchanged for medium-cardinality input near the reduction threshold") {
+    // Roughly half the rows are distinct keys; exercises the boundary of the ratio checks.
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 1000, 1, 1)
+        .select(($"id" % 500) as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s", count(lit(1)) as "c")
+    }
+  }
+
+  test("results unchanged with multiple grouping keys and string keys") {
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 500, 1, 1)
+        .select(
+          concat(lit("g"), ($"id" % 300).cast("string")) as "k1",
+          ($"id" % 7) as "k2",
+          $"id" as "v")
+        .groupBy($"k1", $"k2")
+        .agg(sum($"v") as "s", count(lit(1)) as "c")
+    }
+  }
+
+  test("results unchanged with nullable grouping keys") {
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 400, 1, 1)
+        .select(
+          when($"id" % 4 === 0, lit(null)).otherwise($"id") as "k",
+          $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s", count(lit(1)) as "c")
+    }
+  }
+
+  test("results unchanged with average (multi-slot buffer) aggregate") {
+    // avg has a two-slot partial buffer (sum, count); pass-through buffers must carry all slots.
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 300, 1, 1)
+        .select($"id" as "k", ($"id" + 1) as "v")
+        .groupBy($"k")
+        .agg(avg($"v") as "a", sum($"v") as "s")
+    }
+  }
+
+  test("results unchanged with a mix of many aggregate functions and buffer types") {
+    // Exercises a wide pass-through buffer spanning several aggregate buffer layouts at once:
+    // sum (decimal), avg (double), count, min/max, first/last, and stddev (imperative buffer).
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 400, 1, 1)
+        .select(
+          $"id" as "k",
+          ($"id" % 97).cast("decimal(10,2)") as "d",
+          ($"id" % 13).cast("double") as "dbl")
+        .groupBy($"k")
+        .agg(
+          sum($"d") as "sd",
+          avg($"dbl") as "ad",
+          count(lit(1)) as "c",
+          min($"dbl") as "mn",
+          max($"dbl") as "mx",
+          first($"dbl") as "f",
+          last($"dbl") as "l",
+          stddev($"dbl") as "sd2")
+    }
+  }
+
+  test("results unchanged with filtered aggregate functions") {
+    // A `FILTER (WHERE ...)` aggregate is compiled into a per-row guard around the buffer update
+    // rather than a separate filtering operator: `If(filter, update, buffer)` in the interpreted
+    // path and an `if (!cond) continue` guard in the generated code. Pass-through reuses those
+    // exact update expressions, so a bypassed row whose filter is false contributes nothing to its
+    // single-row buffer. The all-true and all-false filters pin the two extremes, and the fully
+    // distinct grouping keys ensure rows bypass (in the regular-map-only configurations) so the
+    // filter guard actually runs in the pass-through path.
+    withTempView("t") {
+      spark.range(0, 400, 1, 1)
+        .select($"id" as "k", ($"id" % 100) as "v")
+        .createOrReplaceTempView("t")
+      checkAdaptiveMatchesReference { () =>
+        spark.sql(
+          """SELECT k,
+            |       sum(v) FILTER (WHERE v % 2 = 0) AS s_even,
+            |       count(1) FILTER (WHERE v > 50) AS c_gt50,
+            |       avg(v) FILTER (WHERE v > 25) AS a_gt25,
+            |       sum(v) FILTER (WHERE true) AS s_all,
+            |       sum(v) FILTER (WHERE false) AS s_none
+            |FROM t GROUP BY k""".stripMargin)
+      }
+    }
+  }
+
+  test("results unchanged with decimal and date grouping keys") {
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 300, 1, 1)
+        .select(
+          ($"id" % 280).cast("decimal(12,3)") as "k1",
+          date_add(lit(java.sql.Date.valueOf("2020-01-01")), ($"id" % 250).cast("int")) as "k2",
+          $"id" as "v")
+        .groupBy($"k1", $"k2")
+        .agg(sum($"v") as "s", count(lit(1)) as "c")
+    }
+  }
+
+  test("results unchanged for group-by-only (distinct) with no aggregate functions") {
+    // No aggregate functions: the pass-through buffer is a zero-column UnsafeRow, so the output is
+    // just the grouping key. High-cardinality keys should bypass, and the de-duplicated result must
+    // still match the reference.
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 400, 1, 1)
+        .select(($"id" % 350) as "k1", ($"id" % 11) as "k2")
+        .distinct()
+    }
+  }
+
+  test("results unchanged for group-by-only with duplicate keys (Final phase must not bypass)") {
+    // A group-by-only aggregate has an empty `aggregateExpressions`, so checking the aggregate
+    // modes alone is vacuously true and could wrongly admit the `Final` phase of the two-phase
+    // plan. With duplicate keys, a bypassing `Final` would skip its de-duplication and return
+    // duplicate rows. The two-level map off variants route the rows to the regular map so the
+    // sampling tier fires and the regression would show up.
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 1000, 1, 1)
+        .select(($"id" % 10) as "c")
+        .distinct()
+    }
+  }
+
+  test("results unchanged when a large frozen map is output before pass-through streaming") {
+    // A larger sample lets the map accumulate many keys before the no-spill tier bypasses, so the
+    // early map output (which also frees the map) spans several drain cycles and re-enters the
+    // map-output function; the results must still match the feature-off reference.
+    val query = () => spark.range(0, 400000, 1, 1)
+      .select($"id" as "k", $"id" as "v")
+      .groupBy($"k")
+      .agg(sum($"v") as "s")
+    withSQLConf(
+      (Seq(
+        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key -> "200000",
+        SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false") ++ fixedPlanConfs): _*) {
+      val reference = withSQLConf(
+        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "false") {
+        query().collect().toSeq
+      }
+      checkAnswer(query(), reference)
+    }
+  }
+
+  test("distinct aggregation stays correct") {
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 300, 1, 1)
+        .select($"id" as "k", ($"id" % 50) as "v")
+        .groupBy($"k")
+        .agg(countDistinct($"v") as "cd", sum($"v") as "s")
+    }
+  }
+
+  test("distinct aggregation bypasses on high-cardinality input") {
+    // The `PartialMerge` phase of the multi-phase distinct plan always aggregates (it is not
+    // `Partial` mode and requires a distribution), so the rows reaching the distinct `Partial`
+    // phase are de-duplicated and pass-through carries exactly one distinct value each.
+    forEachCodegenAndMap() { clue =>
+      val df = () => spark.range(0, 1000, 1, 1)
+        .select(($"id" % 100) as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(countDistinct($"v") as "cd")
+      withClue(clue) {
+        assert(numBypassingRows(df) > 0,
+          "expected a distinct partial aggregation to bypass for high-cardinality input")
+      }
+    }
+  }
+
+  test("count distinct: the de-duplication partial aggregate bypasses") {
+    // `count(DISTINCT v) GROUP BY k` plans two `Partial` phases: the de-duplication partial groups
+    // on (k, v) and the distinct partial groups on (k). Fully distinct (k, v) pairs make the
+    // de-duplication partial (2 grouping keys) reduce nothing, so it must bypass.
+    forEachCodegenAndMap() { clue =>
+      val df = () => spark.range(0, 400, 1, 1)
+        .select(($"id" % 4) as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(countDistinct($"v") as "cd")
+      withClue(clue) {
+        val byKeyCount = bypassRowsByGroupingKeyCount(df)
+        assert(byKeyCount.get(2).exists(_ > 0),
+          s"expected the (k, v) de-duplication partial to bypass, got $byKeyCount")
+      }
+    }
+  }
+
+  test("count distinct: the distinct partial aggregate bypasses") {
+    // Mirror of the test above for the other phase: with many distinct keys but few distinct
+    // values per key, the (k, v) de-duplication partial reduces well while the distinct partial
+    // (1 grouping key) sees a fresh key per row and must bypass.
+    forEachCodegenAndMap() { clue =>
+      val df = () => spark.range(0, 400, 1, 1)
+        .select($"id" as "k", ($"id" % 2) as "v")
+        .groupBy($"k")
+        .agg(countDistinct($"v") as "cd")
+      withClue(clue) {
+        val byKeyCount = bypassRowsByGroupingKeyCount(df)
+        assert(byKeyCount.get(1).exists(_ > 0),
+          s"expected the distinct partial (grouping on k) to bypass, got $byKeyCount")
+      }
+    }
+  }
+
+  test("count distinct: both partial aggregates bypass and results stay correct") {
+    // Fully distinct keys and fully distinct values: neither partial phase reduces anything, so
+    // both bypass in the same execution. The de-duplication partial keeps the (k, v) pairs unique
+    // and the distinct partial counts them, so the result must still match the reference.
+    forEachCodegenAndMap() { clue =>
+      val df = () => spark.range(0, 400, 1, 1)
+        .select($"id" as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(countDistinct($"v") as "cd")
+      withClue(clue) {
+        val byKeyCount = bypassRowsByGroupingKeyCount(df)
+        assert(byKeyCount.get(2).exists(_ > 0),
+          s"expected the (k, v) de-duplication partial to bypass, got $byKeyCount")
+        assert(byKeyCount.get(1).exists(_ > 0),
+          s"expected the distinct partial (grouping on k) to bypass, got $byKeyCount")
+      }
+    }
+  }
+
+  test("global aggregation (no grouping keys) is never bypassed and stays correct") {
+    withSQLConf(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true") {
+      checkAnswer(
+        spark.range(0, 100, 1, 1).agg(sum($"id") as "s", count(lit(1)) as "c"),
+        Row(4950L, 100L))
+    }
+  }
+
+  test("results unchanged with an empty input") {
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 0, 1, 1)
+        .select($"id" as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s", count(lit(1)) as "c")
+    }
+  }
+
+  // The following four tests cover plans where an `ExpandExec` sits below the partial aggregate
+  // (ROLLUP / CUBE / GROUPING SETS / multi-distinct). PR apache/spark#28804 statically disabled its
+  // skip-partial-aggregate optimization whenever an Expand was present, but that was a performance
+  // heuristic guarding its *static* row sampling, not a correctness requirement. Our decision is
+  // made at runtime from the observed reduction ratio, so we deliberately do not port that
+  // exclusion. These tests assert results stay correct with the exclusion absent.
+
+  test("results unchanged for ROLLUP (Expand below partial aggregate)") {
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 400, 1, 1)
+        .select(($"id" % 200) as "k1", ($"id" % 7) as "k2", $"id" as "v")
+        .rollup($"k1", $"k2")
+        .agg(sum($"v") as "s", count(lit(1)) as "c")
+    }
+  }
+
+  test("results unchanged for CUBE (Expand below partial aggregate)") {
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 400, 1, 1)
+        .select(($"id" % 150) as "k1", ($"id" % 5) as "k2", $"id" as "v")
+        .cube($"k1", $"k2")
+        .agg(sum($"v") as "s", count(lit(1)) as "c")
+    }
+  }
+
+  test("results unchanged for GROUPING SETS (Expand below partial aggregate)") {
+    withTempView("t") {
+      spark.range(0, 400, 1, 1)
+        .select(($"id" % 180) as "k1", ($"id" % 6) as "k2", $"id" as "v")
+        .createOrReplaceTempView("t")
+      checkAdaptiveMatchesReference { () =>
+        spark.sql(
+          """SELECT k1, k2, sum(v) AS s, count(1) AS c
+            |FROM t
+            |GROUP BY k1, k2 GROUPING SETS ((k1, k2), (k1), ())""".stripMargin)
+      }
+    }
+  }
+
+  test("results unchanged for multi-distinct (Expand below partial aggregate)") {
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 400, 1, 1)
+        .select(($"id" % 100) as "k", ($"id" % 30) as "a", ($"id" % 40) as "b")
+        .groupBy($"k")
+        .agg(countDistinct($"a") as "da", countDistinct($"b") as "db", sum($"a") as "s")
+    }
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Part 2: Triggering -- the bypass fires when, and only when, it should.
+  /////////////////////////////////////////////////////////////////////////////
+
+  test("pass-through fires for high-cardinality input, not for low-cardinality input") {
+    forEachCodegenAndMap() { clue =>
+      // Fully distinct keys: partial aggregation reduces nothing, so rows must bypass.
+      val highCard = () => spark.range(0, 200, 1, 1)
+        .select($"id" as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        assert(numBypassingRows(highCard) > 0,
+          "expected some rows to bypass partial aggregation for high-cardinality input")
+      }
+      // Few distinct keys, high reduction: partial aggregation is effective, nothing bypasses.
+      val lowCard = () => spark.range(0, 600, 1, 1)
+        .select(($"id" % 5) as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        assert(numBypassingRows(lowCard) == 0,
+          "expected no rows to bypass partial aggregation for low-cardinality input")
+      }
+    }
+  }
+
+  test("group-by-only pass-through fires for high-cardinality input") {
+    forEachCodegenAndMap() { clue =>
+      val distinctKeys = () => spark.range(0, 200, 1, 1).select($"id" as "k").distinct()
+      withClue(clue) {
+        assert(numBypassingRows(distinctKeys) > 0,
+          "expected group-by-only rows to bypass partial aggregation for high-cardinality input")
+      }
+    }
+  }
+
+  test("filtered aggregate functions are eligible for pass-through") {
+    // The filter clause does not change eligibility: a partial aggregate over `FILTER (WHERE ...)`
+    // functions still bypasses on high-cardinality input, and the per-row filter guard runs inside
+    // the pass-through single-row buffer update.
+    forEachCodegenAndMap() { clue =>
+      withTempView("t") {
+        spark.range(0, 200, 1, 1)
+          .select($"id" as "k", ($"id" % 100) as "v")
+          .createOrReplaceTempView("t")
+        val df = () => spark.sql(
+          """SELECT k, sum(v) FILTER (WHERE v % 2 = 0) AS s
+            |FROM t GROUP BY k""".stripMargin)
+        withClue(clue) {
+          assert(numBypassingRows(df) > 0,
+            "expected filtered-aggregate rows to bypass partial aggregation for high-cardinality " +
+              "input")
+        }
+      }
+    }
+  }
+
+  test("pass-through fires for high-cardinality input below an Expand") {
+    // The static PR#28804 heuristic would have refused to skip whenever an Expand was present; our
+    // runtime decision skips because the expanded rows genuinely do not reduce. GROUPING SETS over
+    // two single-column, fully-distinct sets is used (rather than ROLLUP/CUBE) so there is no
+    // grand-total group dragging the reduction ratio below the threshold: every expanded row is a
+    // fresh key, so all configurations bypass.
+    forEachCodegenAndMap() { clue =>
+      withTempView("t") {
+        spark.range(0, 200, 1, 1)
+          .select($"id".as("k1"), ($"id" + 1000).as("k2"), $"id".as("v"))
+          .createOrReplaceTempView("t")
+        val gs = () => spark.sql(
+          """SELECT k1, k2, sum(v) AS s
+            |FROM t
+            |GROUP BY k1, k2 GROUPING SETS ((k1), (k2))""".stripMargin)
+        withClue(clue) {
+          assert(numBypassingRows(gs) > 0,
+            "expected rows below an Expand to bypass partial aggregation for high-cardinality " +
+              "input")
+        }
+      }
+    }
+  }
+
+  test("no pass-through when the feature is disabled") {
+    // The metric must stay zero across the whole matrix when the switch is off, even for input that
+    // would otherwise bypass.
+    for {
+      wholeStage <- Seq(true, false)
+      twoLevelMap <- Seq(true, false)
+    } {
+      withSQLConf(
+        (Seq(
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "false",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString) ++ fixedPlanConfs): _*) {
+        val df = () => spark.range(0, 200, 1, 1)
+          .select($"id" as "k", $"id" as "v")
+          .groupBy($"k")
+          .agg(sum($"v") as "s")
+        withClue(s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap") {
+          assert(numBypassingRows(df) == 0,
+            "no rows should bypass partial aggregation when the feature is disabled")
+        }
+      }
+    }
+  }
+
+  test("no pass-through for a global aggregation with no grouping keys") {
+    // Global aggregation is ineligible (`groupingExpressions` is empty): there is a single group,
+    // so there is nothing to stream through. The partial aggregate must never bypass regardless of
+    // codegen or map settings, even under a forced fallback.
+    forEachCodegenAndMap(regularFallback = 16) { clue =>
+      val df = () => spark.range(0, 200, 1, 1)
+        .agg(sum($"id") as "s", count(lit(1)) as "c")
+      withClue(clue) {
+        assert(numBypassingRows(df) == 0,
+          "a global aggregation is not eligible and must never bypass")
+      }
+    }
+  }
+
+  test("Tier 1 (no-spill) fires when the sample shows no reduction, without spilling") {
+    // No forced regular-map spill: only the no-spill sampling tier can trigger the bypass. Fully
+    // distinct keys over a small sample cross `noSpillReductionRatioThreshold`, so rows bypass and
+    // the regular map never spills.
+    forEachCodegenAndMap() { clue =>
+      val df = () => spark.range(0, 200, 1, 1)
+        .select($"id" as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        val c = runAndReadCounters(df)
+        assert(c.skipped > 0, "Tier 1 should bypass fully distinct input under the sample")
+        assert(c.spillBytes == 0, "Tier 1 must decide before any spill happens")
+        assert(c.tasksFallBacked == 0, "Tier 1 must not fall back to sort-based aggregation")
+      }
+    }
+  }
+
+  test("Tier 2 (on-spill) fires when the map would spill on high-cardinality input") {
+    // Force the regular map to fall back quickly. High-cardinality input that reaches the fallback
+    // point should bypass via the on-spill tier rather than spilling. Use a sample larger than the
+    // input so Tier 1 cannot fire first and the on-spill tier is the one exercised.
+    forEachCodegenAndMap(sampleRows = 100000, regularFallback = 16) { clue =>
+      val df = () => spark.range(0, 200, 1, 1)
+        .select($"id" as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        val c = runAndReadCounters(df)
+        assert(c.skipped > 0,
+          "Tier 2 should bypass high-cardinality input at the spill boundary")
+        // The whole point of Tier 2 is to bypass *instead of* falling back to sort-based
+        // aggregation, so the sorter is never created. `numTasksFallBacked` is the reliable
+        // per-operator signal for that (the `spillSize` metric on the interpreted path is derived
+        // from the task-cumulative memory-spill counter and can be inflated by unrelated spilling
+        // such as the downstream shuffle write, so it is not asserted here).
+        assert(c.tasksFallBacked == 0, "Tier 2 must replace the sort fallback, not trigger it")
+      }
+    }
+  }
+
+  test("without the feature the same input really does fall back to sort") {
+    // Sanity check for the Tier 2 assertion above: with adaptive disabled, the identical
+    // high-cardinality input under the same forced fallback genuinely falls back to sort-based
+    // aggregation. This proves Tier 2's `tasksFallBacked == 0` reflects the bypass and not merely
+    // an input that never reached the spill boundary.
+    for {
+      wholeStage <- Seq(true, false)
+      twoLevelMap <- Seq(true, false)
+    } {
+      val fastCap = if (twoLevelMap) 4 else 1
+      withSQLConf(
+        (Seq(
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "false",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
+          "spark.sql.TungstenAggregate.testFallbackStartsAt" -> s"$fastCap, 16") ++
+          fixedPlanConfs): _*) {
+        val df = () => spark.range(0, 200, 1, 1)
+          .select($"id" as "k", $"id" as "v")
+          .groupBy($"k")
+          .agg(sum($"v") as "s")
+        withClue(s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap") {
+          val c = runAndReadCounters(df)
+          assert(c.skipped == 0, "feature disabled: nothing should bypass")
+          assert(c.tasksFallBacked > 0,
+            "feature disabled: the forced fallback should trigger sort-based aggregation")
+        }
+      }
+    }
+  }
+
+  test("larger sample defers the decision so a small high-cardinality input is not bypassed") {
+    // With a sample larger than the whole input and no regular-map spill forced, the Tier 1 check
+    // point is never reached, so nothing bypasses even though the keys are fully distinct.
+    forEachCodegenAndMap(sampleRows = 100000) { clue =>
+      val df = () => spark.range(0, 200, 1, 1)
+        .select($"id" as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        assert(numBypassingRows(df) == 0,
+          "no bypass expected before the sample size is reached")
+      }
+    }
+  }
+
+  test("partial aggregate output row count reflects the bypass (independent of the skip metric)") {
+    // `numOutputRows` on the partial aggregate is the ground truth: it is driven by the normal
+    // aggregation output path, not by our self-reported `numBypassingRows` metric. This test cross
+    // checks the two and pins the observable data-side effect of bypassing.
+    val numRows = 200
+    forEachCodegenAndMap() { clue =>
+      // Fully distinct keys: once the bypass fires the operator stops collapsing rows, so the
+      // partial aggregate emits far more than the handful of keys a real aggregation would. Read
+      // all counters from a single execution so the metrics are not double-counted.
+      val highCard = () => spark.range(0, numRows, 1, 1)
+        .select($"id" as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        val c = runAndReadCounters(highCard)
+        assert(c.skipped > 0, "high-cardinality input should bypass")
+        // Every partial output row is either a real (aggregated) group or a bypassed row, so the
+        // partial output count must be at least the number of bypassed rows, and it climbs toward
+        // the input row count -- well above the heavy reduction a kept aggregation would give.
+        assert(c.partialOutputRows >= c.skipped,
+          s"partial output ${c.partialOutputRows} should be >= bypassed rows ${c.skipped}")
+        assert(c.partialOutputRows > numRows / 2,
+          s"partial output (${c.partialOutputRows}) should climb toward the input row count")
+      }
+
+      // Low-cardinality reference: partial aggregation stays effective, so its output equals the
+      // small number of distinct keys and nothing is bypassed.
+      val lowCard = () => spark.range(0, 600, 1, 1)
+        .select(($"id" % 5) as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        val c = runAndReadCounters(lowCard)
+        assert(c.skipped == 0, "low-cardinality input should not bypass")
+        assert(c.partialOutputRows == 5,
+          "an effective partial aggregate should emit exactly the distinct key count")
+      }
+    }
+  }
+}

@@ -4156,6 +4156,66 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ADAPTIVE_PARTIAL_AGGREGATION_ENABLED =
+    buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.enabled")
+      .doc("When true, hash aggregation adaptively bypasses the pre-shuffle partial aggregation " +
+        "at runtime when it observes that the partial aggregation is not reducing the number of " +
+        "rows enough to be worthwhile. Once bypassed, the remaining input rows are passed " +
+        "through as single-row partial aggregation buffers for the final aggregation to merge, " +
+        "which avoids the cost of maintaining and spilling a large aggregation map with little " +
+        "reduction benefit. This applies only to hash aggregation with grouping keys.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS =
+    buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.sampleRows")
+      .doc("The number of input rows to sample before evaluating the reduction ratio for the " +
+        s"no-spill tier of adaptive partial aggregation (see " +
+        s"'${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). From this many rows on, if the ratio " +
+        "of distinct grouping keys to processed rows is at least " +
+        s"'spark.sql.execution.aggregate.adaptivePartialAggregation." +
+        "noSpillReductionRatioThreshold', partial aggregation is bypassed for the rest of the " +
+        "input. When the ratio is below the threshold, the next evaluation happens after twice " +
+        "as many rows, so low-cardinality input is re-checked only rarely.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ > 0, "The sample row count must be positive.")
+      .createWithDefault(100000)
+
+  val ADAPTIVE_PARTIAL_AGGREGATION_NO_SPILL_REDUCTION_RATIO_THRESHOLD =
+    buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation." +
+      "noSpillReductionRatioThreshold")
+      .doc("The reduction ratio threshold used by the no-spill tier of adaptive partial " +
+        s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The reduction ratio " +
+        "is the number of distinct grouping keys divided by the number of processed rows. After " +
+        s"sampling '${ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key}' rows without spilling, if " +
+        "the ratio is at least this value the partial aggregation is bypassed. A larger value " +
+        "is more conservative (keeps partial aggregation in more cases).")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doubleConf
+      .checkValue(v => v > 0.0 && v <= 1.0, "The reduction ratio threshold must be in (0.0, 1.0].")
+      .createWithDefault(0.95)
+
+  val ADAPTIVE_PARTIAL_AGGREGATION_SPILL_REDUCTION_RATIO_THRESHOLD =
+    buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation." +
+      "spillReductionRatioThreshold")
+      .doc("The reduction ratio threshold used by the on-spill tier of adaptive partial " +
+        s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). When the aggregation " +
+        "map is about to spill, if the ratio of distinct grouping keys to processed rows is at " +
+        "least this value the partial aggregation is bypassed for the rest of the input. This " +
+        "threshold is more aggressive (lower) than the no-spill tier because once the map " +
+        "spills, partial aggregation starts paying disk I/O costs, so it is worth bypassing " +
+        "with less reduction benefit.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doubleConf
+      .checkValue(v => v > 0.0 && v <= 1.0, "The reduction ratio threshold must be in (0.0, 1.0].")
+      .createWithDefault(0.8)
+
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")
       .doc("Whether to ignore null fields when generating JSON objects in JSON data source and " +
@@ -8902,6 +8962,18 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def useHashAggregation: Boolean = getConf(USE_HASH_AGG)
 
   def bypassPartialAggregation: Boolean = getConf(BYPASS_PARTIAL_AGGREGATION)
+
+  def adaptivePartialAggregationEnabled: Boolean =
+    getConf(ADAPTIVE_PARTIAL_AGGREGATION_ENABLED)
+
+  def adaptivePartialAggregationSampleRows: Int =
+    getConf(ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS)
+
+  def adaptivePartialAggregationNoSpillReductionRatioThreshold: Double =
+    getConf(ADAPTIVE_PARTIAL_AGGREGATION_NO_SPILL_REDUCTION_RATIO_THRESHOLD)
+
+  def adaptivePartialAggregationSpillReductionRatioThreshold: Double =
+    getConf(ADAPTIVE_PARTIAL_AGGREGATION_SPILL_REDUCTION_RATIO_THRESHOLD)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
