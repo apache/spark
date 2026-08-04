@@ -94,6 +94,32 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
+  test("predicate on partly fully pushed filter attributes -> evaluated after the scan") {
+    val tbl = s"$catalogName.tbl_partly_pushed"
+    val dim = s"$catalogName.dim_partly_pushed"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, p1 INT, p2 INT) USING $v2Source " +
+        "PARTITIONED BY (p1, p2) " +
+        "TBLPROPERTIES('fully-pushed-filter-attributes' = 'p1')")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $tbl VALUES ($i, 1, 2)")
+      }
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (3)")
+
+      // The predicate also references p2, which is not declared fully pushed, so it is not
+      // considered fully pushed and Spark keeps evaluating it after the scan.
+      val df = sql(s"SELECT * FROM $tbl WHERE p1 + p2 = (SELECT max(val) FROM $dim)")
+      checkAnswer(df, (0 until 5).map(i => Row(i, 1, 2)))
+
+      assertScalarSubqueryRuntimeFilters(df)
+      val p1 = AttributeReference("p1", IntegerType, nullable = false)()
+      val p2 = AttributeReference("p2", IntegerType, nullable = false)()
+      assertPushedCatalystPredicatesEqual(df, EqualTo(Add(p1, p2), Literal(3)))
+      assertScalarSubqueryEvaluatedAfterScan(df, expected = true)
+    }
+  }
+
   test("untranslatable filter -> pushed instead of dropped") {
     val tbl = s"$catalogName.tbl2"
     val dim = s"$catalogName.dim2"
