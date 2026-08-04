@@ -329,27 +329,26 @@ def verify_scalar_result(result: Any, num_rows: int) -> Any:
     return result
 
 
-def verify_iterator_exhausted(iterator: Iterator, error_class: str) -> None:
+def verify_iterator_exhausted(iterator: Iterator) -> None:
     """Verify that an iterator has been fully consumed."""
     try:
         next(iterator)
     except StopIteration:
         pass
     else:
-        raise PySparkRuntimeError(errorClass=error_class, messageParameters={})
+        raise PySparkRuntimeError(errorClass="INPUT_NOT_FULLY_CONSUMED", messageParameters={})
 
 
 def verify_output_row_limit(
     iterator: Iterator,
     max_rows: Union[int, Callable[[], int]],
-    error_class: str,
 ) -> Iterator:
     """Yield elements while verifying total rows do not exceed a limit (fail-fast)."""
     total_rows = 0
     for element in iterator:
         total_rows += len(element)
         if total_rows > (max_rows() if callable(max_rows) else max_rows):
-            raise PySparkRuntimeError(errorClass=error_class, messageParameters={})
+            raise PySparkRuntimeError(errorClass="OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={})
         yield element
 
 
@@ -2013,7 +2012,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             limited = verify_output_row_limit(
                 process_results(),
                 lambda: num_input_rows,
-                error_class="OUTPUT_EXCEEDS_INPUT_ROWS",
             )
 
             # Apply row count match check (final)
@@ -2026,10 +2024,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             yield from matched
 
             # Verify iterator consumed
-            verify_iterator_exhausted(
-                args_iter,
-                error_class="INPUT_NOT_FULLY_CONSUMED",
-            )
+            verify_iterator_exhausted(args_iter)
 
         # profiling is not supported for UDF
         return func, None, ser, ser
@@ -3129,7 +3124,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             limited = verify_output_row_limit(
                 process_results(),
                 lambda: num_input_rows,
-                error_class="OUTPUT_EXCEEDS_INPUT_ROWS",
             )
 
             # Apply row count match check (final)
@@ -3142,10 +3136,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             yield from matched
 
             # Verify iterator consumed
-            verify_iterator_exhausted(
-                args_iter,
-                error_class="INPUT_NOT_FULLY_CONSUMED",
-            )
+            verify_iterator_exhausted(args_iter)
 
         # profiling is not supported for UDF
         return func, None, ser, ser
