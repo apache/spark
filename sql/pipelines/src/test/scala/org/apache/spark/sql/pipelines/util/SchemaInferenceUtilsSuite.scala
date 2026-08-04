@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.types._
 
@@ -317,5 +317,72 @@ class SchemaInferenceUtilsSuite extends SparkFunSuite {
     assert(typeChange.length === 1)
     assert(typeChange.head.fieldNames() === Array("value"))
     assert(typeChange.head.newDataType() === LongType)
+  }
+
+  test("mergeSchemas - a nested field differing only in case folds onto the existing field when " +
+    "case-insensitive") {
+    // The nested analog of the top-level case-only fold. `StructType.merge` propagates the
+    // case-sensitivity flag into nested struct merges (SPARK-58525), so the incoming `s.Value` is
+    // matched to the existing `s.value` and the struct keeps a single field with the persisted
+    // (left) spelling -- rather than growing a second, case-differing nested field.
+    val currentSchema = new StructType()
+      .add("id", IntegerType)
+      .add("s", new StructType().add("value", StringType))
+    val dataSchema = new StructType()
+      .add("id", IntegerType)
+      .add("s", new StructType().add("Value", StringType))
+
+    val merged =
+      SchemaMergingUtils.mergeSchemas(currentSchema, dataSchema, caseSensitive = false)
+    assert(merged === currentSchema)
+
+    // Because the merge is a no-op, evolution derives no table changes at all: in particular the
+    // nested struct is NOT rewritten (which would be an UpdateColumnType on `s`).
+    assert(
+      SchemaInferenceUtils.diffSchemas(currentSchema, merged, caseSensitive = false).isEmpty)
+  }
+
+  test("mergeSchemas - a nested field differing only in case stays distinct when case-sensitive") {
+    // The case-sensitive control: `s.value` and `s.Value` are different fields, so the merged
+    // struct carries both.
+    val currentSchema = new StructType().add("s", new StructType().add("value", StringType))
+    val dataSchema = new StructType().add("s", new StructType().add("Value", StringType))
+
+    val merged = SchemaMergingUtils.mergeSchemas(currentSchema, dataSchema, caseSensitive = true)
+    assert(
+      merged === new StructType().add(
+        "s",
+        new StructType().add("value", StringType).add("Value", StringType)))
+  }
+
+  test("mergeSchemas - a nested case-only field whose type also changes fails to merge") {
+    // A nested field that differs only in case AND changes type is rejected rather than silently
+    // resolved. Note this is a *type* incompatibility, not a case one: `StructType.merge` never
+    // widens numeric types, so `int` -> `long` fails identically for a same-cased field and at the
+    // top level. The value of pinning it here is that case-insensitive matching does not turn an
+    // incompatible type change into a silent merge -- the run still fails loudly, and the user's
+    // remedy is a full refresh.
+    val currentSchema = new StructType().add("s", new StructType().add("value", IntegerType))
+    val dataSchema = new StructType().add("s", new StructType().add("Value", LongType))
+
+    val ex = intercept[SparkException] {
+      SchemaMergingUtils.mergeSchemas(currentSchema, dataSchema, caseSensitive = false)
+    }
+    assert(ex.getCondition === "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE")
+
+    // Same-cased and top-level widening fail the same way, confirming the rejection is about the
+    // type change rather than the case difference.
+    intercept[SparkException] {
+      SchemaMergingUtils.mergeSchemas(
+        currentSchema,
+        new StructType().add("s", new StructType().add("value", LongType)),
+        caseSensitive = false)
+    }
+    intercept[SparkException] {
+      SchemaMergingUtils.mergeSchemas(
+        new StructType().add("v", IntegerType),
+        new StructType().add("v", LongType),
+        caseSensitive = false)
+    }
   }
 }
