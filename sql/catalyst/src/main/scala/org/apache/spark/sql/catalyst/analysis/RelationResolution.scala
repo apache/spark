@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
@@ -61,11 +59,9 @@ class RelationResolution(
     with LookupCatalog
     with SQLConfHelper {
 
-  type CacheKey = (Seq[String], Option[TimeTravelSpec])
-
   val v1SessionCatalog = catalogManager.v1SessionCatalog
 
-  private def relationCache: mutable.Map[CacheKey, LogicalPlan] = AnalysisContext.get.relationCache
+  private def relationCache = AnalysisContext.get.relationCache
 
   /**
    * If we are resolving database objects (relations, functions, etc.) inside views, we may need to
@@ -236,24 +232,26 @@ class RelationResolution(
       finalTimeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
     expandIdentifier(identifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
-        val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
         val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
         val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
         val finalOptions = u.clearWritePrivileges.options
+        // Time travel applies to reads only; reject it on a write target (reachable via the option
+        // form, e.g. `INSERT INTO t WITH ('versionAsOf' = ...)`) with a user-facing error.
+        if (finalTimeTravelSpec.nonEmpty && writePrivileges != null) {
+          throw QueryCompilationErrors.timeTravelUnsupportedError(toSQLId(identifier))
+        }
+        val key = toCacheKey(catalog, ident, finalTimeTravelSpec, finalOptions)
         // A reference that requires write privileges is never served from the per-query relation
         // cache. The catalog authorizes the write in `loadTable(ident, writePrivileges)` below, and
         // a cache hit would skip that call entirely. The hit happens whenever the write target is
         // also read in the same statement -- the target is resolved after its query (see
         // `ResolveRelations`), so it finds the relation the query already put in the cache, e.g.
         // for `INSERT INTO t SELECT * FROM t`.
+        //
+        // The cache key includes the options, so a hit means the options already match and each
+        // reference's own bag is honored without re-applying it here.
         val cached = if (writePrivileges == null) relationCache.get(key) else None
         cached
-          // The per-query relation cache is not keyed by options. When the same table is referenced
-          // more than once in a single statement with different dynamic options (e.g. a self-join,
-          // or a second reference sharing the target's cache entry), a cache hit would otherwise
-          // reuse the first reference's options and silently drop this reference's. Re-apply this
-          // reference's options to the cached relation so each reference honors its own bag.
-          .map(applyOptions(_, finalOptions))
           .map(adaptCachedRelation(_, planId))
           .orElse {
             // For a `RelationCatalog` with no time-travel / write privileges, the single-RPC
@@ -280,7 +278,8 @@ class RelationResolution(
                     catalog,
                     ident,
                     finalTimeTravelSpec,
-                    Option(writePrivileges))
+                    Option(writePrivileges),
+                    finalOptions)
                 } else {
                   None
                 }
@@ -308,14 +307,17 @@ class RelationResolution(
             // we don't share-cache views.
             val table: Option[Table] = relation.collect { case t: Table => t }
 
+            // Reuse a cached relation only when this read's options match: the lookup is by name
+            // and `Table.id`, so a differing-options read would otherwise get the cached read's
+            // `Table`.
             val sharedRelationCacheMatch = for {
               t <- table
               if finalTimeTravelSpec.isEmpty && writePrivileges == null && !u.isStreaming
               cached <- lookupSharedRelationCache(catalog, ident, t)
+              if cached.options == finalOptions
             } yield {
-              val updatedRelation = cached.copy(options = finalOptions)
               val nameParts = ident.toQualifiedNameParts(catalog)
-              val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
+              val aliasedRelation = SubqueryAlias(nameParts, cached)
               relationCache.update(key, aliasedRelation)
               adaptCachedRelation(aliasedRelation, planId)
             }
@@ -368,19 +370,6 @@ class RelationResolution(
       ident: Identifier,
       table: Table): Option[DataSourceV2Relation] = {
     CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, conf)
-  }
-
-  /**
-   * Re-applies `options` to the relation in a cached plan. Every `relationCache` entry holds a
-   * single relation for its own identifier (a view's body is still unresolved when it is cached),
-   * so this cannot reach another table's relation.
-   */
-  private def applyOptions(
-      cached: LogicalPlan,
-      options: CaseInsensitiveStringMap): LogicalPlan = cached transform {
-    case r: DataSourceV2Relation => r.copy(options = options)
-    case r: UnresolvedCatalogRelation => r.copy(options = options)
-    case r: StreamingRelationV2 => r.copy(extraOptions = options)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
@@ -496,7 +485,7 @@ class RelationResolution(
   }
 
   private def getOrLoadRelation(ref: V2TableReference): LogicalPlan = {
-    val key = toCacheKey(ref.catalog, ref.identifier)
+    val key = toCacheKey(ref.catalog, ref.identifier, None, ref.options)
     relationCache.get(key) match {
       case Some(cached) =>
         adaptCachedRelation(cached, ref)
@@ -556,8 +545,10 @@ class RelationResolution(
   private def toCacheKey(
       catalog: CatalogPlugin,
       ident: Identifier,
-      timeTravelSpec: Option[TimeTravelSpec] = None): CacheKey = {
-    ((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq, timeTravelSpec)
+      timeTravelSpec: Option[TimeTravelSpec],
+      options: CaseInsensitiveStringMap): RelationCacheKey = {
+    val nameParts = (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq
+    RelationCacheKey(nameParts, timeTravelSpec, options)
   }
 
   private def cloneWithPlanId(plan: LogicalPlan, planId: Option[Long]): LogicalPlan = {
