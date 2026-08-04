@@ -588,8 +588,10 @@ case class JsonTableEvaluator(containerPath: Seq[PathInstruction], explodeRoot: 
     } else if (trie.terminals.nonEmpty && !isNull) {
       // A column path both ends here and extends deeper (e.g. `$.a` alongside `$.a.b`). Serialize
       // the value once for the terminals, then re-parse that fragment to resolve the deeper
-      // columns -- so the only place a value is parsed more than once is this rare prefix overlap,
-      // and even then the descendant columns are still resolved in a single sub-traversal.
+      // columns -- this rare prefix overlap is the only place *within a single traversal* that a
+      // value is parsed more than once, and even then the descendant columns are still resolved in
+      // a single sub-traversal. (Separately, an array row item is serialized by
+      // `arrayElementIterator` and parsed again here, once per row.)
       val raw = serializeCurrentValue(parser)
       val result = JsonPathResult.Found(raw)
       trie.terminals.foreach(out(_) = result)

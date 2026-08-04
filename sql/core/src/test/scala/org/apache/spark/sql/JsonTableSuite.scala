@@ -283,6 +283,41 @@ class JsonTableSuite extends QueryTest with SharedSparkSession {
     assert(e.getMessageParameters.get("columnName") == "`id`")
   }
 
+  test("duplicate column name detection follows spark.sql.caseSensitive") {
+    // Names differing only in case: distinct under a case-sensitive resolver, colliding otherwise.
+    val mixedCase =
+      """
+        |SELECT * FROM json_table(
+        |  '{"items":[{"id":1,"ID":2}]}',
+        |  '$.items[*]'
+        |  COLUMNS (id INT PATH '$.id', ID INT PATH '$.ID')
+        |) AS t
+      """.stripMargin
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(sql(mixedCase), Seq(Row(1, 2)))
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val e = intercept[ParseException](sql(mixedCase))
+      assert(e.getCondition == "INVALID_SQL_SYNTAX.DUPLICATE_JSON_TABLE_COLUMN")
+      assert(e.getMessageParameters.get("columnName") == "`id`")
+    }
+    // An exact-case duplicate is rejected in both modes.
+    val exactDuplicate =
+      """
+        |SELECT * FROM json_table(
+        |  '{"items":[{"id":1}]}',
+        |  '$.items[*]'
+        |  COLUMNS (id INT PATH '$.id', id INT PATH '$.id')
+        |) AS t
+      """.stripMargin
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        val e = intercept[ParseException](sql(exactDuplicate))
+        assert(e.getCondition == "INVALID_SQL_SYNTAX.DUPLICATE_JSON_TABLE_COLUMN")
+      }
+    }
+  }
+
   test("value cast honors ANSI mode") {
     val json = """{"items":[{"v":"not_a_number"}]}"""
     val query =

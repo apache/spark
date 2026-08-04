@@ -3269,8 +3269,12 @@ class AstBuilder extends DataTypeAstBuilder
     val rowPath = string(visitStringLit(jt.rowPath))
 
     val columns = jt.jsonTableColumn.asScala.map(buildJsonTableColumn).toSeq
-    // Column names must be unique within a single JSON_TABLE.
-    val duplicate = columns.groupBy(_.name.toLowerCase(Locale.ROOT)).collectFirst {
+    // Column names must be unique within a single JSON_TABLE. Whether two names that differ only
+    // in case collide follows the configured resolver, so `a` and `A` stay distinct under
+    // `spark.sql.caseSensitive`.
+    val normalize: String => String =
+      if (conf.caseSensitiveAnalysis) identity else _.toLowerCase(Locale.ROOT)
+    val duplicate = columns.groupBy(c => normalize(c.name)).collectFirst {
       case (_, cols) if cols.length > 1 => cols.head.name
     }
     duplicate.foreach { name =>
