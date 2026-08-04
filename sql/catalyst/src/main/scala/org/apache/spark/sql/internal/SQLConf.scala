@@ -6020,6 +6020,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_LIMIT_OFFSET_LEGACY_INCORRECT_ORDER_HANDLING_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateLimitOffsetLegacyIncorrectOrderHandling.enabled")
+      .internal()
+      .doc("If enabled, revert to the legacy incorrect behavior where the ORDER BY of a " +
+        "correlated subquery with LIMIT (and optional OFFSET) whose predicates only reference " +
+        "the outer table is dropped during decorrelation, turning ORDER BY ... LIMIT ... OFFSET " +
+        "into an arbitrary LIMIT/OFFSET. When disabled (default), the ORDER BY is preserved so " +
+        "the result is deterministic.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val DECORRELATE_UNION_OR_SET_OP_UNDER_LIMIT_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateUnionOrSetOpUnderLimit.enabled")
       .internal()
