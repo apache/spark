@@ -187,6 +187,21 @@ class NumPyCompatTestsMixin:
                 expected = np_func(pdf.x1, pdf.x2)
                 self.assert_eq(result, expected, almost=True)
 
+    def test_np_heaviside(self):
+        for pdf in (
+            pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [-2, -1, 0, 1, 2]}),
+            pd.DataFrame(
+                {
+                    "x1": [-np.inf, -2.0, -0.0, 0.0, 0.0, 2.0, np.inf, np.nan],
+                    "x2": [2.0, -2.0, -0.0, 0.5, np.nan, np.nan, -0.0, 2.0],
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(
+                np.heaviside(psdf.x1, psdf.x2), np.heaviside(pdf.x1, pdf.x2), almost=True
+            )
+
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 
