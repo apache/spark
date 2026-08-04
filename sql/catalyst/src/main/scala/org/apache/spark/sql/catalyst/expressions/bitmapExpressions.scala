@@ -109,7 +109,7 @@ case class BitmapBitPosition(child: Expression)
   arguments = """
     Arguments:
       * child - The bitmap whose set bits are counted. An expression that evaluates to a binary
-        bitmap, typically produced by bitmap_construct_agg().
+          bitmap, typically produced by bitmap_construct_agg().
   """,
   examples = """
     Examples:
@@ -258,7 +258,7 @@ case class BitmapConstructAgg(child: Expression,
   arguments = """
     Arguments:
       * child - The expression whose bitmap values are combined with a bitwise OR.
-        An expression that evaluates to a binary bitmap created from bitmap_construct_agg().
+          An expression that evaluates to a binary bitmap created from bitmap_construct_agg().
   """,
   // scalastyle:off line.size.limit
   examples = """
@@ -356,7 +356,7 @@ case class BitmapOrAgg(child: Expression,
   arguments = """
     Arguments:
       * child - The expression whose bitmap values are combined with a bitwise AND.
-        An expression that evaluates to a binary bitmap created from bitmap_construct_agg().
+          An expression that evaluates to a binary bitmap created from bitmap_construct_agg().
   """,
   // scalastyle:off line.size.limit
   examples = """

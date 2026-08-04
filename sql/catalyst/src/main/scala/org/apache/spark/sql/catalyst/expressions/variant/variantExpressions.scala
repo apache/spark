@@ -129,7 +129,7 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
   arguments = """
     Arguments:
       * expr - A nested value of array, map, or struct type. Maps must have string keys. Nested
-        values of any type are allowed.
+          values of any type are allowed.
   """,
   examples = """
     Examples:
@@ -652,7 +652,7 @@ abstract class VariantGetExpressionBuilderBase(failOnError: Boolean) extends Exp
       * v - A variant value to extract from.
       * path - A string literal in JSONPath format that identifies the sub-variant to extract.
       * type - An optional string literal naming the SQL type to cast the extracted sub-variant to.
-        When omitted, it defaults to `variant`.
+          When omitted, it defaults to `variant`.
   """,
   examples = """
     Examples:
@@ -681,7 +681,7 @@ object VariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(true)
       * v - A variant value to extract from.
       * path - A string literal in JSONPath format that identifies the sub-variant to extract.
       * type - An optional string literal naming the SQL type to cast the extracted sub-variant to.
-        When omitted, it defaults to `variant`.
+          When omitted, it defaults to `variant`.
   """,
   examples = """
     Examples:

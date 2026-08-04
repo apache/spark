@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
   arguments = """
     Arguments:
       * exprN - An expression of any type. All arguments must share a common type.
-        Arguments are evaluated in order and the first non-null value is returned.
+          Arguments are evaluated in order and the first non-null value is returned.
   """,
   examples = """
     Examples:

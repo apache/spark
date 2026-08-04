@@ -284,7 +284,7 @@ case class ConcatWs(children: Seq[Expression])
     Arguments:
       * n - An integer expression giving the 1-based index of the input to return.
       * input1, input2, ... - The input expressions to select from. They can be strings
-        or binary values.
+          or binary values.
   """,
   examples = """
     Examples:

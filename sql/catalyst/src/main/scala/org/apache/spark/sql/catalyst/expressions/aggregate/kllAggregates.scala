@@ -57,10 +57,10 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, ByteType, DataT
   arguments = """
     Arguments:
       * expr - The expression to aggregate into the KLL sketch.
-        An expression that evaluates to an integral.
+          An expression that evaluates to an integral.
       * k - Optional. The parameter controlling the size and accuracy of the sketch.
-        An expression that evaluates to an integer between 8 and 65535. Must be a
-        constant. Defaults to 200.
+          An expression that evaluates to an integer between 8 and 65535. Must be a
+          constant. Defaults to 200.
   """,
   examples = """
     Examples:
@@ -212,10 +212,10 @@ case class KllSketchAggBigint(
   arguments = """
     Arguments:
       * expr - The expression to aggregate into the KLL sketch.
-        An expression that evaluates to a float.
+          An expression that evaluates to a float.
       * k - Optional. The parameter controlling the size and accuracy of the sketch.
-        An expression that evaluates to an integer between 8 and 65535. Must be a
-        constant. Defaults to 200.
+          An expression that evaluates to an integer between 8 and 65535. Must be a
+          constant. Defaults to 200.
   """,
   examples = """
     Examples:
@@ -356,10 +356,10 @@ case class KllSketchAggFloat(
   arguments = """
     Arguments:
       * expr - The expression to aggregate into the KLL sketch.
-        An expression that evaluates to a float or double.
+          An expression that evaluates to a float or double.
       * k - Optional. The parameter controlling the size and accuracy of the sketch.
-        An expression that evaluates to an integer between 8 and 65535. Must be a
-        constant. Defaults to 200.
+          An expression that evaluates to an integer between 8 and 65535. Must be a
+          constant. Defaults to 200.
   """,
   examples = """
     Examples:
@@ -506,10 +506,10 @@ case class KllSketchAggDouble(
   arguments = """
     Arguments:
       * expr - The expression to merge into the KLL sketch.
-        An expression that evaluates to a binary KLL sketch representation.
+          An expression that evaluates to a binary KLL sketch representation.
       * k - Optional. The parameter controlling the size and accuracy of the merged
-        sketch. An expression that evaluates to an integer between 8 and 65535. Must be
-        a constant. Defaults to the k value of the first input sketch.
+          sketch. An expression that evaluates to an integer between 8 and 65535. Must be
+          a constant. Defaults to the k value of the first input sketch.
   """,
   examples = """
     Examples:
@@ -587,10 +587,10 @@ case class KllMergeAggBigint(
   arguments = """
     Arguments:
       * expr - The expression to merge into the KLL sketch.
-        An expression that evaluates to a binary KLL sketch representation.
+          An expression that evaluates to a binary KLL sketch representation.
       * k - Optional. The parameter controlling the size and accuracy of the merged
-        sketch. An expression that evaluates to an integer between 8 and 65535. Must be
-        a constant. Defaults to the k value of the first input sketch.
+          sketch. An expression that evaluates to an integer between 8 and 65535. Must be
+          a constant. Defaults to the k value of the first input sketch.
   """,
   examples = """
     Examples:
@@ -668,10 +668,10 @@ case class KllMergeAggFloat(
   arguments = """
     Arguments:
       * expr - The expression to merge into the KLL sketch.
-        An expression that evaluates to a binary KLL sketch representation.
+          An expression that evaluates to a binary KLL sketch representation.
       * k - Optional. The parameter controlling the size and accuracy of the merged
-        sketch. An expression that evaluates to an integer between 8 and 65535. Must be
-        a constant. Defaults to the k value of the first input sketch.
+          sketch. An expression that evaluates to an integer between 8 and 65535. Must be
+          a constant. Defaults to the k value of the first input sketch.
   """,
   examples = """
     Examples:

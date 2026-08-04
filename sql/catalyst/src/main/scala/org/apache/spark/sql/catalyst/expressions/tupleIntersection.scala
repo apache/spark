@@ -37,11 +37,11 @@ import org.apache.spark.unsafe.types.UTF8String
   arguments = """
     Arguments:
       * tupleSketch1 - The binary representation of a Datasketches TupleSketch with a double
-        summary data type.
+          summary data type.
       * tupleSketch2 - The binary representation of a Datasketches TupleSketch with a double
-        summary data type.
+          summary data type.
       * mode - The summary combination mode: 'sum', 'min', 'max', or 'alwaysone'
-        (optional, defaults to 'sum').
+          (optional, defaults to 'sum').
   """,
   examples = """
     Examples:
@@ -92,11 +92,11 @@ case class TupleIntersectionDouble(first: Expression, second: Expression, third:
   arguments = """
     Arguments:
       * tupleSketch1 - The binary representation of a Datasketches TupleSketch with an integer
-        summary data type.
+          summary data type.
       * tupleSketch2 - The binary representation of a Datasketches TupleSketch with an integer
-        summary data type.
+          summary data type.
       * mode - The summary combination mode: 'sum', 'min', 'max', or 'alwaysone'
-        (optional, defaults to 'sum').
+          (optional, defaults to 'sum').
   """,
   examples = """
     Examples:
@@ -152,10 +152,10 @@ case class TupleIntersectionInteger(first: Expression, second: Expression, third
   arguments = """
     Arguments:
       * tupleSketch - The binary representation of a Datasketches TupleSketch with a double
-        summary data type.
+          summary data type.
       * thetaSketch - The binary representation of a Datasketches ThetaSketch.
       * mode - The summary combination mode: 'sum', 'min', 'max', or 'alwaysone'
-        (optional, defaults to 'sum').
+          (optional, defaults to 'sum').
   """,
   examples = """
     Examples:
@@ -211,10 +211,10 @@ case class TupleIntersectionThetaDouble(first: Expression, second: Expression, t
   arguments = """
     Arguments:
       * tupleSketch - The binary representation of a Datasketches TupleSketch with an integer
-        summary data type.
+          summary data type.
       * thetaSketch - The binary representation of a Datasketches ThetaSketch.
       * mode - The summary combination mode: 'sum', 'min', 'max', or 'alwaysone'
-        (optional, defaults to 'sum').
+          (optional, defaults to 'sum').
   """,
   examples = """
     Examples:

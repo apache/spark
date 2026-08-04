@@ -37,9 +37,9 @@ import org.apache.spark.unsafe.types.UTF8String
   arguments = """
     Arguments:
       * child - A binary expression holding a serialized double summary type Datasketches
-        TupleSketch to aggregate.
+          TupleSketch to aggregate.
       * mode - An optional string aggregation mode: 'sum', 'min', 'max', or 'alwaysone'.
-        Defaults to 'sum'.
+          Defaults to 'sum'.
   """,
   examples = """
     Examples:
@@ -108,9 +108,9 @@ case class TupleSketchSummaryDouble(left: Expression, right: Expression)
   arguments = """
     Arguments:
       * child - A binary expression holding a serialized integer summary type Datasketches
-        TupleSketch to aggregate.
+          TupleSketch to aggregate.
       * mode - An optional string aggregation mode: 'sum', 'min', 'max', or 'alwaysone'.
-        Defaults to 'sum'.
+          Defaults to 'sum'.
   """,
   examples = """
     Examples:

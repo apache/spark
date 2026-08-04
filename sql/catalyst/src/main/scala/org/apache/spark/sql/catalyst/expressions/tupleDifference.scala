@@ -35,7 +35,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
     Arguments:
       * tupleSketch1 - A binary representation of a TupleSketch with double summary.
       * tupleSketch2 - A binary representation of a TupleSketch with double summary
-        to subtract from the first sketch.
+          to subtract from the first sketch.
   """,
   examples = """
     Examples:
@@ -77,7 +77,7 @@ case class TupleDifferenceDouble(left: Expression, right: Expression)
     Arguments:
       * tupleSketch1 - A binary representation of a TupleSketch with integer summary.
       * tupleSketch2 - A binary representation of a TupleSketch with integer summary
-        to subtract from the first sketch.
+          to subtract from the first sketch.
   """,
   examples = """
     Examples:

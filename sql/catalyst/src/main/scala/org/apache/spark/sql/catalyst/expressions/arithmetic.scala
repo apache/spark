@@ -505,9 +505,9 @@ object Add {
   arguments = """
     Arguments:
       * expr1 - The minuend.
-        An expression that evaluates to a numeric, interval, date, timestamp, or time.
+          An expression that evaluates to a numeric, interval, date, timestamp, or time.
       * expr2 - The subtrahend.
-        An expression that evaluates to a numeric, interval, date, timestamp, or time.
+          An expression that evaluates to a numeric, interval, date, timestamp, or time.
   """,
   examples = """
     Examples:
@@ -1323,8 +1323,8 @@ object Pmod {
   arguments = """
     Arguments:
       * expr - An expression of any orderable type. At least two expressions must be given,
-        and all arguments must share a common type. Null values are skipped; the result is
-        null only when all arguments are null.
+          and all arguments must share a common type. Null values are skipped; the result is
+          null only when all arguments are null.
   """,
   examples = """
     Examples:
@@ -1418,8 +1418,8 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
   arguments = """
     Arguments:
       * expr - An expression of any orderable type. At least two expressions must be given,
-        and all arguments must share a common type. Null values are skipped; the result is
-        null only when all arguments are null.
+          and all arguments must share a common type. Null values are skipped; the result is
+          null only when all arguments are null.
   """,
   examples = """
     Examples:

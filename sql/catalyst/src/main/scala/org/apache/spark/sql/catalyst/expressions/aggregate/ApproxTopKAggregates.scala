@@ -801,11 +801,11 @@ object CombineInternal {
   arguments = """
     Arguments:
       * state - The sketch state to combine, as produced by approx_top_k_accumulate.
-        An expression that evaluates to the sketch state struct.
+          An expression that evaluates to the sketch state struct.
       * maxItemsTracked - Optional. The maximum number of items to track in the combined
-        sketch, with an upper limit of 1000000. An expression that evaluates to an integer.
-        Must be a constant. If not specified, the input sketches must share the same
-        maxItemsTracked value, which is used for the output sketch.
+          sketch, with an upper limit of 1000000. An expression that evaluates to an integer.
+          Must be a constant. If not specified, the input sketches must share the same
+          maxItemsTracked value, which is used for the output sketch.
   """,
   examples = """
     Examples:

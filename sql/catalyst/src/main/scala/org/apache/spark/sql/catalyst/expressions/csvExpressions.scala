@@ -45,8 +45,8 @@ import org.apache.spark.unsafe.types.UTF8String
       * csvStr - A string expression of a single CSV record.
       * schema - A string literal or invocation of `schema_of_csv` describing the schema.
       * options - An optional map literal of string key-value pairs specifying CSV parsing
-        options controlling how `csvStr` is parsed. Accepts the same options as the CSV data
-        source.
+          options controlling how `csvStr` is parsed. Accepts the same options as the CSV data
+          source.
   """,
   examples = """
     Examples:
@@ -145,7 +145,7 @@ case class CsvToStructs(
     Arguments:
       * csv - A foldable string expression of a single CSV record.
       * options - An optional map literal of string key-value pairs specifying CSV parsing
-        options that control schema inference. Accepts the same options as the CSV data source.
+          options that control schema inference. Accepts the same options as the CSV data source.
   """,
   examples = """
     Examples:
@@ -223,8 +223,8 @@ case class SchemaOfCsv(
     Arguments:
       * expr - A struct expression to convert into a CSV string.
       * options - An optional map literal of string key-value pairs specifying CSV generation
-        options controlling how the struct is rendered. Accepts the same options as the CSV data
-        source.
+          options controlling how the struct is rendered. Accepts the same options as the CSV data
+          source.
   """,
   examples = """
     Examples:

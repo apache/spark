@@ -54,7 +54,7 @@ import org.apache.spark.sql.types._
     Arguments:
       * expr - An expression of any type whose distinct values are counted.
       * relativeSD - An optional double literal for the maximum relative standard
-        deviation allowed. Defaults to 0.05.
+          deviation allowed. Defaults to 0.05.
   """,
   examples = """
     Examples:

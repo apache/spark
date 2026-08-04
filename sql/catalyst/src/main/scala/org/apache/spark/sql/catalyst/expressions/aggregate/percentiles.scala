@@ -274,11 +274,11 @@ abstract class PercentileBase
   arguments = """
     Arguments:
       * col - The column to compute the percentile of.
-        An expression that evaluates to a numeric, ANSI interval, or time.
+          An expression that evaluates to a numeric, ANSI interval, or time.
       * percentage - The percentile(s) to compute, each between 0.0 and 1.0. Either a
-        single numeric value or an array of numeric values. Must be foldable.
+          single numeric value or an array of numeric values. Must be foldable.
       * frequency - Optional. The number of times each value should be counted.
-        An expression that evaluates to a positive integral value. Defaults to 1.
+          An expression that evaluates to a positive integral value. Defaults to 1.
   """,
   examples = """
     Examples:
@@ -506,7 +506,7 @@ case class PercentileDisc(
     Arguments:
       * percentage - The percentile to compute, between 0.0 and 1.0. Must be foldable.
       * col - The column to compute the percentile of, specified in the ORDER BY clause.
-        An expression that evaluates to a numeric, ANSI interval, or time.
+          An expression that evaluates to a numeric, ANSI interval, or time.
   """,
   examples = """
     Examples:
@@ -538,7 +538,7 @@ object PercentileContBuilder extends ExpressionBuilder {
     Arguments:
       * percentage - The percentile to compute, between 0.0 and 1.0. Must be foldable.
       * col - The column to compute the percentile of, specified in the ORDER BY clause.
-        An expression that evaluates to a numeric, ANSI interval, or time.
+          An expression that evaluates to a numeric, ANSI interval, or time.
   """,
   examples = """
     Examples:

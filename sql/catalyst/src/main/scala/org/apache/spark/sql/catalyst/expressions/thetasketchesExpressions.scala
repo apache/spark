@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Integ
   arguments = """
     Arguments:
       * expr - The binary representation of a Datasketches ThetaSketch.
-        An expression that evaluates to binary.
+          An expression that evaluates to binary.
   """,
   examples = """
     Examples:
@@ -74,12 +74,12 @@ case class ThetaSketchEstimate(child: Expression)
   arguments = """
     Arguments:
       * first - The binary representation of the first Datasketches ThetaSketch.
-        An expression that evaluates to binary.
+          An expression that evaluates to binary.
       * second - The binary representation of the second Datasketches ThetaSketch.
-        An expression that evaluates to binary.
+          An expression that evaluates to binary.
       * lgNomEntries - Optional. The log-base-2 of the nominal entries used to size the
-        union buffer, between 4 and 26. An expression that evaluates to an integer.
-        Defaults to 12.
+          union buffer, between 4 and 26. An expression that evaluates to an integer.
+          Defaults to 12.
   """,
   examples = """
     Examples:
@@ -143,9 +143,9 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
   arguments = """
     Arguments:
       * first - The binary representation of the first Datasketches ThetaSketch.
-        An expression that evaluates to binary.
+          An expression that evaluates to binary.
       * second - The binary representation of the second Datasketches ThetaSketch to
-        subtract from the first. An expression that evaluates to binary.
+          subtract from the first. An expression that evaluates to binary.
   """,
   examples = """
     Examples:
@@ -198,9 +198,9 @@ case class ThetaDifference(first: Expression, second: Expression)
   arguments = """
     Arguments:
       * first - The binary representation of the first Datasketches ThetaSketch.
-        An expression that evaluates to binary.
+          An expression that evaluates to binary.
       * second - The binary representation of the second Datasketches ThetaSketch.
-        An expression that evaluates to binary.
+          An expression that evaluates to binary.
   """,
   examples = """
     Examples:

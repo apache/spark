@@ -42,7 +42,7 @@ import org.apache.spark.unsafe.types.UTF8String
     Arguments:
       * xmlStr - A string expression containing a single XML record to parse.
       * schema - The schema of the output struct, as a DDL-formatted string or a schema
-        expression.
+          expression.
       * options - Optional. A map of key-value pairs controlling how the XML is parsed.
   """,
   examples = """

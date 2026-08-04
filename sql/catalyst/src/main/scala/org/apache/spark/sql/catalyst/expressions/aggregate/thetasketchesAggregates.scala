@@ -327,8 +327,8 @@ case class ThetaSketchAgg(
     Arguments:
       * expr - A binary expression of Compact ThetaSketch representations to union.
       * lgNomEntries - An optional integer expression, the log-base-2 of nominal entries which
-        sets the number of buckets for the resulting ThetaSketch. When omitted, it defaults to
-        the default log nominal entries.
+          sets the number of buckets for the resulting ThetaSketch. When omitted, it defaults to
+          the default log nominal entries.
   """,
   examples = """
     Examples:

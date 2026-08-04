@@ -246,10 +246,10 @@ object HllSketchAgg {
   arguments = """
     Arguments:
       * expr - The binary representation of an HllSketch to merge.
-        An expression that evaluates to binary.
+          An expression that evaluates to binary.
       * allowDifferentLgConfigK - Optional. Whether to allow sketches with different
-        lgConfigK values to be unioned. An expression that evaluates to a boolean.
-        Defaults to false.
+          lgConfigK values to be unioned. An expression that evaluates to a boolean.
+          Defaults to false.
   """,
   examples = """
     Examples:
