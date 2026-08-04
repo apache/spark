@@ -348,8 +348,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
         try delegate.hasNext
         catch {
           case NonFatal(e) =>
-            // The failed iterator owns the archive stream and releases it only on exhaustion or an
-            // explicit close, neither of which a mid-advance throw reaches.
+            // A mid-advance throw reaches neither exhaustion nor close, so close the failed
+            // iterator here to release its archive stream promptly rather than at task completion.
             delegate match {
               case c: Closeable => try c.close() catch { case NonFatal(_) => }
               case _ =>
