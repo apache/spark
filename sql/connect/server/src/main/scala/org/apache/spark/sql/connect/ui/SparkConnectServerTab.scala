@@ -50,11 +50,9 @@ private[connect] class SparkConnectServerTab(
     parent.detachTab(this)
   }
 
-  def getMLCacheStatus(userId: String, sessionId: String): Option[MLCacheStatus] = {
-    sessionManager.flatMap(_.getMLCacheStatus(SessionKey(userId, sessionId)))
+  def getMLCacheStatuses: Seq[(SessionKey, MLCacheStatus)] = {
+    sessionManager.toSeq.flatMap(_.getMLCacheStatuses)
   }
-
-  def hasLiveMLCacheStatus: Boolean = sessionManager.nonEmpty
 
   override def displayOrder: Int = 3
 }

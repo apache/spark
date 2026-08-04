@@ -26,6 +26,7 @@ import scala.xml.Node
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.ml.MLCacheModelInfo
 import org.apache.spark.sql.connect.ui.ToolTips._
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
@@ -63,6 +64,7 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
           Request(s)
         </h4> ++
         generateSessionStatsTable(request) ++
+        generateMLCacheStatsTable(request) ++
         generateSQLStatsTable(request)
     }
     UIUtils.headerSparkPage(request, "Spark Connect", content, parent)
@@ -178,6 +180,83 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
         </div>
 
     content
+  }
+
+  /** Generate live ML cache statistics for active Spark Connect sessions. */
+  private def generateMLCacheStatsTable(request: HttpServletRequest): Seq[Node] = {
+    val cacheStatuses = parent.getMLCacheStatuses.filter(_._2.models.nonEmpty)
+    val models = cacheStatuses.flatMap { case (key, status) =>
+      status.models.map(MLCacheModelTableRow(key.userId, key.sessionId, _))
+    }
+    if (models.isEmpty) {
+      return Seq.empty
+    }
+
+    val tableTag = "mlcachemodels"
+    val tablePage = Option(request.getParameter(s"$tableTag.page")).map(_.toInt).getOrElse(1)
+    val table = try {
+      new MLCacheModelStatsPagedTable(
+        request,
+        parent,
+        models,
+        "connect",
+        UIUtils.prependBaseUri(request, parent.basePath),
+        tableTag).table(tablePage)
+    } catch {
+      case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
+        <div class="alert alert-danger">
+          <p>Error while rendering ML cache table:</p>
+          <pre>
+            {Utils.exceptionString(e)}
+          </pre>
+        </div>
+    }
+
+    val inMemoryModels = models.count(_.model.inMemory)
+    val memoryControlledStatuses = cacheStatuses.map(_._2).filter(_.memoryControlEnabled)
+    val inMemorySize = memoryControlledStatuses.map(s => BigInt(s.inMemorySizeBytes)).sum
+    val maxInMemorySize = memoryControlledStatuses.map(s => BigInt(s.maxInMemorySizeBytes)).sum
+    val totalSize = memoryControlledStatuses.map(s => BigInt(s.totalSizeBytes)).sum
+    val maxTotalSize = memoryControlledStatuses.map(s => BigInt(s.maxTotalSizeBytes)).sum
+    val sizeStats = if (memoryControlledStatuses.nonEmpty) {
+      Seq(
+        <li>
+          <strong>In-memory size: </strong>
+          {Utils.bytesToString(inMemorySize)} / {Utils.bytesToString(maxInMemorySize)}
+        </li>,
+        <li>
+          <strong>Total estimated size: </strong>
+          {Utils.bytesToString(totalSize)} / {Utils.bytesToString(maxTotalSize)}
+        </li>)
+    } else {
+      Seq.empty
+    }
+
+    <span id="mlcachestat" class="collapse-table" data-bs-toggle="collapse"
+          data-bs-target="#aggregated-mlcachestat"
+          aria-expanded="true" aria-controls="aggregated-mlcachestat"
+          data-collapse-name="collapse-aggregated-mlcachestat">
+      <h4>
+        <span class="collapse-table-arrow arrow-open"></span>
+        <a>ML Cache Statistics ({models.size})</a>
+      </h4>
+    </span> ++
+      <div class="collapsible-table collapse show" id="aggregated-mlcachestat">
+        <ul class="list-unstyled">
+          <li><strong>Sessions with cached models: </strong>{cacheStatuses.size}</li>
+          <li>
+            <strong>Cached models: </strong>
+            {models.size} ({inMemoryModels} in memory, {models.size - inMemoryModels} offloaded)
+          </li>
+          <li>
+            <strong>Memory control enabled sessions: </strong>
+            {memoryControlledStatuses.size} / {cacheStatuses.size}
+          </li>
+          {sizeStats}
+        </ul>
+        <h5>Cached Models</h5>
+        {table}
+      </div>
   }
 }
 
@@ -404,8 +483,7 @@ private[ui] class SessionStatsPagedTable(
         ("Start Time", true, None),
         ("Finish Time", true, None),
         ("Duration", true, Some(SPARK_CONNECT_SESSION_DURATION)),
-        ("Total Execute", true, Some(SPARK_CONNECT_SESSION_TOTAL_EXECUTE)),
-        ("ML Cache", false, Some(SPARK_CONNECT_SESSION_ML_CACHE)))
+        ("Total Execute", true, Some(SPARK_CONNECT_SESSION_TOTAL_EXECUTE)))
 
     isSortColumnValid(sessionTableHeadersAndTooltips, sortColumn)
 
@@ -432,36 +510,127 @@ private[ui] class SessionStatsPagedTable(
       <td> {if (session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
       <td> {formatDurationVerbose(session.totalTime)} </td>
       <td> {session.totalExecution.toString} </td>
-      <td> {renderMLCacheStatus(session)} </td>
     </tr>
   }
+}
 
-  private def renderMLCacheStatus(session: SessionInfo): Seq[Node] = {
-    if (!parent.hasLiveMLCacheStatus || session.finishTimestamp > 0) {
-      <span>N/A</span>
-    } else {
-      parent
-        .getMLCacheStatus(session.userId, session.sessionId)
-        .map { status =>
-          if (status.memoryControlEnabled) {
-            val objectLabel = if (status.cachedObjectCount == 1) "object" else "objects"
-            <span>
-              {s"${status.cachedObjectCount} $objectLabel in memory"}<br/>
-              {s"${Utils.bytesToString(status.inMemorySizeBytes)} / " +
-              s"${Utils.bytesToString(status.maxInMemorySizeBytes)} memory"}<br/>
-              {s"${Utils.bytesToString(status.totalSizeBytes)} / " +
-              s"${Utils.bytesToString(status.maxTotalSizeBytes)} total"}
-            </span>
-          } else {
-            val objectLabel = if (status.cachedObjectCount == 1) "object" else "objects"
-            <span>
-              Memory control disabled<br/>
-              {s"${status.cachedObjectCount} cached $objectLabel"}
-            </span>
-          }
-        }
-        .getOrElse(<span>Not used</span>)
+private[ui] case class MLCacheModelTableRow(
+    userId: String,
+    sessionId: String,
+    model: MLCacheModelInfo)
+
+private[ui] class MLCacheModelStatsPagedTable(
+    request: HttpServletRequest,
+    parent: SparkConnectServerTab,
+    data: Seq[MLCacheModelTableRow],
+    subPath: String,
+    basePath: String,
+    tableTag: String)
+    extends PagedTable[MLCacheModelTableRow] {
+
+  private val (sortColumn, desc, pageSize) =
+    getTableParameters(request, tableTag, "Estimated Size")
+
+  private val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
+  private val parameterPath = s"$basePath/$subPath/?${getParameterOtherTable(request, tableTag)}"
+
+  override val dataSource =
+    new MLCacheModelTableDataSource(data, pageSize, sortColumn, desc)
+
+  override def tableId: String = tableTag
+
+  override def tableCssClass: String =
+    "table table-bordered table-sm table-striped table-head-clickable table-cell-width-limited"
+
+  override def pageLink(page: Int): String = {
+    parameterPath +
+      s"&$pageNumberFormField=$page" +
+      s"&$tableTag.sort=$encodedSortColumn" +
+      s"&$tableTag.desc=$desc" +
+      s"&$pageSizeFormField=$pageSize" +
+      s"#$tableTag"
+  }
+
+  override def pageSizeFormField: String = s"$tableTag.pageSize"
+
+  override def pageNumberFormField: String = s"$tableTag.page"
+
+  override def goButtonFormPath: String =
+    s"$parameterPath&$tableTag.sort=$encodedSortColumn" +
+      s"&$tableTag.desc=$desc#$tableTag"
+
+  override def headers: Seq[Node] = {
+    val headersAndTooltips: Seq[(String, Boolean, Option[String])] = Seq(
+      ("User", true, None),
+      ("Session ID", true, None),
+      ("Model ID", true, None),
+      ("UID", true, None),
+      ("Model Class", true, None),
+      ("Model Details", true, Some(SPARK_CONNECT_ML_CACHE_MODEL_DETAILS)),
+      ("Estimated Size", true, Some(SPARK_CONNECT_ML_CACHE_ESTIMATED_SIZE)),
+      ("Storage", true, Some(SPARK_CONNECT_ML_CACHE_STORAGE)))
+
+    isSortColumnValid(headersAndTooltips, sortColumn)
+    headerRow(
+      headersAndTooltips,
+      desc,
+      pageSize,
+      sortColumn,
+      parameterPath,
+      tableTag,
+      tableTag)
+  }
+
+  override def row(row: MLCacheModelTableRow): Seq[Node] = {
+    val model = row.model
+    val sessionLink = "%s/%s/session/?id=%s&userId=%s".format(
+      UIUtils.prependBaseUri(request, parent.basePath),
+      parent.prefix,
+      URLEncoder.encode(row.sessionId, UTF_8.name()),
+      ConnectUiUtils.encodeUserId(row.userId))
+    <tr>
+      <td>{row.userId}</td>
+      <td><a href={sessionLink}>{row.sessionId}</a></td>
+      <td>{model.id}</td>
+      <td>{model.uid}</td>
+      <td>{model.className}</td>
+      <td>{model.modelString}</td>
+      <td>{model.estimatedSizeBytes.map(Utils.bytesToString).getOrElse("N/A")}</td>
+      <td>{if (model.inMemory) "In memory" else "Offloaded"}</td>
+    </tr>
+  }
+}
+
+private[ui] class MLCacheModelTableDataSource(
+    info: Seq[MLCacheModelTableRow],
+    pageSize: Int,
+    sortColumn: String,
+    desc: Boolean)
+    extends PagedDataSource[MLCacheModelTableRow](pageSize) {
+
+  private val data = info.sorted(ordering(sortColumn, desc))
+
+  override def dataSize: Int = data.size
+
+  override def sliceData(from: Int, to: Int): Seq[MLCacheModelTableRow] = data.slice(from, to)
+
+  private def ordering(
+      sortColumn: String,
+      desc: Boolean): Ordering[MLCacheModelTableRow] = {
+    val ordering: Ordering[MLCacheModelTableRow] = sortColumn match {
+      case "User" => Ordering.by(_.userId)
+      case "Session ID" => Ordering.by(_.sessionId)
+      case "Model ID" => Ordering.by(_.model.id)
+      case "UID" => Ordering.by(_.model.uid)
+      case "Model Class" => Ordering.by(_.model.className)
+      case "Model Details" => Ordering.by(_.model.modelString)
+      case "Estimated Size" =>
+        Ordering.by((row: MLCacheModelTableRow) =>
+          (row.model.estimatedSizeBytes.isDefined, row.model.estimatedSizeBytes.getOrElse(0L)))
+      case "Storage" => Ordering.by(_.model.inMemory)
+      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
     }
+    if (desc) ordering.reverse else ordering
   }
 }
 
