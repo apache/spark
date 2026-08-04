@@ -367,24 +367,28 @@ class StringIndexerModel (
       labels: Seq[String],
       labelToIndex: OpenHashMap[String, Double],
       keepInvalid: Boolean) = {
-    udf { label: String =>
-      if (label == null) {
-        if (keepInvalid) {
-          labels.length
+    val unknownIndex = labels.length.toDouble
+    if (keepInvalid) {
+      udf { label: String =>
+        if (label == null) {
+          unknownIndex
         } else {
+          labelToIndex.get(label).getOrElse(unknownIndex)
+        }
+      }.asNondeterministic()
+    } else {
+      udf { label: String =>
+        if (label == null) {
           throw new SparkException("StringIndexer encountered NULL value. To handle or skip " +
             "NULLS, try setting StringIndexer.handleInvalid.")
-        }
-      } else {
-        labelToIndex.get(label) match {
-          case Some(index) => index
-          case None if keepInvalid => labels.length
-          case None =>
+        } else {
+          labelToIndex.get(label).getOrElse {
             throw new SparkException(s"Unseen label: $label. To handle unseen labels, " +
               s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
+          }
         }
-      }
-    }.asNondeterministic()
+      }.asNondeterministic()
+    }
   }
 
   @Since("2.0.0")
