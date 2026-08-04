@@ -149,6 +149,24 @@ class NumPyCompatTestsMixin:
                     np_func(psdf.value, psdf.bits), np_func(pdf.value, pdf.bits), almost=True
                 )
 
+    def test_np_float_power(self):
+        for pdf in (
+            pd.DataFrame({"base": [-64, -2, -1, 0, 1, 2, 64], "exponent": [-2, -1, 0, 1, 2, 3, 2]}),
+            pd.DataFrame(
+                {
+                    "base": [-np.inf, -64.0, -2.0, -0.0, 0.0, 2.0, 64.0, np.inf, np.nan],
+                    "exponent": [2.0, 3.0, -2.0, -3.0, -3.0, 0.5, -2.0, 2.0, 2.0],
+                }
+            ),
+        ):
+            with self.subTest(base=pdf.base.tolist(), exponent=pdf.exponent.tolist()):
+                psdf = ps.from_pandas(pdf)
+                self.assert_eq(
+                    np.float_power(psdf.base, psdf.exponent),
+                    np.float_power(pdf.base, pdf.exponent),
+                    almost=True,
+                )
+
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 
