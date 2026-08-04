@@ -168,6 +168,31 @@ SELECT /*+ REBALANCE_BY_SIZE('128m', c) */ * FROM t;
 
 For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
 
+## Tuning Window Functions
+
+Top-k window queries (such as filtering on <code>row_number</code>, <code>rank</code> or
+<code>dense_rank</code>) plan a window group limit on both sides of the shuffle: a partial one
+before the shuffle to reduce the data feeding it, and a final one after. The following configuration
+tunes that behavior.
+
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+  <tr>
+    <td><code>spark.sql.execution.bypassPartialWindowGroupLimit</code></td>
+    <td>false</td>
+    <td>
+      When true, skips the pre-shuffle partial window group limit for partitioned top-k window
+      queries and runs only a single window group limit after the shuffle. Bypassing the partial
+      window group limit can improve performance when the pre-shuffle reduction ratio is low. The
+      bypass only applies to windows with a non-empty partition spec; for an unpartitioned window
+      the partial pass is always kept, since for a multi-partition input the shuffle funnels the
+      whole input into a single reducer. When false, a partial window group limit runs before the
+      shuffle and a final one runs after it.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+</table>
+
 ## Leveraging Statistics
 Apache Spark's ability to choose the best execution plan among many possible options is determined in part by its estimates of how many rows will be output by every node in the execution plan (read, filter, join, etc.). Those estimates in turn are based on statistics that are made available to Spark in one of several ways:
 
