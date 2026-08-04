@@ -4197,8 +4197,8 @@ object SQLConf {
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doubleConf
-      .checkValue(v => v > 0.0 && v <= 1.0, "The reduction ratio threshold must be in (0.0, 1.0].")
-      .createWithDefault(0.95)
+      .checkValue(v => v >= 0.0 && v <= 1.0, "The reduction ratio threshold must be in [0.0, 1.0].")
+      .createWithDefault(0.9)
 
   val ADAPTIVE_PARTIAL_AGGREGATION_SPILL_REDUCTION_RATIO_THRESHOLD =
     buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation." +
@@ -4206,15 +4206,13 @@ object SQLConf {
       .doc("The reduction ratio threshold used by the on-spill tier of adaptive partial " +
         s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). When the aggregation " +
         "map is about to spill, if the ratio of distinct grouping keys to processed rows is at " +
-        "least this value the partial aggregation is bypassed for the rest of the input. This " +
-        "threshold is more aggressive (lower) than the no-spill tier because once the map " +
-        "spills, partial aggregation starts paying disk I/O costs, so it is worth bypassing " +
-        "with less reduction benefit.")
+        "least this value the partial aggregation is bypassed for the rest of the input. It " +
+        s"falls back to '${ADAPTIVE_PARTIAL_AGGREGATION_NO_SPILL_REDUCTION_RATIO_THRESHOLD.key}' " +
+        "so that both tiers apply one policy by default. Setting it lower makes the bypass more " +
+        "likely once spilling is imminent, and 0 always bypasses instead of spilling.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .doubleConf
-      .checkValue(v => v > 0.0 && v <= 1.0, "The reduction ratio threshold must be in (0.0, 1.0].")
-      .createWithDefault(0.8)
+      .fallbackConf(ADAPTIVE_PARTIAL_AGGREGATION_NO_SPILL_REDUCTION_RATIO_THRESHOLD)
 
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")

@@ -181,6 +181,67 @@ Missing or inaccurate statistics will hinder Spark's ability to select an optima
 - **Query plan estimates**: You can inspect Spark's cost estimates in the optimized query plan via [`EXPLAIN COST`](sql-ref-syntax-qry-explain.html) or `DataFrame.explain(mode="cost")`.
 - **Runtime statistics**: You can inspect these statistics in the [SQL UI](web-ui.html#sql-tab) under the "Details" section as a query is running. Look for `Statistics(..., isRuntime=true)` in the plan.
 
+## Optimizing the Aggregate
+
+### Adaptive Partial Aggregation
+
+A grouping aggregation normally runs in two phases: a partial aggregation before the shuffle and a
+final aggregation after it. The partial aggregation is only worthwhile when it actually reduces the
+number of rows; when the grouping keys are close to unique it maintains -- and possibly spills -- an
+aggregation map roughly as large as its input while emitting almost as many rows as it consumed.
+
+When adaptive partial aggregation is enabled, hash aggregation measures the reduction ratio (the
+number of distinct grouping keys divided by the number of processed rows) at runtime and, if the
+partial aggregation is not reducing rows enough to be worthwhile, stops populating the aggregation
+map and passes the remaining rows through as single-row partial aggregation buffers for the final
+aggregation to merge. Query results are unchanged. The ratio is evaluated periodically, and again
+right before the aggregation map would spill, so a query that only becomes ineffective later in its
+input is still caught.
+
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.enabled</code></td>
+    <td>true</td>
+    <td>
+      When true, hash aggregation adaptively bypasses the pre-shuffle partial aggregation at runtime
+      when it observes that the partial aggregation is not reducing the number of rows enough to be
+      worthwhile. This applies only to hash aggregation with grouping keys.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.sampleRows</code></td>
+    <td>100000</td>
+    <td>
+      The number of input rows to sample before evaluating the reduction ratio. When the ratio is
+      below the threshold, the next evaluation happens after twice as many rows, so low-cardinality
+      input is re-checked only rarely.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.noSpillReductionRatioThreshold</code></td>
+    <td>0.9</td>
+    <td>
+      The reduction ratio threshold applied while the aggregation map is still fully in memory. If
+      the ratio is at least this value the partial aggregation is bypassed. A larger value is more
+      conservative (keeps partial aggregation in more cases).
+    </td>
+    <td>4.3.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.spillReductionRatioThreshold</code></td>
+    <td>(value of <code>noSpillReductionRatioThreshold</code>)</td>
+    <td>
+      The reduction ratio threshold applied when the aggregation map is about to spill. Setting it
+      lower makes the bypass more likely once spilling is imminent, and 0 always bypasses instead of
+      spilling.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+</table>
+
 ## Optimizing the Join Strategy
 
 ### Automatically Broadcasting Joins

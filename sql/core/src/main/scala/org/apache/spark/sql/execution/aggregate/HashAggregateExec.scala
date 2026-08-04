@@ -879,7 +879,7 @@ case class HashAggregateExec(
            |  $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
            |}
            |$resetCounter
-           |// the hash map had be spilled, it should have enough memory now,
+           |// the hash map had been spilled, so it should have enough memory now,
            |// try to allocate buffer again.
            |$unsafeRowBuffer = $hashMapTerm.getAggregationBufferFromUnsafeRow(
            |  $unsafeRowKeys, $unsafeRowKeyHash);
@@ -910,24 +910,26 @@ case class HashAggregateExec(
            |// generate grouping key
            |${unsafeRowKeyCode.code}
            |if (!$adaptivePassThroughTerm) {
-           |  $regularMapRowCountTerm += 1;
            |  $probeRegularMap
            |  if ($unsafeRowBuffer == null) {
-           |    // The map is full and would spill. Pre-spill, decide whether to bypass instead.
-           |    if ($sorterTerm == null &&
+           |    if ($sorterTerm == null && $regularMapRowCountTerm > 0 &&
            |        (double) $hashMapTerm.getNumKeys() >=
            |          $regularMapRowCountTerm * ${cfg.spillReductionRatioThreshold}D) {
            |      $adaptivePassThroughTerm = true;
            |    } else {
            |      $spillMap
            |    }
-           |  } else if ($sorterTerm == null &&
-           |      $regularMapRowCountTerm == $adaptiveNextSampleRowTerm) {
-           |    if ((double) $hashMapTerm.getNumKeys() >=
-           |        $regularMapRowCountTerm * ${cfg.noSpillReductionRatioThreshold}D) {
-           |      $adaptivePassThroughTerm = true;
-           |    } else {
-           |      $adaptiveNextSampleRowTerm = $adaptiveNextSampleRowTerm * 2;
+           |  }
+           |  if ($unsafeRowBuffer != null) {
+           |    $regularMapRowCountTerm += 1;
+           |    if ($sorterTerm == null &&
+           |        $regularMapRowCountTerm == $adaptiveNextSampleRowTerm) {
+           |      if ((double) $hashMapTerm.getNumKeys() >=
+           |          $regularMapRowCountTerm * ${cfg.noSpillReductionRatioThreshold}D) {
+           |        $adaptivePassThroughTerm = true;
+           |      } else {
+           |        $adaptiveNextSampleRowTerm = $adaptiveNextSampleRowTerm * 2;
+           |      }
            |    }
            |  }
            |}

@@ -179,7 +179,10 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
    * to the regular map. `regularFallback` optionally sets the second field to also force the
    * regular map to spill (for the on-spill tier); when 0 the regular map does not spill.
    */
-  private def forEachCodegenAndMap(sampleRows: Int = 8, regularFallback: Int = 0)(
+  private def forEachCodegenAndMap(
+      sampleRows: Int = 8,
+      regularFallback: Int = 0,
+      noSpillThreshold: Double = -1.0)(
       body: String => Unit): Unit = {
     for {
       wholeStage <- Seq(true, false)
@@ -194,13 +197,20 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       } else {
         Nil
       }
+      // A negative value means "leave the threshold at its default".
+      val thresholdConf = if (noSpillThreshold >= 0.0) {
+        Seq(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_NO_SPILL_REDUCTION_RATIO_THRESHOLD.key ->
+          noSpillThreshold.toString)
+      } else {
+        Nil
+      }
       withSQLConf(
         (Seq(
           SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
           SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key -> sampleRows.toString) ++
-          fallbackConf ++ fixedPlanConfs): _*) {
+          fallbackConf ++ thresholdConf ++ fixedPlanConfs): _*) {
         body(s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap")
       }
     }
@@ -709,6 +719,59 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           assert(c.tasksFallBacked > 0,
             "feature disabled: the forced fallback should trigger sort-based aggregation")
         }
+      }
+    }
+  }
+
+  test("spill tier decides identically at the exact ratio boundary with codegen on and off") {
+    // The on-spill tier evaluates the ratio over the rows already aggregated, excluding the failed
+    // insertion that becomes the first pass-through row, so both execution paths must judge the
+    // same row set and reach the same decision. `id % 40` over 400 rows gives 40 distinct keys
+    // when the map fills at 50 aggregated rows, i.e. a ratio of exactly 0.8: at the threshold the
+    // bypass fires, just above it (0.85) it does not.
+    Seq(0.8 -> true, 0.85 -> false).foreach { case (threshold, shouldBypass) =>
+      val skippedPerCodegen = Seq(true, false).map { wholeStage =>
+        withSQLConf(
+          (Seq(
+            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+            SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
+            // A sample larger than the input keeps the no-spill tier out of the picture.
+            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key -> "100000",
+            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SPILL_REDUCTION_RATIO_THRESHOLD.key ->
+              threshold.toString,
+            "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 50") ++
+            fixedPlanConfs): _*) {
+          val df = () => spark.range(0, 400, 1, 1)
+            .select(($"id" % 40) as "k", $"id" as "v")
+            .groupBy($"k")
+            .agg(sum($"v") as "s")
+          withClue(s"threshold=$threshold wholeStage=$wholeStage") {
+            numBypassingRows(df)
+          }
+        }
+      }
+      withClue(s"threshold=$threshold skipped=$skippedPerCodegen") {
+        assert(skippedPerCodegen.forall(_ > 0) == shouldBypass,
+          s"expected bypass=$shouldBypass at the ratio boundary")
+        assert(skippedPerCodegen.map(_ > 0).distinct.length == 1,
+          "codegen and interpreted paths must reach the same decision at the boundary")
+      }
+    }
+  }
+
+  test("a zero threshold always bypasses once the sample has been processed") {
+    // 0 is the most aggressive setting: the ratio check `distinctKeys >= rows * 0` always holds,
+    // so even a low-cardinality input that the default threshold keeps aggregating is bypassed
+    // right after the sample. The results must still match the feature-off reference.
+    forEachCodegenAndMap(noSpillThreshold = 0.0) { clue =>
+      val df = () => spark.range(0, 600, 1, 1)
+        .select(($"id" % 5) as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        assert(numBypassingRows(df) > 0,
+          "a zero threshold must bypass even a low-cardinality input")
       }
     }
   }

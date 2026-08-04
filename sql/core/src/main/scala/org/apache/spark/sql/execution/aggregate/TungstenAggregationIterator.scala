@@ -209,6 +209,13 @@ class TungstenAggregationIterator(
     } else {
       var i = 0
       var processedRows = 0L
+      // Eligibility and the thresholds are fixed for the lifetime of this iterator, so unwrap them
+      // once instead of re-checking the `Option` for every row.
+      val adaptiveEnabled = adaptivePartialAggConfig.isDefined
+      val noSpillRatioThreshold =
+        adaptivePartialAggConfig.map(_.noSpillReductionRatioThreshold).getOrElse(0.0)
+      val spillRatioThreshold =
+        adaptivePartialAggConfig.map(_.spillReductionRatioThreshold).getOrElse(0.0)
       // The next row count at which the no-spill tier re-evaluates the reduction ratio. It starts
       // at `sampleRows` and doubles after each sub-threshold check, so the ratio is checked only
       // rarely once the input proves low-cardinality.
@@ -224,9 +231,8 @@ class TungstenAggregationIterator(
           // The map is full and would normally spill. On the first spill, adaptive partial
           // aggregation may instead bypass: keep the in-memory map as-is, pass this row and all
           // remaining rows through, and skip the spill entirely.
-          if (adaptivePartialAggConfig.isDefined && externalSorter == null && processedRows > 0 &&
-              hashMap.getNumKeys().toDouble >=
-                processedRows * adaptivePartialAggConfig.get.spillReductionRatioThreshold) {
+          if (adaptiveEnabled && externalSorter == null && processedRows > 0 &&
+              hashMap.getNumKeys().toDouble >= processedRows * spillRatioThreshold) {
             passThrough = true
             // `newInput` could not be inserted; stash a copy as the first pass-through row so it
             // is not lost when we drain the rest of `inputIter`.
@@ -254,10 +260,8 @@ class TungstenAggregationIterator(
           // the reduction ratio is too high to be worthwhile, bypass partial aggregation for the
           // rest. The window doubles after each sub-threshold check so low-cardinality input is
           // re-evaluated only rarely while a late high-cardinality tail can still be caught.
-          if (adaptivePartialAggConfig.isDefined && externalSorter == null &&
-              processedRows == nextSampleRow) {
-            if (hashMap.getNumKeys().toDouble >=
-                processedRows * adaptivePartialAggConfig.get.noSpillReductionRatioThreshold) {
+          if (adaptiveEnabled && externalSorter == null && processedRows == nextSampleRow) {
+            if (hashMap.getNumKeys().toDouble >= processedRows * noSpillRatioThreshold) {
               passThrough = true
             } else {
               nextSampleRow = nextSampleRow * 2

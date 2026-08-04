@@ -104,7 +104,7 @@ object AdaptivePartialAggregationBenchmark extends SqlBasedBenchmark {
 
     // Force the regular map to spill quickly and disable the no-spill tier (huge sample). With
     // fully distinct keys the reduction ratio is 1.0, so at the spill boundary the on-spill
-    // (Tier 2) tier bypasses instead of spilling; the baseline spills repeatedly and falls back
+    // tier (Tier 2) bypasses instead of spilling; the baseline spills repeatedly and falls back
     // to sort-based aggregation.
     runBenchmark("high-cardinality input, on-spill pass-through (Tier 2)") {
       val N = 8L << 20
