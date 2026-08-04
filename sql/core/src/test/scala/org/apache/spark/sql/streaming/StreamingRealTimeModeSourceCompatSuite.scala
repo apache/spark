@@ -50,16 +50,20 @@ import org.apache.spark.unsafe.types.UTF8String
  *       SupportsRealTimeMode, SupportsRealTimeRead}`
  *
  * It deliberately does NOT use any `private[spark]` / internal helper (no `LowLatencyMemoryStream`,
- * `LongOffset`, `SimpleTableProvider`, RPC endpoints, or `LowLatencyClock`). Its purpose is to
- * pin the source-level backward compatibility of the RTM connector SPI: if a future change to
- * `SupportsRealTimeMode` or `SupportsRealTimeRead` breaks external implementors the way SPARK-55699
- * did (it replaced `nextWithTimeout(Long)` rather than adding an overload, see SPARK-58386), this
- * file will FAIL TO COMPILE, catching the incompatibility at build time.
+ * `LongOffset`, `SimpleTableProvider`, RPC endpoints, or the engine-internal low latency clock).
+ * Its purpose is to pin the source-level backward compatibility of the RTM connector SPI: if a
+ * future change to `SupportsRealTimeMode` or `SupportsRealTimeRead` breaks external implementors
+ * the way SPARK-55699 did (it replaced `nextWithTimeout(Long)` rather than adding an overload, see
+ * SPARK-58386), this file will FAIL TO COMPILE, catching the incompatibility at build time.
  *
- * In particular, `CompatRealTimePartitionReader` overrides ONLY the single-argument
- * `nextWithTimeout(Long)` -- exactly how a pre-SPARK-55699 (Spark 4.1) source is written. The
- * engine only ever calls the two-argument overload, so this reader is exercised purely through the
- * interface's default delegation. Keep it that way.
+ * `SupportsRealTimeRead` offers two `nextWithTimeout` overloads and a source overrides exactly one.
+ * Both are covered here so the guard tracks either entry point:
+ *   - `CompatOneArgPartitionReader` overrides only `nextWithTimeout(Long)` -- the method a
+ *     third-party source is expected to implement. The engine invokes the two-arg overload, so this
+ *     reader is exercised through the interface's default delegation.
+ *   - `CompatTwoArgPartitionReader` overrides `nextWithTimeout(Long, Long)` directly -- the
+ *     overload the engine invokes.
+ * Keep both.
  *
  * When you add a genuinely new REQUIRED method to one of these interfaces, prefer a `default`
  * method so this frozen source keeps compiling. If a required change is truly unavoidable, updating
@@ -93,10 +97,10 @@ private case class CompatInputPartition(
     extends InputPartition
 
 /**
- * Partition reader implementing ONLY the legacy single-argument
- * [[SupportsRealTimeRead#nextWithTimeout(Long)]] -- the Spark 4.1 contract. See the file header.
+ * Shared reader logic for both `nextWithTimeout` entry points. Concrete subclasses only pick which
+ * overload of [[SupportsRealTimeRead#nextWithTimeout]] to override; both route to [[pollNext]].
  */
-private class CompatRealTimePartitionReader(partition: CompatInputPartition)
+private abstract class CompatRealTimePartitionReaderBase(partition: CompatInputPartition)
     extends SupportsRealTimeRead[InternalRow] {
 
   private var pos = 0
@@ -107,7 +111,8 @@ private class CompatRealTimePartitionReader(partition: CompatInputPartition)
     InternalRow(v, UTF8String.fromString(n))
   }
 
-  override def nextWithTimeout(timeoutMs: java.lang.Long): RecordStatus = {
+  /** Return the next record, or wait until the timeout elapses and report no record. */
+  protected final def pollNext(timeoutMs: java.lang.Long): RecordStatus = {
     if (pos < partition.rows.length) {
       val (value, _) = partition.rows(pos)
       currentRow = toRow(pos)
@@ -118,7 +123,7 @@ private class CompatRealTimePartitionReader(partition: CompatInputPartition)
     }
     // Exhausted this batch's data: keep waiting until the caller's timeout elapses, then report
     // no record -- the same wait-until-timeout behavior a real source has. Measured against the
-    // wall clock, since this legacy overload is not given the engine's reference start time.
+    // wall clock, as a third-party source without the engine's reference clock would do.
     val startNs = System.nanoTime()
     var elapsedMs = 0L
     while (elapsedMs < timeoutMs) {
@@ -146,14 +151,33 @@ private class CompatRealTimePartitionReader(partition: CompatInputPartition)
   override def close(): Unit = {}
 }
 
-/** A public-API `PartitionReaderFactory`. */
-private object CompatRealTimeReaderFactory extends PartitionReaderFactory {
-  override def createReader(partition: InputPartition): PartitionReader[InternalRow] =
-    new CompatRealTimePartitionReader(partition.asInstanceOf[CompatInputPartition])
+/**
+ * Reader that overrides ONLY the single-argument `nextWithTimeout(Long)` -- the method a
+ * third-party source is expected to implement. Reached through the two-arg default delegation.
+ */
+private class CompatOneArgPartitionReader(partition: CompatInputPartition)
+    extends CompatRealTimePartitionReaderBase(partition) {
+  override def nextWithTimeout(timeoutMs: java.lang.Long): RecordStatus = pollNext(timeoutMs)
+}
+
+/** Reader that overrides the two-argument `nextWithTimeout(Long, Long)` the engine invokes. */
+private class CompatTwoArgPartitionReader(partition: CompatInputPartition)
+    extends CompatRealTimePartitionReaderBase(partition) {
+  override def nextWithTimeout(
+      startTimeMs: java.lang.Long, timeoutMs: java.lang.Long): RecordStatus = pollNext(timeoutMs)
+}
+
+/** A public-API `PartitionReaderFactory`, parameterized by which reader overload to use. */
+private class CompatRealTimeReaderFactory(twoArg: Boolean) extends PartitionReaderFactory {
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val p = partition.asInstanceOf[CompatInputPartition]
+    if (twoArg) new CompatTwoArgPartitionReader(p) else new CompatOneArgPartitionReader(p)
+  }
 }
 
 /** The RTM stream: a public `MicroBatchStream` that also implements `SupportsRealTimeMode`. */
-private class CompatRealTimeStream extends MicroBatchStream with SupportsRealTimeMode {
+private class CompatRealTimeStream(twoArg: Boolean)
+    extends MicroBatchStream with SupportsRealTimeMode {
   override def initialOffset(): Offset = CompatOffset(0)
   override def deserializeOffset(json: String): Offset = CompatOffset(json.toInt)
   override def commit(end: Offset): Unit = {}
@@ -165,7 +189,8 @@ private class CompatRealTimeStream extends MicroBatchStream with SupportsRealTim
     val to = end.asInstanceOf[CompatOffset].consumed
     Array(CompatInputPartition(0, from, CompatRealTimeData.records.slice(from, to)))
   }
-  override def createReaderFactory(): PartitionReaderFactory = CompatRealTimeReaderFactory
+  override def createReaderFactory(): PartitionReaderFactory =
+    new CompatRealTimeReaderFactory(twoArg)
 
   override def planInputPartitions(start: Offset): Array[InputPartition] = {
     val from = start.asInstanceOf[CompatOffset].consumed
@@ -178,17 +203,18 @@ private class CompatRealTimeStream extends MicroBatchStream with SupportsRealTim
 }
 
 /** Scan + ScanBuilder wired to the RTM stream, using only public APIs. */
-private class CompatRealTimeScan extends ScanBuilder with Scan {
+private class CompatRealTimeScan(twoArg: Boolean) extends ScanBuilder with Scan {
   override def build(): Scan = this
   override def readSchema(): StructType = CompatRealTimeData.schema
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-    new CompatRealTimeStream
+    new CompatRealTimeStream(twoArg)
 }
 
 /**
  * The top-level source, registered as a `TableProvider` + `DataSourceRegister`. Loaded by fully
- * qualified class name via `spark.readStream.format(...)`, so it needs no `META-INF/services`
- * registration entry.
+ * qualified class name via `spark.readStream.format(...)`, so it doesn't need a `META-INF/services`
+ * registration entry. The `twoArg` option selects which `nextWithTimeout` overload the reader
+ * implements.
  */
 class CompatRealTimeSourceProvider extends TableProvider with DataSourceRegister {
   override def shortName(): String = "compat-realtime-source"
@@ -208,21 +234,23 @@ private class CompatRealTimeTable extends Table with SupportsRead {
   override def capabilities(): util.Set[TableCapability] =
     util.EnumSet.of(TableCapability.MICRO_BATCH_READ)
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-    new CompatRealTimeScan
+    new CompatRealTimeScan(options.getBoolean("twoArg", false))
 }
 
 /**
  * SPARK-58386: a compile-time and runtime backward-compatibility guard for the public Real-Time
  * Mode connector SPI (`SupportsRealTimeMode` / `SupportsRealTimeRead`). The frozen source above
- * must keep compiling against these interfaces, and this test runs it end-to-end through a real
- * RTM streaming query to prove an external-style source is still driven correctly.
+ * must keep compiling against these interfaces, and these tests run it end-to-end through a real
+ * RTM streaming query to prove an external-style source is still driven correctly, for both
+ * `nextWithTimeout` entry points.
  */
-class StreamingRealTimeModeSourceSuite extends StreamRealTimeModeManualClockSuiteBase {
+class StreamingRealTimeModeSourceCompatSuite extends StreamRealTimeModeManualClockSuiteBase {
   import testImplicits._
 
-  test("RTM source built from only public connector APIs reads end-to-end") {
+  private def runSourceEndToEnd(twoArg: Boolean): Unit = {
     val df = spark.readStream
       .format(classOf[CompatRealTimeSourceProvider].getName)
+      .option("twoArg", twoArg)
       .load()
       .selectExpr("concat(cast(value as string), '-', name) as output")
 
@@ -231,5 +259,13 @@ class StreamingRealTimeModeSourceSuite extends StreamRealTimeModeManualClockSuit
       CheckAnswerWithTimeout(10000, "1-a", "2-b", "3-c"),
       StopStream
     )
+  }
+
+  test("RTM source implementing single-arg nextWithTimeout reads end-to-end") {
+    runSourceEndToEnd(twoArg = false)
+  }
+
+  test("RTM source implementing two-arg nextWithTimeout reads end-to-end") {
+    runSourceEndToEnd(twoArg = true)
   }
 }
