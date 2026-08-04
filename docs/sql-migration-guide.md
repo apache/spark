@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Spark SQL 4.3 to 4.4
 
-- Since Spark 4.4, `spark.sql.requireAllClusterKeysForCoPartition` no longer affects storage-partitioned joins (V2 data sources). A shuffle is now avoided whenever all partition keys appear in the join keys, regardless of order; joining on a subset of partition keys remains controlled by `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled`. Users who previously set `spark.sql.requireAllClusterKeysForCoPartition` to `false` solely to enable storage-partitioned joins no longer need to do so. The config still applies to hash-partitioned children (e.g., V1 bucketing).
+- Since Spark 4.4, for storage-partitioned joins (V2 data sources), `spark.sql.requireAllClusterKeysForCoPartition` no longer requires the join keys to exactly match the partition keys: duplicated join keys no longer prevent shuffle elimination, and `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled` no longer additionally requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false`. As before, when the partition keys cover only part of the join keys, eliminating the shuffle still requires `spark.sql.requireAllClusterKeysForCoPartition` to be `false`.
 
 ## Upgrading from Spark SQL 4.2 to 4.3
 

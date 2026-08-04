@@ -871,10 +871,15 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       outputPartitioning = KeyedPartitioning(bucket(4, exprC) :: years(exprB) :: Nil, Seq.empty)
     )
 
-    // simple case
+    // simple case: join key exprA is not covered by either side's partition keys, so by default
+    // the coverage check of requireAllClusterKeysForCoPartition falls back to shuffle to avoid
+    // joining on a partitioning coarser than the join keys
     var smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
-    EnsureRequirements.apply(smjExec) match {
+    assert(EnsureRequirements.apply(smjExec)
+      .collect { case s: ShuffleExchangeLike => s }.length == 2)
+    // with requireAllClusterKeysForCoPartition=false, SPJ is allowed
+    applyEnsureRequirementsWithSubsetKeys(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
       SortExec(_, _, DummySparkPlan(_, _, left: KeyedPartitioning, _, _), _),
       SortExec(_, _, DummySparkPlan(_, _, right: KeyedPartitioning, _, _), _), _) =>
@@ -929,7 +934,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprC :: Nil, exprA :: exprB :: exprC :: Nil, Inner, None, plan1, plan2)
-    EnsureRequirements.apply(smjExec) match {
+    applyEnsureRequirementsWithSubsetKeys(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
       SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
       SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
@@ -996,10 +1001,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("KeyedPartitioning: SPJ is not affected by requireAllClusterKeysForCoPartition") {
-    // requireAllClusterKeysForCoPartition only gates HashPartitioning shuffle reuse,
-    // not V2 KeyedPartitioning. SPJ is allowed with either value when partition keys
-    // are a subset of join keys.
+  test("KeyedPartitioning: duplicated join keys do not block SPJ") {
+    // The coverage check of requireAllClusterKeysForCoPartition ignores key order and
+    // duplicated cluster keys: join keys [a, b, b] are fully covered by partition keys
+    // on [a, b], so SPJ is allowed with either config value.
     val plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning =
         KeyedPartitioning(bucket(4, exprA) :: bucket(4, exprB) :: Nil, Seq.empty))
@@ -1040,7 +1045,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       // simple case
       var smjExec = SortMergeJoinExec(
         exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
-      EnsureRequirements.apply(smjExec) match {
+      applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: KeyedPartitioning, _, _),
@@ -1064,7 +1069,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       smjExec = SortMergeJoinExec(
         exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
-      EnsureRequirements.apply(smjExec) match {
+      applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
@@ -1099,7 +1104,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       smjExec = SortMergeJoinExec(
         exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
-      EnsureRequirements.apply(smjExec) match {
+      applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),

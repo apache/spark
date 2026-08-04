@@ -1057,6 +1057,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       Seq((true, true, 5), (false, true, 3), (true, false, 7), (false, false, 5)).foreach {
         case (partial, filter, expected) =>
           withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
@@ -1106,6 +1107,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       Seq(("true", 5), ("false", 5)).foreach {
         case (enable, expected) =>
           withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
             val df = createJoinTestDF(
@@ -1151,6 +1153,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       Seq(("true", 5), ("false", 5)).foreach {
         case (enable, expected) =>
           withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
             val df = createJoinTestDF(
@@ -1763,6 +1766,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     Seq(true, false).foreach { pushDownValues =>
       Seq(true, false).foreach { partiallyClustered =>
         withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
             partiallyClustered.toString,
@@ -3164,6 +3168,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       "(1, 10.0, cast('2021-05-20' as timestamp))")
 
     withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
         SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       val metrics = runAndFetchMetrics {
@@ -3807,6 +3812,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
     Seq(true, false).foreach { preserveOrdering =>
       withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
           SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
           SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key ->
             preserveOrdering.toString) {
@@ -3957,6 +3963,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       "(1, 20.0, cast('2022-03-10' as timestamp))")
 
     withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
         SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true"
     ) {
       val hashDf = sql(

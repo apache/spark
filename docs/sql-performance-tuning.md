@@ -507,6 +507,14 @@ The following SQL properties enable Storage Partition Join in different join que
       <td>3.4.0</td>
     </tr>
     <tr>
+      <td><code>spark.sql.requireAllClusterKeysForCoPartition</code></td>
+      <td>true</td>
+      <td>
+        When true, storage-partitioned join requires every join or MERGE key to be covered by the partition keys, ignoring key order and duplicated keys, to eliminate shuffle. When the partition keys cover only part of the join or MERGE keys, set to <b>false</b> to eliminate shuffle, at the risk of data skew and reduced parallelism from the coarser storage partitioning.
+      </td>
+      <td>3.3.0</td>
+    </tr>
+    <tr>
       <td><code>spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled</code></td>
       <td>false</td>
       <td>
@@ -515,7 +523,7 @@ The following SQL properties enable Storage Partition Join in different join que
       <td>3.4.0</td>
     </tr>
     <tr>
-      <td><code>spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled</code></td>
+      <td><code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code></td>
       <td>false</td>
       <td>
         When enabled, try to avoid shuffle if join or MERGE condition does not include all partition columns. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true.
