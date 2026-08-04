@@ -415,6 +415,47 @@ def get_json(url):
         sys.exit(-1)
 
 
+def has_merge_footer(message, pr_num):
+    """Whether `message` carries the merge footer `merge_pr` generates for `pr_num`.
+
+    Matching the "Closes #N from " line alone is not enough to identify a merge commit:
+    `merge_pr` passes the PR body through as its own `git commit -m` paragraph, so a body
+    that quotes another PR's closing line keeps that line at the start of a line in the
+    resulting message. What a body cannot fake is the footer *structure*, which `merge_pr`
+    always emits as a "Closes" paragraph followed immediately by the authors paragraph:
+
+        Closes #<pr> from <author>/<branch>.
+
+        Authored-by: A <a@example.org>
+        Signed-off-by: C <c@example.org>
+
+    >>> footer = "Closes #1 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nSigned-off-by: C <c@e.org>"
+    >>> has_merge_footer("[SPARK-1][SQL] Title\\n\\nSome body.\\n\\n" + footer, 1)
+    True
+    >>> lead = footer.replace("Authored", "Lead-authored")
+    >>> has_merge_footer("[SPARK-1][SQL] Title\\n\\n" + lead, 1)
+    True
+    >>> has_merge_footer("[SPARK-1][SQL] Title\\n\\n" + footer, 2)
+    False
+
+    A body quoting another PR's closing line is not mistaken for that PR's merge:
+
+    >>> body = "Reverts:\\nCloses #1 from a/b.\\n\\nSee that commit."
+    >>> quoting = "[SPARK-2][SQL] Later\\n\\n%s\\n\\n%s" % (body, footer.replace("#1", "#2"))
+    >>> has_merge_footer(quoting, 1)
+    False
+    >>> has_merge_footer(quoting, 2)
+    True
+    """
+    # \s*$ tolerates trailing whitespace; the blank line then the authors paragraph is what
+    # distinguishes the generated footer from the same text quoted inside a PR body.
+    footer = re.compile(
+        r"^Closes #%s from \S+\s*$\n\n(Lead-authored-by|Authored-by):" % pr_num,
+        re.MULTILINE,
+    )
+    return footer.search(message) is not None
+
+
 def merge_commit_candidates(pr_events):
     """Split `pr_events` into (closed_commits, referenced_commits), each oldest-first.
 
@@ -446,9 +487,8 @@ def find_merge_commit(pr_num, pr_events):
     other branch -- e.g. one opened against a rolling branch-M.x -- is instead closed by
     this script through the API, and that `closed` event carries no commit, so the merge
     survives only as a `referenced` event. Prefer the `closed` commit, which GitHub itself
-    linked; otherwise fall back to `referenced` events, confirming each against the
-    "Closes #N from " line that `merge_pr` writes so that an unrelated commit merely
-    mentioning the PR is not mistaken for its merge.
+    linked; otherwise fall back to `referenced` events, which are also raised by any commit
+    merely mentioning the PR, so confirm each against the merge footer `merge_pr` generates.
     """
 
     def message_of(commit_hash):
@@ -458,12 +498,9 @@ def find_merge_commit(pr_num, pr_events):
     if closed_commits:
         return closed_commits[-1], message_of(closed_commits[-1])
 
-    # Anchored to line start: a PR body quoting "Closes #N from ..." is copied into the merge
-    # commit message too, and only the script's own trailer sits at the start of a line.
-    marker = re.compile(r"^Closes #%s from " % pr_num, re.MULTILINE)
     for commit_hash in reversed(referenced_commits):
         message = message_of(commit_hash)
-        if marker.search(message):
+        if has_merge_footer(message, pr_num):
             return commit_hash, message
     return None, None
 
@@ -666,6 +703,53 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
     print("Pick hash: %s" % pick_hash)
     return pick_ref, pick_hash
+
+
+def branches_with_merge_footer(pr_num, branch_names):
+    """Release branches from `branch_names` that already carry `pr_num`'s merge footer.
+
+    A cherry-pick is a new commit, so `git branch --contains <merge_hash>` finds only the
+    branch the change was merged into; what identifies a backport is the footer, which
+    `cherry-pick -x` copies verbatim (the same signal `dev/pr_merge_status.py` reads).
+    Best-effort: this only sees branches already fetched into PUSH_REMOTE_NAME's tracking
+    refs, so a backport pushed from elsewhere and not yet fetched is simply not reported --
+    the committer is still prompted and can type any branch.
+    """
+    trailer = "Closes #%s from " % pr_num
+    try:
+        out = run_cmd(
+            [
+                "git",
+                "log",
+                "--remotes=%s" % PUSH_REMOTE_NAME,
+                "--fixed-strings",
+                "--grep",
+                trailer,
+                "--format=%H",
+            ]
+        )
+    except Exception as e:
+        print_error("Could not scan for existing backports of #%s (%s)." % (pr_num, e))
+        return []
+
+    landed = set()
+    prefix = "%s/" % PUSH_REMOTE_NAME
+    for commit_hash in out.split():
+        refs = run_cmd(
+            [
+                "git",
+                "for-each-ref",
+                "--contains",
+                commit_hash,
+                "--format=%(refname:short)",
+                "refs/remotes/%s/" % PUSH_REMOTE_NAME,
+            ]
+        )
+        for ref in refs.splitlines():
+            if ref.startswith(prefix):
+                landed.add(ref[len(prefix) :])
+    # Keep branch_names' newest-first order, and drop anything not a known release branch.
+    return [b for b in branch_names if b in landed]
 
 
 def default_pick_branch(branch_names, already_picked):
@@ -1753,13 +1837,35 @@ def main():
             fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
         print("Found commit %s:\n%s" % (merge_hash, message))
-        # The change is already on target_ref, so default to the next branch down and mark
-        # target_ref as picked: defaulting to it would cherry-pick an empty commit.
-        default = default_pick_branch(branch_names, (target_ref,))
-        picked = cherry_pick(
-            pr_num, merge_hash, default, branch_names, target_ref, already_picked=(target_ref,)
-        )
-        post_merge_comment(pr_num, picked)
+        # The change is already on target_ref and on any branch a previous run backported it
+        # to, so exclude all of them: defaulting to one would cherry-pick an empty commit.
+        picked_refs = [target_ref] + [
+            b for b in branches_with_merge_footer(pr_num, branch_names) if b != target_ref
+        ]
+        if len(picked_refs) > 1:
+            print("Already backported to: %s" % ", ".join(picked_refs[1:]))
+        # Loop so one invocation can reach several maintenance branches, as the merge path does.
+        picked_commits = []
+        try:
+            while True:
+                picked = cherry_pick(
+                    pr_num,
+                    merge_hash,
+                    default_pick_branch(branch_names, tuple(picked_refs)),
+                    branch_names,
+                    target_ref,
+                    already_picked=tuple(picked_refs),
+                )
+                picked_refs = picked_refs + [ref for ref, _ in picked]
+                picked_commits = picked_commits + picked
+                prompt = "Would you like to pick %s into another branch?" % merge_hash
+                if get_input(f"\n{prompt} (y/N): ", ["y", "n", ""]) != "y":
+                    break
+        finally:
+            # Report whatever was pushed even if a later pick is aborted, since the earlier
+            # pushes have already landed.
+            if picked_commits:
+                post_merge_comment(pr_num, picked_commits)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
