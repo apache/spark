@@ -617,30 +617,28 @@ class PyArrowArrayToPandasIntegerObjectNullsTests(_PyArrowToPandasTestBase):
             self.COL_SPARK_PANDAS_OPTIONS,
         ]
 
-        # Version-specific expected values go here, keyed by (row, col), when a
-        # newer pandas/PyArrow/NumPy legitimately changes a cell's output.
-        overrides: dict[tuple[str, str], str] = {}
-        # Pandas 3 renders Arrow string arrays with its dedicated string dtype.  This
-        # argument does not touch strings, so every output column shifts together.
-        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+        # Version-specific expected values go here, when a newer pandas/PyArrow/NumPy
+        # legitimately changes a cell's output.  Pandas 3 renders Arrow string arrays
+        # with its dedicated string dtype, and empty ones follow only from PyArrow 24.
+        pandas_3 = LooseVersion(pd.__version__) >= LooseVersion("3.0.0")
+        pyarrow_24 = LooseVersion(pa.__version__) >= LooseVersion("24.0.0")
 
-            def override_all_outputs(row, expected):
-                for col in col_names[1:]:
-                    overrides[(row, col)] = expected
+        expected_by_row: dict[str, str] = {}
+        if pandas_3:
+            expected_by_row["string:standard"] = "['hello', 'world', '']@Series[str]"
+            expected_by_row["string:nullable"] = "['hello', nan, 'world']@Series[str]"
+            expected_by_row["large_string:standard"] = "['hello', 'world']@Series[str]"
+            expected_by_row["large_string:nullable"] = "['hello', nan]@Series[str]"
+        if pandas_3 and pyarrow_24:
+            expected_by_row["string:empty"] = "[]@Series[str]"
+            expected_by_row["large_string:empty"] = "[]@Series[str]"
 
-            for row, expected in [
-                ("string:standard", "['hello', 'world', '']@Series[str]"),
-                ("string:nullable", "['hello', nan, 'world']@Series[str]"),
-                ("large_string:standard", "['hello', 'world']@Series[str]"),
-                ("large_string:nullable", "['hello', nan]@Series[str]"),
-            ]:
-                override_all_outputs(row, expected)
-
-            # Empty string arrays only gain that dtype from PyArrow 24; before that
-            # they stay object even on pandas 3, so the baseline still holds there.
-            if LooseVersion(pa.__version__) >= LooseVersion("24.0.0"):
-                for row in ["string:empty", "large_string:empty"]:
-                    override_all_outputs(row, "[]@Series[str]")
+        # This argument does not touch strings, so every output column shifts together.
+        overrides = {
+            (row, col): expected
+            for row, expected in expected_by_row.items()
+            for col in col_names[1:]
+        }
 
         def compute_cell(row_name, col_name):
             arr = sources[row_name]
