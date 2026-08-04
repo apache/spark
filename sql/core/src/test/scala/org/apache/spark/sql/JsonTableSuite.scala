@@ -716,6 +716,35 @@ class JsonTableSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, Seq(Row("hi", "world")))
   }
 
+  test("wide projection interleaving all column kinds keeps every column in its own slot") {
+    // The per-row projection reads column kinds, paths, casts and trie slots from parallel arrays,
+    // so a wide projection that interleaves the three kinds (and leaves some paths unmatched)
+    // pins each column to its own slot.
+    val n = 60
+    val fields = (1 to n).map(i => s""""f$i":$i""").mkString(",")
+    val columns = (1 to n).map { i =>
+      i % 3 match {
+        case 0 => s"ord$i FOR ORDINALITY"
+        case 1 => s"val$i INT PATH '$$.f$i'"
+        // Some EXISTS columns point at a key the item does not have, so both outcomes are covered.
+        case _ if i % 4 == 0 => s"ex$i BOOLEAN EXISTS PATH '$$.f$i'"
+        case _ => s"ex$i BOOLEAN EXISTS PATH '$$.missing$i'"
+      }
+    }.mkString(", ")
+    val df = sql(
+      s"""
+         |SELECT * FROM json_table('{"items":[{$fields}]}', '$$.items[*]' COLUMNS ($columns)) AS t
+       """.stripMargin)
+    val expected = (1 to n).map { i =>
+      i % 3 match {
+        case 0 => 1L // single row, so ordinality is 1
+        case 1 => i
+        case _ => i % 4 == 0
+      }
+    }
+    checkAnswer(df, Seq(Row.fromSeq(expected)))
+  }
+
   test("array row source over many input rows streams without leaking parsers") {
     // Exercises the per-task (not per-row) parser cleanup: many input rows, each with a `[*]`
     // array row source, must all shred correctly.

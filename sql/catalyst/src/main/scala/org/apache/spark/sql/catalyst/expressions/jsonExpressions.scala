@@ -510,12 +510,17 @@ case class JsonTable(
   @transient private lazy val columnPaths: Array[Seq[PathInstruction]] =
     columns.map(c => c.path.flatMap(JsonPathParser.parse).getOrElse(Nil)).toArray
 
+  // Column kinds snapshotted into an array, like `columnPaths` and `columnCasts`: `columns` is a
+  // `List` (the parser builds it with `.map(...).toSeq`), so `columns(i)` is O(i) and indexing it
+  // in the per-row projection loop would make `projectRow` O(n^2) in the column count.
+  @transient private lazy val columnKinds: Array[JsonTableColumnKind] = columns.map(_.kind).toArray
+
   // Prefix trie over the column paths, built once so every row's value/EXISTS columns are resolved
   // in a single traversal of the item rather than one re-parse per column. Ordinality columns have
   // no path and are excluded (their empty path must not be confused with a root path `$`, which is
   // an included column reading the whole item).
   @transient private lazy val columnTrie: JsonTablePathTrie = {
-    val include = columns.map(_.kind != JsonTableColumnKind.Ordinality).toArray
+    val include = columnKinds.map(_ != JsonTableColumnKind.Ordinality)
     rowEvaluator.buildPathTrie(columnPaths, include)
   }
 
@@ -544,13 +549,14 @@ case class JsonTable(
   }
 
   private def projectRow(item: UTF8String, ordinal: Long): InternalRow = {
+    val numColumns = columnKinds.length
     // Resolve every value/EXISTS column in a single traversal of the item; ordinality slots are
     // not in the trie and come back as Missing (filled below).
-    val resolved = rowEvaluator.navigateColumns(item, columnTrie, columns.length)
-    val values = new Array[Any](columns.length)
+    val resolved = rowEvaluator.navigateColumns(item, columnTrie, numColumns)
+    val values = new Array[Any](numColumns)
     var i = 0
-    while (i < columns.length) {
-      values(i) = columns(i).kind match {
+    while (i < numColumns) {
+      values(i) = columnKinds(i) match {
         case JsonTableColumnKind.Ordinality =>
           ordinal
         case JsonTableColumnKind.Exists =>
