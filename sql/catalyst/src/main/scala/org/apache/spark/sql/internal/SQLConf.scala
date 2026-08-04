@@ -610,6 +610,34 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
+    buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .doc("When true, attempt to transpile Python UDFs to Catalyst expressions. " +
+        "Transpilation also requires ANSI mode (spark.sql.ansi.enabled=true) -- " +
+        "the rewritten expressions target ANSI semantics, so with ANSI off the " +
+        "transpiler falls back to interpreted Python and a warning is logged at " +
+        "UDF construction. Transpiled UDFS attempt to match the Python functionality but " +
+        "may not be 100% equivalent. Some known differences include: overflows from input types " +
+        "(you can precast to decimal to avoid), type coercion on comparison, and implicit " +
+        "returns. This initial version only works with non-Connect Spark; Spark Connect " +
+        "support is to follow. This is an *experimental* feature."
+    )
+    .version("4.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
+
+  val PYTHON_UDF_TRANSPILERS =
+    buildConf("spark.sql.experimental.optimizer.pyTranspilers")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .doc("Comma-separated list of Python transpilers to attempt, in order. " +
+      "The first transpiler that successfully produces a Catalyst expression " +
+      "is used. Default: catalyst.")
+    .version("4.3.0")
+    .stringConf
+    .createWithDefault("catalyst")
+
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -800,6 +828,53 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.enabled")
+      .internal()
+      .doc("When true, dynamic partition pruning may project a bounded value domain from the " +
+        "full rows of an existing ancestor broadcast. When false, Spark uses its existing " +
+        "broadcast-key reuse and subquery fallback behavior.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_ROWS =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.maxRows")
+      .internal()
+      .doc("Maximum number of broadcast value rows visited when projecting a dynamic partition " +
+        "pruning domain. If the limit is exceeded, the projection fails open rather than " +
+        "using a partial domain.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "The maximum number of DPP broadcast rows must be nonnegative.")
+      .createWithDefault(10000)
+
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_BYTES =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.maxBytes")
+      .internal()
+      .doc("Maximum cumulative size of distinct values projected from a broadcast for dynamic " +
+        "partition pruning. If the limit is exceeded, the projection fails open rather than " +
+        "using a partial domain.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "The maximum size of DPP broadcast values must be nonnegative.")
+      .createWithDefaultString("8MB")
+
+  val DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_SOURCE_BYTES =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.broadcastProjection.maxSourceBytes")
+      .internal()
+      .doc("Maximum materialized broadcast size that may be rehydrated on the driver when " +
+        "projecting dynamic partition pruning values. If runtime statistics are unavailable " +
+        "or exceed the limit, the projection fails open.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ >= 0, "The maximum DPP source broadcast size must be nonnegative.")
+      .createWithDefaultString("128MB")
+
   val RUNTIME_FILTER_NUMBER_THRESHOLD =
     buildConf("spark.sql.optimizer.runtimeFilter.number.threshold")
       .doc("The total number of injected runtime filters (non-DPP) for a single " +
@@ -811,8 +886,9 @@ object SQLConf {
 
   val RUNTIME_BLOOM_FILTER_ENABLED =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.enabled")
-      .doc("When true and if one side of a shuffle join has a selective predicate, we attempt " +
-        "to insert a bloom filter in the other side to reduce the amount of shuffle data.")
+      .doc("When true and if one side of a shuffle join has a selective predicate, or is a " +
+        "fully materialized, repeatable cache with evidence that pruning is beneficial, we " +
+        "attempt to insert a bloom filter in the other side to reduce shuffle data.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
@@ -820,10 +896,21 @@ object SQLConf {
   val RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
-        "under this value to try to inject bloom filter.")
+        "under this value to try to inject a bloom filter, unless the creation side is fully " +
+        "materialized and has accurate statistics.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10MB")
+
+  val RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.materializedCreationSideThreshold")
+      .doc("Size threshold of a fully materialized, repeatable bloom filter creation side with " +
+        "accurate statistics. This replaces the general creation-side threshold because scanning " +
+        "materialized output does not recompute its original plan.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("100MB")
 
   val RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold")
@@ -888,9 +975,9 @@ object SQLConf {
 
   val PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED =
     buildConf("spark.sql.optimizer.pushDownJoinThroughUnion.enabled")
-      .doc("When true, pushes down Join through Union when the right side is small enough " +
-        "to broadcast. This can improve performance by allowing each Union branch to " +
-        "directly perform a broadcast join, avoiding materializing the entire Union result.")
+      .doc("When true, pushes down Join through Union when every Union branch would broadcast " +
+        "the right side of the join. This can improve performance by allowing each Union branch " +
+        "to directly perform a broadcast join, avoiding materializing the entire Union result.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -2860,6 +2947,29 @@ object SQLConf {
       "disable logging or -1 to apply no limit.")
     .createWithDefault(1000)
 
+  val CODEGEN_COMPILER = buildConf("spark.sql.codegen.compiler")
+    .internal()
+    .doc("The compiler used to turn generated Java source into bytecode. " +
+      "Supported values are 'janino' (default) and 'jdk'. " +
+      "'janino' uses the Janino library; it is several times faster but the project " +
+      "is unmaintained upstream (last release 3.1.12, Feb 2024). " +
+      "'jdk' uses javax.tools.JavaCompiler from the JDK; it is maintained on the " +
+      "JDK release cadence but adds ~5x cold-start latency for large generated units " +
+      "and 30-300x for small ones. Switch to 'jdk' only if Janino's maintenance status " +
+      "is a concern; for most workloads the default remains the better trade-off. " +
+      "When 'jdk' is requested but javax.tools.JavaCompiler is unavailable " +
+      "(e.g. JRE-only image) Spark falls back to 'janino' with a warning. " +
+      "Regardless of this setting, codegen in REPL / interactive sessions (spark-shell, " +
+      "Spark Connect session artifacts) and generated code referencing a class nested in " +
+      "a Scala package object always compile with 'janino', because the JDK compiler " +
+      "cannot resolve such classes; a one-time INFO log records each such routing.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .stringConf
+    .transform(_.toLowerCase(Locale.ROOT))
+    .checkValues(Set("janino", "jdk"))
+    .createWithDefault("janino")
+
   val WHOLESTAGE_HUGE_METHOD_LIMIT = buildConf("spark.sql.codegen.hugeMethodLimit")
     .internal()
     .doc("The maximum bytecode size of a single compiled Java function generated by whole-stage " +
@@ -4579,6 +4689,20 @@ object SQLConf {
         "The threshold of window group limit must be -1, 0 or positive integer.")
       .createWithDefault(1000)
 
+  val BYPASS_PARTIAL_WINDOW_GROUP_LIMIT =
+    buildConf("spark.sql.execution.bypassPartialWindowGroupLimit")
+      .doc("When true, skips the pre-shuffle partial WindowGroupLimit and runs only a single " +
+        "WindowGroupLimit after the shuffle. Bypassing the partial window group limit can " +
+        "improve performance when the pre-shuffle reduction ratio is low. This only applies to " +
+        "windows with a non-empty partition spec; an unpartitioned window always keeps the " +
+        "partial pass, since for a multi-partition input the shuffle funnels the whole input " +
+        "into a single reducer. When false (default), a partial WindowGroupLimit runs before " +
+        "the shuffle and a final one runs after it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
@@ -5895,6 +6019,19 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val DECORRELATE_LIMIT_OFFSET_LEGACY_INCORRECT_ORDER_HANDLING_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateLimitOffsetLegacyIncorrectOrderHandling.enabled")
+      .internal()
+      .doc("If enabled, revert to the legacy incorrect behavior where the ORDER BY of a " +
+        "correlated subquery with LIMIT (and optional OFFSET) whose predicates only reference " +
+        "the outer table is dropped during decorrelation, turning ORDER BY ... LIMIT ... OFFSET " +
+        "into an arbitrary LIMIT/OFFSET. When disabled (default), the ORDER BY is preserved so " +
+        "the result is deterministic.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val DECORRELATE_UNION_OR_SET_OP_UNDER_LIMIT_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateUnionOrSetOpUnderLimit.enabled")
@@ -8317,11 +8454,26 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
 
+  def dynamicPartitionPruningBroadcastProjectionEnabled: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_ENABLED)
+
+  def dynamicPartitionPruningBroadcastProjectionMaxRows: Int =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_ROWS)
+
+  def dynamicPartitionPruningBroadcastProjectionMaxBytes: Long =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_BYTES)
+
+  def dynamicPartitionPruningBroadcastProjectionMaxSourceBytes: Long =
+    getConf(DYNAMIC_PARTITION_PRUNING_BROADCAST_PROJECTION_MAX_SOURCE_BYTES)
+
   def runtimeFilterBloomFilterEnabled: Boolean =
     getConf(RUNTIME_BLOOM_FILTER_ENABLED)
 
   def runtimeFilterCreationSideThreshold: Long =
     getConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD)
+
+  def runtimeFilterMaterializedCreationSideThreshold: Long =
+    getConf(RUNTIME_BLOOM_FILTER_MATERIALIZED_CREATION_SIDE_THRESHOLD)
 
   def runtimeRowLevelOperationGroupFilterEnabled: Boolean =
     getConf(RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED)
@@ -8641,6 +8793,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def codegenComments: Boolean = getConf(StaticSQLConf.CODEGEN_COMMENTS)
 
   def codegenLogLevel: Level = getConf(CODEGEN_LOG_LEVEL)
+
+  def codegenCompiler: String = getConf(CODEGEN_COMPILER)
 
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
@@ -8981,6 +9135,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def windowExecBufferSpillSizeThreshold: Long = getConf(WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD)
 
   def windowGroupLimitThreshold: Int = getConf(WINDOW_GROUP_LIMIT_THRESHOLD)
+
+  def bypassPartialWindowGroupLimit: Boolean = getConf(BYPASS_PARTIAL_WINDOW_GROUP_LIMIT)
 
   def windowSegmentTreeEnabled: Boolean = getConf(WINDOW_SEGMENT_TREE_ENABLED)
 

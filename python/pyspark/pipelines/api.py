@@ -541,6 +541,7 @@ def create_auto_cdc_flow(
     *,
     track_history_column_list: Optional[Union[List[str], List[Column]]] = None,
     track_history_except_column_list: Optional[Union[List[str], List[Column]]] = None,
+    spark_conf: Optional[Dict[str, str]] = None,
 ) -> None:
     """
     Create an Auto CDC flow into the target table from the Change Data Capture (CDC) source.
@@ -600,6 +601,9 @@ def create_auto_cdc_flow(
         to be 2.
     :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified, \
         this will build a "default flow" with name equal to the target name.
+    :param spark_conf: A dict whose keys are the conf names and values are the conf values. \
+        These confs will be set when the flow is executed; they can override confs set for the \
+        destination, for the pipeline, or on the cluster.
     """
     # Lazy import: pyspark.sql.connect.functions.builtin transitively imports grpc, which is
     # not available in the docs-build environment. pyspark.pipelines.api is loaded eagerly
@@ -736,6 +740,7 @@ def create_auto_cdc_flow(
         stored_as_scd_type=stored_as_scd_type,
         track_history_column_list=track_history_column_list,
         track_history_except_column_list=track_history_except_column_list,
+        spark_conf=spark_conf or {},
         source_code_location=source_code_location,
     )
 

@@ -280,6 +280,12 @@ case class ConcatWs(children: Seq[Expression])
     and `spark.sql.ansi.enabled` is set to false. If `spark.sql.ansi.enabled` is set to true,
     it throws ArrayIndexOutOfBoundsException for invalid indices.
   """,
+  arguments = """
+    Arguments:
+      * n - An integer expression giving the 1-based index of the input to return.
+      * input1, input2, ... - The input expressions to select from. They can be strings
+          or binary values.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');

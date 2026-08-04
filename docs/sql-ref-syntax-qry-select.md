@@ -93,6 +93,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
      * [Pivot relation](sql-ref-syntax-qry-select-pivot.html)
      * [Unpivot relation](sql-ref-syntax-qry-select-unpivot.html)
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
+     * [JSON_TABLE](sql-ref-syntax-qry-select-json-table.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
      * [UNNEST relation](sql-ref-syntax-qry-select-unnest.html)
      * [ [LATERAL](sql-ref-syntax-qry-select-lateral-subquery.html) ] ( Subquery )

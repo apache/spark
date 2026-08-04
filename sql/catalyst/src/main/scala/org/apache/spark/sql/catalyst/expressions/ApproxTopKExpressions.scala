@@ -42,6 +42,13 @@ import org.apache.spark.sql.types._
     _FUNC_(state, k) - Returns top k items with their frequency.
       `k` An optional INTEGER literal greater than 0. If k is not specified, it defaults to 5.
   """,
+  arguments = """
+    Arguments:
+      * state - The sketch state produced by `approx_top_k_accumulate` or
+          `approx_top_k_combine`.
+      * k - Optional. A constant INTEGER literal greater than 0 giving the number
+          of top items to return. If omitted, it defaults to 5.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(approx_top_k_accumulate(expr)) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) AS tab(expr);
