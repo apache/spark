@@ -446,10 +446,14 @@ object UnifiedMemoryManager extends Logging {
     }
   }
 
+  def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
+    apply(conf, numCores, isDriver = true)
+  }
+
   def apply(
       conf: SparkConf,
       numCores: Int,
-      isDriver: Boolean = true): UnifiedMemoryManager = {
+      isDriver: Boolean): UnifiedMemoryManager = {
     val maxMemory = getMaxMemory(conf, isDriver)
     new UnifiedMemoryManager(
       conf,
