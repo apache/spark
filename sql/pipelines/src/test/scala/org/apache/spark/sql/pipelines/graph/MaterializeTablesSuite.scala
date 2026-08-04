@@ -1431,6 +1431,127 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
+  test("SPARK-58517: schema evolution uses the pipeline's case sensitivity, not the session's") {
+    // A pipeline-level `SET spark.sql.caseSensitive` never reaches the session, so evolution must
+    // read it from the flows. Here the session default is case-INsensitive while the pipeline asks
+    // for case-SENSITIVE, so `Value` must become its own column alongside the persisted `value` --
+    // matching how the flow itself resolves the name.
+    withRecordingCatalog {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        materializeGraph(
+          new TestGraphRegistrationContext(
+            spark, Map(SQLConf.CASE_SENSITIVE.key -> "true")) {
+            registerView("src", query = dfFlowFunc(Seq((1, "a")).toDF("id", "value")))
+            registerTable(
+              "t",
+              query = Option(sqlFlowFunc(spark, "SELECT id, value FROM src")),
+              catalog = Option(recordingCatalogName),
+              database = Option(recordingNamespace))
+          }.resolveToDataflowGraph(),
+          storageRoot = storageRoot
+        )
+        assert(
+          loadTableFromRecordingCatalog("t").columns() sameElements
+            CatalogV2Util.structTypeToV2Columns(
+              new StructType().add("id", IntegerType).add("value", StringType)))
+
+        materializeGraph(
+          new TestGraphRegistrationContext(
+            spark, Map(SQLConf.CASE_SENSITIVE.key -> "true")) {
+            registerView("src", query = dfFlowFunc(Seq((1, "a")).toDF("id", "value")))
+            registerTable(
+              "t",
+              query = Option(sqlFlowFunc(spark, "SELECT id, value AS Value FROM src")),
+              catalog = Option(recordingCatalogName),
+              database = Option(recordingNamespace))
+          }.resolveToDataflowGraph(),
+          storageRoot = storageRoot
+        )
+        assert(
+          loadTableFromRecordingCatalog("t").columns() sameElements
+            CatalogV2Util.structTypeToV2Columns(
+              new StructType()
+                .add("id", IntegerType)
+                .add("value", StringType)
+                .add("Value", StringType)),
+          "the pipeline asked for case-sensitive resolution, so `Value` must be its own column")
+      }
+    }
+  }
+
+  test("SPARK-58517: flows writing to one table that disagree on case sensitivity are rejected") {
+    // The effective value decides whether names differing only in case identify the same column, so
+    // if the flows disagree the resulting schema would depend on the order they are evaluated in.
+    // Fail with a clear error instead of picking one arbitrarily.
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerView("src", query = dfFlowFunc(Seq((1, "a")).toDF("id", "value")))
+      registerTable("t")
+      registerFlow(
+        "t", "f1", sqlFlowFunc(spark, "SELECT id, value FROM src"),
+        sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"))
+      registerFlow(
+        "t", "f2", sqlFlowFunc(spark, "SELECT id, value AS Value FROM src"),
+        sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "false"))
+    }
+
+    val ex = intercept[AnalysisException] {
+      ctx.resolveToDataflowGraph().inferredSchema
+    }
+    checkError(
+      exception = ex,
+      condition = "CONFLICTING_PIPELINE_FLOW_CASE_SENSITIVITY",
+      parameters = Map(
+        "tableName" -> "spark_catalog.test_db.t",
+        "configKey" -> SQLConf.CASE_SENSITIVE.key,
+        "flowConfigurations" ->
+          ("false (spark_catalog.test_db.f2); true (spark_catalog.test_db.f1)")
+      )
+    )
+  }
+
+  test("SPARK-58517: a flow inheriting the session value conflicts with one that overrides it") {
+    // f2 leaves the conf unset, so it inherits the session's case-INsensitive default, which
+    // conflicts with f1's explicit case-sensitive request just as much as an opposite explicit
+    // value would.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val ctx = new TestGraphRegistrationContext(spark) {
+        registerView("src", query = dfFlowFunc(Seq((1, "a")).toDF("id", "value")))
+        registerTable("t")
+        registerFlow(
+          "t", "f1", sqlFlowFunc(spark, "SELECT id, value FROM src"),
+          sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"))
+        registerFlow("t", "f2", sqlFlowFunc(spark, "SELECT id, value FROM src"))
+      }
+
+      val ex = intercept[AnalysisException] {
+        ctx.resolveToDataflowGraph().inferredSchema
+      }
+      assert(ex.getCondition === "CONFLICTING_PIPELINE_FLOW_CASE_SENSITIVITY")
+      assert(ex.getMessage.contains("session default"))
+    }
+  }
+
+  test("SPARK-58517: flows that agree on case sensitivity are accepted") {
+    // The negative control: identical explicit values are not a conflict, and neither is a value
+    // that merely differs in spelling from the session's ("TRUE" vs "true").
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val ctx = new TestGraphRegistrationContext(spark) {
+        registerView("src", query = dfFlowFunc(Seq((1, "a")).toDF("id", "value")))
+        registerTable("t")
+        registerFlow(
+          "t", "f1", sqlFlowFunc(spark, "SELECT id, value FROM src"),
+          sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"))
+        registerFlow(
+          "t", "f2", sqlFlowFunc(spark, "SELECT id, value AS Value FROM src"),
+          sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "TRUE"))
+      }
+      val inferred = ctx.resolveToDataflowGraph()
+        .inferredSchema(fullyQualifiedIdentifier("t"))
+      // Case-sensitive, so both spellings survive.
+      assert(inferred.fieldNames.toSet === Set("id", "value", "Value"))
+    }
+  }
+
   test("re-materializing with a dropped property neither removes it nor issues an alterTable") {
     withRecordingCatalog {
       val schema = new StructType().add("id", IntegerType)

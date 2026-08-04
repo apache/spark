@@ -39,9 +39,12 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructTyp
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, Transform}
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
-import org.apache.spark.sql.pipelines.util.PipelinesCatalogUtils
+import org.apache.spark.sql.pipelines.util.{
+  PipelinesCatalogUtils,
+  SchemaInferenceUtils,
+  SchemaMergingUtils
+}
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
-import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -149,6 +152,10 @@ object DatasetManager extends Logging {
                       auxiliaryTableSpec = auxiliaryTableSpec,
                       isFullRefresh = isFullRefresh,
                       existingAuxiliaryTable = existingAuxiliaryTable,
+                      // The auxiliary schema is derived from its target's, so it evolves under the
+                      // target's effective case sensitivity.
+                      caseSensitive = effectiveCaseSensitivityFor(
+                        resolvedDataflowGraph, table.identifier, context),
                       context = context
                     )
                 }
@@ -398,7 +405,8 @@ object DatasetManager extends Logging {
           desiredSchema = outputSchema,
           properties = mergedProperties,
           mergeWithExistingSchema = isTableIncrementallyUpdated,
-          caseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
+          caseSensitive = effectiveCaseSensitivityFor(
+            resolvedDataflowGraph, table.identifier, context)
         )
       case None =>
         createTable(
@@ -456,12 +464,15 @@ object DatasetManager extends Logging {
    * @param existingAuxiliaryTable the already-loaded auxiliary table (if it exists), loaded once by
    *                               the caller and shared with the config-drift validation in
    *                               [[materializeTable]] rather than re-loaded here.
+   * @param caseSensitive the effective case sensitivity of the flows writing to the auxiliary
+   *                      table's TARGET, whose schema the auxiliary schema is derived from.
    * @param context the context for the pipeline update.
    */
   private def materializeAuxiliaryTable(
       auxiliaryTableSpec: AuxiliaryTableSpec,
       isFullRefresh: Boolean,
       existingAuxiliaryTable: Option[V2Table],
+      caseSensitive: Boolean,
       context: PipelineUpdateContext): Unit = {
     // Get the DSv2 catalog handler and identifier for the aux table.
     val (catalog, auxiliaryTableIdentifier) =
@@ -513,7 +524,7 @@ object DatasetManager extends Logging {
             desiredSchema = auxiliaryTableSpec.schema,
             properties = auxiliaryTableSpec.properties,
             mergeWithExistingSchema = true,
-            caseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
+            caseSensitive = caseSensitive
           )
         case None =>
           createTable(
@@ -569,6 +580,23 @@ object DatasetManager extends Logging {
         resolver = resolver
       )
     }
+  }
+
+  /**
+   * The effective `spark.sql.caseSensitive` for schema evolution of `tableIdentifier`, read from
+   * the flows writing to it rather than from the session, so evolution stays consistent with the
+   * flows whose schemas it is evolving (a pipeline-level `SET` never reaches the session). Fails if
+   * those flows disagree; see [[SchemaInferenceUtils.effectiveCaseSensitivity]].
+   */
+  private def effectiveCaseSensitivityFor(
+      resolvedDataflowGraph: DataflowGraph,
+      tableIdentifier: TableIdentifier,
+      context: PipelineUpdateContext): Boolean = {
+    SchemaInferenceUtils.effectiveCaseSensitivity(
+      tableIdentifier = tableIdentifier,
+      flows = resolvedDataflowGraph.flowsTo.getOrElse(tableIdentifier, Seq.empty),
+      sessionCaseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
+    )
   }
 
   /**

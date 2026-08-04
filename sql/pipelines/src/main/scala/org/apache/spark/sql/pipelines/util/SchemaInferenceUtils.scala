@@ -22,12 +22,74 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.DatasetType
-import org.apache.spark.sql.pipelines.graph.{GraphElementTypeUtils, GraphErrors, ResolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{
+  Flow,
+  GraphElementTypeUtils,
+  GraphErrors,
+  ResolvedFlow
+}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 
 object SchemaInferenceUtils {
+
+  /**
+   * The effective `spark.sql.caseSensitive` for schema derivation on `tableIdentifier`, taken from
+   * the flows writing to it rather than from the session.
+   *
+   * A pipeline can set `spark.sql.caseSensitive` for itself, and a `SET` in pipeline source does
+   * not touch the session: [[org.apache.spark.sql.pipelines.graph.GraphRegistrationContext]] folds
+   * it into each flow's `sqlConf`, and it is applied when the flow is analyzed and executed. Schema
+   * derivation therefore has to read it from the same place, or evolution can disagree with the
+   * flows whose schemas it is deriving from -- e.g. folding an incoming `Value` onto a persisted
+   * `value` while the flow, resolving case-sensitively, expects `Value` to be its own column.
+   *
+   * All flows writing to a table must agree: the value decides whether names differing only in case
+   * identify the same column, so a disagreement would make the resulting schema depend on the order
+   * the flows are evaluated in. Throws
+   * [[org.apache.spark.sql.pipelines.graph.GraphErrors.conflictingFlowConfigurationError]] if they
+   * disagree. Flows that do not set it at all inherit the session's value.
+   */
+  def effectiveCaseSensitivity(
+      tableIdentifier: TableIdentifier,
+      flows: Seq[Flow],
+      sessionCaseSensitive: Boolean): Boolean = {
+    val declaredByFlow = flows.flatMap { flow =>
+      flow.sqlConf.get(SQLConf.CASE_SENSITIVE.key).map(value => value -> flow.identifier)
+    }
+    if (declaredByFlow.isEmpty) {
+      return sessionCaseSensitive
+    }
+
+    // Compare the parsed booleans, so that e.g. "TRUE" and "true" are not reported as a conflict,
+    // but report the values as written to keep the error recognizable to the user.
+    val byParsedValue = declaredByFlow.groupBy { case (value, _) => value.trim.toBoolean }
+    // A flow that leaves the conf unset inherits the session value, which conflicts just as much as
+    // an explicitly opposite value.
+    val flowsWithoutDeclaration = flows.filterNot { flow =>
+      flow.sqlConf.contains(SQLConf.CASE_SENSITIVE.key)
+    }
+    val effectiveValues = byParsedValue.keySet ++
+      Option.when(flowsWithoutDeclaration.nonEmpty)(sessionCaseSensitive)
+    if (effectiveValues.sizeIs > 1) {
+      val valuesByFlow = declaredByFlow
+        .groupBy { case (value, _) => value }
+        .map { case (value, entries) => value -> entries.map { case (_, id) => id } } ++
+        Option
+          .when(flowsWithoutDeclaration.nonEmpty)(
+            s"$sessionCaseSensitive (session default)" -> flowsWithoutDeclaration.map(_.identifier)
+          )
+          .toMap
+      throw GraphErrors.conflictingFlowConfigurationError(
+        tableIdentifier = tableIdentifier,
+        configKey = SQLConf.CASE_SENSITIVE.key,
+        valuesByFlow = valuesByFlow
+      )
+    }
+    effectiveValues.head
+  }
 
   /**
    * Given a set of flows that write to the same destination and possibly a user-specified schema,
@@ -43,9 +105,10 @@ object SchemaInferenceUtils {
    *
    * All merges honor `caseSensitive`, which defaults to the active session's
    * `spark.sql.caseSensitive`. Under case-insensitive analysis, flows emitting column names that
-   * differ only in case contribute a single column (the first flow's spelling wins), and a declared
-   * column matches a flow column differing only in case -- consistent with how the rest of the
-   * engine resolves those names.
+   * differ only in case contribute a single column, and a declared column matches a flow column
+   * differing only in case -- consistent with how the rest of the engine resolves those names.
+   * Which of two case-only-differing spellings survives follows the order the flows are merged in,
+   * which is not defined here, so callers should not depend on a particular casing.
    */
   def inferSchemaFromFlows(
       flows: Seq[ResolvedFlow],

@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.DataflowGraph.mapUnique
-import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
+import org.apache.spark.sql.pipelines.util.{SchemaInferenceUtils, SchemaMergingUtils}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -179,14 +179,19 @@ case class DataflowGraph(
    * which this map does not define, so callers should not depend on a particular casing.
    */
   lazy val inferredSchema: Map[TableIdentifier, StructType] = {
-    val caseSensitive = SparkSession.active.sessionState.conf.caseSensitiveAnalysis
-    flowsTo.view.mapValues { flows =>
-      flows
+    val sessionCaseSensitive = SparkSession.active.sessionState.conf.caseSensitiveAnalysis
+    flowsTo.map { case (destinationIdentifier, flows) =>
+      val caseSensitive = SchemaInferenceUtils.effectiveCaseSensitivity(
+        tableIdentifier = destinationIdentifier,
+        flows = flows,
+        sessionCaseSensitive = sessionCaseSensitive
+      )
+      destinationIdentifier -> flows
         .map { flow =>
           resolvedFlow(flow.identifier).schema
         }
         .reduce(SchemaMergingUtils.mergeSchemas(_, _, caseSensitive))
-    }.toMap
+    }
   }
 
   /**
