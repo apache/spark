@@ -6779,7 +6779,8 @@ object SQLConf {
     .doc("When true, enable limit pushdown to Python datasource, at the cost of running " +
       "Python worker one additional time during planning. Spark always applies the limit " +
       "again after the scan, so a pushed limit only lets the data source read less data.")
-    .version("4.3.0")
+    .version("5.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(false)
 

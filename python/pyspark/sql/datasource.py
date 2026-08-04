@@ -609,7 +609,7 @@ class DataSourceReader(ABC):
         scan, so it is safe to return True even if `read()` yields more than `limit` rows.
         Returning True never causes the query to see fewer rows than it requires.
 
-        .. versionadded:: 4.3.0
+        .. versionadded:: 5.0.0
 
         Parameters
         ----------
