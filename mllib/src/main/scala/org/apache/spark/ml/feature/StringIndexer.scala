@@ -342,10 +342,9 @@ class StringIndexerModel (
   private def getIndexer(
       labels: Seq[String],
       labelToIndex: OpenHashMap[String, Double],
-      keepInvalid: Boolean,
-      skipInvalid: Boolean) = {
+      handleInvalid: String) = {
     val unknownIndex = labels.length.toDouble
-    if (keepInvalid) {
+    if (handleInvalid == StringIndexer.KEEP_INVALID) {
       udf { label: String =>
         if (label == null) {
           unknownIndex
@@ -353,7 +352,7 @@ class StringIndexerModel (
           labelToIndex.get(label).getOrElse(unknownIndex)
         }
       }.asNondeterministic()
-    } else if (skipInvalid) {
+    } else if (handleInvalid == StringIndexer.SKIP_INVALID) {
       udf { label: String =>
         if (label == null) {
           null
@@ -389,8 +388,9 @@ class StringIndexerModel (
       map
     }
     val outputColumns = new Array[Column](outputColNames.length)
-    val keepInvalid = getHandleInvalid == StringIndexer.KEEP_INVALID
-    val skipInvalid = getHandleInvalid == StringIndexer.SKIP_INVALID
+    val handleInvalid = getHandleInvalid
+    val keepInvalid = handleInvalid == StringIndexer.KEEP_INVALID
+    val skipInvalid = handleInvalid == StringIndexer.SKIP_INVALID
 
     for (i <- outputColNames.indices) {
       val inputColName = inputColNames(i)
@@ -406,8 +406,7 @@ class StringIndexerModel (
           .withValues(filteredLabels)
           .toMetadata()
 
-        val indexer =
-          getIndexer(labels.toImmutableArraySeq, labelToIndex, keepInvalid, skipInvalid)
+        val indexer = getIndexer(labels.toImmutableArraySeq, labelToIndex, handleInvalid)
 
         outputColumns(i) = indexer(dataset(inputColName).cast(StringType))
           .as(outputColName, metadata)
