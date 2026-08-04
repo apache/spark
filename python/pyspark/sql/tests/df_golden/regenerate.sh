@@ -15,8 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Regenerates the DataFrame golden test files (*.test) in this directory by
-# re-running their test modules with SPARK_GENERATE_GOLDEN_FILES=1.
+# Regenerates the DataFrame golden test files under results/ by re-running the
+# test modules under inputs/ with SPARK_GENERATE_GOLDEN_FILES=1.
 #
 # Usage:
 #   python/pyspark/sql/tests/df_golden/regenerate.sh [--verify]
@@ -39,17 +39,16 @@ cd "$REPO_ROOT"
 
 REL_DIR="python/pyspark/sql/tests/df_golden"
 
-# Every module declaring golden cases, i.e. every test module in this directory
-# with a top-level class mixing in DFGoldenTestMixin. Adding one needs no change
-# here.
+# Every module declaring golden cases, i.e. every test module under inputs/ with
+# a top-level class mixing in DFGoldenTestMixin. Adding one needs no change here.
 MODULES=()
-for file in "$THIS_DIR"/test_*.py; do
+for file in "$THIS_DIR"/inputs/test_*.py; do
   if grep -q "^class .*(DFGoldenTestMixin" "$file"; then
-    MODULES+=("pyspark.sql.tests.df_golden.$(basename "$file" .py)")
+    MODULES+=("pyspark.sql.tests.df_golden.inputs.$(basename "$file" .py)")
   fi
 done
 if [[ ${#MODULES[@]} -eq 0 ]]; then
-  echo "ERROR: no golden test modules found in $REL_DIR" >&2
+  echo "ERROR: no golden test modules found in $REL_DIR/inputs" >&2
   exit 1
 fi
 TESTNAMES="$(IFS=,; echo "${MODULES[*]}")"

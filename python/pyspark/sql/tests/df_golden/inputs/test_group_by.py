@@ -20,8 +20,9 @@ DataFrame API golden file tests for GROUP BY and aggregate operations.
 
 The cases are modelled on the GROUP BY cases of the SQL golden tests
 (``sql/core/src/test/resources/sql-tests/inputs/group-by.sql``).  Their expected
-outputs live in ``group_by.test``; see ``pyspark.sql.tests.df_golden.df_golden``
-for the framework and how to regenerate them.
+outputs live in ``../results/test_group_by.py.out``; see
+``pyspark.sql.tests.df_golden.df_golden`` for the framework and how to
+regenerate them.
 """
 
 from decimal import Decimal
@@ -56,8 +57,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 class GroupByGoldenTests(DFGoldenTestMixin, ReusedConnectTestCase):
     """Test the aggregate operator."""
-
-    golden_file = "group_by.test"
 
     @classmethod
     def setup_session(cls, spark):
