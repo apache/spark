@@ -11432,16 +11432,6 @@
       "Can't run submitMapStage on RDD with 0 partitions"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3024" : {
-    "message" : [
-      "attempted to access non-existent accumulator <id>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3025" : {
-    "message" : [
-      "TaskSetManagers should only send Resubmitted task statuses for tasks in ShuffleMapStages."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3026" : {
     "message" : [
       "duration() called on unfinished task"
@@ -11457,29 +11447,9 @@
       "Exiting due to error from cluster scheduler: <message>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3030" : {
-    "message" : [
-      "Task <currentTaskAttemptId> has not locked block <blockId> for writing"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3031" : {
-    "message" : [
-      "Block <blockId> does not exist"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3032" : {
-    "message" : [
-      "Error occurred while waiting for replication to finish"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3033" : {
     "message" : [
       "Unable to register with external shuffle server due to : <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3034" : {
-    "message" : [
-      "Error occurred while waiting for async. reregistration"
     ]
   },
   "_LEGACY_ERROR_TEMP_3035" : {
@@ -11495,31 +11465,6 @@
   "_LEGACY_ERROR_TEMP_3037" : {
     "message" : [
       "Block <blockId> was not found even though it's read-locked"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3038" : {
-    "message" : [
-      "get() failed for block <blockId> even though we held a lock"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3039" : {
-    "message" : [
-      "BlockManager returned null for BlockStatus query: <blockId>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3040" : {
-    "message" : [
-      "BlockManagerMasterEndpoint returned false, expected true."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3041" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3042" : {
-    "message" : [
-      "Failed to get block <blockId>, which is not a shuffle block"
     ]
   },
   "_LEGACY_ERROR_TEMP_3052" : {
