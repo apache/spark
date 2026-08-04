@@ -206,6 +206,17 @@ case class ShuffleExchangeExec(
 
   override def nodeName: String = "Exchange"
 
+  // `pipelined` is only meaningful for a Real-Time Mode plan, and the default arg string is
+  // positional, so printing it unconditionally would add a bare `false` to every shuffle in every
+  // plan. Show it only when set, and name it when shown.
+  override def stringArgs: Iterator[Any] = {
+    // `pipelined` is the last field, so drop it positionally rather than by value; argString drops
+    // the child on its own. Exchange's `[plan_id=...]` suffix is re-appended here.
+    val argsWithoutPipelined = productIterator.toSeq.dropRight(1).iterator
+    val pipelinedArg = if (pipelined) Iterator("isPipelined=true") else Iterator.empty
+    argsWithoutPipelined ++ pipelinedArg ++ Iterator(s"[plan_id=$id]")
+  }
+
   private lazy val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
 
