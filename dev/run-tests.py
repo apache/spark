@@ -69,17 +69,18 @@ def determine_java_executable():
 # -------------------------------------------------------------------------------------------------
 
 
-_group_depth = 0
+_in_titled_block = False
 
 
 @contextmanager
 def titled_block(title):
-    global _group_depth
+    global _in_titled_block
+    if _in_titled_block:
+        raise RuntimeError(f"titled_block({title!r}) cannot be nested")
+    _in_titled_block = True
     line_str = "=" * 72
-    is_outermost = _group_depth == 0
-    if "GITHUB_ACTIONS" in os.environ and is_outermost:
+    if "GITHUB_ACTIONS" in os.environ:
         print(f"::group::{title}", flush=True)
-    _group_depth += 1
     print("")
     print(line_str)
     print(title)
@@ -87,8 +88,8 @@ def titled_block(title):
     try:
         yield
     finally:
-        _group_depth -= 1
-        if "GITHUB_ACTIONS" in os.environ and is_outermost:
+        _in_titled_block = False
+        if "GITHUB_ACTIONS" in os.environ:
             print("::endgroup::", flush=True)
 
 
@@ -123,26 +124,6 @@ def run_sparkr_style_checks():
         run_cmd([os.path.join(SPARK_HOME, "dev", "lint-r")])
     else:
         print("Ignoring SparkR style check as R was not found in PATH")
-
-
-def build_spark_documentation():
-    os.environ["PRODUCTION"] = "1"
-
-    os.chdir(os.path.join(SPARK_HOME, "docs"))
-
-    bundle_bin = which("bundle")
-
-    if not bundle_bin:
-        print(
-            "[error] Cannot find a version of `bundle` on the system; please",
-            " install one with `gem install bundler` and retry to build documentation.",
-        )
-        sys.exit(1)
-    else:
-        run_cmd([bundle_bin, "install"])
-        run_cmd([bundle_bin, "exec", "jekyll", "build"])
-
-    os.chdir(SPARK_HOME)
 
 
 def exec_maven(mvn_args=()):
@@ -279,7 +260,7 @@ def build_spark_unidoc_sbt(extra_profiles):
     exec_sbt(profiles_and_goals)
 
 
-def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
+def build_spark_assembly_sbt(extra_profiles):
     # Enable all of the profiles for the build:
     build_profiles = extra_profiles + modules.root.build_profile_flags
     sbt_goals = ["assembly/package"]
@@ -290,14 +271,6 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     )
 
     exec_sbt(profiles_and_goals)
-
-    if checkstyle:
-        with titled_block("Running Java style checks"):
-            run_java_style_checks(build_profiles)
-
-    if not os.environ.get("SKIP_UNIDOC"):
-        with titled_block("Building Unidoc API Documentation"):
-            build_spark_unidoc_sbt(extra_profiles)
 
 
 def build_apache_spark(build_tool, extra_profiles):
@@ -643,7 +616,13 @@ def main():
         # do it here because the tests still rely on it; see SPARK-13294 for details.
         if os.environ.get("SKIP_SCALA_BUILD", "false") != "true":
             with titled_block("Building Spark assembly"):
-                build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
+                build_spark_assembly_sbt(extra_profiles)
+            if should_run_java_style_checks:
+                with titled_block("Running Java style checks"):
+                    run_java_style_checks(extra_profiles + modules.root.build_profile_flags)
+            if not os.environ.get("SKIP_UNIDOC"):
+                with titled_block("Building Unidoc API Documentation"):
+                    build_spark_unidoc_sbt(extra_profiles)
 
     # run the test suites
     with titled_block("Running Spark unit tests"):
