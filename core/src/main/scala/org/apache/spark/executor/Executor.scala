@@ -852,12 +852,8 @@ private[spark] class Executor(
         // the race between RPC broadcast and task dispatch.
         // Only apply if the version is newer than what the store already has, preventing
         // a delayed TaskDescription from overwriting fresher credentials delivered via RPC.
-        // Uses updateAndGet for atomic compare-and-set across concurrent task threads.
         taskDescription.userCredentials.foreach { case (version, creds) =>
-          val newValue = VersionedCredentials(version, creds)
-          env.userCredentials.updateAndGet { current =>
-            if (current == null || version > current.version) newValue else current
-          }
+          VersionedCredentials.updateIfNewer(env.userCredentials, version, creds)
         }
 
         updateDependencies(

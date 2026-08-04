@@ -226,11 +226,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     case UpdateUserCredentials(version, credentials) =>
       logInfo(log"Received user credentials of " +
         log"${MDC(LogKeys.NUM_BYTES, credentials.length)} bytes " +
-        log"(version ${MDC(LogKeys.COUNT, version)})")
-      val newValue = VersionedCredentials(version, credentials)
-      env.userCredentials.updateAndGet { current =>
-        if (current == null || version > current.version) newValue else current
-      }
+        log"(version ${MDC(LogKeys.CREDENTIAL_VERSION, version)})")
+      VersionedCredentials.updateIfNewer(env.userCredentials, version, credentials)
 
     case DecommissionExecutor =>
       decommissionSelf()

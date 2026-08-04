@@ -133,10 +133,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Current set of delegation tokens to send to executors.
   private val delegationTokens = new AtomicReference[Array[Byte]]()
 
-  // Current set of OIDC user credentials to send to executors.
-  // Updated by UserCredentialManager and sent via UpdateUserCredentials RPC.
-  private val userCredentials = new AtomicReference[VersionedCredentials]()
-
   // UserCredentialManager for OIDC credential propagation (if enabled).
   private var userCredentialManager: Option[UserCredentialManager] = None
 
@@ -369,7 +365,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           Option(delegationTokens.get()),
-          Option(userCredentials.get()).map(vc => (vc.version, vc.bytes)),
+          Option(SparkEnv.get.userCredentials.get()).map(vc => (vc.version, vc.bytes)),
           rp,
           currentLogLevel)
         context.reply(reply)
@@ -1066,10 +1062,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Called from the DriverEndpoint receive loop (thread-safe access to executorDataMap).
    */
   private def updateUserCredentials(version: Long, credentials: Array[Byte]): Unit = {
-    val versioned = VersionedCredentials(version, credentials)
-    userCredentials.set(versioned)
-    // Also update driver's SparkEnv so TaskDescription can include current credentials.
-    SparkEnv.get.userCredentials.set(versioned)
+    VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, version, credentials)
     executorDataMap.values.foreach { ed =>
       ed.executorEndpoint.send(UpdateUserCredentials(version, credentials))
     }
@@ -1088,16 +1081,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     })
     userCredentialManager.foreach { manager =>
       val (version, initialCredentials) = manager.start()
-      // Store initial credentials for SparkAppConfig (late-registering executors)
-      // and TaskDescription (task dispatch). Both stores must be populated synchronously
-      // to avoid a window where tasks could be dispatched without credentials.
+      // Store initial credentials synchronously so they are available for SparkAppConfig
+      // (late-registering executors) and TaskDescription (task dispatch) immediately.
       // Note: the onCredentialsUpdate callback above also triggers an async
-      // UpdateUserCredentials message that will redundantly set these stores.
+      // UpdateUserCredentials message that will redundantly call updateIfNewer.
       // The synchronous set here ensures no null window before the async message
       // is processed by DriverEndpoint.
-      val versioned = VersionedCredentials(version, initialCredentials)
-      userCredentials.set(versioned)
-      SparkEnv.get.userCredentials.set(versioned)
+      VersionedCredentials.updateIfNewer(
+        SparkEnv.get.userCredentials, version, initialCredentials)
     }
   }
 

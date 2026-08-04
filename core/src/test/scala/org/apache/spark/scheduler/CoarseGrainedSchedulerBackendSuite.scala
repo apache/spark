@@ -697,6 +697,15 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val credsV1 = Array[Byte](10, 10, 10)
     backend.driverEndpoint.send(UpdateUserCredentials(1L, credsV1))
 
+    // Flush the DriverEndpoint mailbox by sending a synchronous request.
+    // Since DriverEndpoint is single-threaded, when this returns, v1 has been processed.
+    backend.driverEndpoint.askSync[SparkAppConfig](
+      RetrieveSparkAppConfig(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    // Store should still hold v3 (stale v1 was rejected by version guard)
+    assert(SparkEnv.get.userCredentials.get().version === 3L,
+      "Stale version 1 should not overwrite newer version 3")
+
     // Send version 5 (newer) -- should be accepted
     val credsV5 = Array[Byte](50, 50, 50)
     backend.driverEndpoint.send(UpdateUserCredentials(5L, credsV5))
@@ -710,38 +719,26 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   }
 
   test("executor-side credential store version guard rejects stale and accepts newer") {
-    // This tests the same updateAndGet logic used in CoarseGrainedExecutorBackend.receive
-    // and Executor.TaskRunner for applying credentials from RPC and TaskDescription.
+    // This tests VersionedCredentials.updateIfNewer -- the same method used in
+    // CoarseGrainedExecutorBackend.receive and Executor.TaskRunner.
     val store = new AtomicReference[VersionedCredentials]()
 
     // Initial write to null store should succeed
-    val v2 = VersionedCredentials(2L, Array[Byte](20, 20))
-    store.updateAndGet { current =>
-      if (current == null || 2L > current.version) v2 else current
-    }
+    VersionedCredentials.updateIfNewer(store, 2L, Array[Byte](20, 20))
     assert(store.get().version === 2L)
     assert(store.get().bytes === Array[Byte](20, 20))
 
     // Stale version (1) should be rejected
-    val v1 = VersionedCredentials(1L, Array[Byte](10, 10))
-    store.updateAndGet { current =>
-      if (current == null || 1L > current.version) v1 else current
-    }
+    VersionedCredentials.updateIfNewer(store, 1L, Array[Byte](10, 10))
     assert(store.get().version === 2L, "Stale version should not overwrite newer")
 
     // Same version (2) should also be rejected (strict >)
-    val v2b = VersionedCredentials(2L, Array[Byte](22, 22))
-    store.updateAndGet { current =>
-      if (current == null || 2L > current.version) v2b else current
-    }
+    VersionedCredentials.updateIfNewer(store, 2L, Array[Byte](22, 22))
     assert(store.get().version === 2L)
     assert(store.get().bytes === Array[Byte](20, 20), "Same version should not overwrite")
 
     // Newer version (5) should be accepted
-    val v5 = VersionedCredentials(5L, Array[Byte](50, 50))
-    store.updateAndGet { current =>
-      if (current == null || 5L > current.version) v5 else current
-    }
+    VersionedCredentials.updateIfNewer(store, 5L, Array[Byte](50, 50))
     assert(store.get().version === 5L)
     assert(store.get().bytes === Array[Byte](50, 50))
   }

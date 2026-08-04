@@ -460,11 +460,11 @@ class UserCredentialManagerSuite extends SparkFunSuite {
       }
     }
 
-    val callbacks = new java.util.concurrent.CopyOnWriteArrayList[Array[Byte]]()
+    val callbacks = new java.util.concurrent.CopyOnWriteArrayList[(Long, Array[Byte])]()
     val manager = new UserCredentialManager(
       conf,
       rotatingIngestor,
-      (_, bytes) => callbacks.add(bytes))
+      (version, bytes) => callbacks.add((version, bytes)))
 
     try {
       val (_, initial) = manager.start()
@@ -481,6 +481,13 @@ class UserCredentialManagerSuite extends SparkFunSuite {
       // Verify that the ingestor was called more than once (rotation detected)
       assert(callCount.get() >= 2,
         s"TokenIngestor should have been called at least twice, got ${callCount.get()}")
+
+      // Verify version monotonicity: each callback receives a strictly increasing version
+      val versions = (0 until callbacks.size()).map(i => callbacks.get(i)._1)
+      assert(versions === versions.sorted,
+        s"Versions should be monotonically increasing: $versions")
+      assert(versions.head === 1L, "First version should be 1")
+      assert(versions(1) === 2L, "Second version should be 2")
     } finally {
       manager.stop()
     }

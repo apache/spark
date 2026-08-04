@@ -849,3 +849,23 @@ object SparkEnv extends Logging {
  * @param bytes   Serialized `UserCredentials` payload (no raw identity token).
  */
 private[spark] case class VersionedCredentials(version: Long, bytes: Array[Byte])
+
+private[spark] object VersionedCredentials {
+  /**
+   * Atomically update a credential store only if the given version is strictly newer
+   * than what is currently stored. This prevents stale credentials (e.g., from a delayed
+   * `TaskDescription`) from overwriting fresher credentials delivered via RPC broadcast.
+   *
+   * Uses `AtomicReference.updateAndGet` to ensure the check-and-set is atomic even
+   * when called concurrently from multiple task threads and the RPC dispatcher thread.
+   */
+  def updateIfNewer(
+      store: AtomicReference[VersionedCredentials],
+      version: Long,
+      bytes: Array[Byte]): Unit = {
+    val newValue = VersionedCredentials(version, bytes)
+    store.updateAndGet { current =>
+      if (current == null || version > current.version) newValue else current
+    }
+  }
+}

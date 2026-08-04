@@ -69,7 +69,7 @@ private[spark] class TaskDescription(
     // This is acceptable because OIDC credentials are short-lived (minutes) unlike Hadoop
     // delegation tokens (hours/days), making the race between RPC broadcast and task dispatch
     // a practical concern. For short-task-heavy workloads, the overhead is bounded by
-    // credential size × tasks-in-flight (not total task count).
+    // credential size x tasks-in-flight (not total task count).
     val userCredentials: Option[(Long, Array[Byte])],
     val serializedTask: ByteBuffer) {
 
