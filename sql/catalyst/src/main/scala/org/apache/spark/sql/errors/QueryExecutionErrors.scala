@@ -936,6 +936,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def cannotReadZipEntry(entry: String, path: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "CANNOT_READ_ZIP_ENTRY",
+      messageParameters = Map("entry" -> entry, "path" -> path))
+  }
+
   def cannotCreateColumnarReaderError(): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2065",
