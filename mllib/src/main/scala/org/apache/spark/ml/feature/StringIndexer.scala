@@ -344,34 +344,35 @@ class StringIndexerModel (
       labelToIndex: OpenHashMap[String, Double],
       handleInvalid: String) = {
     val unknownIndex = labels.length.toDouble
-    if (handleInvalid == StringIndexer.KEEP_INVALID) {
-      udf { label: String =>
-        if (label == null) {
-          unknownIndex
-        } else {
-          labelToIndex.get(label).getOrElse(unknownIndex)
-        }
-      }.asNondeterministic()
-    } else if (handleInvalid == StringIndexer.SKIP_INVALID) {
-      udf { label: String =>
-        if (label == null) {
-          null
-        } else {
-          labelToIndex.get(label).map(index => java.lang.Double.valueOf(index)).orNull
-        }
-      }.asNondeterministic()
-    } else {
-      udf { label: String =>
-        if (label == null) {
-          throw new SparkException("StringIndexer encountered NULL value. To handle or skip " +
-            "NULLS, try setting StringIndexer.handleInvalid.")
-        } else {
-          labelToIndex.get(label).getOrElse {
-            throw new SparkException(s"Unseen label: $label. To handle unseen labels, " +
-              s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
+    handleInvalid match {
+      case StringIndexer.KEEP_INVALID =>
+        udf { label: String =>
+          if (label == null) {
+            unknownIndex
+          } else {
+            labelToIndex.get(label).getOrElse(unknownIndex)
           }
-        }
-      }.asNondeterministic()
+        }.asNondeterministic()
+      case StringIndexer.SKIP_INVALID =>
+        udf { label: String =>
+          if (label == null) {
+            null
+          } else {
+            labelToIndex.get(label).map(index => java.lang.Double.valueOf(index)).orNull
+          }
+        }.asNondeterministic()
+      case _ =>
+        udf { label: String =>
+          if (label == null) {
+            throw new SparkException("StringIndexer encountered NULL value. To handle or skip " +
+              "NULLS, try setting StringIndexer.handleInvalid.")
+          } else {
+            labelToIndex.get(label).getOrElse {
+              throw new SparkException(s"Unseen label: $label. To handle unseen labels, " +
+                s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
+            }
+          }
+        }.asNondeterministic()
     }
   }
 
