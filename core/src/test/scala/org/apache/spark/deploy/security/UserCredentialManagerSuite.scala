@@ -487,7 +487,7 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     val manager = new UserCredentialManager(
       conf,
       createIngestor(ctx),
-      bytes => callbackRef.set(bytes))
+      (_, bytes) => callbackRef.set(bytes))
 
     manager.start()
 
