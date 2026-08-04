@@ -64,8 +64,8 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
           Request(s)
         </h4> ++
         generateSessionStatsTable(request) ++
-        generateMLCacheStatsTable(request) ++
-        generateSQLStatsTable(request)
+        generateSQLStatsTable(request) ++
+        generateMLCacheStatsTable(request)
     }
     UIUtils.headerSparkPage(request, "Spark Connect", content, parent)
   }

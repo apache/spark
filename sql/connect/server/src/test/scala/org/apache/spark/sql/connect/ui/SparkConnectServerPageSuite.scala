@@ -178,7 +178,7 @@ class SparkConnectServerPageSuite
     val sessionStatsIndex = html.indexOf("session statistics")
     val mlCacheStatsIndex = html.indexOf("ml cache statistics (2)")
     val requestStatsIndex = html.indexOf("request statistics")
-    assert(sessionStatsIndex < mlCacheStatsIndex && mlCacheStatsIndex < requestStatsIndex)
+    assert(sessionStatsIndex < requestStatsIndex && requestStatsIndex < mlCacheStatsIndex)
     assert(html.contains("2 (1 in memory, 1 offloaded)"))
     assert(html.contains("1.0 kib / 4.0 kib"))
     assert(html.contains("2.0 kib / 8.0 kib"))
