@@ -617,28 +617,30 @@ class PyArrowArrayToPandasIntegerObjectNullsTests(_PyArrowToPandasTestBase):
             self.COL_SPARK_PANDAS_OPTIONS,
         ]
 
-        # Version-specific expected values go here, when a newer pandas/PyArrow/NumPy
-        # legitimately changes a cell's output.  Pandas 3 renders Arrow string arrays
-        # with its dedicated string dtype, and empty ones follow only from PyArrow 24.
-        pandas_3 = LooseVersion(pd.__version__) >= LooseVersion("3.0.0")
-        pyarrow_24 = LooseVersion(pa.__version__) >= LooseVersion("24.0.0")
+        # Version-specific expected values go here, keyed by (row, col), when a newer
+        # pandas/PyArrow/NumPy legitimately changes a cell's output.  This argument does
+        # not touch strings, so a string row shifts in every output column at once.
+        overrides: dict[tuple[str, str], str] = {}
 
-        expected_by_row: dict[str, str] = {}
-        if pandas_3:
-            expected_by_row["string:standard"] = "['hello', 'world', '']@Series[str]"
-            expected_by_row["string:nullable"] = "['hello', nan, 'world']@Series[str]"
-            expected_by_row["large_string:standard"] = "['hello', 'world']@Series[str]"
-            expected_by_row["large_string:nullable"] = "['hello', nan]@Series[str]"
-        if pandas_3 and pyarrow_24:
-            expected_by_row["string:empty"] = "[]@Series[str]"
-            expected_by_row["large_string:empty"] = "[]@Series[str]"
+        def override_outputs(row: str, expected: str) -> None:
+            for col in col_names[1:]:  # every column but the "pyarrow array" input
+                overrides[(row, col)] = expected
 
-        # This argument does not touch strings, so every output column shifts together.
-        overrides = {
-            (row, col): expected
-            for row, expected in expected_by_row.items()
-            for col in col_names[1:]
-        }
+        pandas_3_or_later = LooseVersion(pd.__version__) >= LooseVersion("3.0.0")
+        pyarrow_24_or_later = LooseVersion(pa.__version__) >= LooseVersion("24.0.0")
+
+        # Pandas 3 renders Arrow string arrays with its dedicated string dtype.
+        if pandas_3_or_later:
+            override_outputs("string:standard", "['hello', 'world', '']@Series[str]")
+            override_outputs("string:nullable", "['hello', nan, 'world']@Series[str]")
+            override_outputs("large_string:standard", "['hello', 'world']@Series[str]")
+            override_outputs("large_string:nullable", "['hello', nan]@Series[str]")
+
+        # Empty ones stay object until PyArrow 24, so the baseline holds before that.
+        # Spark supports PyArrow 18+, so both branches are reachable.
+        if pandas_3_or_later and pyarrow_24_or_later:
+            override_outputs("string:empty", "[]@Series[str]")
+            override_outputs("large_string:empty", "[]@Series[str]")
 
         def compute_cell(row_name, col_name):
             arr = sources[row_name]
