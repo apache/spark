@@ -136,7 +136,8 @@ class _PyArrowToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         numpy-backed Series, so it stays correct as pandas moves more dtypes to
         Arrow-backed storage.
 
-        Returns ``"zero-copy"``, ``"copied"``, or ``"ERR@<ExceptionClass>"``.
+        Returns ``"zero-copy"``, ``"partial-copy"``, ``"copied"``, or
+        ``"ERR@<ExceptionClass>"``.
         """
         try:
             series = arr.to_pandas(**to_pandas_kwargs)
@@ -150,13 +151,21 @@ class _PyArrowToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
         # materialize a copy here and wrongly report no sharing.  Keying on the
         # protocol rather than on ArrowDtype also covers dtypes that are
         # Arrow-backed without being ArrowDtype, such as pandas 3's string.
+        #
+        # The result has several buffers (validity, offsets, values) and can borrow
+        # some while allocating others, so count how many it borrowed rather than
+        # stopping at the first match.  The result's buffers are the denominator
+        # because the question is what pandas had to allocate.
         if hasattr(backing_array, "__arrow_array__"):
-            stored = pa.array(backing_array)
             source_addresses = {buffer.address for buffer in cls._arrow_buffers(arr)}
-            for buffer in cls._arrow_buffers(stored):
+            stored_buffers = cls._arrow_buffers(pa.array(backing_array))
+            borrowed = 0
+            for buffer in stored_buffers:
                 if buffer.address in source_addresses:
-                    return "zero-copy"
-            return "copied"
+                    borrowed += 1
+            if borrowed == len(stored_buffers):
+                return "zero-copy"
+            return "partial-copy" if borrowed else "copied"
 
         # numpy-backed result: np.shares_memory accounts for slice offsets, so it
         # is robust where raw address equality is not.
@@ -360,12 +369,15 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
     - ``zero_copy_only=True``: PyArrow's own verdict -- ``Series[dtype]`` when the
       conversion is zero-copy, or ``ERR@ArrowInvalid`` when a copy is required.
     - ``verified zero-copy``: an INDEPENDENT check of whether the conversion
-      actually reused the Arrow buffers, rather than trusting PyArrow's flag.  The
-      last two columns are expected to agree, but are recorded separately rather
-      than asserted equal, because they do not always: a tz-aware timestamp
-      reports ``zero_copy_only=True`` while pandas materializes it into a
-      ``DatetimeTZDtype`` array that shares nothing.  Pinning both as data makes
-      such disagreements visible instead of hiding them behind an assertion.
+      actually reused the Arrow buffers, rather than trusting PyArrow's flag.
+      ``zero-copy`` when every buffer the result needs was borrowed, ``copied``
+      when none were, and ``partial-copy`` when only some were (e.g. the values
+      reused but the offsets reallocated).  The last two columns are expected to
+      agree, but are recorded separately rather than asserted equal, because they
+      do not always: a tz-aware timestamp reports ``zero_copy_only=True`` while
+      pandas materializes it into a ``DatetimeTZDtype`` array that shares nothing.
+      Pinning both as data makes such disagreements visible instead of hiding them
+      behind an assertion.
 
     The row set mirrors ``test_pyarrow_arrow_to_pandas_default.py``'s rows exactly
     -- every Arrow type it covers, in its standard / nullable / empty variants --
@@ -427,13 +439,16 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
         # Pandas 3 renders non-empty Arrow string arrays with its dedicated string
         # dtype, so the copying conversion reports Series[str] instead of object.
         if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            # Pandas stores that dtype as large_string, so `string` keeps its values
+            # but has its 32-bit offsets rebuilt as 64-bit, while `large_string`
+            # already matches and passes through untouched.
             non_empty_strings = [
-                ("string:standard", "['hello', 'world', '']@Series[str]"),
-                ("string:nullable", "['hello', nan, 'world']@Series[str]"),
-                ("large_string:standard", "['hello', 'world']@Series[str]"),
-                ("large_string:nullable", "['hello', nan]@Series[str]"),
+                ("string:standard", "['hello', 'world', '']@Series[str]", "partial-copy"),
+                ("string:nullable", "['hello', nan, 'world']@Series[str]", "partial-copy"),
+                ("large_string:standard", "['hello', 'world']@Series[str]", "zero-copy"),
+                ("large_string:nullable", "['hello', nan]@Series[str]", "zero-copy"),
             ]
-            for row, expected in non_empty_strings:
+            for row, expected, _ in non_empty_strings:
                 overrides[(row, self.COL_ZERO_COPY_OFF)] = expected
 
             # Only from PyArrow 24 is that string conversion actually Arrow-backed,
@@ -441,13 +456,12 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
             # PyArrow < 24 it still materializes, so the pandas 2 expectations
             # (ERR@ArrowInvalid / copied) remain correct and need no override.
             if LooseVersion(pa.__version__) >= LooseVersion("24.0.0"):
-                for row, expected in non_empty_strings:
+                for row, expected, verified in non_empty_strings:
                     overrides[(row, self.COL_ZERO_COPY_ON)] = expected
-                    overrides[(row, self.COL_VERIFIED)] = "zero-copy"
-                # Empty arrays also gain the string dtype in PyArrow 24.  The two
-                # rows differ in whether buffers survive: pandas normalizes string to
-                # large_string, so `string`'s 32-bit offsets are rebuilt as 64-bit (a
-                # copy), while `large_string` already matches and passes through.
+                    overrides[(row, self.COL_VERIFIED)] = verified
+                # Empty arrays also gain the string dtype in PyArrow 24.  Offsets are
+                # the only buffer an empty result has, so rebuilding them shares
+                # nothing at all -- fully copied rather than partial.
                 for row, verified in [
                     ("string:empty", "copied"),
                     ("large_string:empty", "zero-copy"),
