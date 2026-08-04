@@ -1026,9 +1026,14 @@ public class CollationAwareUTF8String {
    * window that starts at {@code INITIAL_BACKWARD_SEARCH_WINDOW} code units and grows by
    * {@code BACKWARD_SEARCH_WINDOW_GROWTH} until it holds {@code count} matches or reaches the
    * start of the target, so the cost tracks the distance back to the requested match. A pass
-   * that runs off the end of the target instead widens straight to the start of the target: it
-   * has already enumerated every match from its own start onward, and growing geometrically
-   * would re-walk that stretch once per step. Once a window holds that many the answer is final:
+   * that finds no match past {@code maxStartIndex} runs on to the end of the target, so besides
+   * its own window it walks the whole stretch beyond the anchor. When that stretch is longer
+   * than the window it is what the pass cost, and every geometric step would walk it again, so
+   * such a pass widens straight to the start of the target instead. That fires on the first
+   * pass that sees it, which caps the total at two passes over the target. When the anchor sits
+   * at or near the end of the target -- always for {@code subStringIndex}, and for
+   * {@code indexOf} with a small negative start -- the stretch beyond it is empty and the
+   * growth stays geometric. Once a window holds that many the answer is final:
    * every remaining match starts before the window, so it precedes all of the window's matches
    * and cannot be one of the last {@code count}. Only the search's start index moves; the target
    * and its collation context stay the whole string, so unlike searching a substring a window
@@ -1085,12 +1090,13 @@ public class CollationAwareUTF8String {
       if (found >= count) return lastMatches[found % lastMatches.length];
       // The window already reached the start of the target, so there really are fewer matches.
       if (windowStart == 0) return MATCH_NOT_FOUND;
-      if (reachedEnd) {
-        // The pass enumerated every match from `windowStart` to the end of the target, so the
-        // stretch it just walked holds nothing a wider window could add. Growing geometrically
-        // would walk that same stretch again on every step, which costs O(n log n) over a target
-        // whose tail holds no match; widening straight to the start bounds the total at two
-        // passes over the target.
+      if (reachedEnd && text.length() - maxStartIndex > window) {
+        // The pass ran off the end of the target, so on top of its own window it walked the
+        // whole stretch past `maxStartIndex`, and that stretch is the longer of the two. Every
+        // geometric step would walk it again, which costs O(n log n) over a target whose tail
+        // holds no match; widening straight to the start bounds the total at two passes over
+        // the target. The comparison is against the window that just ran, so this fires on the
+        // first pass that sees such a stretch and there is never a second re-walk.
         window = text.length();
       } else {
         // Capping at the target length keeps the growth from overflowing and guarantees that the

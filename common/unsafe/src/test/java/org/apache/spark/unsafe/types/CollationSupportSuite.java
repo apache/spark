@@ -2754,8 +2754,9 @@ public class CollationSupportSuite {
     // at 64 UTF-16 code units and grows by 4x, and the ring buffer that retains the last `count`
     // match positions starts at 16 entries, so every case above resolves in the first window
     // with an unresized buffer. The three below do not.
-    // Only delimiter occurrence is 300 code units before the end: the first window holds no
-    // occurrence and reaches the end of the target, so it widens to the start in one step.
+    // Only delimiter occurrence is 300 code units before the end: the anchor is the end of the
+    // target, so there is no stretch beyond it for a pass to re-walk and the growth stays
+    // geometric until the window reaches the start.
     assertSubstringIndex("z" + "x".repeat(300), "z", -1, UNICODE, "x".repeat(300));
     // The 20th occurrence from the end lies outside the first window, and 20 exceeds the ring
     // buffer's initial capacity: the window grows once and the buffer is resized and wraps.
@@ -4408,8 +4409,9 @@ public class CollationSupportSuite {
     // at 64 UTF-16 code units and grows by 4x, and the ring buffer that retains the last
     // `occurrence` match positions starts at 16 entries, so every case above resolves in the
     // first window with an unresized buffer. The three below do not.
-    // Only match is 300 code units before the end: the first window holds no match and reaches
-    // the end of the target, so it widens to the start in one step.
+    // Only match is 300 code units before the end: the anchor is one code point from the end,
+    // so the stretch past it is never longer than the window and the growth stays geometric
+    // until it reaches the start.
     assertStringInstrWithOccurrence("z" + "x".repeat(300), "z", -1, 1, UNICODE, 1);
     // The 20th match from the end lies outside the first window, and 20 exceeds the ring
     // buffer's initial capacity: the window grows once and the buffer is resized and wraps.
@@ -4436,6 +4438,21 @@ public class CollationSupportSuite {
       UTF8_BINARY, 137);
     assertStringInstrWithOccurrence("e\u0301".repeat(100) + "xx", "e\u0301", -1, 32,
       UNICODE, 137);
+    // A backward start away from the end of the target, with a match after the anchor. The pass
+    // stops at the anchor instead of running off the end, so the stretch past the anchor never
+    // dominates and the window grows geometrically. Both cases below need two growth steps
+    // (64 -> 256 -> 1024) and resolve inside a window that has not reached the start of the
+    // target. UTF8_BINARY does not use the windowed search and pins the expectation
+    // independently.
+    String twoSteps = "x".repeat(2000) + "z" + "x".repeat(700) + "z";
+    assertStringInstrWithOccurrence(twoSteps, "z", -2, 1, UTF8_BINARY, 2001);
+    assertStringInstrWithOccurrence(twoSteps, "z", -2, 1, UNICODE, 2001);
+    // Same, with an occurrence that makes the ring buffer wrap while the window is still
+    // growing: the third window holds five matches and retains only the last three.
+    String twoStepsWrap =
+      "x".repeat(1000) + ("z" + "x".repeat(99)).repeat(5) + "y".repeat(500) + "z";
+    assertStringInstrWithOccurrence(twoStepsWrap, "z", -2, 3, UTF8_BINARY, 1201);
+    assertStringInstrWithOccurrence(twoStepsWrap, "z", -2, 3, UNICODE, 1201);
   }
 
 }
