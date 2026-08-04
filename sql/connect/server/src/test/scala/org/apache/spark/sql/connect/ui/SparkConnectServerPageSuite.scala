@@ -26,6 +26,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.SparkListenerJobStart
+import org.apache.spark.sql.connect.ml.MLCacheStatus
 import org.apache.spark.sql.connect.service._
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.kvstore.InMemoryStore
@@ -47,7 +48,8 @@ class SparkConnectServerPageSuite
   /**
    * Run a dummy session and return the store
    */
-  private def getStatusStore: SparkConnectServerAppStatusStore = {
+  private def getStatusStore(
+      closeSession: Boolean = true): SparkConnectServerAppStatusStore = {
     kvstore = new ElementTrackingStore(new InMemoryStore, new SparkConf())
     // val server = mock(classOf[SparkConnectServer], RETURNS_SMART_NULLS)
     val sparkConf = new SparkConf
@@ -74,8 +76,10 @@ class SparkConnectServerPageSuite
       SparkListenerConnectOperationFinished("jobTag", "operationId", System.currentTimeMillis()))
     listener.onOtherEvent(
       SparkListenerConnectOperationClosed("jobTag", "operationId", System.currentTimeMillis()))
-    listener.onOtherEvent(
-      SparkListenerConnectSessionClosed("sessionId", "userId", System.currentTimeMillis()))
+    if (closeSession) {
+      listener.onOtherEvent(
+        SparkListenerConnectSessionClosed("sessionId", "userId", System.currentTimeMillis()))
+    }
 
     statusStore
   }
@@ -132,6 +136,35 @@ class SparkConnectServerPageSuite
     assert(
       html.contains("collapse-table\" data-bs-toggle=\"collapse\"" +
         " data-bs-target=\"#aggregated-sqlsessionstat\""))
+  }
+
+  test("Spark Connect Server page should show live ML cache status") {
+    val store = getStatusStore(closeSession = false)
+
+    val request = mock(classOf[HttpServletRequest])
+    val tab = mock(classOf[SparkConnectServerTab], RETURNS_SMART_NULLS)
+    when(tab.startTime).thenReturn(Calendar.getInstance().getTime)
+    when(tab.store).thenReturn(store)
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+    when(tab.hasLiveMLCacheStatus).thenReturn(true)
+    when(tab.getMLCacheStatus("userId", "sessionId")).thenReturn(
+      Some(
+        MLCacheStatus(
+          memoryControlEnabled = true,
+          cachedObjectCount = 2,
+          inMemorySizeBytes = 1024,
+          maxInMemorySizeBytes = 4096,
+          totalSizeBytes = 2048,
+          maxTotalSizeBytes = 8192)))
+
+    val page = new SparkConnectServerPage(tab)
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+
+    assert(html.contains("ml cache"))
+    assert(html.contains("2 objects in memory"))
+    assert(html.contains("1.0 kib / 4.0 kib memory"))
+    assert(html.contains("2.0 kib / 8.0 kib total"))
   }
 
   test("SPARK-58097: session page only shows the requested user's operations") {

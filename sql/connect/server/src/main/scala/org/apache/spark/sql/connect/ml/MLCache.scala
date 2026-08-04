@@ -280,4 +280,23 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     }
     info.result()
   }
+
+  def getStatus: MLCacheStatus = this.synchronized {
+    MLCacheStatus(
+      memoryControlEnabled = getMemoryControlEnabled,
+      cachedObjectCount = cachedModel.size(),
+      inMemorySizeBytes = totalMLCacheInMemorySizeBytes.get(),
+      maxInMemorySizeBytes = sessionHolder.session.conf.get(
+        Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE),
+      totalSizeBytes = totalMLCacheSizeBytes.get(),
+      maxTotalSizeBytes = getMLCacheMaxSize)
+  }
 }
+
+private[connect] case class MLCacheStatus(
+    memoryControlEnabled: Boolean,
+    cachedObjectCount: Int,
+    inMemorySizeBytes: Long,
+    maxInMemorySizeBytes: Long,
+    totalSizeBytes: Long,
+    maxTotalSizeBytes: Long)

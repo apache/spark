@@ -387,6 +387,30 @@ class MLSuite extends MLHelper {
     }
   }
 
+  test("MLCache status") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    sessionHolder.session.conf
+      .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
+    sessionHolder.session.conf.set(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE.key,
+      16384)
+    sessionHolder.session.conf.set(
+      Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_STORAGE_SIZE.key,
+      65536)
+
+    // Reading UI status should not initialize an unused cache.
+    assert(sessionHolder.getMLCacheStatus.isEmpty)
+
+    trainLogisticRegressionModel(sessionHolder)
+    val status = sessionHolder.getMLCacheStatus.get
+    assert(status.memoryControlEnabled)
+    assert(status.cachedObjectCount === 1)
+    assert(status.inMemorySizeBytes > 0)
+    assert(status.maxInMemorySizeBytes === 16384)
+    assert(status.totalSizeBytes === status.inMemorySizeBytes)
+    assert(status.maxTotalSizeBytes === 65536)
+  }
+
   test("MLCache offloading works") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     sessionHolder.session.conf

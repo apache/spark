@@ -404,7 +404,8 @@ private[ui] class SessionStatsPagedTable(
         ("Start Time", true, None),
         ("Finish Time", true, None),
         ("Duration", true, Some(SPARK_CONNECT_SESSION_DURATION)),
-        ("Total Execute", true, Some(SPARK_CONNECT_SESSION_TOTAL_EXECUTE)))
+        ("Total Execute", true, Some(SPARK_CONNECT_SESSION_TOTAL_EXECUTE)),
+        ("ML Cache", false, Some(SPARK_CONNECT_SESSION_ML_CACHE)))
 
     isSortColumnValid(sessionTableHeadersAndTooltips, sortColumn)
 
@@ -431,7 +432,36 @@ private[ui] class SessionStatsPagedTable(
       <td> {if (session.finishTimestamp > 0) formatDate(session.finishTimestamp)} </td>
       <td> {formatDurationVerbose(session.totalTime)} </td>
       <td> {session.totalExecution.toString} </td>
+      <td> {renderMLCacheStatus(session)} </td>
     </tr>
+  }
+
+  private def renderMLCacheStatus(session: SessionInfo): Seq[Node] = {
+    if (!parent.hasLiveMLCacheStatus || session.finishTimestamp > 0) {
+      <span>N/A</span>
+    } else {
+      parent
+        .getMLCacheStatus(session.userId, session.sessionId)
+        .map { status =>
+          if (status.memoryControlEnabled) {
+            val objectLabel = if (status.cachedObjectCount == 1) "object" else "objects"
+            <span>
+              {s"${status.cachedObjectCount} $objectLabel in memory"}<br/>
+              {s"${Utils.bytesToString(status.inMemorySizeBytes)} / " +
+              s"${Utils.bytesToString(status.maxInMemorySizeBytes)} memory"}<br/>
+              {s"${Utils.bytesToString(status.totalSizeBytes)} / " +
+              s"${Utils.bytesToString(status.maxTotalSizeBytes)} total"}
+            </span>
+          } else {
+            val objectLabel = if (status.cachedObjectCount == 1) "object" else "objects"
+            <span>
+              Memory control disabled<br/>
+              {s"${status.cachedObjectCount} cached $objectLabel"}
+            </span>
+          }
+        }
+        .getOrElse(<span>Not used</span>)
+    }
   }
 }
 

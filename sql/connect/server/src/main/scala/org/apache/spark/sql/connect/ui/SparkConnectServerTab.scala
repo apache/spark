@@ -21,12 +21,15 @@ import java.util.Date
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.connect.ml.MLCacheStatus
+import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectSessionManager}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 private[connect] class SparkConnectServerTab(
     val store: SparkConnectServerAppStatusStore,
-    sparkUI: SparkUI)
+    sparkUI: SparkUI,
+    sessionManager: Option[SparkConnectSessionManager] = None)
     extends SparkUITab(sparkUI, "connect")
     with Logging {
 
@@ -46,6 +49,12 @@ private[connect] class SparkConnectServerTab(
   def detach(): Unit = {
     parent.detachTab(this)
   }
+
+  def getMLCacheStatus(userId: String, sessionId: String): Option[MLCacheStatus] = {
+    sessionManager.flatMap(_.getMLCacheStatus(SessionKey(userId, sessionId)))
+  }
+
+  def hasLiveMLCacheStatus: Boolean = sessionManager.nonEmpty
 
   override def displayOrder: Int = 3
 }

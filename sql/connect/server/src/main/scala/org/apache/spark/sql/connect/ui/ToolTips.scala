@@ -36,4 +36,7 @@ private[ui] object ToolTips {
   val SPARK_CONNECT_SESSION_DURATION =
     "Elapsed time since session start, or until closed if the session was closed"
 
+  val SPARK_CONNECT_SESSION_ML_CACHE =
+    "Current ML cache usage for an active Spark Connect session"
+
 }
