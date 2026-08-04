@@ -53,6 +53,14 @@ class SparkConnectException(PySparkException):
     Exception thrown from Spark Connect.
     """
 
+    @property
+    def operation_id(self) -> Optional[str]:
+        """The Spark Connect ExecutePlan operation ID, when available.
+
+        .. versionadded:: 4.3.0
+        """
+        return getattr(self, "_operation_id", None)
+
 
 def convert_exception(
     info: "ErrorInfo",

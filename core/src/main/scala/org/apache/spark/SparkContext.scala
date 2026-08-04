@@ -3159,6 +3159,14 @@ object SparkContext extends Logging {
     "spark.sql.dataset.queryExecution.id"
 
   /**
+   * Local property containing the Spark Connect ExecutePlan operation ID. It is available on the
+   * driver while the operation is executing and is propagated to executor tasks.
+   *
+   * @since 4.3.0
+   */
+  val SPARK_CONNECT_OPERATION_ID_PROPERTY = "spark.connect.operation_id"
+
+  /**
    * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was
    * changed to `driver` because the angle brackets caused escaping issues in URLs and XML (see
    * SPARK-6716 for more details).
