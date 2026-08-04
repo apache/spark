@@ -389,9 +389,6 @@ class StringIndexerModel (
       map
     }
     val outputColumns = new Array[Column](outputColNames.length)
-    val handleInvalid = getHandleInvalid
-    val keepInvalid = handleInvalid == StringIndexer.KEEP_INVALID
-    val skipInvalid = handleInvalid == StringIndexer.SKIP_INVALID
 
     for (i <- outputColNames.indices) {
       val inputColName = inputColNames(i)
@@ -401,13 +398,17 @@ class StringIndexerModel (
 
       try {
         dataset.col(inputColName)
-        val filteredLabels = if (keepInvalid) labels :+ "__unknown" else labels
+        val filteredLabels = if (getHandleInvalid == StringIndexer.KEEP_INVALID) {
+          labels :+ "__unknown"
+        } else {
+          labels
+        }
         val metadata = NominalAttribute.defaultAttr
           .withName(outputColName)
           .withValues(filteredLabels)
           .toMetadata()
 
-        val indexer = getIndexer(labels.toImmutableArraySeq, labelToIndex, handleInvalid)
+        val indexer = getIndexer(labels.toImmutableArraySeq, labelToIndex, getHandleInvalid)
 
         outputColumns(i) = indexer(dataset(inputColName).cast(StringType))
           .as(outputColName, metadata)
@@ -425,7 +426,7 @@ class StringIndexerModel (
     if (filteredOutputColNames.length > 0) {
       val transformedDataset = dataset.withColumns(
         filteredOutputColNames.toImmutableArraySeq, filteredOutputColumns.toImmutableArraySeq)
-      if (skipInvalid) {
+      if (getHandleInvalid == StringIndexer.SKIP_INVALID) {
         // The skip indexers return null for invalid labels. Their nondeterminism keeps this filter
         // above the projection, so each label is looked up only once.
         transformedDataset.na.drop(filteredOutputColNames)
