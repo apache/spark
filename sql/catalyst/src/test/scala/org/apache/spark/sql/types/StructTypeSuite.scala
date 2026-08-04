@@ -543,6 +543,15 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
           new StructType().add("m", MapType(StringType, new StructType().add("Value", StringType))),
           caseSensitive = false) ===
         new StructType().add("m", MapType(StringType, new StructType().add("value", StringType))))
+
+    // map<struct, _> key recursion. mergeInternal recurses through map keys and values
+    // independently, so the key path needs its own coverage.
+    assert(
+      new StructType().add("m", MapType(new StructType().add("value", StringType), StringType))
+        .merge(
+          new StructType().add("m", MapType(new StructType().add("Value", StringType), StringType)),
+          caseSensitive = false) ===
+        new StructType().add("m", MapType(new StructType().add("value", StringType), StringType)))
   }
 
   test("SPARK-37191: Merge DecimalType") {
