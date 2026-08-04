@@ -45,7 +45,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Single MemoryStream reused across both pipeline runs so the streaming checkpoint can
@@ -87,7 +87,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Single MemoryStream reused across both runs so the streaming checkpoint can resume.
@@ -128,7 +128,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     // leading column.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(name STRING, id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(name STRING, id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(String, Int, Long)]
@@ -163,7 +163,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(value STRING, id INT NOT NULL, region STRING NOT NULL, " +
-      s"version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(String, Int, String, Long)]
@@ -181,6 +181,31 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     assert(getAuxTableKeyColumnNames(target = "target") == Seq("region", "id"))
   }
 
+  test("a dry run resolves and validates the graph without provisioning the auxiliary " +
+    "table") {
+    val session = spark
+    import session.implicits._
+
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
+    )
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 1L))
+    val ctx = singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream.toDF().toDF("id", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version"))
+
+    val updateCtx = TestPipelineUpdateContext(spark, ctx.toDataflowGraph, storageRoot)
+    updateCtx.pipelineExecution.dryRunPipeline()
+
+    assert(!spark.catalog.tableExists(auxTableNameFor("target")))
+  }
+
   test("if the AutoCDC auxiliary table is dropped between runs, it is transparently " +
     "recreated") {
     val session = spark
@@ -188,7 +213,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     // Single MemoryStream reused across both runs so the streaming checkpoint can resume.
@@ -242,7 +267,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     // would have to be escaped by doubling, but none of these names contain one.
     val targetTableDdl = keyNames
       .map(name => s"`$name` STRING NOT NULL")
-      .mkString(", ") + s", version BIGINT NOT NULL, $cdcMetadataDdl"
+      .mkString(", ") + s", version BIGINT NOT NULL, $scd1MetadataDdl"
     spark.sql(s"CREATE TABLE $catalog.$namespace.target ($targetTableDdl)")
 
     // The AutoCDC API runs every key through `UnqualifiedColumnName.apply`, which calls
@@ -292,7 +317,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
         s"auxiliary table $auxName is missing the " +
         s"${AutoCdcAuxiliaryTable.keyColumnNamesProperty} property; got: ${rows.toSeq}"
       ))
-    AutoCdcAuxiliaryTable.parseKeyColumnNames(prop.getString(1))
+    AutoCdcAuxiliaryTable.parseColumnNames(prop.getString(1))
       .getOrElse(fail(
         s"auxiliary table $auxName has a malformed " +
         s"${AutoCdcAuxiliaryTable.keyColumnNamesProperty} property: '${prop.getString(1)}'"

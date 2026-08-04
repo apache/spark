@@ -69,7 +69,7 @@ However, native acceleration libraries can't be distributed with Spark. See [MLl
 WARNING: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
 ```
 
-To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
+To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.23.2 or newer.
 
 [^1]: To learn more about the benefits and background of system optimised natives, you may wish to
     watch Sam Halliday's ScalaX talk on [High Performance Linear Algebra in Scala](http://fommil.github.io/scalax14/).

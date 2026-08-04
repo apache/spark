@@ -52,6 +52,11 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns an MD5 128-bit checksum as a hex string of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the MD5 checksum of.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark');
@@ -93,6 +98,13 @@ case class Md5(child: Expression)
   usage = """
     _FUNC_(expr, bitLength) - Returns a checksum of SHA-2 family as a hex string of `expr`.
       SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is equivalent to 256.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the SHA-2 checksum of.
+        An expression that evaluates to a binary.
+      * bitLength - The bit length of the SHA-2 result (224, 256, 384, or 512).
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:
@@ -160,6 +172,11 @@ case class Sha2(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a sha1 hash value as a hex string of the `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the SHA-1 hash of.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark');
@@ -195,6 +212,11 @@ case class Sha1(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a cyclic redundancy check value of the `expr` as a bigint.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the cyclic redundancy check value of.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark');
@@ -242,8 +264,8 @@ case class Crc32(child: Expression)
  *                             and hash it.
  *  - decimal:                 if it's a small decimal, i.e. precision <= 18, turn it into long
  *                             and hash it. Else, turn it into bytes and hash it.
- *  - calendar interval:       hash `microseconds` first, and use the result as seed
- *                             to hash `months`.
+ *  - calendar interval:       hash `microseconds` first, use the result as seed to hash `days`,
+ *                             then use that result as seed to hash `months`.
  *  - interval day to second:  it store long value of `microseconds`, use murmur3 to hash the long
  *                             input with seed.
  *  - interval year to month:  it store int value of `months`, use murmur3 to hash the int
@@ -419,7 +441,8 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashCalendarInterval(input: String, result: String): String = {
     val microsecondsHash = s"$hasherClassName.hashLong($input.microseconds, $result)"
-    s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
+    val daysHash = s"$hasherClassName.hashInt($input.days, $microsecondsHash)"
+    s"$result = $hasherClassName.hashInt($input.months, $daysHash);"
   }
 
   protected def genHashTimestampNanos(input: String, result: String): String = {

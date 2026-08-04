@@ -57,7 +57,7 @@ private[spark] class TaskContextImpl(
     @transient private val metricsSystem: MetricsSystem,
     // The default value is only used in tests.
     override val taskMetrics: TaskMetrics = TaskMetrics.empty,
-    override val cpus: Int = SparkEnv.get.conf.get(config.CPUS_PER_TASK),
+    override val cpuAmount: BigDecimal = SparkEnv.get.conf.get(config.CPUS_PER_TASK),
     override val resources: Map[String, ResourceInformation] = Map.empty)
   extends TaskContext
   with Logging {
@@ -75,6 +75,13 @@ private[spark] class TaskContextImpl(
 
   /** List of callback functions to execute when the task is interrupted. */
   @transient private val onInterruptCallbacks = new Stack[TaskInterruptListener]
+
+  /**
+   * List of callback functions to invoke after the task's status update has been sent
+   * to the driver. Used for operations like push-based shuffle block push that should only
+   * begin after the driver has been notified of the task result.
+   */
+  @transient private val onPostStatusUpdateCallbacks = new Stack[PostStatusUpdateListener]
 
   /**
    * The thread currently executing task completion or failure listeners, if any.
@@ -142,6 +149,19 @@ private[spark] class TaskContextImpl(
       invokeTaskInterruptListeners(reason, new TaskKilledException(reason))
     }
     this
+  }
+
+  override def addPostStatusUpdateListener(listener: PostStatusUpdateListener): this.type = {
+    synchronized {
+      onPostStatusUpdateCallbacks.push(listener)
+    }
+    this
+  }
+
+  private[spark] def invokePostStatusUpdateListeners(): Unit = {
+    invokeListeners(onPostStatusUpdateCallbacks, "PostStatusUpdateListener", None) {
+      _.onStatusUpdateSent(this)
+    }
   }
 
   override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {

@@ -1199,6 +1199,49 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-57825: timestamp nanos add year-month interval preserves nanosWithinMicro") {
+    def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+
+    // The epoch-micros part follows the micro `timestampAddMonths` (including the Jan-31 -> Feb-29
+    // day clamp in a leap year) while the sub-microsecond remainder is carried through unchanged.
+    assert(timestampNanosAddMonths(
+      nanos(date(2020, 1, 31, 12, 0, 0, 123000, LA), 789), 1, LA) ===
+      nanos(date(2020, 2, 29, 12, 0, 0, 123000, LA), 789))
+
+    outstandingZoneIds.foreach { zid =>
+      // The sub-microsecond remainder is preserved for the boundary values 0, 1 and 999.
+      Seq(0, 1, 999).foreach { rem =>
+        // Zero interval is a no-op on both the epoch-micros and the remainder.
+        assert(timestampNanosAddMonths(
+          nanos(date(2021, 3, 18, 19, 44, 1, 123456, zid), rem), 0, zid) ===
+          nanos(date(2021, 3, 18, 19, 44, 1, 123456, zid), rem))
+        // Adding whole years/months shifts only the month field, never the fraction.
+        assert(timestampNanosAddMonths(
+          nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), rem), 14, zid) ===
+          nanos(date(2021, 3, 2, 3, 4, 5, 123456, zid), rem))
+        // Subtracting months is symmetric.
+        assert(timestampNanosAddMonths(
+          nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), rem), -1, zid) ===
+          nanos(date(2019, 12, 2, 3, 4, 5, 123456, zid), rem))
+        // Pre-epoch (negative epochMicros) value.
+        assert(timestampNanosAddMonths(
+          nanos(date(1960, 1, 2, 3, 4, 5, 123456, zid), rem), 1, zid) ===
+          nanos(date(1960, 2, 2, 3, 4, 5, 123456, zid), rem))
+      }
+    }
+
+    // Consistency with the micro helper: epochMicros matches `timestampAddMonths` exactly and the
+    // remainder is independent of the interval amount.
+    outstandingZoneIds.foreach { zid =>
+      val start = nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), 789)
+      val months = 15
+      val result = timestampNanosAddMonths(start, months, zid)
+      assert(result.epochMicros === timestampAddMonths(start.epochMicros, months, zid))
+      assert(result.nanosWithinMicro === start.nanosWithinMicro)
+    }
+  }
+
   test("SPARK-57159: timestampNanosToEpochNanos packs into int64 epoch-nanoseconds") {
     def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
       TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
@@ -2049,6 +2092,54 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     intercept[ArithmeticException] {
       timeBucketDTInterval(Long.MaxValue, -6L, -5L, utc)
     }
+  }
+
+  test("timeBucketFromIndexDTInterval / timeBucketFromTimestampDTInterval") {
+    val utc = ZoneOffset.UTC
+    val la = DateTimeUtils.getZoneId("America/Los_Angeles")
+
+    // The containing bucket agrees with timeBucketDTInterval and encloses ts:
+    // boundary(k) == start <= ts < boundary(k + 1).
+    def checkContaining(bucket: Long, ts: Long, origin: Long, zone: ZoneId): Unit = {
+      val (k, start) = timeBucketFromTimestampDTInterval(bucket, ts, origin, zone)
+      assert(start === timeBucketFromIndexDTInterval(bucket, k, origin, zone))
+      assert(start === timeBucketDTInterval(bucket, ts, origin, zone))
+      assert(start <= ts)
+      assert(ts < timeBucketFromIndexDTInterval(bucket, k + 1, origin, zone))
+    }
+    // Sub-day, sub-day with custom origin, and multi-day (36h) across both LA DST transitions.
+    checkContaining(15 * MICROS_PER_MINUTE, date(2024, 1, 1, 11, 27, 0), 0L, la)
+    checkContaining(MICROS_PER_HOUR, date(2024, 1, 1, 11, 27, 0), date(1970, 1, 1, 0, 5, 0), utc)
+    val laOrigin = date(2024, 3, 9, 8, 0, 0)  // 08:00 UTC = 2024-03-09 00:00 PST
+    checkContaining(36 * MICROS_PER_HOUR, date(2024, 3, 12, 9, 0, 0), laOrigin, la)
+    checkContaining(MICROS_PER_DAY, date(2024, 11, 4, 2, 0, 0), date(2024, 11, 1, 7, 0, 0), la)
+
+    // Pacific/Apia's 2011 date-line shift throws the 1-day estimate off by one bucket (epoch
+    // origin) or two (1900 origin), so the search must step more than once.
+    val apiaZone = DateTimeUtils.getZoneId("Pacific/Apia")
+    checkContaining(MICROS_PER_DAY, date(2012, 1, 2, 0, 0, 0, 0, apiaZone),
+      date(1970, 1, 1), apiaZone)
+    checkContaining(MICROS_PER_DAY, date(2012, 1, 2, 0, 0, 0, 0, apiaZone),
+      date(1900, 1, 1, 0, 0, 0, 0, apiaZone), apiaZone)
+
+    // Boundaries land on the grid across the spring-forward, not 1h off as a walk would drift.
+    val (idx, _) = timeBucketFromTimestampDTInterval(36 * MICROS_PER_HOUR,
+      date(2024, 3, 12, 9, 0, 0), laOrigin, la)
+    assert(timeBucketFromIndexDTInterval(36 * MICROS_PER_HOUR, idx, laOrigin, la)
+      === date(2024, 3, 12, 7, 0, 0))       // 2024-03-12 00:00 PDT, the grid (not walked) value
+    assert(timeBucketFromIndexDTInterval(36 * MICROS_PER_HOUR, idx + 1, laOrigin, la)
+      === date(2024, 3, 13, 19, 0, 0))      // 2024-03-13 12:00 PDT
+
+    // Whole-day zone skip: Apia skipped 2011-12-30, so two consecutive 1-day grid boundaries
+    // collapse to the same instant (civil "2011-12-30 00:00" and "2011-12-31 00:00" are identical).
+    val apia = DateTimeUtils.getZoneId("Pacific/Apia")
+    val apiaOrigin = date(2011, 12, 25, 10, 0, 0)  // 2011-12-25 00:00 Apia (UTC-11 -> 10:00 UTC)
+    // This ts lands in the bucket whose start collapsed onto the previous one's, so
+    // boundary(k - 1) == boundary(k).
+    val (collapsed, _) = timeBucketFromTimestampDTInterval(MICROS_PER_DAY,
+      date(2011, 12, 30, 12, 0, 0), apiaOrigin, apia)
+    assert(timeBucketFromIndexDTInterval(MICROS_PER_DAY, collapsed - 1, apiaOrigin, apia)
+      === timeBucketFromIndexDTInterval(MICROS_PER_DAY, collapsed, apiaOrigin, apia))
   }
 
   test("timeBucketYMInterval") {

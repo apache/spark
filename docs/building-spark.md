@@ -80,6 +80,7 @@ For more information on usage, run `./dev/make-distribution.sh --help`
 ## Specifying the Hadoop Version and Enabling YARN
 
 You can enable the `yarn` profile and specify the exact version of Hadoop to compile against through the `hadoop.version` property.
+Spark requires Hadoop 3.4.0 or later; building against older Hadoop versions is not supported.
 
 Example:
 

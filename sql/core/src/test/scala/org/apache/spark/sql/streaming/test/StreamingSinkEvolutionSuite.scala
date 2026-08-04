@@ -19,12 +19,12 @@ package org.apache.spark.sql.streaming.test
 
 import org.scalatest.{BeforeAndAfterEach, Tag}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadataV3}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.util.Utils
 
 /**
@@ -145,6 +145,23 @@ class StreamingSinkEvolutionSuite extends StreamTest with BeforeAndAfterEach {
       q.processAllAvailable()
       q.stop()
     }
+  }
+
+  testWithSinkEvolution("fail with continuous processing enabled") {
+    val input = MemoryStream[Int]
+    input.addData(1, 2, 3)
+    // The sink is intentionally left unnamed: the combination is rejected before the execution is
+    // constructed, so the error does not depend on whether name() is set.
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        input.toDF().writeStream
+          .format("noop")
+          .trigger(Trigger.Continuous(1000))
+          .option("checkpointLocation", newMetadataDir)
+          .start()
+      },
+      condition = "STREAMING_QUERY_EVOLUTION_ERROR.CONTINUOUS_PROCESSING_NOT_SUPPORTED",
+      parameters = Map.empty)
   }
 
   testWithSinkEvolution("named sink succeeds with sink evolution enabled") {

@@ -309,13 +309,19 @@ class RocksDB(
    *
    * @param colFamilyName - column family name
    * @param isInternal - whether the column family is for internal use or not
+   * @param readOnly - when true (read-only callers), do not force a snapshot for a newly created
+   *                   family; read stores never commit, so registering a family carries no write
+   *                   intent.
    * @return - virtual column family id
    */
-  def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean): Short = {
+  def createColFamilyIfAbsent(
+      colFamilyName: String,
+      isInternal: Boolean,
+      readOnly: Boolean = false): Short = {
     if (!checkColFamilyExists(colFamilyName)) {
       val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
       addToColFamilyMaps(colFamilyName, newColumnFamilyId, isInternal)
-      shouldForceSnapshot.set(true)
+      if (!readOnly) shouldForceSnapshot.set(true)
       newColumnFamilyId
     } else {
       colFamilyNameToInfoMap.get(colFamilyName).cfId
@@ -2045,7 +2051,8 @@ class RocksDB(
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
-  def doMaintenance(): Unit = {
+  /** Run only the snapshot upload portion of maintenance. */
+  def doSnapshotMaintenance(): Unit = {
     if (enableChangelogCheckpointing) {
 
       var mostRecentSnapshot: Option[RocksDBSnapshot] = None
@@ -2076,6 +2083,10 @@ class RocksDB(
         uploadSnapshot(snapshotToUpload)
       }
     }
+  }
+
+  /** Run only the cleanup portion of maintenance. */
+  def doCleanupMaintenance(): Unit = {
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(
         numVersionsToRetain = conf.minVersionsToRetain,
@@ -2083,6 +2094,11 @@ class RocksDB(
         minVersionsToDelete = conf.minVersionsToDelete)
     }
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
+  }
+
+  def doMaintenance(): Unit = {
+    doSnapshotMaintenance()
+    doCleanupMaintenance()
   }
 
   /**

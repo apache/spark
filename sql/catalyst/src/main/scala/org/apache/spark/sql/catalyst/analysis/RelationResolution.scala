@@ -238,12 +238,24 @@ class RelationResolution(
       case CatalogAndIdentifier(catalog, ident) =>
         val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
         val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
-        relationCache
-          .get(key)
+        val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+        val finalOptions = u.clearWritePrivileges.options
+        // A reference that requires write privileges is never served from the per-query relation
+        // cache. The catalog authorizes the write in `loadTable(ident, writePrivileges)` below, and
+        // a cache hit would skip that call entirely. The hit happens whenever the write target is
+        // also read in the same statement -- the target is resolved after its query (see
+        // `ResolveRelations`), so it finds the relation the query already put in the cache, e.g.
+        // for `INSERT INTO t SELECT * FROM t`.
+        val cached = if (writePrivileges == null) relationCache.get(key) else None
+        cached
+          // The per-query relation cache is not keyed by options. When the same table is referenced
+          // more than once in a single statement with different dynamic options (e.g. a self-join,
+          // or a second reference sharing the target's cache entry), a cache hit would otherwise
+          // reuse the first reference's options and silently drop this reference's. Re-apply this
+          // reference's options to the cached relation so each reference honors its own bag.
+          .map(applyOptions(_, finalOptions))
           .map(adaptCachedRelation(_, planId))
           .orElse {
-            val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
-            val finalOptions = u.clearWritePrivileges.options
             // For a `RelationCatalog` with no time-travel / write privileges, the single-RPC
             // `loadRelation` answers both "is there a table?" and "is there a view?" in one
             // call. Time-travel and write privileges apply to tables only, so for those the
@@ -342,7 +354,7 @@ class RelationResolution(
         val relation = if (u.isStreaming) {
           StreamingRelationV2(
             None, changelogTable.name, changelogTable, u.options,
-            changelogTable.columns.toAttributes, Some(catalog), Some(ident), None)
+            changelogTable.columns.toOutputAttributes, Some(catalog), Some(ident), None)
         } else {
           DataSourceV2Relation.create(changelogTable, Some(catalog), Some(ident), u.options)
         }
@@ -356,6 +368,19 @@ class RelationResolution(
       ident: Identifier,
       table: Table): Option[DataSourceV2Relation] = {
     CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, conf)
+  }
+
+  /**
+   * Re-applies `options` to the relation in a cached plan. Every `relationCache` entry holds a
+   * single relation for its own identifier (a view's body is still unresolved when it is cached),
+   * so this cannot reach another table's relation.
+   */
+  private def applyOptions(
+      cached: LogicalPlan,
+      options: CaseInsensitiveStringMap): LogicalPlan = cached transform {
+    case r: DataSourceV2Relation => r.copy(options = options)
+    case r: UnresolvedCatalogRelation => r.copy(options = options)
+    case r: StreamingRelationV2 => r.copy(extraOptions = options)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
@@ -429,7 +454,7 @@ class RelationResolution(
               table.name,
               table,
               options,
-              table.columns.toAttributes,
+              table.columns.toOutputAttributes,
               Some(catalog),
               Some(ident),
               v1Fallback

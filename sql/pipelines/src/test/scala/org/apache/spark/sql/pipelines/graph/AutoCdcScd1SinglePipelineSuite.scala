@@ -46,7 +46,7 @@ class AutoCdcScd1SinglePipelineSuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, String, Long)]
@@ -80,7 +80,7 @@ class AutoCdcScd1SinglePipelineSuite
     // column, drives the deleteCondition, and is excluded from the target projection.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, String, Long, Boolean)]
@@ -122,11 +122,11 @@ class AutoCdcScd1SinglePipelineSuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.t_a " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.t_b " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val streamA = MemoryStream[(Int, Long)]
@@ -177,7 +177,7 @@ class AutoCdcScd1SinglePipelineSuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$database.target_no_merge " +
-      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
 
     val stream = MemoryStream[(Int, Long)]

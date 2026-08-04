@@ -36,6 +36,13 @@ trait SparkSessionBuilderImplementationBindingSuite
   protected def sparkContext: SparkContext
   protected def implementationPackageName: String = getClass.getPackageName
 
+  /**
+   * A builder whose implementation mode is pinned via the mode selector (`classic()` /
+   * `connect()`). Each concrete suite overrides this so we verify the selector binds to the
+   * matching implementation.
+   */
+  protected def implementationSpecificBuilder: SparkSession.Builder
+
   private def assertInCorrectPackage[T](obj: T): Unit = {
     assert(obj.getClass.getPackageName == implementationPackageName)
   }
@@ -70,6 +77,11 @@ trait SparkSessionBuilderImplementationBindingSuite
     import ctx.implicits._
     val df = ctx.createDataset(1 to 11).select(max("value").as[Long])
     assert(df.head() == 11)
+  }
+
+  test("SPARK-58223: mode selector binds to the correct implementation") {
+    val session = implementationSpecificBuilder.getOrCreate()
+    assertInCorrectPackage(session)
   }
 
   test("emptyDataFrame with Schema") {

@@ -47,7 +47,7 @@ import org.apache.spark.util.Utils
 /**
  * Common functions for parsing XML files
  */
-abstract class XmlDataSource extends Serializable with Logging {
+abstract class XmlDataSource extends Serializable with Logging with SupportsArchiveFormat {
   def isSplitable: Boolean
 
   /**
@@ -87,7 +87,7 @@ abstract class XmlDataSource extends Serializable with Logging {
       file: PartitionedFile,
       parser: () => StaxXmlParser,
       schema: StructType): Iterator[InternalRow] =
-    ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
+    SupportsArchiveFormat.readArchiveEntries(file.toPath, conf) { (_, in) =>
       readStream(in, parser(), schema)
     }
 
@@ -106,7 +106,7 @@ abstract class XmlDataSource extends Serializable with Logging {
         // loose files -- so the result matches a directory read of the same files. XML has no DSv2
         // reader, so this archive scan is always V1.
         val hasArchive = parsedOptions.archiveFormatEnabled &&
-          inputPaths.exists(f => ArchiveReader.isArchivePath(f.getPath))
+          inputPaths.exists(f => SupportsArchiveFormat.isArchivePath(f.getPath))
         if (hasArchive) {
           Some(inferWithArchives(sparkSession, inputPaths, parsedOptions))
         } else if (inputPaths.nonEmpty) {
@@ -124,9 +124,9 @@ abstract class XmlDataSource extends Serializable with Logging {
 
   /**
    * Infers an XML schema when at least one input is a tar archive (`.tar`/`.tar.gz`/`.tgz`). Every
-   * archive entry (streamed through `ArchiveReader`, never unpacked to disk) and every loose file
-   * is tokenized into records and fed to a single [[XmlInferSchema]] pass, exactly as a directory
-   * of the same files would infer. Tokenization is per-mode so it matches this mode's scan:
+   * archive entry (streamed through `SupportsArchiveFormat`, never unpacked to disk) and every
+   * loose file is tokenized into records and fed to a single [[XmlInferSchema]] pass, exactly as a
+   * directory of the same files would infer. Tokenization is per-mode so it matches the scan:
    * multi-line splits the whole stream into `rowTag`-delimited records, single-line treats each
    * line as a record (mirroring [[readFile]] and JSON's `inferWithArchives`).
    */
@@ -145,8 +145,10 @@ abstract class XmlDataSource extends Serializable with Logging {
       stream =>
         val path = new Path(stream.getPath())
         try {
-          if (ArchiveReader.isArchivePath(path)) {
-            ArchiveReader(path).readEntries(stream.getConfiguration) { (_, in) => perEntry(in) }
+          if (SupportsArchiveFormat.isArchivePath(path)) {
+            SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
+              perEntry(in)
+            }
           } else {
             perEntry(
               CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
@@ -173,7 +175,7 @@ abstract class XmlDataSource extends Serializable with Logging {
       perInput(in => StaxXmlParser.tokenizeStream(in, parsedOptions))
     } else {
       val charset = parsedOptions.charset
-      perInput(in => ArchiveReader.lineIterator(in, None).map { line =>
+      perInput(in => lineIterator(in, None).map { line =>
         new String(line.getBytes, 0, line.getLength, charset)
       })
     }
@@ -254,7 +256,7 @@ object TextInputXmlDataSource extends XmlDataSource {
       in: InputStream,
       parser: StaxXmlParser,
       schema: StructType): Iterator[InternalRow] = {
-    val lines = ArchiveReader.lineIterator(in, None).map { line =>
+    val lines = lineIterator(in, None).map { line =>
       new String(line.getBytes, 0, line.getLength, parser.options.charset)
     }
     val safeParser = new FailureSafeParser[String](

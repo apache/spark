@@ -690,6 +690,24 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(optimized2, query2.analyze)
   }
 
+  test("SPARK-58373: do not simplify named_struct + from_json if options is not empty") {
+    val schema = StructType.fromDDL("a int, b int, c long")
+    def query(options: Map[String, String]): LogicalPlan = testRelation2.select(namedStruct(
+      "a", GetStructField(JsonToStructs(schema, options, $"json"), 0),
+      "b", GetStructField(JsonToStructs(schema, options, $"json"), 1)).as("struct")).analyze
+
+    // Any option disables the rewrite, not just a parse mode: pruning `c` out of the schema
+    // stops the parser from converting it, which a caller may be relying on.
+    Seq(Map("mode" -> "failfast"), Map("timestampFormat" -> "yyyy")).foreach { options =>
+      comparePlans(Optimizer.execute(query(options)), query(options))
+    }
+
+    // Control: the same shape with no options is still rewritten, so the guard above is what
+    // blocks it rather than some other precondition of the rule.
+    val optimized = Optimizer.execute(query(Map.empty))
+    assert(optimized != query(Map.empty), "expected the empty-options plan to be rewritten")
+  }
+
   test("SPARK-33007: simplify named_struct + from_json") {
     val options = Map.empty[String, String]
     val schema = StructType.fromDDL("a int, b int, c long, d string")

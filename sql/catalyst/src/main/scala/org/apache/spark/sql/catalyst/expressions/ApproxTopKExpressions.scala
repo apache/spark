@@ -50,6 +50,12 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(approx_top_k_accumulate(expr), 2) FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' tab(expr);
        [{"item":"c","count":4},{"item":"d","count":2}]
   """,
+  note = """
+    When the sketch was built over a string column with a non-UTF8_BINARY collation, values that
+    are equal under the collation are counted as one item, and the returned item is one of the
+    actual input values of that group; which one is returned is not deterministic (as with the
+    `mode` function).
+  """,
   group = "sketch_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
@@ -102,10 +108,13 @@ case class ApproxTopKEstimate(state: Expression, k: Expression)
     val kVal = kEval.asInstanceOf[Int]
     ApproxTopK.checkK(kVal)
     ApproxTopK.checkMaxItemsTracked(maxItemsTrackedVal, kVal)
+    val sketchItemType = ApproxTopK.withCollationOf(
+      ApproxTopK.DDLToDataType(stateEval.asInstanceOf[InternalRow].getUTF8String(3).toString),
+      itemDataType)
     val approxTopKAggregateBuffer = ApproxTopKAggregateBuffer.deserialize(
       dataSketchBytes,
-      ApproxTopK.genSketchSerDe(itemDataType))
-    approxTopKAggregateBuffer.eval(kVal, itemDataType)
+      ApproxTopK.genSketchSerDe(sketchItemType))
+    approxTopKAggregateBuffer.eval(kVal, sketchItemType, itemDataType)
   }
 
   override protected def withNewChildrenInternal(newState: Expression, newK: Expression)

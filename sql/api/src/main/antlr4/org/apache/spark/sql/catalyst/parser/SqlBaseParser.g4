@@ -75,7 +75,7 @@ options { tokenVocab = SqlBaseLexer; }
            la == AS || la == WHERE || la == PIVOT || la == UNPIVOT ||
            la == TABLESAMPLE || la == INNER || la == CROSS || la == LEFT ||
            la == RIGHT || la == FULL || la == NATURAL || la == SEMI ||
-           la == ANTI || la == JOIN || la == UNION || la == EXCEPT ||
+           la == ANTI || la == ASOF || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
@@ -395,6 +395,9 @@ statement
     | COMMENT ON namespace identifierReference IS
         comment                                                        #commentNamespace
     | COMMENT ON TABLE identifierReference IS comment                  #commentTable
+    | COMMENT ON TABLE identifierReference COLUMN
+        LEFT_PAREN columns=columnCommentList RIGHT_PAREN               #commentColumn
+    | COMMENT ON COLUMN columnComment                                  #commentColumn
     | REFRESH TABLE identifierReference                                #refreshTable
     | REFRESH FUNCTION identifierReference                             #refreshFunction
     | REFRESH (stringLit | .*?)                                        #refreshResource
@@ -594,7 +597,7 @@ query
 insertInto
     : INSERT (WITH SCHEMA EVOLUTION)? OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
     | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference tableAlias optionsClause? (BY NAME)?
+    | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference tableAlias optionsClause? ((BY NAME) | identifierList)?
         REPLACE (WHERE | ON) replaceCondition=booleanExpression        #insertIntoReplaceBooleanCond
     | INSERT (WITH SCHEMA EVOLUTION)? INTO TABLE? identifierReference tableAlias optionsClause? (BY NAME)?
         REPLACE USING identifierList                                   #insertIntoReplaceUsing
@@ -744,10 +747,11 @@ resource
 dmlStatementNoWith
     : insertInto (query | LEFT_PAREN query RIGHT_PAREN queryAlias=tableAlias)      #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
-    | DELETE FROM identifierReference tableAlias whereClause?                      #deleteFromTable
+    | DELETE FROM identifierReference tableAlias optionsClause? whereClause?       #deleteFromTable
     | UPDATE identifierReference tableAlias optionsClause? setClause whereClause?  #updateTable
     | MERGE (WITH SCHEMA EVOLUTION)? INTO target=identifierReference targetAlias=tableAlias
-        USING (source=identifierReference |
+        targetOptions=optionsClause?
+        USING (source=identifierReference sourceOptions=optionsClause? |
           LEFT_PAREN sourceQuery=query RIGHT_PAREN) sourceAlias=tableAlias
         ON mergeCondition=booleanExpression
         matchedClause*
@@ -767,9 +771,11 @@ autoCdcBody
 autoCdcParameters
     : FROM source=relationPrimary
         KEYS LEFT_PAREN keys=identifierSeq RIGHT_PAREN
-        autoCdcDeleteClause?
-        autoCdcSequenceByClause
-        autoCdcColumnsClause?
+        (autoCdcDeleteClause
+        | autoCdcSequenceByClause
+        | autoCdcColumnsClause
+        | autoCdcStoredAsClause
+        | autoCdcTrackHistoryClause)*
     ;
 
 autoCdcDeleteClause
@@ -784,6 +790,16 @@ autoCdcColumnsClause
     : COLUMNS (
         LEFT_PAREN columns=identifierSeq RIGHT_PAREN |
         ASTERISK EXCEPT LEFT_PAREN exceptCols=identifierSeq RIGHT_PAREN)
+    ;
+
+autoCdcStoredAsClause
+    : STORED AS SCD TYPE scdType=INTEGER_VALUE
+    ;
+
+autoCdcTrackHistoryClause
+    : TRACK HISTORY ON (
+        LEFT_PAREN trackCols=identifierSeq RIGHT_PAREN |
+        ASTERISK EXCEPT LEFT_PAREN nonTrackCols=identifierSeq RIGHT_PAREN)
     ;
 
 identifierReference
@@ -1104,8 +1120,24 @@ relationExtension
     ;
 
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary (joinCriteria | nearestByClause)?
+    : (joinType) JOIN LATERAL? right=relationPrimary joinPostfix?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
+    | asofJoinType ASOF JOIN right=relationPrimary asofJoinCriteria
+    ;
+
+asofJoinType
+    : INNER?
+    | LEFT OUTER?
+    ;
+
+joinPostfix
+    : joinCriteria
+    | nearestByClause
+    ;
+
+asofJoinCriteria
+    : MATCH_CONDITION LEFT_PAREN matchExpr=booleanExpression RIGHT_PAREN
+      ( ON onExpr=booleanExpression | USING identifierList )?
     ;
 
 joinType
@@ -1176,7 +1208,16 @@ relationPrimary
     | LEFT_PAREN relation RIGHT_PAREN sample?
        watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
+    | unnest                                                #unnestTable
     | tableFunctionCallWithTrailingClauses                  #tableValuedFunction
+    ;
+
+// ANSI SQL UNNEST of one or more arrays in the FROM clause, with an optional
+// trailing ordinality column (WITH ORDINALITY). Multiple arrays are expanded in
+// parallel, padded with NULLs to the length of the longest array.
+unnest
+    : UNNEST LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+      (WITH ORDINALITY)? tableAlias
     ;
 
 optionsClause
@@ -1276,12 +1317,14 @@ tableIdentifier
     ;
 
 temporalTableIdentifier
-    : id=multipartIdentifier AT_VERSION version
+    : id=multipartIdentifier AT_SIGN timestamp=INTEGER_VALUE
+    | id=multipartIdentifier AT_VERSION version
     | id=multipartIdentifier
     ;
 
 temporalTableIdentifierReference
-    : identifierReference AT_VERSION version
+    : identifierReference AT_SIGN timestamp=INTEGER_VALUE
+    | identifierReference AT_VERSION version
     | identifierReference
     ;
 
@@ -1920,6 +1963,14 @@ alterColumnAction
     | dropDefault=DROP DEFAULT
     ;
 
+columnCommentList
+    : columnComment (COMMA columnComment)*
+    ;
+
+columnComment
+    : column=multipartIdentifier IS comment
+    ;
+
 // Matches exactly one string literal without coalescing or parameter markers.
 // Used in type constructors where coalescing is not allowed.
 singleStringLitWithoutMarker
@@ -2011,6 +2062,7 @@ ansiNonReserved
     | ARRAY
     | ASC
     | ASENSITIVE
+    | ASOF
     | AT
     | ATOMIC
     | AUTO
@@ -2129,6 +2181,7 @@ ansiNonReserved
     | GLOBAL
     | GROUPING
     | HANDLER
+    | HISTORY
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -2178,6 +2231,7 @@ ansiNonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MATCH_CONDITION
     | MATERIALIZED
     | MAX
     | MEASURE
@@ -2209,6 +2263,7 @@ ansiNonReserved
     | OPEN
     | OPTION
     | OPTIONS
+    | ORDINALITY
     | OUT
     | OUTPUTFORMAT
     | OVER
@@ -2260,6 +2315,7 @@ ansiNonReserved
     | ROLLUP
     | ROW
     | ROWS
+    | SCD
     | SCHEMA
     | SCHEMAS
     | SECOND
@@ -2314,6 +2370,7 @@ ansiNonReserved
     | TIMESTAMPDIFF
     | TINYINT
     | TOUCH
+    | TRACK
     | TRANSACTION
     | TRANSACTIONS
     | TRANSFORM
@@ -2327,6 +2384,7 @@ ansiNonReserved
     | UNCACHE
     | UNIFORM
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL
@@ -2403,6 +2461,7 @@ nonReserved
     | AS
     | ASC
     | ASENSITIVE
+    | ASOF
     | AT
     | ATOMIC
     | AUTHORIZATION
@@ -2553,6 +2612,7 @@ nonReserved
     | GROUPING
     | HANDLER
     | HAVING
+    | HISTORY
     | HOUR
     | HOURS
     | IDENTIFIER_KW
@@ -2608,6 +2668,7 @@ nonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MATCH_CONDITION
     | MATERIALIZED
     | MAX
     | MEASURE
@@ -2645,6 +2706,7 @@ nonReserved
     | OPTIONS
     | OR
     | ORDER
+    | ORDINALITY
     | OUT
     | OUTER
     | OUTPUTFORMAT
@@ -2701,6 +2763,7 @@ nonReserved
     | ROLLUP
     | ROW
     | ROWS
+    | SCD
     | SCHEMA
     | SCHEMAS
     | SECOND
@@ -2761,6 +2824,7 @@ nonReserved
     | TINYINT
     | TO
     | TOUCH
+    | TRACK
     | TRAILING
     | TRANSACTION
     | TRANSACTIONS
@@ -2777,6 +2841,7 @@ nonReserved
     | UNIQUE
     | UNKNOWN
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL

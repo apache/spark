@@ -129,7 +129,7 @@ case class TimestampNTZNanosTypeOps(override val t: TimestampNTZNanosType)
     vector match {
       case v: TimeStampNanoVector => Some(new TimestampNTZNanosWriter(v))
       // The lossless struct representation (ArrowUtils.toArrowField with
-      // losslessTimestampNanos = true) is backed by a StructVector; its writer needs the
+      // losslessInternalTypes = true) is backed by a StructVector; its writer needs the
       // recursively-built child writers, so defer to ArrowWriter's default matching.
       case _ => None
     }

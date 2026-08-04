@@ -147,7 +147,7 @@ private[spark] object UI {
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val UI_CONTENT_SECURITY_POLICY_FRAME_ANCESTORS_ENABLED =
     ConfigBuilder("spark.ui.contentSecurityPolicy.frameAncestors.enabled")

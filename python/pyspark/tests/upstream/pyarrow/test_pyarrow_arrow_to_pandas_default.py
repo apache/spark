@@ -44,19 +44,17 @@ Set SPARK_GENERATE_GOLDEN_FILES=1 before running:
     SPARK_GENERATE_GOLDEN_FILES=1 python -m pytest \\
         python/pyspark/tests/upstream/pyarrow/test_pyarrow_arrow_to_pandas_default.py
 
-## PyArrow Version Compatibility
+## PyArrow and pandas Version Compatibility
 
-The golden files capture behavior for a specific PyArrow version.
-Regenerate when upgrading PyArrow, as to_pandas() behavior may change.
+The golden files capture behavior for specific PyArrow and pandas versions.
+Regenerate when upgrading either dependency, as to_pandas() behavior may change.
 """
 
 import datetime
-import inspect
-import os
 import unittest
 from decimal import Decimal
-from typing import Callable, List, Optional
 
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
@@ -66,6 +64,11 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
 )
 from pyspark.testing.goldenutils import GoldenFileTestMixin
+
+if have_pandas:
+    import pandas as pd
+if have_pyarrow:
+    import pyarrow as pa
 
 
 @unittest.skipIf(
@@ -80,66 +83,6 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
     decimal, date, timestamp, duration, time, null, and nested types.
     Each type is tested both without and with null values.
     """
-
-    def compare_or_generate_golden_matrix(
-        self,
-        row_names: List[str],
-        col_names: List[str],
-        compute_cell: Callable[[str, str], str],
-        golden_file_prefix: str,
-        index_name: str = "source \\ target",
-        overrides: Optional[dict[tuple[str, str], str]] = None,
-    ) -> None:
-        """
-        Run a matrix of computations and compare against (or generate) a golden file.
-
-        1. If SPARK_GENERATE_GOLDEN_FILES=1, compute every cell, build a
-           DataFrame, and save it as the new golden CSV / Markdown file.
-        2. Otherwise, load the existing golden file and assert that every cell
-           matches the freshly computed value.
-        """
-        generating = self.is_generating_golden()
-
-        test_dir = os.path.dirname(inspect.getfile(type(self)))
-        golden_csv = os.path.join(test_dir, f"{golden_file_prefix}.csv")
-        golden_md = os.path.join(test_dir, f"{golden_file_prefix}.md")
-
-        golden = None
-        if not generating:
-            golden = self.load_golden_csv(golden_csv)
-
-        errors = []
-        results = {}
-
-        for row_name in row_names:
-            for col_name in col_names:
-                result = compute_cell(row_name, col_name)
-                results[(row_name, col_name)] = result
-
-                if not generating:
-                    if overrides and (row_name, col_name) in overrides:
-                        expected = overrides[(row_name, col_name)]
-                    else:
-                        expected = golden.loc[row_name, col_name]
-                    if expected != result:
-                        errors.append(
-                            f"{row_name} -> {col_name}: expected '{expected}', got '{result}'"
-                        )
-
-        if generating:
-            import pandas as pd
-
-            index = pd.Index(row_names, name=index_name)
-            df = pd.DataFrame(index=index)
-            for col_name in col_names:
-                df[col_name] = [results[(row, col_name)] for row in row_names]
-            self.save_golden(df, golden_csv, golden_md)
-        else:
-            self.assertEqual(
-                len(errors),
-                0,
-                f"\n{len(errors)} golden file mismatches:\n" + "\n".join(errors),
-            )
 
     def _build_source_arrays(self):
         """Build an ordered dict of named source PyArrow arrays for testing."""
@@ -388,6 +331,26 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         row_names = list(sources.keys())
         col_names = ["pyarrow array", "pandas series"]
 
+        overrides = {}
+        # Pandas 3 uses its dedicated string dtype for non-empty Arrow string arrays.
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            overrides.update(
+                {
+                    ("string:standard", "pandas series"): ("['hello', 'world', '']@Series[str]"),
+                    ("string:nullable", "pandas series"): ("['hello', nan, 'world']@Series[str]"),
+                    ("large_string:standard", "pandas series"): ("['hello', 'world']@Series[str]"),
+                    ("large_string:nullable", "pandas series"): "['hello', nan]@Series[str]",
+                }
+            )
+            # PyArrow 24 extends the pandas string dtype conversion to empty arrays.
+            if LooseVersion(pa.__version__) >= LooseVersion("24.0.0"):
+                overrides.update(
+                    {
+                        ("string:empty", "pandas series"): "[]@Series[str]",
+                        ("large_string:empty", "pandas series"): "[]@Series[str]",
+                    }
+                )
+
         def compute_cell(row_name, col_name):
             arr = sources[row_name]
             if col_name == "pyarrow array":
@@ -405,6 +368,7 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             compute_cell=compute_cell,
             golden_file_prefix="golden_pyarrow_arrow_to_pandas_default",
             index_name="test case",
+            overrides=overrides,
         )
 
 

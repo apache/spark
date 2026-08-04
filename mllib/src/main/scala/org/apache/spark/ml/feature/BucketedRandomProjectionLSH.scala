@@ -71,6 +71,14 @@ class BucketedRandomProjectionLSHModel private[ml](
   // For ml connect only
   private[ml] def this() = this("", Matrices.empty)
 
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (randMatrix != null) {
+      size += randMatrix.getSizeInBytes
+    }
+    size
+  }
+
   private[ml] def this(uid: String, randUnitVectors: Array[Vector]) = {
     this(uid, Matrices.fromVectors(randUnitVectors.toImmutableArraySeq))
   }

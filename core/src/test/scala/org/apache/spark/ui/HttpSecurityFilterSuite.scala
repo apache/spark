@@ -155,6 +155,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
 
   test("no CSP header when CSP is disabled regardless of frameAncestors setting") {
     val conf = new SparkConf(false)
+      .set(UI_CONTENT_SECURITY_POLICY_ENABLED, false)
     val secMgr = new SecurityManager(conf)
     val req = mockRequest()
     val res = mock(classOf[HttpServletResponse])
@@ -163,7 +164,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     val filter = new HttpSecurityFilter(conf, secMgr)
     filter.doFilter(req, res, chain)
 
-    // CSP is disabled by default, so no CSP header should be emitted
+    // CSP is disabled explicitly, so no CSP header should be emitted
     verify(res, times(0)).setHeader(meq("Content-Security-Policy"), any())
   }
 

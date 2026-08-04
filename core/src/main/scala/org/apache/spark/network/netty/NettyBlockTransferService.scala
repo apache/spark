@@ -174,13 +174,15 @@ private[spark] class NettyBlockTransferService(
       blockId: BlockId,
       blockData: ManagedBuffer,
       level: StorageLevel,
-      classTag: ClassTag[_]): Future[Unit] = {
+      classTag: ClassTag[_],
+      checksum: Option[Long] = None,
+      verifySealedChecksum: Boolean = false): Future[Unit] = {
     val result = Promise[Unit]()
     val client = clientFactory.createClient(hostname, port)
 
-    // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.
-    // Everything else is encoded using our binary protocol.
-    val metadata = JavaUtils.bufferToArray(serializer.newInstance().serialize((level, classTag)))
+    // BlockReplicationMetadata is Java-serialized; everything else uses our binary protocol.
+    val metadata = JavaUtils.bufferToArray(serializer.newInstance().serialize(
+      BlockReplicationMetadata(level, classTag, checksum, verifySealedChecksum)))
 
     // We always transfer shuffle blocks as a stream for simplicity with the receiving code since
     // they are always written to disk. Otherwise we check the block size.

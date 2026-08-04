@@ -54,6 +54,8 @@ private[sql] trait SqlApiConf {
   def legacyParameterSubstitutionConstantsOnly: Boolean
   def legacyIdentifierClauseOnly: Boolean
   def timestampNanosTypesEnabled: Boolean
+  def allowCreatingUDTFromString: Boolean
+  def allowedDynamicUDTClasses: Seq[String]
 }
 
 private[sql] object SqlApiConf {
@@ -77,6 +79,8 @@ private[sql] object SqlApiConf {
   val PARSER_DFA_CACHE_FLUSH_RATIO_KEY: String =
     SqlApiConfHelper.PARSER_DFA_CACHE_FLUSH_RATIO_KEY
   val MANAGE_PARSER_CACHES_KEY: String = SqlApiConfHelper.MANAGE_PARSER_CACHES_KEY
+  val ALLOW_CREATING_UDT_FROM_STRING: String = SqlApiConfHelper.ALLOW_CREATING_UDT_FROM_STRING
+  val ALLOWED_DYNAMIC_UDT_CLASSES: String = SqlApiConfHelper.ALLOWED_DYNAMIC_UDT_CLASSES
 
   def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
@@ -112,4 +116,6 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def legacyParameterSubstitutionConstantsOnly: Boolean = false
   override def legacyIdentifierClauseOnly: Boolean = false
   override def timestampNanosTypesEnabled: Boolean = SparkEnvUtils.isTesting
+  override def allowCreatingUDTFromString: Boolean = true
+  override def allowedDynamicUDTClasses: Seq[String] = Nil
 }
