@@ -17,11 +17,9 @@
 # under the License.
 #
 
-name: "Build / Python-only (branch-4.x, Python 3.14)"
+name: "Build / Python-only (Python 3.14)"
 
 on:
-  schedule:
-    - cron: '0 21 * * *'
   workflow_dispatch:
 
 jobs:
