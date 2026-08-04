@@ -104,7 +104,9 @@ class Module(object):
         if not re.match(r"test_.*\.py", last_part):
             return False
         module_path = ".".join(path.parts)[:-3]  # Remove the ".py" suffix
-        return not any(module_path.endswith(test) for test in self.python_test_goals)
+        # The CLI is implemented in Python but it's not tested as part of PySpark.
+        python_goals = self.python_test_goals + list(self.cli_test_goals)
+        return not any(module_path.endswith(test) for test in python_goals)
 
     def __repr__(self):
         return "Module<%s>" % self.name
