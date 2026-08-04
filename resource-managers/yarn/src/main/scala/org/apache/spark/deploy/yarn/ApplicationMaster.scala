@@ -351,7 +351,7 @@ private[spark] class ApplicationMaster(
    */
   final def getDefaultFinalStatus(): FinalApplicationStatus = {
     if (isClusterMode) {
-      FinalApplicationStatus.FAILED
+      FinalApplicationStatus.SUCCEEDED
     } else {
       FinalApplicationStatus.UNDEFINED
     }
