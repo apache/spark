@@ -1107,7 +1107,8 @@ object SQLConf {
         "be co-partitioned, such as JOIN node. This is to avoid data skews which can lead to " +
         "significant performance regression if shuffles are eliminated. For V2 data source " +
         "partitioning (storage-partitioned join), the check ignores key order and duplicated " +
-        "clustering keys: it requires every clustering key to be covered by the partition keys.")
+        "clustering keys: it requires every clustering key to be covered by the partition keys; " +
+        "hash partitioning deliberately keeps the exact match (same keys in the same order).")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
