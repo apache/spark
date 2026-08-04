@@ -28,6 +28,7 @@ import jakarta.ws.rs.core.{Context, MediaType, UriInfo}
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphNode, SQLAppStatusStore, SQLExecutionUIData}
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
 import org.apache.spark.ui.UIUtils
 
@@ -51,7 +52,7 @@ private[v1] class SqlResource extends BaseAppResource {
       }
       execs.map { exec =>
         val graph = sqlStore.planGraph(exec.executionId)
-        prepareExecutionData(exec, graph, details, planDescription)
+        prepareExecutionData(exec, graph, details, planDescription, ui.store)
       }
     }
   }
@@ -67,7 +68,10 @@ private[v1] class SqlResource extends BaseAppResource {
       val sqlStore = new SQLAppStatusStore(ui.store.store)
       sqlStore
         .execution(execId)
-        .map(prepareExecutionData(_, sqlStore.planGraph(execId), details, planDescription))
+        .map { exec =>
+          prepareExecutionData(exec, sqlStore.planGraph(execId), details, planDescription,
+            ui.store)
+        }
         .getOrElse(throw new NotFoundException("unknown query execution id: " + execId))
     }
   }
@@ -146,18 +150,19 @@ private[v1] class SqlResource extends BaseAppResource {
       val start = Option(uriParams.getFirst("start")).map(_.toInt).getOrElse(0)
       val length = Option(uriParams.getFirst("length")).map(_.toInt).getOrElse(20)
 
-      val sortedRoots = sortExecs(rootRows, sortCol, sortDir)
+      val sortedRoots = sortExecs(rootRows, sortCol, sortDir, ui.store)
       val page = if (length > 0) sortedRoots.slice(start, start + length) else sortedRoots
 
       // Convert to Java-compatible row data; embed sub-executions when grouping.
       // Always emit a `subExecutions` field (possibly empty) in grouped mode so
       // JSON consumers see a consistent schema; flat mode never includes it.
       val aaData = page.map { exec =>
-        val row = execToRow(exec)
+        val row = execToRow(exec, ui.store)
         if (groupSubExec) {
           val subs = subsByRoot.getOrElse(exec.executionId, Seq.empty)
           // Sort subs by id ascending so they appear in chronological order
-          row.put("subExecutions", sortExecs(subs, "id", "asc").map(execToRow).asJava)
+          row.put("subExecutions",
+            sortExecs(subs, "id", "asc", ui.store).map(execToRow(_, ui.store)).asJava)
         }
         row
       }
@@ -191,7 +196,8 @@ private[v1] class SqlResource extends BaseAppResource {
   private def sortExecs(
       execs: Seq[SQLExecutionUIData],
       sortCol: String,
-      sortDir: String): Seq[SQLExecutionUIData] = {
+      sortDir: String,
+      store: AppStatusStore): Seq[SQLExecutionUIData] = {
     val sorted = sortCol match {
       case "id" => execs.sortBy(_.executionId)
       case "status" => execs.sortBy(_.executionStatus)
@@ -200,12 +206,33 @@ private[v1] class SqlResource extends BaseAppResource {
       case "duration" =>
         execs.sortBy(e =>
           e.completionTime.getOrElse(new Date()).getTime - e.submissionTime)
+      case "totalTaskTime" => execs.sortBy(e => totalTaskTime(e, store))
       case _ => execs.sortBy(_.executionId)
     }
     if (sortDir == "asc") sorted else sorted.reverse
   }
 
-  private def execToRow(exec: SQLExecutionUIData): java.util.LinkedHashMap[String, Object] = {
+  /**
+   * Total task time of an execution, in milliseconds, aggregated across all
+   * stages of the execution. Sums `executorRunTime` (the "Total Time Across All
+   * Tasks" metric) of every attempt of every stage: each attempt genuinely
+   * consumed task time, including failed attempts that were retried. Returns -1
+   * when the execution has no stages to aggregate, so callers can distinguish
+   * "no task time information" from a genuine zero.
+   */
+  private def totalTaskTime(exec: SQLExecutionUIData, store: AppStatusStore): Long = {
+    if (exec.stages.isEmpty) {
+      -1L
+    } else {
+      exec.stages.iterator.flatMap { stageId =>
+        store.stageData(stageId).map(_.executorRunTime)
+      }.sum
+    }
+  }
+
+  private def execToRow(
+      exec: SQLExecutionUIData,
+      store: AppStatusStore): java.util.LinkedHashMap[String, Object] = {
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
     val jobIds = exec.jobs.collect {
       case (id, JobExecutionStatus.SUCCEEDED) => id
@@ -216,6 +243,7 @@ private[v1] class SqlResource extends BaseAppResource {
     row.put("description", exec.description)
     row.put("submissionTime", new Date(exec.submissionTime))
     row.put("duration", java.lang.Long.valueOf(duration))
+    row.put("totalTaskTime", java.lang.Long.valueOf(totalTaskTime(exec, store)))
     row.put("jobIds", jobIds)
     row.put("queryId", if (exec.queryId != null) exec.queryId.toString else null)
     row.put("errorMessage", exec.errorMessage.orNull)
@@ -227,7 +255,8 @@ private[v1] class SqlResource extends BaseAppResource {
     exec: SQLExecutionUIData,
     graph: SparkPlanGraph,
     details: Boolean,
-    planDescription: Boolean): ExecutionData = {
+    planDescription: Boolean,
+    store: AppStatusStore): ExecutionData = {
 
     var running = Seq[Int]()
     var completed = Seq[Int]()
@@ -267,7 +296,8 @@ private[v1] class SqlResource extends BaseAppResource {
       if (exec.queryId != null) exec.queryId.toString else null,
       exec.errorMessage.orNull,
       exec.rootExecutionId,
-      exec.modifiedConfigs)
+      exec.modifiedConfigs,
+      totalTaskTime(exec, store))
   }
 
   private def printableMetrics(allNodes: collection.Seq[SparkPlanGraphNode],
