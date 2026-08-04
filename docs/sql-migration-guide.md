@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.3 to 4.4
+
+- Since Spark 4.4, `spark.sql.requireAllClusterKeysForCoPartition` no longer affects storage-partitioned joins (V2 data sources). A shuffle is now avoided whenever all partition keys appear in the join keys, regardless of order; joining on a subset of partition keys remains controlled by `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled`. Users who previously set `spark.sql.requireAllClusterKeysForCoPartition` to `false` solely to enable storage-partitioned joins no longer need to do so. The config still applies to hash-partitioned children (e.g., V1 bucketing).
+
 ## Upgrading from Spark SQL 4.2 to 4.3
 
 - Since Spark 4.3, [ASOF JOIN](sql-ref-syntax-qry-select-asof-join.html) is available as an opt-in SQL feature gated by `spark.sql.join.asofJoin.enabled` (default `false`). When disabled, `ASOF JOIN` fails at parse time with `UNSUPPORTED_FEATURE.ASOF_JOIN`.
