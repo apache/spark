@@ -203,7 +203,8 @@ trait DelegateFunction extends ExpressionBuilder {
     // `inputTypes` carries one entry per argument position (`AnyDataType` for an accept-any-type
     // position), so when it is set its length is the function's arity. Validate it here so a
     // wrong-arity call fails with the structured WRONG_NUM_ARGS error rather than an
-    // IndexOutOfBounds from `lower` (too few args) or a silently-ignored extra argument (too many).
+    // IndexOutOfBoundsException from `lower` (too few args) or a silently-ignored extra argument
+    // (too many).
     // An empty `inputTypes` marks a variadic function whose `lower` accepts any argument count.
     if (inputTypes.nonEmpty && expressions.length != inputTypes.length) {
       throw QueryCompilationErrors.wrongNumArgsError(

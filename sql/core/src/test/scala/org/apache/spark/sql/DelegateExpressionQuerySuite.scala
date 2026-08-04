@@ -123,6 +123,18 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("hybrid analyzer ignores display-only state in delegate inputs") {
+    withSQLConf(
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+      SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE.key -> "true") {
+      val analyzed = spark.sql(
+        "SELECT right(assert_true(CAST(1 AS BOOLEAN)), 1)").queryExecution.analyzed
+      assert(analyzed.resolved)
+    }
+  }
+
   test("LowerDelegateExpression fully unwraps a directly-nested delegate-of-delegate") {
     // A delegate whose `definition` is itself a delegate (e.g. one delegate function composing
     // another). transformDown does not re-apply the rule to the replacement it produces, so the
@@ -155,7 +167,8 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
 
   test("right() rejects a wrong number of arguments with WRONG_NUM_ARGS") {
     // `DelegateFunction.build` validates arity before lowering, so too few/too many arguments fail
-    // with the structured error rather than an IndexOutOfBounds or a silently ignored extra arg.
+    // with the structured error rather than an IndexOutOfBoundsException or a silently ignored
+    // extra arg.
     Seq("SELECT right('abcd')", "SELECT right('abcd', 1, 99)").foreach { q =>
       val e = intercept[AnalysisException](spark.sql(q))
       assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",

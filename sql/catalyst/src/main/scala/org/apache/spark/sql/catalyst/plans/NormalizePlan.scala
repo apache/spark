@@ -61,13 +61,10 @@ object NormalizePlan extends PredicateHelper {
       case expressionWithRandomSeed: ExpressionWithRandomSeed =>
         expressionWithRandomSeed.withNewSeed(0)
       case d: DelegateExpression =>
-        // `inputs` are display-only metadata, not children, so `transformAllExpressions` never
-        // reaches them -- yet a `Rand` seed or `CommonExpressionId` there is just as
-        // run-dependent as in the `definition` child. Normalize them explicitly with the same
-        // rule (e.g. `right(rand(), 1)` under the Hybrid Analyzer, whose fixed-point and
-        // single-pass runs pick different seeds, would otherwise fail structural comparison).
-        // `definition` is reached by the surrounding traversal.
-        d.copy(inputs = d.inputs.map(_.transform(rule)))
+        // `inputs` are display-only metadata, not children. They can retain analyzer-specific
+        // state that is irrelevant to execution, so exclude them from structural comparison.
+        // `definition`, which fully determines behavior, is reached by the surrounding traversal.
+        d.copy(inputs = Nil)
     }
     withNormalizedRuntimeReplaceable.transformAllExpressions(rule)
   }

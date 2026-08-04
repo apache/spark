@@ -182,9 +182,9 @@ object GetJsonObject {
  * It is inserted by `OptimizeCsvJsonExprs` (after analysis, so its inputs are resolved), and is the
  * optimizer-constructed showcase for [[DelegateExpression]]: instead of hand-written
  * eval/doGenCode, it builds a typed delegate directly -- the high-level call
- * `multi_get_json_object(json, p1, .., pn)` stays visible via `inputs`, while the `definition`
- * delegates evaluation to [[MultiGetJsonObjectEvaluator]] through an `Invoke`. No rewrite step: the
- * delegate runs as-is.
+ * `multi_get_json_object(json, p1, ..., pn)` stays visible via `inputs`, while the `definition`
+ * delegates evaluation to [[MultiGetJsonObjectEvaluator]] through an `Invoke`. The delegate stays
+ * in logical plans and is lowered to its definition before physical planning.
  */
 object MultiGetJsonObject {
   val name: String = "multi_get_json_object"
@@ -195,13 +195,13 @@ object MultiGetJsonObject {
     val resultType = StructType(fallbackPaths.indices.map { index =>
       StructField(s"_$index", StringType, nullable = true)
     })
-    val simplePaths = fallbackPaths.map { path =>
-      GetJsonObject.simplePath(UTF8String.fromString(path)).getOrElse {
+    val utf8Paths = fallbackPaths.map(UTF8String.fromString)
+    val simplePaths = utf8Paths.map { path =>
+      GetJsonObject.simplePath(path).getOrElse {
         throw new IllegalArgumentException(s"Unsupported shared JSON path: $path")
       }
     }
-    val evaluator =
-      MultiGetJsonObjectEvaluator(fallbackPaths.map(UTF8String.fromString), simplePaths)
+    val evaluator = MultiGetJsonObjectEvaluator(utf8Paths, simplePaths)
     // `propagateNull = true` reproduces the old null-intolerant behavior: null json -> null result.
     val definition = Invoke(
       Literal.create(evaluator, ObjectType(classOf[MultiGetJsonObjectEvaluator])),
@@ -211,7 +211,7 @@ object MultiGetJsonObject {
       Seq(json.dataType),
       returnNullable = true)
     // `inputs` keeps the high-level call visible: the json plus one string literal per path.
-    val pathInputs = fallbackPaths.map(p => Literal(UTF8String.fromString(p), StringType))
+    val pathInputs = utf8Paths.map(Literal(_, StringType))
     DelegateExpression(name, json +: pathInputs, definition)
   }
 
