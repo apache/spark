@@ -295,15 +295,38 @@ SetCommand (spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled,Some(f
 
 
 -- !query
-SELECT COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m) FROM distinct_map_data
+SELECT COUNT(DISTINCT m) FROM distinct_map_data
 -- !query analysis
-Aggregate [count(distinct m#x) AS count(DISTINCT m)#xL, collect_list(distinct m#x, 0, 0, true) AS collect_list(DISTINCT m)#x]
+Aggregate [count(distinct m#x) AS count(DISTINCT m)#xL]
 +- SubqueryAlias distinct_map_data
    +- View (`distinct_map_data`, [g#x, m#x, id#x, should_keep#x])
       +- Project [cast(g#x as int) AS g#x, cast(m#x as map<string,int>) AS m#x, cast(id#x as int) AS id#x, cast(should_keep#x as boolean) AS should_keep#x]
          +- Project [g#x, m#x, id#x, should_keep#x]
             +- SubqueryAlias distinct_map_data
                +- LocalRelation [g#x, m#x, id#x, should_keep#x]
+
+
+-- !query
+SELECT map_entries(m)
+FROM (
+  SELECT EXPLODE(COLLECT_LIST(DISTINCT m)) AS m
+  FROM distinct_map_data
+) AS collected_maps
+ORDER BY element_at(m, 'a'), map_entries(m)[0].key
+-- !query analysis
+Project [map_entries(m)#x]
++- Sort [element_at(m#x, a, None, true) ASC NULLS FIRST, map_entries(m#x)[0].key ASC NULLS FIRST], true
+   +- Project [map_entries(m#x) AS map_entries(m)#x, m#x]
+      +- SubqueryAlias collected_maps
+         +- Project [m#x]
+            +- Generate explode(_gen_input_0#x), false, [m#x]
+               +- Aggregate [collect_list(distinct m#x, 0, 0, true) AS _gen_input_0#x]
+                  +- SubqueryAlias distinct_map_data
+                     +- View (`distinct_map_data`, [g#x, m#x, id#x, should_keep#x])
+                        +- Project [cast(g#x as int) AS g#x, cast(m#x as map<string,int>) AS m#x, cast(id#x as int) AS id#x, cast(should_keep#x as boolean) AS should_keep#x]
+                           +- Project [g#x, m#x, id#x, should_keep#x]
+                              +- SubqueryAlias distinct_map_data
+                                 +- LocalRelation [g#x, m#x, id#x, should_keep#x]
 
 
 -- !query

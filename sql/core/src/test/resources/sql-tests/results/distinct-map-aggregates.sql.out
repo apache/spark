@@ -215,11 +215,26 @@ spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled	false
 
 
 -- !query
-SELECT COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m) FROM distinct_map_data
+SELECT COUNT(DISTINCT m) FROM distinct_map_data
 -- !query schema
-struct<count(DISTINCT m):bigint,collect_list(DISTINCT m):array<map<string,int>>>
+struct<count(DISTINCT m):bigint>
 -- !query output
-3	[{"a":1,"b":2},{"a":1,"b":2},{"a":3}]
+3
+
+
+-- !query
+SELECT map_entries(m)
+FROM (
+  SELECT EXPLODE(COLLECT_LIST(DISTINCT m)) AS m
+  FROM distinct_map_data
+) AS collected_maps
+ORDER BY element_at(m, 'a'), map_entries(m)[0].key
+-- !query schema
+struct<map_entries(m):array<struct<key:string,value:int>>>
+-- !query output
+[{"key":"a","value":1},{"key":"b","value":2}]
+[{"key":"b","value":2},{"key":"a","value":1}]
+[{"key":"a","value":3}]
 
 
 -- !query

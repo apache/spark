@@ -21,7 +21,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Alias, MapSort}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Aggregate, LocalRelation, LogicalPlan, Project, Union}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
@@ -90,6 +91,27 @@ class InsertMapSortInAggregateSuite extends PlanTest {
 
     withSQLConf(SQLConf.INSERT_MAP_SORT_IN_DISTINCT_AGGREGATES_ENABLED.key -> "false") {
       comparePlans(InsertMapSortInAggregate(plan), plan)
+    }
+  }
+
+  test("leave map-free aggregates untouched when another aggregate needs rewriting") {
+    val scalarInput = LocalRelation(Symbol("i").int)
+    val scalarAggregate = Aggregate(
+      Nil,
+      Seq(count(scalarInput.output.head).as("count")),
+      scalarInput)
+    val mapAggregate = Aggregate(
+      Nil,
+      Seq(countDistinct(mapAttribute).as("count")),
+      input)
+
+    InsertMapSortInAggregate(Union(Seq(scalarAggregate, mapAggregate))) match {
+      case Union(Seq(rewrittenScalarAggregate, rewrittenMapAggregate), _, _) =>
+        comparePlans(rewrittenScalarAggregate, scalarAggregate)
+        assert(rewrittenScalarAggregate.collect { case _: Project => 1 }.isEmpty)
+        assert(rewrittenMapAggregate.collect { case _: Project => 1 }.size == 1)
+      case other =>
+        fail(s"Unexpected plan:\n$other")
     }
   }
 }

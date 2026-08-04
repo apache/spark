@@ -83,7 +83,14 @@ GROUP BY m;
 
 SET spark.sql.optimizer.insertMapSortInDistinctAggregates.enabled=false;
 
-SELECT COUNT(DISTINCT m), COLLECT_LIST(DISTINCT m) FROM distinct_map_data;
+SELECT COUNT(DISTINCT m) FROM distinct_map_data;
+
+SELECT map_entries(m)
+FROM (
+  SELECT EXPLODE(COLLECT_LIST(DISTINCT m)) AS m
+  FROM distinct_map_data
+) AS collected_maps
+ORDER BY element_at(m, 'a'), map_entries(m)[0].key;
 
 SELECT COUNT(DISTINCT named_struct('m', m)) FROM distinct_map_data;
 
