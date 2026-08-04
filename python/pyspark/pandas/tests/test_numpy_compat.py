@@ -171,6 +171,22 @@ class NumPyCompatTestsMixin:
                 almost=True,
             )
 
+    def test_np_fmax_fmin(self):
+        for pdf in (
+            pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [2, 1, 0, -1, -2]}),
+            pd.DataFrame(
+                {
+                    "x1": [np.nan, 2.0, np.nan, -np.inf, -2.0, -0.0, 0.0, 2.0, np.inf],
+                    "x2": [2.0, np.nan, np.nan, np.inf, -np.inf, 0.0, -0.0, np.inf, -np.inf],
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            for np_func in (np.fmax, np.fmin):
+                result = np_func(psdf.x1, psdf.x2)
+                expected = np_func(pdf.x1, pdf.x2)
+                self.assert_eq(result, expected, almost=True)
+
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 
