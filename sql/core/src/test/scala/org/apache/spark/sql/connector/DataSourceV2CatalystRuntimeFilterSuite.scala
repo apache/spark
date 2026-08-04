@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.scalatest.BeforeAndAfter
-
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, GreaterThan, Literal}
 import org.apache.spark.sql.connector.catalog.{InMemoryCatalystRuntimeFilterTable, InMemoryTableCatalystRuntimeFilterCatalog}
@@ -35,20 +34,14 @@ import org.apache.spark.sql.types.IntegerType
  * where runtime filters are pushed once as Catalyst expressions instead of connector
  * predicates.
  */
-class DataSourceV2CatalystRuntimeFilterSuite
-  extends SharedSparkSession with BeforeAndAfter {
+class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
 
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   protected val catalogName = "testcatalystruntimefilter"
 
-  before {
-    spark.conf.set(s"spark.sql.catalog.$catalogName",
+  override def sparkConf: SparkConf = super.sparkConf
+    .set(s"spark.sql.catalog.$catalogName",
       classOf[InMemoryTableCatalystRuntimeFilterCatalog].getName)
-  }
-
-  after {
-    spark.sessionState.catalogManager.reset()
-  }
 
   private def withDPPConf(f: => Unit): Unit = {
     withSQLConf(
