@@ -409,6 +409,285 @@ class BasePythonDataSourceTestsMixin:
             with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
                 df.show()
 
+    def test_limit_pushdown(self):
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.limit = None
+
+            def pushLimit(self, limit: int) -> bool:
+                self.limit = limit
+                return True
+
+            def partitions(self):
+                assert self.limit == 2, self.limit
+                return super().partitions()
+
+            def read(self, partition):
+                assert self.limit == 2, self.limit
+                # Only produce as many rows as the query asked for.
+                for i in range(self.limit):
+                    yield (i,)
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(2)
+            assertDataFrameEqual(df, [Row(x=0), Row(x=1)])
+
+    def test_limit_pushdown_not_supported(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pushLimit(self, limit: int) -> bool:
+                # The reader cannot make use of the limit.
+                return False
+
+            def read(self, partition):
+                yield from [(0,), (1,), (2,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(2)
+            assertDataFrameEqual(df, [Row(x=0), Row(x=1)])
+
+    def test_limit_pushdown_over_delivering_reader(self):
+        # A reader that accepts the limit but ignores it must not change the query result:
+        # Spark always applies the limit again after the scan.
+        class TestDataSourceReader(DataSourceReader):
+            def pushLimit(self, limit: int) -> bool:
+                return True
+
+            def read(self, partition):
+                yield from [(i,) for i in range(100)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(3)
+            self.assertEqual(df.count(), 3)
+
+    def test_limit_pushdown_with_filter(self):
+        # The limit is pushed after the filters, and the reader sees both. All filters are
+        # accepted here, so no post-scan filter remains to block limit pushdown.
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.filters = []
+                self.limit = None
+
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                self.filters = list(filters)
+                return []
+
+            def pushLimit(self, limit: int) -> bool:
+                # pushFilters must have been called before pushLimit.
+                assert EqualTo(("x",), 1) in self.filters, self.filters
+                self.limit = limit
+                return True
+
+            def read(self, partition):
+                assert EqualTo(("x",), 1) in self.filters, self.filters
+                assert self.limit == 5, self.limit
+                yield from [(1,), (1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.python.limitPushdown.enabled": True,
+            }
+        ):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1").limit(5)
+            # All filters are reported as fully pushed, so Spark does not re-apply them.
+            assertDataFrameEqual(df, [Row(x=1), Row(x=1)])
+
+    def test_limit_pushdown_blocked_by_post_scan_filter(self):
+        # A filter that the reader does not accept stays as a post-scan filter, which prevents
+        # LIMIT from being pushed: applying the limit before that filter could drop rows the
+        # query needs. The result must still be correct.
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                # Accept nothing.
+                return filters
+
+            def pushLimit(self, limit: int) -> bool:
+                raise AssertionError("pushLimit should not be called")
+
+            def read(self, partition):
+                yield from [(1,), (2,), (1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.python.limitPushdown.enabled": True,
+            }
+        ):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1").limit(5)
+            assertDataFrameEqual(df, [Row(x=1), Row(x=1)])
+
+    def test_limit_pushdown_nondeterministic_push_filters(self):
+        # Pushing a limit replays pushFilters on a fresh reader. Spark has already committed to
+        # the first pass's filter decision, so a reader that reports a different supported set
+        # the second time must fail the query instead of silently returning wrong rows.
+        with tempfile.TemporaryDirectory(prefix="test_limit_pushdown_nondet") as d:
+            counter_path = os.path.join(d, "calls")
+
+            class TestDataSourceReader(DataSourceReader):
+                def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                    # Accept everything on the first call, nothing on the replay.
+                    n = 0
+                    if os.path.exists(counter_path):
+                        with open(counter_path) as f:
+                            n = int(f.read().strip() or 0)
+                    with open(counter_path, "w") as f:
+                        f.write(str(n + 1))
+                    return [] if n == 0 else list(filters)
+
+                def pushLimit(self, limit: int) -> bool:
+                    return True
+
+                def read(self, partition):
+                    yield from [(1,), (2,), (3,)]
+
+            class TestDataSource(DataSource):
+                def schema(self):
+                    return "x int"
+
+                def reader(self, schema) -> "DataSourceReader":
+                    return TestDataSourceReader()
+
+            with self.sql_conf(
+                {
+                    "spark.sql.python.filterPushdown.enabled": True,
+                    "spark.sql.python.limitPushdown.enabled": True,
+                }
+            ):
+                self.spark.dataSource.register(TestDataSource)
+                df = self.spark.read.format("TestDataSource").load().filter("x = 1").limit(5)
+                with self.assertRaisesRegex(Exception, "must be deterministic"):
+                    df.collect()
+
+    def test_limit_pushdown_zero(self):
+        # `LIMIT 0` never reaches the data source: EliminateLimits rewrites it to an empty
+        # relation before operator pushdown runs, so the scan is removed altogether and neither
+        # pushLimit nor read is called.
+        class TestDataSourceReader(DataSourceReader):
+            def pushLimit(self, limit: int) -> bool:
+                raise AssertionError("pushLimit should not be called for LIMIT 0")
+
+            def read(self, partition):
+                raise AssertionError("read should not be called for LIMIT 0")
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(0)
+            assertDataFrameEqual(df, [])
+
+    def test_limit_pushdown_disabled_with_filter_pushdown_enabled(self):
+        # The reader implements pushLimit while limit pushdown is disabled. Filter pushdown runs
+        # a different planning worker, which must not silently ignore pushLimit either.
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                return []
+
+            def pushLimit(self, limit: int) -> bool:
+                return True
+
+            def read(self, partition):
+                yield from [(1,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": True,
+                "spark.sql.python.limitPushdown.enabled": False,
+            }
+        ):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1").limit(1)
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+                df.show()
+
+    def test_limit_pushdown_disabled(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pushLimit(self, limit: int) -> bool:
+                assert False
+
+            def read(self, partition):
+                assert False
+
+        class TestDataSource(DataSource):
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": False}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("x int").load()
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+                df.show()
+
+    def test_limit_pushdown_not_implemented(self):
+        # A reader that does not implement pushLimit is unaffected when the conf is on.
+        class TestDataSourceReader(DataSourceReader):
+            def read(self, partition):
+                yield from [(0,), (1,), (2,)]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.limitPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().limit(2)
+            assertDataFrameEqual(df, [Row(x=0), Row(x=1)])
+
     def _check_filters(self, sql_type, sql_filter, python_filters):
         """
         Parameters

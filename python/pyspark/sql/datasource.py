@@ -531,6 +531,13 @@ class DataSourceReader(ABC):
         all filters, indicating that no filters can be pushed down. Subclasses can
         override this method to implement filter pushdown.
 
+        .. note::
+            When the query also has a limit to push down (see :meth:`pushLimit`), planning
+            creates a second reader and calls this method on it again with the same filters, so
+            that the reader reaches the same state before the limit is pushed. Implementations
+            must therefore be deterministic -- returning a different set of supported filters
+            the second time fails the query -- and should avoid side effects outside of `self`.
+
         It's recommended to implement this method only for data sources that natively
         support filtering, such as databases and GraphQL APIs.
 
@@ -577,6 +584,73 @@ class DataSourceReader(ABC):
         ...             yield filter
         """
         return filters
+
+    def pushLimit(self, limit: int) -> bool:
+        """
+        Called with the maximum number of rows that the query needs from this data source.
+
+        Limit pushdown allows the data source to fetch less data, for example by adding a
+        `LIMIT` clause to a SQL query or a page size parameter to a REST request.
+
+        This method is called once during query planning, before :meth:`partitions` and
+        :meth:`read`. By default, it returns False, indicating that the limit cannot be
+        pushed down. Subclasses can override this method to implement limit pushdown.
+
+        :meth:`pushFilters` is called before this method only when the query has filters that
+        Spark can push down; for a query without them, :meth:`pushFilters` is not called at
+        all. Any state this method relies on must therefore be initialized in `__init__`
+        rather than in :meth:`pushFilters`.
+
+        A limit is only pushed down when every filter was pushed down, because Spark cannot
+        apply a limit before a filter it still has to evaluate itself. To benefit from limit
+        pushdown alongside filters, :meth:`pushFilters` should return an empty iterable.
+
+        Pushing down a limit is only a hint: Spark always applies the limit again after the
+        scan, so it is safe to return True even if `read()` yields more than `limit` rows.
+        Returning True never causes the query to see fewer rows than it requires.
+
+        .. versionadded:: 4.3.0
+
+        Parameters
+        ----------
+        limit : int
+            The maximum number of rows the query needs. Always positive: `LIMIT 0` is
+            optimized into an empty relation and never reaches the data source.
+
+        Returns
+        -------
+        bool
+            True if the data source will use the limit to reduce the amount of data it
+            reads, False otherwise.
+
+        Side effects
+        ------------
+        This method is allowed to modify `self`. The object must remain picklable.
+        Modifications to `self` are visible to the `partitions()` and `read()` methods.
+
+        Notes
+        -----
+        This method is only called when the configuration
+        `spark.sql.python.limitPushdown.enabled` is set to true.
+
+        Examples
+        --------
+        Implement pushLimit to fetch fewer rows from the data source:
+
+        >>> def pushLimit(self, limit):
+        ...     # Save the limit for handling in partitions() and read()
+        ...     self.limit = limit
+        ...     return True
+
+        A limit can also be used to reduce the number of partitions, since every
+        partition opens its own connection to the data source:
+
+        >>> def partitions(self):
+        ...     if self.limit is not None:
+        ...         return [InputPartition(None)]
+        ...     return [InputPartition(i) for i in range(16)]
+        """
+        return False
 
     def partitions(self) -> Sequence[InputPartition]:
         """

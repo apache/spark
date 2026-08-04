@@ -31,7 +31,8 @@ class PythonScan(
     shortName: String,
     outputSchema: StructType,
     options: CaseInsensitiveStringMap,
-    supportedFilters: Array[Filter]
+    supportedFilters: Array[Filter],
+    pushedLimit: Option[Int] = None
 ) extends Scan with SupportsMetadata {
   override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
 
@@ -67,7 +68,7 @@ class PythonScan(
     Map(
       "PushedFilters" -> supportedFilters.mkString("[", ", ", "]"),
       "ReadSchema" -> outputSchema.simpleString
-    )
+    ) ++ pushedLimit.map(limit => "PushedLimit" -> s"LIMIT $limit")
   }
 }
 

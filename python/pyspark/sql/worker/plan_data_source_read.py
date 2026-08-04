@@ -42,7 +42,7 @@ from pyspark.sql.types import (
     BinaryType,
     StructType,
 )
-from pyspark.sql.worker.utils import worker_run
+from pyspark.sql.worker.utils import is_method_overridden, worker_run
 from pyspark.worker_util import (
     get_sock_file_to_executor,
     read_command,
@@ -339,6 +339,7 @@ def _main(infile: IO, outfile: IO) -> None:
         f"The maximum arrow batch size should be greater than 0, but got '{max_arrow_batch_size}'"
     )
     enable_pushdown = read_bool(infile)
+    enable_limit_pushdown = read_bool(infile)
 
     is_streaming = read_bool(infile)
     binary_as_bytes = read_bool(infile)
@@ -360,19 +361,21 @@ def _main(infile: IO, outfile: IO) -> None:
                         "actual": f"'{type(reader).__name__}'",
                     },
                 )
-            is_pushdown_implemented = (
-                getattr(reader.pushFilters, "__func__", None) is not DataSourceReader.pushFilters
-            )
-            if is_pushdown_implemented and not enable_pushdown:
-                # Do not silently ignore pushFilters when pushdown is disabled.
-                # Raise an error to ask the user to enable pushdown.
-                raise PySparkAssertionError(
-                    errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
-                    messageParameters={
-                        "type": type(reader).__name__,
-                        "conf": "spark.sql.python.filterPushdown.enabled",
-                    },
-                )
+            # Do not silently ignore a pushdown method that the reader implements while the
+            # corresponding pushdown is disabled. Raise an error to ask the user to enable it.
+            for method, conf, enabled in (
+                ("pushFilters", "spark.sql.python.filterPushdown.enabled", enable_pushdown),
+                ("pushLimit", "spark.sql.python.limitPushdown.enabled", enable_limit_pushdown),
+            ):
+                if not enabled and is_method_overridden(reader, method):
+                    raise PySparkAssertionError(
+                        errorClass="DATA_SOURCE_PUSHDOWN_DISABLED",
+                        messageParameters={
+                            "type": type(reader).__name__,
+                            "method": method,
+                            "conf": conf,
+                        },
+                    )
 
         # Send the read function and partitions to the JVM.
         write_read_func_and_partitions(

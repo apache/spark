@@ -17,7 +17,7 @@
 
 import os
 import sys
-from typing import Callable, IO, Optional
+from typing import Any, Callable, IO, Optional
 
 from pyspark.accumulators import (
     _accumulatorRegistry,
@@ -54,6 +54,17 @@ class RunnerConf(Conf):
     @property
     def profiler(self) -> Optional[str]:
         return self.get("spark.sql.pyspark.dataSource.profiler", None)
+
+
+def is_method_overridden(reader: Any, name: str) -> bool:
+    """
+    Whether `reader` overrides the `DataSourceReader` method `name`, rather than inheriting the
+    default implementation. Used to detect pushdown methods that a reader implements while the
+    corresponding pushdown configuration is disabled, so that they are not silently ignored.
+    """
+    from pyspark.sql.datasource import DataSourceReader
+
+    return getattr(getattr(reader, name), "__func__", None) is not getattr(DataSourceReader, name)
 
 
 @with_faulthandler
