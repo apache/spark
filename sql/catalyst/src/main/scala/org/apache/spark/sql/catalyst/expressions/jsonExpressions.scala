@@ -84,6 +84,7 @@ case class GetJsonObject(json: Expression, path: Expression)
   } else {
     new GetJsonObjectEvaluator()
   }
+  override def stateful: Boolean = true
 
   override def eval(input: InternalRow): Any = {
     evaluator.setJson(json.eval(input).asInstanceOf[UTF8String])
@@ -215,6 +216,8 @@ case class MultiGetJsonObject(
     }
   }
 
+  override def stateful: Boolean = true
+
   @transient
   private lazy val evaluator = MultiGetJsonObjectEvaluator(
     fallbackPaths.map(UTF8String.fromString),
@@ -308,6 +311,7 @@ case class JsonTuple(children: Seq[Expression])
 
   @transient
   private lazy val evaluator: JsonTupleEvaluator = JsonTupleEvaluator(foldableFieldNames)
+  override def stateful: Boolean = true
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
@@ -729,6 +733,7 @@ case class JsonToStructs(
   @transient
   private lazy val evaluator = new JsonToStructsEvaluator(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, variantAllowDuplicateKeys)
+  override def stateful: Boolean = true
 
   override def nullSafeEval(json: Any): Any = evaluator.evaluate(json.asInstanceOf[UTF8String])
 
