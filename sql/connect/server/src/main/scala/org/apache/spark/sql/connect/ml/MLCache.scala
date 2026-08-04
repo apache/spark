@@ -23,6 +23,7 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
@@ -317,7 +318,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   /** Returns a cache snapshot without loading or touching any cached model. */
   def getStatus: MLCacheStatus = this.synchronized {
     val models = mutable.ArrayBuilder.make[MLCacheModelInfo]
-    cachedModelMetadata.forEach { case (id, metadata) =>
+    cachedModelMetadata.asScala.foreach { case (id, metadata) =>
       models += MLCacheModelInfo(
         id = id,
         uid = metadata.uid,
@@ -333,7 +334,7 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
         Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_IN_MEMORY_SIZE),
       totalSizeBytes = totalMLCacheSizeBytes.get(),
       maxTotalSizeBytes = getMLCacheMaxSize,
-      models = models.result().sortBy(_.id))
+      models = models.result().toIndexedSeq.sortBy(_.id))
   }
 }
 

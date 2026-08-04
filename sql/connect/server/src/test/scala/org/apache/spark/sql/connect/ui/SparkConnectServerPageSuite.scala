@@ -85,7 +85,7 @@ class SparkConnectServerPageSuite
   }
 
   test("Spark Connect Server page should load successfully") {
-    val store = getStatusStore
+    val store = getStatusStore()
 
     val request = mock(classOf[HttpServletRequest])
     val tab = mock(classOf[SparkConnectServerTab], RETURNS_SMART_NULLS)
@@ -113,7 +113,7 @@ class SparkConnectServerPageSuite
   }
 
   test("Spark Connect Server session page should load successfully") {
-    val store = getStatusStore
+    val store = getStatusStore()
 
     val request = mock(classOf[HttpServletRequest])
     when(request.getParameter("id")).thenReturn("sessionId")
