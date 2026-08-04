@@ -48,6 +48,7 @@ import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
+import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric;
 import org.apache.spark.shuffle.checksum.ShuffleChecksumSupport;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.scheduler.MapStatus;
@@ -104,6 +105,7 @@ final class BypassMergeSortShuffleWriter<K, V>
   private FileSegment[] partitionWriterSegments;
   @Nullable private MapStatus mapStatus;
   private long[] partitionLengths;
+  private CustomShuffleTaskMetric[] customMetricsValues = new CustomShuffleTaskMetric[0];
   /** Checksum calculator for each partition. Empty when shuffle checksum disabled. */
   private final Checksum[] partitionChecksums;
   /**
@@ -153,6 +155,7 @@ final class BypassMergeSortShuffleWriter<K, V>
       if (!records.hasNext()) {
         partitionLengths = mapOutputWriter.commitAllPartitions(
           ShuffleChecksumHelper.EMPTY_CHECKSUM_VALUE).getPartitionLengths();
+        customMetricsValues = mapOutputWriter.currentMetricsValues();
         mapStatus = MapStatus$.MODULE$.apply(
           blockManager.shuffleServerId(), partitionLengths, mapId, getAggregatedChecksumValue());
         return;
@@ -213,6 +216,11 @@ final class BypassMergeSortShuffleWriter<K, V>
     return partitionLengths;
   }
 
+  @Override
+  public CustomShuffleTaskMetric[] currentMetricsValues() {
+    return customMetricsValues;
+  }
+
   // For test only.
   @VisibleForTesting
   RowBasedChecksum[] getRowBasedChecksums() {
@@ -261,8 +269,11 @@ final class BypassMergeSortShuffleWriter<K, V>
       }
       partitionWriters = null;
     }
-    return mapOutputWriter.commitAllPartitions(getChecksumValues(partitionChecksums))
-      .getPartitionLengths();
+    long[] committedPartitionLengths =
+      mapOutputWriter.commitAllPartitions(getChecksumValues(partitionChecksums))
+        .getPartitionLengths();
+    customMetricsValues = mapOutputWriter.currentMetricsValues();
+    return committedPartitionLengths;
   }
 
   private void writePartitionedDataWithChannel(
