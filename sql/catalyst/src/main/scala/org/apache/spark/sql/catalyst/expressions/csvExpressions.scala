@@ -40,6 +40,14 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(csvStr, schema[, options]) - Returns a struct value with the given `csvStr` and `schema`.",
+  arguments = """
+    Arguments:
+      * csvStr - A string expression of a single CSV record.
+      * schema - A string literal or invocation of `schema_of_csv` describing the schema.
+      * options - An optional map literal of string key-value pairs specifying CSV parsing
+          options controlling how `csvStr` is parsed. Accepts the same options as the CSV data
+          source.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('1, 0.8', 'a INT, b DOUBLE');
@@ -133,6 +141,12 @@ case class CsvToStructs(
  */
 @ExpressionDescription(
   usage = "_FUNC_(csv[, options]) - Returns schema in the DDL format of CSV string.",
+  arguments = """
+    Arguments:
+      * csv - A foldable string expression of a single CSV record.
+      * options - An optional map literal of string key-value pairs specifying CSV parsing
+          options that control schema inference. Accepts the same options as the CSV data source.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('1,abc');
@@ -205,6 +219,13 @@ case class SchemaOfCsv(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, options]) - Returns a CSV string with a given struct value",
+  arguments = """
+    Arguments:
+      * expr - A struct expression to convert into a CSV string.
+      * options - An optional map literal of string key-value pairs specifying CSV generation
+          options controlling how the struct is rendered. Accepts the same options as the CSV data
+          source.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
