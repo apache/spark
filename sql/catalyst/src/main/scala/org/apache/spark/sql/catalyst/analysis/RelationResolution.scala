@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
@@ -63,8 +61,7 @@ class RelationResolution(
 
   val v1SessionCatalog = catalogManager.v1SessionCatalog
 
-  private def relationCache: mutable.Map[RelationCacheKey, LogicalPlan] =
-    AnalysisContext.get.relationCache
+  private def relationCache = AnalysisContext.get.relationCache
 
   /**
    * If we are resolving database objects (relations, functions, etc.) inside views, we may need to
@@ -550,8 +547,8 @@ class RelationResolution(
       ident: Identifier,
       timeTravelSpec: Option[TimeTravelSpec],
       options: CaseInsensitiveStringMap): RelationCacheKey = {
-    RelationCacheKey(
-      (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq, timeTravelSpec, options)
+    val nameParts = (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq
+    RelationCacheKey(nameParts, timeTravelSpec, options)
   }
 
   private def cloneWithPlanId(plan: LogicalPlan, planId: Option[Long]): LogicalPlan = {

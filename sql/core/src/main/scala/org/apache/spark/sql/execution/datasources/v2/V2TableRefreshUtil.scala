@@ -32,6 +32,8 @@ import org.apache.spark.sql.util.SchemaValidationMode.ALLOW_NEW_FIELDS
 import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 
 private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
+  private type CurrentTableKey = (TableCatalog, Identifier, CaseInsensitiveStringMap)
+
   /**
    * Refreshes table metadata for tables in the plan.
    *
@@ -82,8 +84,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       plan: LogicalPlan,
       versionedOnly: Boolean,
       schemaValidationMode: SchemaValidationMode): LogicalPlan = {
-    val currentTables =
-      mutable.HashMap.empty[(TableCatalog, Identifier, CaseInsensitiveStringMap), Table]
+    val currentTables = mutable.HashMap.empty[CurrentTableKey, Table]
     plan transformWithSubqueries {
       case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
           if (r.isVersioned || !versionedOnly) && r.timeTravelSpec.isEmpty =>
