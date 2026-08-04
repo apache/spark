@@ -73,10 +73,16 @@ from pyspark.testing.utils import (
 )
 from pyspark.testing.goldenutils import GoldenFileTestMixin
 
+# Imported as a module, not `from ... import PyArrowArrayToPandasDefaultTests`, so
+# that unittest does not collect and re-run the default test class from this module.
+from pyspark.tests.upstream.pyarrow import test_pyarrow_arrow_to_pandas_default
+
 if have_pandas:
     import pandas as pd
 if have_pyarrow:
     import pyarrow as pa
+if have_numpy:
+    import numpy as np
 
 
 class _PyArrowToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
@@ -98,6 +104,86 @@ class _PyArrowToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
             return self.repr_value(arr.to_pandas(**to_pandas_kwargs), max_len=0)
         except Exception as e:
             return f"ERR@{type(e).__name__}"
+
+    @staticmethod
+    def _arrow_buffers(arrow_obj):
+        """
+        Every non-null buffer backing ``arrow_obj``.
+
+        A ChunkedArray has no buffers of its own -- its data lives in its chunks --
+        so it is expanded first.  ``None`` entries (e.g. an absent validity bitmap)
+        are skipped.
+        """
+        if isinstance(arrow_obj, pa.ChunkedArray):
+            chunks = [arrow_obj.chunk(i) for i in range(arrow_obj.num_chunks)]
+        else:
+            chunks = [arrow_obj]
+
+        buffers = []
+        for chunk in chunks:
+            for buffer in chunk.buffers():
+                if buffer is not None:
+                    buffers.append(buffer)
+        return buffers
+
+    @classmethod
+    def _verify_zero_copy(cls, arr, **to_pandas_kwargs) -> str:
+        """
+        Independently verify whether ``to_pandas`` reused ``arr``'s buffers,
+        instead of trusting PyArrow's own ``zero_copy_only`` verdict.
+
+        The check inspects whatever storage pandas returned rather than assuming a
+        numpy-backed Series, so it stays correct as pandas moves more dtypes to
+        Arrow-backed storage.
+
+        Returns ``"zero-copy"``, ``"partial-copy"``, ``"copied"``, or
+        ``"ERR@<ExceptionClass>"``.
+        """
+        try:
+            series = arr.to_pandas(**to_pandas_kwargs)
+        except Exception as e:
+            return f"ERR@{type(e).__name__}"
+
+        backing_array = series.array
+
+        # Arrow-backed result: compare buffer addresses, reading the stored data
+        # back through the public __arrow_array__ protocol.  to_numpy() would
+        # materialize a copy here and wrongly report no sharing.  Keying on the
+        # protocol rather than on ArrowDtype also covers dtypes that are
+        # Arrow-backed without being ArrowDtype, such as pandas 3's string.
+        #
+        # The result has several buffers (validity, offsets, values) and can borrow
+        # some while allocating others, so count how many it borrowed rather than
+        # stopping at the first match.  The result's buffers are the denominator
+        # because the question is what pandas had to allocate.
+        if hasattr(backing_array, "__arrow_array__"):
+            source_addresses = {buffer.address for buffer in cls._arrow_buffers(arr)}
+            stored_buffers = cls._arrow_buffers(pa.array(backing_array))
+            borrowed = 0
+            for buffer in stored_buffers:
+                if buffer.address in source_addresses:
+                    borrowed += 1
+            if borrowed == len(stored_buffers):
+                return "zero-copy"
+            return "partial-copy" if borrowed else "copied"
+
+        # numpy-backed result: np.shares_memory accounts for slice offsets, so it
+        # is robust where raw address equality is not.
+        pandas_values = series.to_numpy()
+        for buffer in cls._arrow_buffers(arr):
+            if np.shares_memory(np.frombuffer(buffer, dtype=np.uint8), pandas_values):
+                return "zero-copy"
+
+        # Zero bytes cannot overlap, so an empty result is zero-copy if the numpy
+        # array still borrows the Arrow array (numpy's .base is its memory owner).
+        if len(arr) == 0:
+            owner = pandas_values
+            while (base := getattr(owner, "base", None)) is not None:
+                if base is arr:
+                    return "zero-copy"
+                owner = base
+
+        return "copied"
 
 
 @unittest.skipIf(
@@ -253,6 +339,155 @@ class PyArrowArrayToPandasCoerceTemporalTests(_PyArrowToPandasTestBase):
             col_names=col_names,
             compute_cell=compute_cell,
             golden_file_prefix="golden_pyarrow_arrow_to_pandas_coerce_temporal",
+            index_name="test case",
+            overrides=overrides,
+        )
+
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas or not have_numpy,
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
+)
+class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
+    """
+    Tests pa.Array.to_pandas(zero_copy_only=True) via golden file comparison.
+
+    PySpark converts Arrow data to (numpy-backed) pandas objects throughout its
+    conversion layer (``python/pyspark/sql/pandas/conversion.py``); whether a
+    given Arrow type can make that conversion WITHOUT copying its buffers
+    directly affects the memory and latency of ``toPandas`` and pandas UDFs.
+    ``zero_copy_only=True`` makes PyArrow raise ``ArrowInvalid`` instead of
+    silently copying, so it is the natural probe for "is this conversion
+    zero-copy?".  These tests record, per Arrow type, whether the conversion is
+    zero-copy so CI fails loudly if that changes across pandas/PyArrow/NumPy
+    upgrades.
+
+    Three output columns are recorded for each source array:
+
+    - ``zero_copy_only=False``: the default, where PyArrow silently copies when a
+      view is not possible.  This always succeeds, and records the resulting dtype.
+    - ``zero_copy_only=True``: PyArrow's own verdict -- ``Series[dtype]`` when the
+      conversion is zero-copy, or ``ERR@ArrowInvalid`` when a copy is required.
+    - ``verified zero-copy``: an INDEPENDENT check of whether the conversion
+      actually reused the Arrow buffers, rather than trusting PyArrow's flag.
+      ``zero-copy`` when every buffer the result needs was borrowed, ``copied``
+      when none were, and ``partial-copy`` when only some were (e.g. the values
+      reused but the offsets reallocated).  The last two columns are expected to
+      agree, but are recorded separately rather than asserted equal, because they
+      do not always: a tz-aware timestamp reports ``zero_copy_only=True`` while
+      pandas materializes it into a ``DatetimeTZDtype`` array that shares nothing.
+      Pinning both as data makes such disagreements visible instead of hiding them
+      behind an assertion.
+
+    The row set mirrors ``test_pyarrow_arrow_to_pandas_default.py``'s rows exactly
+    -- every Arrow type it covers, in its standard / nullable / empty variants --
+    so both golden files pin the same types, and appends the layout variants that
+    only matter for zero-copy: sliced (offset) arrays and single- vs multi-chunk
+    ChunkedArrays.
+    """
+
+    def _build_source_arrays(self):
+        """
+        Reuse every row of the sibling default test, then add the layout variants
+        that only matter for zero-copy.
+
+        Sharing the row set keeps both golden files pinning the same types, and
+        means a type added to the default test is covered here automatically.
+        A slice still views a contiguous no-null region, so it stays zero-copy even
+        though its data starts partway into the parent buffer.  A single chunk is
+        zero-copy, but multiple chunks must be concatenated into one contiguous
+        numpy buffer -- a copy.  Multi-chunk is the common shape in real PySpark,
+        where each partition arrives as its own chunk.
+        """
+        default_tests = test_pyarrow_arrow_to_pandas_default.PyArrowArrayToPandasDefaultTests
+        sources = default_tests._build_source_arrays(self)
+
+        sources["int64:sliced"] = pa.array(list(range(10)), pa.int64()).slice(2, 3)
+        sources["int64:sliced-with-null"] = pa.array([1, 2, None, 4, 5], pa.int64()).slice(1, 3)
+        sources["int64:single-chunk"] = pa.chunked_array([pa.array([1, 2, 3], pa.int64())])
+        sources["int64:multi-chunk"] = pa.chunked_array(
+            [pa.array([1, 2], pa.int64()), pa.array([3, 4], pa.int64())]
+        )
+
+        return sources
+
+    # Output column for the default zero_copy_only=False: PyArrow silently copies
+    # when a view is not possible, so this always succeeds and records the dtype.
+    COL_ZERO_COPY_OFF = "zero_copy_only=False"
+
+    # Output column for zero_copy_only=True: PyArrow raises ArrowInvalid instead
+    # of copying, so this records its verdict on whether a view was possible.
+    COL_ZERO_COPY_ON = "zero_copy_only=True"
+
+    # Output column independently verifying that buffers were actually reused.
+    COL_VERIFIED = "verified zero-copy"
+
+    def test_to_pandas_zero_copy_only(self):
+        """Test pa.Array.to_pandas(zero_copy_only=True/False) against golden file."""
+        sources = self._build_source_arrays()
+        row_names = list(sources.keys())
+        col_names = [
+            "pyarrow array",
+            self.COL_ZERO_COPY_OFF,
+            self.COL_ZERO_COPY_ON,
+            self.COL_VERIFIED,
+        ]
+
+        # Version-specific expected values go here, keyed by (row, col), when a
+        # newer pandas/PyArrow/NumPy legitimately changes a cell's output.
+        overrides: dict[tuple[str, str], str] = {}
+        # Pandas 3 renders non-empty Arrow string arrays with its dedicated string
+        # dtype, so the copying conversion reports Series[str] instead of object.
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            # Pandas stores that dtype as large_string, so `string` keeps its values
+            # but has its 32-bit offsets rebuilt as 64-bit, while `large_string`
+            # already matches and passes through untouched.
+            non_empty_strings = [
+                ("string:standard", "['hello', 'world', '']@Series[str]", "partial-copy"),
+                ("string:nullable", "['hello', nan, 'world']@Series[str]", "partial-copy"),
+                ("large_string:standard", "['hello', 'world']@Series[str]", "zero-copy"),
+                ("large_string:nullable", "['hello', nan]@Series[str]", "zero-copy"),
+            ]
+            for row, expected, _ in non_empty_strings:
+                overrides[(row, self.COL_ZERO_COPY_OFF)] = expected
+
+            # Only from PyArrow 24 is that string conversion actually Arrow-backed,
+            # so zero_copy_only succeeds and the buffers are genuinely reused.  On
+            # PyArrow < 24 it still materializes, so the pandas 2 expectations
+            # (ERR@ArrowInvalid / copied) remain correct and need no override.
+            if LooseVersion(pa.__version__) >= LooseVersion("24.0.0"):
+                for row, expected, verified in non_empty_strings:
+                    overrides[(row, self.COL_ZERO_COPY_ON)] = expected
+                    overrides[(row, self.COL_VERIFIED)] = verified
+                # Empty arrays also gain the string dtype in PyArrow 24.  Offsets are
+                # the only buffer an empty result has, so rebuilding them shares
+                # nothing at all -- fully copied rather than partial.
+                for row, verified in [
+                    ("string:empty", "copied"),
+                    ("large_string:empty", "zero-copy"),
+                ]:
+                    overrides[(row, self.COL_ZERO_COPY_OFF)] = "[]@Series[str]"
+                    overrides[(row, self.COL_ZERO_COPY_ON)] = "[]@Series[str]"
+                    overrides[(row, self.COL_VERIFIED)] = verified
+
+        def compute_cell(row_name, col_name):
+            arr = sources[row_name]
+            if col_name == "pyarrow array":
+                return self.repr_value(arr, max_len=0)
+            elif col_name == self.COL_ZERO_COPY_OFF:
+                return self._to_pandas_cell(arr, zero_copy_only=False)
+            elif col_name == self.COL_ZERO_COPY_ON:
+                return self._to_pandas_cell(arr, zero_copy_only=True)
+            elif col_name == self.COL_VERIFIED:
+                return self._verify_zero_copy(arr)
+            else:
+                raise ValueError(f"unknown column: {col_name}")
+
+        self.compare_or_generate_golden_matrix(
+            row_names=row_names,
+            col_names=col_names,
+            compute_cell=compute_cell,
+            golden_file_prefix="golden_pyarrow_arrow_to_pandas_zero_copy",
             index_name="test case",
             overrides=overrides,
         )
