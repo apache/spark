@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.{DeveloperApi, Stable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{LEFT_EXPR, RIGHT_EXPR}
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
@@ -31,11 +31,13 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * The companion object is public so that extension developers can reference the `Column` type as
- * a value, which is what makes the `Column(expression)` factory provided by
- * `org.apache.spark.sql.classic.ClassicConversions.ColumnConstructorExt` usable outside of the
- * `org.apache.spark` package. All of its members intentionally stay internal.
+ * The companion object is public so that the `Column` type can be referenced as a value. This
+ * allows an implementation to add a `Column(expression)` factory through an extension method. All
+ * of its members are internal to Spark.
+ *
+ * @since 4.4.0
  */
+@DeveloperApi
 object Column {
 
   private[spark] def apply(colName: String): Column = new Column(colName)
