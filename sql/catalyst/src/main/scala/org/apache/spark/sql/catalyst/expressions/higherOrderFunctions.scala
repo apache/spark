@@ -658,6 +658,12 @@ object ArraySort {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Filters entries in a map using the function.",
+  arguments = """
+    Arguments:
+      * expr - A map expression.
+      * func - A lambda function `(k, v) -> boolean` that returns whether the entry with
+          key `k` and value `v` should be kept.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 0, 2, 2, 3, -1), (k, v) -> k > v);
@@ -1352,6 +1358,12 @@ case class ArrayAggregate(
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Transforms elements in a map using the function.",
+  arguments = """
+    Arguments:
+      * expr - A map expression.
+      * func - A lambda function `(k, v) -> newKey` producing the transformed key from the
+          entry with key `k` and value `v`. The values are kept unchanged.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + 1);
@@ -1412,6 +1424,12 @@ case class TransformKeys(
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Transforms values in the map using the function.",
+  arguments = """
+    Arguments:
+      * expr - A map expression.
+      * func - A lambda function `(k, v) -> newValue` producing the transformed value from
+          the entry with key `k` and value `v`. The keys are kept unchanged.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> v + 1);
@@ -1472,6 +1490,14 @@ case class TransformValues(
       NULL will be passed as the value for the missing key. If an input map contains duplicated
       keys, only the first entry of the duplicated key is passed into the lambda function.
     """,
+  arguments = """
+    Arguments:
+      * map1 - The first map expression.
+      * map2 - The second map expression.
+      * function - A lambda function `(k, v1, v2) -> newValue` that produces the merged value
+          for key `k`, where `v1` and `v2` are the values from `map1` and `map2` respectively
+          (NULL when the key is missing from that map).
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2));

@@ -660,6 +660,11 @@ object Cast extends QueryErrorsBase {
 @ExpressionDescription(
   usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`." +
           " `expr` :: `type` alternative casting syntax is also supported.",
+  arguments = """
+    Arguments:
+      * expr - An expression whose value is converted to the target data type.
+      * type - The target data type to cast the value to.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('10' as int);
