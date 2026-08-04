@@ -344,6 +344,10 @@ case class CollectSet(
 @ExpressionDescription(
   usage =
     "_FUNC_(expr) - Collects and returns the distinct union of the elements of array `expr`.",
+  arguments = """
+    Arguments:
+      * expr - An array expression whose elements are collected into a set across rows.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (array(1, 2)), (array(2, 3)), (array(1)) AS tab(col);
