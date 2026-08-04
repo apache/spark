@@ -415,45 +415,67 @@ def get_json(url):
         sys.exit(-1)
 
 
-def has_merge_footer(message, pr_num):
-    """Whether `message` carries the merge footer `merge_pr` generates for `pr_num`.
+def merge_footer_pr(message):
+    """The PR number in `message`'s generated merge footer, or None if it has none.
 
-    Matching the "Closes #N from " line alone is not enough to identify a merge commit:
+    A commit message cannot be searched for "Closes #N from " to identify the merge of N:
     `merge_pr` passes the PR body through as its own `git commit -m` paragraph, so a body
-    that quotes another PR's closing line keeps that line at the start of a line in the
-    resulting message. What a body cannot fake is the footer *structure*, which `merge_pr`
-    always emits as a "Closes" paragraph followed immediately by the authors paragraph:
-
-        Closes #<pr> from <author>/<branch>.
-
-        Authored-by: A <a@example.org>
-        Signed-off-by: C <c@example.org>
+    discussing or reverting another commit can quote that commit's entire footer, structure
+    included. What is unforgeable is *position*: `merge_pr` appends the footer last, so the
+    generated one is the final "Closes" paragraph in the message. Later `cherry-pick -x`
+    lines may follow it, but no further "Closes" paragraph can. So read the last one and
+    compare its number, rather than searching for a number anywhere.
 
     >>> footer = "Closes #1 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nSigned-off-by: C <c@e.org>"
-    >>> has_merge_footer("[SPARK-1][SQL] Title\\n\\nSome body.\\n\\n" + footer, 1)
+    >>> merge_footer_pr("[SPARK-1][SQL] Title\\n\\nSome body.\\n\\n" + footer)
+    1
+    >>> merge_footer_pr("[SPARK-1][SQL] Title\\n\\n" + footer.replace("Authored", "Lead-authored"))
+    1
+    >>> merge_footer_pr("[SPARK-1][SQL] Title\\n\\nNo footer here.") is None
     True
-    >>> lead = footer.replace("Authored", "Lead-authored")
-    >>> has_merge_footer("[SPARK-1][SQL] Title\\n\\n" + lead, 1)
+
+    A cherry-pick keeps the footer, with `-x` provenance appended after it:
+
+    >>> pick = footer + "\\n(cherry picked from commit abc123)\\nSigned-off-by: C <c@e.org>"
+    >>> merge_footer_pr("[SPARK-1][SQL] Title\\n\\n" + pick)
+    1
+
+    A body quoting another PR's complete footer does not shadow the real one:
+
+    >>> quoted = "Reverting:\\n\\n" + footer + "\\n\\nSee above."
+    >>> own = footer.replace("#1", "#2")
+    >>> merge_footer_pr("[SPARK-2][SQL] Later\\n\\n%s\\n\\n%s" % (quoted, own))
+    2
+    """
+    # \s*$ tolerates trailing whitespace. The blank line and authors paragraph reject prose
+    # that merely mentions a PR; taking the LAST match rejects a body quoting a real footer.
+    footer = re.compile(
+        r"^Closes #(\d+) from \S+\s*$\n\n(?:Lead-authored-by|Authored-by):",
+        re.MULTILINE,
+    )
+    matches = footer.findall(message)
+    return int(matches[-1]) if matches else None
+
+
+def has_merge_footer(message, pr_num):
+    """Whether `message`'s generated merge footer closes `pr_num`. See `merge_footer_pr`.
+
+    >>> footer = "Closes #1 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nSigned-off-by: C <c@e.org>"
+    >>> has_merge_footer("[SPARK-1][SQL] Title\\n\\n" + footer, 1)
     True
     >>> has_merge_footer("[SPARK-1][SQL] Title\\n\\n" + footer, 2)
     False
 
-    A body quoting another PR's closing line is not mistaken for that PR's merge:
+    A commit whose body quotes another PR's full footer is not taken for that PR's merge:
 
-    >>> body = "Reverts:\\nCloses #1 from a/b.\\n\\nSee that commit."
-    >>> quoting = "[SPARK-2][SQL] Later\\n\\n%s\\n\\n%s" % (body, footer.replace("#1", "#2"))
-    >>> has_merge_footer(quoting, 1)
+    >>> quoted = "Reverting:\\n\\n" + footer + "\\n\\nSee above."
+    >>> later = "[SPARK-2][SQL] Later\\n\\n%s\\n\\n%s" % (quoted, footer.replace("#1", "#2"))
+    >>> has_merge_footer(later, 1)
     False
-    >>> has_merge_footer(quoting, 2)
+    >>> has_merge_footer(later, 2)
     True
     """
-    # \s*$ tolerates trailing whitespace; the blank line then the authors paragraph is what
-    # distinguishes the generated footer from the same text quoted inside a PR body.
-    footer = re.compile(
-        r"^Closes #%s from \S+\s*$\n\n(Lead-authored-by|Authored-by):" % pr_num,
-        re.MULTILINE,
-    )
-    return footer.search(message) is not None
+    return merge_footer_pr(message) == pr_num
 
 
 def merge_commit_candidates(pr_events):
@@ -711,12 +733,16 @@ def branches_with_merge_footer(pr_num, branch_names):
     A cherry-pick is a new commit, so `git branch --contains <merge_hash>` finds only the
     branch the change was merged into; what identifies a backport is the footer, which
     `cherry-pick -x` copies verbatim (the same signal `dev/pr_merge_status.py` reads).
+    `git log --grep` only narrows the walk -- it matches the fragment anywhere in a message,
+    including inside a copied PR body -- so every candidate is confirmed with
+    `has_merge_footer` before its branches count as already backported.
     Best-effort: this only sees branches already fetched into PUSH_REMOTE_NAME's tracking
     refs, so a backport pushed from elsewhere and not yet fetched is simply not reported --
     the committer is still prompted and can type any branch.
     """
     trailer = "Closes #%s from " % pr_num
     try:
+        # %x00 delimits records so a commit message (which spans lines) stays one field.
         out = run_cmd(
             [
                 "git",
@@ -725,7 +751,7 @@ def branches_with_merge_footer(pr_num, branch_names):
                 "--fixed-strings",
                 "--grep",
                 trailer,
-                "--format=%H",
+                "--format=%H %B%x00",
             ]
         )
     except Exception as e:
@@ -734,7 +760,14 @@ def branches_with_merge_footer(pr_num, branch_names):
 
     landed = set()
     prefix = "%s/" % PUSH_REMOTE_NAME
-    for commit_hash in out.split():
+    for record in out.split("\0"):
+        record = record.strip("\n")
+        if not record:
+            continue
+        commit_hash, _, message = record.partition(" ")
+        # --grep matched somewhere in the message; only the generated footer counts.
+        if not has_merge_footer(message, pr_num):
+            continue
         refs = run_cmd(
             [
                 "git",
@@ -753,22 +786,22 @@ def branches_with_merge_footer(pr_num, branch_names):
 
 
 def default_pick_branch(branch_names, already_picked):
-    """Highest-ranked release branch that has not already received the change.
+    """Highest-ranked release branch that has not already received the change, or None.
 
     `branch_names` is ordered newest-first (see `semver_branch_rank`) and `already_picked`
     holds the branches the change is known to be on, so the prompt never defaults to a
-    branch where the cherry-pick would come up empty. Falls back to the newest branch when
-    every known branch is accounted for, leaving the committer to type a target.
+    branch where the cherry-pick would come up empty. Returns None when every known branch
+    already has it, so callers can say so instead of offering an empty pick.
 
     >>> default_pick_branch(["branch-4.x", "branch-4.3", "branch-4.2"], ("branch-4.x",))
     'branch-4.3'
     >>> default_pick_branch(["branch-4.x", "branch-4.3"], ())
     'branch-4.x'
-    >>> default_pick_branch(["branch-4.x"], ("branch-4.x",))
-    'branch-4.x'
+    >>> default_pick_branch(["branch-4.x"], ("branch-4.x",)) is None
+    True
     """
     remaining = [b for b in branch_names if b not in already_picked]
-    return remaining[0] if remaining else branch_names[0]
+    return remaining[0] if remaining else None
 
 
 def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
@@ -1848,10 +1881,17 @@ def main():
         picked_commits = []
         try:
             while True:
+                default = default_pick_branch(branch_names, tuple(picked_refs))
+                if default is None:
+                    print(
+                        "Every known release branch already contains #%s; nothing to pick."
+                        % pr_num
+                    )
+                    break
                 picked = cherry_pick(
                     pr_num,
                     merge_hash,
-                    default_pick_branch(branch_names, tuple(picked_refs)),
+                    default,
                     branch_names,
                     target_ref,
                     already_picked=tuple(picked_refs),
@@ -1953,10 +1993,14 @@ def main():
     # already been pushed, so cancelling a backport must not drop that line.
     try:
         while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
+            default = default_pick_branch(branch_names, tuple(merged_refs))
+            if default is None:
+                print("Every known release branch already contains #%s; nothing to pick." % pr_num)
+                break
             picked = cherry_pick(
                 pr_num,
                 merge_hash,
-                default_pick_branch(branch_names, tuple(merged_refs)),
+                default,
                 branch_names,
                 target_ref,
                 already_picked=tuple(merged_refs),
