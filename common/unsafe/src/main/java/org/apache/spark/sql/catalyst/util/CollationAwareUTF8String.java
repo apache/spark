@@ -59,10 +59,15 @@ public class CollationAwareUTF8String {
 
   /**
    * The initial size, in UTF-16 code units, of the trailing window searched by
-   * `findIndexFromEnd`, and the factor by which that window grows when it does not hold enough
-   * matches. A target no longer than the initial window is searched in a single pass.
+   * `findIndexFromEnd`. A target no longer than this is searched in a single pass.
    */
   private static final int INITIAL_BACKWARD_SEARCH_WINDOW = 64;
+
+  /**
+   * The factor by which the trailing window searched by `findIndexFromEnd` grows when it does
+   * not hold enough matches. Each pass re-walks the window before it, so the total stays within
+   * a constant factor of the last window.
+   */
   private static final int BACKWARD_SEARCH_WINDOW_GROWTH = 4;
 
   /**
@@ -1019,7 +1024,7 @@ public class CollationAwareUTF8String {
    * The matches are enumerated forward with next() because StringSearch.previous() does not
    * visit the same match set as next(): it skips overlapping matches, and it skips or misaligns
    * matches when a character maps to multiple collation elements (see the note in
-   * collationTrimRight).
+   * {@link #trimRight}).
    *
    * Enumerating from the start of the target would cost the length of the target on every call,
    * even when the requested match is the last one. Instead the search runs over a trailing
@@ -1030,15 +1035,22 @@ public class CollationAwareUTF8String {
    * its own window it walks the whole stretch beyond the anchor. When that stretch is longer
    * than the window it is what the pass cost, and every geometric step would walk it again, so
    * such a pass widens straight to the start of the target instead. That fires on the first
-   * pass that sees it, which caps the total at two passes over the target. When the anchor sits
-   * at or near the end of the target -- always for {@code subStringIndex}, and for
-   * {@code indexOf} with a small negative start -- the stretch beyond it is empty and the
-   * growth stays geometric. Once a window holds that many the answer is final:
-   * every remaining match starts before the window, so it precedes all of the window's matches
-   * and cannot be one of the last {@code count}. Only the search's start index moves; the target
-   * and its collation context stay the whole string, so unlike searching a substring a window
-   * boundary can never split a contraction or a combining sequence and report a match that does
-   * not exist in the target.
+   * pass whose trailing stretch dominates, which caps the total at two passes over the target.
+   * When the anchor sits at or near the end of the target -- always for {@code subStringIndex},
+   * and for {@code indexOf} with a small negative start -- the stretch beyond it is empty and
+   * the growth stays geometric.
+   *
+   * Once a window holds {@code count} matches the answer is final: every remaining match starts
+   * before the window, so it precedes all of the window's matches and cannot be one of the last
+   * {@code count}. Only the search's start index moves; the target stays the whole string, so a
+   * window can never manufacture a match the target does not contain, the way searching a
+   * detached substring could. A boundary can still cost a pass a match near its start -- the
+   * one that straddles it, and, because ICU adjusts a start index falling inside a contraction,
+   * possibly the one beginning at it. That loss is confined to the earliest match of the pass,
+   * and the answer is counted from the end, so it can only matter when the window holds fewer
+   * than {@code count} matches; the window then widens and a pass starting further back
+   * enumerates it. A start index inside a surrogate pair is not a character boundary at all, so
+   * it is backed off below rather than relied on.
    *
    * Only the last {@code count} positions of a window are retained, in a ring buffer that grows
    * on demand so that a {@code count} far larger than the number of matches does not allocate up
@@ -1086,7 +1098,7 @@ public class CollationAwareUTF8String {
         index = nextIndex;
       }
       // The buffer has grown to `count` entries by the time `found` reaches it, so the oldest
-      // entry still in the ring buffer is the {@code count}-th match from the end.
+      // entry still in the ring buffer is the `count`-th match from the end.
       if (found >= count) return lastMatches[found % lastMatches.length];
       // The window already reached the start of the target, so there really are fewer matches.
       if (windowStart == 0) return MATCH_NOT_FOUND;
