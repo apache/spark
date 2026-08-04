@@ -17,6 +17,8 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
+rem You shouldn't need to call this script directly. Call `spark.cmd` instead.
+
 rem Figure out where the Spark framework is installed
 call "%~dp0find-spark-home.cmd"
 

@@ -42,6 +42,7 @@ class Module(object):
         environ=None,
         sbt_test_goals=(),
         python_test_goals=(),
+        cli_test_goals=(),
         excluded_python_implementations=(),
         test_tags=(),
         should_run_r_tests=False,
@@ -62,6 +63,7 @@ class Module(object):
             module are changed.
         :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param python_test_goals: A set of Python test goals for testing this module.
+        :param cli_test_goals: A set of CLI test goals for testing this module.
         :param excluded_python_implementations: A set of Python implementations that are not
             supported by this module's Python components. The values in this set should match
             strings returned by Python's `platform.python_implementation()`.
@@ -77,6 +79,7 @@ class Module(object):
         self.build_profile_flags = build_profile_flags
         self.environ = environ or {}
         self.python_test_goals = python_test_goals
+        self.cli_test_goals = cli_test_goals
         self.excluded_python_implementations = excluded_python_implementations
         self.test_tags = test_tags
         self.should_run_r_tests = should_run_r_tests
@@ -1669,7 +1672,7 @@ spark_cli = Module(
     name="cli",
     dependencies=[],
     source_file_regexes=["cli/"],
-    python_test_goals=[
+    cli_test_goals=[
         "cli.tests.test_spark_cli",
     ],
 )
