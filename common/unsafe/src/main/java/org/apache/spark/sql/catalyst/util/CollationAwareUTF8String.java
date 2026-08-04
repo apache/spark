@@ -50,24 +50,13 @@ public class CollationAwareUTF8String {
    */
   private static final int MATCH_NOT_FOUND = -1;
 
-  /**
-   * The initial capacity of the ring buffer used by `findIndexFromEnd` to retain the last
-   * `count` match positions. The buffer grows on demand, so a caller-supplied `count` that is
-   * far larger than the number of matches does not allocate up front.
-   */
+  /** Initial capacity of `findIndexFromEnd`'s ring buffer; it grows on demand up to `count`. */
   private static final int INITIAL_MATCH_RING_CAPACITY = 16;
 
-  /**
-   * The initial size, in UTF-16 code units, of the trailing window searched by
-   * `findIndexFromEnd`. A target no longer than this is searched in a single pass.
-   */
+  /** Initial size, in UTF-16 code units, of `findIndexFromEnd`'s trailing search window. */
   private static final int INITIAL_BACKWARD_SEARCH_WINDOW = 64;
 
-  /**
-   * The factor by which the trailing window searched by `findIndexFromEnd` grows when it does
-   * not hold enough matches. Each pass re-walks the window before it, so the total stays within
-   * a constant factor of the last window.
-   */
+  /** Growth factor of `findIndexFromEnd`'s window when it holds fewer than `count` matches. */
   private static final int BACKWARD_SEARCH_WINDOW_GROWTH = 4;
 
   /**
@@ -967,8 +956,9 @@ public class CollationAwareUTF8String {
       // Adjust the starting position from 1-based to 0-based.
       int realStart = start - 1;
       if (numCodePoints <= realStart) return MATCH_NOT_FOUND;
-      stringSearch.setIndex(targetStr.offsetByCodePoints(0, realStart));
-      searchIndex = findIndex(stringSearch, targetStr, occurrence);
+      int startIndex = targetStr.offsetByCodePoints(0, realStart);
+      stringSearch.setIndex(startIndex);
+      searchIndex = findIndex(stringSearch, targetStr, occurrence, startIndex);
     } else {
       // The last code point index at which a match is allowed to start. A start before the
       // beginning of the string matches nothing, as in UTF8String.indexOf.
@@ -983,12 +973,23 @@ public class CollationAwareUTF8String {
     return targetStr.codePointCount(0, searchIndex);
   }
 
-  private static int findIndex(final StringSearch stringSearch, final String text, int count) {
+  /**
+   * Returns the start of the {@code count}-th match of {@code stringSearch} counting forward from
+   * the iterator's current position, among the matches that start at or after
+   * {@code minStartIndex}, or {@code MATCH_NOT_FOUND} if there are fewer such matches. Both
+   * indices are in UTF-16 code units.
+   *
+   * Positioning the iterator does not bound the matches on its own: ICU snaps a start index
+   * falling inside a collation unit -- a contraction such as Czech "ch", or a surrogate pair --
+   * back to the beginning of that unit, so the first match reported can begin before
+   * {@code minStartIndex}. Such a match is out of range and is skipped without being counted, as
+   * in UTF8String.indexOf.
+   */
+  private static int findIndex(final StringSearch stringSearch, final String text, int count,
+      final int minStartIndex) {
     assert(count >= 0);
-    // -1 is a safe "no match seen yet" sentinel: StringSearch.DONE (also -1) is handled first,
-    // so next() can never store -1 in `index`. Using 0 here would fail to detect the iterator
-    // reporting the same match at index 0 again (e.g. an overlapping search on a pattern that
-    // starts with a surrogate pair), double-counting that match.
+    // "No match seen yet" sentinel. StringSearch.DONE is also -1 but is handled first, so this
+    // cannot collide with a real match; 0 would hide a match at index 0 being reported twice.
     int index = -1;
     while (count > 0) {
       int nextIndex = stringSearch.next();
@@ -997,7 +998,7 @@ public class CollationAwareUTF8String {
       } else if (nextIndex == index) {
         advancePastStuckMatch(stringSearch, text, nextIndex);
       } else {
-        count--;
+        if (nextIndex >= minStartIndex) count--;
         index = nextIndex;
       }
     }
@@ -1005,14 +1006,26 @@ public class CollationAwareUTF8String {
   }
 
   /**
-   * The overlapping search advances by one UTF-16 code unit past the last match start, which
-   * falls inside a surrogate pair when the match starts with a supplementary character, making
-   * next() report the same match again. Advance by one code point past the stuck match start so
-   * the search resumes at the next candidate without skipping an overlapping match.
+   * The overlapping search advances one UTF-16 code unit past the last match start, which lands
+   * inside the collation unit the match begins with whenever that unit spans more than one code
+   * unit -- a surrogate pair, or a contraction such as Czech "ch". ICU snaps such a start index
+   * back to the beginning of the unit, so next() reports the same match again. Advance one code
+   * point at a time until ICU accepts a start index past the stuck match: that is the nearest
+   * position the search can resume from without skipping an overlapping match. This terminates
+   * because each step moves at least one code point and the end of the text is always accepted.
    */
   private static void advancePastStuckMatch(final StringSearch stringSearch, final String text,
       final int matchStart) {
-    stringSearch.setIndex(matchStart + Character.charCount(text.codePointAt(matchStart)));
+    int position = matchStart;
+    while (true) {
+      position += Character.charCount(text.codePointAt(position));
+      if (position >= text.length()) {
+        stringSearch.setIndex(text.length());
+        return;
+      }
+      stringSearch.setIndex(position);
+      if (stringSearch.getIndex() > matchStart) return;
+    }
   }
 
   /**
@@ -1026,51 +1039,34 @@ public class CollationAwareUTF8String {
    * matches when a character maps to multiple collation elements (see the note in
    * {@link #trimRight}).
    *
-   * Enumerating from the start of the target would cost the length of the target on every call,
-   * even when the requested match is the last one. Instead the search runs over a trailing
-   * window that starts at {@code INITIAL_BACKWARD_SEARCH_WINDOW} code units and grows by
+   * A forward scan has to start somewhere before the answer. Rather than always starting at the
+   * beginning of the target, the search runs over a trailing window that starts at
+   * {@code INITIAL_BACKWARD_SEARCH_WINDOW} code units and grows by
    * {@code BACKWARD_SEARCH_WINDOW_GROWTH} until it holds {@code count} matches or reaches the
-   * start of the target, so the cost tracks the distance back to the requested match. A pass
-   * that finds no match past {@code maxStartIndex} runs on to the end of the target, so besides
-   * its own window it walks the whole stretch beyond the anchor. When that stretch is longer
-   * than the window it is what the pass cost, and every geometric step would walk it again, so
-   * such a pass widens straight to the start of the target instead. That fires on the first
-   * pass whose trailing stretch dominates, which caps the total at two passes over the target.
-   * When the anchor sits at or near the end of the target -- always for {@code subStringIndex},
-   * and for {@code indexOf} with a small negative start -- the stretch beyond it is empty and
-   * the growth stays geometric.
+   * start, so the cost tracks the distance back to the answer.
    *
-   * Once a window holds {@code count} matches the answer is final: every remaining match starts
-   * before the window, so it precedes all of the window's matches and cannot be one of the last
-   * {@code count}. Only the search's start index moves; the target stays the whole string, so a
-   * window can never manufacture a match the target does not contain, the way searching a
-   * detached substring could. A boundary can still cost a pass a match near its start -- the
-   * one that straddles it, and, because ICU adjusts a start index falling inside a contraction,
-   * possibly the one beginning at it. That loss is confined to the earliest match of the pass,
-   * and the answer is counted from the end, so it can only matter when the window holds fewer
-   * than {@code count} matches; the window then widens and a pass starting further back
-   * enumerates it. A start index inside a surrogate pair is not a character boundary at all, so
-   * it is backed off below rather than relied on.
+   * A window is safe because only the search's start index moves -- the target stays the whole
+   * string, so a window can never manufacture a match the target does not contain -- and once a
+   * window holds {@code count} matches the answer is final, since every remaining match starts
+   * before the window and cannot be one of the last {@code count}. A boundary can still cost a
+   * pass its earliest match, which only matters when the pass found fewer than {@code count};
+   * the window then widens and a pass starting further back enumerates it.
    *
-   * Only the last {@code count} positions of a window are retained, in a ring buffer that grows
-   * on demand so that a {@code count} far larger than the number of matches does not allocate up
-   * front. Retaining them is what forward enumeration costs that {@code previous()} did not:
-   * the buffer holds one int per match up to {@code count}, so a caller that asks for a large
-   * occurrence of a pattern that really does occur that many times allocates in proportion to
-   * it -- bounded by the match count, and hence by the length of the target, but no longer
-   * constant. A hard cap would mean a second pass (count the matches, then re-scan to the
-   * one wanted), trading the allocation for another walk of the target.
+   * Only the last {@code count} positions are retained, in a ring buffer that grows on demand so
+   * that a {@code count} far larger than the number of matches does not allocate up front.
    */
   private static int findIndexFromEnd(final StringSearch stringSearch, final String text,
       final int count, final int maxStartIndex, final boolean matchEnd) {
-    // The buffer sizing and ring arithmetic below both need a positive count, so reject any
-    // other value here rather than relying on an assertion, which is disabled outside of test
-    // JVMs.
+    // The buffer sizing and ring arithmetic below need a positive count, and assertions are
+    // disabled outside test JVMs, so reject other values here.
     if (count <= 0) return MATCH_NOT_FOUND;
     // Match starts are distinct text offsets, so there can be at most text.length() matches.
     if (count > text.length()) return MATCH_NOT_FOUND;
     int[] lastMatches = new int[Math.min(count, INITIAL_MATCH_RING_CAPACITY)];
     int window = INITIAL_BACKWARD_SEARCH_WINDOW;
+    // Distance walked past `maxStartIndex`, summed over passes. Every pass re-walks the stretch
+    // from the anchor to the first match beyond it; this bounds how far that repetition can go.
+    long walkedPastAnchor = 0;
     while (true) {
       int windowStart = Math.max(0, maxStartIndex - window);
       // Never start the search inside a surrogate pair; widening the window is always safe.
@@ -1078,15 +1074,16 @@ public class CollationAwareUTF8String {
       stringSearch.setIndex(windowStart);
       int found = 0;
       int index = -1;
-      // Whether the pass ran off the end of the target instead of stopping past `maxStartIndex`.
-      boolean reachedEnd = false;
+      // Where the pass stopped: the first match past `maxStartIndex`, or the end of the target
+      // when the iterator reported none.
+      int scanEnd = text.length();
       while (true) {
         int nextIndex = stringSearch.next();
-        if (nextIndex == StringSearch.DONE) {
-          reachedEnd = true;
+        if (nextIndex == StringSearch.DONE) break;
+        if (nextIndex > maxStartIndex) {
+          scanEnd = nextIndex;
           break;
         }
-        if (nextIndex > maxStartIndex) break;
         if (nextIndex == index) {
           advancePastStuckMatch(stringSearch, text, nextIndex);
           continue;
@@ -1107,13 +1104,11 @@ public class CollationAwareUTF8String {
       if (found >= count) return lastMatches[found % lastMatches.length];
       // The window already reached the start of the target, so there really are fewer matches.
       if (windowStart == 0) return MATCH_NOT_FOUND;
-      if (reachedEnd && text.length() - maxStartIndex > window) {
-        // The pass ran off the end of the target, so on top of its own window it walked the
-        // whole stretch past `maxStartIndex`, and that stretch is the longer of the two. Every
-        // geometric step would walk it again, which costs O(n log n) over a target whose tail
-        // holds no match; widening straight to the start bounds the total at two passes over
-        // the target. The comparison is against the window that just ran, so this fires on the
-        // first pass that sees such a stretch and there is never a second re-walk.
+      walkedPastAnchor += scanEnd - maxStartIndex;
+      if (walkedPastAnchor >= text.length()) {
+        // Re-walking the stretch past the anchor has now cost a full pass over the target on its
+        // own, so growing geometrically would keep paying for it. Widening straight to the start
+        // caps the total at a constant number of passes.
         window = text.length();
       } else {
         // Capping at the target length keeps the growth from overflowing and guarantees that the
@@ -1133,8 +1128,9 @@ public class CollationAwareUTF8String {
     StringSearch stringSearch = CollationFactory.getStringSearch(str, delim, collationId);
     stringSearch.setOverlapping(true);
     if (count > 0) {
-      // If the count is positive, we search for the count-th delimiter from the left.
-      int searchIndex = findIndex(stringSearch, str, count);
+      // If the count is positive, we search for the count-th delimiter from the left. The search
+      // starts at the beginning of the string, so every match is in range.
+      int searchIndex = findIndex(stringSearch, str, count, 0);
       if (searchIndex == MATCH_NOT_FOUND) {
         return string;
       } else if (searchIndex == 0) {

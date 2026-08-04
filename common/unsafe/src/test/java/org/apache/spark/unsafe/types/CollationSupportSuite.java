@@ -2801,6 +2801,25 @@ public class CollationSupportSuite {
     // delimiter is the uppercase base plus the same combining mark.
     assertSubstringIndex("e\u0301".repeat(100) + "x", "E\u0301", -32, UNICODE_CI,
       "e\u0301".repeat(31) + "x");
+    // Collations whose delimiter is a contraction, i.e. a single collation unit spanning more
+    // than one code point. A start index inside such a unit is snapped back to its beginning, so
+    // the iterator only makes progress if it is advanced past the whole unit. Czech "ch" occurs
+    // at the same positions under UTF8_BINARY, which pins the expectations independently.
+    assertSubstringIndex("chch", "ch", 2, UTF8_BINARY, "ch");
+    assertSubstringIndex("chch", "ch", 2, "cs", "ch");
+    assertSubstringIndex("chch", "ch", -1, UTF8_BINARY, "");
+    assertSubstringIndex("chch", "ch", -1, "cs", "");
+    assertSubstringIndex("achbchcch", "ch", -2, UTF8_BINARY, "cch");
+    assertSubstringIndex("achbchcch", "ch", -2, "cs", "cch");
+    // Same, over a target long enough that the trailing window starts partway into it rather
+    // than at its beginning, so the contraction is crossed by a pass that did not walk the
+    // target from index 0.
+    assertSubstringIndex("ch".repeat(60), "ch", -3, UTF8_BINARY, "chch");
+    assertSubstringIndex("ch".repeat(60), "ch", -3, "cs", "chch");
+    // Danish "aa" is a contraction whose occurrences differ from the byte-wise ones: "aaaa"
+    // holds a delimiter at code points 0 and 2, but not at 1, which is inside the first one.
+    assertSubstringIndex("aaaa", "aa", 2, "da", "aa");
+    assertSubstringIndex("aaaa", "aa", -1, "da", "");
   }
 
   /**
@@ -4494,6 +4513,52 @@ public class CollationSupportSuite {
       "x".repeat(1000) + ("z" + "x".repeat(99)).repeat(5) + "y".repeat(500) + "z";
     assertStringInstrWithOccurrence(twoStepsWrap, "z", -2, 3, UTF8_BINARY, 1201);
     assertStringInstrWithOccurrence(twoStepsWrap, "z", -2, 3, UNICODE, 1201);
+    // Collations whose pattern is a contraction, i.e. a single collation unit spanning more than
+    // one code point. A start index inside such a unit is snapped back to its beginning, so the
+    // iterator only makes progress if it is advanced past the whole unit. Czech "ch" occurs at
+    // the same positions under UTF8_BINARY, which pins the expectations independently.
+    assertStringInstrWithOccurrence("chch", "ch", 1, 2, UTF8_BINARY, 3);
+    assertStringInstrWithOccurrence("chch", "ch", 1, 2, "cs", 3);
+    assertStringInstrWithOccurrence("chch", "ch", -1, 1, UTF8_BINARY, 3);
+    assertStringInstrWithOccurrence("chch", "ch", -1, 1, "cs", 3);
+    assertStringInstrWithOccurrence("achbchcch", "ch", -1, 2, UTF8_BINARY, 5);
+    assertStringInstrWithOccurrence("achbchcch", "ch", -1, 2, "cs", 5);
+    // Same, over a target long enough that the trailing window starts partway into it. The first
+    // window starts at code unit 55, which is inside the contraction beginning at 54, so ICU
+    // snaps it back to 54 and the pass enumerates 33 matches. Occurrences 32 and 33 are answered
+    // by that pass -- 33 is the match at the snapped-back boundary, the earliest one the pass can
+    // see -- and occurrence 40 is answered only after the window widens to the start of the
+    // target.
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 32, UTF8_BINARY, 57);
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 32, "cs", 57);
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 33, UTF8_BINARY, 55);
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 33, "cs", 55);
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 40, UTF8_BINARY, 41);
+    assertStringInstrWithOccurrence("ch".repeat(60), "ch", -1, 40, "cs", 41);
+    // A positive start that falls inside a contraction. ICU snaps the search index back to the
+    // beginning of the unit, so the first match it reports begins before the requested start;
+    // such a match is out of range and must not be counted. UTF8_BINARY pins the expectations.
+    assertStringInstrWithOccurrence("achch", "ch", 3, 1, UTF8_BINARY, 4);
+    assertStringInstrWithOccurrence("achch", "ch", 3, 1, "cs", 4);
+    assertStringInstrWithOccurrence("achch", "ch", 3, 2, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("achch", "ch", 3, 2, "cs", 0);
+    assertStringInstrWithOccurrence("chchch", "ch", 2, 1, UTF8_BINARY, 3);
+    assertStringInstrWithOccurrence("chchch", "ch", 2, 1, "cs", 3);
+    assertStringInstrWithOccurrence("chchch", "ch", 2, 2, UTF8_BINARY, 5);
+    assertStringInstrWithOccurrence("chchch", "ch", 2, 2, "cs", 5);
+    assertStringInstrWithOccurrence("chchch", "ch", 4, 1, UTF8_BINARY, 5);
+    assertStringInstrWithOccurrence("chchch", "ch", 4, 1, "cs", 5);
+    assertStringInstrWithOccurrence("chchch", "ch", 6, 1, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("chchch", "ch", 6, 1, "cs", 0);
+    // Danish "aa" is a contraction whose occurrences differ from the byte-wise ones: "aaaa"
+    // holds a match at code points 0 and 2, but not at 1, which is inside the first one.
+    assertStringInstrWithOccurrence("aaaa", "aa", 1, 2, "da", 3);
+    assertStringInstrWithOccurrence("aaaa", "aa", -1, 1, "da", 3);
+    // Same, with a positive start inside the first contraction. UTF8_BINARY cannot pin this one:
+    // "xaaaa" holds a match at code points 1 and 3 under "da", but at 1, 2 and 3 byte-wise. A
+    // start of 3 excludes the match at 1 under either.
+    assertStringInstrWithOccurrence("xaaaa", "aa", 3, 1, "da", 4);
+    assertStringInstrWithOccurrence("xaaaa", "aa", 3, 2, "da", 0);
   }
 
 }
