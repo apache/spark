@@ -339,41 +339,26 @@ class StringIndexerModel (
   @Since("3.0.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  // This filters out any null values and also the input labels which are not in
-  // the dataset used for fitting.
-  private def filterInvalidData(
-      dataset: Dataset[_],
-      inputColNames: Seq[String],
-      labelsToIndexArray: Array[OpenHashMap[String, Int]]): Dataset[_] = {
-    val conditions: Seq[Column] = inputColNames.indices.map { i =>
-      val inputColName = inputColNames(i)
-      val labelToIndex = labelsToIndexArray(i)
-      // We have this additional lookup at `labelToIndex` when `handleInvalid` is set to
-      // `StringIndexer.SKIP_INVALID`. Another idea is to do this lookup natively by SQL
-      // expression, however, lookup for a key in a map is not efficient in SparkSQL now.
-      // See `ElementAt` and `GetMapValue` expressions. If SQL's map lookup is improved,
-      // we can consider to change this.
-      val filter = udf { label: String =>
-        labelToIndex.contains(label)
-      }
-      filter(dataset(inputColName))
-    }
-
-    dataset.na.drop(inputColNames.filter(dataset.schema.fieldNames.contains(_)))
-      .where(conditions.reduce(_ and _))
-  }
-
   private def getIndexer(
       labels: Seq[String],
-      labelToIndex: OpenHashMap[String, Int],
-      keepInvalid: Boolean) = {
-    val unknownIndex = labels.length
+      labelToIndex: OpenHashMap[String, Double],
+      keepInvalid: Boolean,
+      skipInvalid: Boolean) = {
+    val unknownIndex = labels.length.toDouble
     if (keepInvalid) {
       udf { label: String =>
         if (label == null) {
           unknownIndex
         } else {
           labelToIndex.get(label).getOrElse(unknownIndex)
+        }
+      }.asNondeterministic()
+    } else if (skipInvalid) {
+      udf { label: String =>
+        if (label == null) {
+          null
+        } else {
+          labelToIndex.get(label).map(index => java.lang.Double.valueOf(index)).orNull
         }
       }.asNondeterministic()
     } else {
@@ -397,7 +382,7 @@ class StringIndexerModel (
 
     val (inputColNames, outputColNames) = getInOutCols()
     val labelsToIndexArray = labelsArray.map { labels =>
-      val map = new OpenHashMap[String, Int](labels.length)
+      val map = new OpenHashMap[String, Double](labels.length)
       labels.zipWithIndex.foreach { case (label, idx) =>
         map.update(label, idx)
       }
@@ -405,13 +390,7 @@ class StringIndexerModel (
     }
     val outputColumns = new Array[Column](outputColNames.length)
     val keepInvalid = getHandleInvalid == StringIndexer.KEEP_INVALID
-
-    // Skips invalid rows if `handleInvalid` is set to `StringIndexer.SKIP_INVALID`.
-    val filteredDataset = if (getHandleInvalid == StringIndexer.SKIP_INVALID) {
-      filterInvalidData(dataset, inputColNames.toImmutableArraySeq, labelsToIndexArray)
-    } else {
-      dataset
-    }
+    val skipInvalid = getHandleInvalid == StringIndexer.SKIP_INVALID
 
     for (i <- outputColNames.indices) {
       val inputColName = inputColNames(i)
@@ -427,9 +406,10 @@ class StringIndexerModel (
           .withValues(filteredLabels)
           .toMetadata()
 
-        val indexer = getIndexer(labels.toImmutableArraySeq, labelToIndex, keepInvalid)
+        val indexer =
+          getIndexer(labels.toImmutableArraySeq, labelToIndex, keepInvalid, skipInvalid)
 
-        outputColumns(i) = indexer(dataset(inputColName).cast(StringType)).cast(DoubleType)
+        outputColumns(i) = indexer(dataset(inputColName).cast(StringType))
           .as(outputColName, metadata)
       } catch {
         case _: AnalysisException =>
@@ -443,10 +423,17 @@ class StringIndexerModel (
 
     require(filteredOutputColNames.length == filteredOutputColumns.length)
     if (filteredOutputColNames.length > 0) {
-      filteredDataset.withColumns(
+      val transformedDataset = dataset.withColumns(
         filteredOutputColNames.toImmutableArraySeq, filteredOutputColumns.toImmutableArraySeq)
+      if (skipInvalid) {
+        // The skip indexers return null for invalid labels. Their nondeterminism keeps this filter
+        // above the projection, so each label is looked up only once.
+        transformedDataset.na.drop(filteredOutputColNames)
+      } else {
+        transformedDataset
+      }
     } else {
-      filteredDataset.toDF()
+      dataset.toDF()
     }
   }
 
