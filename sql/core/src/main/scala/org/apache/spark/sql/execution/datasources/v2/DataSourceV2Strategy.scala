@@ -172,9 +172,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // These filters stay in postScanFilters for correctness (FilterExec above scan),
       // but are also routed into runtimeFilters so BatchScanExec can use them for
       // partition pruning via SupportsRuntimeV2Filtering.filter().
+      // Non-deterministic filters are not routed: they would be pushed to the source for
+      // pruning while the FilterExec above the scan re-evaluates them, so the two evaluations
+      // would disagree and rows the source pruned away could not be recovered. This is the
+      // runtime counterpart of the pushFilters guard in PushDownUtils (SPARK-58207).
       val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty) {
         postScanFilters.filter { f =>
-          f.containsPattern(SCALAR_SUBQUERY) &&
+          f.deterministic &&
+            f.containsPattern(SCALAR_SUBQUERY) &&
             f.references.nonEmpty &&
             f.references.subsetOf(relation.runtimeFilterAttrs)
         }
