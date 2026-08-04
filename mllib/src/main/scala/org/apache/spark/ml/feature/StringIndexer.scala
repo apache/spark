@@ -343,9 +343,9 @@ class StringIndexerModel (
       labels: Seq[String],
       labelToIndex: OpenHashMap[String, Double],
       handleInvalid: String) = {
-    val unknownIndex = labels.length.toDouble
     handleInvalid match {
       case StringIndexer.KEEP_INVALID =>
+        val unknownIndex = labels.length.toDouble
         udf { label: String =>
           if (label == null) {
             unknownIndex
