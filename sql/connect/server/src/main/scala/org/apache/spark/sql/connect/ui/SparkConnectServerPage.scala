@@ -248,10 +248,6 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
             <strong>Cached models: </strong>
             {models.size} ({inMemoryModels} in memory, {models.size - inMemoryModels} offloaded)
           </li>
-          <li>
-            <strong>Memory control enabled sessions: </strong>
-            {memoryControlledStatuses.size} / {cacheStatuses.size}
-          </li>
           {sizeStats}
         </ul>
         <h5>Cached Models</h5>
