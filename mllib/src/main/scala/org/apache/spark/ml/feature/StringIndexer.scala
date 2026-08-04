@@ -316,20 +316,8 @@ class StringIndexerModel (
     labelsArray(0)
   }
 
-  // Prepares the maps for string values to corresponding index values.
-  private val labelsToIndexArray: Array[OpenHashMap[String, Double]] = {
-    for (labels <- labelsArray) yield {
-      val n = labels.length
-      val map = new OpenHashMap[String, Double](n)
-      labels.zipWithIndex.foreach { case (label, idx) =>
-        map.update(label, idx)
-      }
-      map
-    }
-  }
-
   private[spark] override def estimatedSize: Long =
-    estimateMatadataSize + SizeEstimator.estimate((labelsArray, labelsToIndexArray))
+    estimateMatadataSize + SizeEstimator.estimate(labelsArray)
 
   /** @group setParam */
   @Since("1.6.0")
@@ -353,7 +341,10 @@ class StringIndexerModel (
 
   // This filters out any null values and also the input labels which are not in
   // the dataset used for fitting.
-  private def filterInvalidData(dataset: Dataset[_], inputColNames: Seq[String]): Dataset[_] = {
+  private def filterInvalidData(
+      dataset: Dataset[_],
+      inputColNames: Seq[String],
+      labelsToIndexArray: Array[OpenHashMap[String, Double]]): Dataset[_] = {
     val conditions: Seq[Column] = inputColNames.indices.map { i =>
       val inputColName = inputColNames(i)
       val labelToIndex = labelsToIndexArray(i)
@@ -401,11 +392,18 @@ class StringIndexerModel (
     transformSchema(dataset.schema, logging = true)
 
     val (inputColNames, outputColNames) = getInOutCols()
+    val labelsToIndexArray = labelsArray.map { labels =>
+      val map = new OpenHashMap[String, Double](labels.length)
+      labels.zipWithIndex.foreach { case (label, idx) =>
+        map.update(label, idx)
+      }
+      map
+    }
     val outputColumns = new Array[Column](outputColNames.length)
 
     // Skips invalid rows if `handleInvalid` is set to `StringIndexer.SKIP_INVALID`.
     val filteredDataset = if (getHandleInvalid == StringIndexer.SKIP_INVALID) {
-      filterInvalidData(dataset, inputColNames.toImmutableArraySeq)
+      filterInvalidData(dataset, inputColNames.toImmutableArraySeq, labelsToIndexArray)
     } else {
       dataset
     }
