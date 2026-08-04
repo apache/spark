@@ -678,7 +678,7 @@ class ScalarPandasUDFTestsMixin:
         df = self.spark.range(10)
         raise_exception = pandas_udf(lambda _: pd.Series(1), LongType())
         with self.assertRaisesRegex(
-            Exception, "Result vector from pandas_udf was not the required length"
+            Exception, "The number of output rows.*must match the number of input rows"
         ):
             df.select(raise_exception(col("id"))).collect()
 

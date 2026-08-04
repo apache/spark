@@ -289,6 +289,11 @@ case class VariantGet(
     timeZoneId,
     zoneId)
 
+  override def eval(input: InternalRow): Any = {
+    val _ = parsedPath
+    super.eval(input)
+  }
+
   protected override def nullSafeEval(input: Any, path: Any): Any = parsedPath match {
     case Some(pp) =>
       VariantGet.variantGet(input.asInstanceOf[VariantVal], pp, dataType, castArgs)
@@ -873,6 +878,11 @@ case class VariantInsert(
     }
   }
 
+  override def eval(input: InternalRow): Any = {
+    val _ = foldablePath
+    super.eval(input)
+  }
+
   override protected def nullSafeEval(v: Any, p: Any, valValue: Any): Any = {
     val inputVariant = v.asInstanceOf[VariantVal]
     foldablePath match {
@@ -1306,6 +1316,11 @@ case class VariantArrayAppend(
     } else {
       None
     }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val _ = foldablePath
+    super.eval(input)
   }
 
   override protected def nullSafeEval(v: Any, p: Any, valValue: Any): Any = {

@@ -256,7 +256,7 @@
       },
       "AUXILIARY_TABLE_PROPERTY_MISSING" : {
         "message" : [
-          "The internal auxiliary table is missing the required <propertyName> table property; cannot validate AutoCDC key columns. The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+          "The internal auxiliary table is missing the required <propertyName> table property; cannot validate the AutoCDC configuration. The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
         ]
       },
       "KEY_SCHEMA_DRIFT" : {
@@ -267,6 +267,16 @@
       "SCD_TYPE_DRIFT" : {
         "message" : [
           "One or more AutoCDC flows writing to the target use SCD type <expectedScdType>, which is inconsistent with the SCD type recorded for it (recorded <recordedScdType>). AutoCDC does not support changing a target's SCD type across incremental pipeline runs. Correct the conflicting flow(s) or perform a full refresh of the target table."
+        ]
+      },
+      "SEQUENCING_TYPE_DRIFT" : {
+        "message" : [
+          "One or more AutoCDC flows writing to the target use a sequencing expression of type <expectedSequencingType>, which is inconsistent with the sequencing type recorded for it (recorded <recordedSequencingType>). The sequencing expression may change across incremental pipeline runs, but its result type must not, so recorded sequencing values remain comparable. Correct the conflicting flow(s) or perform a full refresh of the target table."
+        ]
+      },
+      "TRACK_HISTORY_DRIFT" : {
+        "message" : [
+          "One or more AutoCDC flows writing to the target track history on columns [<expectedTrackHistoryColumns>], which are inconsistent with the track-history columns recorded for it (recorded [<recordedTrackHistoryColumns>]). AutoCDC does not support changing the SCD Type 2 track-history columns across incremental pipeline runs. Correct the conflicting flow(s) or perform a full refresh of the target table."
         ]
       }
     },
@@ -5270,6 +5280,18 @@
       "Function <funcName> does not implement a ScalarFunction or AggregateFunction."
     ],
     "sqlState" : "38000"
+  },
+  "INVALID_UDF_PARAMETER_PLACEHOLDER" : {
+    "message" : [
+      "Invalid Python UDF transpiled-expression parameter placeholder: <placeholder>. Placeholders must be of the form `_udf_param_N` where N is a non-negative integer index into the UDF's positional arguments. This is an internal error in the Python UDF transpiler."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_UDF_PARAMETER_PLACEHOLDER_INDEX" : {
+    "message" : [
+      "Python UDF transpiled-expression parameter placeholder `_udf_param_<index>` references position <index> but the UDF only has <numParams> argument(s). This is an internal error in the Python UDF transpiler."
+    ],
+    "sqlState" : "42000"
   },
   "INVALID_URL" : {
     "message" : [
@@ -11411,16 +11433,6 @@
       "Can't run submitMapStage on RDD with 0 partitions"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3024" : {
-    "message" : [
-      "attempted to access non-existent accumulator <id>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3025" : {
-    "message" : [
-      "TaskSetManagers should only send Resubmitted task statuses for tasks in ShuffleMapStages."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3026" : {
     "message" : [
       "duration() called on unfinished task"
@@ -11436,29 +11448,9 @@
       "Exiting due to error from cluster scheduler: <message>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3030" : {
-    "message" : [
-      "Task <currentTaskAttemptId> has not locked block <blockId> for writing"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3031" : {
-    "message" : [
-      "Block <blockId> does not exist"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3032" : {
-    "message" : [
-      "Error occurred while waiting for replication to finish"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3033" : {
     "message" : [
       "Unable to register with external shuffle server due to : <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3034" : {
-    "message" : [
-      "Error occurred while waiting for async. reregistration"
     ]
   },
   "_LEGACY_ERROR_TEMP_3035" : {
@@ -11474,31 +11466,6 @@
   "_LEGACY_ERROR_TEMP_3037" : {
     "message" : [
       "Block <blockId> was not found even though it's read-locked"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3038" : {
-    "message" : [
-      "get() failed for block <blockId> even though we held a lock"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3039" : {
-    "message" : [
-      "BlockManager returned null for BlockStatus query: <blockId>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3040" : {
-    "message" : [
-      "BlockManagerMasterEndpoint returned false, expected true."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3041" : {
-    "message" : [
-      ""
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3042" : {
-    "message" : [
-      "Failed to get block <blockId>, which is not a shuffle block"
     ]
   },
   "_LEGACY_ERROR_TEMP_3052" : {

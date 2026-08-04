@@ -106,7 +106,7 @@ class AutoCdcScd1AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
     assert(spec.properties(AutoCdcAuxiliaryTable.scdTypePropertyKey) == ScdType.Type1.label)
     assert(spec.expectedKeyFields.map(_.name) == Seq("id"))
     assert(
-      AutoCdcAuxiliaryTable.parseKeyColumnNames(
+      AutoCdcAuxiliaryTable.parseColumnNames(
         spec.properties(AutoCdcAuxiliaryTable.keyColumnNamesProperty)).contains(Seq("id")))
     assert(spec.identifier == AutoCdcAuxiliaryTable.identifier(targetIdentifier))
     assert(spec.targetTableIdentifier == targetIdentifier)
@@ -116,7 +116,7 @@ class AutoCdcScd1AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
     val spec = scd1AuxSpec(keys = Seq("id", "name"))
     assert(spec.expectedKeyFields.map(_.name) == Seq("id", "name"))
     assert(
-      AutoCdcAuxiliaryTable.parseKeyColumnNames(
+      AutoCdcAuxiliaryTable.parseColumnNames(
         spec.properties(AutoCdcAuxiliaryTable.keyColumnNamesProperty)).contains(Seq("id", "name")))
     // The aux schema is the two keys followed by the metadata column, and nothing else.
     assert(

@@ -3139,8 +3139,9 @@ class TaskSetManagerSuite
     // The TaskSetManager.executorLost "Resubmitted" loop re-enqueues an already-successful
     // ShuffleMapTask when its executor is lost and the map output looks gone -- for a decommission,
     // it looks gone whenever MapOutputTracker.getMapOutputLocation returns None. A pipelined
-    // shuffle is NEVER registered in the MapOutputTracker, so getMapOutputLocation is always None
-    // and this loop would resubmit the lone producer task -- the exact streaming-writer hang. This
+    // shuffle is registered only with the StreamingShuffleOutputTracker, never the
+    // MapOutputTracker, so getMapOutputLocation is always None and this loop would resubmit the
+    // lone producer task -- the exact streaming-writer hang. This
     // loop bypasses handleFailedTask, so the group-atomic abort would never see it. The guard
     // (!taskSet.isPipelined on maybeShuffleMapOutputLoss) must keep a pipelined set out of the
     // loop.
