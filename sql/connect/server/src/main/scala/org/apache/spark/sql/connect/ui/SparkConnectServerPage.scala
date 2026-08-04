@@ -225,7 +225,7 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
           {Utils.bytesToString(inMemorySize)} / {Utils.bytesToString(maxInMemorySize)}
         </li>,
         <li>
-          <strong>Total estimated size: </strong>
+          <strong>Total estimated size (in-memory and offloaded data): </strong>
           {Utils.bytesToString(totalSize)} / {Utils.bytesToString(maxTotalSize)}
         </li>)
     } else {

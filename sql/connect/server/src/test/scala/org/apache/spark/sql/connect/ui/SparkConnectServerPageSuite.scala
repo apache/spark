@@ -181,6 +181,7 @@ class SparkConnectServerPageSuite
     assert(sessionStatsIndex < requestStatsIndex && requestStatsIndex < mlCacheStatsIndex)
     assert(html.contains("2 (1 in memory, 1 offloaded)"))
     assert(html.contains("1.0 kib / 4.0 kib"))
+    assert(html.contains("total estimated size (in-memory and offloaded data)"))
     assert(html.contains("2.0 kib / 8.0 kib"))
     assert(html.contains("model-id-1"))
     assert(html.contains("logisticregressionmodel: uid=logreg-1"))
