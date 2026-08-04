@@ -3157,14 +3157,7 @@ object SparkContext extends Logging {
   private[spark] val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
   private[spark] val DATASET_QUERY_EXECUTION_ID_KEY =
     "spark.sql.dataset.queryExecution.id"
-
-  /**
-   * Local property containing the Spark Connect ExecutePlan operation ID. It is available on the
-   * driver while the operation is executing and is propagated to executor tasks.
-   *
-   * @since 4.3.0
-   */
-  val SPARK_CONNECT_OPERATION_ID_PROPERTY = "spark.connect.operation_id"
+  private[spark] val SPARK_CONNECT_OPERATION_ID_PROPERTY = "spark.connect.operation_id"
 
   /**
    * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was
