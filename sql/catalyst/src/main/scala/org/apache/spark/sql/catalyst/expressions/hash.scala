@@ -762,6 +762,11 @@ abstract class InterpretedHashFunction {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.",
+  arguments = """
+    Arguments:
+      * exprN - The values to hash. There can be one or more of them, each an
+          expression of any data type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
@@ -833,6 +838,11 @@ case class CollationAwareMurmur3Hash(children: Seq[Expression], seed: Int)
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a 64-bit hash value of the arguments. " +
     "Hash seed is 42.",
+  arguments = """
+    Arguments:
+      * exprN - The values to hash. There can be one or more of them, each an
+          expression of any data type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);

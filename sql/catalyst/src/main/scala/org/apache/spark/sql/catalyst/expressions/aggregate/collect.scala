@@ -104,6 +104,10 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any type whose values are collected into a list.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (1) AS tab(col);
@@ -181,6 +185,10 @@ case class CollectList(
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Collects and returns a set of unique elements.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any type whose values are collected into a set.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (1) AS tab(col);
@@ -336,6 +344,10 @@ case class CollectSet(
 @ExpressionDescription(
   usage =
     "_FUNC_(expr) - Collects and returns the distinct union of the elements of array `expr`.",
+  arguments = """
+    Arguments:
+      * expr - An array expression whose elements are collected into a set across rows.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (array(1, 2)), (array(2, 3)), (array(1)) AS tab(col);

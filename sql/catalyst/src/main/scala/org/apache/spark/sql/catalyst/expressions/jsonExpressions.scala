@@ -244,6 +244,12 @@ case class MultiGetJsonObject(
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
+  arguments = """
+    Arguments:
+      * jsonStr - A JSON string to extract fields from.
+      * pN - The field names to extract. Each name yields one output column with
+          the corresponding field value.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
@@ -346,6 +352,14 @@ case class JsonTuple(children: Seq[Expression])
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
+  arguments = """
+    Arguments:
+      * jsonStr - A JSON string to parse.
+      * schema - The schema to use when parsing the JSON string, given as a DDL
+          formatted string or a schema expression.
+      * options - Optional. A map of string key-value pairs that control how the
+          JSON is parsed. By default no options are set.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
@@ -549,6 +563,12 @@ case class StructsToJson(
  */
 @ExpressionDescription(
   usage = "_FUNC_(json[, options]) - Returns schema in the DDL format of JSON string.",
+  arguments = """
+    Arguments:
+      * json - A JSON string whose schema is inferred.
+      * options - Optional. A map of string key-value pairs that control how the
+          JSON is parsed. By default no options are set.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('[{"col":0}]');

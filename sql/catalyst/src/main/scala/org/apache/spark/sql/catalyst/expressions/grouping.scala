@@ -196,6 +196,11 @@ object GroupingSets {
     _FUNC_(col) - indicates whether a specified column in a GROUP BY is aggregated or
       not, returns 1 for aggregated or 0 for not aggregated in the result set.",
   """,
+  arguments = """
+    Arguments:
+      * col - A grouping column referenced in the GROUP BY clause. It must exactly match one
+          of the grouping expressions of the query.
+  """,
   examples = """
     Examples:
       > SELECT name, _FUNC_(name), sum(age) FROM VALUES (2, 'Alice'), (5, 'Bob') people(age, name) GROUP BY cube(name);
@@ -228,6 +233,12 @@ case class Grouping(child: Expression) extends Expression with Unevaluable
   usage = """
     _FUNC_([col1[, col2 ..]]) - returns the level of grouping, equals to
       `(grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)`
+  """,
+  arguments = """
+    Arguments:
+      * colN - An optional grouping column referenced in the GROUP BY clause. Zero or more
+          columns can be given; when provided, they must match the grouping columns exactly,
+          and when omitted all grouping columns are used.
   """,
   examples = """
     Examples:
