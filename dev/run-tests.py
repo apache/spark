@@ -461,7 +461,6 @@ def main():
         )
         sys.exit(2)
 
-    # Install SparkR
     should_only_test_modules = opts.modules is not None
     test_modules = []
     if should_only_test_modules:
@@ -472,7 +471,8 @@ def main():
         # If tests modules are specified, we will not run R linter.
         # SparkR needs the manual SparkR installation.
         if which("R"):
-            run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
+            with titled_block("Installing SparkR"):
+                run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
         else:
             print("Cannot install SparkR as R was not found in PATH")
 
