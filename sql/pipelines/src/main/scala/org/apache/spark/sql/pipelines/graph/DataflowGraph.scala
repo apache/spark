@@ -20,6 +20,7 @@ package org.apache.spark.sql.pipelines.graph
 import scala.util.Try
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.DataflowGraph.mapUnique
 import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
@@ -170,14 +171,20 @@ case class DataflowGraph(
   /**
    * A map of the inferred schema of each table, computed by merging the analyzed schemas
    * of all flows writing to that table.
+   *
+   * The merge honors the session's `spark.sql.caseSensitive`: under case-insensitive analysis two
+   * flows emitting column names that differ only in case contribute a single column (the first
+   * flow's spelling wins) rather than both, which would otherwise produce a target schema the
+   * engine's own resolver cannot disambiguate.
    */
   lazy val inferredSchema: Map[TableIdentifier, StructType] = {
+    val caseSensitive = SparkSession.active.sessionState.conf.caseSensitiveAnalysis
     flowsTo.view.mapValues { flows =>
       flows
         .map { flow =>
           resolvedFlow(flow.identifier).schema
         }
-        .reduce(SchemaMergingUtils.mergeSchemas(_, _))
+        .reduce(SchemaMergingUtils.mergeSchemas(_, _, caseSensitive))
     }.toMap
   }
 

@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.pipelines.common.DatasetType
@@ -41,10 +42,18 @@ object SchemaInferenceUtils {
    *    The user-specified schema will take precedence over the inferred schema.
    * Returns an error if encountered during schema inference or merging the inferred schema with
    * the user-specified one.
+   *
+   * All merges honor `caseSensitive`, which defaults to the active session's
+   * `spark.sql.caseSensitive`. Under case-insensitive analysis, flows emitting column names that
+   * differ only in case contribute a single column (the first flow's spelling wins), and a declared
+   * column matches a flow column differing only in case -- consistent with how the rest of the
+   * engine resolves those names.
    */
   def inferSchemaFromFlows(
       flows: Seq[ResolvedFlow],
-      userSpecifiedSchema: Option[StructType]): StructType = {
+      userSpecifiedSchema: Option[StructType],
+      caseSensitive: Boolean = SparkSession.active.sessionState.conf.caseSensitiveAnalysis)
+      : StructType = {
     if (flows.isEmpty) {
       return userSpecifiedSchema.getOrElse(new StructType())
     }
@@ -56,7 +65,7 @@ object SchemaInferenceUtils {
 
     val inferredSchema = flows.map(_.schema).fold(new StructType()) { (schemaSoFar, schema) =>
       try {
-        SchemaMergingUtils.mergeSchemas(schemaSoFar, schema)
+        SchemaMergingUtils.mergeSchemas(schemaSoFar, schema, caseSensitive)
       } catch {
         case NonFatal(e) =>
           throw GraphErrors.unableToInferSchemaError(
@@ -76,7 +85,8 @@ object SchemaInferenceUtils {
       identifier,
       datasetType,
       inferredSchema,
-      userSpecifiedSchema
+      userSpecifiedSchema,
+      caseSensitive
     )
   }
 
@@ -84,12 +94,13 @@ object SchemaInferenceUtils {
       tableIdentifier: TableIdentifier,
       datasetType: DatasetType,
       inferredSchema: StructType,
-      userSpecifiedSchema: Option[StructType]): StructType = {
+      userSpecifiedSchema: Option[StructType],
+      caseSensitive: Boolean): StructType = {
     userSpecifiedSchema match {
       case Some(userSpecifiedSchema) =>
         try {
           // Merge the inferred schema with the user-provided schema hint
-          SchemaMergingUtils.mergeSchemas(userSpecifiedSchema, inferredSchema)
+          SchemaMergingUtils.mergeSchemas(userSpecifiedSchema, inferredSchema, caseSensitive)
         } catch {
           case NonFatal(e) =>
             throw GraphErrors.incompatibleUserSpecifiedAndInferredSchemasError(

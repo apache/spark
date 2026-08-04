@@ -1244,6 +1244,75 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
+  test("SPARK-58517: multi-flow schema inference folds case-only column differences under " +
+    "case-insensitive resolution") {
+    withRecordingCatalog {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        // Two append flows write to the same streaming table, one emitting `value` and the other
+        // `Value`. The target schema is INFERRED by merging the flows' schemas, which happens
+        // before the evolveTable path runs -- so inference must honor case-insensitivity too,
+        // otherwise the table is created with both columns and the engine's own resolver cannot
+        // disambiguate them.
+        val df1 = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(1, "a"))),
+          new StructType().add("id", IntegerType).add("value", StringType))
+        val df2 = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(2, "b"))),
+          new StructType().add("id", IntegerType).add("Value", StringType))
+
+        val ctx = new TestGraphRegistrationContext(spark) {
+          registerTable(
+            "t",
+            catalog = Option(recordingCatalogName),
+            database = Option(recordingNamespace))
+          registerFlow(
+            "t", "f1", dfFlowFunc(df1),
+            catalog = Option(recordingCatalogName), database = Option(recordingNamespace))
+          registerFlow(
+            "t", "f2", dfFlowFunc(df2),
+            catalog = Option(recordingCatalogName), database = Option(recordingNamespace))
+        }
+
+        val inferred = ctx.resolveToDataflowGraph().inferredSchema.values.head
+        assert(
+          inferred.fieldNames.toSeq === Seq("id", "value"),
+          s"inference should contribute a single `value` column, got ${inferred.fieldNames.toSeq}")
+      }
+    }
+  }
+
+  test("multi-flow schema inference keeps case-only column differences distinct under " +
+    "case-sensitive resolution") {
+    withRecordingCatalog {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        // The case-sensitive control: `value` and `Value` are distinct columns, so inference
+        // contributes both.
+        val df1 = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(1, "a"))),
+          new StructType().add("id", IntegerType).add("value", StringType))
+        val df2 = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(2, "b"))),
+          new StructType().add("id", IntegerType).add("Value", StringType))
+
+        val ctx = new TestGraphRegistrationContext(spark) {
+          registerTable(
+            "t",
+            catalog = Option(recordingCatalogName),
+            database = Option(recordingNamespace))
+          registerFlow(
+            "t", "f1", dfFlowFunc(df1),
+            catalog = Option(recordingCatalogName), database = Option(recordingNamespace))
+          registerFlow(
+            "t", "f2", dfFlowFunc(df2),
+            catalog = Option(recordingCatalogName), database = Option(recordingNamespace))
+        }
+
+        val inferred = ctx.resolveToDataflowGraph().inferredSchema.values.head
+        assert(inferred.fieldNames.toSeq === Seq("id", "value", "Value"))
+      }
+    }
+  }
+
   test("re-materializing with a case-only column difference adds a column under case-sensitive " +
     "resolution") {
     withRecordingCatalog {
