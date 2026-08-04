@@ -2619,7 +2619,7 @@ class MergeSubplansSuite extends PlanTest {
     assertDeclines(s => s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending)))))
   }
 
-  test("SPARK-40259: do not merge DSv2 scans reporting incompatible kGP/ordering") {
+  test("SPARK-58549: do not merge DSv2 scans reporting incompatible kGP/ordering") {
     // Both inputs report a partitioning/ordering, but on the different column each reads, so no
     // single rebuilt scan could keep both not-worse. combineRequired* returns None (incompatible),
     // so the merge is declined at the leaf -- before any rebuild -- with the degradation configs
@@ -2637,7 +2637,7 @@ class MergeSubplansSuite extends PlanTest {
     assertDeclines(s => s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending)))))
   }
 
-  test("SPARK-40259: merge DSv2 scans reporting kGP/ordering when the degradation config allows") {
+  test("SPARK-58549: merge DSv2 scans reporting kGP/ordering when the degradation config allows") {
     // With the matching degradation config on, a merge that would drop a reported partitioning or
     // ordering proceeds anyway (trading it for a single scan). The merged scan re-derives no report
     // from the non-reporting TestV2Scan, so the fused plan is the plain column union.
@@ -2670,7 +2670,7 @@ class MergeSubplansSuite extends PlanTest {
       SQLConf.MERGE_SUBPLANS_DSV2_ALLOW_ORDERING_DEGRADATION.key)
   }
 
-  test("SPARK-40259: enforce the required report on the deferred under-Filter scan build") {
+  test("SPARK-58549: enforce the required report on the deferred under-Filter scan build") {
     // The above tests fuse scans directly under an Aggregate (no Filter), so they exercise the
     // scan build at the leaf. When the scans sit under an (identical) Filter the build is instead
     // DEFERRED to the enclosing Filter, and the required report is carried there through

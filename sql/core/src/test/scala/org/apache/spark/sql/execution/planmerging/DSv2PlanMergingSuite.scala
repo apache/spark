@@ -173,7 +173,7 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("SPARK-40259: a scan merge preserves the sources' reported key-grouped partitioning") {
+  test("SPARK-58549: a scan merge preserves the sources' reported key-grouped partitioning") {
     val t = "scanmergereport.t2"
     withTable(t) {
       withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
