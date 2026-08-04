@@ -1054,7 +1054,12 @@ public class CollationAwareUTF8String {
    *
    * Only the last {@code count} positions of a window are retained, in a ring buffer that grows
    * on demand so that a {@code count} far larger than the number of matches does not allocate up
-   * front.
+   * front. Retaining them is what forward enumeration costs that {@code previous()} did not:
+   * the buffer holds one int per match up to {@code count}, so a caller that asks for a large
+   * occurrence of a pattern that really does occur that many times allocates in proportion to
+   * it -- bounded by the match count, and hence by the length of the target, but no longer
+   * constant. A hard cap would mean a second pass (count the matches, then re-scan to the
+   * one wanted), trading the allocation for another walk of the target.
    */
   private static int findIndexFromEnd(final StringSearch stringSearch, final String text,
       final int count, final int maxStartIndex, final boolean matchEnd) {

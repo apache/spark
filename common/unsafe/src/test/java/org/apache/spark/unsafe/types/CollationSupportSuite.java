@@ -2739,16 +2739,21 @@ public class CollationSupportSuite {
     assertSubstringIndex("a🙃b🙃c", "d", -1, UNICODE_CI, "a🙃b🙃c");
     // SPARK-58441: negative count with adjacent delimiter occurrences over characters that map
     // to multiple collation elements: the ICU path previously used StringSearch.previous(),
-    // which skips such occurrences and returned the wrong suffix.
+    // which skips such occurrences and returned the wrong suffix. UTF8_BINARY does not go
+    // through the ICU path, so it pins each expectation independently of the code under test.
+    assertSubstringIndex("ééa", "é", -2, UTF8_BINARY, "éa");
     assertSubstringIndex("ééa", "é", -2, UNICODE, "éa");
     assertSubstringIndex("ééa", "é", -2, UNICODE_CI, "éa");
     // Same, with a delimiter spanning more than one such character, so that the suffix depends
     // on the matched length and not just on the match position.
+    assertSubstringIndex("aéééba", "éé", -2, UTF8_BINARY, "éba");
     assertSubstringIndex("aéééba", "éé", -2, UNICODE, "éba");
     // Positive count with the first delimiter occurrence at position 0 and a delimiter
     // starting with a surrogate pair: the stuck-iterator workaround previously used 0 as the
     // "no match yet" sentinel and double-counted the first occurrence.
+    assertSubstringIndex("😀a😀b", "😀", 2, UTF8_BINARY, "😀a");
     assertSubstringIndex("😀a😀b", "😀", 2, UNICODE, "😀a");
+    assertSubstringIndex("😀😀😀", "😀😀", 2, UTF8_BINARY, "😀");
     assertSubstringIndex("😀😀😀", "😀😀", 2, UNICODE, "😀");
     // Targets long enough to exercise the backward search's trailing window. The window starts
     // at 64 UTF-16 code units and grows by 4x, and the ring buffer that retains the last `count`
@@ -2783,6 +2788,18 @@ public class CollationSupportSuite {
     assertSubstringIndex("e\u0301".repeat(100) + "x", "e\u0301", -32, UTF8_BINARY,
       "e\u0301".repeat(31) + "x");
     assertSubstringIndex("e\u0301".repeat(100) + "x", "e\u0301", -32, UNICODE,
+      "e\u0301".repeat(31) + "x");
+    // The windowed cases above all run under UNICODE, where the delimiter matches literally.
+    // Repeat them under the collations that make the match set itself collation-dependent,
+    // which is the property this fix turns on: case folding under UNICODE_CI and accent folding
+    // under UNICODE_AI, over targets long enough to need a second window.
+    assertSubstringIndex(("A" + "x".repeat(9)).repeat(30), "a", -20, UNICODE_CI,
+      "x".repeat(9) + ("A" + "x".repeat(9)).repeat(19));
+    assertSubstringIndex(("\u00e1" + "x".repeat(9)).repeat(30), "a", -20, "UNICODE_AI",
+      "x".repeat(9) + ("\u00e1" + "x".repeat(9)).repeat(19));
+    // Case folding across a window boundary that falls inside a combining sequence: the
+    // delimiter is the uppercase base plus the same combining mark.
+    assertSubstringIndex("e\u0301".repeat(100) + "x", "E\u0301", -32, UNICODE_CI,
       "e\u0301".repeat(31) + "x");
   }
 
@@ -4389,10 +4406,16 @@ public class CollationSupportSuite {
     assertStringInstrWithOccurrence("aaaa", "aa", -2, 3, UNICODE, 1);
     // SPARK-58441: backward search over characters that map to multiple collation elements: the
     // ICU path previously used StringSearch.previous(), which skips or misaligns such matches.
+    // UTF8_BINARY does not go through the ICU path, so it pins each expectation independently
+    // of the code under test.
+    assertStringInstrWithOccurrence("bbébébé", "bé", -3, 1, UTF8_BINARY, 4);
     assertStringInstrWithOccurrence("bbébébé", "bé", -3, 1, UNICODE, 4);
+    assertStringInstrWithOccurrence("bbébébé", "bé", -3, 2, UTF8_BINARY, 2);
     assertStringInstrWithOccurrence("bbébébé", "bé", -3, 2, UNICODE, 2);
     // A match that starts exactly at the backward anchor still counts.
+    assertStringInstrWithOccurrence("babaéa", "aé", -3, 1, UTF8_BINARY, 4);
     assertStringInstrWithOccurrence("babaéa", "aé", -3, 1, UNICODE, 4);
+    assertStringInstrWithOccurrence("ééé", "é", -1, 2, UTF8_BINARY, 2);
     assertStringInstrWithOccurrence("ééé", "é", -1, 2, UNICODE_CI, 2);
     // A backward start one position before the beginning of the string matches nothing. The ICU
     // path used to accept such a start and report a match, unlike every other collation, so the
@@ -4401,9 +4424,12 @@ public class CollationSupportSuite {
     assertStringInstrWithOccurrence("é", "é", -2, 1, UNICODE, 0);
     // A match at position 0 of a pattern starting with a surrogate pair: the stuck-iterator
     // workaround previously used 0 as the "no match yet" sentinel and double-counted it.
+    assertStringInstrWithOccurrence("😀a😀b", "😀", 1, 2, UTF8_BINARY, 3);
     assertStringInstrWithOccurrence("😀a😀b", "😀", 1, 2, UNICODE, 3);
+    assertStringInstrWithOccurrence("😀abc", "😀", 1, 2, UTF8_BINARY, 0);
     assertStringInstrWithOccurrence("😀abc", "😀", 1, 2, UNICODE, 0);
     // Overlapping matches of a pattern starting with a surrogate pair.
+    assertStringInstrWithOccurrence("😀😀😀", "😀😀", 1, 2, UTF8_BINARY, 2);
     assertStringInstrWithOccurrence("😀😀😀", "😀😀", 1, 2, UNICODE, 2);
     // Targets long enough to exercise the backward search's trailing window. The window starts
     // at 64 UTF-16 code units and grows by 4x, and the ring buffer that retains the last
@@ -4438,6 +4464,21 @@ public class CollationSupportSuite {
       UTF8_BINARY, 137);
     assertStringInstrWithOccurrence("e\u0301".repeat(100) + "xx", "e\u0301", -1, 32,
       UNICODE, 137);
+    // The windowed cases above all run under UNICODE, where the pattern matches literally.
+    // Repeat them under the collations that make the match set itself collation-dependent,
+    // which is the property this fix turns on: case folding under UNICODE_CI and accent folding
+    // under UNICODE_AI, over targets long enough to need a second window.
+    assertStringInstrWithOccurrence(("A" + "x".repeat(9)).repeat(30), "a", -1, 20,
+      UNICODE_CI, 101);
+    assertStringInstrWithOccurrence(("\u00e1" + "x".repeat(9)).repeat(30), "a", -1, 20,
+      "UNICODE_AI", 101);
+    // A window boundary that falls inside a combining sequence, where the pattern matches only
+    // because of the collation: the uppercase base plus the same mark under UNICODE_CI, and the
+    // bare base under UNICODE_AI, which matches the whole sequence.
+    assertStringInstrWithOccurrence("e\u0301".repeat(100) + "xx", "E\u0301", -1, 32,
+      UNICODE_CI, 137);
+    assertStringInstrWithOccurrence("e\u0301".repeat(100) + "xx", "e", -1, 32,
+      "UNICODE_AI", 137);
     // A backward start away from the end of the target, with a match after the anchor. The pass
     // stops at the anchor instead of running off the end, so the stretch past the anchor never
     // dominates and the window grows geometrically. Both cases below need two growth steps
