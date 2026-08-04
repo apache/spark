@@ -76,8 +76,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // resolve all required metadata attrs that may be used for grouping data on write
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
-    val connectorDataAttrs = resolveConnectorDataAttrs(relation, operationTable.operation)
-    val supportsColumnUpdate = connectorDataAttrs.nonEmpty
+    val supportsColumnUpdate = operationTable.operation.isInstanceOf[SupportsColumnUpdates]
+    val connectorDataAttrs = if (supportsColumnUpdate) {
+      resolveConnectorDataAttrs(relation, operationTable.operation)
+    } else Nil
 
     if (supportsColumnUpdate) {
       validateUpdatedColumnsSubset(operationTable.operation, assignments, connectorDataAttrs)
@@ -117,8 +119,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // resolve all required metadata attrs that may be used for grouping data on write
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
-    val connectorDataAttrs = resolveConnectorDataAttrs(relation, operationTable.operation)
-    val supportsColumnUpdate = connectorDataAttrs.nonEmpty
+    val supportsColumnUpdate = operationTable.operation.isInstanceOf[SupportsColumnUpdates]
+    val connectorDataAttrs = if (supportsColumnUpdate) {
+      resolveConnectorDataAttrs(relation, operationTable.operation)
+    } else Nil
 
     if (supportsColumnUpdate) {
       validateUpdatedColumnsSubset(operationTable.operation, assignments, connectorDataAttrs)
@@ -243,8 +247,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // resolve all needed attrs (e.g. row ID, any required metadata attrs and optionally connector
     // declared attrs)
     val rowAttrs = relation.output
-    val connectorDataAttrs = resolveConnectorDataAttrs(relation, operation)
-    val supportsColumnUpdate = connectorDataAttrs.nonEmpty
+    val supportsColumnUpdate = operation.isInstanceOf[SupportsColumnUpdates]
+    val connectorDataAttrs = if (supportsColumnUpdate) {
+      resolveConnectorDataAttrs(relation, operation)
+    } else Nil
 
     if (supportsColumnUpdate) {
       validateUpdatedColumnsSubset(operation, assignments, connectorDataAttrs)
@@ -420,7 +426,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
   /**
    * Resolves the connector's `requiredDataAttributes()` if the operation opts into column
-   * updates. Returns `Nil` when the operation does not mix in `SupportsColumnUpdates`.
+   * updates. Returns `Nil` otherwise.
    */
   private def resolveConnectorDataAttrs(
       relation: DataSourceV2Relation,
