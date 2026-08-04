@@ -1884,8 +1884,7 @@ def main():
                 default = default_pick_branch(branch_names, tuple(picked_refs))
                 if default is None:
                     print(
-                        "Every known release branch already contains #%s; nothing to pick."
-                        % pr_num
+                        "Every known release branch already contains #%s; nothing to pick." % pr_num
                     )
                     break
                 picked = cherry_pick(
