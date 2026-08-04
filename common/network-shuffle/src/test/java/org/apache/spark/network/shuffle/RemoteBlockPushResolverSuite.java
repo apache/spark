@@ -20,8 +20,10 @@ package org.apache.spark.network.shuffle;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -30,6 +32,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +40,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.CheckedInputStream;
+import java.util.zip.Checksum;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -53,8 +58,11 @@ import org.slf4j.LoggerFactory;
 import static org.junit.jupiter.api.Assertions.*;
 
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
+import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
+import org.apache.spark.network.shuffle.checksum.Cause;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver.MergeShuffleFile;
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver.PushMergeMetrics;
 import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
@@ -87,6 +95,7 @@ public class RemoteBlockPushResolverSuite {
   private final String INVALID_MERGE_DIRECTORY_META =
           "shuffleManager:{\"mergeDirInvalid\": \"merge_manager_2\", \"attemptId\": \"2\"}";
   private final String BLOCK_MANAGER_DIR = "blockmgr-193d8401";
+  private static final String CHECKSUM_ALGORITHM = "ADLER32";
 
   private TransportConf conf;
   private RemoteBlockPushResolver pushResolver;
@@ -166,6 +175,158 @@ public class RemoteBlockPushResolverSuite {
     MergedBlockMeta meta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, meta, new int[]{5, 5, 3}, new int[][]{{0, 1}, {2}, {3}});
     verifyMetrics(13, 0, 0, 0, 0, 0, 0);
+  }
+
+  @Test
+  public void testChecksumsOfMergedChunks() throws IOException {
+    PushBlock[] pushBlocks = new PushBlock[] {
+      new PushBlock(0, 0, 0, 0, createBuffer(2)),
+      new PushBlock(0, 0, 1, 0, createBuffer(3)),
+      new PushBlock(0, 0, 2, 0, createBuffer(5)),
+      new PushBlock(0, 0, 3, 0, createBuffer(3))
+    };
+    pushBlockHelper(TEST_APP, NO_ATTEMPT_ID, pushBlocks);
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
+    MergedBlockMeta meta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
+    // validateChunks verifies that every stored checksum matches the data of its chunk
+    validateChunks(TEST_APP, 0, 0, 0, meta, new int[]{5, 5, 3}, new int[][]{{0, 1}, {2}, {3}});
+    // The checksum file holds one entry per chunk while the index file has an extra leading one
+    File indexFile = new File(pushResolver.validateAndGetAppShuffleInfo(TEST_APP)
+      .getMergedShuffleIndexFilePath(0, 0, 0));
+    assertEquals(indexFile.length() - 8L, readChunkChecksums(TEST_APP, 0, 0, 0).length * 8L);
+  }
+
+  @Test
+  public void testChecksumOfChunkAfterFailedBlockPush() throws IOException {
+    StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
+    stream1.onData(stream1.getID(), createBuffer(2));
+    // The partially written block is abandoned, so the next block overwrites its data. The data
+    // of the abandoned block must not be part of the checksum of the chunk.
+    stream1.onFailure(stream1.getID(), new RuntimeException("forced error"));
+    StreamCallbackWithID stream2 = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 1, 0, 0));
+    stream2.onData(stream2.getID(), createBuffer(5));
+    stream2.onComplete(stream2.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
+    MergedBlockMeta meta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
+    validateChunks(TEST_APP, 0, 0, 0, meta, new int[]{5}, new int[][]{{1}});
+  }
+
+  @Test
+  public void testChecksumOfChunkWhenBlockPushIsInFlightAtFinalize() throws IOException {
+    StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
+    stream1.onData(stream1.getID(), createBuffer(5));
+    stream1.onComplete(stream1.getID());
+    StreamCallbackWithID stream2 = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 1, 0, 0));
+    stream2.onData(stream2.getID(), createBuffer(2));
+    stream2.onComplete(stream2.getID());
+    // This block is still being written when the shuffle merge is finalized, so its data is
+    // truncated away and must not be part of the checksum of the last chunk.
+    StreamCallbackWithID stream3 = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 2, 0, 0));
+    stream3.onData(stream3.getID(), createBuffer(3));
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
+    MergedBlockMeta meta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
+    validateChunks(TEST_APP, 0, 0, 0, meta, new int[]{5, 2}, new int[][]{{0}, {1}});
+  }
+
+  @Test
+  public void testFailureToWriteChecksumsDoesNotFailTheMerge() throws IOException {
+    useTestFiles(false, false, true);
+    StreamCallbackWithID stream = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
+    stream.onData(stream.getID(), createBuffer(5));
+    RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo =
+      ((RemoteBlockPushResolver.PushBlockStreamCallback) stream).getPartitionInfo();
+    // Closing the checksum file makes every write to it fail
+    ((TestMergeShuffleFile) partitionInfo.getChecksumFile()).close();
+    stream.onComplete(stream.getID());
+    // The merge of the partition is unaffected by the failure to write the checksums
+    MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
+      new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
+    validateMergeStatuses(statuses, new int[] {0}, new long[] {5});
+    MergedBlockMeta meta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
+    assertEquals(1, meta.getNumChunks(), "num chunks");
+    assertEquals(0, partitionInfo.getNumIOExceptions(), "no IOExceptions counted for the merge");
+    // The checksums no longer describe the chunks, so they are discarded and the corruption of
+    // the chunk can no longer be diagnosed
+    assertFalse(pushResolver.validateAndGetAppShuffleInfo(TEST_APP)
+      .getMergedShuffleChecksumFile(0, 0, 0, CHECKSUM_ALGORITHM).exists(), "no checksum file");
+    assertEquals(Cause.UNKNOWN_ISSUE, pushResolver.diagnoseShuffleChunkCorruption(
+      TEST_APP, 0, 0, 0, 0, 0L, CHECKSUM_ALGORITHM));
+  }
+
+  @Test
+  public void testShuffleChunkCorruptionDiagnosisChecksumVerifyPass() throws IOException {
+    prepareChunkForDiagnosis();
+    long checksumByReader = readChunkChecksums(TEST_APP, 0, 0, 0)[0];
+    assertEquals(Cause.CHECKSUM_VERIFY_PASS, pushResolver.diagnoseShuffleChunkCorruption(
+      TEST_APP, 0, 0, 0, 0, checksumByReader, CHECKSUM_ALGORITHM));
+  }
+
+  @Test
+  public void testShuffleChunkCorruptionDiagnosisNetworkIssue() throws IOException {
+    prepareChunkForDiagnosis();
+    // The chunk on disk is intact, but the reducer read something else
+    long checksumByReader = readChunkChecksums(TEST_APP, 0, 0, 0)[0] + 1;
+    assertEquals(Cause.NETWORK_ISSUE, pushResolver.diagnoseShuffleChunkCorruption(
+      TEST_APP, 0, 0, 0, 0, checksumByReader, CHECKSUM_ALGORITHM));
+  }
+
+  @Test
+  public void testShuffleChunkCorruptionDiagnosisDiskIssue() throws IOException {
+    prepareChunkForDiagnosis();
+    long checksumByReader = readChunkChecksums(TEST_APP, 0, 0, 0)[0];
+    // Corrupt the merged shuffle data after it was merged and checksummed
+    File dataFile = pushResolver.validateAndGetAppShuffleInfo(TEST_APP)
+      .getMergedShuffleDataFile(0, 0, 0);
+    try (FileChannel channel = FileChannel.open(dataFile.toPath(), StandardOpenOption.WRITE)) {
+      channel.write(ByteBuffer.wrap(new byte[] {(byte) 0xff, (byte) 0xff}), 0);
+    }
+    assertEquals(Cause.DISK_ISSUE, pushResolver.diagnoseShuffleChunkCorruption(
+      TEST_APP, 0, 0, 0, 0, checksumByReader, CHECKSUM_ALGORITHM));
+  }
+
+  @Test
+  public void testShuffleChunkCorruptionDiagnosisUnsupportedAlgorithm() throws IOException {
+    prepareChunkForDiagnosis();
+    // The reducer calculated its checksum with an algorithm the chunk was not merged with
+    assertEquals(Cause.UNSUPPORTED_CHECKSUM_ALGORITHM,
+      pushResolver.diagnoseShuffleChunkCorruption(TEST_APP, 0, 0, 0, 0, 0L, "CRC32"));
+  }
+
+  @Test
+  public void testShuffleChunkCorruptionDiagnosisOfUnknownChunk() throws IOException {
+    prepareChunkForDiagnosis();
+    assertEquals(Cause.UNKNOWN_ISSUE, pushResolver.diagnoseShuffleChunkCorruption(
+      TEST_APP, 0, 0, 0, 5, 0L, CHECKSUM_ALGORITHM));
+  }
+
+  @Test
+  public void testShuffleChunkCorruptionDiagnosisWhenChecksumIsDisabled() throws IOException {
+    MapConfigProvider provider = new MapConfigProvider(Map.of(
+      "spark.shuffle.push.server.minChunkSizeInMergedShuffleFile", "4",
+      "spark.shuffle.push.server.mergedShuffleChecksum.enabled", "false"));
+    pushResolver = new RemoteBlockPushResolver(new TransportConf("shuffle", provider), null);
+    registerExecutor(TEST_APP, prepareLocalDirs(localDirs, MERGE_DIRECTORY), MERGE_DIRECTORY_META);
+    pushBlockHelper(TEST_APP, NO_ATTEMPT_ID, new PushBlock[] {
+      new PushBlock(0, 0, 0, 0, createBuffer(5))
+    });
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
+    assertFalse(pushResolver.validateAndGetAppShuffleInfo(TEST_APP)
+      .getMergedShuffleChecksumFile(0, 0, 0, CHECKSUM_ALGORITHM).exists(), "no checksum file");
+    assertEquals(Cause.UNKNOWN_ISSUE, pushResolver.diagnoseShuffleChunkCorruption(
+      TEST_APP, 0, 0, 0, 0, 0L, CHECKSUM_ALGORITHM));
+  }
+
+  private void prepareChunkForDiagnosis() throws IOException {
+    pushBlockHelper(TEST_APP, NO_ATTEMPT_ID, new PushBlock[] {
+      new PushBlock(0, 0, 0, 0, createBuffer(5))
+    });
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
   }
 
   @Test
@@ -1220,6 +1381,9 @@ public class RemoteBlockPushResolverSuite {
             "Meta files on the disk should be cleaned up");
     assertFalse(new File(appShuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists(),
             "Index files on the disk should be cleaned up");
+    assertFalse(
+            appShuffleInfo.getMergedShuffleChecksumFile(0, 1, 0, CHECKSUM_ALGORITHM).exists(),
+            "Checksum files on the disk should be cleaned up");
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     // stream 2 now completes
@@ -1411,12 +1575,14 @@ public class RemoteBlockPushResolverSuite {
     assertTrue(shuffleInfo.getMergedShuffleMetaFile(0, 1, 0).exists());
     assertTrue(new File(shuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
     assertTrue(shuffleInfo.getMergedShuffleDataFile(0, 1, 0).exists());
+    assertTrue(shuffleInfo.getMergedShuffleChecksumFile(0, 1, 0, CHECKSUM_ALGORITHM).exists());
     pushResolver.removeShuffleMerge(
         new RemoveShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 1));
     closed.tryAcquire(10, TimeUnit.SECONDS);
     assertFalse(shuffleInfo.getMergedShuffleMetaFile(0, 1, 0).exists());
     assertFalse(new File(shuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
     assertFalse(shuffleInfo.getMergedShuffleDataFile(0, 1, 0).exists());
+    assertFalse(shuffleInfo.getMergedShuffleChecksumFile(0, 1, 0, CHECKSUM_ALGORITHM).exists());
 
     // 1.2 Cleaned up the merged files when msg.shuffleMergeId is DELETE_ALL_MERGED_SHUFFLE
     StreamCallbackWithID streamCallback1 = pushResolver.receiveBlockDataAsStream(
@@ -1489,6 +1655,13 @@ public class RemoteBlockPushResolverSuite {
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {
+    useTestFiles(useTestIndexFile, useTestMetaFile, false);
+  }
+
+  private void useTestFiles(
+      boolean useTestIndexFile,
+      boolean useTestMetaFile,
+      boolean useTestChecksumFile) throws IOException {
     pushResolver = new RemoteBlockPushResolver(conf, null) {
       @Override
       AppShufflePartitionInfo newAppShufflePartitionInfo(
@@ -1505,9 +1678,14 @@ public class RemoteBlockPushResolverSuite {
         MergeShuffleFile mergedMetaFile = useTestMetaFile ?
           new TestMergeShuffleFile(metaFile) :
             new MergeShuffleFile(metaFile);
+        File checksumFile = appShuffleInfo.getMergedShuffleChecksumFile(
+          shuffleId, shuffleMergeId, reduceId, CHECKSUM_ALGORITHM);
+        MergeShuffleFile mergedChecksumFile = useTestChecksumFile ?
+          new TestMergeShuffleFile(checksumFile) :
+            new MergeShuffleFile(checksumFile);
         return new AppShufflePartitionInfo(new AppAttemptShuffleMergeId(
             appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId), reduceId,
-            dataFile, mergedIndexFile, mergedMetaFile);
+            dataFile, mergedIndexFile, mergedMetaFile, mergedChecksumFile, CHECKSUM_ALGORITHM);
       }
     };
     registerExecutor(TEST_APP, prepareLocalDirs(localDirs, MERGE_DIRECTORY), MERGE_DIRECTORY_META);
@@ -1572,6 +1750,62 @@ public class RemoteBlockPushResolverSuite {
           shuffleMergeId, reduceId, i);
       assertEquals(expectedSizes[i], mb.getLength());
     }
+    validateChunkChecksums(appId, shuffleId, shuffleMergeId, reduceId, meta.getNumChunks());
+  }
+
+  /**
+   * Verifies that the checksum file holds exactly one checksum per chunk and that every one of
+   * them describes the data the chunk ended up with in the merged shuffle data file.
+   */
+  private void validateChunkChecksums(
+      String appId,
+      int shuffleId,
+      int shuffleMergeId,
+      int reduceId,
+      int numChunks) throws IOException {
+    long[] checksums = readChunkChecksums(appId, shuffleId, shuffleMergeId, reduceId);
+    assertEquals(numChunks, checksums.length, "num checksums");
+    for (int i = 0; i < numChunks; i++) {
+      ManagedBuffer chunk =
+        pushResolver.getMergedBlockData(appId, shuffleId, shuffleMergeId, reduceId, i);
+      assertEquals(calculateChecksum(chunk), checksums[i], "checksum of chunk " + i);
+    }
+  }
+
+  private long[] readChunkChecksums(
+      String appId,
+      int shuffleId,
+      int shuffleMergeId,
+      int reduceId) throws IOException {
+    File checksumFile = pushResolver.validateAndGetAppShuffleInfo(appId)
+      .getMergedShuffleChecksumFile(shuffleId, shuffleMergeId, reduceId, CHECKSUM_ALGORITHM);
+    assertTrue(checksumFile.exists(), "checksum file " + checksumFile.getName() + " exists");
+    long[] checksums = new long[(int) (checksumFile.length() / 8L)];
+    try (DataInputStream in = new DataInputStream(new FileInputStream(checksumFile))) {
+      for (int i = 0; i < checksums.length; i++) {
+        checksums[i] = in.readLong();
+      }
+    }
+    return checksums;
+  }
+
+  private long calculateChecksum(ManagedBuffer data) throws IOException {
+    Checksum checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(CHECKSUM_ALGORITHM);
+    byte[] buffer = new byte[ShuffleChecksumHelper.CHECKSUM_CALCULATION_BUFFER];
+    try (CheckedInputStream in = new CheckedInputStream(data.createInputStream(), checksum)) {
+      while (in.read(buffer) != -1) {}
+      return checksum.getValue();
+    }
+  }
+
+  /**
+   * Blocks of random data, so that the checksum of a chunk actually depends on which data ended
+   * up in it.
+   */
+  private ByteBuffer createBuffer(int size) {
+    byte[] bytes = new byte[size];
+    ThreadLocalRandom.current().nextBytes(bytes);
+    return ByteBuffer.wrap(bytes);
   }
 
   private void pushBlockHelper(
