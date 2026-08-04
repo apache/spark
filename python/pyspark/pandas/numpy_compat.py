@@ -60,7 +60,7 @@ unary_np_spark_mappings = {
     "log": F.log,
     "log10": F.log10,
     "log1p": F.log1p,
-    "log2": F.log2,
+    "log2": lambda c: F.when(c == 0, F.lit(float("-inf"))).otherwise(F.log2(c)),
     "logical_not": lambda c: ~(c.cast(BooleanType())),
     "matmul": lambda _: NotImplemented,  # Can return a NumPy array in pandas.
     "negative": F.negative,
