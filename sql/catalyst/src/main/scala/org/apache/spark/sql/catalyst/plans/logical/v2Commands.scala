@@ -367,10 +367,12 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
       originalTable)
   }
 
-  // Resolves the connector-declared data attributes against the original table.
-  // Symmetric with projectedMetadataAttrs; used to validate the narrow updateRowProjection
-  // when the connector mixes in SupportsColumnUpdates. The write relation stays wide, so
-  // the narrow projection cannot be validated against `table.output` directly.
+  /**
+   * Resolves the connector-declared data attributes against the original table.
+   * Symmetric with projectedMetadataAttrs; used to validate the narrow updateRowProjection
+   * when the connector mixes in SupportsColumnUpdates. The write relation stays wide, so
+   * the narrow projection cannot be validated against `table.output` directly.
+   */
   protected def projectedDataAttrs: Seq[Attribute] = operation match {
     case scu: SupportsColumnUpdates =>
       V2ExpressionUtils.resolveRefs[AttributeReference](
