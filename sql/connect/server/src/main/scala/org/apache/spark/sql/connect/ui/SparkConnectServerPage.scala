@@ -221,11 +221,11 @@ private[ui] class SparkConnectServerPage(parent: SparkConnectServerTab)
     val sizeStats = if (memoryControlledStatuses.nonEmpty) {
       Seq(
         <li>
-          <strong>In-memory size: </strong>
+          <strong>Estimated size (In-memory): </strong>
           {Utils.bytesToString(inMemorySize)} / {Utils.bytesToString(maxInMemorySize)}
         </li>,
         <li>
-          <strong>Total estimated size (in-memory and offloaded data): </strong>
+          <strong>Estimated size (In-memory + Disk): </strong>
           {Utils.bytesToString(totalSize)} / {Utils.bytesToString(maxTotalSize)}
         </li>)
     } else {
