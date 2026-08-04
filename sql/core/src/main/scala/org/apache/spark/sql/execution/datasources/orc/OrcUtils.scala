@@ -208,9 +208,11 @@ object OrcUtils extends Logging {
   def readOrcSchemasInParallel(
     files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
     ignoreMissingFiles: Boolean): Seq[StructType] = {
+    // Read outside `parmap`: its worker threads do not inherit the caller's `SQLConf` thread-local,
+    // so `SQLConf.get` there would fall back to defaults and never take the archive branch.
+    val archiveEnabled = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
     ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
-      if (SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED) &&
-          SupportsArchiveFormat.isArchivePath(currentFile.getPath)) {
+      if (archiveEnabled && SupportsArchiveFormat.isArchivePath(currentFile.getPath)) {
         readArchiveSchemas(conf, currentFile, ignoreCorruptFiles, ignoreMissingFiles,
           stopAtFirst = false)
       } else {
