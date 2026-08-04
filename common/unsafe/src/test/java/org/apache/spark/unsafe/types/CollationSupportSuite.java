@@ -2792,10 +2792,12 @@ public class CollationSupportSuite {
     // The windowed cases above all run under UNICODE, where the delimiter matches literally.
     // Repeat them under the collations that make the match set itself collation-dependent,
     // which is the property this fix turns on: case folding under UNICODE_CI and accent folding
-    // under UNICODE_AI, over targets long enough to need a second window.
+    // under UNICODE_CI_AI, over targets long enough to need a second window. UNICODE_AI is not
+    // used here: substring_index declares StringTypeNonCSAICollation, which rejects a collation
+    // that is accent-insensitive but case-sensitive, so no such call can reach this code.
     assertSubstringIndex(("A" + "x".repeat(9)).repeat(30), "a", -20, UNICODE_CI,
       "x".repeat(9) + ("A" + "x".repeat(9)).repeat(19));
-    assertSubstringIndex(("\u00e1" + "x".repeat(9)).repeat(30), "a", -20, "UNICODE_AI",
+    assertSubstringIndex(("\u00e1" + "x".repeat(9)).repeat(30), "a", -20, "UNICODE_CI_AI",
       "x".repeat(9) + ("\u00e1" + "x".repeat(9)).repeat(19));
     // Case folding across a window boundary that falls inside a combining sequence: the
     // delimiter is the uppercase base plus the same combining mark.
@@ -4486,18 +4488,20 @@ public class CollationSupportSuite {
     // The windowed cases above all run under UNICODE, where the pattern matches literally.
     // Repeat them under the collations that make the match set itself collation-dependent,
     // which is the property this fix turns on: case folding under UNICODE_CI and accent folding
-    // under UNICODE_AI, over targets long enough to need a second window.
+    // under UNICODE_CI_AI, over targets long enough to need a second window. UNICODE_AI is not
+    // used here: instr declares StringTypeNonCSAICollation, which rejects a collation that is
+    // accent-insensitive but case-sensitive, so no such call can reach this code.
     assertStringInstrWithOccurrence(("A" + "x".repeat(9)).repeat(30), "a", -1, 20,
       UNICODE_CI, 101);
     assertStringInstrWithOccurrence(("\u00e1" + "x".repeat(9)).repeat(30), "a", -1, 20,
-      "UNICODE_AI", 101);
+      "UNICODE_CI_AI", 101);
     // A window boundary that falls inside a combining sequence, where the pattern matches only
     // because of the collation: the uppercase base plus the same mark under UNICODE_CI, and the
-    // bare base under UNICODE_AI, which matches the whole sequence.
+    // bare base under UNICODE_CI_AI, which matches the whole sequence.
     assertStringInstrWithOccurrence("e\u0301".repeat(100) + "xx", "E\u0301", -1, 32,
       UNICODE_CI, 137);
     assertStringInstrWithOccurrence("e\u0301".repeat(100) + "xx", "e", -1, 32,
-      "UNICODE_AI", 137);
+      "UNICODE_CI_AI", 137);
     // A backward start away from the end of the target, with a match after the anchor. The pass
     // stops at the anchor instead of running off the end, so the stretch past the anchor never
     // dominates and the window grows geometrically. Both cases below need two growth steps
@@ -4513,6 +4517,20 @@ public class CollationSupportSuite {
       "x".repeat(1000) + ("z" + "x".repeat(99)).repeat(5) + "y".repeat(500) + "z";
     assertStringInstrWithOccurrence(twoStepsWrap, "z", -2, 3, UTF8_BINARY, 1201);
     assertStringInstrWithOccurrence(twoStepsWrap, "z", -2, 3, UNICODE, 1201);
+    // A backward start whose anchor sits mid-target with no match past it, so every pass runs on
+    // to the end of the target and re-walks the same trailing stretch. Here that stretch is half
+    // the target, so by the second pass the repetition has cost a full pass on its own and the
+    // window widens straight to the start instead of taking another geometric step. Only instr
+    // reaches this: substring_index anchors at the end of the target, leaving no stretch to
+    // re-walk. UTF8_BINARY does not use the windowed search and pins the expectation.
+    String tailRewalk = "z" + "x".repeat(4095);
+    assertStringInstrWithOccurrence(tailRewalk, "z", -2048, 1, UTF8_BINARY, 1);
+    assertStringInstrWithOccurrence(tailRewalk, "z", -2048, 1, UNICODE, 1);
+    // Same shape with the match a little later, so the answer is not the first code point of the
+    // target and a window that widened too far would still have to place it correctly.
+    String tailRewalkLate = "x".repeat(40) + "z" + "x".repeat(4055);
+    assertStringInstrWithOccurrence(tailRewalkLate, "z", -2048, 1, UTF8_BINARY, 41);
+    assertStringInstrWithOccurrence(tailRewalkLate, "z", -2048, 1, UNICODE, 41);
     // Collations whose pattern is a contraction, i.e. a single collation unit spanning more than
     // one code point. A start index inside such a unit is snapped back to its beginning, so the
     // iterator only makes progress if it is advanced past the whole unit. Czech "ch" occurs at
