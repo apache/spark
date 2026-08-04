@@ -715,20 +715,20 @@ class PlanMerger(
     // stronger, which satisfies both). None from combine* means the inputs are INCOMPATIBLE -- no
     // rebuilt scan could keep both not-worse -- so decline HERE, before rebuilding, unless the
     // matching config accepts degrading that dimension.
-    val requiredKeyGroupedPartitioning = combineRequiredKeyGroupedPartitioning(
+    val combinedKeyGroupedPartitioning = combineRequiredKeyGroupedPartitioning(
       np.keyGroupedPartitioning.map(_.map(mapAttributes(_, npRelationMapping))).getOrElse(Nil),
       cp.keyGroupedPartitioning.getOrElse(Nil))
-    val requiredOrdering = combineRequiredOrdering(
+    val combinedOrdering = combineRequiredOrdering(
       np.ordering.map(_.map(mapAttributes(_, npRelationMapping))).getOrElse(Nil),
       cp.ordering.getOrElse(Nil))
-    if ((requiredKeyGroupedPartitioning.isEmpty && !dsv2AllowKeyGroupedPartitioningDegradation) ||
-        (requiredOrdering.isEmpty && !dsv2AllowOrderingDegradation)) {
+    if ((combinedKeyGroupedPartitioning.isEmpty && !dsv2AllowKeyGroupedPartitioningDegradation) ||
+        (combinedOrdering.isEmpty && !dsv2AllowOrderingDegradation)) {
       return None
     }
     // Empty = no requirement (both inputs reported none, or they were incompatible but the config
     // accepts the degradation). Otherwise the single report the merged scan must reproduce/satisfy.
-    val expectedKeyGroupedPartitioning = requiredKeyGroupedPartitioning.getOrElse(Nil)
-    val expectedOrdering = requiredOrdering.getOrElse(Nil)
+    val expectedKeyGroupedPartitioning = combinedKeyGroupedPartitioning.getOrElse(Nil)
+    val expectedOrdering = combinedOrdering.getOrElse(Nil)
 
     if (context.filterAboveScan) {
       // Defer the build to the enclosing Filter so the scan is built once with strict +
