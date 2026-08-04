@@ -75,4 +75,12 @@ class DataFrameAnalyzerTestGapsSuite extends SharedSparkSession {
       Seq(Row(4), Row(6), Row(8))
     )
   }
+
+  test("Stacked orderBy resolving hidden columns across levels") {
+    // Each orderBy resolves a dropped column from hidden output, widening an intermediate Project.
+    // The missing-input check runs on each such Project; a valid query must not trip it.
+    val table = Seq((1, 2, 3), (4, 5, 6)).toDF("col1", "col2", "col3")
+    val query = table.select($"col1").orderBy($"col2").orderBy($"col1").orderBy($"col2")
+    checkAnswer(query, Seq(Row(1), Row(4)))
+  }
 }
