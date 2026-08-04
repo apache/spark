@@ -31,8 +31,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * The companion object is public so that extension developers can reference the `Column` type as a
- * value, which is what makes the `Column(expression)` factory provided by
+ * The companion object is public so that extension developers can reference the `Column` type as
+ * a value, which is what makes the `Column(expression)` factory provided by
  * `org.apache.spark.sql.classic.ClassicConversions.ColumnConstructorExt` usable outside of the
  * `org.apache.spark` package. All of its members intentionally stay internal.
  */
