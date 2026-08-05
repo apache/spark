@@ -663,14 +663,14 @@ object DatasetManager extends Logging {
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
    * @param caseSensitive           whether the additive schema merge treats field names differing
-   *                                only in case as distinct columns. Threaded from the flows'
-   *                                effective `spark.sql.caseSensitive` so the merge matches how
-   *                                the flows resolve the same names; when `false`, an incoming
-   *                                column differing from an existing one only in case is folded
-   *                                onto it rather than added as a duplicate. Only affects the merge
-   *                                (i.e. `mergeWithExistingSchema = true`); the subsequent diff
-   *                                always keys columns on their exact names, so a case-only rename
-   *                                on a non-merging path stays an explicit drop-then-add.
+   *                                only in case as distinct columns. Callers should pass the
+   *                                effective `spark.sql.caseSensitive` used to resolve the schema
+   *                                being evolved. When `false`, an incoming column differing from
+   *                                an existing one only in case is folded onto it rather than
+   *                                added as a duplicate. Only affects the merge (i.e.
+   *                                `mergeWithExistingSchema = true`); the subsequent diff always
+   *                                keys columns on their exact names, so a case-only rename on a
+   *                                non-merging path stays an explicit drop-then-add.
    */
   private def evolveTable(
       catalog: TableCatalog,
@@ -686,12 +686,10 @@ object DatasetManager extends Logging {
     } else {
       desiredSchema
     }
-    // NOTE: `caseSensitive` deliberately does not reach `diffSchemas`. On the incremental path the
-    // merge above has already folded a case-only-differing incoming field onto the persisted one,
-    // so there is nothing left for `diffSchemas` to match case-insensitively; on the non-merging
-    // paths (materialized views, full refresh) `targetSchema` is the declared schema as-is, where
-    // matching case-insensitively would make a case-only rename invisible and freeze the persisted
-    // spelling.
+    // `diffSchemas` keys column identity on exact field names. On the incremental path the merge
+    // above has already folded a case-only-differing incoming field onto the persisted one. On the
+    // non-merging paths (materialized views, full refresh), `targetSchema` is the declared schema
+    // as-is, where exact-name matching keeps a case-only rename visible as a schema change.
     val columnChanges = diffSchemas(currentSchema, targetSchema)
 
     val existingProperties = existingTable.properties()

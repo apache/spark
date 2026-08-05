@@ -1274,18 +1274,13 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         }
 
         val graph = ctx.resolveToDataflowGraph()
-        val inferred = graph.inferSchemas(
-          spark.sessionState.conf.caseSensitiveAnalysis).values.head
-        // The two spellings must fold into a SINGLE column. Which spelling survives depends on the
-        // order the flows are merged in, which the graph does not define, so assert the invariant
-        // (one column, case-insensitively named `value`) rather than a particular casing.
-        assert(
-          inferred.fieldNames.length === 2,
-          s"expected `id` plus a single value column, got ${inferred.fieldNames.toSeq}")
-        assert(inferred.fieldNames.head === "id")
-        assert(
-          inferred.fieldNames(1).equalsIgnoreCase("value"),
-          s"expected a single value column, got ${inferred.fieldNames.toSeq}")
+        val inferredSchemas = graph.inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)
+        val (targetIdentifier, inferred) = inferredSchemas.head
+        val firstFlowValueField =
+          graph.resolvedFlowsTo(targetIdentifier).head.schema.fieldNames(1)
+        // The two spellings must fold into a single column, and the first flow in the resolved
+        // graph's encounter order wins.
+        assert(inferred.fieldNames.toSeq === Seq("id", firstFlowValueField))
       }
     }
   }
@@ -1319,9 +1314,8 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         val graph = ctx.resolveToDataflowGraph()
         val inferred = graph.inferSchemas(
           spark.sessionState.conf.caseSensitiveAnalysis).values.head
-        // Both spellings survive as distinct columns. The flows' merge order is not defined by the
-        // graph, so compare as a set rather than a sequence.
-        assert(inferred.fieldNames.toSet === Set("id", "value", "Value"))
+        // Both spellings survive as distinct columns in merge order.
+        assert(inferred.fieldNames.toSeq === Seq("id", "value", "Value"))
       }
     }
   }
@@ -1555,7 +1549,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         .inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)(
           fullyQualifiedIdentifier("t"))
       // Case-sensitive, so both spellings survive.
-      assert(inferred.fieldNames.toSet === Set("id", "value", "Value"))
+      assert(inferred.fieldNames.toSeq === Seq("id", "value", "Value"))
     }
   }
 

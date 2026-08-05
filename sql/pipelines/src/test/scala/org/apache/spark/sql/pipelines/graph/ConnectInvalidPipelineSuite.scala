@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
 class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
 
   private def validateGraph(graph: DataflowGraph): DataflowGraph =
-    validateGraph(graph)
+    graph.validate(spark.sessionState.conf.caseSensitiveAnalysis)
 
   test("Missing source") {
     class P extends TestGraphRegistrationContext(spark) {

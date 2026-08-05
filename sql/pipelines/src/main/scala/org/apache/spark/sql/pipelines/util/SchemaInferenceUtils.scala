@@ -119,9 +119,8 @@ object SchemaInferenceUtils {
    * `tableIdentifier`, falling back to `sessionCaseSensitive` for flows that do not set it. Under
    * case-insensitive analysis, flows emitting column names that differ only in case contribute a
    * single column, and a declared column matches a flow column differing only in case -- consistent
-   * with how the rest of the engine resolves those names. Which of two case-only-differing
-   * spellings survives follows the order the flows are merged in, which is not defined here, so
-   * callers should not depend on a particular casing.
+   * with how the rest of the engine resolves those names. If two flows differ only in column
+   * casing, the first flow's spelling wins because flows are merged in the order provided.
    */
   def inferSchemaFromFlows(
       tableIdentifier: TableIdentifier,
@@ -202,16 +201,12 @@ object SchemaInferenceUtils {
    * 1. New columns that need to be added
    * 2. Existing columns that need type updates
    *
-   * Column identity is keyed on the exact field name, deliberately NOT on a case-normalized one.
-   * Two consequences worth being explicit about, since both were considered and rejected:
-   *   - On the incremental (streaming table) path this is not where case-insensitivity belongs:
-   *     `targetSchema` is the merge of the current and desired schemas, and
-   *     [[SchemaMergingUtils.mergeSchemas]] has already folded an incoming case-only-differing
-   *     field onto the persisted one, so a case-differing pair never reaches here.
-   *   - On the non-merging paths (materialized views and any full refresh) `targetSchema` is the
-   *     run's declared schema as-is, so normalizing here would make a case-only rename invisible
-   *     and freeze the persisted spelling forever, with the table permanently disagreeing with its
-   *     definition. Exact-name keying keeps such a rename an explicit drop-then-add.
+   * Column identity is keyed on the exact field name, not on a case-normalized one. On the
+   * incremental streaming-table path, `targetSchema` is the merge of the current and desired
+   * schemas, and [[SchemaMergingUtils.mergeSchemas]] has already folded an incoming
+   * case-only-differing field onto the persisted one. On the non-merging paths (materialized views
+   * and any full refresh), `targetSchema` is the run's declared schema as-is, so exact-name keying
+   * keeps a case-only rename visible as an explicit drop-then-add.
    * Exact keying also avoids silently collapsing two genuinely distinct declared columns that
    * differ only in case (`value` and `Value`) into an arbitrary one of the two.
    *
