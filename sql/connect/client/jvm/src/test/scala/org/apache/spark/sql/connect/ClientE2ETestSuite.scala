@@ -977,6 +977,32 @@ class ClientE2ETestSuite
       df1.join(df1_filter).join(df2, df1_filter("i") === 1).select(df1_filter("j")))
   }
 
+  test("SPARK-56632: self-join reusing a DataFrame resolves columns from both sides") {
+    withTable("testcat.t") {
+      spark.sql("CREATE TABLE testcat.t (id INT, salary INT)")
+
+      // Version X.
+      spark.sql("INSERT INTO testcat.t VALUES (1, 100)")
+      // Resolves to table version X (QueryExecution #1).
+      val df1 = spark.table("testcat.t")
+
+      // External write produces version X + 1.
+      spark.sql("INSERT INTO testcat.t VALUES (2, 200)")
+      // Resolves to table version X + 1 (QueryExecution #2).
+      val df2 = spark.table("testcat.t")
+
+      // Self-join reusing the same table on both sides (QueryExecution #3).
+      // Succeeds on master (post SPARK-56632); on 4.1 (has SPARK-55070 but
+      // missing the fix) this throws AMBIGUOUS_COLUMN_REFERENCE.
+      checkSameResult(
+        Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)),
+        df1
+          .join(df2, df1("id") === df2("id"))
+          .select(df1("id"), df1("salary"), df2("id"), df2("salary"))
+          .orderBy(df1("id")))
+    }
+  }
+
   test("broadcast join") {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "-1") {
       val left = spark.range(100).select(col("id"), rand(10).as("a"))
