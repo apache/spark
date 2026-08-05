@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
@@ -637,11 +637,20 @@ trait V2CreateTablePlan extends LogicalPlan {
     name.asInstanceOf[ResolvedIdentifier].identifier
   }
 
+  /** The requested write ordering, empty when the statement did not ask for one. */
+  def writeOrdering: Seq[V2SortOrder]
+
   /**
    * Creates a copy of this node with the new partitioning transforms. This method is used to
    * rewrite the partition transforms normalized according to the table schema.
    */
   def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
+
+  /**
+   * Creates a copy of this node with the new write ordering. Used to rewrite the ordering's
+   * transforms normalized according to the table schema, exactly as `withPartitioning` does.
+   */
+  def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan
 }
 
 /**
@@ -652,7 +661,11 @@ case class CreateTable(
     columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
-    ignoreIfExists: Boolean)
+    ignoreIfExists: Boolean,
+    // The requested write distribution mode, or null when the statement did not ask for one, and
+    // the requested write ordering. Only honored by catalogs that support them at create time.
+    writeDistributionMode: String = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -662,6 +675,10 @@ case class CreateTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 }
 
@@ -710,13 +727,21 @@ case class CreateTableAsSelect(
     tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean,
-    isAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false,
+    // The requested write distribution mode, or null when the statement did not ask for one, and
+    // the requested write ordering. Only honored by catalogs that support them at create time.
+    writeDistributionMode: String = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 
   override protected def withNameAndQuery(
@@ -906,7 +931,11 @@ case class ReplaceTable(
     columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
-    orCreate: Boolean)
+    orCreate: Boolean,
+    // The requested write distribution mode, or null when the statement did not ask for one, and
+    // the requested write ordering. Only honored by catalogs that support them at create time.
+    writeDistributionMode: String = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -916,6 +945,10 @@ case class ReplaceTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 }
 
@@ -932,7 +965,11 @@ case class ReplaceTableAsSelect(
     tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    isAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false,
+    // The requested write distribution mode, or null when the statement did not ask for one, and
+    // the requested write ordering. Only honored by catalogs that support them at create time.
+    writeDistributionMode: String = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = {
@@ -941,6 +978,10 @@ case class ReplaceTableAsSelect(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 
   override protected def withNameAndQuery(
