@@ -127,9 +127,7 @@ binary_np_spark_mappings = {
     .otherwise(F.lit(1.0)),
     "hypot": F.hypot,
     "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "ldexp": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.ldexp(s1, s2), DoubleType()
-    ),
+    "ldexp": lambda c1, c2: c1.cast("double") * F.pow(F.lit(2.0), c2),
     # F.shiftleft accepts literal counts only; call_function also accepts a column.
     # NumPy returns zero for counts outside an int64's bit width, unlike JVM shifts.
     "left_shift": lambda c1, c2: F.when((c2 < 0) | (c2 >= 64), F.lit(0)).otherwise(
