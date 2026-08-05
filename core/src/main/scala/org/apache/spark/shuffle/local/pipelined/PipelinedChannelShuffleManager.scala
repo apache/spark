@@ -72,9 +72,14 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
-    // A ShuffledRDD reads exactly one reduce partition: [startPartition, startPartition+1).
+    // A reduce task reads the reduce-partition range [startPartition, endPartition). Core
+    // ShuffledRDD uses width 1, but SQL's ShuffledRowRDD may coalesce several reduce
+    // partitions into one reader task, so the reader must honor the whole range. Map-index
+    // bounds are irrelevant to the channel transport (all map tasks share each partition's
+    // queue). The final 5-arg getReader forwards here with the correct partition range.
     val h = handle.asInstanceOf[BaseShuffleHandle[K, _, C]]
-    new ChannelShuffleReader[K, C](h, startPartition, numMapsByShuffle.get(h.shuffleId))
+    new ChannelShuffleReader[K, C](
+      h, startPartition, endPartition, numMapsByShuffle.get(h.shuffleId))
   }
 
   override def unregisterShuffle(shuffleId: Int): Boolean = {

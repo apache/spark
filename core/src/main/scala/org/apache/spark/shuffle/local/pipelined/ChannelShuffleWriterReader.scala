@@ -44,6 +44,12 @@ private[spark] class ChannelShuffleWriter[K, V](
     while (records.hasNext) {
       val rec = records.next()
       val pid = partitioner.getPartition(rec._1)
+      // Records must already be detached from the producer's reused row buffers by the time
+      // they reach here (the producer reuses its output UnsafeRow across iterations, and the
+      // consumer reads on another thread). The copy is done in the SQL layer's
+      // ShuffleWriteProcessor for the pipelined path -- where InternalRow.copy() is available
+      // -- rather than here, because this class lives in `core` and cannot reference SQL rows,
+      // and the UnsafeRow serializer offers no single-object copy. So enqueue as-is.
       ChannelShuffleRendezvous.queue(shuffleId, pid).put((rec._1, rec._2))
     }
     // Signal end-of-stream to every reduce partition so each reader can count this map
@@ -78,18 +84,27 @@ private[spark] class ChannelShuffleWriter[K, V](
  */
 private[spark] class ChannelShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
-    reducePartitionId: Int,
+    startPartition: Int,
+    endPartition: Int,
     numMaps: Int)
   extends ShuffleReader[K, C] {
 
-  override def read(): Iterator[Product2[K, C]] = {
+  // A reduce task may be asked to read a RANGE of reduce partitions in one go, not just one:
+  // ShuffledRowRDD's CoalescedPartitionSpec(start, end) collapses several reduce partitions
+  // into a single reader task. Drain every queue in [startPartition, endPartition); each
+  // carries numMaps EndOfStream markers (the writer puts one per map task on every partition
+  // queue), so each queue is drained independently to completion.
+  override def read(): Iterator[Product2[K, C]] =
+    (startPartition until endPartition).iterator.flatMap(drainQueue)
+
+  private def drainQueue(reducePartitionId: Int): Iterator[Product2[K, C]] = {
     val q = ChannelShuffleRendezvous.queue(handle.shuffleId, reducePartitionId)
     new Iterator[Product2[K, C]] {
       private var endOfStreamSeen = 0
       private var nextItem: AnyRef = advance()
 
       // Blocking-drain until the next data pair, or until every map task has signalled
-      // end-of-stream (then return null to end iteration).
+      // end-of-stream for this queue (then return null to end iteration).
       private def advance(): AnyRef = {
         var item = q.take()
         while (item eq ChannelShuffleRendezvous.EndOfStream) {

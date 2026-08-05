@@ -570,7 +570,7 @@ object ShuffleExchangeExec {
           rddWithPartitionIds,
           new PartitionIdPassthrough(part.numPartitions),
           serializer,
-          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
+          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics, copyRows = true),
           rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize))
       } else {
         new ShuffleDependency[Int, InternalRow, InternalRow](
@@ -590,12 +590,37 @@ object ShuffleExchangeExec {
   /**
    * Create a customized [[ShuffleWriteProcessor]] for SQL which wrap the default metrics reporter
    * with [[SQLShuffleWriteMetricsReporter]] as new reporter for [[ShuffleWriteProcessor]].
+   *
+   * When `copyRows` is true (the pipelined path), each record's value row is copied before the
+   * shuffle writer sees it. A pipelined shuffle hands rows to a concurrently-running reducer
+   * through an in-process channel with no serialization, so the producer's reused output
+   * UnsafeRow buffer must be detached here -- in the SQL layer, where `InternalRow.copy()` is
+   * available -- or every enqueued row would alias the same buffer. A regular (materializing)
+   * shuffle serializes on write and so needs no copy; `copyRows` stays false for it.
    */
-  def createShuffleWriteProcessor(metrics: Map[String, SQLMetric]): ShuffleWriteProcessor = {
+  def createShuffleWriteProcessor(
+      metrics: Map[String, SQLMetric],
+      copyRows: Boolean = false): ShuffleWriteProcessor = {
     new ShuffleWriteProcessor {
       override protected def createMetricsReporter(
           context: TaskContext): ShuffleWriteMetricsReporter = {
         new SQLShuffleWriteMetricsReporter(context.taskMetrics().shuffleWriteMetrics, metrics)
+      }
+
+      override def write(
+          inputs: Iterator[_],
+          dep: ShuffleDependency[_, _, _],
+          mapId: Long,
+          mapIndex: Int,
+          context: TaskContext): org.apache.spark.scheduler.MapStatus = {
+        val rows = if (copyRows) {
+          inputs.asInstanceOf[Iterator[Product2[Int, InternalRow]]].map { pair =>
+            (pair._1, pair._2.copy()): Product2[Int, InternalRow]
+          }
+        } else {
+          inputs
+        }
+        super.write(rows, dep, mapId, mapIndex, context)
       }
     }
   }
