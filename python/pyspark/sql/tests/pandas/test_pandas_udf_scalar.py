@@ -677,8 +677,13 @@ class ScalarPandasUDFTestsMixin:
     def check_vectorized_udf_invalid_length(self):
         df = self.spark.range(10)
         raise_exception = pandas_udf(lambda _: pd.Series(1), LongType())
+        # Accept both this branch's SCHEMA_MISMATCH_FOR_PANDAS_UDF message and the
+        # RESULT_ROWS_MISMATCH message a newer server raises (SPARK-58529), so the
+        # cross-version old-client job passes against a master server.
         with self.assertRaisesRegex(
-            Exception, "Result vector from pandas_udf was not the required length"
+            Exception,
+            "Result vector from pandas_udf was not the required length"
+            "|The number of output rows.*must match the number of input rows",
         ):
             df.select(raise_exception(col("id"))).collect()
 
