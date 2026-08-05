@@ -384,6 +384,8 @@ class CollationExpressionWalkerSuite extends SharedSparkSession {
       "sha2",
       "sha",
       "crc32",
+      "xxh3_64",
+      "xxh3_128",
       "ascii",
       "time_trunc",
       // The result/sketch embeds the original item value, which now preserves the
