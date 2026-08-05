@@ -152,6 +152,30 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
     }
   }
 
+  test("user-specified schema validation uses case sensitivity inherited from upstream view") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val ctx = new TestGraphRegistrationContext(spark) {
+        val session = spark
+        import session.implicits._
+
+        registerPersistedView(
+          "src",
+          query = dfFlowFunc(Seq((1, "alice")).toDF("id", "value")),
+          sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "true"))
+        registerTable(
+          "target",
+          specifiedSchema = Some(
+            new StructType().add("id", IntegerType).add("value", StringType)))
+        registerFlow(
+          destinationName = "target",
+          name = "case_sensitive_flow",
+          query = sqlFlowFunc(spark, "SELECT id, value AS Value FROM src"))
+      }
+
+      assertSchemaIncompatible(ctx.resolveToDataflowGraph())
+    }
+  }
+
   // AUTO CDC flows: the inferred schema appends a reserved metadata column to the data columns.
 
   test("data-only user-specified schema is rejected for an implicit AUTO CDC flow") {

@@ -126,7 +126,7 @@ object SchemaInferenceUtils {
 
     val caseSensitive = effectiveCaseSensitivity(
       tableIdentifier = tableIdentifier,
-      flows = flows.map(_.flow),
+      flows = flows,
       sessionCaseSensitive = sessionCaseSensitive
     )
 
