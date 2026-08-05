@@ -30,22 +30,26 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Coverage for the explicit segment-tree aggregate allowlist
  * ([[WindowSegmentTree.EligibleAggregates]]):
  *   - allowlisted aggregates route to segtree (`numSegmentTreeFrames` bumps).
- *   - non-allowlisted aggregates fall through to the sliding path without
- *     crashing or producing wrong results (segtree counters stay at 0).
- * Eligibility gating only; exhaustive equivalence lives in
- * [[SegmentTreeWindowFunctionSuite]].
+ *   - non-allowlisted aggregates fall through to the sliding path without crashing or producing
+ *     wrong results (segtree counters stay at 0).
+ * Eligibility gating only; exhaustive equivalence lives in [[SegmentTreeWindowFunctionSuite]].
  */
-class WindowSegmentTreeAllowlistSuite
-    extends SharedSparkSession with SQLMetricsTestUtils {
+class WindowSegmentTreeAllowlistSuite extends SharedSparkSession with SQLMetricsTestUtils {
 
   import testImplicits._
 
   private val enableSegTree: Map[String, String] = Map(
     SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
-    SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1")
+    SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1",
+    SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false")
 
-  private def baseDF = spark.range(0, 120).selectExpr(
-    "id", "(id % 3) AS pk", "CAST(id AS INT) AS v", "CAST(id AS DOUBLE) AS vd")
+  private val enableDeque: Map[String, String] = Map(
+    SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true",
+    SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false")
+
+  private def baseDF = spark
+    .range(0, 120)
+    .selectExpr("id", "(id % 3) AS pk", "CAST(id AS INT) AS v", "CAST(id AS DOUBLE) AS vd")
 
   private val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-3, 3)
 
@@ -61,13 +65,38 @@ class WindowSegmentTreeAllowlistSuite
     }
     def total(name: String): Long = {
       val mOpt = windowNode.metrics.find(_.name == name)
-      mOpt.map { m =>
-        val raw = metricValues(m.accumulatorId)
-        "-?\\d+".r.findFirstIn(raw).map(_.toLong).getOrElse(0L)
-      }.getOrElse(0L)
+      mOpt
+        .map { m =>
+          val raw = metricValues(m.accumulatorId)
+          "-?\\d+".r.findFirstIn(raw).map(_.toLong).getOrElse(0L)
+        }
+        .getOrElse(0L)
     }
-    (total("number of segment-tree frames prepared"),
+    (
+      total("number of segment-tree frames prepared"),
       total("number of segment-tree fallback frames prepared"))
+  }
+
+  private def dequeCounters(df: DataFrame): Long = {
+    val previousExecutionIds = currentExecutionIds()
+    df.collect()
+    sparkContext.listenerBus.waitUntilEmpty(10000)
+    val executionId = currentExecutionIds().diff(previousExecutionIds).head
+    val metricValues = statusStore.executionMetrics(executionId)
+    val graph = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan))
+    val windowNode = graph.allNodes.find(_.name == "Window").getOrElse {
+      fail(s"No Window node in plan:\n${df.queryExecution.executedPlan}")
+    }
+    def total(name: String): Long = {
+      val mOpt = windowNode.metrics.find(_.name == name)
+      mOpt
+        .map { m =>
+          val raw = metricValues(m.accumulatorId)
+          "-?\\d+".r.findFirstIn(raw).map(_.toLong).getOrElse(0L)
+        }
+        .getOrElse(0L)
+    }
+    total("number of monotonic-deque frames prepared")
   }
 
   // Positive: allowlisted aggregates route to segtree
@@ -84,21 +113,18 @@ class WindowSegmentTreeAllowlistSuite
     ("var_samp", (c: org.apache.spark.sql.Column) => var_samp(c)),
     ("first", (c: org.apache.spark.sql.Column) => first(c)),
     ("last", (c: org.apache.spark.sql.Column) => last(c)),
-    ("first_ignore_nulls",
-      (c: org.apache.spark.sql.Column) => first(c, ignoreNulls = true)),
-    ("last_ignore_nulls",
-      (c: org.apache.spark.sql.Column) => last(c, ignoreNulls = true))
-  ).foreach { case (name, fn) =>
-    test(s"$name routes to the segment-tree path") {
-      withSQLConf(enableSegTree.toSeq: _*) {
-        val df = baseDF.withColumn("agg", fn($"vd").over(winSpec))
-        val (seg, fallback) = segTreeCounters(df)
-        assert(seg > 0, s"$name should bump numSegmentTreeFrames (got $seg)")
-        assert(fallback == 0,
-          s"$name should not fall back (fallback counter: $fallback)")
+    ("first_ignore_nulls", (c: org.apache.spark.sql.Column) => first(c, ignoreNulls = true)),
+    ("last_ignore_nulls", (c: org.apache.spark.sql.Column) => last(c, ignoreNulls = true)))
+    .foreach { case (name, fn) =>
+      test(s"$name routes to the segment-tree path") {
+        withSQLConf(enableSegTree.toSeq: _*) {
+          val df = baseDF.withColumn("agg", fn($"vd").over(winSpec))
+          val (seg, fallback) = segTreeCounters(df)
+          assert(seg > 0, s"$name should bump numSegmentTreeFrames (got $seg)")
+          assert(fallback == 0, s"$name should not fall back (fallback counter: $fallback)")
+        }
       }
     }
-  }
 
   // Negative: non-allowlisted aggregates fall through
 
@@ -122,15 +148,16 @@ class WindowSegmentTreeAllowlistSuite
     withSQLConf(enableSegTree.toSeq: _*) {
       val df = baseDF.withColumn("agg", approx_count_distinct($"v").over(winSpec))
       val (seg, _) = segTreeCounters(df)
-      assert(seg == 0,
+      assert(
+        seg == 0,
         s"approx_count_distinct is intentionally not on the allowlist (got $seg frames)")
     }
   }
 
   test("percentile_approx falls through (sketch buffer not auditable)") {
     withSQLConf(enableSegTree.toSeq: _*) {
-      val df = baseDF.withColumn(
-        "agg", percentile_approx($"vd", lit(0.5), lit(100)).over(winSpec))
+      val df =
+        baseDF.withColumn("agg", percentile_approx($"vd", lit(0.5), lit(100)).over(winSpec))
       val (seg, _) = segTreeCounters(df)
       assert(seg == 0, s"percentile_approx should not use segment tree (got $seg frames)")
     }
@@ -147,14 +174,14 @@ class WindowSegmentTreeAllowlistSuite
     withSQLConf(enableSegTree.toSeq: _*) {
       withTempView("t") {
         baseDF.createOrReplaceTempView("t")
-        val df = spark.sql(
-          """SELECT id, pk, v,
+        val df = spark.sql("""SELECT id, pk, v,
             |  sum(v) FILTER (WHERE v % 2 = 0)
             |    OVER (PARTITION BY pk ORDER BY id ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING)
             |    AS filtered_sum
             |FROM t""".stripMargin)
         val (seg, _) = segTreeCounters(df)
-        assert(seg == 0,
+        assert(
+          seg == 0,
           s"filtered aggregate must not take segment-tree path (got $seg segtree frames)")
       }
     }
@@ -170,8 +197,46 @@ class WindowSegmentTreeAllowlistSuite
       val (seg, _) = segTreeCounters(df)
       // Both aggregates share the same Window node; gating is forall(isEligible),
       // so `collect_list` (unbounded-buffer denylist) drops the whole group.
-      assert(seg == 0,
+      assert(
+        seg == 0,
         s"Window group containing a non-allowlisted agg must fall through (got $seg)")
+    }
+  }
+
+  test("MIN/MAX routes to the monotonic-deque path") {
+    withSQLConf(enableDeque.toSeq: _*) {
+      val df = baseDF.withColumn("agg", min($"vd").over(winSpec))
+      val dequeFrames = dequeCounters(df)
+      assert(dequeFrames > 0, s"MIN should bump numMonotonicDequeFrames (got $dequeFrames)")
+    }
+  }
+
+  test("mix of MIN/MAX + other allowlisted aggregates falls through deque") {
+    withSQLConf(enableDeque.toSeq: _*) {
+      val df = baseDF
+        .withColumn("m", min($"v").over(winSpec))
+        .withColumn("s", sum($"v").over(winSpec))
+      val dequeFrames = dequeCounters(df)
+      assert(
+        dequeFrames == 0,
+        s"Window group containing a non-MIN/MAX agg must fall through (got $dequeFrames)")
+    }
+  }
+
+  test("FILTER (WHERE ...) disables monotonic-deque path") {
+    withSQLConf(enableDeque.toSeq: _*) {
+      withTempView("t") {
+        baseDF.createOrReplaceTempView("t")
+        val df = spark.sql("""SELECT id, pk, v,
+            |  min(v) FILTER (WHERE v % 2 = 0)
+            |    OVER (PARTITION BY pk ORDER BY id ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING)
+            |    AS filtered_min
+            |FROM t""".stripMargin)
+        val dequeFrames = dequeCounters(df)
+        assert(
+          dequeFrames == 0,
+          s"filtered MIN must not take monotonic-deque path (got $dequeFrames)")
+      }
     }
   }
 }
