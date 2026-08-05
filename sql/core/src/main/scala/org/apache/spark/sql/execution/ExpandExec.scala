@@ -138,9 +138,10 @@ case class ExpandExec(
      * We use a for loop here so we only includes one copy of the consume code and avoid code
      * size explosion.
      *
-     * In addition, common subexpressions shared by the branch expressions (e.g. an expensive
-     * condition repeated in many branches) are evaluated only once per input row, before the
-     * loop, since all the branches consume the same input row.
+     * In addition, when subexpression elimination is enabled, common subexpressions shared by
+     * the branch expressions (e.g. an expensive condition repeated in many branches) are
+     * evaluated only once per input row, before the loop, since all the branches consume the
+     * same input row.
      */
 
     // Tracks whether a column has the same output for all rows.
