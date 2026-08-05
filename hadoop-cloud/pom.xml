@@ -34,8 +34,8 @@
   </description>
   <properties>
     <sbt.project.name>hadoop-cloud</sbt.project.name>
-    <okhttp.version>4.9.2</okhttp.version>
-    <okio.version>2.10.0</okio.version>
+    <okhttp.version>4.12.0</okhttp.version>
+    <okio.version>3.9.1</okio.version>
     <wildfly-openssl.version>2.3.0.Final</wildfly-openssl.version>
   </properties>
 
