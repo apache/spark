@@ -924,6 +924,19 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       case other => fail(other.toString)
     }
 
+    // a column partitioned by more than one transform: partition expressions outnumber the
+    // join keys, but every join key is covered, so SPJ is allowed with default configs
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, left: KeyedPartitioning, _, _), _),
+      SortExec(_, _, DummySparkPlan(_, _, right: KeyedPartitioning, _, _), _), _) =>
+        assert(left.expressions === Seq(years(exprA), bucket(4, exprB), days(exprA)))
+        assert(right.expressions === Seq(years(exprA), bucket(4, exprC), days(exprA)))
+      case other => fail(other.toString)
+    }
+
     // invalid case: partitioning key positions don't match
     plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyedPartitioning(bucket(4, exprA) :: bucket(4, exprB) :: Nil, Seq.empty)
@@ -1001,10 +1014,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
-  test("KeyedPartitioning: duplicated join keys do not block SPJ") {
-    // The coverage check of requireAllClusterKeysForCoPartition ignores key order and
-    // duplicated cluster keys: join keys [a, b, b] are fully covered by partition keys
-    // on [a, b], so SPJ is allowed with either config value.
+  test("KeyedPartitioning: duplicated join keys in hand-built plans do not block SPJ") {
+    // Queries produce this key list only in unusual configurations: BooleanSimplification
+    // normally dedups the conjunction, but it is an excludable rule
+    // (spark.sql.optimizer.excludedRules), and EnsureRequirements must also stay robust
+    // for hand-built or rewritten plans. The coverage check treats duplicated cluster
+    // keys as covered, so SPJ is allowed with either config value.
     val plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning =
         KeyedPartitioning(bucket(4, exprA) :: bucket(4, exprB) :: Nil, Seq.empty))
