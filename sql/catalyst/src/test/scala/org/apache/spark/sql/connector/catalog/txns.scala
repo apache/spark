@@ -136,6 +136,7 @@ class TxnTable(
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     catalog.writeTarget = this
+    lastWriteInfo = info
     super.newWriteBuilder(info)
   }
 
@@ -171,6 +172,7 @@ class TxnTable(
 class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends TableCatalog {
 
   private val tables: util.Map[Identifier, TxnTable] = new ConcurrentHashMap[Identifier, TxnTable]()
+  val loadTableCalls: ArrayBuffer[(TableContext, CaseInsensitiveStringMap)] = ArrayBuffer.empty
 
   var writeTarget: TxnTable = _
 
@@ -194,6 +196,14 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
       val table = delegate.liveTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
       new TxnTable(table, table.schema(), this)
     })
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      context: TableContext,
+      options: CaseInsensitiveStringMap): Table = {
+    loadTableCalls += ((context, options))
+    loadTable(ident)
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {

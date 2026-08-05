@@ -497,6 +497,18 @@ private[sql] object CatalogV2Util {
   }
 
   /**
+   * Loads a table for a write, forwarding both the required privileges and all write options.
+   */
+  def getTableForWrite(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      writePrivileges: Set[TableWritePrivilege],
+      options: CaseInsensitiveStringMap): Table = {
+    val context = new TableContext(null, writePrivileges.asJava)
+    catalog.asTableCatalog.loadTable(ident, context, options)
+  }
+
+  /**
    * Parses the comma-separated write-privileges string (as carried in the internal
    * [[org.apache.spark.sql.catalyst.analysis.UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES]]
    * option) into a set of [[TableWritePrivilege]]. Returns an empty set when absent (a read).
