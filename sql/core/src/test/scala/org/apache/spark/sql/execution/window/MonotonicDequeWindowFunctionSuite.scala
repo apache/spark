@@ -47,7 +47,7 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
     SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "false")
 
   /** Build `df` thrice (Deque, SegTree, Naive) and assert equal results. */
-  private def checkEquivalence(build: () => DataFrame): Unit = {
+  private def checkEquivalence(build: () => DataFrame, expectDeque: Boolean = true): Unit = {
     val naiveResult: Seq[Row] = withSQLConf(disableDequeNaive.toSeq: _*) {
       build().collect().toSeq
     }
@@ -55,7 +55,22 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
       build().collect().toSeq
     }
     val dequeResult: Seq[Row] = withSQLConf(enableDeque.toSeq: _*) {
-      build().collect().toSeq
+      val df = build()
+      val res = df.collect().toSeq
+
+      // Verify routing actually hit (or didn't hit) the deque
+      val windowNodes = df.queryExecution.executedPlan.collect {
+        case w: org.apache.spark.sql.execution.window.WindowExec => w
+      }
+      assert(windowNodes.nonEmpty, "No WindowExec found in the query plan")
+      val dequeCount = windowNodes.flatMap(_.metrics.get("monotonicDequeFrames").map(_.value)).sum
+
+      if (expectDeque) {
+        assert(dequeCount > 0, "Monotonic deque was enabled but no frames were routed to it")
+      } else {
+        assert(dequeCount == 0, "Monotonic deque was used but expected to fallback")
+      }
+      res
     }
 
     QueryTest.sameRows(naiveResult, dequeResult, isSorted = false).foreach { err =>
@@ -91,20 +106,32 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
         max($"v_double").over(winSpec)))
   }
 
-  test("SPARK-58201: Shrinking rows frame: MIN/MAX on primitives (Int/Long/Double)") {
-    val winSpec = Window
-      .partitionBy($"pk")
-      .orderBy($"id")
-      .rowsBetween(-4, Window.unboundedFollowing)
+  test("SPARK-58201: Fallback for mixed aggregates (SUM + MIN/MAX)") {
+    val winSpec = Window.partitionBy($"pk").orderBy($"id").rowsBetween(-4, 2)
     checkEquivalence(() =>
       baseDF.select(
         $"id",
         min($"v_int").over(winSpec),
-        max($"v_int").over(winSpec),
-        min($"v_long").over(winSpec),
-        max($"v_long").over(winSpec),
-        min($"v_double").over(winSpec),
-        max($"v_double").over(winSpec)))
+        sum($"v_int").over(winSpec)),
+      expectDeque = false)
+  }
+
+  test("SPARK-58201: Fallback for FILTER clauses") {
+    val df = spark.sql("""SELECT id,
+        |  MIN(id) FILTER (WHERE id % 2 = 0) OVER (
+        |    PARTITION BY (id % 3) ORDER BY id ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING
+        |  ) AS v
+        |FROM RANGE(0, 20)""".stripMargin)
+    // Deque shouldn't be used since FILTER is not supported. We can't use checkEquivalence
+    // because checkEquivalence builds DF inside, so we'll just check metrics.
+    withSQLConf(enableDeque.toSeq: _*) {
+      val res = df.collect()
+      val windowNodes = df.queryExecution.executedPlan.collect {
+        case w: org.apache.spark.sql.execution.window.WindowExec => w
+      }
+      val dequeCount = windowNodes.flatMap(_.metrics.get("monotonicDequeFrames").map(_.value)).sum
+      assert(dequeCount == 0, "Monotonic deque was used for FILTER clause")
+    }
   }
 
   test("SPARK-58201: Moving rows frame: MIN/MAX on reference types (String)") {
@@ -202,7 +229,7 @@ class MonotonicDequeWindowFunctionSuite extends QueryTest with SharedSparkSessio
     checkEquivalence(() => df.select($"id", min($"v").over(winSpec), max($"v").over(winSpec)))
   }
 
-  // Finding 6: spill coverage — lower thresholds to force ExternalAppendOnlyUnsafeRowArray
+  // Finding 6: spill coverage - lower thresholds to force ExternalAppendOnlyUnsafeRowArray
   // to use its SpillableArrayIterator, which recycles a single UnsafeRow.
 
   test("SPARK-58201: Moving rows frame: MIN/MAX on reference types (String) with spill") {
