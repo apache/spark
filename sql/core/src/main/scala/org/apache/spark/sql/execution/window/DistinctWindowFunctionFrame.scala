@@ -35,8 +35,8 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
  * contains it. A bounded BytesToBytesMap removes duplicates up to the hash fallback threshold. If
  * another new key arrives, the frame permanently falls back to an external sorter for the rest of
  * the window partition. That sorter finds the earliest event for every key, then a second external
- * sorter orders those events by index. `write` feeds each unique, normalized DISTINCT input to the
- * aggregate processor when its event becomes visible.
+ * sorter orders those events by index. The frame feeds each unique, normalized DISTINCT input to
+ * the aggregate processor when its event becomes visible.
  */
 private[window] abstract class DistinctWindowFunctionFrame(
     target: InternalRow,
@@ -102,16 +102,14 @@ private[window] abstract class DistinctWindowFunctionFrame(
         newEventSorter.cleanupResources()
       }
     }
-    prepareUpperBound(rows)
+    prepareFrame(rows)
   }
 
   protected def populateFirstVisibleRows(
       rows: ExternalAppendOnlyUnsafeRowArray,
       firstVisibleRows: FirstVisibleRowsBuilder): Unit
 
-  protected def prepareUpperBound(rows: ExternalAppendOnlyUnsafeRowArray): Unit
-
-  protected def updateUpperBound(index: Int, current: InternalRow): Unit
+  protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit
 
   protected final def addCandidate(
       row: InternalRow,
@@ -327,7 +325,7 @@ private[window] abstract class DistinctWindowFunctionFrame(
     }
   }
 
-  override final def write(index: Int, current: InternalRow): Unit = {
+  protected final def updateProcessor(index: Int): Unit = {
     var bufferUpdated = index == 0
     while (nextEventIndex <= index) {
       processor.update(eventIterator.getValue)
@@ -337,7 +335,14 @@ private[window] abstract class DistinctWindowFunctionFrame(
     if (bufferUpdated) {
       processor.evaluate(target)
     }
-    updateUpperBound(index, current)
+  }
+
+  protected final def evaluateEntirePartition(): Unit = {
+    try {
+      updateProcessor(0)
+    } finally {
+      closeEventResources()
+    }
   }
 
   override final def currentLowerBound(): Int = 0
@@ -393,11 +398,12 @@ private[window] final class UnboundedDistinctWindowFunctionFrame(
     }
   }
 
-  override protected def prepareUpperBound(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+  override protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     partitionSize = rows.length
+    evaluateEntirePartition()
   }
 
-  override protected def updateUpperBound(index: Int, current: InternalRow): Unit = {}
+  override def write(index: Int, current: InternalRow): Unit = {}
 
   override def currentUpperBound(): Int = partitionSize
 }
@@ -452,13 +458,14 @@ private[window] final class UnboundedPrecedingDistinctWindowFunctionFrame(
     }
   }
 
-  override protected def prepareUpperBound(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+  override protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     boundaryInputIndex = 0
     boundaryIterator = rows.generateIterator()
     nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
   }
 
-  override protected def updateUpperBound(index: Int, current: InternalRow): Unit = {
+  override def write(index: Int, current: InternalRow): Unit = {
+    updateProcessor(index)
     while (nextBoundaryRow != null &&
         upperBound.compare(nextBoundaryRow, boundaryInputIndex, current, index) <= 0) {
       boundaryInputIndex += 1
