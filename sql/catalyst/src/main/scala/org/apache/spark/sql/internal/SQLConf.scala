@@ -4209,6 +4209,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STREAMING_ANCHOR_NOW_AND_CURRENT_TIME =
+    buildConf("spark.sql.streaming.anchorNowAndCurrentTime")
+      .internal()
+      .doc("When true, now() and current_time() are anchored to the batch timestamp of a " +
+        "streaming query, so that a batch replayed after failure or restart reproduces the " +
+        "same value, as current_timestamp(), current_date() and localtimestamp() already do. " +
+        "When false, now() and current_time() are evaluated against the wall clock at plan " +
+        "optimization time and are not reproducible across batch replays.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_POLLING_DELAY =
     buildConf("spark.sql.streaming.pollingDelay")
       .internal()
