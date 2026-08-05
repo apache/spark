@@ -3187,11 +3187,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         df_for_struct=True,
                     )[0]
 
-            # mapInPandas accepts any iterable (e.g. a list), not just an
-            # iterator, so the standard verify_return_type (which requires an
-            # Iterator) is intentionally not reused here.
             result = map_udf(dataframe_iter())
-            if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+            if not isinstance(result, Iterator):
                 raise PySparkTypeError(
                     errorClass="UDF_RETURN_TYPE",
                     messageParameters={
