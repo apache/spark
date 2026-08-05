@@ -109,7 +109,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # Initial iterator comes from ExecutePlan request.
         # Note: This is not retried, because no error would ever be thrown here, and GRPC will only
         # throw error on first self._has_next().
-        self._metadata = metadata
+        # Convert metadata to a list to ensure it remains re-iterable across all RPCs
+        # (ReattachExecute, ReleaseExecute), so auth headers are always present.
+        self._metadata = list(metadata)
         with disable_gc():
             self._iterator: Optional[Iterator[pb2.ExecutePlanResponse]] = iter(
                 self._stub.ExecutePlan(
