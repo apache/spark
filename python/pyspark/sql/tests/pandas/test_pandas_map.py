@@ -86,12 +86,6 @@ class MapInPandasTestsMixin:
         expected = df.collect()
         self.assertEqual(actual, expected)
 
-        # test returning list of DataFrames
-        df = self.spark.range(10, numPartitions=3)
-        actual = df.mapInPandas(lambda it: [pdf for pdf in it], "id long").collect()
-        expected = df.collect()
-        self.assertEqual(actual, expected)
-
     def test_multiple_columns(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
         df = self.spark.createDataFrame(data, "a int, b string")
@@ -186,6 +180,10 @@ class MapInPandasTestsMixin:
         def bad_iter_elem(_):
             return iter([1])
 
+        def list_not_iter(iterator):
+            # Iterable but not an Iterator: violates the Iterator[pandas.DataFrame] contract.
+            return [pdf for pdf in iterator]
+
         with self.assertRaisesRegex(
             PythonException,
             "Return type of the user-defined function should be iterator of pandas.DataFrame, "
@@ -199,6 +197,13 @@ class MapInPandasTestsMixin:
             "but is iterator of int",
         ):
             (self.spark.range(10, numPartitions=3).mapInPandas(bad_iter_elem, "a int").count())
+
+        with self.assertRaisesRegex(
+            PythonException,
+            "Return type of the user-defined function should be iterator of pandas.DataFrame, "
+            "but is list",
+        ):
+            (self.spark.range(10, numPartitions=3).mapInPandas(list_not_iter, "a int").count())
 
     def test_dataframes_with_other_column_names(self):
         with self.quiet():
