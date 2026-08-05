@@ -171,6 +171,31 @@ class NumPyCompatTestsMixin:
                 almost=True,
             )
 
+    def test_np_ldexp(self):
+        pdf = pd.DataFrame(
+            {
+                "x": [
+                    -np.inf,
+                    -64.0,
+                    -2.0,
+                    -0.0,
+                    0.0,
+                    1.0,
+                    2.0,
+                    64.0,
+                    np.inf,
+                    np.nan,
+                    1.0,
+                    1.0,
+                    1.0,
+                ],
+                "exp": [2, 3, -2, -3, -3, 0, -2, 2, 2, 2, -1074, -1075, 1024],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(np.ldexp(psdf.x, psdf.exp), np.ldexp(pdf.x, pdf.exp), almost=True)
+
     def test_np_fmax_fmin(self):
         for pdf in (
             pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [2, 1, 0, -1, -2]}),
