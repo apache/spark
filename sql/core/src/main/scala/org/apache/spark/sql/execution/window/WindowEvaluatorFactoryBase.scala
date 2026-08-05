@@ -273,13 +273,12 @@ trait WindowEvaluatorFactoryBase {
         val factory = key match {
           case ("DISTINCT_AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _, _) =>
             target: InternalRow =>
-              new DistinctWindowFunctionFrame(
+              new UnboundedDistinctWindowFunctionFrame(
                 target,
                 distinctProcessor,
                 normalizedDistinctExpressions,
                 distinctAggregateExpressions.head.filter,
                 childOutput,
-                upperBound = None,
                 spillSize,
                 conf.windowExecDistinctHashFallbackThreshold,
                 conf.windowExecBufferSpillThreshold,
@@ -287,13 +286,13 @@ trait WindowEvaluatorFactoryBase {
 
           case ("DISTINCT_AGGREGATE", frameType, UnboundedPreceding, upper, _, _) =>
             target: InternalRow =>
-              new DistinctWindowFunctionFrame(
+              new UnboundedPrecedingDistinctWindowFunctionFrame(
                 target,
                 distinctProcessor,
                 normalizedDistinctExpressions,
                 distinctAggregateExpressions.head.filter,
                 childOutput,
-                Some(createBoundOrdering(frameType, upper, timeZone)),
+                createBoundOrdering(frameType, upper, timeZone),
                 spillSize,
                 conf.windowExecDistinctHashFallbackThreshold,
                 conf.windowExecBufferSpillThreshold,
