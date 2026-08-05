@@ -127,8 +127,8 @@ binary_np_spark_mappings = {
         lambda s1, s2: np.copysign(s1, s2), DoubleType()
     ),
     "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
-    "floor_divide": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.floor_divide(s1, s2), DoubleType()
+    "floor_divide": lambda c1, c2: F.when(c2 == 0, F.lit(0.0)).otherwise(
+        F.floor(c1 / c2).cast("double")
     ),
     "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
     .when(F.isnan(c2.cast("double")), c1)

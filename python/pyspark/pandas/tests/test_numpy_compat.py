@@ -246,6 +246,19 @@ class NumPyCompatTestsMixin:
 
             self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2), almost=True)
 
+    def test_np_floor_divide(self):
+        pdf = pd.DataFrame(
+            {
+                "x1": [-64, -2, -1, 0, 1, 2, 64],
+                "x2": [2, 3, -2, -3, -3, 0, 2],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(
+            np.floor_divide(psdf.x1, psdf.x2), np.floor_divide(pdf.x1, pdf.x2), almost=True
+        )
+
     def test_np_fmax_fmin(self):
         for pdf in (
             pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [2, 1, 0, -1, -2]}),
