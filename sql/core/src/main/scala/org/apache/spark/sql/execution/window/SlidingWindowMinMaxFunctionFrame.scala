@@ -97,7 +97,8 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     input = rows
     lowerIterator = input.generateIterator()
     lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
-    deques.foreach(_.clear())
+    var di = 0
+    while (di < deques.length) { deques(di).clear(); di += 1 }
     lowerBound = 0
 
     if (ubound.isEmpty) {
@@ -108,7 +109,8 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
       var idx = 0
       while (iter.hasNext) {
         val row = iter.next()
-        deques.foreach(_.admit(row, idx))
+        var dj = 0
+        while (dj < deques.length) { deques(dj).admit(row, idx); dj += 1 }
         idx += 1
       }
       upperBound = input.length
@@ -141,7 +143,8 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
           lowerBound += 1
           lowerRow = WindowFunctionFrame.getNextOrNull(lowerIterator)
         } else {
-          deques.foreach(_.admit(nextRow, upperBound))
+          var di = 0
+          while (di < deques.length) { deques(di).admit(nextRow, upperBound); di += 1 }
           bufferUpdated = true
         }
         nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
@@ -150,7 +153,8 @@ private[window] final class SlidingWindowMinMaxFunctionFrame(
     }
 
     if (bufferUpdated) {
-      deques.foreach(_.dropBefore(lowerBound))
+      var di = 0
+      while (di < deques.length) { deques(di).dropBefore(lowerBound); di += 1 }
     }
 
     // Write output values to target.
