@@ -866,6 +866,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringTranslate(Literal("translate"), Literal("rnlt"), Literal("123")), "1a2s3ae")
     checkEvaluation(StringTranslate(Literal("translate"), Literal(""), Literal("123")), "translate")
     checkEvaluation(StringTranslate(Literal("translate"), Literal("rnlt"), Literal("")), "asae")
+    // A literal U+0000 in `to` is preserved as a one-character replacement, not deletion.
+    checkEvaluation(StringTranslate(Literal("A"), Literal("A"), Literal("\u0000")), "\u0000")
+    // Mixed literal U+0000 replacement and deletion: A -> U+0000, B -> X, C and D deleted.
+    checkEvaluation(
+      StringTranslate(Literal("ABCD"), Literal("ABCD"), Literal("\u0000" + "X")), "\u0000" + "X")
     // test for multiple mapping
     checkEvaluation(StringTranslate(Literal("abcd"), Literal("aba"), Literal("123")), "12cd")
     checkEvaluation(StringTranslate(Literal("abcd"), Literal("aba"), Literal("12")), "12cd")
@@ -2262,5 +2267,24 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           s"Expression $expr should be context independent foldable")
       }
     }
+  }
+
+  test("StringTranslate and FormatNumber are stateful and produce fresh copies") {
+    val src = Literal("aeiou")
+    val matching = Literal("aeiou")
+    val replace = Literal("12345")
+    val translate = StringTranslate(src, matching, replace)
+    assert(translate.stateful, "StringTranslate.stateful should be true")
+    val translateCopy = translate.freshCopyIfContainsStatefulExpression()
+    assert(translateCopy ne translate,
+      "freshCopyIfContainsStatefulExpression should return a new instance for StringTranslate")
+
+    val num = Literal(1234567.89)
+    val fmt = Literal(2)
+    val formatNumber = FormatNumber(num, fmt)
+    assert(formatNumber.stateful, "FormatNumber.stateful should be true")
+    val formatNumberCopy = formatNumber.freshCopyIfContainsStatefulExpression()
+    assert(formatNumberCopy ne formatNumber,
+      "freshCopyIfContainsStatefulExpression should return a new instance for FormatNumber")
   }
 }

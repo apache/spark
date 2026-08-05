@@ -42,7 +42,7 @@ class AutoCdcScd1TargetTableDurabilitySuite
 
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     insertPreloadedRow(s"$catalog.$namespace.target", "1, 'alice', 5", 5L)
     insertPreloadedRow(s"$catalog.$namespace.target", "2, 'bob', 5", 5L)
@@ -81,7 +81,7 @@ class AutoCdcScd1TargetTableDurabilitySuite
     // Target was populated by some external process; this is the first AutoCDC run.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd1MetadataDdl)"
     )
     insertPreloadedRow(s"$catalog.$namespace.target", "1, 'alice', 1", 1L)
 

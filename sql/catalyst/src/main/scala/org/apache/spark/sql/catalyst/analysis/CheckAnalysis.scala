@@ -676,15 +676,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _)
+          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _)
               if condition.dataType != BooleanType =>
-            throw SparkException.internalError(
-              msg = s"join condition '${toSQLExpr(condition)}' " +
-                s"of type ${toSQLType(condition.dataType)} is not a boolean.",
-              context = j.origin.getQueryContext,
-              summary = j.origin.context.summary)
+            j.failAnalysis(
+              errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
+              messageParameters = Map(
+                "joinCondition" -> toSQLExpr(condition),
+                "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion)) =>
+          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _, _, _) =>
             if (!toleranceAssertion.foldable) {
               j.failAnalysis(
                 errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
@@ -974,33 +974,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
-            val missingAttributes = o.missingInput.map(attr => toSQLExpr(attr)).mkString(", ")
-            val input = o.inputSet.map(attr => toSQLExpr(attr)).mkString(", ")
-
             val resolver = plan.conf.resolver
             val attrsWithSameName = o.missingInput.filter { missing =>
               o.inputSet.exists(input => resolver(missing.name, input.name))
             }
 
-            if (attrsWithSameName.nonEmpty) {
-              val sameNames = attrsWithSameName.map(attr => toSQLExpr(attr)).mkString(", ")
-              o.failAnalysis(
-                errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-                messageParameters = Map(
-                  "missingAttributes" -> missingAttributes,
-                  "input" -> input,
-                  "operator" -> operator.simpleString(SQLConf.get.maxToStringFields),
-                  "operation" -> sameNames
-                ))
-            } else {
-              o.failAnalysis(
-                errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-                messageParameters = Map(
-                  "missingAttributes" -> missingAttributes,
-                  "input" -> input,
-                  "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
-                ))
-            }
+            throw QueryCompilationErrors.missingAttributesError(
+              operator = o,
+              missingInput = o.missingInput,
+              input = o.inputSet,
+              attributesWithSameName = attrsWithSameName
+            )
 
           case p @ Project(projectList, _) =>
             checkForUnspecifiedWindow(projectList)
@@ -1129,6 +1113,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             other.failAnalysis(
               errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
               messageParameters = Map(
+                "operator" -> other.nodeName,
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
           case j @ LateralJoin(_, right, _, _)
@@ -1254,27 +1239,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case AlterColumns(table: ResolvedTable, specs) =>
-        val groupedColumns = specs.groupBy(_.column.name)
-        groupedColumns.collect {
-          case (name, occurrences) if occurrences.length > 1 =>
-            alter.failAnalysis(
-              errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
-              messageParameters = Map(
-                "table" -> toSQLId(table.name),
-                "fieldName" -> toSQLId(name)))
-        }
-        groupedColumns.keys.foreach { name =>
-          if (groupedColumns.keys.exists(child => child != name && child.startsWith(name))) {
-            alter.failAnalysis(
-              errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
-              messageParameters = Map(
-                "table" -> toSQLId(table.name),
-                "fieldName" -> toSQLId(name)))
-          }
+      case AlterColumns(table: ResolvedTable, specs, _) =>
+        AlterColumns.findRepeatedColumn(specs).foreach { name =>
+          alter.failAnalysis(
+            errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+            messageParameters = Map(
+              "table" -> toSQLId(table.name),
+              "fieldName" -> toSQLId(name)))
         }
         specs.foreach {
-          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _) =>
+          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _, _) =>
             val fieldName = col.name.quoted
             if (dataType.isDefined) {
               val field = CharVarcharUtils.getRawType(col.field.metadata)

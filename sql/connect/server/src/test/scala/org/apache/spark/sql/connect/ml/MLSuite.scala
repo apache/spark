@@ -358,7 +358,7 @@ class MLSuite extends MLHelper {
       .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
 
     for (estimator <- Seq(getDecisionTreeClassifier, getRandomForestClassifier)) {
-      for (maxModelSize <- Seq(20000, 50000)) {
+      for (maxModelSize <- Seq(25000, 50000)) {
         sessionHolder.session.conf.set(
           Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key,
           maxModelSize.toString)
@@ -375,7 +375,7 @@ class MLSuite extends MLHelper {
     sessionHolder.session.conf
       .set(Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_ENABLED.key, "true")
 
-    for (maxModelSize <- Seq(20000, 50000, 130000)) {
+    for (maxModelSize <- Seq(25000, 50000, 130000)) {
       sessionHolder.session.conf.set(
         Connect.CONNECT_SESSION_CONNECT_ML_CACHE_MEMORY_CONTROL_MAX_MODEL_SIZE.key,
         maxModelSize.toString)

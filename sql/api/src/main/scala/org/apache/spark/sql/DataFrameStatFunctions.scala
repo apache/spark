@@ -141,7 +141,7 @@ abstract class DataFrameStatFunctions {
    * {{{
    *    val df = sc.parallelize(0 until 10).toDF("id").withColumn("rand1", rand(seed=10))
    *      .withColumn("rand2", rand(seed=27))
-   *    df.stat.corr("rand1", "rand2")
+   *    df.stat.corr("rand1", "rand2", "pearson")
    *    res1: Double = 0.613...
    * }}}
    * @since 1.4.0
@@ -161,7 +161,7 @@ abstract class DataFrameStatFunctions {
    * {{{
    *    val df = sc.parallelize(0 until 10).toDF("id").withColumn("rand1", rand(seed=10))
    *      .withColumn("rand2", rand(seed=27))
-   *    df.stat.corr("rand1", "rand2", "pearson")
+   *    df.stat.corr("rand1", "rand2")
    *    res1: Double = 0.613...
    * }}}
    * @since 1.4.0

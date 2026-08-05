@@ -290,6 +290,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
           case _: TestSparkPluginEvent =>
             // Count down upon receiving the event sent from the plugin during shutdown.
             countDownLatch.countDown()
+          case _ =>
         }
       }
     })
@@ -318,7 +319,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensures the shuffle manager specified in configuration was
     // overridden by the Spark plugin.
-    assert(sc.env.shuffleManager.isInstanceOf[SetShuffleManagerPlugin.MyShuffleManager])
+    assert(sc.env.blockingShuffleManager.isInstanceOf[SetShuffleManagerPlugin.MyShuffleManager])
   }
 }
 

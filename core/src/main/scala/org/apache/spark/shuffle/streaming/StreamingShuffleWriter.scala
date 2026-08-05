@@ -21,6 +21,7 @@ import java.util.concurrent.{CancellationException, CompletableFuture, CountDown
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 import javax.annotation.concurrent.NotThreadSafe
 
+import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
 import io.netty.buffer.{ByteBuf, ByteBufOutputStream, CompositeByteBuf, Unpooled}
@@ -88,6 +89,12 @@ class StreamingShuffleWriter[K, V](
       log"minimum for ${MDC(LogKeys.NUM_PARTITIONS, numPartitions)} partitions takes precedence.")
   }
   private val CHECKSUM_ENABLED = conf.get(STREAMING_SHUFFLE_CHECKSUM_ENABLED)
+  // A row larger than the network buffer cannot be packed with any neighbor and forces its own
+  // (oversized) buffer, defeating the batching that BUFFER_SIZE is meant to enable.
+  private val largeRowThreshold = BUFFER_SIZE
+  // Warnings about oversized rows are throttled so a run of large rows cannot flood the logs.
+  private val largeRowWarningThrottler = LogThrottler(logWarning, 1.second)
+  private val hugeRowWarningThrottler = LogThrottler(logWarning, 1.second)
 
   // Helper objects.
 
@@ -438,6 +445,7 @@ class StreamingShuffleWriter[K, V](
         if (timestampedBuffer == null) {
           timestampedBuffer = newBuffer()
         }
+        val dataStartPos = timestampedBuffer.buffer.writerIndex()
         val partitionSerializationStream = timestampedBuffer.serializationStream
         // When UnsafeRowSerializer, the key, record._1, is only used for determining
         // the partition, and it doesn't need to be sent to the shuffle readers.
@@ -452,6 +460,24 @@ class StreamingShuffleWriter[K, V](
         }
         partitionSerializationStream.writeValue(record._2.asInstanceOf[Any])
         partitionSerializationStream.flush()
+
+        // A single row is never split across buffers (see the TODO above), so an oversized row
+        // grows its buffer past BUFFER_SIZE and inflates the tracked memory budget. Warn
+        // (throttled) so operators can raise the block size or writer memory instead of overshoot.
+        // When a row trips both thresholds the more severe memory warning takes precedence.
+        val rowSize = timestampedBuffer.buffer.writerIndex() - dataStartPos
+        if (rowSize > MAX_BUFFER_BYTES / 4) {
+          hugeRowWarningThrottler(
+            log"Row size ${MDC(LogKeys.BYTE_SIZE, rowSize)} is >25% of " +
+            log"total writer memory " +
+            log"${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, MAX_BUFFER_BYTES)}. " +
+            log"Consider increasing the maximum writer memory.")
+        } else if (rowSize > largeRowThreshold) {
+          largeRowWarningThrottler(
+            log"Row size ${MDC(LogKeys.BYTE_SIZE, rowSize)} is larger than the block size " +
+            log"${MDC(LogKeys.MEMORY_THRESHOLD_SIZE, largeRowThreshold)}. " +
+            log"Consider increasing the block size.")
+        }
 
         timestampedBuffer.updateChecksum()
 

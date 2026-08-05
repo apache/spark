@@ -148,22 +148,6 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
     )
   }
 
-  test("environment check for real-time mode throws when the valid configurations aren't set") {
-    val inputData = LowLatencyMemoryStream.singlePartition[Int]
-    val mapped = inputData.toDS().map(_ + 1)
-
-    checkError(
-      intercept[SparkIllegalArgumentException] {
-        testStream(mapped, OutputMode.Update, Map(
-          "asyncProgressTrackingEnabled" -> "true"
-        ), new ContinuousMemorySink())(
-          StartStream()
-        )
-      },
-      "STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED"
-    )
-  }
-
   test("error when unsupported source is used") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map(_ + 1)

@@ -71,6 +71,14 @@ class BucketedRandomProjectionLSHModel private[ml](
   // For ml connect only
   private[ml] def this() = this("", Matrices.empty)
 
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (randMatrix != null) {
+      size += randMatrix.getSizeInBytes
+    }
+    size
+  }
+
   private[ml] def this(uid: String, randUnitVectors: Array[Vector]) = {
     this(uid, Matrices.fromVectors(randUnitVectors.toImmutableArraySeq))
   }
@@ -197,7 +205,7 @@ class BucketedRandomProjectionLSH(override val uid: String)
 
   @Since("2.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
     validateAndTransformSchema(schema)
   }
 

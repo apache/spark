@@ -86,8 +86,14 @@ case class NamedLambdaVariable(
 
   override def qualifier: Seq[String] = Seq.empty
 
+  override def stateful: Boolean = true
+
   override def newInstance(): NamedExpression =
     copy(exprId = NamedExpression.newExprId, value = new AtomicReference())
+
+  override def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): NamedLambdaVariable =
+    copy(value = new AtomicReference())
 
   override def toAttribute: Attribute = {
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
@@ -393,6 +399,13 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Transforms elements in an array using the function.",
+  arguments = """
+    Arguments:
+      * expr - The array whose elements are transformed.
+        An expression that evaluates to an array.
+      * func - The function applied to each element.
+        A lambda function.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x + 1);
@@ -513,6 +526,13 @@ case class ArrayTransform(
     equal to, or greater than the second element. If the comparator function returns null,
     the function will fail and raise an error.
     """,
+  arguments = """
+    Arguments:
+      * expr - The input array to sort.
+        An expression that evaluates to an array.
+      * func - The comparator function used to determine the sort order.
+        A lambda function returning an integer.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(5, 6, 1), (left, right) -> case when left < right then -1 when left > right then 1 else 0 end);
@@ -644,6 +664,12 @@ object ArraySort {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Filters entries in a map using the function.",
+  arguments = """
+    Arguments:
+      * expr - A map expression.
+      * func - A lambda function `(k, v) -> boolean` that returns whether the entry with
+          key `k` and value `v` should be kept.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 0, 2, 2, 3, -1), (k, v) -> k > v);
@@ -700,6 +726,13 @@ case class MapFilter(
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Filters the input array using the given predicate.",
+  arguments = """
+    Arguments:
+      * expr - The array to filter.
+        An expression that evaluates to an array.
+      * func - The predicate used to filter the array.
+        A lambda function returning a boolean.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 1);
@@ -838,6 +871,13 @@ case class ArrayFilter(
  */
 @ExpressionDescription(usage =
   "_FUNC_(expr, pred) - Tests whether a predicate holds for one or more elements in the array.",
+  arguments = """
+    Arguments:
+      * expr - The array to test.
+        An expression that evaluates to an array.
+      * pred - The predicate tested against the array elements.
+        A lambda function returning a boolean.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 0);
@@ -972,6 +1012,13 @@ object ArrayExists {
  */
 @ExpressionDescription(usage =
   "_FUNC_(expr, pred) - Tests whether a predicate holds for all elements in the array.",
+  arguments = """
+    Arguments:
+      * expr - The array to test.
+        An expression that evaluates to an array.
+      * pred - The predicate tested against the array elements.
+        A lambda function returning a boolean.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 0);
@@ -1093,6 +1140,17 @@ case class ArrayForAll(
       elements in the array, and reduces this to a single state. The final state is converted
       into the final result by applying a finish function.
     """,
+  arguments = """
+    Arguments:
+      * expr - The input array to reduce.
+        An expression that evaluates to an array.
+      * start - The initial state to start the reduction from.
+        An expression of any type.
+      * merge - The binary operator applied to the current state and each array element.
+        A lambda function.
+      * finish - The function that converts the final state into the result.
+        A lambda function.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 0, (acc, x) -> acc + x);
@@ -1306,6 +1364,12 @@ case class ArrayAggregate(
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Transforms elements in a map using the function.",
+  arguments = """
+    Arguments:
+      * expr - A map expression.
+      * func - A lambda function `(k, v) -> newKey` producing the transformed key from the
+          entry with key `k` and value `v`. The values are kept unchanged.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + 1);
@@ -1366,6 +1430,12 @@ case class TransformKeys(
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, func) - Transforms values in the map using the function.",
+  arguments = """
+    Arguments:
+      * expr - A map expression.
+      * func - A lambda function `(k, v) -> newValue` producing the transformed value from
+          the entry with key `k` and value `v`. The keys are kept unchanged.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> v + 1);
@@ -1426,6 +1496,14 @@ case class TransformValues(
       NULL will be passed as the value for the missing key. If an input map contains duplicated
       keys, only the first entry of the duplicated key is passed into the lambda function.
     """,
+  arguments = """
+    Arguments:
+      * map1 - The first map expression.
+      * map2 - The second map expression.
+      * function - A lambda function `(k, v1, v2) -> newValue` that produces the merged value
+          for key `k`, where `v1` and `v2` are the values from `map1` and `map2` respectively
+          (NULL when the key is missing from that map).
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2));
@@ -1652,6 +1730,15 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(left, right, func) - Merges the two given arrays, element-wise, into a single array using function. If one array is shorter, nulls are appended at the end to match the length of the longer array, before applying function.",
+  arguments = """
+    Arguments:
+      * left - The first array to merge.
+        An expression that evaluates to an array.
+      * right - The second array to merge.
+        An expression that evaluates to an array.
+      * func - The function applied element-wise to merge the arrays.
+        A lambda function.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array('a', 'b', 'c'), (x, y) -> (y, x));

@@ -437,6 +437,18 @@ class PlanParserSuite extends AnalysisTest {
         stop = 41))
   }
 
+  test("DISTRIBUTE BY is not supported in the Catalyst parser") {
+    val sql = "select * from t distribute by a"
+    checkError(
+      exception = parseException(sql),
+      condition = "UNSUPPORTED_FEATURE.DISTRIBUTE_BY",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "distribute by a",
+        start = 16,
+        stop = 30))
+  }
+
   test("insert into") {
     import org.apache.spark.sql.catalyst.dsl.expressions._
     import org.apache.spark.sql.catalyst.dsl.plans._
@@ -659,6 +671,85 @@ class PlanParserSuite extends AnalysisTest {
         fragment = fragment3,
         start = 9,
         stop = 115))
+  }
+
+  test("unnest in FROM clause") {
+    def unnest(
+        exprs: Seq[Expression],
+        withOrdinality: Boolean = false): LogicalPlan =
+      Generate(
+        Unnest(exprs, withOrdinality),
+        unrequiredChildIndex = Nil,
+        outer = false,
+        qualifier = None,
+        generatorOutput = Nil,
+        child = OneRowRelation())
+
+    // Single array.
+    assertEqual(
+      "select * from unnest(array(1, 2, 3))",
+      unnest(Seq(UnresolvedFunction("array", Seq(Literal(1), Literal(2), Literal(3)),
+        isDistinct = false))).select(star()))
+
+    // Multiple arrays.
+    assertEqual(
+      "select * from unnest(a, b)",
+      unnest(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b"))).select(star()))
+
+    // WITH ORDINALITY.
+    assertEqual(
+      "select * from unnest(a) with ordinality",
+      unnest(Seq(UnresolvedAttribute("a")), withOrdinality = true).select(star()))
+
+    // Table alias only.
+    assertEqual(
+      "select * from unnest(a) t",
+      unnest(Seq(UnresolvedAttribute("a"))).as("t").select(star()))
+
+    // Table alias with column aliases.
+    assertEqual(
+      "select * from unnest(a, b) t(x, y)",
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("x", "y"),
+          unnest(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b"))))).select(star()))
+
+    // Correlated via LATERAL, with WITH ORDINALITY and column aliases.
+    assertEqual(
+      "select * from t, lateral unnest(t.arr) with ordinality u(v, o)",
+      table("t").lateralJoin(
+        SubqueryAlias(
+          "u",
+          UnresolvedSubqueryColumnAliases(
+            Seq("v", "o"),
+            unnest(Seq(UnresolvedAttribute(Seq("t", "arr"))), withOrdinality = true))))
+        .select(star()))
+
+    // With no arguments the dedicated UNNEST relation rule does not match; the statement instead
+    // parses as a generic table-valued function call named `unnest`, which is not registered and
+    // therefore fails later during analysis rather than at parse time.
+    assertEqual(
+      "select * from unnest()",
+      UnresolvedTableValuedFunction("unnest", Nil).select(star()))
+
+    // `UNNEST` and `ORDINALITY` are non-reserved keywords, so they remain usable as regular
+    // table and column identifiers for backwards compatibility.
+    assertEqual(
+      "select ordinality from unnest",
+      table("unnest").select($"ordinality"))
+    assertEqual(
+      "select unnest.ordinality from unnest",
+      table("unnest").select($"unnest.ordinality"))
+
+    // Quoting the name bypasses the UNNEST relation syntax, so a table-valued function named
+    // `unnest` can still be invoked. This is the escape hatch for the non-reserved keyword.
+    assertEqual(
+      "select * from `unnest`(array(1, 2))",
+      UnresolvedTableValuedFunction(
+        "unnest",
+        Seq(UnresolvedFunction("array", Seq(Literal(1), Literal(2)), isDistinct = false)))
+        .select(star()))
   }
 
   test("joins") {
@@ -953,17 +1044,182 @@ class PlanParserSuite extends AnalysisTest {
         stop = 73))
   }
 
+  test("asof join") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      assertEqual(
+        "select * from t asof join u match_condition (t.a >= u.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          Inner).select(star()))
+
+      assertEqual(
+        "select * from t left asof join u match_condition (t.a >= u.a) on t.b = u.b",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          Some($"t.b" === $"u.b"),
+          LeftOuter).select(star()))
+
+      assertEqual(
+        "select * from t asof join u match_condition (t.a >= u.a) using (b)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          Inner,
+          usingColumns = Some(Seq("b"))).select(star()))
+
+      assertEqual(
+        "select * from t asof join u match_condition (u.a <= t.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"u.a",
+          LessThanOrEqualOp,
+          $"t.a",
+          None,
+          Inner).select(star()))
+    }
+  }
+
+  test("asof join - invalid match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      val sql =
+        "select * from t asof join u match_condition (t.a = u.a)"
+      checkError(
+        exception = parseException(sql),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "="),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a = u.a)",
+            start = 16,
+            stop = 54)))
+    }
+  }
+
+  test("asof join - not equal match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a <> u.a)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "<>"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a <> u.a)",
+            start = 16,
+            stop = 55)))
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a != u.a)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "!="),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a != u.a)",
+            start = 16,
+            stop = 55)))
+    }
+  }
+
+  test("asof join - null-safe equal match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a <=> u.a)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "<=>"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a <=> u.a)",
+            start = 16,
+            stop = 56)))
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a is not distinct from u.a)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "IS NOT DISTINCT FROM"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a is not distinct from u.a)",
+            start = 16,
+            stop = 73)))
+    }
+  }
+
+  test("asof join - is distinct from match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a is distinct from u.a)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "IS DISTINCT FROM"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a is distinct from u.a)",
+            start = 16,
+            stop = 69)))
+    }
+  }
+
+  test("asof join - compound match condition rejected") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a >= u.a and t.b >= u.b)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "AND"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a >= u.a and t.b >= u.b)",
+            start = 16,
+            stop = 70)))
+    }
+  }
+
+  test("asof join disabled by default") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "false") {
+      checkError(
+        exception = parseException("select * from t asof join u match_condition (t.a >= u.a)"),
+        condition = "UNSUPPORTED_FEATURE.ASOF_JOIN",
+        sqlState = "0A000",
+        parameters = Map("config" -> "\"spark.sql.join.asofJoin.enabled\""),
+        context = ExpectedContext(
+          fragment = "asof join u match_condition (t.a >= u.a)",
+          start = 16,
+          stop = 55))
+    }
+  }
+
   test("nearest-by keywords are non-reserved (usable as identifiers)") {
-    // The five new keywords (APPROX, DISTANCE, EXACT, NEAREST, SIMILARITY) must remain
-    // non-reserved so they can continue to be used as column or table identifiers.
-    Seq("approx", "distance", "exact", "nearest", "similarity").foreach { kw =>
+    // Spark-specific join keywords must remain non-reserved so they can be used as identifiers.
+    Seq("approx", "asof", "distance", "exact", "nearest", "similarity").foreach { kw =>
       // As a column identifier in the SELECT list.
       parsePlan(s"select $kw from t")
       // As a table identifier in the FROM clause.
       parsePlan(s"select * from $kw")
     }
-    // All five together in a single SELECT list.
-    parsePlan("select approx, distance, exact, nearest, similarity from t")
+    // All six together in a single SELECT list.
+    parsePlan("select approx, asof, distance, exact, nearest, similarity from t")
   }
 
   test("sampled relations") {

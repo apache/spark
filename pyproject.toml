@@ -59,12 +59,224 @@ ignore = [
     "python/pyspark/errors/error_classes.py" = ["E501"]
     # Examples contain some unused variables.
     "examples/src/main/python/sql/datasource.py" = ["F841"]
+    # DataFrame golden test scripts are executed by the framework with ``spark``
+    # injected into their namespace, so it is undefined at lint time.
+    "python/pyspark/sql/tests/df_golden/scripts/**/*.py" = ["F821"]
 
-[tool.black]
-# When changing the version, we have to update
-# GitHub workflow version and dev/reformat-python
-required-version = "26.3.1"
-line-length = 100
-target-version = ['py39']
-include = '\.pyi?$'
-extend-exclude = 'cloudpickle|error_classes.py'
+[dependency-groups]
+internal_py4j = ["py4j>=0.10.9.9"]
+
+internal_numpy = ["numpy>=1.23.2"]
+internal_pandas = ["pandas>=2.2.0,<3.0.0"]
+internal_protobuf = ["protobuf==6.33.5"]
+internal_pyarrow = ["pyarrow>=18.0.0"]
+
+internal_pyspark_devtool = [
+    # Optional tools that are used by pyspark directly.
+    "memory-profiler>=0.61.0",
+    "flameprof==0.4",
+    "psutil",
+    "pystack>=1.6.0; sys_platform=='linux'",
+]
+
+connect = [
+    {include-group = "internal_py4j"},
+    {include-group = "internal_pandas"},
+    {include-group = "internal_protobuf"},
+    {include-group = "internal_pyarrow"},
+    "grpcio>=1.76.0",
+    "grpcio-status>=1.76.0",
+    "googleapis-common-protos>=1.71.0",
+    "zstandard>=0.25.0",
+    "graphviz>=0.20",
+]
+
+sql = [
+    {include-group = "internal_py4j"},
+    {include-group = "internal_pandas"},
+    {include-group = "internal_pyarrow"},
+]
+
+pandas_on_spark = [
+    {include-group = "internal_py4j"},
+    {include-group = "internal_pandas"},
+    {include-group = "internal_pyarrow"},
+]
+
+pandas_on_spark_extra = [
+    "plotly<6.0.0",
+    "matplotlib",
+    "mlflow>=2.3.1",
+    "jinja2",
+]
+
+ml = [
+    {include-group = "internal_py4j"},
+    {include-group = "internal_numpy"},
+]
+
+mllib = [
+    {include-group = "internal_py4j"},
+    {include-group = "internal_numpy"},
+]
+
+ml_extra_base = [
+    "scipy>=1.8.0",
+    "scikit-learn",
+    "torcheval",
+    "deepspeed; sys_platform != 'darwin'",
+]
+
+ml_torch = [
+    # We often need to install torch related packages from index-url like
+    # https://download.pytorch.org/whl/cpu. This group is designed for that and
+    # it should only have packages that are available from that index-url.
+    "torch",
+    "torchvision",
+]
+
+ml_extra = [
+    {include-group = "ml_extra_base"},
+    {include-group = "ml_torch"},
+]
+
+pipelines = [
+    {include-group = "connect"},
+    "pyyaml>=3.11",
+]
+
+internal_lint = [
+    "ruff==0.14.8",
+    "mypy==1.19.1",
+    "pytest",
+    "pytest-mypy-plugins==3.2.0",
+    "mypy-protobuf==3.3.0",
+    "googleapis-common-protos-stubs==2.2.0",
+    "grpc-stubs==1.24.11",
+    "pandas-stubs>=2.2.0",
+    "scipy-stubs",
+    "types-protobuf==6.32.1.20260221",
+    "types-PyYAML"
+]
+
+internal_test = [
+    # Dependency for running tests
+    "unittest-xml-reporting",
+    # Coverage tool
+    "coverage",
+    # 3rd party libraries that unittests use.
+    "openpyxl",
+    "tabulate",
+    "lxml",
+    "testcontainers[kafka]>=3.7.0",
+    "kafka-python-ng>=2.0.2",
+    # Used by the opt-in UDF transpile hypothesis test suite (gated on
+    # the RUN_HYPOTHESIS env var); the suite skips cleanly if absent.
+    "hypothesis>=6,<7",
+]
+
+internal_docs = [
+    "sphinx==8.2.3",
+    "sphinx-plotly-directive",
+    "sphinx-copybutton",
+    "docutils",
+    "markupsafe",
+    "pydata_sphinx_theme>=0.13",
+    "ipython",
+    "nbsphinx",
+    "numpydoc",
+    "mkdocs",
+]
+
+internal_devtools = [
+    # Devtools that are used by pyspark developers.
+    "debugpy",
+    "viztracer",
+    "jira>=3.5.2",
+    "PyGithub",
+    "asv",
+]
+
+dev = [
+    {include-group = "internal_pyspark_devtool"},
+    {include-group = "internal_lint"},
+    {include-group = "internal_test"},
+    {include-group = "internal_docs"},
+    {include-group = "internal_devtools"},
+    {include-group = "sql"},
+    {include-group = "connect"},
+    {include-group = "ml"},
+    {include-group = "ml_extra"},
+    {include-group = "mllib"},
+    {include-group = "pandas_on_spark"},
+    {include-group = "pandas_on_spark_extra"},
+    {include-group = "pipelines"},
+]
+
+internal_ci_connect = [
+    {include-group = "connect"},
+    "grpcio==1.76.0",
+    "grpcio-status==1.76.0",
+    "googleapis-common-protos==1.71.0",
+    "zstandard==0.25.0",
+    "protobuf==6.33.5",
+]
+
+ci_connect_standard = [
+    {include-group = "internal_ci_connect"},
+    "graphviz==0.20.3",
+]
+
+ci_connect_minimum = [
+    {include-group = "internal_ci_connect"},
+    "graphviz==0.20",
+]
+
+ci_classic_standard = [
+    {include-group = "internal_pyspark_devtool"},
+    {include-group = "sql"},
+    {include-group = "pandas_on_spark"},
+    {include-group = "pandas_on_spark_extra"},
+    {include-group = "ml"},
+    # torch should be installed with ml_torch group
+    {include-group = "ml_extra_base"},
+    {include-group = "internal_test"},
+    "pyarrow>=23.0.0",
+    "pandas==2.3.3",
+]
+
+ci_classic_minimum = [
+    {include-group = "sql"},
+    {include-group = "pandas_on_spark"},
+    {include-group = "ml"},
+    "numpy==1.23.2",
+    "pyarrow==18.0.0",
+    "pandas==2.2.0",
+    "scipy",
+    "scikit-learn",
+    "unittest-xml-reporting",
+    # Debug tools
+    "psutil",
+]
+
+ci_lint = [
+    {include-group = "internal_lint"},
+    {include-group = "ml_extra_base"},
+    {include-group = "pandas_on_spark_extra"},
+    {include-group = "internal_ci_connect"},
+    "pyarrow>=23.0.0",
+    "pandas==2.3.3",
+    "pandas-stubs==2.3.3.260113",
+    "ipython"
+]
+
+ci_docs = [
+    {include-group = "internal_docs"},
+    {include-group = "internal_ci_connect"},
+    {include-group = "internal_numpy"},
+    # These are required for sphinx to introspect the code
+    "pyarrow>=23.0.0",
+    "pandas==2.3.3",
+    # plotly is used for sphinx_plotly_directive examples
+    "plotly>=4.8"
+]
