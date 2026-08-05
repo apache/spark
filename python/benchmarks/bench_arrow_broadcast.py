@@ -39,43 +39,35 @@ class _UncloseableBytesIO(io.BytesIO):
 
 
 class ExampleArrowBroadcastValue:
-    """A Python-list-backed value that can be reconstructed with Arrow buffers."""
+    """A float-list-backed value that can be reconstructed with an Arrow buffer."""
 
-    def __init__(self, ids=None, payloads=None, table=None):
-        self.ids = ids
-        self.payloads = payloads
-        self.table = table
+    def __init__(self, values=None, array=None):
+        self.values = values
+        self.array = array
 
     @classmethod
-    def from_size(cls, n_rows):
-        ids = list(range(n_rows))
-        payloads = [f"{value:032d}" for value in ids]
-        return cls(ids=ids, payloads=payloads)
+    def from_size(cls, n_values):
+        return cls(values=[float(value) for value in range(n_values)])
 
     def __to_arrow__(self):
-        if self.table is not None:
-            return self.table
-        return pa.table({"id": self.ids, "payload": self.payloads})
+        if self.array is not None:
+            return self.array
+        return pa.array(self.values, type=pa.float64())
 
     @classmethod
     def __from_arrow__(cls, value):
-        return cls(table=value)
+        return cls(array=value)
 
     @property
-    def num_rows(self):
-        if self.table is not None:
-            return self.table.num_rows
-        return len(self.ids)
+    def num_values(self):
+        if self.array is not None:
+            return len(self.array)
+        return len(self.values)
 
-    def id_at(self, index):
-        if self.table is not None:
-            return self.table.column("id")[index].as_py()
-        return self.ids[index]
-
-    def payload_at(self, index):
-        if self.table is not None:
-            return self.table.column("payload")[index].as_py()
-        return self.payloads[index]
+    def value_at(self, index):
+        if self.array is not None:
+            return self.array[index].as_py()
+        return self.values[index]
 
 
 class ArrowBroadcastSerdeBenchmark:
@@ -122,18 +114,16 @@ class ArrowBroadcastSerdeBenchmark:
 
 
 class PythonObjectArrowBroadcastSerdeBenchmark(ArrowBroadcastSerdeBenchmark):
-    """Benchmark serde for a Python-list-backed object with an Arrow protocol."""
+    """Benchmark serde for a float-list-backed object with an Arrow protocol."""
 
     def setup(self, n_rows, serializer):
         self.value = ExampleArrowBroadcastValue.from_size(n_rows)
         self._setup_serde(serializer)
 
     def _check_deserialized_value(self, actual):
-        assert actual.num_rows == self.value.num_rows
-        assert actual.id_at(0) == self.value.id_at(0)
-        assert actual.id_at(-1) == self.value.id_at(-1)
-        assert actual.payload_at(0) == self.value.payload_at(0)
-        assert actual.payload_at(-1) == self.value.payload_at(-1)
+        assert actual.num_values == self.value.num_values
+        assert actual.value_at(0) == self.value.value_at(0)
+        assert actual.value_at(-1) == self.value.value_at(-1)
 
 
 class ArrowBroadcastEndToEndBenchmark:
