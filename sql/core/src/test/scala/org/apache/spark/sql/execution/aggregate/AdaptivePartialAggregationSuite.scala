@@ -111,8 +111,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
    *     `tasksFallBacked` otherwise.
    *   - `tasksFallBacked`: the partial aggregate's `numTasksFallBacked`, incremented only when the
    *     regular map actually falls back into sort-based aggregation. When the spill check bypasses
-   *     at the
-   *     spill boundary the sorter is never created, so this stays 0 -- direct, per-operator
+   *     at the spill boundary the sorter is never created, so this stays 0 -- direct, per-operator
    *     evidence the bypass replaced the sort fallback.
    */
   private case class AggCounters(
@@ -652,6 +651,29 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("rows absorbed by the fast map count toward the compaction ratio") {
+    // The compaction ratio is measured at the operator level, so the rows the fast map absorbs
+    // must count in the numerator just as its keys count in the denominator. This input is
+    // dominated by a hot-key prefix that the fast map serves without ever reaching the regular
+    // map, followed by a short distinct tail that does reach it. Counting only the regular map's
+    // traffic would see the tail alone -- a ratio near 1 -- and bypass an aggregation that is in
+    // fact collapsing rows heavily.
+    forEachCodegenAndMap() { clue =>
+      // With the fast map on it holds 4 keys, so `k < 4` is served there and `k >= 4` falls
+      // through. 400 hot-key rows against 4 hot keys plus 20 tail keys is a ratio of about 17.5,
+      // far above the default 1.1, so nothing may bypass.
+      val df = () => spark.range(0, 420, 1, 1)
+        .select(when($"id" < 400, $"id" % 4).otherwise($"id" - 396) as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        assert(numBypassingRows(df) == 0,
+          "an aggregation collapsing ~17 rows per key must not bypass; fast-map hits are " +
+            "missing from the numerator if it does")
+      }
+    }
+  }
+
   test("the periodic check fires when the sample shows no reduction, without spilling") {
     // No forced regular-map spill: only the periodic check can trigger the bypass. Fully
     // distinct keys over a small sample cross `noSpillReductionRatioThreshold`, so rows bypass and
@@ -731,11 +753,10 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("without the feature the same input really does fall back to sort") {
-    // Sanity check for the the spill check assertion above: with adaptive disabled, the identical
+    // Sanity check for the spill check assertion above: with adaptive disabled, the identical
     // high-cardinality input under the same forced fallback genuinely falls back to sort-based
     // aggregation. This proves the spill check's `tasksFallBacked == 0` reflects the bypass and
-    // not merely
-    // an input that never reached the spill boundary.
+    // not merely an input that never reached the spill boundary.
     for {
       wholeStage <- Seq(true, false)
       twoLevelMap <- Seq(true, false)
@@ -810,6 +831,41 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       withClue(clue) {
         assert(numBypassingRows(df) > 0,
           "an unreachable compaction ratio must bypass even a low-cardinality input")
+      }
+    }
+  }
+
+  test("minRows = 0 disables the periodic check but keeps the spill check") {
+    // `minRows = 0` is a sentinel for "never evaluate periodically". Without a forced regular-map
+    // spill there is no check point at all, so fully distinct input -- which the default settings
+    // bypass immediately -- must be aggregated all the way through. This is what proves the
+    // periodic check is genuinely off rather than merely deferred.
+    forEachCodegenAndMap(minRows = 0) { clue =>
+      val df = () => spark.range(0, 200, 1, 1)
+        .select($"id" as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        assert(numBypassingRows(df) == 0,
+          "minRows = 0 must disable the periodic check, so nothing may bypass without a spill")
+      }
+    }
+  }
+
+  test("minRows = 0 still bypasses at the spill boundary") {
+    // The other half of the sentinel: with the periodic check off, the spill check alone still
+    // bypasses instead of paying the spill I/O, which is the spill-only operating mode.
+    forEachCodegenAndMap(minRows = 0, regularFallback = 16) { clue =>
+      val df = () => spark.range(0, 200, 1, 1)
+        .select($"id" as "k", $"id" as "v")
+        .groupBy($"k")
+        .agg(sum($"v") as "s")
+      withClue(clue) {
+        val c = runAndReadCounters(df)
+        assert(c.skipped > 0,
+          "the spill check must still bypass when the periodic check is disabled")
+        assert(c.tasksFallBacked == 0,
+          "the spill check must replace the sort fallback, not trigger it")
       }
     }
   }

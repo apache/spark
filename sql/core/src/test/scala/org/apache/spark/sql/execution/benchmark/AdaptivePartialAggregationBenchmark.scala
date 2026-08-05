@@ -92,7 +92,7 @@ object AdaptivePartialAggregationBenchmark extends SqlBasedBenchmark {
     }
 
     // 1000 distinct keys over a large input: partial aggregation reduces a lot, the periodic check
-    // never fires, and the two runs must match (no regression).
+    // never activates pass-through, and the two runs must match (no regression).
     runBenchmark("low-cardinality input, pass-through at the periodic check") {
       val N = 16L << 20
       val benchmark = new Benchmark("adaptive partial agg, low card, no spill", N,

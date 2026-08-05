@@ -216,7 +216,8 @@ skipped entirely -- so a query that only becomes ineffective later in its input 
     <td>
       The number of rows to process before the compaction ratio is evaluated, so a decision is never
       made on too few rows. The ratio is re-evaluated every time this many further rows have been
-      processed.
+      processed. Setting this to <code>0</code> disables the periodic evaluation entirely, leaving
+      only the check made when the aggregation map is about to spill.
     </td>
     <td>4.4.0</td>
   </tr>

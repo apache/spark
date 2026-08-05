@@ -4174,11 +4174,13 @@ object SQLConf {
       .doc("The number of rows to process before adaptive partial aggregation (see " +
         s"'${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}') evaluates the compaction ratio. The " +
         "ratio is evaluated once this many rows have been processed since the previous " +
-        "evaluation, so a decision is never made on too few rows.")
+        "evaluation, so a decision is never made on too few rows. A value of 0 disables the " +
+        "periodic evaluation entirely, leaving only the check made when the aggregation map is " +
+        "about to spill.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .longConf
-      .checkValue(_ > 0, "The minimum row count must be positive.")
+      .checkValue(_ >= 0, "The minimum row count must not be negative.")
       .createWithDefault(100000)
 
   val ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION =

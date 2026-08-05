@@ -213,7 +213,9 @@ class TungstenAggregationIterator(
       val minRows = adaptiveMinRows
       // The processed-row count at which the compaction ratio is evaluated next. It advances by
       // `minRows` after every check, and restarts after a spill so the new in-memory map epoch is
-      // judged on its own rows.
+      // judged on its own rows. `minRows = 0` disables the periodic check: the count is only ever
+      // compared after being incremented past 0, so it never matches and only the spill check
+      // below remains.
       var nextCheckRow = minRows
       // The partial aggregation is ineffective when it does not collapse `minCompaction` rows into
       // one key. There is no fast map on this path, so the map's keys are all the operator holds.
