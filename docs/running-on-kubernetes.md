@@ -1629,6 +1629,7 @@ See the [configuration page](configuration.html) for information on Spark config
     <code>targetPort</code> to match the actual bound UI port, which allows using
     <code>spark.ui.port=0</code> (random port). Requires the driver's ServiceAccount to have
     the <code>patch</code> verb on <code>services</code>.
+    This setting only applies to <code>cluster</code> deploy mode.
   </td>
   <td>4.3.0</td>
 </tr>
