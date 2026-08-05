@@ -258,10 +258,7 @@ try:
 
     # Scripts directive requires a list of each script path and does not take wild cards.
     # Exclude the spark CLI shell scripts; the CLI is shipped as a console_scripts entry point.
-    scripts = [
-        str(p) for p in Path(SCRIPTS_TARGET).iterdir()
-        if p.stem not in ("spark", "spark2")
-    ]
+    scripts = [str(p) for p in Path(SCRIPTS_TARGET).iterdir() if p.stem not in ("spark", "spark2")]
     # We add find_spark_home.py to the bin directory we install so that pip installed PySpark
     # will search for SPARK_HOME with Python.
     scripts.append("pyspark/find_spark_home.py")
