@@ -371,16 +371,6 @@ def verify_iter_result_row_count(
     verify_result_row_count(actual_rows, expected_rows())
 
 
-def wrap_udf(f, args_offsets, kwargs_offsets, return_type):
-    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
-
-    if return_type.needConversion():
-        toInternal = return_type.toInternal
-        return args_kwargs_offsets, lambda *a: toInternal(func(*a))
-    else:
-        return args_kwargs_offsets, lambda *a: func(*a)
-
-
 def _verify_column_schema(
     actual_names: list, expected_names: list, *, assign_cols_by_name: bool
 ) -> None:
@@ -672,8 +662,15 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
         return func, None, None, return_type
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
         return func, None, None, None
+    # Batched (plain Python) UDFs: (args_kwargs_offsets, eval func); apply kwargs binding and
+    # convert each result to the internal representation only when the return type requires it.
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
-        return wrap_udf(func, args_offsets, kwargs_offsets, return_type)
+        func, args_kwargs_offsets = wrap_kwargs_support(func, args_offsets, kwargs_offsets)
+        if return_type.needConversion():
+            toInternal = return_type.toInternal
+            return args_kwargs_offsets, lambda *a: toInternal(func(*a))
+        else:
+            return args_kwargs_offsets, lambda *a: func(*a)
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
