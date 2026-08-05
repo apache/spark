@@ -127,9 +127,33 @@ binary_np_spark_mappings = {
         lambda s1, s2: np.copysign(s1, s2), DoubleType()
     ),
     "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
-    "floor_divide": lambda c1, c2: F.when(c2 == 0, F.lit(0.0)).otherwise(
-        F.floor(c1 / c2).cast("double")
-    ),
+    "floor_divide": lambda c1, c2: F.when(
+        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+        F.when(c1.isNull(), c1.cast("double"))
+        .when(c2.isNull(), c2.cast("double"))
+        .when(
+            F.isnan(c1.cast("double")) | F.isnan(c2.cast("double")),
+            F.lit(float("nan")),
+        )
+        .when(
+            c2 == 0,
+            F.when(c1 == 0, F.lit(float("nan")))
+            .when(
+                (c1 < 0) != (c2.cast("string") == "-0.0"),
+                F.lit(float("-inf")),
+            )
+            .otherwise(F.lit(float("inf"))),
+        )
+        .when(c1.cast("double").isin(float("-inf"), float("inf")), F.lit(float("nan")))
+        .when(
+            c2.cast("double").isin(float("-inf"), float("inf")),
+            F.when(c1 == 0, (c1 / c2).cast("double"))
+            .when((c1 < 0) != (c2 < 0), F.lit(-1.0))
+            .otherwise(F.lit(0.0)),
+        )
+        .when(c1 == 0, (c1 / c2).cast("double"))
+        .otherwise(F.floor(c1 / c2).cast("double")),
+    ).otherwise(F.when(c2 == 0, F.lit(0.0)).otherwise(F.floor(c1 / c2).cast("double"))),
     "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
     .when(F.isnan(c2.cast("double")), c1)
     .otherwise(F.greatest(c1, c2))
