@@ -1789,6 +1789,10 @@ class SparkContext:
 
         .. versionadded:: 0.7.0
 
+        .. versionchanged:: 4.4.0
+           Native PyArrow tables, record batches, arrays, and chunked arrays are serialized
+           using Arrow IPC instead of pickle.
+
         Parameters
         ----------
         value : T

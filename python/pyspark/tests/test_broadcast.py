@@ -24,9 +24,18 @@ import unittest
 from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext, Broadcast
+from pyspark.core.broadcast import (
+    _ARROW_ARRAY_SERIALIZATION,
+    _ARROW_CHUNKED_ARRAY_SERIALIZATION,
+    _ARROW_RECORD_BATCH_SERIALIZATION,
+    _ARROW_TABLE_SERIALIZATION,
+    _BROADCAST_FORMAT_MAGIC,
+    _PICKLE_SERIALIZATION,
+)
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import ChunkedStream
 from pyspark.sql import SparkSession, Row
+from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 
 
 class BroadcastTest(unittest.TestCase):
@@ -139,6 +148,105 @@ class BroadcastTest(unittest.TestCase):
         sel = spark.sql("SELECT MYUDF('a') AS a, MYUDF('b') AS b")
         self.assertEqual(sel.collect(), [Row(a="aa", b="bb")])
         spark.stop()
+
+    def _test_arrow_broadcast(self, *extra_confs):
+        import pyarrow as pa
+
+        conf = SparkConf()
+        for key, value in extra_confs:
+            conf.set(key, value)
+        conf.setMaster("local[2]")
+        self.sc = SparkContext(conf=conf)
+
+        values = [
+            pa.table({"i": [1, 2], "s": ["a", "b"]}),
+            pa.record_batch([[3, 4]], names=["i"]),
+            pa.array([], type=pa.int64()),
+            pa.chunked_array([[5, 6], [7]], type=pa.int64()),
+        ]
+        broadcasts = [self.sc.broadcast(value) for value in values]
+
+        for broadcast, expected in zip(broadcasts, values):
+            self.assertIs(type(broadcast.value), type(expected))
+            self.assertTrue(broadcast.value.equals(expected))
+
+        def read_broadcasts(_):
+            table, batch, array, chunked_array = [broadcast.value for broadcast in broadcasts]
+            return (
+                table.to_pydict(),
+                batch.to_pydict(),
+                array.to_pylist(),
+                chunked_array.to_pylist(),
+            )
+
+        expected = (
+            {"i": [1, 2], "s": ["a", "b"]},
+            {"i": [3, 4]},
+            [],
+            [5, 6, 7],
+        )
+        results = self.sc.parallelize(range(2), 2).map(read_broadcasts).collect()
+        self.assertEqual(results, [expected, expected])
+
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    def test_arrow_broadcast(self):
+        self._test_arrow_broadcast()
+
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+    def test_arrow_broadcast_with_encryption(self):
+        self._test_arrow_broadcast(("spark.io.encryption.enabled", "true"))
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class BroadcastArrowSerializationTest(unittest.TestCase):
+    def test_arrow_serialization_preserves_type_and_value(self):
+        import pyarrow as pa
+
+        values_and_serializations = [
+            (pa.table({"i": [1, 2]}), _ARROW_TABLE_SERIALIZATION),
+            (pa.record_batch([[1, 2]], names=["i"]), _ARROW_RECORD_BATCH_SERIALIZATION),
+            (pa.array([], type=pa.int64()), _ARROW_ARRAY_SERIALIZATION),
+            (
+                pa.chunked_array([[1, 2], [3]], type=pa.int64()),
+                _ARROW_CHUNKED_ARRAY_SERIALIZATION,
+            ),
+        ]
+        broadcast = Broadcast.__new__(Broadcast)
+
+        for value, expected_serialization in values_and_serializations:
+            output = tempfile.NamedTemporaryFile(delete=False)
+            path = output.name
+            try:
+                broadcast._dump(value, output)
+                with open(path, "rb") as serialized:
+                    self.assertEqual(
+                        serialized.read(len(_BROADCAST_FORMAT_MAGIC)),
+                        _BROADCAST_FORMAT_MAGIC,
+                    )
+                    self.assertEqual(serialized.read(1), expected_serialization)
+
+                actual = broadcast._load_from_path(path)
+                self.assertIs(type(actual), type(value))
+                self.assertTrue(actual.equals(value))
+            finally:
+                os.unlink(path)
+
+    def test_pickle_fallback(self):
+        broadcast = Broadcast.__new__(Broadcast)
+        value = {"a": [1, 2, 3]}
+        output = tempfile.NamedTemporaryFile(delete=False)
+        path = output.name
+        try:
+            broadcast._dump(value, output)
+            with open(path, "rb") as serialized:
+                self.assertEqual(
+                    serialized.read(len(_BROADCAST_FORMAT_MAGIC)),
+                    _BROADCAST_FORMAT_MAGIC,
+                )
+                self.assertEqual(serialized.read(1), _PICKLE_SERIALIZATION)
+            self.assertEqual(broadcast._load_from_path(path), value)
+        finally:
+            os.unlink(path)
 
 
 class BroadcastFrameProtocolTest(unittest.TestCase):

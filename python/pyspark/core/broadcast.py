@@ -50,6 +50,15 @@ __all__ = ["Broadcast"]
 T = TypeVar("T")
 
 
+_BROADCAST_FORMAT_MAGIC = b"PYSPARK_BROADCAST_V1"
+_PICKLE_SERIALIZATION = b"P"
+_ARROW_TABLE_SERIALIZATION = b"T"
+_ARROW_RECORD_BATCH_SERIALIZATION = b"R"
+_ARROW_ARRAY_SERIALIZATION = b"A"
+_ARROW_CHUNKED_ARRAY_SERIALIZATION = b"C"
+_ARROW_COLUMN_NAME = "_value"
+
+
 # Holds broadcasted data received from Java, keyed by its id.
 _broadcastRegistry: Dict[int, "Broadcast[Any]"] = {}
 
@@ -111,7 +120,7 @@ class Broadcast(Generic[T]):
         instead.
         """
         if sc is not None:
-            # we're on the driver.  We want the pickled data to end up in a file (maybe encrypted)
+            # We're on the driver. Write the serialized data to a file (maybe encrypted).
             f = NamedTemporaryFile(delete=False, dir=sc._temp_dir)
             self._path = f.name
             self._sc: Optional["SparkContext"] = sc
@@ -125,9 +134,9 @@ class Broadcast(Generic[T]):
                 encryption_sock_file, _ = local_connect_and_auth(conn_info, auth_secret)
                 broadcast_out = ChunkedStream(encryption_sock_file, 8192)
             else:
-                # no encryption, we can just write pickled data directly to the file from python
+                # Without encryption, write the serialized data directly to the file from Python.
                 broadcast_out = f
-            self.dump(value, broadcast_out)  # type: ignore[arg-type]
+            self._dump(value, broadcast_out)  # type: ignore[arg-type]
             if sc._encryption_enabled:
                 self._python_broadcast.waitTillDataReceived()
             self._jbroadcast = sc._jsc.broadcast(self._python_broadcast)
@@ -138,14 +147,116 @@ class Broadcast(Generic[T]):
             self._sc = None
             self._python_broadcast = None
             if sock_file is not None:
-                # the jvm is doing decryption for us.  Read the value
-                # immediately from the sock_file
-                self._value = self.load(sock_file)
+                # The JVM is doing decryption for us. Read the value immediately from the socket.
+                self._value = self._load(sock_file)
             else:
-                # the jvm just dumps the pickled data in path -- we'll unpickle lazily when
-                # the value is requested
+                # The JVM writes the serialized data to path. Load it lazily when requested.
                 assert path is not None
                 self._path = path
+
+    def _dump(self, value: T, f: BinaryIO) -> None:
+        serialization = self._get_arrow_serialization(value) or _PICKLE_SERIALIZATION
+        f.write(_BROADCAST_FORMAT_MAGIC)
+        f.write(serialization)
+        if serialization == _PICKLE_SERIALIZATION:
+            self.dump(value, f)
+        else:
+            self._dump_arrow(value, f, serialization)
+
+    @staticmethod
+    def _get_arrow_serialization(value: Any) -> Optional[bytes]:
+        # Avoid importing the optional PyArrow dependency for ordinary broadcasts. A native
+        # PyArrow value can only exist after the module has already been imported by the user.
+        pa = sys.modules.get("pyarrow")
+        if pa is None:
+            return None
+        if isinstance(value, pa.Table):
+            return _ARROW_TABLE_SERIALIZATION
+        if isinstance(value, pa.RecordBatch):
+            return _ARROW_RECORD_BATCH_SERIALIZATION
+        if isinstance(value, pa.Array):
+            return _ARROW_ARRAY_SERIALIZATION
+        if isinstance(value, pa.ChunkedArray):
+            return _ARROW_CHUNKED_ARRAY_SERIALIZATION
+        return None
+
+    def _dump_arrow(self, value: T, f: BinaryIO, serialization: bytes) -> None:
+        import pyarrow as pa
+
+        try:
+            arrow_value: Any = value
+            table = None
+            if serialization == _ARROW_TABLE_SERIALIZATION:
+                schema = arrow_value.schema
+            elif serialization == _ARROW_RECORD_BATCH_SERIALIZATION:
+                schema = arrow_value.schema
+            elif serialization == _ARROW_ARRAY_SERIALIZATION:
+                schema = pa.schema([pa.field(_ARROW_COLUMN_NAME, arrow_value.type)])
+            else:
+                assert serialization == _ARROW_CHUNKED_ARRAY_SERIALIZATION
+                table = pa.Table.from_arrays([arrow_value], names=[_ARROW_COLUMN_NAME])
+                schema = table.schema
+
+            with pa.RecordBatchStreamWriter(f, schema) as writer:
+                if serialization == _ARROW_TABLE_SERIALIZATION:
+                    writer.write_table(arrow_value)
+                elif serialization == _ARROW_RECORD_BATCH_SERIALIZATION:
+                    writer.write_batch(arrow_value)
+                elif serialization == _ARROW_ARRAY_SERIALIZATION:
+                    writer.write_batch(
+                        pa.RecordBatch.from_arrays([arrow_value], names=[_ARROW_COLUMN_NAME])
+                    )
+                else:
+                    assert table is not None
+                    writer.write_table(table)
+        except Exception as e:
+            msg = "Could not serialize broadcast with Arrow: %s: %s" % (
+                e.__class__.__name__,
+                str(e),
+            )
+            print_exec(sys.stderr)
+            raise pickle.PicklingError(msg)
+        f.close()
+
+    def _load_from_path(self, path: str) -> T:
+        with open(path, "rb", 1 << 20) as f:
+            return self._load(f)
+
+    def _load(self, file: BinaryIO) -> T:
+        magic = file.read(len(_BROADCAST_FORMAT_MAGIC))
+        if magic != _BROADCAST_FORMAT_MAGIC:
+            raise pickle.UnpicklingError("Invalid broadcast serialization format")
+
+        serialization = file.read(1)
+        if serialization == _PICKLE_SERIALIZATION:
+            return self.load(file)
+        arrow_serializations = {
+            _ARROW_TABLE_SERIALIZATION,
+            _ARROW_RECORD_BATCH_SERIALIZATION,
+            _ARROW_ARRAY_SERIALIZATION,
+            _ARROW_CHUNKED_ARRAY_SERIALIZATION,
+        }
+        if serialization not in arrow_serializations:
+            raise pickle.UnpicklingError("Unknown broadcast serialization format")
+
+        import pyarrow as pa
+
+        with pa.ipc.open_stream(file) as reader:
+            if serialization == _ARROW_TABLE_SERIALIZATION:
+                return reader.read_all()  # type: ignore[return-value]
+            elif serialization == _ARROW_RECORD_BATCH_SERIALIZATION:
+                batches = list(reader)
+                if len(batches) != 1:
+                    raise pickle.UnpicklingError("Invalid Arrow record batch broadcast")
+                return batches[0]  # type: ignore[return-value]
+            elif serialization == _ARROW_ARRAY_SERIALIZATION:
+                batches = list(reader)
+                if len(batches) != 1:
+                    raise pickle.UnpicklingError("Invalid Arrow array broadcast")
+                return batches[0].column(0)  # type: ignore[return-value]
+
+            table = reader.read_all()
+            return table.column(0)  # type: ignore[return-value]
 
     def dump(self, value: T, f: BinaryIO) -> None:
         """
@@ -269,9 +380,9 @@ class Broadcast(Generic[T]):
                 conn_info, auth_secret = self._python_broadcast.setupDecryptionServer()
                 decrypted_sock_file, _ = local_connect_and_auth(conn_info, auth_secret)
                 self._python_broadcast.waitTillBroadcastDataSent()
-                return self.load(decrypted_sock_file)
+                return self._load(decrypted_sock_file)
             else:
-                self._value = self.load_from_path(self._path)
+                self._value = self._load_from_path(self._path)
         return self._value
 
     def unpersist(self, blocking: bool = False) -> None:
