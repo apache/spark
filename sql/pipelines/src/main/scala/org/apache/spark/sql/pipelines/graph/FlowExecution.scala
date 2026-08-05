@@ -232,7 +232,9 @@ class StreamingTableWrite(
   override def getOrigin: QueryOrigin = flow.origin
 
   def startStream(): StreamingQuery = {
-    val data = graph.reanalyzeFlow(flow).df
+    val data = graph.reanalyzeFlow(
+      flow,
+      updateContext.spark.sessionState.conf.caseSensitiveAnalysis).df
     val dataStreamWriter = data
       .writeStream
       .queryName(displayName)
@@ -260,7 +262,9 @@ class BatchTableWrite(
   def executeInternal(): Future[Unit] = {
     SparkSessionUtils.withSqlConf(spark, sqlConf.toList: _*) {
       updateContext.flowProgressEventLogger.recordRunning(flow = flow)
-      val data = graph.reanalyzeFlow(flow).df
+      val data = graph.reanalyzeFlow(
+        flow,
+        updateContext.spark.sessionState.conf.caseSensitiveAnalysis).df
       Future {
         val dataFrameWriter = data.write
         destination.format.foreach(dataFrameWriter.format)
@@ -298,7 +302,9 @@ class SinkWrite(
   override def getOrigin: QueryOrigin = flow.origin
 
   def startStream(): StreamingQuery = {
-    val data = graph.reanalyzeFlow(flow).df
+    val data = graph.reanalyzeFlow(
+      flow,
+      updateContext.spark.sessionState.conf.caseSensitiveAnalysis).df
     data.writeStream
       .queryName(displayName)
       .option("checkpointLocation", checkpointPath)
@@ -328,7 +334,9 @@ class Scd1MergeStreamingWrite(
   override def getOrigin: QueryOrigin = flow.origin
 
   override def startStream(): StreamingQuery = {
-    val sourceChangeDataFeed = graph.reanalyzeFlow(flow).df
+    val sourceChangeDataFeed = graph.reanalyzeFlow(
+      flow,
+      updateContext.spark.sessionState.conf.caseSensitiveAnalysis).df
 
     // The auxiliary table is created and evolved during dataset materialization (see
     // [[DatasetManager]]), so it already exists by the time this flow executes; resolve its
@@ -373,7 +381,9 @@ class Scd2MergeStreamingWrite(
   override def getOrigin: QueryOrigin = flow.origin
 
   override def startStream(): StreamingQuery = {
-    val sourceChangeDataFeed = graph.reanalyzeFlow(flow).df
+    val sourceChangeDataFeed = graph.reanalyzeFlow(
+      flow,
+      updateContext.spark.sessionState.conf.caseSensitiveAnalysis).df
 
     // The auxiliary table is created and evolved during dataset materialization (see
     // [[DatasetManager]]), so it already exists by the time this flow executes; resolve its

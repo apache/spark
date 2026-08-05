@@ -101,10 +101,14 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
 
   /** The full inferred AUTO CDC output schema (data columns plus the reserved metadata column). */
   private def autoCdcInferredSchema(flowName: String): StructType =
-    autoCdcGraph(flowName, declaredSchema = None).inferredSchema(targetIdentifier)
+    autoCdcGraph(flowName, declaredSchema = None)
+      .inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)(targetIdentifier)
+
+  private def validateGraph(graph: DataflowGraph): DataflowGraph =
+    graph.validate(spark.sessionState.conf.caseSensitiveAnalysis)
 
   private def assertSchemaIncompatible(graph: DataflowGraph): Unit = {
-    val ex = intercept[AnalysisException](graph.validate())
+    val ex = intercept[AnalysisException](validateGraph(graph))
     assert(ex.getCondition == "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE")
     assert(ex.getMessage.contains(targetIdentifier.unquotedString))
   }
@@ -112,7 +116,7 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
   // Plain flows: the inferred schema is exactly the source's data columns.
 
   test("compatible user-specified schema is accepted for an implicit plain flow") {
-    plainGraph(flowName = "target", declaredSchema = Some(dataSchema)).validate()
+    validateGraph(plainGraph(flowName = "target", declaredSchema = Some(dataSchema)))
   }
 
   test("incompatible user-specified schema is rejected for an implicit plain flow") {
@@ -121,7 +125,7 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
   }
 
   test("compatible user-specified schema is accepted for a named plain flow") {
-    plainGraph(flowName = "plain_flow", declaredSchema = Some(dataSchema)).validate()
+    validateGraph(plainGraph(flowName = "plain_flow", declaredSchema = Some(dataSchema)))
   }
 
   test("incompatible user-specified schema is rejected for a named plain flow") {
@@ -192,12 +196,14 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
     // Schema includes the appended metadata column, matching the inferred schema exactly.
     autoCdcGraph(
       flowName = "target",
-      declaredSchema = Some(autoCdcInferredSchema("target"))).validate()
+      declaredSchema = Some(autoCdcInferredSchema("target"))).validate(
+        spark.sessionState.conf.caseSensitiveAnalysis)
   }
 
   test("full user-specified schema is accepted for a named AUTO CDC flow") {
     autoCdcGraph(
       flowName = "auto_cdc_flow",
-      declaredSchema = Some(autoCdcInferredSchema("auto_cdc_flow"))).validate()
+      declaredSchema = Some(autoCdcInferredSchema("auto_cdc_flow"))).validate(
+        spark.sessionState.conf.caseSensitiveAnalysis)
   }
 }

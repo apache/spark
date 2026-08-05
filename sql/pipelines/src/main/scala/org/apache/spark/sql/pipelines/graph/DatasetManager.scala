@@ -101,7 +101,8 @@ object DatasetManager extends Logging {
       tablesToMatz(resolvedDataflowGraph).map(t => t.table.identifier -> t).toMap
     }
     val sessionCaseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
-    val auxiliaryTableSpecs = resolvedDataflowGraph.auxiliaryTableSpecs(sessionCaseSensitive)
+    val inferredSchemas = resolvedDataflowGraph.inferSchemas(sessionCaseSensitive)
+    val auxiliaryTableSpecs = resolvedDataflowGraph.auxiliaryTableSpecs(inferredSchemas)
 
     // materialized [[DataflowGraph]] where each table has been materialized and each table
     // has metadata (e.g., normalized table storage path) populated
@@ -126,6 +127,7 @@ object DatasetManager extends Logging {
                 val (tableWithMaterializationMetadata, catalogTableEntity) = materializeTable(
                   resolvedDataflowGraph = resolvedDataflowGraph,
                   table = table,
+                  inferredSchemas = inferredSchemas,
                   isFullRefresh = isFullRefresh,
                   auxiliaryTableSpecOpt = auxiliaryTableSpecOpt,
                   existingAuxiliaryTable = existingAuxiliaryTable,
@@ -290,8 +292,9 @@ object DatasetManager extends Logging {
   /**
    * Materializes a table in the catalog. This method will create or update the table in the
    * catalog based on the given table and context.
-   * @param resolvedDataflowGraph The resolved [[DataflowGraph]] used to infer the table schema.
+   * @param resolvedDataflowGraph The resolved [[DataflowGraph]] used for table metadata.
    * @param table The table to be materialized.
+   * @param inferredSchemas The schemas inferred from the resolved graph, keyed by table.
    * @param isFullRefresh Whether this table should be full refreshed or not.
    * @param auxiliaryTableSpecOpt The spec for the auxiliary table (if this table has one)
    * @param existingAuxiliaryTable The already-loaded auxiliary table for this target (if it has one
@@ -304,6 +307,7 @@ object DatasetManager extends Logging {
   private def materializeTable(
       resolvedDataflowGraph: DataflowGraph,
       table: Table,
+      inferredSchemas: Map[TableIdentifier, StructType],
       isFullRefresh: Boolean,
       auxiliaryTableSpecOpt: Option[AuxiliaryTableSpec],
       existingAuxiliaryTable: Option[V2Table],
@@ -313,9 +317,8 @@ object DatasetManager extends Logging {
     val (catalog, identifier) =
       PipelinesCatalogUtils.resolveTableCatalog(context.spark, table.identifier)
 
-    val sessionCaseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
     val outputSchema = table.specifiedSchema.getOrElse(
-      resolvedDataflowGraph.inferredSchema(sessionCaseSensitive)(table.identifier).asNullable
+      inferredSchemas(table.identifier).asNullable
     )
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)

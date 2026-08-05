@@ -408,7 +408,8 @@ class TestGraphRegistrationContext(
    * Generates a dataflow graph from this pipeline definition and resolves it.
    * @return
    */
-  def resolveToDataflowGraph(): DataflowGraph = toDataflowGraph.resolve()
+  def resolveToDataflowGraph(): DataflowGraph =
+    toDataflowGraph.resolve(spark.sessionState.conf.caseSensitiveAnalysis)
 }
 
 object TestGraphRegistrationContext {

@@ -253,13 +253,14 @@ class AppendOnceFlow(
  */
 class AutoCdcMergeFlow(
     val flow: AutoCdcFlow,
-    val funcResult: FlowFunctionResult
+    val funcResult: FlowFunctionResult,
+    sessionCaseSensitive: Boolean
 ) extends ResolvedFlow {
   private[graph] val effectiveResolver: Resolver = SchemaInferenceUtils.resolverFor(
     sqlConf
       .get(SQLConf.CASE_SENSITIVE.key)
       .map(_.trim.toBoolean)
-      .getOrElse(spark.sessionState.conf.caseSensitiveAnalysis))
+      .getOrElse(sessionCaseSensitive))
 
   requireReservedPrefixAbsentInSourceColumns()
   requireReservedFrameworkColumnsAbsentInSourceColumns()

@@ -60,7 +60,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
       registerMaterializedView("b", query = readFlowFunc("a"))
     }
     val unresolvedGraph = pipelineDef.toDataflowGraph
-    val resolvedGraph = unresolvedGraph.resolve()
+    val resolvedGraph = unresolvedGraph.resolve(spark.sessionState.conf.caseSensitiveAnalysis)
     assert(resolvedGraph.flows.size == 2)
     assert(unresolvedGraph.flows.size == 2)
     assert(unresolvedGraph.tables.size == 2)
@@ -109,7 +109,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     }
 
     val unresolvedGraph = pipelineDef.toDataflowGraph
-    val resolvedGraph = unresolvedGraph.resolve()
+    val resolvedGraph = unresolvedGraph.resolve(spark.sessionState.conf.caseSensitiveAnalysis)
     assert(resolvedGraph.flows.size == 4)
     assert(resolvedGraph.tables.size == 3)
     assert(resolvedGraph.views.size == 1)

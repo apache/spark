@@ -20,7 +20,6 @@ package org.apache.spark.sql.pipelines.graph
 import scala.util.Try
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.DataflowGraph.mapUnique
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
@@ -147,7 +146,9 @@ case class DataflowGraph(
    *                upstream flows
    * @return The reanalyzed flow
    */
-  protected[graph] def reanalyzeFlow(srcFlow: Flow): ResolvedFlow = {
+  protected[graph] def reanalyzeFlow(
+      srcFlow: Flow,
+      sessionCaseSensitive: Boolean): ResolvedFlow = {
     val upstreamDatasetIdentifiers = dfsInternal(
       flowNodes(srcFlow.identifier).output,
       downstream = false,
@@ -165,7 +166,7 @@ case class DataflowGraph(
       tables = table.get(srcFlow.destinationIdentifier).toSeq,
       sinks = sink.get(srcFlow.destinationIdentifier).toSeq
     )
-    subgraph.resolve().resolvedFlow(srcFlow.identifier)
+    subgraph.resolve(sessionCaseSensitive).resolvedFlow(srcFlow.identifier)
   }
 
   /**
@@ -179,7 +180,7 @@ case class DataflowGraph(
    * order the flows are merged in, which this map does not define, so callers should not depend on
    * a particular casing.
    */
-  def inferredSchema(sessionCaseSensitive: Boolean): Map[TableIdentifier, StructType] = {
+  def inferSchemas(sessionCaseSensitive: Boolean): Map[TableIdentifier, StructType] = {
     flowsTo.map { case (destinationIdentifier, flows) =>
       val resolvedFlows = flows.map { flow =>
         resolvedFlow(flow.identifier)
@@ -192,15 +193,11 @@ case class DataflowGraph(
     }
   }
 
-  lazy val inferredSchema: Map[TableIdentifier, StructType] = {
-    inferredSchema(SparkSession.active.sessionState.conf.caseSensitiveAnalysis)
-  }
-
   /**
    * The internal auxiliary tables owned by each destination [[Table]], derived from the resolved
-   * flows writing to it and that destination's [[inferredSchema]]. Keyed by the destination's
-   * identifier; only destinations that actually require auxiliary tables appear. Today only
-   * AutoCDC flow destination tables have an auxiliary table, and exactly one.
+   * flows writing to it and the destination schemas inferred from them. Keyed by the destination's
+   * identifier; only destinations that actually require auxiliary tables appear. Today only AutoCDC
+   * flow destination tables have an auxiliary table, and exactly one.
    *
    * Auxiliary tables are deliberately NOT part of the logical graph (they are never resolved,
    * connected, or exposed as [[Input]]s); this is purely a derived view used during dataset
@@ -208,8 +205,8 @@ case class DataflowGraph(
    * performs no catalog access.
    */
   def auxiliaryTableSpecs(
-      sessionCaseSensitive: Boolean): Map[TableIdentifier, AuxiliaryTableSpec] = {
-    val inferredSchemas = inferredSchema(sessionCaseSensitive)
+      inferredSchemas: Map[TableIdentifier, StructType]
+  ): Map[TableIdentifier, AuxiliaryTableSpec] = {
     resolvedFlowsTo.flatMap { case (destinationTableIdentifier, flowsToDestinationTable) =>
       table.get(destinationTableIdentifier).flatMap { destinationTable =>
         flowsToDestinationTable
@@ -229,27 +226,23 @@ case class DataflowGraph(
     }.toMap
   }
 
-  lazy val auxiliaryTableSpecs: Map[TableIdentifier, AuxiliaryTableSpec] = {
-    auxiliaryTableSpecs(SparkSession.active.sessionState.conf.caseSensitiveAnalysis)
-  }
-
   /** Ensure that the [[DataflowGraph]] is valid and throws errors if not. */
-  def validate(): DataflowGraph = {
-    validationFailure.toOption match {
+  def validate(sessionCaseSensitive: Boolean): DataflowGraph = {
+    validationFailure(sessionCaseSensitive).toOption match {
       case Some(exception) => throw exception
       case None => this
     }
   }
 
   /**
-   * Validate the current [[DataflowGraph]] and cache the validation failure.
+   * Validate the current [[DataflowGraph]] and return the validation failure, if one exists.
    *
    * To add more validations, add them in a helper function that throws an exception if the
    * validation fails, and invoke the helper function here.
    */
-  private lazy val validationFailure: Try[Throwable] = Try {
+  private def validationFailure(sessionCaseSensitive: Boolean): Try[Throwable] = Try {
     validateSuccessfulFlowAnalysis()
-    validateUserSpecifiedSchemas()
+    validateUserSpecifiedSchemas(sessionCaseSensitive)
     // Connecting the graph sorts it topologically
     validateGraphIsTopologicallySorted()
     validateMultiQueryTables()
@@ -257,7 +250,6 @@ case class DataflowGraph(
     validateEveryDatasetHasFlow()
     validateTablesAreResettable()
     validateFlowStreamingness()
-    inferredSchema
   }.failed
 
   /**
@@ -280,10 +272,12 @@ case class DataflowGraph(
   def resolved: Boolean =
     flows.forall(f => resolvedFlow.contains(f.identifier))
 
-  def resolve(): DataflowGraph =
+  def resolve(sessionCaseSensitive: Boolean): DataflowGraph =
     DataflowGraphTransformer.withDataflowGraphTransformer(this) { transformer =>
       val coreDataflowNodeProcessor =
-        new CoreDataflowNodeProcessor(rawGraph = this)
+        new CoreDataflowNodeProcessor(
+          rawGraph = this,
+          sessionCaseSensitive = sessionCaseSensitive)
       transformer
         .transformDownNodes(coreDataflowNodeProcessor.processNode)
         .getDataflowGraph

@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.DataflowGraph.mapUnique
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
@@ -253,9 +252,7 @@ trait GraphValidations extends Logging {
       }
   }
 
-  protected def validateUserSpecifiedSchemas(): Unit = {
-    val sessionCaseSensitive = SparkSession.active.sessionState.conf.caseSensitiveAnalysis
-
+  protected def validateUserSpecifiedSchemas(sessionCaseSensitive: Boolean): Unit = {
     // Look up tables by their destination identifier, not by the flow's own identifier. The two
     // coincide only for an implicit/default flow (whose identifier equals its destination
     // table's); for a named flow (e.g. `CREATE FLOW <name> AS AUTO CDC INTO <target>`) they

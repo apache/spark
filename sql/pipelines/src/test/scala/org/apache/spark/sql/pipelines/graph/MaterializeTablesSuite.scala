@@ -566,7 +566,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
     val graph1 = new TestGraphRegistrationContext(spark) {
       registerTable("a", query = Option(dfFlowFunc(spark.readStream.format("rate").load())))
-    }.resolveToDataflowGraph().validate()
+    }.resolveToDataflowGraph().validate(spark.sessionState.conf.caseSensitiveAnalysis)
 
     materializeGraph(graph1, storageRoot = storageRoot)
   }
@@ -639,7 +639,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(streamInts.toDF()))
           registerTable("b", query = Option(sqlFlowFunc(spark, "SELECT value AS x FROM STREAM a")))
-        }.resolveToDataflowGraph().validate()
+        }.resolveToDataflowGraph().validate(spark.sessionState.conf.caseSensitiveAnalysis)
 
       val (refreshSelection, fullRefreshSelection) = if (isFullRefresh) {
         (NoTables, AllTables)
@@ -669,7 +669,7 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
         new TestGraphRegistrationContext(spark) {
           registerView("a", query = dfFlowFunc(streamInts.toDF()))
           registerTable("b", query = Option(sqlFlowFunc(spark, "SELECT value AS y FROM STREAM a")))
-        }.resolveToDataflowGraph().validate(),
+        }.resolveToDataflowGraph().validate(spark.sessionState.conf.caseSensitiveAnalysis),
         contextOpt = updateContextOpt,
         storageRoot = storageRoot
       )
@@ -1273,7 +1273,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
             catalog = Option(recordingCatalogName), database = Option(recordingNamespace))
         }
 
-        val inferred = ctx.resolveToDataflowGraph().inferredSchema.values.head
+        val graph = ctx.resolveToDataflowGraph()
+        val inferred = graph.inferSchemas(
+          spark.sessionState.conf.caseSensitiveAnalysis).values.head
         // The two spellings must fold into a SINGLE column. Which spelling survives depends on the
         // order the flows are merged in, which the graph does not define, so assert the invariant
         // (one column, case-insensitively named `value`) rather than a particular casing.
@@ -1314,7 +1316,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
             catalog = Option(recordingCatalogName), database = Option(recordingNamespace))
         }
 
-        val inferred = ctx.resolveToDataflowGraph().inferredSchema.values.head
+        val graph = ctx.resolveToDataflowGraph()
+        val inferred = graph.inferSchemas(
+          spark.sessionState.conf.caseSensitiveAnalysis).values.head
         // Both spellings survive as distinct columns. The flows' merge order is not defined by the
         // graph, so compare as a set rather than a sequence.
         assert(inferred.fieldNames.toSet === Set("id", "value", "Value"))
@@ -1495,7 +1499,8 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
 
     val ex = intercept[AnalysisException] {
-      ctx.resolveToDataflowGraph().inferredSchema
+      ctx.resolveToDataflowGraph().inferSchemas(
+        spark.sessionState.conf.caseSensitiveAnalysis)
     }
     checkError(
       exception = ex,
@@ -1524,7 +1529,8 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       }
 
       val ex = intercept[AnalysisException] {
-        ctx.resolveToDataflowGraph().inferredSchema
+        ctx.resolveToDataflowGraph().inferSchemas(
+          spark.sessionState.conf.caseSensitiveAnalysis)
       }
       assert(ex.getCondition === "CONFLICTING_PIPELINE_FLOW_CASE_SENSITIVITY")
       assert(ex.getMessage.contains("session default"))
@@ -1546,7 +1552,8 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
           sqlConf = Map(SQLConf.CASE_SENSITIVE.key -> "TRUE"))
       }
       val inferred = ctx.resolveToDataflowGraph()
-        .inferredSchema(fullyQualifiedIdentifier("t"))
+        .inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)(
+          fullyQualifiedIdentifier("t"))
       // Case-sensitive, so both spellings survive.
       assert(inferred.fieldNames.toSet === Set("id", "value", "Value"))
     }
