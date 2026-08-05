@@ -29,15 +29,17 @@ object SchemaMergingUtils {
    * @param caseSensitive whether two field names that differ only in case are considered distinct.
    *                      When `false` (mirroring a case-insensitive session), `dataSchema`'s field
    *                      is folded onto the matching `tableSchema` field rather than added as a
-   *                      separate, case-differing column. Callers on a schema-evolution path should
-   *                      pass the session's `spark.sql.caseSensitive`; the default `true` preserves
-   *                      the historical behavior for callers that intentionally merge case
-   *                      sensitively.
+   *                      separate, case-differing column. Deliberately has no default: every caller
+   *                      merges schemas that some pipeline will later resolve names against, so the
+   *                      choice belongs to the caller and should be visible at the call site rather
+   *                      than silently inherited. Callers should pass the effective
+   *                      `spark.sql.caseSensitive` of the flows involved (see
+   *                      [[SchemaInferenceUtils.effectiveCaseSensitivity]]).
    */
   def mergeSchemas(
       tableSchema: StructType,
       dataSchema: StructType,
-      caseSensitive: Boolean = true): StructType = {
+      caseSensitive: Boolean): StructType = {
     StructType.merge(tableSchema, dataSchema, caseSensitive).asInstanceOf[StructType]
   }
 }
