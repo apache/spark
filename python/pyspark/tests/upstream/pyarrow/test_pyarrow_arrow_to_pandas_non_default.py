@@ -384,6 +384,13 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
     so both golden files pin the same types, and appends the layout variants that
     only matter for zero-copy: sliced (offset) arrays and single- vs multi-chunk
     ChunkedArrays.
+
+    A second test method repeats those rows with ``types_mapper=pd.ArrowDtype``, which
+    asks pandas to keep pointing at the Arrow buffers instead of materializing them
+    into NumPy -- avoiding the copy is the point of that backend.  Its own golden file
+    records the result, so the two can be read side by side.  PySpark takes this path
+    in ``ArrowArrayToPandasConversion.convert_numpy``
+    (``python/pyspark/sql/conversion.py``).
     """
 
     def _build_source_arrays(self):
@@ -488,6 +495,49 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
             col_names=col_names,
             compute_cell=compute_cell,
             golden_file_prefix="golden_pyarrow_arrow_to_pandas_zero_copy",
+            index_name="test case",
+            overrides=overrides,
+        )
+
+    # Output columns for the Arrow-backed conversion.  Both zero_copy_only states are
+    # recorded even though the flag is expected to make no difference here
+    COL_ARROW_ZERO_COPY_OFF = "types_mapper=pd.ArrowDtype, zero_copy_only=False"
+    COL_ARROW_ZERO_COPY_ON = "types_mapper=pd.ArrowDtype, zero_copy_only=True"
+    COL_ARROW_VERIFIED = "verified zero-copy"
+
+    def test_to_pandas_zero_copy_only_arrow_backed(self):
+        """Test pa.Array.to_pandas(types_mapper=pd.ArrowDtype) against golden file."""
+        sources = self._build_source_arrays()
+        row_names = list(sources.keys())
+        col_names = [
+            "pyarrow array",
+            self.COL_ARROW_ZERO_COPY_OFF,
+            self.COL_ARROW_ZERO_COPY_ON,
+            self.COL_ARROW_VERIFIED,
+        ]
+
+        # Version-specific expected values go here, keyed by (row, col), when a
+        # newer pandas/PyArrow/NumPy legitimately changes a cell's output.
+        overrides: dict[tuple[str, str], str] = {}
+
+        def compute_cell(row_name, col_name):
+            arr = sources[row_name]
+            if col_name == "pyarrow array":
+                return self.repr_value(arr, max_len=0)
+            elif col_name == self.COL_ARROW_ZERO_COPY_OFF:
+                return self._to_pandas_cell(arr, types_mapper=pd.ArrowDtype, zero_copy_only=False)
+            elif col_name == self.COL_ARROW_ZERO_COPY_ON:
+                return self._to_pandas_cell(arr, types_mapper=pd.ArrowDtype, zero_copy_only=True)
+            elif col_name == self.COL_ARROW_VERIFIED:
+                return self._verify_zero_copy(arr, types_mapper=pd.ArrowDtype)
+            else:
+                raise ValueError(f"unknown column: {col_name}")
+
+        self.compare_or_generate_golden_matrix(
+            row_names=row_names,
+            col_names=col_names,
+            compute_cell=compute_cell,
+            golden_file_prefix="golden_pyarrow_arrow_to_pandas_zero_copy_arrow_backed",
             index_name="test case",
             overrides=overrides,
         )
