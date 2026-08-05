@@ -31,7 +31,7 @@ import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSeq}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
@@ -144,12 +144,7 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       conf: SQLConf): RDD[ColumnarBatch] = {
     val cacheSchema = DataTypeUtils.fromAttributes(cacheAttributes)
     val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
-    // Use AttributeSeq's cached exprId -> ordinal map so each selected attribute is a
-    // constant-time lookup, instead of rebuilding the exprId list and linear-scanning it
-    // per selected attribute.
-    val cacheAttributeSeq = AttributeSeq(cacheAttributes)
-    val columnIndices =
-      selectedAttributes.map(a => cacheAttributeSeq.indexOf(a.exprId)).toArray
+    val columnIndices = CachedColumnIndices(cacheAttributes, selectedAttributes)
     // Capture config on driver
     val timeZoneId = conf.sessionLocalTimeZone
     val prefetchEnabled = conf.arrowCachePrefetchEnabled
@@ -186,14 +181,6 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     val cacheSchema = DataTypeUtils.fromAttributes(cacheAttributes)
     val selectedSchema = DataTypeUtils.fromAttributes(selectedAttributes)
     val timeZoneId = conf.sessionLocalTimeZone
-
-    // Calculate column indices for projection. Use AttributeSeq's cached exprId -> ordinal
-    // map so each selected attribute is a constant-time lookup, instead of linear-scanning
-    // the cache attributes per selected attribute.
-    val cacheAttributeSeq = AttributeSeq(cacheAttributes)
-    val selectedIndices = selectedAttributes.map { attr =>
-      cacheAttributeSeq.indexOf(attr.exprId)
-    }.toArray
 
     // Check if all selected types can use the fast path.
     // Types not handled by ArrowColumnReader must use the fallback path.
@@ -234,6 +221,9 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
           }
         }
     } else {
+      // Only the fast path consumes the column indices; the fallback branch above delegates to
+      // convertCachedBatchToColumnarBatch, which resolves them itself.
+      val selectedIndices = CachedColumnIndices(cacheAttributes, selectedAttributes)
       val prefetchEnabled = conf.arrowCachePrefetchEnabled
       input.mapPartitionsInternal { batchIterator =>
         new ArrowCachedBatchToInternalRowIterator(
