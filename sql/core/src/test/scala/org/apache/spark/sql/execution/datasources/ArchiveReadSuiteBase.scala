@@ -105,6 +105,19 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   protected def corruptEntryBytes: Array[Byte] =
     s"This is not a valid $format file".getBytes("UTF-8")
 
+  /**
+   * Whether [[writeArchiveFailingAfterFirstEntry]] is supported, gating the mid-advance
+   * corrupt-skip regression test. From the container trait.
+   */
+  protected def supportsMidAdvanceFailure: Boolean
+
+  /**
+   * Writes an archive at `dest` whose first entry (`firstEntry`) reads cleanly but which then fails
+   * while advancing to a later entry. From the container trait.
+   */
+  protected def writeArchiveFailingAfterFirstEntry(
+      dest: File, firstEntry: (String, Array[Byte])): Unit
+
   /** An archive extension whose reader fails on corrupt bytes (used by the corrupt-file tests). */
   protected def corruptArchiveExtension: String
 
