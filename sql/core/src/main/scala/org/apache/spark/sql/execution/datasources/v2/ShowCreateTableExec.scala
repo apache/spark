@@ -25,9 +25,9 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedTable
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, V1Table}
-import org.apache.spark.sql.connector.expressions.BucketTransform
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils, WriteDistributionAndOrdering}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, TableInfo, V1Table}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform}
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
@@ -58,6 +58,7 @@ case class ShowCreateTableExec(
       }.toMap
     showTableOptions(builder, tableOptions)
     showTablePartitioning(table, builder)
+    showTableWriteDistributionAndOrdering(table, builder)
     showTableComment(table, builder)
     showTableCollation(table, builder)
     showTableLocation(table, builder)
@@ -122,6 +123,45 @@ case class ShowCreateTableExec(
         }
         builder ++= s"INTO ${bucket.numBuckets} BUCKETS\n"
       }
+    }
+  }
+
+  /**
+   * Emits the write distribution and ordering the table declares as the default for writes into it,
+   * so that a table created with those clauses can be recreated from this statement.
+   *
+   * The pair a connector may report is wider than the syntax can spell: `hash` on a table with no
+   * partitioning (the parser rejects `DISTRIBUTED BY PARTITION` there), a `range` distribution with
+   * no ordering, an ordering with no distribution, and a mode this Spark version does not know.
+   * Those are left out rather than guessed at, since emitting a clause that means something else --
+   * or one that does not parse at all -- would be worse than emitting none. DESCRIBE TABLE EXTENDED
+   * reports both values verbatim regardless.
+   */
+  private def showTableWriteDistributionAndOrdering(
+      table: Table,
+      builder: StringBuilder): Unit = {
+    val orderBy = if (table.writeOrdering().nonEmpty) {
+      Some(table.writeOrdering()
+        .map(WriteDistributionAndOrdering.describeSortOrder)
+        .mkString("ORDERED BY (", ", ", ")"))
+    } else {
+      None
+    }
+    // Mirrors the parser's own precondition for DISTRIBUTED BY PARTITION: bucketing counts as
+    // partitioning, CLUSTER BY does not.
+    val hasPartitioning = table.partitioning.exists(!_.isInstanceOf[ClusterByTransform])
+    (table.writeDistributionMode(), orderBy) match {
+      case (TableInfo.DISTRIBUTION_MODE_HASH, Some(o)) if hasPartitioning =>
+        builder ++= s"DISTRIBUTED BY PARTITION $o\n"
+      case (TableInfo.DISTRIBUTION_MODE_HASH, None) if hasPartitioning =>
+        builder ++= "DISTRIBUTED BY PARTITION\n"
+      case (TableInfo.DISTRIBUTION_MODE_RANGE, Some(o)) =>
+        builder ++= s"$o\n"
+      case (TableInfo.DISTRIBUTION_MODE_NONE, Some(o)) =>
+        builder ++= s"LOCALLY $o\n"
+      case (TableInfo.DISTRIBUTION_MODE_NONE, None) =>
+        builder ++= "UNORDERED\n"
+      case _ =>
     }
   }
 

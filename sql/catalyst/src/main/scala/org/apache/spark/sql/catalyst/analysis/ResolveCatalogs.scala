@@ -116,11 +116,13 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     // For CREATE TABLE and REPLACE TABLE statements, resolve the table identifier and include
     // the table columns as output. This allows expressions (e.g., constraints) referencing these
     // columns to be resolved correctly.
-    case c @ CreateTable(UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _) =>
+    case c @ CreateTable(
+        UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _, _, _) =>
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
       c.copy(name = resolvedIdentifier)
 
-    case r @ ReplaceTable(UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _) =>
+    case r @ ReplaceTable(
+        UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _, _, _) =>
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
       r.copy(name = resolvedIdentifier)
 

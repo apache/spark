@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUt
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeleteSummaryImpl, DeltaWrite, DeltaWriter, InsertSummaryImpl, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperation, RowLevelOperationTable, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command._
@@ -78,6 +78,8 @@ case class CreateTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     ifNotExists: Boolean,
+    writeDistributionMode: String,
+    writeOrdering: Seq[V2SortOrder],
     transaction: Option[Transaction] = None)
   extends V2CreateTableAsSelectBaseExec with TransactionalExec {
 
@@ -97,6 +99,8 @@ case class CreateTableAsSelectExec(
       .withColumns(getV2Columns(query.schema, catalog.useNullableQuerySchema))
       .withPartitions(partitioning.toArray)
       .withProperties(properties.asJava)
+      .withWriteDistributionMode(writeDistributionMode)
+      .withWriteOrdering(writeOrdering.toArray)
       .build()
     val table = Option(catalog.createTable(ident, tableInfo))
       .getOrElse(loadTableForInsert(catalog, ident, writeOptions))
@@ -122,7 +126,9 @@ case class AtomicCreateTableAsSelectExec(
     query: LogicalPlan,
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
-    ifNotExists: Boolean)
+    ifNotExists: Boolean,
+    writeDistributionMode: String,
+    writeOrdering: Seq[V2SortOrder])
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
@@ -141,6 +147,8 @@ case class AtomicCreateTableAsSelectExec(
       .withColumns(getV2Columns(query.schema, catalog.useNullableQuerySchema))
       .withPartitions(partitioning.toArray)
       .withProperties(properties.asJava)
+      .withWriteDistributionMode(writeDistributionMode)
+      .withWriteOrdering(writeOrdering.toArray)
       .build()
     val stagedTable = Option(catalog.stageCreate(ident, tableInfo)
     ).getOrElse(loadTableForInsert(catalog, ident, writeOptions))
@@ -167,6 +175,8 @@ case class ReplaceTableAsSelectExec(
     writeOptions: Map[String, String],
     orCreate: Boolean,
     invalidateCache: (TableCatalog, Identifier) => Unit,
+    writeDistributionMode: String,
+    writeOrdering: Seq[V2SortOrder],
     transaction: Option[Transaction] = None)
   extends V2CreateTableAsSelectBaseExec with TransactionalExec {
 
@@ -204,6 +214,8 @@ case class ReplaceTableAsSelectExec(
       .withColumns(getV2Columns(refreshedQuery.schema, catalog.useNullableQuerySchema))
       .withPartitions(partitioning.toArray)
       .withProperties(properties.asJava)
+      .withWriteDistributionMode(writeDistributionMode)
+      .withWriteOrdering(writeOrdering.toArray)
       .build()
     val table = Option(catalog.createTable(ident, tableInfo))
       .getOrElse(loadTableForInsert(catalog, ident, writeOptions))
@@ -235,7 +247,9 @@ case class AtomicReplaceTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Identifier) => Unit)
+    invalidateCache: (TableCatalog, Identifier) => Unit,
+    writeDistributionMode: String,
+    writeOrdering: Seq[V2SortOrder])
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
@@ -253,6 +267,8 @@ case class AtomicReplaceTableAsSelectExec(
         .withColumns(columns)
         .withPartitions(partitioning.toArray)
         .withProperties(properties.asJava)
+        .withWriteDistributionMode(writeDistributionMode)
+        .withWriteOrdering(writeOrdering.toArray)
         .build()
       catalog.stageCreateOrReplace(ident, tableInfo)
     } else if (catalog.tableExists(ident)) {
@@ -261,6 +277,8 @@ case class AtomicReplaceTableAsSelectExec(
           .withColumns(columns)
           .withPartitions(partitioning.toArray)
           .withProperties(properties.asJava)
+          .withWriteDistributionMode(writeDistributionMode)
+          .withWriteOrdering(writeOrdering.toArray)
           .build()
         catalog.stageReplace(ident, tableInfo)
       } catch {
