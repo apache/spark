@@ -303,6 +303,13 @@ def _with_origin(func: FuncT) -> FuncT:
     """
     A decorator to capture and provide the call site information to the server side
     when PySpark API functions are invoked.
+
+    Notes
+    -----
+    A PySpark API can invoke other decorated APIs internally, for example
+    :meth:`Column.__and__` calls :func:`lit`. Only the outermost call is captured because
+    that is the one closest to the user code, mirroring the JVM side `withOrigin`. Nested
+    calls are skipped entirely, so they neither overwrite nor clear the captured origin.
     """
 
     @functools.wraps(func)
@@ -311,6 +318,10 @@ def _with_origin(func: FuncT) -> FuncT:
         from pyspark.sql.utils import is_remote
 
         if hasattr(func, "__name__") and is_debugging_enabled():
+            if current_origin().fragment is not None:
+                # Already within a decorated API; keep the outermost origin.
+                return func(*args, **kwargs)
+
             if is_remote():
                 # Getting the configuration requires RPC call. Uses the default value for now.
                 depth = 1
@@ -333,13 +344,17 @@ def _with_origin(func: FuncT) -> FuncT:
                         "spark.sql.stackTracesInDataFrameContext"
                     )
                 )
-                # Update call site when the function is called
-                jvm_pyspark_origin.set(func.__name__, _capture_call_site(depth))
+                call_site = _capture_call_site(depth)
+                # Update call site when the function is called. The call site is also kept
+                # on the Python side so that nested calls can detect the outermost one.
+                set_current_origin(func.__name__, call_site)
+                jvm_pyspark_origin.set(func.__name__, call_site)
 
                 try:
                     return func(*args, **kwargs)
                 finally:
                     jvm_pyspark_origin.clear()
+                    set_current_origin(None, None)
         else:
             return func(*args, **kwargs)
 

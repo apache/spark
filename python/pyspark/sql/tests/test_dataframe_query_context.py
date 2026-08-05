@@ -507,6 +507,32 @@ class DataFrameQueryContextTestsMixin:
             fragment="col",
         )
 
+    def test_with_origin_is_reentrant(self):
+        # A PySpark API can invoke another decorated API internally, for example
+        # `Column.__and__` calls `lit`. The nested call must neither overwrite nor clear the
+        # outer origin, so that the outermost call site, the one closest to the user code,
+        # is the one reported. This mirrors the JVM side `withOrigin`.
+        from pyspark.errors.utils import _with_origin, current_origin
+
+        observed = []
+
+        @_with_origin
+        def inner():
+            observed.append(current_origin().fragment)
+
+        @_with_origin
+        def outer():
+            inner()
+            # Still set after the nested call returns, so the expression built here
+            # is still attributed to `outer`.
+            observed.append(current_origin().fragment)
+
+        outer()
+        self.assertEqual(observed, ["outer", "outer"])
+        # Fully cleared once the outermost call completes.
+        self.assertIsNone(current_origin().fragment)
+        self.assertIsNone(current_origin().call_site)
+
 
 class DataFrameQueryContextTests(DataFrameQueryContextTestsMixin, ReusedSQLTestCase):
     pass
