@@ -721,12 +721,17 @@ private[spark] class DAGScheduler(
     // before addActiveJob (its sole populator) runs, so a pipelined stage's mapStageJobs is always
     // empty; and checkAndScheduleShuffleMergeFinalize's getStatistics is on the push-based-merge
     // path, which a pipelined dependency rejects up front (checkPipelinedProducerSupported).
-    if (!outputTracker.containsShuffle(shuffleDep.shuffleId)) {
-      logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)} " +
-        log"(${MDC(CREATION_SITE, rdd.getCreationSite)}) as input to " +
-        log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
-      outputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
-        shuffleDep.partitioner.numPartitions, jobId)
+    // `outputTracker` is None only for a pipelined shuffle whose in-process manager needs no
+    // tracker; such a shuffle registers with no output tracker (its availability lives on the
+    // stage). Otherwise register as before.
+    outputTracker.foreach { tracker =>
+      if (!tracker.containsShuffle(shuffleDep.shuffleId)) {
+        logInfo(log"Registering RDD ${MDC(RDD_ID, rdd.id)} " +
+          log"(${MDC(CREATION_SITE, rdd.getCreationSite)}) as input to " +
+          log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
+        tracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
+          shuffleDep.partitioner.numPartitions, jobId)
+      }
     }
     stage
   }
@@ -741,15 +746,27 @@ private[spark] class DAGScheduler(
    * enforces the same invariant, see StreamingShuffleReader).
    */
   private def outputTrackerMaster(
-      shuffleDep: ShuffleDependency[_, _, _]): ShuffleOutputTrackerMaster = {
+      shuffleDep: ShuffleDependency[_, _, _]): Option[ShuffleOutputTrackerMaster] = {
     if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
-      sc.env.streamingShuffleOutputTracker
-        .getOrElse(throw new IllegalStateException(
-          s"A pipelined shuffle (id ${shuffleDep.shuffleId}) requires a " +
-            "StreamingShuffleOutputTracker, but none is configured"))
-        .asInstanceOf[StreamingShuffleOutputTrackerMaster]
+      // A pipelined shuffle uses the StreamingShuffleOutputTracker only when its manager
+      // discovers writers over RPC. An in-process transport declares it needs no tracker
+      // (SparkEnv then creates none); such a shuffle registers with no output tracker at all,
+      // and its map-stage availability is tracked locally on the ShuffleMapStage. When a
+      // tracker IS expected (the RPC streaming manager) but absent, that is a real
+      // misconfiguration, so keep failing loudly.
+      sc.env.streamingShuffleOutputTracker match {
+        case some @ Some(_) => some.map(_.asInstanceOf[StreamingShuffleOutputTrackerMaster])
+        case None =>
+          val usesTracker = SparkEnv.get.pipelinedShuffleManager.usesStreamingShuffleOutputTracker
+          if (usesTracker) {
+            throw new IllegalStateException(
+              s"A pipelined shuffle (id ${shuffleDep.shuffleId}) requires a " +
+                "StreamingShuffleOutputTracker, but none is configured")
+          }
+          None
+      }
     } else {
-      mapOutputTracker
+      Some(mapOutputTracker)
     }
   }
 

@@ -20,8 +20,7 @@ package org.apache.spark.shuffle.local.pipelined
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.{ShuffleDependency, SparkConf, TaskContext}
-import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleHandle, ShuffleReader, ShuffleReadMetricsReporter, ShuffleWriteMetricsReporter, ShuffleWriter}
-import org.apache.spark.shuffle.streaming.StreamingShuffleManager
+import org.apache.spark.shuffle.{BaseShuffleHandle, PipelinedShuffleManager, ShuffleHandle, ShuffleReader, ShuffleReadMetricsReporter, ShuffleWriteMetricsReporter, ShuffleWriter}
 
 /**
  * A pipelined shuffle manager whose writer -> reader transport is an in-process bounded
@@ -32,23 +31,24 @@ import org.apache.spark.shuffle.streaming.StreamingShuffleManager
  *
  * Selected via `spark.shuffle.manager.incremental`.
  *
- * Why it subclasses [[StreamingShuffleManager]] rather than implementing the bare
- * `PipelinedShuffleManager` trait: a `PipelinedShuffleDependency` requires a
- * `StreamingShuffleOutputTrackerMaster`, which `SparkEnv` only creates when the pipelined
- * manager is an instance of `StreamingShuffleManager` (the `DAGScheduler` pipelined path
- * and the reader both assert on that tracker). Subclassing satisfies that check and
- * inherits the tracker wiring; only the transport (`getWriter` / `getReader`) is
- * overridden. Decoupling tracker creation from the concrete streaming class -- so an
- * alternative transport could implement the trait cleanly -- is a separate upstream change
- * tracked in the feasibility notes.
+ * Unlike the RPC streaming manager, this one needs no `StreamingShuffleOutputTracker`: it
+ * finds each reader/writer pair through the JVM-local [[ChannelShuffleRendezvous]] rather
+ * than a directory of writer host/port locations. It therefore declares
+ * `usesStreamingShuffleOutputTracker = false`, so `SparkEnv` creates no tracker and the
+ * scheduler registers the shuffle with none (a pipelined stage's availability is tracked on
+ * the stage itself, not in any output tracker). This is why it implements the
+ * `PipelinedShuffleManager` trait directly instead of subclassing the concrete streaming
+ * manager.
  */
 private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
-  extends StreamingShuffleManager {
+  extends PipelinedShuffleManager {
 
   // Number of map tasks per shuffle, so a reader knows how many end-of-stream markers to
   // expect before it can finish. Populated at registration on the driver and read on the
-  // executor via the handle; since this is single-executor, the same instance serves both.
+  // executor; single-executor, so the same instance serves both.
   private val numMapsByShuffle = new ConcurrentHashMap[Int, Int]()
+
+  override def usesStreamingShuffleOutputTracker: Boolean = false
 
   override def registerShuffle[K, V, C](
       shuffleId: Int,
@@ -80,6 +80,8 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     numMapsByShuffle.remove(shuffleId)
     ChannelShuffleRendezvous.removeShuffle(shuffleId)
-    super.unregisterShuffle(shuffleId)
+    true
   }
+
+  override def stop(): Unit = {}
 }

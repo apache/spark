@@ -129,7 +129,17 @@ private[spark] trait BlockingShuffleManager extends ShuffleManager {
  * has no [[ShuffleBlockResolver]]. [[org.apache.spark.shuffle.streaming.StreamingShuffleManager]]
  * is the built-in implementation.
  */
-private[spark] trait PipelinedShuffleManager extends ShuffleManager
+private[spark] trait PipelinedShuffleManager extends ShuffleManager {
+  /**
+   * Whether this manager relies on a `StreamingShuffleOutputTracker` to discover writer task
+   * locations. The RPC streaming transport needs it (writers publish their host/port; readers
+   * look them up to open connections). An in-process transport that finds writer and reader
+   * within the same JVM does not, and returns false so `SparkEnv` skips creating the tracker
+   * and the scheduler skips registering the shuffle with it. Defaults to true so the built-in
+   * streaming manager is unaffected.
+   */
+  def usesStreamingShuffleOutputTracker: Boolean = true
+}
 
 /**
  * Utility companion object to create a ShuffleManager given a spark configuration.
