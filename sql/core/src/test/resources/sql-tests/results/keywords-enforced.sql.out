@@ -124,6 +124,7 @@ DIRECTORY	false
 DISTANCE	false
 DISTINCT	true
 DISTRIBUTE	false
+DISTRIBUTED	false
 DIV	false
 DO	false
 DOUBLE	false
@@ -231,6 +232,7 @@ LINES	false
 LIST	false
 LOAD	false
 LOCAL	false
+LOCALLY	false
 LOCALTIME	true
 LOCATION	false
 LOCK	false
@@ -282,6 +284,7 @@ OPTION	false
 OPTIONS	false
 OR	true
 ORDER	true
+ORDERED	false
 ORDINALITY	false
 OUT	false
 OUTER	true
@@ -420,6 +423,7 @@ UNIQUE	true
 UNKNOWN	true
 UNLOCK	false
 UNNEST	false
+UNORDERED	false
 UNPIVOT	false
 UNSET	false
 UNTIL	false

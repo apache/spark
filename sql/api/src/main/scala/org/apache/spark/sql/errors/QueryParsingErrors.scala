@@ -1085,4 +1085,10 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       messageParameters = Map("cursorName" -> toSQLId(cursorName)),
       ctx = null)
   }
+
+  def distributedByPartitionWithoutPartitioning(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "SPECIFY_DISTRIBUTED_BY_PARTITION_WITHOUT_PARTITIONING_IS_NOT_ALLOWED",
+      ctx)
+  }
 }
