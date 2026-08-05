@@ -23,7 +23,9 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => F, AnalysisException, Column}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
   CaseSensitivityLabels,
@@ -33,6 +35,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
   Scd2BatchProcessor,
   ScdType
 }
+import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
@@ -252,6 +255,12 @@ class AutoCdcMergeFlow(
     val flow: AutoCdcFlow,
     val funcResult: FlowFunctionResult
 ) extends ResolvedFlow {
+  private[graph] val effectiveResolver: Resolver = SchemaInferenceUtils.resolverFor(
+    sqlConf
+      .get(SQLConf.CASE_SENSITIVE.key)
+      .map(_.trim.toBoolean)
+      .getOrElse(spark.sessionState.conf.caseSensitiveAnalysis))
+
   requireReservedPrefixAbsentInSourceColumns()
   requireReservedFrameworkColumnsAbsentInSourceColumns()
 
@@ -263,7 +272,7 @@ class AutoCdcMergeFlow(
       schemaName = "changeDataFeed",
       schema = df.schema,
       columnSelection = changeArgs.columnSelection,
-      resolver = spark.sessionState.conf.resolver
+      resolver = effectiveResolver
     )
     // AutoCDC flows require all key columns to be present in the user-selected source schema,
     // so that they survive into the target table where SCD reconciliation needs them.
@@ -303,7 +312,7 @@ class AutoCdcMergeFlow(
         Some(Scd2BatchProcessor.computeTrackedHistoryColumns(
           schema = userSelectedSchema,
           changeArgs = changeArgs,
-          resolver = spark.sessionState.conf.resolver))
+          resolver = effectiveResolver))
       case ScdType.Type1 => None
     }
 
@@ -405,7 +414,7 @@ class AutoCdcMergeFlow(
    * names that use the reserved Spark AutoCDC prefix.
    */
   private def requireReservedPrefixAbsentInSourceColumns(): Unit = {
-    val resolver = spark.sessionState.conf.resolver
+    val resolver = effectiveResolver
     val reservedPrefix = AutoCdcReservedNames.prefix
 
     def nameContainsReservedPrefix(name: String): Boolean = {
@@ -437,7 +446,7 @@ class AutoCdcMergeFlow(
    * during preprocessing. No-op for SCD1, which has no such columns.
    */
   private def requireReservedFrameworkColumnsAbsentInSourceColumns(): Unit = {
-    val resolver = spark.sessionState.conf.resolver
+    val resolver = effectiveResolver
     val reservedPrefix = AutoCdcReservedNames.prefix
 
     // Only the non-prefixed reserved names need checking here; prefixed ones are already rejected
@@ -469,7 +478,7 @@ class AutoCdcMergeFlow(
    * Validate all keys specified in changeArgs are actually present in the user-selected schema.
    */
   private def requireKeysPresentInSelectedSchema(selectedSchema: StructType): Unit = {
-    val resolver = spark.sessionState.conf.resolver
+    val resolver = effectiveResolver
 
     changeArgs.keys
       .find(key => !selectedSchema.fieldNames.exists(name => resolver(name, key.name)))

@@ -20,6 +20,11 @@ package org.apache.spark.sql.pipelines.util
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{
+  caseInsensitiveResolution,
+  caseSensitiveResolution,
+  Resolver
+}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.DatasetType
@@ -33,6 +38,14 @@ import org.apache.spark.sql.types.{StructField, StructType}
 
 
 object SchemaInferenceUtils {
+
+  def resolverFor(caseSensitive: Boolean): Resolver = {
+    if (caseSensitive) {
+      caseSensitiveResolution
+    } else {
+      caseInsensitiveResolution
+    }
+  }
 
   /**
    * The effective `spark.sql.caseSensitive` for schema derivation on `tableIdentifier`, taken from

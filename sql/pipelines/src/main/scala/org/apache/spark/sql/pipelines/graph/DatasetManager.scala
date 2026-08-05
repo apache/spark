@@ -24,7 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, PersistedView}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, PersistedView, Resolver}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
@@ -361,6 +361,9 @@ object DatasetManager extends Logging {
     val autoCdcAuxTableSpecOpt = auxiliaryTableSpecOpt.collect {
         case autoCdcSpec: AutoCdcAuxiliaryTableSpec => autoCdcSpec
       }
+    val effectiveCaseSensitive = effectiveCaseSensitivityFor(
+      resolvedDataflowGraph, table.identifier, context)
+    val effectiveResolver = SchemaInferenceUtils.resolverFor(effectiveCaseSensitive)
 
     // For an incrementally-updated AutoCDC target, validate that the AutoCDC configuration recorded
     // on the auxiliary table has not drifted, BEFORE anything is created or evolved this run. These
@@ -372,7 +375,7 @@ object DatasetManager extends Logging {
     // Running here turns that into one clear drift error (remedy: full refresh).
     if (isTableIncrementallyUpdated) {
       autoCdcAuxTableSpecOpt.foreach {
-        validateNoAutoCdcAuxConfigDrift(_, existingAuxiliaryTable, context)
+        validateNoAutoCdcAuxConfigDrift(_, existingAuxiliaryTable, effectiveResolver)
       }
     }
 
@@ -394,7 +397,7 @@ object DatasetManager extends Logging {
               targetTableIdentifier = autoCdcSpec.targetTableIdentifier,
               expectedScdType = autoCdcSpec.expectedScdType,
               expectedSequencingType = autoCdcSpec.expectedSequencingType,
-              resolver = context.spark.sessionState.conf.resolver
+              resolver = effectiveResolver
             )
           }
         }
@@ -405,8 +408,7 @@ object DatasetManager extends Logging {
           desiredSchema = outputSchema,
           properties = mergedProperties,
           mergeWithExistingSchema = isTableIncrementallyUpdated,
-          caseSensitive = effectiveCaseSensitivityFor(
-            resolvedDataflowGraph, table.identifier, context)
+          caseSensitive = effectiveCaseSensitive
         )
       case None =>
         createTable(
@@ -554,13 +556,12 @@ object DatasetManager extends Logging {
    * @param existingAuxiliaryTableOpt the already-loaded auxiliary table (if it exists), shared with
    *                                  the caller and [[materializeAuxiliaryTable]] to avoid a
    *                                  redundant load.
-   * @param context the context for the pipeline update.
+   * @param resolver the effective resolver of the flows writing to the AutoCDC target.
    */
   private def validateNoAutoCdcAuxConfigDrift(
       autoCdcSpec: AutoCdcAuxiliaryTableSpec,
       existingAuxiliaryTableOpt: Option[V2Table],
-      context: PipelineUpdateContext): Unit = {
-    val resolver = context.spark.sessionState.conf.resolver
+      resolver: Resolver): Unit = {
     existingAuxiliaryTableOpt.foreach { existingAuxiliaryTable =>
       AutoCdcAuxiliaryTable.validateNoKeyColumnDrift(
         existingAuxiliaryTable = existingAuxiliaryTable,
@@ -657,9 +658,9 @@ object DatasetManager extends Logging {
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
    * @param caseSensitive           whether the additive schema merge treats field names differing
-   *                                only in case as distinct columns. Threaded from the session's
-   *                                `spark.sql.caseSensitive` so the merge matches how the rest of
-   *                                the engine resolves the same names; when `false`, an incoming
+   *                                only in case as distinct columns. Threaded from the flows'
+   *                                effective `spark.sql.caseSensitive` so the merge matches how
+   *                                the flows resolve the same names; when `false`, an incoming
    *                                column differing from an existing one only in case is folded
    *                                onto it rather than added as a duplicate. Only affects the merge
    *                                (i.e. `mergeWithExistingSchema = true`); the subsequent diff

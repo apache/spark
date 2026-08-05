@@ -592,12 +592,12 @@ class AutoCdcScd1SchemaEvolutionSuite
     import session.implicits._
 
     // Under case-insensitive resolution (Spark's default), a target `value` and a source `Value`
-    // are the same column. Schema evolution honors that: `SchemaMergingUtils.mergeSchemas` and
-    // `diffSchemas` are threaded with the session's case-sensitivity (SPARK-58517), so the merge
-    // is a no-op that maps `Value` onto the existing `value` -- no second column is added, and the
-    // write succeeds. (Before SPARK-58517 the merge ran case-sensitively regardless of the session
-    // and added a duplicate `Value` column, after which the case-insensitive MERGE plan tripped on
-    // the ambiguous reference.)
+    // are the same column. Schema evolution honors that by threading case-sensitivity into
+    // `SchemaMergingUtils.mergeSchemas`: the merge maps `Value` onto the existing `value`, so
+    // `diffSchemas` has no case-only difference left to process. No second column is added, and
+    // the write succeeds. (Before SPARK-58517 the merge ran case-sensitively regardless of the
+    // session and added a duplicate `Value` column, after which the case-insensitive MERGE plan
+    // tripped on the ambiguous reference.)
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       spark.sql(
         s"CREATE TABLE $catalog.$namespace.target " +
