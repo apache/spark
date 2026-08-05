@@ -37,10 +37,10 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
  *     2. UNBOUNDED PRECEDING AND CURRENT ROW
  *     3. UNBOUNDED PRECEDING AND 1 FOLLOWING Every time we move to a new row to process, we add
  *        some rows to the frame. We do not remove rows from this frame.
- *   - Shrinking frame: We only remove rows from the frame, Examples are:
+ *   - Shrinking frame: We only remove rows from the frame. Examples are:
  *     1. 1 PRECEDING AND UNBOUNDED FOLLOWING
  *     2. CURRENT ROW AND UNBOUNDED FOLLOWING
- *     3. 1 FOLLOWING AND UNBOUNDED FOLLOWING Every time we move to a new row to process, we
+ *     3. 1 FOLLOWING AND UNBOUNDED FOLLOWING. Every time we move to a new row to process, we
  *        remove some rows from the frame. We do not add rows to this frame.
  *   - Moving frame: Every time we move to a new row to process, we remove some rows from the
  *     frame and we add some rows to the frame. Examples are:
@@ -49,9 +49,9 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
  *     3. CURRENT ROW AND 1 FOLLOWING
  *     4. 1 PRECEDING AND 1 FOLLOWING
  *     5. 1 FOLLOWING AND 2 FOLLOWING
- *   - Offset frame: The frame consist of one row, which is an offset number of rows away from the
+ *   - Offset frame: The frame consists of one row, which is an offset number of rows away from the
  *     current row. Only [[OffsetWindowFunction]]s can be processed in an offset frame. There are
- *     three implements of offset frame: [[FrameLessOffsetWindowFunctionFrame]],
+ *     three implementations of offset frame: [[FrameLessOffsetWindowFunctionFrame]],
  *     [[UnboundedOffsetWindowFunctionFrame]] and [[UnboundedPrecedingOffsetWindowFunctionFrame]].
  *
  * Different frame boundaries can be used in Growing, Shrinking and Moving frames. A frame
