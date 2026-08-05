@@ -857,20 +857,27 @@ case class HashAggregateExec(
     // would spill (in which case the spill is skipped entirely). `minRows = 0` disables the
     // periodic check: the row count is only ever compared after being incremented past 0, so it
     // never matches and only the spill check remains.
-    val adaptiveTotalKeys = if (isFastHashMapEnabled) {
-      s"($fastHashMapTerm.getNumKeys() + $hashMapTerm.getNumKeys())"
+    val adaptiveIneffective = if (adaptivePartialAggEnabled) {
+      val totalKeys = if (isFastHashMapEnabled) {
+        s"($fastHashMapTerm.getNumKeys() + $hashMapTerm.getNumKeys())"
+      } else {
+        s"$hashMapTerm.getNumKeys()"
+      }
+      s"$processedRowsTerm < (double) $totalKeys * ${adaptiveMinCompaction}D"
     } else {
-      s"$hashMapTerm.getNumKeys()"
+      ""
     }
-    val adaptiveIneffective =
-      s"$processedRowsTerm < (double) $adaptiveTotalKeys * ${adaptiveMinCompaction}D"
+
     // After a spill the map starts a new in-memory epoch, so the counters restart and the ratio of
     // that epoch alone decides whether the remaining rows are passed through.
-    val adaptiveResetEpoch =
+    val adaptiveResetEpoch = if (adaptivePartialAggEnabled) {
       s"""
-         |$processedRowsTerm = 0;
+         |$processedRowsTerm = 0L;
          |$adaptiveNextCheckRowTerm = ${adaptiveMinRows}L;
        """.stripMargin
+    } else {
+      ""
+    }
 
     val findOrInsertRegularHashMap: String = {
       // Assumes the grouping key projection (`unsafeRowKeyCode.code`) has already run for this row,
@@ -970,26 +977,40 @@ case class HashAggregateExec(
         findOrInsertRegularHashMap
       }
 
-      // True when an aggregation map accepted this row, from either map. The fast map serves a row
-      // without it ever reaching the regular map, so both buffers have to be consulted to tell an
-      // aggregated row from one that must be streamed through.
-      val heldByAMap = if (isFastHashMapEnabled) {
-        s"($fastRowBuffer != null || $unsafeRowBuffer != null)"
-      } else {
-        s"($unsafeRowBuffer != null)"
-      }
-
-      // When pass-through is active, a row that no map holds must be streamed through.
-      // `rowBypassed` marks exactly those rows: both probes are skipped (guarded above), so
-      // neither buffer is set. A row a map did accept is excluded -- including the row that
-      // flipped pass-through at the periodic check, which is already aggregated in the map that
+      // Every row is either accepted by an aggregation map or streamed through -- the fast map
+      // serves a row without it ever reaching the regular map, so both buffers are consulted to
+      // tell the two apart.
+      //
+      // An accepted row counts toward the compaction ratio, so the numerator matches the
+      // operator-level denominator. Counting inside the regular-map branch alone would drop the
+      // rows the fast map absorbed from the ratio and bypass an aggregation that is in fact
+      // reducing. A row no map holds is streamed once pass-through is active: both probes are
+      // skipped (guarded above), so neither buffer is set, and `rowBypassed` marks exactly those
+      // rows. The row that fails to insert at the spill boundary lands here too, while the row
+      // that merely flipped pass-through at the check point is already aggregated in the map that
       // took it and must not be re-emitted.
-      val createPassThroughBuffer = if (adaptivePartialAggEnabled) {
+      val countOrPassThroughRow = if (adaptivePartialAggEnabled) {
+        val heldByAMap = if (isFastHashMapEnabled) {
+          s"($fastRowBuffer != null || $unsafeRowBuffer != null)"
+        } else {
+          s"($unsafeRowBuffer != null)"
+        }
         // The grouping key was already projected in `findOrInsertRegularHashMap`
         // (`unsafeRowKeyCode.code`), so `unsafeRowKeyCode.value` holds this row's key. Only build
         // the single-row partial buffer here.
         s"""
-           |if ($adaptivePassThroughTerm && !$heldByAMap) {
+           |if ($heldByAMap) {
+           |  if (!$adaptivePassThroughTerm) {
+           |    $processedRowsTerm += 1;
+           |    if ($processedRowsTerm == $adaptiveNextCheckRowTerm) {
+           |      if ($adaptiveIneffective) {
+           |        $adaptivePassThroughTerm = true;
+           |      } else {
+           |        $adaptiveNextCheckRowTerm += ${adaptiveMinRows}L;
+           |      }
+           |    }
+           |  }
+           |} else if ($adaptivePassThroughTerm) {
            |  $adaptiveRowBypassedTerm = true;
            |  ${emptyAggBufferCode.code}
            |  $unsafeRowBuffer = ${emptyAggBufferCode.value};
@@ -999,32 +1020,9 @@ case class HashAggregateExec(
         ""
       }
 
-      // Count every row an aggregation map accepted so the numerator matches the operator-level
-      // denominator. Counting inside the regular-map branch alone would drop the rows the fast map
-      // absorbed from the ratio and bypass an aggregation that is in fact reducing. The row that
-      // fails to insert at the spill boundary sets pass-through and holds no buffer, so it is
-      // excluded here and streamed instead.
-      val adaptivePeriodicCheck = if (adaptivePartialAggEnabled) {
-        s"""
-           |if (!$adaptivePassThroughTerm && $heldByAMap) {
-           |  $processedRowsTerm += 1;
-           |  if ($processedRowsTerm == $adaptiveNextCheckRowTerm) {
-           |    if ($adaptiveIneffective) {
-           |      $adaptivePassThroughTerm = true;
-           |    } else {
-           |      $adaptiveNextCheckRowTerm += ${adaptiveMinRows}L;
-           |    }
-           |  }
-           |}
-         """.stripMargin
-      } else {
-        ""
-      }
-
       s"""
          |$findCode
-         |$adaptivePeriodicCheck
-         |$createPassThroughBuffer
+         |$countOrPassThroughRow
        """.stripMargin
     }
 
