@@ -32,8 +32,8 @@ The shared ``_PyArrowToPandasTestBase`` holds the golden-file matrix driver and
 the per-cell conversion helper.  Each concrete test class supplies its own source
 arrays (the rows relevant to the argument under test) and one test method per
 argument combination (each producing its own golden file).  New ``to_pandas``
-arguments (e.g. ``zero_copy_only``) can be added as additional classes without
-touching the existing ones.
+arguments (e.g. ``zero_copy_only``, ``integer_object_nulls``) can be added as
+additional classes without touching the existing ones.
 
 ## Golden File Cell Format
 
@@ -488,6 +488,178 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
             col_names=col_names,
             compute_cell=compute_cell,
             golden_file_prefix="golden_pyarrow_arrow_to_pandas_zero_copy",
+            index_name="test case",
+            overrides=overrides,
+        )
+
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas or not have_numpy,
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
+)
+class PyArrowArrayToPandasIntegerObjectNullsTests(_PyArrowToPandasTestBase):
+    """
+    Tests pa.Array.to_pandas(integer_object_nulls=True) via golden file comparison.
+
+    numpy integers have no null, so by default PyArrow widens a null-bearing integer
+    array to ``float64`` with ``NaN`` -- which cannot hold every int64 exactly, so a
+    large value silently changes.  ``integer_object_nulls=True`` keeps ``object``
+    dtype (Python ``int`` and ``None``) instead, preserving the values.
+
+    PySpark passes it in ``ArrowArrayToPandasConversion.convert_legacy``
+    (``python/pyspark/sql/conversion.py``), bundled with ``date_as_object`` and
+    ``coerce_temporal_nanoseconds``, then narrows the object Series to a nullable
+    extension dtype (``Int8Dtype`` .. ``Int64Dtype``) -- the only bridge from Arrow to
+    those dtypes that avoids ``float64``.
+
+    Three output columns are recorded per source array: the argument off, on, and the
+    full ``pandas_options`` dict ``convert_legacy`` passes.  The last is not a
+    duplicate of the second -- ``coerce_temporal_nanoseconds`` shifts the temporal
+    rows to ``ns`` -- and pinning the call as Spark makes it also catches PyArrow
+    changing the ``date_as_object=True`` default it relies on.
+
+    The row set mirrors ``test_pyarrow_arrow_to_pandas_default.py``'s rows so both
+    golden files pin the same types, and appends the integer variants those rows do
+    not reach (see ``_build_source_arrays``).
+    """
+
+    def _build_source_arrays(self):
+        """
+        Reuse every row of the sibling default test, then add the integer variants
+        that only matter for this argument: the shared rows' nullable values are
+        small enough to survive ``float64``, and their nested rows are missing whole
+        sub-lists rather than a single integer inside one.
+        """
+        default_tests = test_pyarrow_arrow_to_pandas_default.PyArrowArrayToPandasDefaultTests
+        sources = default_tests._build_source_arrays(self)
+
+        # Each width's min and max alongside a null.  The shared rows use small values,
+        # which float64 represents exactly; only at 64 bits does the range exceed its
+        # 53-bit mantissa and the value itself change.
+        for pa_type in [
+            pa.int8(),
+            pa.int16(),
+            pa.int32(),
+            pa.int64(),
+            pa.uint8(),
+            pa.uint16(),
+            pa.uint32(),
+            pa.uint64(),
+        ]:
+            if pa.types.is_signed_integer(pa_type):
+                bounds = [2 ** (pa_type.bit_width - 1) - 1, -(2 ** (pa_type.bit_width - 1))]
+            else:
+                bounds = [2**pa_type.bit_width - 1, 0]
+            sources[f"{pa_type}:extremes-nullable"] = pa.array(bounds + [None], pa_type)
+
+        # Every value is null, so there is no integer left to convert.
+        sources["int64:all-null"] = pa.array([None, None], pa.int64())
+        # Values split across buffers, with the null in one chunk and not the other.
+        # Reachable in production: cogrouped applyInPandas is the one UDF path that does
+        # not call combine_chunks() first.
+        sources["int64:multi-chunk-nullable"] = pa.chunked_array(
+            [pa.array([1, None], pa.int64()), pa.array([2], pa.int64())]
+        )
+
+        # Nested types whose null is an integer ELEMENT, not a missing sub-list: the
+        # shared rows only cover the latter, which this argument does not affect.
+        # These are also the types convert_legacy still serves.
+        sources["list<int64>:null-element"] = pa.array([[1, None], [2, 3]], pa.list_(pa.int64()))
+        sources["list<int64>:null-element-extreme"] = pa.array(
+            [[2**63 - 1, None]], pa.list_(pa.int64())
+        )
+        sources["large_list<int64>:null-element"] = pa.array([[1, None]], pa.large_list(pa.int64()))
+        sources["fixed_size_list<int64>[3]:null-element"] = pa.array(
+            [[1, None, 3]], pa.list_(pa.int64(), 3)
+        )
+        sources["list<list<int64>>:null-element"] = pa.array(
+            [[[1, None], [2]]], pa.list_(pa.list_(pa.int64()))
+        )
+        sources["struct:null-int-field"] = pa.array(
+            [{"x": 1, "y": "a"}, {"x": None, "y": "b"}],
+            pa.struct([("x", pa.int64()), ("y", pa.string())]),
+        )
+        sources["map<string,int64>:null-value"] = pa.array(
+            [[("a", 1), ("b", None)]], pa.map_(pa.string(), pa.int64())
+        )
+        # Control: dictionary encoding stores the distinct values once plus an index per
+        # row, so the null lives in the indices and the int64 values hold none.  With no
+        # null to represent there, the argument has nothing to decide -- both columns
+        # stay category, whose own values also remain int64.
+        sources["dictionary<int64>:nullable"] = pa.array(
+            [1, None, 1], pa.int64()
+        ).dictionary_encode()
+
+        return sources
+
+    # Output column for the default: a null-bearing integer array widens to float64.
+    COL_INTEGER_OBJECT_NULLS_OFF = "integer_object_nulls=False"
+    # Output column for the argument on: the result stays object dtype.
+    COL_INTEGER_OBJECT_NULLS_ON = "integer_object_nulls=True"
+    # Output column for all three arguments as convert_legacy passes them together.
+    COL_SPARK_PANDAS_OPTIONS = "spark pandas_options"
+
+    # Kept as one dict so the column cannot drift from the call site it mirrors.
+    SPARK_PANDAS_OPTIONS = {
+        "date_as_object": True,
+        "coerce_temporal_nanoseconds": True,
+        "integer_object_nulls": True,
+    }
+
+    def test_to_pandas_integer_object_nulls(self):
+        """Test pa.Array.to_pandas(integer_object_nulls=True/False) against golden file."""
+        sources = self._build_source_arrays()
+        row_names = list(sources.keys())
+        col_names = [
+            "pyarrow array",
+            self.COL_INTEGER_OBJECT_NULLS_OFF,
+            self.COL_INTEGER_OBJECT_NULLS_ON,
+            self.COL_SPARK_PANDAS_OPTIONS,
+        ]
+
+        # Version-specific expected values go here, keyed by (row, col), when a newer
+        # pandas/PyArrow/NumPy legitimately changes a cell's output.  This argument does
+        # not touch strings, so a string row shifts in every output column at once.
+        overrides: dict[tuple[str, str], str] = {}
+
+        def override_outputs(row: str, expected: str) -> None:
+            for col in col_names[1:]:  # every column but the "pyarrow array" input
+                overrides[(row, col)] = expected
+
+        pandas_3_or_later = LooseVersion(pd.__version__) >= LooseVersion("3.0.0")
+        pyarrow_24_or_later = LooseVersion(pa.__version__) >= LooseVersion("24.0.0")
+
+        # Pandas 3 renders Arrow string arrays with its dedicated string dtype.
+        if pandas_3_or_later:
+            override_outputs("string:standard", "['hello', 'world', '']@Series[str]")
+            override_outputs("string:nullable", "['hello', nan, 'world']@Series[str]")
+            override_outputs("large_string:standard", "['hello', 'world']@Series[str]")
+            override_outputs("large_string:nullable", "['hello', nan]@Series[str]")
+
+        # Empty ones stay object until PyArrow 24, so the baseline holds before that.
+        # Spark supports PyArrow 18+, so both branches are reachable.
+        if pandas_3_or_later and pyarrow_24_or_later:
+            override_outputs("string:empty", "[]@Series[str]")
+            override_outputs("large_string:empty", "[]@Series[str]")
+
+        def compute_cell(row_name, col_name):
+            arr = sources[row_name]
+            if col_name == "pyarrow array":
+                return self.repr_value(arr, max_len=0)
+            elif col_name == self.COL_INTEGER_OBJECT_NULLS_OFF:
+                return self._to_pandas_cell(arr, integer_object_nulls=False)
+            elif col_name == self.COL_INTEGER_OBJECT_NULLS_ON:
+                return self._to_pandas_cell(arr, integer_object_nulls=True)
+            elif col_name == self.COL_SPARK_PANDAS_OPTIONS:
+                return self._to_pandas_cell(arr, **self.SPARK_PANDAS_OPTIONS)
+            else:
+                raise ValueError(f"unknown column: {col_name}")
+
+        self.compare_or_generate_golden_matrix(
+            row_names=row_names,
+            col_names=col_names,
+            compute_cell=compute_cell,
+            golden_file_prefix="golden_pyarrow_arrow_to_pandas_integer_object_nulls",
             index_name="test case",
             overrides=overrides,
         )
