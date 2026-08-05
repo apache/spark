@@ -90,7 +90,6 @@ private[window] abstract class DistinctWindowFunctionFrame(
       populateFirstVisibleRows(rows, firstVisibleRows)
       newEventSorter = firstVisibleRows.buildEvents()
       spillSize.add(firstVisibleRows.getSpillSize)
-      spillSize.add(newEventSorter.getSpillSize)
 
       eventSorter = newEventSorter
       newEventSorter = null
@@ -348,6 +347,9 @@ private[window] abstract class DistinctWindowFunctionFrame(
   override final def currentLowerBound(): Int = 0
 
   private def closeEventResources(): Unit = {
+    if (eventSorter != null) {
+      spillSize.add(eventSorter.getSpillSize)
+    }
     if (eventIterator != null) {
       eventIterator.close()
       eventIterator = null
@@ -433,6 +435,12 @@ private[window] final class UnboundedPrecedingDistinctWindowFunctionFrame(
     spillThreshold,
     spillSizeThreshold) {
 
+  private val rowOffset = upperBound match {
+    case RowBoundOrdering(offset) => Some(offset)
+    case _ => None
+  }
+
+  private var partitionSize = 0
   private var boundaryIterator: Iterator[UnsafeRow] = Iterator.empty
   private var nextBoundaryRow: UnsafeRow = _
   private var boundaryInputIndex = 0
@@ -440,36 +448,71 @@ private[window] final class UnboundedPrecedingDistinctWindowFunctionFrame(
   override protected def populateFirstVisibleRows(
       rows: ExternalAppendOnlyUnsafeRowArray,
       firstVisibleRows: FirstVisibleRowsBuilder): Unit = {
-    val inputIterator = rows.generateIterator()
-    val outputIterator = rows.generateIterator()
-    var nextInput = WindowFunctionFrame.getNextOrNull(inputIterator)
-    var inputIndex = 0
-    var outputIndex = 0
+    rowOffset match {
+      case Some(offset) =>
+        // A ROWS bound depends only on row indexes. Calculate the first visible output row
+        // directly instead of scanning the partition again as output rows.
+        val inputIterator = rows.generateIterator()
+        var inputIndex = 0
+        while (inputIterator.hasNext) {
+          val input = inputIterator.next()
+          val firstVisibleIndex = inputIndex.toLong - offset.toLong
+          if (firstVisibleIndex < rows.length) {
+            addCandidate(
+              input,
+              math.max(firstVisibleIndex, 0L).toInt,
+              inputIndex,
+              firstVisibleRows)
+          }
+          inputIndex += 1
+        }
 
-    while (outputIterator.hasNext && nextInput != null) {
-      val currentOutput = outputIterator.next()
-      while (nextInput != null &&
-          upperBound.compare(nextInput, inputIndex, currentOutput, outputIndex) <= 0) {
-        addCandidate(nextInput, outputIndex, inputIndex, firstVisibleRows)
-        inputIndex += 1
-        nextInput = WindowFunctionFrame.getNextOrNull(inputIterator)
-      }
-      outputIndex += 1
+      case None =>
+        val inputIterator = rows.generateIterator()
+        val outputIterator = rows.generateIterator()
+        var nextInput = WindowFunctionFrame.getNextOrNull(inputIterator)
+        var inputIndex = 0
+        var outputIndex = 0
+
+        while (outputIterator.hasNext && nextInput != null) {
+          val currentOutput = outputIterator.next()
+          while (nextInput != null &&
+              upperBound.compare(nextInput, inputIndex, currentOutput, outputIndex) <= 0) {
+            addCandidate(nextInput, outputIndex, inputIndex, firstVisibleRows)
+            inputIndex += 1
+            nextInput = WindowFunctionFrame.getNextOrNull(inputIterator)
+          }
+          outputIndex += 1
+        }
     }
   }
 
   override protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    partitionSize = rows.length
     boundaryInputIndex = 0
-    boundaryIterator = rows.generateIterator()
-    nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
+    if (rowOffset.isEmpty) {
+      boundaryIterator = rows.generateIterator()
+      nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
+    } else {
+      boundaryIterator = Iterator.empty
+      nextBoundaryRow = null
+    }
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
     updateProcessor(index)
-    while (nextBoundaryRow != null &&
-        upperBound.compare(nextBoundaryRow, boundaryInputIndex, current, index) <= 0) {
-      boundaryInputIndex += 1
-      nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
+    rowOffset match {
+      case Some(offset) =>
+        // The upper bound is exclusive, hence the extra one after applying the ROWS offset.
+        val upperBoundIndex = index.toLong + offset.toLong + 1L
+        boundaryInputIndex = math.max(0L, math.min(upperBoundIndex, partitionSize.toLong)).toInt
+
+      case None =>
+        while (nextBoundaryRow != null &&
+            upperBound.compare(nextBoundaryRow, boundaryInputIndex, current, index) <= 0) {
+          boundaryInputIndex += 1
+          nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
+        }
     }
   }
 
