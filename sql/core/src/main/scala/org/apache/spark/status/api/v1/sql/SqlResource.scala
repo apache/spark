@@ -150,19 +150,31 @@ private[v1] class SqlResource extends BaseAppResource {
       val start = Option(uriParams.getFirst("start")).map(_.toInt).getOrElse(0)
       val length = Option(uriParams.getFirst("length")).map(_.toInt).getOrElse(20)
 
-      val sortedRoots = sortExecs(rootRows, sortCol, sortDir, ui.store)
+      // Precompute the total task time of every root row only when the list is
+      // sorted by it, so the sort and the page rows reuse the same values
+      // instead of recomputing per stage attempt. When sorting by another
+      // column, `execToRow` computes it only for the rows on the current page.
+      val totalTaskTimeMap: Map[Long, Long] =
+        if (sortCol == "totalTaskTime") {
+          rootRows.iterator.map(e => e.executionId -> totalTaskTime(e, ui.store)).toMap
+        } else {
+          Map.empty
+        }
+
+      val sortedRoots = sortExecs(rootRows, sortCol, sortDir, totalTaskTimeMap)
       val page = if (length > 0) sortedRoots.slice(start, start + length) else sortedRoots
 
       // Convert to Java-compatible row data; embed sub-executions when grouping.
       // Always emit a `subExecutions` field (possibly empty) in grouped mode so
       // JSON consumers see a consistent schema; flat mode never includes it.
       val aaData = page.map { exec =>
-        val row = execToRow(exec, ui.store)
+        val row = execToRow(exec, totalTaskTimeMap, ui.store)
         if (groupSubExec) {
           val subs = subsByRoot.getOrElse(exec.executionId, Seq.empty)
           // Sort subs by id ascending so they appear in chronological order
           row.put("subExecutions",
-            sortExecs(subs, "id", "asc", ui.store).map(execToRow(_, ui.store)).asJava)
+            sortExecs(subs, "id", "asc", totalTaskTimeMap)
+              .map(execToRow(_, totalTaskTimeMap, ui.store)).asJava)
         }
         row
       }
@@ -197,7 +209,7 @@ private[v1] class SqlResource extends BaseAppResource {
       execs: Seq[SQLExecutionUIData],
       sortCol: String,
       sortDir: String,
-      store: AppStatusStore): Seq[SQLExecutionUIData] = {
+      totalTaskTimeMap: Map[Long, Long]): Seq[SQLExecutionUIData] = {
     val sorted = sortCol match {
       case "id" => execs.sortBy(_.executionId)
       case "status" => execs.sortBy(_.executionStatus)
@@ -206,7 +218,8 @@ private[v1] class SqlResource extends BaseAppResource {
       case "duration" =>
         execs.sortBy(e =>
           e.completionTime.getOrElse(new Date()).getTime - e.submissionTime)
-      case "totalTaskTime" => execs.sortBy(e => totalTaskTime(e, store))
+      case "totalTaskTime" =>
+        execs.sortBy(e => totalTaskTimeMap.getOrElse(e.executionId, -1L))
       case _ => execs.sortBy(_.executionId)
     }
     if (sortDir == "asc") sorted else sorted.reverse
@@ -214,11 +227,12 @@ private[v1] class SqlResource extends BaseAppResource {
 
   /**
    * Total task time of an execution, in milliseconds, aggregated across all
-   * stages of the execution. Sums `executorRunTime` (the "Total Time Across All
-   * Tasks" metric) of every attempt of every stage: each attempt genuinely
-   * consumed task time, including failed attempts that were retried. Returns -1
-   * when the execution has no stages to aggregate, so callers can distinguish
-   * "no task time information" from a genuine zero.
+   * stages of the execution. Sums `executorRunTime` (the cumulative time
+   * executors spent running tasks, which is the "Total Time Across All Tasks"
+   * stage-level metric) of every attempt of every stage: each attempt
+   * genuinely consumed task time, including failed attempts that were
+   * retried. Returns -1 when the execution has no stages to aggregate, so
+   * callers can distinguish "no task time information" from a genuine zero.
    */
   private def totalTaskTime(exec: SQLExecutionUIData, store: AppStatusStore): Long = {
     if (exec.stages.isEmpty) {
@@ -232,6 +246,7 @@ private[v1] class SqlResource extends BaseAppResource {
 
   private def execToRow(
       exec: SQLExecutionUIData,
+      totalTaskTimeMap: Map[Long, Long],
       store: AppStatusStore): java.util.LinkedHashMap[String, Object] = {
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
     val jobIds = exec.jobs.collect {
@@ -243,7 +258,8 @@ private[v1] class SqlResource extends BaseAppResource {
     row.put("description", exec.description)
     row.put("submissionTime", new Date(exec.submissionTime))
     row.put("duration", java.lang.Long.valueOf(duration))
-    row.put("totalTaskTime", java.lang.Long.valueOf(totalTaskTime(exec, store)))
+    row.put("totalTaskTime", java.lang.Long.valueOf(
+      totalTaskTimeMap.getOrElse(exec.executionId, totalTaskTime(exec, store))))
     row.put("jobIds", jobIds)
     row.put("queryId", if (exec.queryId != null) exec.queryId.toString else null)
     row.put("errorMessage", exec.errorMessage.orNull)
