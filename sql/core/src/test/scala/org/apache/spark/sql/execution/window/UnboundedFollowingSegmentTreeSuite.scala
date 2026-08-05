@@ -36,8 +36,6 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
 
   import testImplicits._
 
-  override def withSQLConf[T](confs: (String, String)*)(f: => T): T =
-    super.withSQLConf((SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false") +: confs: _*)(f)
 
   private val enableSegTree: Map[String, String] = Map(
     SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
