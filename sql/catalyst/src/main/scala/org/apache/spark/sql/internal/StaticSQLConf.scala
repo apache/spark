@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
  */
 object StaticSQLConf {
 
-  import SQLConf.buildStaticConf
+  import SQLConf.{buildConfFromConfigFile, buildStaticConf}
 
   val WAREHOUSE_PATH = buildStaticConf("spark.sql.warehouse.dir")
     .doc("The default location for managed databases and tables.")
@@ -171,7 +171,10 @@ object StaticSQLConf {
       "org.apache.spark.sql.columnar.CachedBatchSerializer. It will be used to " +
       "translate SQL data into a format that can more efficiently be cached. The underlying " +
       "API is subject to change so use with caution. Multiple classes cannot be specified. " +
-      "The class must have a no-arg constructor.")
+      "The class must have a no-arg constructor. Available implementations include: " +
+      "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer (default) and " +
+      "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer (Arrow format with " +
+      "zero-copy columnar reads and better Arrow ecosystem interoperability).")
     .version("3.1.0")
     .stringConf
     .createWithDefault("org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
@@ -195,11 +198,7 @@ object StaticSQLConf {
     .createOptional
 
   val UI_RETAINED_EXECUTIONS =
-    buildStaticConf("spark.sql.ui.retainedExecutions")
-      .doc("Number of executions to retain in the Spark UI.")
-      .version("1.5.0")
-      .intConf
-      .createWithDefault(1000)
+    buildConfFromConfigFile[Int]("spark.sql.ui.retainedExecutions")
 
   val SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD =
     buildStaticConf("spark.sql.shuffleExchange.maxThreadThreshold")

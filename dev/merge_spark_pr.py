@@ -324,6 +324,10 @@ def red(text):
     return "\033[91m%s\033[0m" % text
 
 
+def bold(text):
+    return "\033[1m%s\033[0m" % text
+
+
 def print_error(msg):
     print(red(msg))
 
@@ -454,8 +458,13 @@ def post_merge_comment(pr_num, merged_commits):
         "- merged into %s %s/%s" % (ref, GITHUB_COMMIT_BASE, commit_hash)
         for ref, commit_hash in merged_commits
     ]
-    body = "**Merge Summary:**\n" + "\n".join(lines) + "\n\n*Posted by `merge_spark_pr.py`*"
-    print("Posting merge comment on PR #%s:\n%s" % (pr_num, body))
+    summary = "**Merge Summary:**\n" + "\n".join(lines)
+    attribution = "*Posted by `merge_spark_pr.py`*"
+    body = "%s\n\n%s" % (summary, attribution)
+    print(
+        "\n%s\n\n%s\n%s"
+        % (bold("Posting merge comment on PR #%s:" % pr_num), bold(summary), attribution)
+    )
     if not GITHUB_OAUTH_KEY:
         print_error("GITHUB_OAUTH_KEY is not set; skipping the merge comment.")
         return
@@ -1756,14 +1765,6 @@ def main():
     # then each cherry-pick target as it is picked.
     merged_commits = [(target_ref, merge_hash)]
 
-    # The "Closes #N" keyword in the commit message only auto-closes the PR when the commit
-    # lands on the default branch. For merges into other branches (e.g. branch-X.Y backport
-    # PRs), GitHub leaves the PR open, so close it explicitly through the API.
-    pr_state = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num)).get("state")
-    if pr_state != "closed":
-        print("PR #%s is still open after push; closing it explicitly." % pr_num)
-        close_pr(pr_num)
-
     # Walk a mutable remaining-branches list so the next default correctly skips any
     # branches already picked, including branches consumed by the Upstream-First two-branch
     # path inside cherry_pick (e.g. picking branch-M.x + branch-M.N in a single prompt).
@@ -1792,7 +1793,17 @@ def main():
                 if b in remaining_branches:
                     remaining_branches.remove(b)
     finally:
-        post_merge_comment(pr_num, merged_commits)
+        if merged_commits:
+            # The "Closes #N" keyword in the commit message only auto-closes the PR when the
+            # commit lands on the default branch. For merges into other branches (e.g.
+            # branch-X.Y backport PRs), GitHub leaves the PR open, so close it through the API.
+            pr_state = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num)).get("state")
+            if pr_state != "closed":
+                close_message = "PR #%s is still open after push; closing it explicitly." % pr_num
+                print("\n%s\n" % bold(close_message))
+                close_pr(pr_num)
+            # Record every branch that successfully received the change on the PR.
+            post_merge_comment(pr_num, merged_commits)
 
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
     continue_maybe("Would you like to update an associated JIRA?")

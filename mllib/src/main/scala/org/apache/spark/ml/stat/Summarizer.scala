@@ -22,7 +22,7 @@ import java.io._
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
@@ -302,7 +302,7 @@ private[spark] object SummaryBuilderImpl extends Logging {
     }
   }
 
-  private val vectorUDT = new VectorUDT
+  private val vectorUDT = SQLDataTypes.VectorType.asInstanceOf[VectorUDT]
 
   /**
    * All the metrics that can be currently computed by Spark for vectors.

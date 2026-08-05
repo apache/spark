@@ -30,6 +30,11 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongT
 
 @ExpressionDescription(
   usage = "_FUNC_(child) - Returns the bucket number for the given input child expression.",
+  arguments = """
+    Arguments:
+      * child - The input expression to compute the bucket number for.
+        An expression that evaluates to a long.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(123);
@@ -63,6 +68,11 @@ case class BitmapBucketNumber(child: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(child) - Returns the bit position for the given input child expression.",
+  arguments = """
+    Arguments:
+      * child - The input expression to compute the bit position for.
+        An expression that evaluates to a long.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -96,6 +106,11 @@ case class BitmapBitPosition(child: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(child) - Returns the number of set bits in the child bitmap.",
+  arguments = """
+    Arguments:
+      * child - The bitmap whose set bits are counted. An expression that evaluates to a binary
+          bitmap, typically produced by bitmap_construct_agg().
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(X '1010');
@@ -147,6 +162,11 @@ case class BitmapCount(child: Expression)
   usage = """
     _FUNC_(child) - Returns a bitmap with the positions of the bits set from all the values from
     the child expression. The child expression will most likely be bitmap_bit_position().
+  """,
+  arguments = """
+    Arguments:
+      * child - The expression whose values set the bit positions in the bitmap.
+        An expression that evaluates to a long.
   """,
   // scalastyle:off line.size.limit
   examples = """
@@ -234,6 +254,11 @@ case class BitmapConstructAgg(child: Expression,
   usage = """
     _FUNC_(child) - Returns a bitmap that is the bitwise OR of all of the bitmaps from the child
     expression. The input should be bitmaps created from bitmap_construct_agg().
+  """,
+  arguments = """
+    Arguments:
+      * child - The expression whose bitmap values are combined with a bitwise OR.
+          An expression that evaluates to a binary bitmap created from bitmap_construct_agg().
   """,
   // scalastyle:off line.size.limit
   examples = """
@@ -327,6 +352,11 @@ case class BitmapOrAgg(child: Expression,
   usage = """
     _FUNC_(child) - Returns a bitmap that is the bitwise AND of all of the bitmaps from the child
     expression. The input should be bitmaps created from bitmap_construct_agg().
+  """,
+  arguments = """
+    Arguments:
+      * child - The expression whose bitmap values are combined with a bitwise AND.
+          An expression that evaluates to a binary bitmap created from bitmap_construct_agg().
   """,
   // scalastyle:off line.size.limit
   examples = """

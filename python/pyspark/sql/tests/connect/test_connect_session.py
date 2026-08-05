@@ -82,6 +82,20 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.spark.sql("select 1").collect()
         self.assertGreaterEqual(len(handler_called), 0)
 
+    @timeout(10)
+    def test_operation_id_in_execution_info_and_exception(self):
+        df = self.spark.sql("select 1")
+        df.collect()
+        self.assertIsNotNone(df.executionInfo)
+        operation_id = df.executionInfo.operation_id
+        self.assertIsNotNone(operation_id)
+        uuid.UUID(operation_id)
+
+        with self.assertRaises(SparkConnectException) as error:
+            self.spark.sql("select raise_error('expected')").collect()
+        self.assertIsNotNone(error.exception.operation_id)
+        uuid.UUID(error.exception.operation_id)
+
     def _check_no_active_session_error(self, e: PySparkException):
         self.check_error(exception=e, errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
 
@@ -113,6 +127,16 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         # Config
         with self.assertRaises(SparkConnectException) as e:
             self.spark.conf.get("some.conf")
+        self._check_no_active_session_error(e.exception)
+
+    def test_with_block(self):
+        with PySparkSession.builder.remote("local[*]").getOrCreate() as session:
+            df = session.sql("select 1 as a, 2 as b")
+            self.assertEqual(df.collect(), [(1, 2)])
+
+        # Confirm that the session is stopped
+        with self.assertRaises(SparkConnectException) as e:
+            self.spark.sql("select 1")
         self._check_no_active_session_error(e.exception)
 
     def test_error_enrichment_message(self):

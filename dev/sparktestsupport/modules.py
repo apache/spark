@@ -410,6 +410,21 @@ streaming_kinesis_asl = Module(
 )
 
 
+credential_aws = Module(
+    name="credential-aws",
+    dependencies=[tags, core],
+    source_file_regexes=[
+        "connector/credential-aws/",
+    ],
+    build_profile_flags=[
+        "-Pcredential-aws",
+    ],
+    sbt_test_goals=[
+        "credential-aws/test",
+    ],
+)
+
+
 streaming_kafka_0_10 = Module(
     name="streaming-kafka-0-10",
     dependencies=[streaming, core],
@@ -524,6 +539,7 @@ pyspark_core = Module(
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_non_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_coercion",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
@@ -593,6 +609,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map_misc",
         "pyspark.sql.tests.arrow.test_arrow_grouped_map",
         "pyspark.sql.tests.arrow.test_arrow_python_udf",
+        "pyspark.sql.tests.arrow.test_arrow_python_udf_cached",
         "pyspark.sql.tests.arrow.test_arrow_udf",
         "pyspark.sql.tests.arrow.test_arrow_udf_grouped_agg",
         "pyspark.sql.tests.arrow.test_arrow_udf_scalar",
@@ -625,6 +642,9 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_udf_combinations",
         "pyspark.sql.tests.test_udf_profiler",
+        "pyspark.sql.tests.test_udf_transpile_hypothesis",
+        "pyspark.sql.tests.test_udf_transpile_parity",
+        "pyspark.sql.tests.test_udf_transpile_unit",
         "pyspark.sql.tests.test_unified_udf",
         "pyspark.sql.tests.test_udtf",
         "pyspark.sql.tests.test_tvf",
@@ -1176,6 +1196,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_readwriter",
         "pyspark.sql.tests.connect.test_connect_retry",
         "pyspark.sql.tests.connect.test_connect_session",
+        "pyspark.sql.tests.connect.test_connect_local_server",
         "pyspark.sql.tests.connect.test_connect_stat",
         "pyspark.sql.tests.connect.test_parity_geographytype",
         "pyspark.sql.tests.connect.test_parity_geometrytype",

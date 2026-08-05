@@ -44,6 +44,7 @@
 | org.apache.spark.sql.catalyst.expressions.Atan2 | atan2 | SELECT atan2(0, 0) | struct<ATAN2(0, 0):double> |
 | org.apache.spark.sql.catalyst.expressions.Atanh | atanh | SELECT atanh(0) | struct<ATANH(0):double> |
 | org.apache.spark.sql.catalyst.expressions.BRound | bround | SELECT bround(2.5, 0) | struct<bround(2.5, 0):decimal(2,0)> |
+| org.apache.spark.sql.catalyst.expressions.Base32 | to_base32 | SELECT to_base32('foobar') | struct<to_base32(foobar):string> |
 | org.apache.spark.sql.catalyst.expressions.Base64 | base64 | SELECT base64('Spark SQL') | struct<base64(Spark SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.Between | between | SELECT 0.5 between 0.1 AND 1.0 | struct<between(0.5, 0.1, 1.0):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Bin | bin | SELECT bin(13) | struct<bin(13):string> |
@@ -166,6 +167,7 @@
 | org.apache.spark.sql.catalyst.expressions.Hex | hex | SELECT hex(17) | struct<hex(17):string> |
 | org.apache.spark.sql.catalyst.expressions.HllSketchEstimate | hll_sketch_estimate | SELECT hll_sketch_estimate(hll_sketch_agg(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col) | struct<hll_sketch_estimate(hll_sketch_agg(col, 12)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.HllUnion | hll_union | SELECT hll_sketch_estimate(hll_union(hll_sketch_agg(col1), hll_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2) | struct<hll_sketch_estimate(hll_union(hll_sketch_agg(col1, 12), hll_sketch_agg(col2, 12), false)):bigint> |
+| org.apache.spark.sql.catalyst.expressions.Hmac | hmac | SELECT hex(hmac('key', 'message')) | struct<hex(hmac(key, message, SHA-256)):string> |
 | org.apache.spark.sql.catalyst.expressions.HourExpressionBuilder | hour | SELECT hour('2018-02-14 12:58:59') | struct<hour(2018-02-14 12:58:59):int> |
 | org.apache.spark.sql.catalyst.expressions.Hypot | hypot | SELECT hypot(3, 4) | struct<HYPOT(3, 4):double> |
 | org.apache.spark.sql.catalyst.expressions.ILike | ilike | SELECT ilike('Spark', '_Park') | struct<ilike(Spark, _Park):boolean> |
@@ -429,6 +431,7 @@
 | org.apache.spark.sql.catalyst.expressions.TupleUnionThetaDoubleExpressionBuilder | tuple_union_theta_double | SELECT tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1.0D, 4), (2, 2.0D, 5), (3, 3.0D, 6) tab(col1, val1, col2) | struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(col1, val1, 12, sum), theta_sketch_agg(col2, 12), 12, sum)):double> |
 | org.apache.spark.sql.catalyst.expressions.TupleUnionThetaIntegerExpressionBuilder | tuple_union_theta_integer | SELECT tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1, 4), (2, 2, 5), (3, 3, 6) tab(col1, val1, col2) | struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(col1, val1, 12, sum), theta_sketch_agg(col2, 12), 12, sum)):double> |
 | org.apache.spark.sql.catalyst.expressions.TypeOf | typeof | SELECT typeof(1) | struct<typeof(1):string> |
+| org.apache.spark.sql.catalyst.expressions.UnBase32 | from_base32 | SELECT from_base32('MZXW6YTBOI======') | struct<from_base32(MZXW6YTBOI======):binary> |
 | org.apache.spark.sql.catalyst.expressions.UnBase64 | unbase64 | SELECT unbase64('U3BhcmsgU1FM') | struct<unbase64(U3BhcmsgU1FM):binary> |
 | org.apache.spark.sql.catalyst.expressions.UnaryMinus | negative | SELECT negative(1) | struct<negative(1):int> |
 | org.apache.spark.sql.catalyst.expressions.UnaryPositive | positive | SELECT positive(1) | struct<(+ 1):int> |
@@ -481,6 +484,7 @@
 | org.apache.spark.sql.catalyst.expressions.aggregate.CollectList | array_agg | SELECT array_agg(col) FROM VALUES (1), (2), (1) AS tab(col) | struct<collect_list(col):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.CollectList | collect_list | SELECT collect_list(col) FROM VALUES (1), (2), (1) AS tab(col) | struct<collect_list(col):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.CollectSet | collect_set | SELECT collect_set(col) FROM VALUES (1), (2), (1) AS tab(col) | struct<collect_set(col):array<int>> |
+| org.apache.spark.sql.catalyst.expressions.aggregate.CollectUnion | collect_union | SELECT collect_union(col) FROM VALUES (array(1, 2)), (array(2, 3)), (array(1)) AS tab(col) | struct<collect_union(col):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.Corr | corr | SELECT corr(c1, c2) FROM VALUES (3, 2), (3, 3), (6, 4) as tab(c1, c2) | struct<corr(c1, c2):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.Count | count | SELECT count(*) FROM VALUES (NULL), (5), (5), (20) AS tab(col) | struct<count(1):bigint> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.CountIf | count_if | SELECT count_if(col % 2 = 0) FROM VALUES (NULL), (0), (1), (2), (3) AS tab(col) | struct<count_if(((col % 2) = 0)):bigint> |
@@ -554,9 +558,11 @@
 | org.apache.spark.sql.catalyst.expressions.variant.SchemaOfVariantAgg | schema_of_variant_agg | SELECT schema_of_variant_agg(parse_json(j)) FROM VALUES ('1'), ('2'), ('3') AS tab(j) | struct<schema_of_variant_agg(parse_json(j)):string> |
 | org.apache.spark.sql.catalyst.expressions.variant.ToVariantObject | to_variant_object | SELECT to_variant_object(named_struct('a', 1, 'b', 2)) | struct<to_variant_object(named_struct(a, 1, b, 2)):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.TryParseJsonExpressionBuilder | try_parse_json | SELECT try_parse_json('{"a":1,"b":0.8}') | struct<try_parse_json({"a":1,"b":0.8}):variant> |
+| org.apache.spark.sql.catalyst.expressions.variant.TryVariantArrayAppendExpressionBuilder | try_variant_array_append | SELECT try_variant_array_append(parse_json('[1, 2, 3]'), '$', 4) | struct<try_variant_array_append(parse_json([1, 2, 3]), $, 4):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.TryVariantGetExpressionBuilder | try_variant_get | SELECT try_variant_get(parse_json('{"a": 1}'), '$.a', 'int') | struct<try_variant_get(parse_json({"a": 1}), $.a):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.TryVariantInsertExpressionBuilder | try_variant_insert | SELECT try_variant_insert(parse_json('{"a": 1}'), '$.b', 2) | struct<try_variant_insert(parse_json({"a": 1}), $.b, 2):variant> |
-| org.apache.spark.sql.catalyst.expressions.variant.VariantArrayAppend | variant_array_append | SELECT variant_array_append(parse_json('[1, 2, 3]'), '$', 4) | struct<variant_array_append(parse_json([1, 2, 3]), $, 4):variant> |
+| org.apache.spark.sql.catalyst.expressions.variant.TryVariantSetExpressionBuilder | try_variant_set | SELECT try_variant_set(parse_json('{"a": 1}'), '$.a', 2) | struct<try_variant_set(parse_json({"a": 1}), $.a, 2, true):variant> |
+| org.apache.spark.sql.catalyst.expressions.variant.VariantArrayAppendExpressionBuilder | variant_array_append | SELECT variant_array_append(parse_json('[1, 2, 3]'), '$', 4) | struct<variant_array_append(parse_json([1, 2, 3]), $, 4):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantDelete | variant_delete | SELECT variant_delete(parse_json('{"a": 1, "b": 2, "c": 3, "items": [1, 2, 3]}'), NULL, '$.a', '$.c') | struct<variant_delete(parse_json({"a": 1, "b": 2, "c": 3, "items": [1, 2, 3]}), NULL, $.a, $.c):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantGetExpressionBuilder | variant_get | SELECT variant_get(parse_json('{"a": 1}'), '$.a', 'int') | struct<variant_get(parse_json({"a": 1}), $.a):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantInsertExpressionBuilder | variant_insert | SELECT variant_insert(parse_json('{"a": 1}'), '$.b', 2) | struct<variant_insert(parse_json({"a": 1}), $.b, 2):variant> |

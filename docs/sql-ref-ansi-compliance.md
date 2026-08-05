@@ -539,6 +539,7 @@ Below is a list of all the keywords in Spark SQL.
 |ELSEIF|non-reserved|non-reserved|non-reserved|
 |END|reserved|non-reserved|reserved|
 |ENFORCED|non-reserved|non-reserved|non-reserved|
+|ERROR|non-reserved|non-reserved|non-reserved|
 |ESCAPE|reserved|non-reserved|reserved|
 |ESCAPED|non-reserved|non-reserved|non-reserved|
 |EVOLUTION|non-reserved|non-reserved|non-reserved|
@@ -583,6 +584,7 @@ Below is a list of all the keywords in Spark SQL.
 |GROUPING|non-reserved|non-reserved|reserved|
 |HANDLER|non-reserved|non-reserved|non-reserved|
 |HAVING|reserved|non-reserved|reserved|
+|HISTORY|non-reserved|non-reserved|non-reserved|
 |HOUR|non-reserved|non-reserved|non-reserved|
 |HOURS|non-reserved|non-reserved|non-reserved|
 |IDENTIFIER|non-reserved|non-reserved|non-reserved|
@@ -615,6 +617,7 @@ Below is a list of all the keywords in Spark SQL.
 |ITERATE|non-reserved|non-reserved|non-reserved|
 |JOIN|reserved|strict-non-reserved|reserved|
 |JSON|non-reserved|non-reserved|non-reserved|
+|JSON_TABLE|non-reserved|non-reserved|reserved|
 |KEY|non-reserved|non-reserved|non-reserved|
 |KEYS|non-reserved|non-reserved|non-reserved|
 |LANGUAGE|non-reserved|non-reserved|reserved|
@@ -683,6 +686,7 @@ Below is a list of all the keywords in Spark SQL.
 |OPTIONS|non-reserved|non-reserved|non-reserved|
 |OR|reserved|non-reserved|reserved|
 |ORDER|reserved|non-reserved|reserved|
+|ORDINALITY|non-reserved|non-reserved|non-reserved|
 |OUT|non-reserved|non-reserved|reserved|
 |OUTER|reserved|non-reserved|reserved|
 |OUTPUTFORMAT|non-reserved|non-reserved|non-reserved|
@@ -741,6 +745,7 @@ Below is a list of all the keywords in Spark SQL.
 |ROLLUP|non-reserved|non-reserved|reserved|
 |ROW|non-reserved|non-reserved|reserved|
 |ROWS|non-reserved|non-reserved|reserved|
+|SCD|non-reserved|non-reserved|non-reserved|
 |SCHEMA|non-reserved|non-reserved|non-reserved|
 |SCHEMAS|non-reserved|non-reserved|non-reserved|
 |SECOND|non-reserved|non-reserved|non-reserved|
@@ -803,6 +808,7 @@ Below is a list of all the keywords in Spark SQL.
 |TINYINT|non-reserved|non-reserved|non-reserved|
 |TO|reserved|non-reserved|reserved|
 |TOUCH|non-reserved|non-reserved|non-reserved|
+|TRACK|non-reserved|non-reserved|non-reserved|
 |TRAILING|reserved|non-reserved|reserved|
 |TRANSACTION|non-reserved|non-reserved|non-reserved|
 |TRANSACTIONS|non-reserved|non-reserved|non-reserved|
@@ -820,6 +826,7 @@ Below is a list of all the keywords in Spark SQL.
 |UNIQUE|reserved|non-reserved|reserved|
 |UNKNOWN|reserved|non-reserved|reserved|
 |UNLOCK|non-reserved|non-reserved|non-reserved|
+|UNNEST|non-reserved|non-reserved|non-reserved|
 |UNPIVOT|non-reserved|non-reserved|non-reserved|
 |UNSET|non-reserved|non-reserved|non-reserved|
 |UNTIL|non-reserved|non-reserved|non-reserved|

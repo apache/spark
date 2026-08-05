@@ -29,7 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, SQLDataTypes, Vector}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -37,6 +37,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.collection.{OpenHashSet, Utils}
 
 /** Private trait for params for VectorIndexer and VectorIndexerModel */
@@ -159,11 +160,10 @@ class VectorIndexer @Since("1.4.0") (
   override def transformSchema(schema: StructType): StructType = {
     // We do not transfer feature metadata since we do not know what types of features we will
     // produce in transform().
-    val dataType = new VectorUDT
     require(isDefined(inputCol), s"VectorIndexer requires input column parameter: $inputCol")
     require(isDefined(outputCol), s"VectorIndexer requires output column parameter: $outputCol")
-    SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
-    SchemaUtils.appendColumn(schema, $(outputCol), dataType)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
+    SchemaUtils.appendColumn(schema, $(outputCol), SQLDataTypes.VectorType)
   }
 
   @Since("1.4.1")
@@ -302,6 +302,13 @@ class VectorIndexerModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", -1, Map.empty)
 
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    // categoryMaps: Map[Int, Map[Double, Int]]
+    size += SizeEstimator.estimate(categoryMaps)
+    size
+  }
+
   /** Java-friendly version of [[categoryMaps]] */
   @Since("1.4.0")
   def javaCategoryMaps: JMap[JInt, JMap[JDouble, JInt]] = {
@@ -318,10 +325,10 @@ class VectorIndexerModel private[ml] (
   }
 
   /**
-   * Pre-computed feature attributes, with some missing info.
-   * In transform(), set attribute name and other info, if available.
+   * Computes feature attributes with some missing information.
+   * In transform(), set attribute name and other information, if available.
    */
-  private val partialFeatureAttributes: Array[Attribute] = {
+  private def partialFeatureAttributes: Array[Attribute] = {
     val attrs = new Array[Attribute](numFeatures)
     var categoricalFeatureCount = 0 // validity check for numFeatures, categoryMaps
     var featureIndex = 0
@@ -350,8 +357,11 @@ class VectorIndexerModel private[ml] (
       }
       featureIndex += 1
     }
-    require(categoricalFeatureCount == categoryMaps.size, "VectorIndexerModel given categoryMaps" +
-      s" with keys outside expected range [0,...,numFeatures), where numFeatures=$numFeatures")
+    require(
+      categoricalFeatureCount == categoryMaps.size,
+      "VectorIndexerModel given categoryMaps" +
+        s" with keys outside expected range [0,...,numFeatures), " +
+        s"where numFeatures=$numFeatures")
     attrs
   }
 
@@ -450,12 +460,11 @@ class VectorIndexerModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    val dataType = new VectorUDT
     require(isDefined(inputCol),
       s"VectorIndexerModel requires input column parameter: $inputCol")
     require(isDefined(outputCol),
       s"VectorIndexerModel requires output column parameter: $outputCol")
-    SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
 
     // If the input metadata specifies numFeatures, compare with expected numFeatures.
     val origAttrGroup = AttributeGroup.fromStructField(

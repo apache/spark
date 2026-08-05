@@ -376,7 +376,10 @@ class QueryExecution(
   def assertExecutedPlanPrepared(): Unit = executedPlan
 
   val lazyToRdd = LazyTry {
-    new SQLExecutionRDD(executedPlan.execute(), sparkSession.sessionState.conf)
+    new SQLExecutionRDD(
+      executedPlan.execute(),
+      sparkSession.sessionState.conf,
+      SparkPlanInfo.fromSparkPlan(executedPlan))
   }
 
   /**
@@ -764,6 +767,10 @@ object QueryExecution {
       EnsureRequirements(),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
+      // `PushDownLocalSort` pushes a wider local sort down onto a narrower one below it, so a
+      // single sort serves several operators' ordering requirements. It must run after
+      // `EnsureRequirements`, which is what inserts the local sorts it pushes down.
+      PushDownLocalSort,
       // `CombineAdjacentAggregation` must run before `ReplaceHashWithSortAgg`: it combines a pair
       // of adjacent partial and final aggregate into a single `Complete` mode aggregate, which
       // `ReplaceHashWithSortAgg` can then replace with a sort aggregate when the ordering allows.

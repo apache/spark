@@ -172,15 +172,23 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // These filters stay in postScanFilters for correctness (FilterExec above scan),
       // but are also routed into runtimeFilters so BatchScanExec can use them for
       // partition pruning via SupportsRuntimeV2Filtering.filter().
+      // Non-deterministic filters are not routed: they would be pushed to the source for
+      // pruning while the FilterExec above the scan re-evaluates them, so the two evaluations
+      // may disagree and rows the source pruned away could not be recovered. This is the
+      // runtime counterpart of the pushFilters guard in PushDownUtils (SPARK-58207).
       val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty) {
         postScanFilters.filter { f =>
-          f.containsPattern(SCALAR_SUBQUERY) &&
+          f.deterministic &&
+            f.containsPattern(SCALAR_SUBQUERY) &&
             f.references.nonEmpty &&
             f.references.subsetOf(relation.runtimeFilterAttrs)
         }
       } else {
         Seq.empty
       }
+      // dynamicFilters need no such check: a DynamicPruningSubquery over a non-deterministic
+      // filtering plan is itself non-deterministic, so CleanupDynamicPruningFilters has already
+      // rewritten it to TrueLiteral by the time we get here.
       val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
 
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
@@ -527,8 +535,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, _, Some(write)) =>
       OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
-    case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters) =>
-      DeleteFromTableExec(r.table.asDeletable, filters.toArray, refreshCache(r)) :: Nil
+    case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters, options) =>
+      DeleteFromTableExec(r.table.asDeletable, filters.toArray, refreshCache(r), options) :: Nil
 
     case DeleteFromTable(relation, condition) =>
       relation match {
@@ -547,11 +555,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
           table match {
             case t: SupportsDeleteV2 if t.canDeleteWhere(filters) =>
-              DeleteFromTableExec(t, filters, refreshCache(r)) :: Nil
+              DeleteFromTableExec(t, filters, refreshCache(r), r.options) :: Nil
             case t: SupportsDeleteV2 =>
               throw QueryCompilationErrors.cannotDeleteTableWhereFiltersError(t, filters)
             case t: TruncatableTable if condition == TrueLiteral =>
-              TruncateTableExec(t, refreshCache(r)) :: Nil
+              TruncateTableExec(t, refreshCache(r), r.options) :: Nil
             case _ =>
               throw QueryCompilationErrors.tableDoesNotSupportDeletesError(table)
           }
@@ -955,6 +963,9 @@ private[sql] object DataSourceV2Strategy extends Logging {
    * If the underlying subquery hasn't completed yet, this method will throw an exception.
    */
   protected[sql] def translateRuntimeFilterV2(expr: Expression): Option[Predicate] = expr match {
+    case TrueLiteral => None
+    case in: InSubqueryExec if in.isResultUnavailable =>
+      None
     case in @ InSubqueryExec(PushableColumnAndNestedColumn(name), _, _, _, _, _) =>
       val values = in.values().getOrElse {
         throw SparkException.internalError(

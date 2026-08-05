@@ -308,6 +308,18 @@ class StringFunctionsSuite extends SharedSparkSession {
       Row("AQIDBA==", bytes))
   }
 
+  test("string to_base32/from_base32 function") {
+    val bytes = "foobar".getBytes("UTF-8")
+    val df = Seq((bytes, "MZXW6YTBOI======")).toDF("a", "b")
+    checkAnswer(
+      df.select(to_base32($"a"), from_base32($"b")),
+      Row("MZXW6YTBOI======", bytes))
+
+    checkAnswer(
+      df.selectExpr("to_base32(a)", "from_base32(b)"),
+      Row("MZXW6YTBOI======", bytes))
+  }
+
   test("string overlay function") {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.

@@ -450,6 +450,49 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
+  test("SPARK-57814: unix_seconds / unix_millis / unix_micros over nanosecond timestamps") {
+    // unix_* apply no zone shift; sub-microsecond digits are dropped. The nanos result equals the
+    // microsecond-timestamp result for the same instant, and is the same for every precision p.
+    val ntzStr = "2020-01-01T13:24:35.123456789"
+    val ltzStr = "2020-01-01T21:24:35.987654321Z"
+    // NTZ 13:24:35.123456 -> 1577885075123456 micros; LTZ 21:24:35.987654 UTC -> 1577913875987654.
+    val ntzExpected = Row(1577885075L, 1577885075123L, 1577885075123456L)
+    val ltzExpected = Row(1577913875L, 1577913875987L, 1577913875987654L)
+    Seq(7, 8, 9).foreach { p =>
+      val ntz = ntzNanos(ntzStr, p)
+      checkAnswer(
+        ntz.select(unix_seconds(col("c")), unix_millis(col("c")), unix_micros(col("c"))),
+        ntzExpected)
+      checkAnswer(
+        ntz.selectExpr("unix_seconds(c)", "unix_millis(c)", "unix_micros(c)"),
+        ntzExpected)
+      val ltz = ltzNanos(ltzStr, p)
+      checkAnswer(
+        ltz.select(unix_seconds(col("c")), unix_millis(col("c")), unix_micros(col("c"))),
+        ltzExpected)
+      checkAnswer(
+        ltz.selectExpr("unix_seconds(c)", "unix_millis(c)", "unix_micros(c)"),
+        ltzExpected)
+    }
+  }
+
+  test("SPARK-57814: unix_seconds / unix_millis / unix_micros over NULL nanosecond timestamps") {
+    Seq(7, 8, 9).foreach { p =>
+      val ntz = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampNTZNanosType(p)))
+      val ltz = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampLTZNanosType(p)))
+      checkAnswer(
+        ntz.select(unix_seconds(col("c")), unix_millis(col("c")), unix_micros(col("c"))),
+        Row(null, null, null))
+      checkAnswer(
+        ltz.select(unix_seconds(col("c")), unix_millis(col("c")), unix_micros(col("c"))),
+        Row(null, null, null))
+    }
+  }
+
   // ===== max_by / min_by over nanosecond-precision timestamps (SPARK-56822) =====
   // `MaxBy`/`MinBy` gate only on the ordering expression's orderability
   // (`MaxMinBy.checkInputDataTypes` -> `TypeUtils.checkForOrderingExpr`), which the nanosecond

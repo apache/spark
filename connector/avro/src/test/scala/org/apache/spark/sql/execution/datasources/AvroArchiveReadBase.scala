@@ -78,3 +78,18 @@ trait AvroArchiveReadBase extends ArchiveReadSuiteBase {
     } finally stream.close()
   }
 }
+
+class AvroTarArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with AvroArchiveReadBase
+  with TarArchiveReadBase
+
+class AvroZipArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with AvroArchiveReadBase
+  with ZipArchiveReadBase
+
+class AvroSevenZArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with AvroArchiveReadBase
+  with SevenZArchiveReadBase

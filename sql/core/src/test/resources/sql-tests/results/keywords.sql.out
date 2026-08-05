@@ -132,6 +132,7 @@ ELSE	false
 ELSEIF	false
 END	false
 ENFORCED	false
+ERROR	false
 ESCAPE	false
 ESCAPED	false
 EVOLUTION	false
@@ -176,6 +177,7 @@ GROUP	false
 GROUPING	false
 HANDLER	false
 HAVING	false
+HISTORY	false
 HOUR	false
 HOURS	false
 IDENTIFIED	false
@@ -209,6 +211,7 @@ ITEMS	false
 ITERATE	false
 JOIN	false
 JSON	false
+JSON_TABLE	false
 KEY	false
 KEYS	false
 LANGUAGE	false
@@ -276,6 +279,7 @@ OPTION	false
 OPTIONS	false
 OR	false
 ORDER	false
+ORDINALITY	false
 OUT	false
 OUTER	false
 OUTPUTFORMAT	false
@@ -332,6 +336,7 @@ ROLLBACK	false
 ROLLUP	false
 ROW	false
 ROWS	false
+SCD	false
 SCHEMA	false
 SCHEMAS	false
 SECOND	false
@@ -392,6 +397,7 @@ TIMESTAMP_NTZ	false
 TINYINT	false
 TO	false
 TOUCH	false
+TRACK	false
 TRAILING	false
 TRANSACTION	false
 TRANSACTIONS	false
@@ -409,6 +415,7 @@ UNION	false
 UNIQUE	false
 UNKNOWN	false
 UNLOCK	false
+UNNEST	false
 UNPIVOT	false
 UNSET	false
 UNTIL	false

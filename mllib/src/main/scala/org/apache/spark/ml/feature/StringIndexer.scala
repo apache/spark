@@ -33,6 +33,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions.{get => fget, printf => fprintf, _}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -315,17 +316,8 @@ class StringIndexerModel (
     labelsArray(0)
   }
 
-  // Prepares the maps for string values to corresponding index values.
-  private val labelsToIndexArray: Array[OpenHashMap[String, Double]] = {
-    for (labels <- labelsArray) yield {
-      val n = labels.length
-      val map = new OpenHashMap[String, Double](n)
-      labels.zipWithIndex.foreach { case (label, idx) =>
-        map.update(label, idx)
-      }
-      map
-    }
-  }
+  private[spark] override def estimatedSize: Long =
+    estimateMatadataSize + SizeEstimator.estimate(labelsArray)
 
   /** @group setParam */
   @Since("1.6.0")
@@ -349,7 +341,10 @@ class StringIndexerModel (
 
   // This filters out any null values and also the input labels which are not in
   // the dataset used for fitting.
-  private def filterInvalidData(dataset: Dataset[_], inputColNames: Seq[String]): Dataset[_] = {
+  private def filterInvalidData(
+      dataset: Dataset[_],
+      inputColNames: Seq[String],
+      labelsToIndexArray: Array[OpenHashMap[String, Double]]): Dataset[_] = {
     val conditions: Seq[Column] = inputColNames.indices.map { i =>
       val inputColName = inputColNames(i)
       val labelToIndex = labelsToIndexArray(i)
@@ -368,28 +363,32 @@ class StringIndexerModel (
       .where(conditions.reduce(_ and _))
   }
 
-  private def getIndexer(labels: Seq[String], labelToIndex: OpenHashMap[String, Double]) = {
-    val keepInvalid = (getHandleInvalid == StringIndexer.KEEP_INVALID)
-
-    udf { label: String =>
-      if (label == null) {
-        if (keepInvalid) {
-          labels.length
+  private def getIndexer(
+      labels: Seq[String],
+      labelToIndex: OpenHashMap[String, Double],
+      keepInvalid: Boolean) = {
+    val unknownIndex = labels.length.toDouble
+    if (keepInvalid) {
+      udf { label: String =>
+        if (label == null) {
+          unknownIndex
         } else {
+          labelToIndex.get(label).getOrElse(unknownIndex)
+        }
+      }.asNondeterministic()
+    } else {
+      udf { label: String =>
+        if (label == null) {
           throw new SparkException("StringIndexer encountered NULL value. To handle or skip " +
             "NULLS, try setting StringIndexer.handleInvalid.")
-        }
-      } else {
-        if (labelToIndex.contains(label)) {
-          labelToIndex(label)
-        } else if (keepInvalid) {
-          labels.length
         } else {
-          throw new SparkException(s"Unseen label: $label. To handle unseen labels, " +
-            s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
+          labelToIndex.get(label).getOrElse {
+            throw new SparkException(s"Unseen label: $label. To handle unseen labels, " +
+              s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
+          }
         }
-      }
-    }.asNondeterministic()
+      }.asNondeterministic()
+    }
   }
 
   @Since("2.0.0")
@@ -397,11 +396,19 @@ class StringIndexerModel (
     transformSchema(dataset.schema, logging = true)
 
     val (inputColNames, outputColNames) = getInOutCols()
+    val labelsToIndexArray = labelsArray.map { labels =>
+      val map = new OpenHashMap[String, Double](labels.length)
+      labels.zipWithIndex.foreach { case (label, idx) =>
+        map.update(label, idx)
+      }
+      map
+    }
     val outputColumns = new Array[Column](outputColNames.length)
+    val keepInvalid = getHandleInvalid == StringIndexer.KEEP_INVALID
 
     // Skips invalid rows if `handleInvalid` is set to `StringIndexer.SKIP_INVALID`.
     val filteredDataset = if (getHandleInvalid == StringIndexer.SKIP_INVALID) {
-      filterInvalidData(dataset, inputColNames.toImmutableArraySeq)
+      filterInvalidData(dataset, inputColNames.toImmutableArraySeq, labelsToIndexArray)
     } else {
       dataset
     }
@@ -414,16 +421,13 @@ class StringIndexerModel (
 
       try {
         dataset.col(inputColName)
-        val filteredLabels = getHandleInvalid match {
-          case StringIndexer.KEEP_INVALID => labels :+ "__unknown"
-          case _ => labels
-        }
+        val filteredLabels = if (keepInvalid) labels :+ "__unknown" else labels
         val metadata = NominalAttribute.defaultAttr
           .withName(outputColName)
           .withValues(filteredLabels)
           .toMetadata()
 
-        val indexer = getIndexer(labels.toImmutableArraySeq, labelToIndex)
+        val indexer = getIndexer(labels.toImmutableArraySeq, labelToIndex, keepInvalid)
 
         outputColumns(i) = indexer(dataset(inputColName).cast(StringType))
           .as(outputColName, metadata)

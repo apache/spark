@@ -454,6 +454,22 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
+  test("create external table without location") {
+    withBasicCatalog { catalog =>
+      val externalTableWithoutLocation = CatalogTable(
+        identifier = TableIdentifier("tbl_ext", Some("db1")),
+        tableType = CatalogTableType.EXTERNAL,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("col1", "int"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          catalog.createTable(externalTableWithoutLocation, ignoreIfExists = false)
+        },
+        condition = "CREATE_EXTERNAL_TABLE_WITHOUT_LOCATION",
+        parameters = Map.empty)
+    }
+  }
+
   test("create table when database does not exist") {
     withBasicCatalog { catalog =>
       // Creating table in non-existent database should always fail
