@@ -17,10 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
 import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.util.ThreadUtils
 
 class ApplyFunctionExpressionSuite extends SparkFunSuite {
 
@@ -40,5 +46,42 @@ class ApplyFunctionExpressionSuite extends SparkFunSuite {
       "freshCopyIfContainsStatefulExpression should return a new instance " +
         "for ApplyFunctionExpression")
     assert(copy.eval(InternalRow(7)) === 7)
+  }
+
+  test("SPARK-58578: concurrent evaluation uses independent input rows") {
+    val firstEvaluationStarted = new CountDownLatch(1)
+    val secondEvaluationStarted = new CountDownLatch(1)
+    val blockingIdentity = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "blocking_identity"
+      override def produceResult(input: InternalRow): Int = {
+        if (input.getInt(0) == 1) {
+          firstEvaluationStarted.countDown()
+          assert(secondEvaluationStarted.await(10, TimeUnit.SECONDS))
+        } else {
+          secondEvaluationStarted.countDown()
+        }
+        input.getInt(0)
+      }
+    }
+
+    val expr = ApplyFunctionExpression(
+      blockingIdentity, Seq(BoundReference(0, IntegerType, nullable = false)))
+    val firstEvaluator = expr.freshCopyIfContainsStatefulExpression()
+    val secondEvaluator = expr.freshCopyIfContainsStatefulExpression()
+
+    val executor = ThreadUtils.newDaemonFixedThreadPool(2, "apply-function-expression-test")
+    val executionContext = ExecutionContext.fromExecutorService(executor)
+    try {
+      val firstResult = Future(firstEvaluator.eval(InternalRow(1)))(executionContext)
+      assert(firstEvaluationStarted.await(10, TimeUnit.SECONDS))
+      val secondResult = Future(secondEvaluator.eval(InternalRow(2)))(executionContext)
+
+      assert(ThreadUtils.awaitResult(firstResult, 10.seconds) === 1)
+      assert(ThreadUtils.awaitResult(secondResult, 10.seconds) === 2)
+    } finally {
+      executor.shutdownNow()
+    }
   }
 }
