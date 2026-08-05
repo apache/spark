@@ -177,13 +177,14 @@ case class DataflowGraph(
    * under case-insensitive analysis two flows emitting column names that differ only in case
    * contribute a single column rather than both, which would otherwise produce a target schema the
    * engine's own resolver cannot disambiguate. If two flows differ only in column casing, the
-   * first flow's spelling wins because flows are merged in graph encounter order.
+   * flow with the lowest identifier spelling wins because flows are merged in sorted identifier
+   * order.
    */
   def inferSchemas(sessionCaseSensitive: Boolean): Map[TableIdentifier, StructType] = {
     flowsTo.map { case (destinationIdentifier, flows) =>
       val resolvedFlows = flows.map { flow =>
         resolvedFlow(flow.identifier)
-      }
+      }.sortBy(_.identifier.unquotedString)
       destinationIdentifier -> SchemaInferenceUtils.inferSchemaFromFlows(
         tableIdentifier = destinationIdentifier,
         flows = resolvedFlows,
