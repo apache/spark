@@ -118,11 +118,19 @@ class ErrorsTest(unittest.TestCase):
         error = PySparkRuntimeError(errorClass="APPLICATION_NAME_NOT_SET", messageParameters={})
         self.assertIsNone(error.getSqlState())
 
+        # Neither the sub-class nor the main class declares a sqlState.
         error = PySparkRuntimeError(
             errorClass="SESSION_MUTATION_IN_DECLARATIVE_PIPELINE.SET_RUNTIME_CONF",
             messageParameters={"method": "set"},
         )
         self.assertIsNone(error.getSqlState())
+
+        # A sub-class without its own sqlState inherits the main class's.
+        error = PySparkRuntimeError(
+            errorClass="NEAREST_BY_JOIN.UNSUPPORTED_MODE",
+            messageParameters={"mode": "invalid", "supported": "nearest"},
+        )
+        self.assertEqual(error.getSqlState(), "42604")
 
 
 if __name__ == "__main__":

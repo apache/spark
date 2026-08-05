@@ -98,20 +98,22 @@ class ErrorClassesReader:
     def get_sqlstate(self, errorClass: Optional[str]) -> Optional[str]:
         """
         Returns the SQL state for the given error class.
+
+        A sub-class with its own sqlState overrides the main class's; a sub-class
+        without one inherits the main class's.
         """
         if errorClass is None:
             return None
 
         error_classes = errorClass.split(".")
-        try:
-            if len(error_classes) == 1:
-                return self.error_info_map[errorClass]["sqlState"]
-            else:
-                return self.error_info_map[error_classes[0]]["sub_class"][error_classes[1]][
-                    "sqlState"
-                ]
-        except KeyError:
+        main_class_info = self.error_info_map.get(error_classes[0])
+        if main_class_info is None:
             return None
+        if len(error_classes) == 2:
+            sub_class_info = main_class_info.get("sub_class", {}).get(error_classes[1], {})
+            if "sqlState" in sub_class_info:
+                return sub_class_info["sqlState"]
+        return main_class_info.get("sqlState")
 
     def get_error_message(self, errorClass: str, messageParameters: Dict[str, str]) -> str:
         """
