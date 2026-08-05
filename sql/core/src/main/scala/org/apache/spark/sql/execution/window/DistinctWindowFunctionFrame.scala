@@ -32,10 +32,10 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
  *
  * Such a frame only grows as output advances. For each qualifying input row this frame finds the
  * first output row whose upper bound contains it. A bounded BytesToBytesMap removes duplicates
- * until it reaches the hash fallback threshold, then the frame permanently falls back to an
- * external sorter for the rest of the window partition. That sorter finds the earliest event for
- * every key, then a second external sorter orders those events by index. `write` feeds each unique,
- * normalized DISTINCT input to the aggregate processor when its event becomes visible.
+ * up to the hash fallback threshold. If another new key arrives, the frame permanently falls back
+ * to an external sorter for the rest of the window partition. That sorter finds the earliest event
+ * for every key, then a second external sorter orders those events by index. `write` feeds each
+ * unique, normalized DISTINCT input to the aggregate processor when its event becomes visible.
  */
 private[window] final class DistinctWindowFunctionFrame(
     target: InternalRow,
@@ -171,9 +171,9 @@ private[window] final class DistinctWindowFunctionFrame(
    * in non-decreasing (firstVisibleIndex, inputIndex) order.
    *
    * BytesToBytesMap compares raw UnsafeRow bytes, so binary-unstable keys use the sorter directly.
-   * Once the map reaches the hash fallback threshold or cannot append a record, all map entries
-   * are transferred to one external sorter. The rest of this window partition goes directly to
-   * that sorter and never returns to hash-based deduplication.
+   * Once the map is at the hash fallback threshold and another new key arrives, or it cannot append
+   * a record, all map entries are transferred to one external sorter. The rest of this window
+   * partition goes directly to that sorter and never returns to hash-based deduplication.
    */
   private final class FirstVisibleRowsBuilder extends AutoCloseable {
     private val map = if (canUseHashDedup) {
@@ -199,7 +199,11 @@ private[window] final class DistinctWindowFunctionFrame(
         return
       }
 
-      if (!location.append(
+      if (map.numKeys() >= hashFallbackThreshold ||
+          map.getTotalMemoryConsumption >= spillSizeThreshold) {
+        switchToSorter()
+        insertIntoSorter(key, value)
+      } else if (!location.append(
           key.getBaseObject,
           key.getBaseOffset,
           key.getSizeInBytes,
@@ -208,9 +212,6 @@ private[window] final class DistinctWindowFunctionFrame(
           value.getSizeInBytes)) {
         switchToSorter()
         insertIntoSorter(key, value)
-      } else if (map.numKeys() >= hashFallbackThreshold ||
-          map.getTotalMemoryConsumption >= spillSizeThreshold) {
-        switchToSorter()
       }
     }
 
