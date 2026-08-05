@@ -32,12 +32,15 @@ class WindowEvaluatorFactory(
     val childOutput: Seq[Attribute],
     val spillSize: SQLMetric,
     segmentTreeFrames: SQLMetric,
-    segmentTreeFallbackFrames: SQLMetric)
-  extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
+    segmentTreeFallbackFrames: SQLMetric,
+    monotonicDequeFrames: SQLMetric)
+    extends PartitionEvaluatorFactory[InternalRow, InternalRow]
+    with WindowEvaluatorFactoryBase {
 
   override def numSegmentTreeFrames: Option[SQLMetric] = Some(segmentTreeFrames)
   override def numSegmentTreeFallbackFrames: Option[SQLMetric] =
     Some(segmentTreeFallbackFrames)
+  override def numMonotonicDequeFrames: Option[SQLMetric] = Some(monotonicDequeFrames)
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
     new WindowPartitionEvaluator()
@@ -69,7 +72,7 @@ class WindowEvaluatorFactory(
             val types = partitionSpec.map(_.dataType)
             val ordering = InterpretedOrdering.forSchema(types)
             (key1: UnsafeRow, key2: UnsafeRow) => ordering.compare(key1, key2) == 0
-        }
+          }
 
         // Manage the stream and the grouping.
         var nextRow: UnsafeRow = null
