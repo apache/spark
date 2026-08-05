@@ -228,9 +228,13 @@ object PushDownUtils extends Logging {
         // information for the source. The V2 path above drops these implicitly because
         // translateRuntimeFilterV2 returns None; here we push Catalyst expressions directly,
         // so filter them out explicitly.
+        // Screen with the same pushability guard as the V2 PartitionPredicate path
+        // (deterministic, no subquery, no Python UDF). Keeps non-deterministic filters
+        // from being the sole evaluator when fullyPushedFilterAttributes drops FilterExec.
         val catalystFilters = runtimeFilters
           .flatMap(unwrapRuntimeFilterExpression)
           .filterNot(_ == Literal.TrueLiteral)
+          .filter(isPushablePartitionFilter)
         if (catalystFilters.nonEmpty) {
           catalystScan.filter(catalystFilters.toArray)
           true
