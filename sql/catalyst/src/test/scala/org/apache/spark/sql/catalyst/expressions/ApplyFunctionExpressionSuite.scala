@@ -48,7 +48,7 @@ class ApplyFunctionExpressionSuite extends SparkFunSuite {
     assert(copy.eval(InternalRow(7)) === 7)
   }
 
-  test("SPARK-58578: concurrent evaluation uses independent input rows") {
+  test("SPARK-58578: fresh copies do not share the reused input row") {
     val firstEvaluationStarted = new CountDownLatch(1)
     val secondEvaluationStarted = new CountDownLatch(1)
     val blockingIdentity = new ScalarFunction[Int] {
