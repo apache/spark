@@ -526,8 +526,10 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
       testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
         AddData(inputData, ("a", 1), ("b", 1), ("c", 1), ("a", 2), ("b", 2), ("c", 2)),
         StartStream(),
-        // Record the id before any batch is awaited, so the listener attributes this query's jobs
-        // from the first one.
+        // StartStream only launches the query -- the stream runs on its own thread and can submit
+        // the first batch's jobs before the id is recorded here, in which case those jobs are not
+        // attributed. Rather than race, the assertion below relies on the SECOND batch, which is
+        // driven after this point and so is always observed in full.
         Execute(q => queryId.set(q.id.toString)),
         CheckAnswerWithTimeout(60000, "a", "b", "c"),
         advanceRealTimeClock,
@@ -630,10 +632,17 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
         testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
           AddData(inputData, ("a", 1), ("b", 1), ("c", 1), ("a", 2)),
           StartStream(),
-          // Record the id before any batch is awaited, so the listener attributes this query's jobs
-          // from the first one.
+          // StartStream only launches the query -- the stream runs on its own thread and can submit
+          // the first batch's jobs before the id is recorded here, in which case those jobs are not
+          // attributed and contribute nothing to maxConcurrentStages. So do not assert on the first
+          // batch: record the id, let batch 0 finish, then drive a SECOND batch that is guaranteed
+          // to run entirely after this point, and assert on that one.
           Execute(q => queryId.set(q.id.toString)),
           CheckAnswerWithTimeout(60000, "a", "b", "c"),
+          advanceRealTimeClock,
+          WaitUntilBatchProcessed(0),
+          AddData(inputData, ("d", 1), ("e", 1), ("d", 2)),
+          CheckAnswerWithTimeout(60000, "a", "b", "c", "d", "e"),
           Execute { q =>
             val exchanges = q.lastExecution.executedPlan.collect {
               case s: ShuffleExchangeExec => s
