@@ -210,6 +210,12 @@ class NumPyCompatTestsMixin:
                     "x2": [2.0, 3.0, -2.0, -3.0, -3.0, 0.0, -np.inf, np.inf, 2.0, 0.0],
                 }
             ),
+            pd.DataFrame(
+                {
+                    "x1": pd.array([1, 2, None, None], dtype="Int64"),
+                    "x2": pd.array([2, None, 2, 0], dtype="Int64"),
+                }
+            ),
         ):
             psdf = ps.from_pandas(pdf)
 
