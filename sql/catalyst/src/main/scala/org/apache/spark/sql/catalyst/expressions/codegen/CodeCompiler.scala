@@ -951,10 +951,21 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
    * implements (`compare(String, String)` against `Comparator.compare(Object, Object)`),
    * and the compiler emits a bridge carrying the supertype's signature. Such a method is
    * safe to narrow because `invokevirtual` on the supertype signature still dispatches to
-   * the override. An overload has no bridge, so it is rejected - and it must be, because
-   * narrowing binds the call to the supertype's method instead: `Invoke` codegen always
-   * wraps the call in an explicit cast, which would hide the type mismatch from javac and
-   * silently produce the wrong result rather than fail to compile.
+   * the override. An overload has no bridge of its own, so it is rejected - and it must be,
+   * because narrowing binds the call to the supertype's method instead: `Invoke` codegen
+   * always wraps the call in an explicit cast, which would hide the type mismatch from
+   * javac and silently produce the wrong result rather than fail to compile.
+   *
+   * Telling the two apart needs the bridge to be matched to the specific method it forwards
+   * to, not merely to some method of the same name and arity. A class can hold both shapes
+   * at once - an anonymous `Comparator[String]` that also declares `compare(int, int)` has
+   * a bridge for the override and an unrelated overload sharing its name and arity - and
+   * excusing the whole name/arity group would let the overload through. So a bridge covers
+   * a method only when their parameter types line up (boxing counts as equivalent, since a
+   * specialized primitive override such as `apply(int)` is reached through an
+   * `apply(Object)` bridge), and only when it is the group's sole non-bridge method: with
+   * two of them the bridge cannot forward to both, so at least one becomes unreachable
+   * after narrowing.
    *
    * Reflection over the concrete class can raise a `LinkageError` when a member signature
    * names a class the loader cannot find (a partial or shaded jar). `NonFatal` does not
@@ -970,18 +981,48 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
       val targetSignatures = reachable.flatMap(_.getMethods).map(erasedSignature).toSet
       val targetFields = reachable.flatMap(_.getFields).map(_.getName).toSet
       val methods = cls.getMethods
-      val bridgedTo = methods.iterator
-        .filter(m => m.isBridge && targetSignatures.contains(erasedSignature(m)))
-        .map(m => (m.getName, m.getParameterCount))
-        .toSet
+      val bridges = methods.filter(m => m.isBridge && targetSignatures.contains(erasedSignature(m)))
+      val nonBridgeCount = methods.iterator.filterNot(_.isBridge)
+        .foldLeft(Map.empty[(String, Int), Int]) { (counts, m) =>
+          val key = (m.getName, m.getParameterCount)
+          counts.updated(key, counts.getOrElse(key, 0) + 1)
+        }
+      def coveredByBridge(m: Method): Boolean =
+        nonBridgeCount.getOrElse((m.getName, m.getParameterCount), 0) <= 1 &&
+          bridges.exists(b => forwardsTo(b, m))
       methods.forall { m =>
-        targetSignatures.contains(erasedSignature(m)) ||
-          bridgedTo.contains((m.getName, m.getParameterCount))
+        targetSignatures.contains(erasedSignature(m)) || coveredByBridge(m)
       } && cls.getFields.forall(f => targetFields.contains(f.getName))
     } catch {
       case _: LinkageError => false
       case NonFatal(_) => false
     }
+  }
+
+  /**
+   * True when `bridge` can be the bridge the compiler emitted for `impl`: same name and
+   * arity, and every bridge parameter accepts the corresponding one of `impl`. Boxing is
+   * treated as equivalence so that a specialized primitive override (`apply(int)` reached
+   * through an `apply(Object)` bridge) matches.
+   */
+  private def forwardsTo(bridge: Method, impl: Method): Boolean =
+    bridge.getName == impl.getName &&
+      bridge.getParameterCount == impl.getParameterCount &&
+      bridge.getParameterTypes.zip(impl.getParameterTypes).forall {
+        case (bridgeParam, implParam) => boxed(bridgeParam).isAssignableFrom(boxed(implParam))
+      }
+
+  /** The wrapper type for a primitive, or `cls` itself when it is already a reference type. */
+  private def boxed(cls: Class[_]): Class[_] = cls match {
+    case Integer.TYPE => classOf[java.lang.Integer]
+    case java.lang.Long.TYPE => classOf[java.lang.Long]
+    case java.lang.Double.TYPE => classOf[java.lang.Double]
+    case java.lang.Float.TYPE => classOf[java.lang.Float]
+    case java.lang.Short.TYPE => classOf[java.lang.Short]
+    case java.lang.Byte.TYPE => classOf[java.lang.Byte]
+    case Character.TYPE => classOf[java.lang.Character]
+    case java.lang.Boolean.TYPE => classOf[java.lang.Boolean]
+    case other => other
   }
 
   private def erasedSignature(m: Method): (String, Seq[Class[_]]) =

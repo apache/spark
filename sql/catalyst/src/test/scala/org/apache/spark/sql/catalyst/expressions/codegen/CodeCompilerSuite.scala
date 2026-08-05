@@ -745,11 +745,14 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
   test("referencesUnnarrowableClass: false when the supertype offers every member") {
     // The shapes codegen actually produces: the anonymous or local class only overrides
     // methods the supertype already declares, so narrowing the reference loses nothing.
+    // `specializedPrimitiveOverride` is the boxing case - scalac specializes the override to
+    // `apply(int)` while the bridge that reaches it takes `Object`.
     val anonSubclass = new java.util.HashMap[String, String]() { put("k", "v") }
     val anonInterface = new java.util.Comparator[String] {
       override def compare(a: String, b: String): Int = a.compareTo(b)
     }
-    val narrowable = Seq[Any](anonSubclass, anonInterface, CodeCompilerSuite.plainLocal)
+    val narrowable = Seq[Any](anonSubclass, anonInterface, CodeCompilerSuite.plainLocal,
+      CodeCompilerSuite.specializedPrimitiveOverride)
     for (o <- narrowable) {
       val cls = o.getClass
       // Guard the fixture's own precondition: a nameable class would pass the assertion
@@ -763,20 +766,36 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
 
   test("referencesUnnarrowableClass: true when narrowing would lose access") {
     // An extra public method, public fields inherited from a second interface, a member on
-    // a second interface, an overload that shadows nothing, and a local class with an extra
-    // method: each puts something out of reach of the nearest nameable supertype.
+    // a second interface, an overload that shadows nothing, a local class with an extra
+    // method, and a bridged override sharing its name and arity with an unrelated overload:
+    // each puts something out of reach of the nearest nameable supertype.
     val unnarrowable = Seq[Any](
       CodeCompilerSuite.anonWithExtraMethod,
       CodeCompilerSuite.anonWithPublicFields,
       CodeCompilerSuite.anonWithSecondInterface,
       CodeCompilerSuite.anonWithOverload,
-      CodeCompilerSuite.localWithExtraMethod)
+      CodeCompilerSuite.localWithExtraMethod,
+      CodeCompilerSuite.anonWithBridgeAndPrimitiveOverload,
+      CodeCompilerSuite.anonWithBridgeAndReferenceOverload)
     for (o <- unnarrowable) {
       val cls = o.getClass
       assert(cls.getCanonicalName == null, s"expected an unnameable class, got: ${cls.getName}")
       val name = cls.getName
       assert(JdkCodeCompiler.referencesUnnarrowableClass(s"$name v = ($name) references[0];"),
         s"expected $name to be rejected")
+    }
+  }
+
+  test("referencesUnnarrowableClass: a bridge covers only the method it forwards to") {
+    // Guards the fixture shapes behind the two bridge tests: both classes carry a genuine
+    // bridge for the generic override, so a check that excused the whole name/arity group
+    // would let the unrelated overload ride along on it.
+    for (o <- Seq[Any](CodeCompilerSuite.anonWithBridgeAndPrimitiveOverload,
+        CodeCompilerSuite.anonWithBridgeAndReferenceOverload)) {
+      val compares = o.getClass.getMethods.filter(_.getName == "compare")
+      assert(compares.exists(_.isBridge), "fixture precondition: expected a bridge method")
+      assert(compares.count(m => !m.isBridge && m.getParameterCount == 2) === 2,
+        "fixture precondition: expected the override and the overload to share name and arity")
     }
   }
 
@@ -1008,6 +1027,31 @@ object CodeCompilerSuite {
   // no bridge is emitted. Narrowing would silently bind the call to the supertype's method.
   val anonWithOverload = new Converter {
     def convert(s: String): String = "anon"
+  }
+
+  // A bridged generic override alongside an unrelated overload of the same name and arity.
+  // `compare(String, String)` is reached through a `compare(Object, Object)` bridge, but
+  // `compare(Int, Int)` has no bridge of its own: after narrowing to `Comparator`, an
+  // integer call would bind to `compare(Object, Object)` and land in the String-casting
+  // bridge instead of the overload.
+  val anonWithBridgeAndPrimitiveOverload = new java.util.Comparator[String] {
+    override def compare(a: String, b: String): Int = a.compareTo(b)
+    def compare(a: Int, b: Int): Int = a - b
+  }
+
+  // The same collision with a reference-typed overload. Boxing-blind parameter matching
+  // would accept this one, since the bridge's `Object` parameters do accept `Integer`.
+  val anonWithBridgeAndReferenceOverload = new java.util.Comparator[String] {
+    override def compare(a: String, b: String): Int = a.compareTo(b)
+    def compare(a: Integer, b: Integer): Int = a - b
+  }
+
+  // Sound counterpart of the two above, and the reason bridge matching treats boxing as
+  // equivalence: scalac specializes this override to `apply(int)`, which is reached through
+  // an `apply(Object)` bridge. Requiring the bridge parameter to accept the override's
+  // parameter without boxing would reject it, since `Object` is not assignable from `int`.
+  val specializedPrimitiveOverride = new scala.runtime.AbstractFunction1[Int, Boolean] {
+    def apply(i: Int): Boolean = i > 0
   }
 
   val plainLocal: java.util.ArrayList[String] = {
