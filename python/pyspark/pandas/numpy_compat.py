@@ -121,9 +121,10 @@ binary_np_spark_mappings = {
     "heaviside": lambda c1, c2: F.when(
         c1.isNull() | F.isnan(c1.cast("double")),
         c1.cast("double"),
-    ).when(c1 < 0, F.lit(0.0)
-    ).when(c1 == 0, c2.cast("double")
-    ).otherwise(F.lit(1.0)),
+    )
+    .when(c1 < 0, F.lit(0.0))
+    .when(c1 == 0, c2.cast("double"))
+    .otherwise(F.lit(1.0)),
     "hypot": F.hypot,
     "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "ldexp": pandas_udf(  # type: ignore[call-overload]
