@@ -1,0 +1,113 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.exchange
+
+import org.apache.spark.sql.SparkSession
+
+/**
+ * WIP benchmark (SPARK-57399 local-repartition v2). Compares the in-process pipelined channel
+ * shuffle against the regular (materializing) shuffle on simple batch queries.
+ *
+ * Fair-comparison constraints, read before trusting any number:
+ *   - Runs on `local[N]` with N = physical cores, and only queries whose pipelined
+ *     whole-group slot demand is <= N, so the concurrently-scheduled pipelined stages do NOT
+ *     oversubscribe the cores. A demand > cores run would measure thread thrash, not the
+ *     transport, and is intentionally avoided here.
+ *   - Pipelined overlaps map+reduce stages (uses more concurrent slots) vs the baseline's
+ *     sequential map-then-reduce; with demand <= cores neither is slot-limited, so the delta
+ *     reflects stage overlap minus channel overhead, which is the honest comparison.
+ *
+ * {{{
+ *   build/sbt "sql/Test/runMain org.apache.spark.sql.execution.exchange.PipelinedShuffleBenchmark"
+ * }}}
+ */
+object PipelinedShuffleBenchmark {
+
+  private val cores = Runtime.getRuntime.availableProcessors()
+
+  private def newSession(pipelined: Boolean): SparkSession = {
+    val b = SparkSession.builder()
+      .master(s"local[$cores]")
+      .appName("pipelined-shuffle-benchmark")
+      .config("spark.sql.adaptive.enabled", "false")
+      .config("spark.speculation", "false")
+      .config("spark.sql.shuffle.partitions", "8")
+      .config("spark.ui.enabled", "false")
+    if (pipelined) {
+      b.config("spark.shuffle.manager.incremental",
+        "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")
+        .config("spark.sql.pipelinedShuffle.enabled", "true")
+    }
+    b.getOrCreate()
+  }
+
+  private val numRows = 20000000L  // 20M: large enough that transport cost dominates startup noise
+  private val inputParts = 6       // demand = 6 (input) + 8 (shuffle) = 14 <= 16 cores: no oversub
+  private val iters = 6            // report best of N timed runs after a warm-up
+
+  // Time a workload under a fresh session (created/stopped OUTSIDE the timed region so session
+  // startup and manager init are not counted). One warm-up run, then `iters` timed runs; report
+  // the best (min) wall-clock ms.
+  private def bestMs(pipelined: Boolean, workload: SparkSession => Unit): Long = {
+    val spark = newSession(pipelined)
+    try {
+      workload(spark) // warm up (JIT, caches, codegen)
+      var best = Long.MaxValue
+      var i = 0
+      while (i < iters) {
+        val t0 = System.nanoTime()
+        workload(spark)
+        best = math.min(best, (System.nanoTime() - t0) / 1000000L)
+        i += 1
+      }
+      best
+    } finally {
+      spark.stop()
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+    }
+  }
+
+  private def compare(name: String, workload: SparkSession => Unit): Unit = {
+    val regular = bestMs(pipelined = false, workload)
+    val pipe = bestMs(pipelined = true, workload)
+    val speedup = regular.toDouble / pipe
+    // scalastyle:off println
+    println(f"[bench] $name%-40s  regular=${regular}%5dms  pipelined=${pipe}%5dms  " +
+      f"speedup=${speedup}%.2fx")
+    // scalastyle:on println
+  }
+
+  def main(args: Array[String]): Unit = {
+    // scalastyle:off println
+    println(s"[bench] local[$cores], $numRows rows, best of $iters iters")
+    // scalastyle:on println
+
+    compare("repartition(k) + count", { spark =>
+      import spark.implicits._
+      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
+        .repartition($"k").count()
+    })
+
+    compare("groupBy(k).count", { spark =>
+      import spark.implicits._
+      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
+        .groupBy($"k").count().count()
+    })
+  }
+}

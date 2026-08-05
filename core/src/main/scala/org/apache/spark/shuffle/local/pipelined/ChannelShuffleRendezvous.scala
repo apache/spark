@@ -23,7 +23,10 @@ import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
  * Process-wide rendezvous between the map (writer) and reduce (reader) sides of an
  * in-process pipelined shuffle. One bounded queue exists per
  * `(shuffleId, reducePartitionId)`; every map task writing to a given reduce partition
- * shares the queue with the single reduce task that drains it.
+ * shares the queue with the single reduce task that drains it. Queue elements are BATCHES
+ * of records (`Array[AnyRef]` of pairs, see [[ChannelShuffleWriter]]) or the
+ * [[EndOfStream]] marker, so the queue's per-operation lock cost is paid per batch, not
+ * per row.
  *
  * This is correct only when producer and consumer tasks are co-resident in the same JVM,
  * i.e. a single executor (local mode). The concurrent-stage scheduler co-schedules the two
@@ -44,11 +47,14 @@ private[spark] object ChannelShuffleRendezvous {
   val EndOfStream: AnyRef = new AnyRef
 
   // Keyed by (shuffleId, reducePartitionId). Values are AnyRef because the queue carries
-  // both data pairs (Product2) and the EndOfStream marker.
+  // both record batches (Array[AnyRef]) and the EndOfStream marker.
   private val queues =
     new ConcurrentHashMap[(Int, Int), LinkedBlockingQueue[AnyRef]]()
 
-  /** Default per-queue capacity (in elements). Bounds the pipelined hand-off. */
+  /**
+   * Default per-queue capacity in BATCHES (not rows): with the default 1024-row batch this
+   * bounds the in-flight hand-off at ~64K rows per reduce partition.
+   */
   private val DefaultCapacity = 64
 
   /** The queue for one `(shuffleId, reducePartitionId)`, created on first access. */

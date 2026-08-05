@@ -48,6 +48,12 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   // executor; single-executor, so the same instance serves both.
   private val numMapsByShuffle = new ConcurrentHashMap[Int, Int]()
 
+  // Rows accumulated per output partition before a batch is handed across the channel in one
+  // queue operation. Batching amortizes the queue's per-operation lock cost; per-row hand-off
+  // measured ~19x slower than a regular shuffle on a 20M-row repartition.
+  private val batchSize =
+    conf.getInt("spark.shuffle.pipelined.channel.batchSize", 1024)
+
   override def usesStreamingShuffleOutputTracker: Boolean = false
 
   override def registerShuffle[K, V, C](
@@ -62,7 +68,8 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
       mapId: Long,
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] =
-    new ChannelShuffleWriter[K, V](handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId)
+    new ChannelShuffleWriter[K, V](
+      handle.asInstanceOf[BaseShuffleHandle[K, V, _]], mapId, batchSize)
 
   override def getReader[K, C](
       handle: ShuffleHandle,

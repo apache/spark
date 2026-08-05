@@ -17,23 +17,34 @@
 
 package org.apache.spark.shuffle.local.pipelined
 
+import java.util.Arrays
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader, ShuffleWriter}
 
 /**
  * Map-side of the in-process pipelined shuffle. Each input record is routed to the reduce
- * partition its key hashes to and pushed onto that partition's shared queue (see
- * [[ChannelShuffleRendezvous]]) as it is produced -- the consumer stage, running
- * concurrently, reads it immediately. No serialization, no disk, no network.
+ * partition its key hashes to and accumulated in a per-partition batch; a FULL batch (an
+ * `Array[AnyRef]` of `batchSize` pairs) is pushed onto that partition's shared queue in one
+ * queue operation (see [[ChannelShuffleRendezvous]]) -- the consumer stage, running
+ * concurrently, drains it batch by batch. No serialization, no disk, no network.
  *
- * The pair is copied before being enqueued because upstream operators reuse their output
- * row/pair buffers across a stage, and the consumer reads on a different thread.
+ * Batching is what makes the transport viable for large unaggregated shuffles: the queue
+ * costs a lock acquisition per operation (~hundreds of ns under producer/consumer
+ * contention), so handing rows across one at a time costs that PER ROW -- measured at ~19x
+ * slower than a regular shuffle on a 20M-row repartition. Batching divides the lock traffic
+ * by `batchSize`, the same lesson as local-repartition v1's object-batch transport. A batch
+ * array is handed off to the consumer and never touched again by the writer (a fresh array
+ * is allocated after each put), so ownership transfer is clean across threads.
  */
 private[spark] class ChannelShuffleWriter[K, V](
     handle: BaseShuffleHandle[K, V, _],
-    mapId: Long)
+    mapId: Long,
+    batchSize: Int)
   extends ShuffleWriter[K, V] {
+
+  require(batchSize > 0, s"batchSize must be positive, got $batchSize")
 
   private val dep = handle.dependency
   private val partitioner = dep.partitioner
@@ -41,6 +52,10 @@ private[spark] class ChannelShuffleWriter[K, V](
   private val shuffleId = handle.shuffleId
 
   override def write(records: Iterator[Product2[K, V]]): Unit = {
+    // One in-progress batch per reduce partition, plus its fill count.
+    val batches = Array.fill(numPartitions)(new Array[AnyRef](batchSize))
+    val sizes = new Array[Int](numPartitions)
+
     while (records.hasNext) {
       val rec = records.next()
       val pid = partitioner.getPartition(rec._1)
@@ -49,13 +64,24 @@ private[spark] class ChannelShuffleWriter[K, V](
       // consumer reads on another thread). The copy is done in the SQL layer's
       // ShuffleWriteProcessor for the pipelined path -- where InternalRow.copy() is available
       // -- rather than here, because this class lives in `core` and cannot reference SQL rows,
-      // and the UnsafeRow serializer offers no single-object copy. So enqueue as-is.
-      ChannelShuffleRendezvous.queue(shuffleId, pid).put((rec._1, rec._2))
+      // and the UnsafeRow serializer offers no single-object copy. So batch the pair as-is.
+      batches(pid)(sizes(pid)) = (rec._1, rec._2)
+      sizes(pid) += 1
+      if (sizes(pid) == batchSize) {
+        ChannelShuffleRendezvous.queue(shuffleId, pid).put(batches(pid))
+        batches(pid) = new Array[AnyRef](batchSize)
+        sizes(pid) = 0
+      }
     }
-    // Signal end-of-stream to every reduce partition so each reader can count this map
-    // task as done.
+
+    // Flush partial batches (trimmed so the reader can iterate array length directly), then
+    // signal end-of-stream to every reduce partition so each reader can count this map task
+    // as done. Same thread, same queue: data always precedes the marker.
     var p = 0
     while (p < numPartitions) {
+      if (sizes(p) > 0) {
+        ChannelShuffleRendezvous.queue(shuffleId, p).put(Arrays.copyOf(batches(p), sizes(p)))
+      }
       ChannelShuffleRendezvous.queue(shuffleId, p).put(ChannelShuffleRendezvous.EndOfStream)
       p += 1
     }
@@ -76,8 +102,8 @@ private[spark] class ChannelShuffleWriter[K, V](
 
 /**
  * Reduce-side of the in-process pipelined shuffle. Drains the shared queue for this reduce
- * partition, handing rows to the consumer stage as the map tasks produce them, until every
- * map task has signalled end-of-stream.
+ * partition batch by batch, handing rows to the consumer stage as the map tasks produce
+ * them, until every map task has signalled end-of-stream.
  *
  * `numMaps` is the number of map tasks feeding this shuffle; the reader stops after it has
  * observed that many [[ChannelShuffleRendezvous.EndOfStream]] markers on its queue.
@@ -100,27 +126,35 @@ private[spark] class ChannelShuffleReader[K, C](
   private def drainQueue(reducePartitionId: Int): Iterator[Product2[K, C]] = {
     val q = ChannelShuffleRendezvous.queue(handle.shuffleId, reducePartitionId)
     new Iterator[Product2[K, C]] {
+      // The current batch being handed out, and the cursor into it. A null batch after
+      // advance() means every map task has signalled end-of-stream: iteration is over.
+      private var batch: Array[AnyRef] = _
+      private var pos = 0
       private var endOfStreamSeen = 0
-      private var nextItem: AnyRef = advance()
+      advance()
 
-      // Blocking-drain until the next data pair, or until every map task has signalled
-      // end-of-stream for this queue (then return null to end iteration).
-      private def advance(): AnyRef = {
+      // Blocking-drain until the next non-empty data batch, or until every map task has
+      // signalled end-of-stream for this queue (then leave `batch` null to end iteration).
+      private def advance(): Unit = {
+        batch = null
+        pos = 0
         var item = q.take()
         while (item eq ChannelShuffleRendezvous.EndOfStream) {
           endOfStreamSeen += 1
-          if (endOfStreamSeen >= numMaps) return null
+          if (endOfStreamSeen >= numMaps) return
           item = q.take()
         }
-        item
+        batch = item.asInstanceOf[Array[AnyRef]]
       }
 
-      override def hasNext: Boolean = nextItem != null
+      override def hasNext: Boolean = batch != null
 
       override def next(): Product2[K, C] = {
-        if (nextItem == null) throw new NoSuchElementException
-        val cur = nextItem.asInstanceOf[Product2[K, C]]
-        nextItem = advance()
+        if (batch == null) throw new NoSuchElementException
+        val cur = batch(pos).asInstanceOf[Product2[K, C]]
+        pos += 1
+        // Writers only enqueue non-empty batches, so exhausting one means fetching the next.
+        if (pos == batch.length) advance()
         cur
       }
     }
