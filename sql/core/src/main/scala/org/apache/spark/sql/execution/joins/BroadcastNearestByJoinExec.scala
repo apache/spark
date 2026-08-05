@@ -41,8 +41,10 @@ private[joins] case class HeapEntry(index: Int, rankingValue: Any)
  * queue of size k, then emits the top-k matches directly.
  *
  * The right side is fully broadcast unconditionally when
- * `spark.sql.join.nearestBy.broadcast.enabled` is on. [[RewriteNearestByJoin]] leaves
- * every [[NearestByJoin]] intact for this operator; there is no size test and no fallback.
+ * `spark.sql.join.nearestBy.broadcast.enabled` is on.
+ * [[org.apache.spark.sql.catalyst.optimizer.RewriteNearestByJoin]] leaves every
+ * [[org.apache.spark.sql.catalyst.plans.logical.NearestByJoin]] intact for this operator;
+ * there is no size test and no fallback.
  * A right side too large to broadcast will fail the query. Tie-breaking among equal
  * ranking values is non-deterministic (matches the rewrite).
  *
@@ -122,6 +124,10 @@ case class BroadcastNearestByJoinExec(
         val resultProj = UnsafeProjection.create(allOutput, allOutput)
         val rankingNeedsCopy = !UnsafeRow.isFixedLength(rankExpr.dataType)
 
+        // Pre-allocate the all-null right row for LEFT OUTER unmatched left rows.
+        // Hoisted here so it is built once per partition rather than once per left row.
+        val nullRight: InternalRow = new GenericInternalRow(rightOutput.size)
+
         // Hoist heap outside flatMap to reduce GC pressure.
         // Size the heap to min(k, rightRows.length) + 1 to avoid over-allocating when
         // the right side is smaller than k.
@@ -175,7 +181,6 @@ case class BroadcastNearestByJoinExec(
           }
 
           if (heap.isEmpty && localJoinType == LeftOuter) {
-            val nullRight = new GenericInternalRow(rightOutput.size)
             joinedRow(leftRow, nullRight)
             numOutput += 1
             Iterator.single(resultProj(joinedRow).copy())

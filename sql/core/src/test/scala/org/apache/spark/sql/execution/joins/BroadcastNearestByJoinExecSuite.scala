@@ -438,18 +438,17 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
   test("SPARK-57091: Long ranking - similarity direction orders correctly past 2^53") {
     withStreamingHeap {
       // v1 = 2^53 - 1, v2 = 2^53, v3 = 2^53 + 1. v2 and v3 are equal as Double
-      // but v1 < v2 < v3 as Long. With k=1 and similarity (largest wins), the fix
-      // deterministically picks v3. With Double cast, v2==v3 so either could be picked.
-      // We include a clearly-smaller value to make the failure mode clear: if the code
-      // can't distinguish v2 from v3, it might pick v2 instead of v3.
+      // but v1 < v2 < v3 as Long. With k=1 and similarity (largest wins), proper
+      // Long ordering deterministically keeps v3 because v3 > v2 strictly.
+      // With a Double cast v2==v3, and the result would be non-deterministic.
       val v2 = (1L << 53)      // 9007199254740992
       val v3 = (1L << 53) + 1  // 9007199254740993
       assert(v2.toDouble == v3.toDouble,
         "precondition: v2 and v3 must be equal as Double")
 
       val left = Seq((1, 0L)).toDF("id", "x")
-      // Insert v3 FIRST so that with Double-equality and k=1, it would be evicted
-      // when v2 is added (since PQ evicts the head which is the first-inserted on tie)
+      // v3 is inserted first; with correct Long comparison the heap retains it
+      // because v3 > v2 strictly, so v2 fails the retention check and is never offered.
       val right = Seq((12, v3), (11, v2)).toDF("rid", "y")
       val result = left.nearestByJoin(right, col("y"),
         numResults = 1, mode = "exact", direction = "similarity")
@@ -654,7 +653,7 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
   }
 
   // ==========================================================================
-  // uros-b :62: EXPLAIN FORMATTED output
+  // EXPLAIN FORMATTED output
   // ==========================================================================
 
   test("SPARK-57091: EXPLAIN FORMATTED shows ranking, k, and direction") {
@@ -677,7 +676,7 @@ class BroadcastNearestByJoinExecSuite extends QueryTest with SharedSparkSession 
   }
 
   // ==========================================================================
-  // :47 parity test: rewrite vs operator produce identical results
+  // Parity test: rewrite vs operator produce identical results
   // ==========================================================================
 
   test("SPARK-57091: rewrite-vs-operator parity") {
