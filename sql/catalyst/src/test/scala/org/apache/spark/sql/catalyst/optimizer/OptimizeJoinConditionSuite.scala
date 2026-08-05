@@ -46,4 +46,30 @@ class OptimizeJoinConditionSuite extends PlanTest {
       comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
     })
   }
+
+  test("SPARK-58384: do not replace null-safe equality pattern under NOT") {
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+    val originalQuery =
+      x.join(y, Inner, Option(!($"a" === $"c" || ($"a".isNull && $"c".isNull))))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+  }
+
+  test("SPARK-58384: replace null-safe equality pattern under AND and OR") {
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+    val pattern = $"a" === $"c" || ($"a".isNull && $"c".isNull)
+    val optimizedPattern = $"a" <=> $"c"
+    val otherCondition = $"b" === $"d"
+    val conditions = Seq(
+      (pattern && otherCondition) -> (optimizedPattern && otherCondition),
+      (pattern || otherCondition) -> (optimizedPattern || otherCondition))
+
+    conditions.foreach { case (condition, optimizedCondition) =>
+      val originalQuery = x.join(y, Inner, Option(condition))
+      val correctAnswer = x.join(y, Inner, Option(optimizedCondition))
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
 }
