@@ -196,6 +196,25 @@ class NumPyCompatTestsMixin:
 
         self.assert_eq(np.ldexp(psdf.x, psdf.exp), np.ldexp(pdf.x, pdf.exp), almost=True)
 
+    def test_np_fmod(self):
+        for pdf in (
+            pd.DataFrame(
+                {
+                    "x1": [-64, -2, -1, 0, 1, 2, 64],
+                    "x2": [2, 3, -2, -3, -3, 0, 2],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": [-np.inf, -64.0, -2.0, -0.0, 0.0, 2.0, 64.0, np.inf, np.nan, 1.0],
+                    "x2": [2.0, 3.0, -2.0, -3.0, -3.0, 0.0, -np.inf, np.inf, 2.0, 0.0],
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+
+            self.assert_eq(np.fmod(psdf.x1, psdf.x2), np.fmod(pdf.x1, pdf.x2), almost=True)
+
     def test_np_fmax_fmin(self):
         for pdf in (
             pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [2, 1, 0, -1, -2]}),
