@@ -86,7 +86,8 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph, sessionCaseSensitive: B
           identifier = table.identifier,
           specifiedSchema = table.specifiedSchema,
           incomingFlowIdentifiers = flowsToTable.map(_.identifier).toSet,
-          availableFlows = resolvedFlowsToTable
+          availableFlows = resolvedFlowsToTable,
+          sessionCaseSensitive = sessionCaseSensitive
         )
         resolvedInputs.put(table.identifier, virtualTableInput)
         Seq(table)
