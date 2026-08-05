@@ -381,6 +381,8 @@ class CollationExpressionWalkerSuite extends SharedSparkSession {
       "sha1",
       "unbase64",
       "base64",
+      "to_base32",
+      "from_base32",
       "sha2",
       "sha",
       "crc32",

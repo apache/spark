@@ -44,6 +44,7 @@
 | org.apache.spark.sql.catalyst.expressions.Atan2 | atan2 | SELECT atan2(0, 0) | struct<ATAN2(0, 0):double> |
 | org.apache.spark.sql.catalyst.expressions.Atanh | atanh | SELECT atanh(0) | struct<ATANH(0):double> |
 | org.apache.spark.sql.catalyst.expressions.BRound | bround | SELECT bround(2.5, 0) | struct<bround(2.5, 0):decimal(2,0)> |
+| org.apache.spark.sql.catalyst.expressions.Base32 | to_base32 | SELECT to_base32('foobar') | struct<to_base32(foobar):string> |
 | org.apache.spark.sql.catalyst.expressions.Base64 | base64 | SELECT base64('Spark SQL') | struct<base64(Spark SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.Between | between | SELECT 0.5 between 0.1 AND 1.0 | struct<between(0.5, 0.1, 1.0):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Bin | bin | SELECT bin(13) | struct<bin(13):string> |
@@ -430,6 +431,7 @@
 | org.apache.spark.sql.catalyst.expressions.TupleUnionThetaDoubleExpressionBuilder | tuple_union_theta_double | SELECT tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1.0D, 4), (2, 2.0D, 5), (3, 3.0D, 6) tab(col1, val1, col2) | struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(col1, val1, 12, sum), theta_sketch_agg(col2, 12), 12, sum)):double> |
 | org.apache.spark.sql.catalyst.expressions.TupleUnionThetaIntegerExpressionBuilder | tuple_union_theta_integer | SELECT tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1, 4), (2, 2, 5), (3, 3, 6) tab(col1, val1, col2) | struct<tuple_sketch_estimate_integer(tuple_union_theta_integer(tuple_sketch_agg_integer(col1, val1, 12, sum), theta_sketch_agg(col2, 12), 12, sum)):double> |
 | org.apache.spark.sql.catalyst.expressions.TypeOf | typeof | SELECT typeof(1) | struct<typeof(1):string> |
+| org.apache.spark.sql.catalyst.expressions.UnBase32 | from_base32 | SELECT from_base32('MZXW6YTBOI======') | struct<from_base32(MZXW6YTBOI======):binary> |
 | org.apache.spark.sql.catalyst.expressions.UnBase64 | unbase64 | SELECT unbase64('U3BhcmsgU1FM') | struct<unbase64(U3BhcmsgU1FM):binary> |
 | org.apache.spark.sql.catalyst.expressions.UnaryMinus | negative | SELECT negative(1) | struct<negative(1):int> |
 | org.apache.spark.sql.catalyst.expressions.UnaryPositive | positive | SELECT positive(1) | struct<(+ 1):int> |
