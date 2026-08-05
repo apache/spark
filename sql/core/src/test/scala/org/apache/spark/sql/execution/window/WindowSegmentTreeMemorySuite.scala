@@ -36,8 +36,6 @@ import org.apache.spark.sql.types.IntegerType
  *   - `evictUntil` LRU eviction driven by TMM pressure
  *   - `spill()` self-trigger short-circuit and rowArray-spilled fall-through
  *   - task completion / kill listener releasing all cached blocks
- * T5 (rowArray-spilled priority) and T8 (task-kill listener) are kept as `ignore`d stubs so the
- * matrix stays visible; each documents what it needs.
  */
 class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext {
 
