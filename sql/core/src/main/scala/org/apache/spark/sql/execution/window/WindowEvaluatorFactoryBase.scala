@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate, Max, Min}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, TimestampNTZType, TimestampType, YearMonthIntervalType}
@@ -36,22 +36,32 @@ trait WindowEvaluatorFactoryBase {
   def orderSpec: Seq[SortOrder]
   def childOutput: Seq[Attribute]
   def spillSize: SQLMetric
+
   /**
-   * Counters for [[SegmentTreeWindowFunctionFrame]] observability. Default
-   * `None` means the subclass does not integrate with the segment-tree frame
-   * path (e.g. [[org.apache.spark.sql.execution.python.ArrowWindowPythonEvaluatorFactory]]);
-   * only [[WindowEvaluatorFactory]] wires them.
+   * Counters for [[SegmentTreeWindowFunctionFrame]] observability. Default `None` means the
+   * subclass does not integrate with the segment-tree frame path (e.g.
+   * [[org.apache.spark.sql.execution.python.ArrowWindowPythonEvaluatorFactory]]); only
+   * [[WindowEvaluatorFactory]] wires them.
    */
   def numSegmentTreeFrames: Option[SQLMetric] = None
   def numSegmentTreeFallbackFrames: Option[SQLMetric] = None
+
+  /**
+   * Counter for [[SlidingWindowMinMaxFunctionFrame]] observability. Incremented each time a
+   * monotonic deque frame is prepared. Default `None` means the subclass does not integrate with
+   * the deque path.
+   */
+  def numMonotonicDequeFrames: Option[SQLMetric] = None
 
   /**
    * Create the resulting projection.
    *
    * This method uses Code Generation. It can only be used on the executor side.
    *
-   * @param expressions unbound ordered function expressions.
-   * @return the final resulting projection.
+   * @param expressions
+   *   unbound ordered function expressions.
+   * @return
+   *   the final resulting projection.
    */
   protected def createResultProjection(expressions: Seq[Expression]): UnsafeProjection = {
     val references = expressions.zipWithIndex.map { case (e, i) =>
@@ -60,9 +70,7 @@ trait WindowEvaluatorFactoryBase {
     }
     val unboundToRefMap = Utils.toMap(expressions, references)
     val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
-    UnsafeProjection.create(
-      childOutput ++ patchedWindowExpression,
-      childOutput)
+    UnsafeProjection.create(childOutput ++ patchedWindowExpression, childOutput)
   }
 
   /**
@@ -71,13 +79,19 @@ trait WindowEvaluatorFactoryBase {
    *
    * This method uses Code Generation. It can only be used on the executor side.
    *
-   * @param frame to evaluate. This can either be a Row or Range frame.
-   * @param bound with respect to the row.
-   * @param timeZone the session local timezone for time related calculations.
-   * @return a bound ordering object.
+   * @param frame
+   *   to evaluate. This can either be a Row or Range frame.
+   * @param bound
+   *   with respect to the row.
+   * @param timeZone
+   *   the session local timezone for time related calculations.
+   * @return
+   *   a bound ordering object.
    */
   private def createBoundOrdering(
-      frame: FrameType, bound: Expression, timeZone: String): BoundOrdering = {
+      frame: FrameType,
+      bound: Expression,
+      timeZone: String): BoundOrdering = {
     (frame, bound) match {
       case (RowFrame, CurrentRow) =>
         RowBoundOrdering(0)
@@ -131,14 +145,15 @@ trait WindowEvaluatorFactoryBase {
         RangeBoundOrdering(ordering, current, bound)
 
       case (RangeFrame, _) =>
-        throw SparkException.internalError("Non-Zero range offsets are not supported for windows " +
-          "with multiple order expressions.")
+        throw SparkException.internalError(
+          "Non-Zero range offsets are not supported for windows " +
+            "with multiple order expressions.")
     }
   }
 
   /**
-   * Collection containing an entry for each window frame to process. Each entry contains a frame's
-   * [[WindowExpression]]s and factory function for the [[WindowFunctionFrame]].
+   * Collection containing an entry for each window frame to process. Each entry contains a
+   * frame's [[WindowExpression]]s and factory function for the [[WindowFunctionFrame]].
    */
   protected lazy val windowFrameExpressionFactoryPairs = {
     type FrameKey = (String, FrameType, Expression, Expression, Seq[Expression])
@@ -158,7 +173,8 @@ trait WindowEvaluatorFactoryBase {
         case _ => (tpe, fr.frameType, fr.lower, fr.upper, Nil)
       }
       val (es, fns) = framedFunctions.getOrElseUpdate(
-        key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
+        key,
+        (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
       es += e
       fns += fn
     }
@@ -166,14 +182,15 @@ trait WindowEvaluatorFactoryBase {
     // Collect all valid window functions and group them by their frame.
     windowExpression.foreach { x =>
       x.foreach {
-        case e@WindowExpression(function, spec) =>
+        case e @ WindowExpression(function, spec) =>
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: FrameLessOffsetWindowFunction =>
               collect("FRAME_LESS_OFFSET", f.fakeFrame, e, f)
-            case f: OffsetWindowFunction if frame.frameType == RowFrame &&
-              frame.lower == UnboundedPreceding =>
+            case f: OffsetWindowFunction
+                if frame.frameType == RowFrame &&
+                  frame.lower == UnboundedPreceding =>
               frame.upper match {
                 case UnboundedFollowing => collect("UNBOUNDED_OFFSET", f.fakeFrame, e, f)
                 case CurrentRow => collect("UNBOUNDED_PRECEDING_OFFSET", f.fakeFrame, e, f)
@@ -189,220 +206,242 @@ trait WindowEvaluatorFactoryBase {
     // Map the groups to a (unbound) expression and frame factory pair.
     var numExpressions = 0
     val timeZone = SQLConf.get.sessionLocalTimeZone
-    framedFunctions.toSeq.map {
-      case (key, (expressions, functionSeq)) =>
-        val ordinal = numExpressions
-        val functions = functionSeq.toArray
+    framedFunctions.toSeq.map { case (key, (expressions, functionSeq)) =>
+      val ordinal = numExpressions
+      val functions = functionSeq.toArray
 
-        // Construct an aggregate processor if we need one.
-        // Currently we don't allow mixing of Pandas UDF and SQL aggregation functions
-        // in a single Window physical node. Therefore, we can assume no SQL aggregation
-        // functions if Pandas UDF exists. In the future, we might mix Pandas UDF and SQL
-        // aggregation function in a single physical node.
-        val aggFilters: Array[Option[Expression]] = expressions.map {
-          case WindowExpression(ae: AggregateExpression, _) => ae.filter
-          case _ => None
-        }.toArray
-        // Keep as `def` (lazy / per-call): the FRAME_LESS_OFFSET /
-        // UNBOUNDED_OFFSET / UNBOUNDED_PRECEDING_OFFSET branches do not read
-        // `processor`. Eager `val` construction would invoke
-        // `AggregateProcessor.apply` on Lag / Lead / NthValue and throw
-        // `INTERNAL_ERROR: Unsupported aggregate function`.
-        def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
-          null
-        } else {
-          AggregateProcessor(
-            functions,
-            ordinal,
-            childOutput,
-            (expressions, schema) =>
-              MutableProjection.create(expressions, schema),
-            aggFilters)
-        }
-        val conf = SQLConf.get
-        val blockSize = conf.windowSegmentTreeBlockSize
+      // Construct an aggregate processor if we need one.
+      // Currently we don't allow mixing of Pandas UDF and SQL aggregation functions
+      // in a single Window physical node. Therefore, we can assume no SQL aggregation
+      // functions if Pandas UDF exists. In the future, we might mix Pandas UDF and SQL
+      // aggregation function in a single physical node.
+      val aggFilters: Array[Option[Expression]] = expressions.map {
+        case WindowExpression(ae: AggregateExpression, _) => ae.filter
+        case _ => None
+      }.toArray
+      // Keep as `def` (lazy / per-call): the FRAME_LESS_OFFSET /
+      // UNBOUNDED_OFFSET / UNBOUNDED_PRECEDING_OFFSET branches do not read
+      // `processor`. Eager `val` construction would invoke
+      // `AggregateProcessor.apply` on Lag / Lead / NthValue and throw
+      // `INTERNAL_ERROR: Unsupported aggregate function`.
+      def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
+        null
+      } else {
+        AggregateProcessor(
+          functions,
+          ordinal,
+          childOutput,
+          (expressions, schema) => MutableProjection.create(expressions, schema),
+          aggFilters)
+      }
+      val conf = SQLConf.get
+      val isMinMaxOnly = conf.windowMonotonicDequeEnabled &&
+        functions.nonEmpty && functions.forall {
+          case _: Min | _: Max => true
+          case _ => false
+        } && aggFilters.forall(_.isEmpty)
+      val blockSize = conf.windowSegmentTreeBlockSize
 
-        // Create the factory to produce WindowFunctionFrame.
-        val factory = key match {
-          // Frameless offset Frame
-          case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _, expr) =>
-            target: InternalRow =>
-              new FrameLessOffsetWindowFunctionFrame(
-                target,
-                ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
-                functions.map(_.asInstanceOf[OffsetWindowFunction]),
-                childOutput,
-                (expressions, schema) =>
-                  MutableProjection.create(expressions, schema),
-                offset,
-                expr.nonEmpty)
-          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, expr) =>
-            target: InternalRow => {
-              new UnboundedOffsetWindowFunctionFrame(
-                target,
-                ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
-                functions.map(_.asInstanceOf[OffsetWindowFunction]),
-                childOutput,
-                (expressions, schema) =>
-                  MutableProjection.create(expressions, schema),
-                offset,
-                expr.nonEmpty)
-            }
-          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, expr) =>
-            target: InternalRow => {
-              new UnboundedPrecedingOffsetWindowFunctionFrame(
-                target,
-                ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
-                functions.map(_.asInstanceOf[OffsetWindowFunction]),
-                childOutput,
-                (expressions, schema) =>
-                  MutableProjection.create(expressions, schema),
-                offset,
-                expr.nonEmpty)
-            }
+      // Create the factory to produce WindowFunctionFrame.
+      val factory = key match {
+        // Frameless offset Frame
+        case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          target: InternalRow =>
+            new FrameLessOffsetWindowFunctionFrame(
+              target,
+              ordinal,
+              // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+              functions.map(_.asInstanceOf[OffsetWindowFunction]),
+              childOutput,
+              (expressions, schema) => MutableProjection.create(expressions, schema),
+              offset,
+              expr.nonEmpty)
+        case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          target: InternalRow => {
+            new UnboundedOffsetWindowFunctionFrame(
+              target,
+              ordinal,
+              // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+              functions.map(_.asInstanceOf[OffsetWindowFunction]),
+              childOutput,
+              (expressions, schema) => MutableProjection.create(expressions, schema),
+              offset,
+              expr.nonEmpty)
+          }
+        case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, expr) =>
+          target: InternalRow => {
+            new UnboundedPrecedingOffsetWindowFunctionFrame(
+              target,
+              ordinal,
+              // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+              functions.map(_.asInstanceOf[OffsetWindowFunction]),
+              childOutput,
+              (expressions, schema) => MutableProjection.create(expressions, schema),
+              offset,
+              expr.nonEmpty)
+          }
 
-          // Entire Partition Frame.
-          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _) =>
-            target: InternalRow => {
-              new UnboundedWindowFunctionFrame(target, processor)
-            }
+        // Entire Partition Frame.
+        case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _) =>
+          target: InternalRow => {
+            new UnboundedWindowFunctionFrame(target, processor)
+          }
 
-          // Growing Frame.
-          case ("AGGREGATE", frameType, UnboundedPreceding, upper, _) =>
-            target: InternalRow => {
-              new UnboundedPrecedingWindowFunctionFrame(
+        // Growing Frame.
+        case ("AGGREGATE", frameType, UnboundedPreceding, upper, _) =>
+          target: InternalRow => {
+            new UnboundedPrecedingWindowFunctionFrame(
+              target,
+              processor,
+              createBoundOrdering(frameType, upper, timeZone))
+          }
+
+        // Shrinking Frame.
+        case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
+          if (isMinMaxOnly) { target: InternalRow =>
+            {
+              val lb = createBoundOrdering(frameType, lower, timeZone)
+              numMonotonicDequeFrames.foreach(_ += 1)
+              new SlidingWindowMinMaxFunctionFrame(
                 target,
                 processor,
+                lb,
+                None,
+                functions,
+                childOutput)
+            }
+          } else if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
+            val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
+            // Shrinking-frame queries `[lower, n)` on `WindowSegmentTree` touch the LRU
+            // for exactly two blocks per query: (1) the lower-edge partial block, and
+            // (2) the partition's last block (the right-partial `mergeBlockRange(bhi, 0,
+            // ...)` calls `ensureBlockLevels(bhi)` on every multi-block query). Middle
+            // blocks of `[lower, n)` are answered directly from `blockAggregates` and
+            // never go through the LRU. The lower-edge block advances monotonically with
+            // the output row, so once the cursor crosses a boundary the previous block
+            // is never revisited; the last block stays hot because every query touches
+            // it. Hint = 2 keeps both resident; routing through `estimateMaxCachedBlocks`
+            // would produce 8 by default (no `IntegerLiteral` upper match) -- correct
+            // numerically but misleading about what the shrinking path actually needs.
+            // Note: tuning this down to 1 would thrash, evicting the last block on every
+            // query and forcing it to be rebuilt.
+            val cacheHint = Some(2)
+            target: InternalRow => {
+              val tc = TaskContext.get()
+              if (tc == null) {
+                throw SparkException.internalError(
+                  "WindowEvaluatorFactoryBase.shrinkingSegTreeFrameFactory requires " +
+                    "an active TaskContext")
+              }
+              val tmm = tc.taskMemoryManager()
+              val lb = createBoundOrdering(frameType, lower, timeZone)
+              new SegmentTreeWindowFunctionFrame(
+                target,
+                processor,
+                segFns,
+                childOutput,
+                frameType,
+                lb,
+                ubound = None,
+                fallbackFactory =
+                  () => new UnboundedFollowingWindowFunctionFrame(target, processor, lb),
+                (e, s) => MutableProjection.create(e, s),
+                conf,
+                cacheHint,
+                tmm,
+                numSegmentTreeFrames,
+                numSegmentTreeFallbackFrames)
+            }
+          } else { target: InternalRow =>
+            {
+              new UnboundedFollowingWindowFunctionFrame(
+                target,
+                processor,
+                createBoundOrdering(frameType, lower, timeZone))
+            }
+          }
+
+        // Moving Frame.
+        case ("AGGREGATE", frameType, lower, upper, _) =>
+          if (isMinMaxOnly) { target: InternalRow =>
+            {
+              val lb = createBoundOrdering(frameType, lower, timeZone)
+              val ub = createBoundOrdering(frameType, upper, timeZone)
+              numMonotonicDequeFrames.foreach(_ += 1)
+              new SlidingWindowMinMaxFunctionFrame(
+                target,
+                processor,
+                lb,
+                Some(ub),
+                functions,
+                childOutput)
+            }
+          } else if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
+            val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
+            val cacheHint = estimateMaxCachedBlocks(lower, upper, frameType, blockSize)
+            target: InternalRow => {
+              // Task-completion listener registration lives inside the frame
+              // constructor (one per frame instance) to avoid duplicates when
+              // this closure fires multiple times per task. `TaskContext.get()`
+              // is only called at task-execution time, never at driver planning.
+              val tc = TaskContext.get()
+              if (tc == null) {
+                throw SparkException.internalError(
+                  "WindowEvaluatorFactoryBase.segTreeFrameFactory requires " +
+                    "an active TaskContext")
+              }
+              val tmm = tc.taskMemoryManager()
+              val lb = createBoundOrdering(frameType, lower, timeZone)
+              val ub = createBoundOrdering(frameType, upper, timeZone)
+              new SegmentTreeWindowFunctionFrame(
+                target,
+                processor,
+                segFns,
+                childOutput,
+                frameType,
+                lb,
+                ubound = Some(ub),
+                fallbackFactory = () => new SlidingWindowFunctionFrame(target, processor, lb, ub),
+                (e, s) => MutableProjection.create(e, s),
+                conf,
+                cacheHint,
+                tmm,
+                numSegmentTreeFrames,
+                numSegmentTreeFallbackFrames)
+            }
+          } else { target: InternalRow =>
+            {
+              new SlidingWindowFunctionFrame(
+                target,
+                processor,
+                createBoundOrdering(frameType, lower, timeZone),
                 createBoundOrdering(frameType, upper, timeZone))
             }
+          }
 
-          // Shrinking Frame.
-          case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
-            if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
-              val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
-              // Shrinking-frame queries `[lower, n)` on `WindowSegmentTree` touch the LRU
-              // for exactly two blocks per query: (1) the lower-edge partial block, and
-              // (2) the partition's last block (the right-partial `mergeBlockRange(bhi, 0,
-              // ...)` calls `ensureBlockLevels(bhi)` on every multi-block query). Middle
-              // blocks of `[lower, n)` are answered directly from `blockAggregates` and
-              // never go through the LRU. The lower-edge block advances monotonically with
-              // the output row, so once the cursor crosses a boundary the previous block
-              // is never revisited; the last block stays hot because every query touches
-              // it. Hint = 2 keeps both resident; routing through `estimateMaxCachedBlocks`
-              // would produce 8 by default (no `IntegerLiteral` upper match) -- correct
-              // numerically but misleading about what the shrinking path actually needs.
-              // Note: tuning this down to 1 would thrash, evicting the last block on every
-              // query and forcing it to be rebuilt.
-              val cacheHint = Some(2)
-              target: InternalRow => {
-                val tc = TaskContext.get()
-                if (tc == null) {
-                  throw SparkException.internalError(
-                    "WindowEvaluatorFactoryBase.shrinkingSegTreeFrameFactory requires " +
-                      "an active TaskContext")
-                }
-                val tmm = tc.taskMemoryManager()
-                val lb = createBoundOrdering(frameType, lower, timeZone)
-                new SegmentTreeWindowFunctionFrame(
-                  target,
-                  processor,
-                  segFns,
-                  childOutput,
-                  frameType,
-                  lb,
-                  ubound = None,
-                  fallbackFactory = () =>
-                    new UnboundedFollowingWindowFunctionFrame(target, processor, lb),
-                  (e, s) => MutableProjection.create(e, s),
-                  conf,
-                  cacheHint,
-                  tmm,
-                  numSegmentTreeFrames,
-                  numSegmentTreeFallbackFrames)
-              }
-            } else {
-              target: InternalRow => {
-                new UnboundedFollowingWindowFunctionFrame(
-                  target,
-                  processor,
-                  createBoundOrdering(frameType, lower, timeZone))
-              }
-            }
+        case _ =>
+          throw SparkException.internalError(s"Unsupported factory: $key")
+      }
 
-          // Moving Frame.
-          case ("AGGREGATE", frameType, lower, upper, _) =>
-            if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
-              val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
-              val cacheHint = estimateMaxCachedBlocks(lower, upper, frameType, blockSize)
-              target: InternalRow => {
-                // Task-completion listener registration lives inside the frame
-                // constructor (one per frame instance) to avoid duplicates when
-                // this closure fires multiple times per task. `TaskContext.get()`
-                // is only called at task-execution time, never at driver planning.
-                val tc = TaskContext.get()
-                if (tc == null) {
-                  throw SparkException.internalError(
-                    "WindowEvaluatorFactoryBase.segTreeFrameFactory requires " +
-                      "an active TaskContext")
-                }
-                val tmm = tc.taskMemoryManager()
-                val lb = createBoundOrdering(frameType, lower, timeZone)
-                val ub = createBoundOrdering(frameType, upper, timeZone)
-                new SegmentTreeWindowFunctionFrame(
-                  target,
-                  processor,
-                  segFns,
-                  childOutput,
-                  frameType,
-                  lb,
-                  ubound = Some(ub),
-                  fallbackFactory = () =>
-                    new SlidingWindowFunctionFrame(target, processor, lb, ub),
-                  (e, s) => MutableProjection.create(e, s),
-                  conf,
-                  cacheHint,
-                  tmm,
-                  numSegmentTreeFrames,
-                  numSegmentTreeFallbackFrames)
-              }
-            } else {
-              target: InternalRow => {
-                new SlidingWindowFunctionFrame(
-                  target,
-                  processor,
-                  createBoundOrdering(frameType, lower, timeZone),
-                  createBoundOrdering(frameType, upper, timeZone))
-              }
-            }
+      // Keep track of the number of expressions. This is a side-effect in a map...
+      numExpressions += expressions.size
 
-          case _ =>
-            throw SparkException.internalError(s"Unsupported factory: $key")
-        }
-
-        // Keep track of the number of expressions. This is a side-effect in a map...
-        numExpressions += expressions.size
-
-        // Create the Window Expression - Frame Factory pair.
-        (expressions, factory)
+      // Create the Window Expression - Frame Factory pair.
+      (expressions, factory)
     }
   }
 
   /**
-   * Segment-tree path eligibility. The tree relies on
-   * `DeclarativeAggregate.mergeExpressions`, which [[AggregateWindowFunction]]s
-   * (NthValue, NTile, Rank, RowNumber, NullIndex) refuse via
-   * `mergeUnsupportedByWindowFunctionError`: they extend DeclarativeAggregate
-   * but are NOT merge-capable. Normal aggregate window expressions reach this
-   * code as the inner DeclarativeAggregate unwrapped from
-   * [[AggregateExpression]] (see `windowFrameExpressionFactoryPairs.collect`).
+   * Segment-tree path eligibility. The tree relies on `DeclarativeAggregate.mergeExpressions`,
+   * which [[AggregateWindowFunction]]s (NthValue, NTile, Rank, RowNumber, NullIndex) refuse via
+   * `mergeUnsupportedByWindowFunctionError`: they extend DeclarativeAggregate but are NOT
+   * merge-capable. Normal aggregate window expressions reach this code as the inner
+   * DeclarativeAggregate unwrapped from [[AggregateExpression]] (see
+   * `windowFrameExpressionFactoryPairs.collect`).
    *
-   * DISTINCT aggregate window expressions are already rejected earlier in
-   * analysis by `WindowResolution.checkWindowFunction`
-   * (error class `DISTINCT_WINDOW_FUNCTION_UNSUPPORTED`), so no explicit
-   * `isDistinct` gate is needed here.
+   * DISTINCT aggregate window expressions are already rejected earlier in analysis by
+   * `WindowResolution.checkWindowFunction` (error class `DISTINCT_WINDOW_FUNCTION_UNSUPPORTED`),
+   * so no explicit `isDistinct` gate is needed here.
    */
   private def eligibleForSegTree(
       functions: Array[Expression],
@@ -418,9 +457,9 @@ trait WindowEvaluatorFactoryBase {
       case _ => false
     }
     conf.windowSegmentTreeEnabled &&
-      frameTypeOk &&
-      filters.forall(_.isEmpty) &&
-      functions.forall(WindowSegmentTree.isEligible)
+    frameTypeOk &&
+    filters.forall(_.isEmpty) &&
+    functions.forall(WindowSegmentTree.isEligible)
   }
 
   private def estimateMaxCachedBlocks(
@@ -432,7 +471,8 @@ trait WindowEvaluatorFactoryBase {
     // RANGE the frame width is data-dependent (defined by order-key distance,
     // not row count), so no static width inference is possible; fall back to
     // a default budget and rely on the runtime LRU + TMM spiller.
-    assert(frameType == RowFrame || frameType == RangeFrame,
+    assert(
+      frameType == RowFrame || frameType == RangeFrame,
       s"estimateMaxCachedBlocks expects RowFrame or RangeFrame, got $frameType")
     if (frameType == RangeFrame) {
       return Some(8)
