@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.graph.DataflowGraph.mapUnique
-import org.apache.spark.sql.pipelines.util.{SchemaInferenceUtils, SchemaMergingUtils}
+import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -172,25 +172,24 @@ case class DataflowGraph(
    * A map of the inferred schema of each table, computed by merging the analyzed schemas
    * of all flows writing to that table.
    *
-   * The merge honors the session's `spark.sql.caseSensitive`: under case-insensitive analysis two
-   * flows emitting column names that differ only in case contribute a single column rather than
-   * both, which would otherwise produce a target schema the engine's own resolver cannot
-   * disambiguate. Which of the two spellings survives follows the order the flows are merged in,
-   * which this map does not define, so callers should not depend on a particular casing.
+   * The merge honors the effective `spark.sql.caseSensitive` of the flows writing to each table:
+   * under case-insensitive analysis two flows emitting column names that differ only in case
+   * contribute a single column rather than both, which would otherwise produce a target schema the
+   * engine's own resolver cannot disambiguate. Which of the two spellings survives follows the
+   * order the flows are merged in, which this map does not define, so callers should not depend on
+   * a particular casing.
    */
   lazy val inferredSchema: Map[TableIdentifier, StructType] = {
     val sessionCaseSensitive = SparkSession.active.sessionState.conf.caseSensitiveAnalysis
     flowsTo.map { case (destinationIdentifier, flows) =>
-      val caseSensitive = SchemaInferenceUtils.effectiveCaseSensitivity(
+      val resolvedFlows = flows.map { flow =>
+        resolvedFlow(flow.identifier)
+      }
+      destinationIdentifier -> SchemaInferenceUtils.inferSchemaFromFlows(
         tableIdentifier = destinationIdentifier,
-        flows = flows,
-        sessionCaseSensitive = sessionCaseSensitive
-      )
-      destinationIdentifier -> flows
-        .map { flow =>
-          resolvedFlow(flow.identifier).schema
-        }
-        .reduce(SchemaMergingUtils.mergeSchemas(_, _, caseSensitive))
+        flows = resolvedFlows,
+        userSpecifiedSchema = None,
+        sessionCaseSensitive = sessionCaseSensitive)
     }
   }
 

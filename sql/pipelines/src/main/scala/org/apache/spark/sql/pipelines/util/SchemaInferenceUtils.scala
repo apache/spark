@@ -19,7 +19,6 @@ package org.apache.spark.sql.pipelines.util
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.internal.SQLConf
@@ -103,25 +102,32 @@ object SchemaInferenceUtils {
    * Returns an error if encountered during schema inference or merging the inferred schema with
    * the user-specified one.
    *
-   * All merges honor `caseSensitive`, which defaults to the active session's
-   * `spark.sql.caseSensitive`. Under case-insensitive analysis, flows emitting column names that
-   * differ only in case contribute a single column, and a declared column matches a flow column
-   * differing only in case -- consistent with how the rest of the engine resolves those names.
-   * Which of two case-only-differing spellings survives follows the order the flows are merged in,
-   * which is not defined here, so callers should not depend on a particular casing.
+   * All merges honor the effective `spark.sql.caseSensitive` of the flows writing to
+   * `tableIdentifier`, falling back to `sessionCaseSensitive` for flows that do not set it. Under
+   * case-insensitive analysis, flows emitting column names that differ only in case contribute a
+   * single column, and a declared column matches a flow column differing only in case -- consistent
+   * with how the rest of the engine resolves those names. Which of two case-only-differing
+   * spellings survives follows the order the flows are merged in, which is not defined here, so
+   * callers should not depend on a particular casing.
    */
   def inferSchemaFromFlows(
+      tableIdentifier: TableIdentifier,
       flows: Seq[ResolvedFlow],
       userSpecifiedSchema: Option[StructType],
-      caseSensitive: Boolean = SparkSession.active.sessionState.conf.caseSensitiveAnalysis)
-      : StructType = {
+      sessionCaseSensitive: Boolean): StructType = {
     if (flows.isEmpty) {
       return userSpecifiedSchema.getOrElse(new StructType())
     }
 
     require(
-      flows.forall(_.destinationIdentifier == flows.head.destinationIdentifier),
+      flows.forall(_.destinationIdentifier == tableIdentifier),
       "Expected all flows to have the same destination"
+    )
+
+    val caseSensitive = effectiveCaseSensitivity(
+      tableIdentifier = tableIdentifier,
+      flows = flows.map(_.flow),
+      sessionCaseSensitive = sessionCaseSensitive
     )
 
     val inferredSchema = flows.map(_.schema).fold(new StructType()) { (schemaSoFar, schema) =>
@@ -130,7 +136,7 @@ object SchemaInferenceUtils {
       } catch {
         case NonFatal(e) =>
           throw GraphErrors.unableToInferSchemaError(
-            flows.head.destinationIdentifier,
+            tableIdentifier,
             schemaSoFar,
             schema,
             cause = Option(e)
@@ -138,12 +144,11 @@ object SchemaInferenceUtils {
       }
     }
 
-    val identifier = flows.head.destinationIdentifier
     val datasetType = GraphElementTypeUtils.getDatasetTypeForMaterializedViewOrStreamingTable(flows)
     // We merge the inferred schema with the user-specified schema to pick up any schema metadata
     // that is provided by the user, e.g., comments or column masks.
     mergeInferredAndUserSchemasIfNeeded(
-      identifier,
+      tableIdentifier,
       datasetType,
       inferredSchema,
       userSpecifiedSchema,

@@ -186,7 +186,11 @@ case class VirtualTableInput(
       // Otherwise infer the schema from a combination of the incoming flows and the
       // user-specified schema, if provided.
       case _ =>
-        SchemaInferenceUtils.inferSchemaFromFlows(availableFlows, specifiedSchema)
+        SchemaInferenceUtils.inferSchemaFromFlows(
+          tableIdentifier = identifier,
+          flows = availableFlows,
+          userSpecifiedSchema = specifiedSchema,
+          sessionCaseSensitive = spark.sessionState.conf.caseSensitiveAnalysis)
     }
 
     // Produce either a streaming or batch dataframe, depending on whether this is a virtual
