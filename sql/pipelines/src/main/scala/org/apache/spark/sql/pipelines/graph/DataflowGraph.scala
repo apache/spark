@@ -179,8 +179,7 @@ case class DataflowGraph(
    * order the flows are merged in, which this map does not define, so callers should not depend on
    * a particular casing.
    */
-  lazy val inferredSchema: Map[TableIdentifier, StructType] = {
-    val sessionCaseSensitive = SparkSession.active.sessionState.conf.caseSensitiveAnalysis
+  def inferredSchema(sessionCaseSensitive: Boolean): Map[TableIdentifier, StructType] = {
     flowsTo.map { case (destinationIdentifier, flows) =>
       val resolvedFlows = flows.map { flow =>
         resolvedFlow(flow.identifier)
@@ -191,6 +190,10 @@ case class DataflowGraph(
         userSpecifiedSchema = None,
         sessionCaseSensitive = sessionCaseSensitive)
     }
+  }
+
+  lazy val inferredSchema: Map[TableIdentifier, StructType] = {
+    inferredSchema(SparkSession.active.sessionState.conf.caseSensitiveAnalysis)
   }
 
   /**
@@ -204,7 +207,9 @@ case class DataflowGraph(
    * materialization to create/evolve them alongside their owning table. The derivation is pure and
    * performs no catalog access.
    */
-  lazy val auxiliaryTableSpecs: Map[TableIdentifier, AuxiliaryTableSpec] = {
+  def auxiliaryTableSpecs(
+      sessionCaseSensitive: Boolean): Map[TableIdentifier, AuxiliaryTableSpec] = {
+    val inferredSchemas = inferredSchema(sessionCaseSensitive)
     resolvedFlowsTo.flatMap { case (destinationTableIdentifier, flowsToDestinationTable) =>
       table.get(destinationTableIdentifier).flatMap { destinationTable =>
         flowsToDestinationTable
@@ -215,13 +220,17 @@ case class DataflowGraph(
           .map { autoCdcFlow =>
             val spec = AutoCdcAuxiliaryTable.buildAuxiliaryTableSpecFor(
               targetTable = destinationTable,
-              targetTableSchema = inferredSchema(destinationTableIdentifier),
+              targetTableSchema = inferredSchemas(destinationTableIdentifier),
               inputAutoCdcFlow = autoCdcFlow
             )
             destinationTableIdentifier -> spec
           }
       }
     }.toMap
+  }
+
+  lazy val auxiliaryTableSpecs: Map[TableIdentifier, AuxiliaryTableSpec] = {
+    auxiliaryTableSpecs(SparkSession.active.sessionState.conf.caseSensitiveAnalysis)
   }
 
   /** Ensure that the [[DataflowGraph]] is valid and throws errors if not. */

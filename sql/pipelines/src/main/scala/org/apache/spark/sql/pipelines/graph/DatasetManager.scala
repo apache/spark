@@ -100,6 +100,8 @@ object DatasetManager extends Logging {
     val tablesToMaterialize = {
       tablesToMatz(resolvedDataflowGraph).map(t => t.table.identifier -> t).toMap
     }
+    val sessionCaseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
+    val auxiliaryTableSpecs = resolvedDataflowGraph.auxiliaryTableSpecs(sessionCaseSensitive)
 
     // materialized [[DataflowGraph]] where each table has been materialized and each table
     // has metadata (e.g., normalized table storage path) populated
@@ -115,8 +117,7 @@ object DatasetManager extends Logging {
                 // materializeAuxiliaryTable (which uses it to decide evolve-vs-create). Nothing
                 // between them mutates the auxiliary table, so a single load is safe and avoids a
                 // redundant catalog round trip.
-                val auxiliaryTableSpecOpt =
-                  resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier)
+                val auxiliaryTableSpecOpt = auxiliaryTableSpecs.get(table.identifier)
                 val existingAuxiliaryTable = auxiliaryTableSpecOpt.flatMap { spec =>
                   val (auxCatalog, auxId) =
                     PipelinesCatalogUtils.resolveTableCatalog(context.spark, spec.identifier)
@@ -312,8 +313,9 @@ object DatasetManager extends Logging {
     val (catalog, identifier) =
       PipelinesCatalogUtils.resolveTableCatalog(context.spark, table.identifier)
 
+    val sessionCaseSensitive = context.spark.sessionState.conf.caseSensitiveAnalysis
     val outputSchema = table.specifiedSchema.getOrElse(
-      resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
+      resolvedDataflowGraph.inferredSchema(sessionCaseSensitive)(table.identifier).asNullable
     )
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
