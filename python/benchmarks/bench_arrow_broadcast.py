@@ -15,12 +15,14 @@
 # limitations under the License.
 #
 
-"""End-to-end benchmarks for pickle and Arrow PySpark broadcast serialization."""
+"""Benchmarks for pickle and Arrow PySpark broadcast serialization."""
+
+import io
 
 import numpy as np
 import pyarrow as pa
 
-from pyspark import SparkConf, SparkContext
+from pyspark import Broadcast, SparkConf, SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, udf
 
@@ -29,6 +31,109 @@ def _create_broadcast_value(n_rows):
     ids = pa.array(np.arange(n_rows, dtype=np.int64))
     payloads = pa.array(["x" * 32] * n_rows)
     return pa.Table.from_arrays([ids, payloads], names=["id", "payload"])
+
+
+class _UncloseableBytesIO(io.BytesIO):
+    def close(self):
+        pass
+
+
+class ExampleArrowBroadcastValue:
+    """A Python-list-backed value that can be reconstructed with Arrow buffers."""
+
+    def __init__(self, ids=None, payloads=None, table=None):
+        self.ids = ids
+        self.payloads = payloads
+        self.table = table
+
+    @classmethod
+    def from_size(cls, n_rows):
+        ids = list(range(n_rows))
+        payloads = [f"{value:032d}" for value in ids]
+        return cls(ids=ids, payloads=payloads)
+
+    def __to_arrow__(self):
+        if self.table is not None:
+            return self.table
+        return pa.table({"id": self.ids, "payload": self.payloads})
+
+    @classmethod
+    def __from_arrow__(cls, value):
+        return cls(table=value)
+
+    @property
+    def num_rows(self):
+        if self.table is not None:
+            return self.table.num_rows
+        return len(self.ids)
+
+    def id_at(self, index):
+        if self.table is not None:
+            return self.table.column("id")[index].as_py()
+        return self.ids[index]
+
+    def payload_at(self, index):
+        if self.table is not None:
+            return self.table.column("payload")[index].as_py()
+        return self.payloads[index]
+
+
+class ArrowBroadcastSerdeBenchmark:
+    """Benchmark the standalone driver and worker broadcast serde paths."""
+
+    params = [
+        [100_000, 1_000_000],
+        ["pickle", "arrow"],
+    ]
+    param_names = ["n_rows", "serializer"]
+
+    number = 1
+    repeat = 3
+    timeout = 60
+
+    def setup(self, n_rows, serializer):
+        self.value = _create_broadcast_value(n_rows)
+        self._setup_serde(serializer)
+
+    def _setup_serde(self, serializer):
+        self.broadcast = Broadcast.__new__(Broadcast)
+        self.use_arrow = serializer == "arrow"
+
+        output = _UncloseableBytesIO()
+        self.broadcast._dump(self.value, output, use_arrow=self.use_arrow)
+        self.serialized = output.getvalue()
+        actual = self.broadcast._load(io.BytesIO(self.serialized))
+        self._check_deserialized_value(actual)
+
+    def _check_deserialized_value(self, actual):
+        assert actual.equals(self.value)
+
+    def time_driver_serialize(self, n_rows, serializer):
+        output = _UncloseableBytesIO()
+        self.broadcast._dump(self.value, output, use_arrow=self.use_arrow)
+
+    def time_worker_deserialize(self, n_rows, serializer):
+        self.broadcast._load(io.BytesIO(self.serialized))
+
+    def track_serialized_size(self, n_rows, serializer):
+        return len(self.serialized)
+
+    track_serialized_size.unit = "bytes"
+
+
+class PythonObjectArrowBroadcastSerdeBenchmark(ArrowBroadcastSerdeBenchmark):
+    """Benchmark serde for a Python-list-backed object with an Arrow protocol."""
+
+    def setup(self, n_rows, serializer):
+        self.value = ExampleArrowBroadcastValue.from_size(n_rows)
+        self._setup_serde(serializer)
+
+    def _check_deserialized_value(self, actual):
+        assert actual.num_rows == self.value.num_rows
+        assert actual.id_at(0) == self.value.id_at(0)
+        assert actual.id_at(-1) == self.value.id_at(-1)
+        assert actual.payload_at(0) == self.value.payload_at(0)
+        assert actual.payload_at(-1) == self.value.payload_at(-1)
 
 
 class ArrowBroadcastEndToEndBenchmark:
