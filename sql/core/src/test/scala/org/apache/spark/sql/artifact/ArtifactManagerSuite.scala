@@ -265,6 +265,18 @@ class ArtifactManagerSuite extends SharedSparkSession {
       parameters = Map("key" -> s""""$key""""))
   }
 
+  test("SPARK-58531: StaticSQLConf can initialize before SQLConf") {
+    // Use a fresh process because both objects may already be initialized in this test JVM.
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val process = Utils.executeCommand(
+      Seq(
+        s"$sparkHome/bin/spark-class",
+        StaticSQLConfInitializationTestApp.getClass.getCanonicalName.stripSuffix("$")),
+      new File(sparkHome),
+      Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
+    assert(process.waitFor() === 0)
+  }
+
   test("Removal of resources") {
 
     withTempPath { path =>
@@ -724,5 +736,12 @@ class ArtifactManagerSuite extends SharedSparkSession {
       assert(count4 == count3,
         s"$msg: codegen should not happen again as classloader is not changed")
     }
+  }
+}
+
+object StaticSQLConfInitializationTestApp {
+  def main(args: Array[String]): Unit = {
+    val key = StaticSQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key
+    require(key == "spark.sql.artifact.copyFromLocalToFs.allowDestLocal")
   }
 }

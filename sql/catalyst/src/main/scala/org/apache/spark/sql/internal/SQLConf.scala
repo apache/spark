@@ -8222,7 +8222,7 @@ object SQLConf {
       DeprecatedConfig(ESCAPED_STRING_LITERALS.key, "4.0",
         "Use raw string literals with the `r` prefix instead. "),
       DeprecatedConfig("spark.connect.copyFromLocalToFs.allowDestLocal", "4.0",
-        s"Use '${StaticSQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead."),
+        "Use 'spark.sql.artifact.copyFromLocalToFs.allowDestLocal' instead."),
       DeprecatedConfig(ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key, "4.0", "Increase indexes by 1 " +
         "in `strfmt` of the `format_string` function. Refer to the first argument by \"1$\"."),
       DeprecatedConfig(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "4.1",
