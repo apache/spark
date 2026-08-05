@@ -23,9 +23,10 @@ import scala.collection.mutable.ArrayBuffer
 
 import InMemoryCatalystRuntimeFilterTable._
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, Expression, Predicate => CatalystPredicate}
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -64,9 +65,9 @@ class InMemoryCatalystRuntimeFilterTable(
 
   /**
    * Scan that receives runtime filters as Catalyst expressions.
-   * Records what was pushed; pruning is left to the
-   * [[org.apache.spark.sql.execution.FilterExec]] above the scan, so the recorded
-   * expressions are the only observable effect.
+   * Records what was pushed and evaluates expressions that reference only
+   * partition columns against each partition key, so fully-pushed predicates
+   * are enforced when Spark drops the post-scan [[org.apache.spark.sql.execution.FilterExec]].
    */
   case class InMemoryCatalystRuntimeFilterBatchScan(
       var _data: Seq[InputPartition],
@@ -101,11 +102,46 @@ class InMemoryCatalystRuntimeFilterTable(
       }
     }
 
-    override def filter(expressions: Array[Expression]): Unit =
+    override def filter(expressions: Array[Expression]): Unit = {
       _catalystPredicates ++= expressions
+      val partAttrs = partitionAttributes
+      if (partAttrs.isEmpty) return
 
-    override def pushedPredicates(): Array[Expression] =
-      _catalystPredicates.toArray
+      val resolver = SQLConf.get.resolver
+      expressions.foreach { expr =>
+        val remapped = expr.transform {
+          case a: AttributeReference =>
+            partAttrs.find(p => resolver(p.name, a.name)).getOrElse(a)
+        }
+        // Only evaluate expressions whose refs are all partition columns, so we can bind
+        // against the partition key InternalRow (same approach as PartitionPredicateImpl).
+        if (remapped.references.forall(r => partAttrs.exists(_.exprId == r.exprId))) {
+          val bound = BindReferences.bindReference(remapped, partAttrs)
+          val pred = CatalystPredicate.createInterpreted(bound)
+          data = data.filter { p =>
+            try {
+              pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
+            } catch {
+              // Keep the partition on eval failure, matching PartitionPredicateImpl.
+              case _: Exception => true
+            }
+          }
+        }
+      }
+    }
+
+    /** Predicates recorded by [[filter]], for test assertions only. */
+    def pushedCatalystPredicates: Seq[Expression] = _catalystPredicates.toSeq
+
+    /** AttributeReferences matching the partition-key InternalRow field order. */
+    private def partitionAttributes: Seq[AttributeReference] = {
+      partitioning.flatMap(_.references()).flatMap { ref =>
+        val name = ref.fieldNames.mkString(".")
+        readSchema.find(_.name == name).orElse(tableSchema.find(_.name == name)).map { f =>
+          AttributeReference(f.name, f.dataType, f.nullable)()
+        }
+      }.toSeq
+    }
   }
 }
 

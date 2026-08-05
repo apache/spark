@@ -78,14 +78,16 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     withTable(tbl, dim) {
       sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part) " +
         "TBLPROPERTIES('fully-pushed-filter-attributes' = 'part')")
+      // Matching and nonmatching partitions: the scan must prune nonmatching ones itself
+      // because Spark drops the post-scan FilterExec for fully pushed attributes.
       for (i <- 0 until 5) {
-        sql(s"INSERT INTO $tbl VALUES ($i, 3)")
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
       }
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (3)")
 
       val df = sql(s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim)")
-      checkAnswer(df, (0 until 5).map(i => Row(i, 3)))
+      checkAnswer(df, Row(3, 3))
 
       assertScalarSubqueryRuntimeFilters(df)
       val part = AttributeReference("part", IntegerType, nullable = false)()
@@ -264,8 +266,9 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
   private def getPushedCatalystPredicates(df: DataFrame): Seq[Expression] = {
     collectBatchScan(df).scan match {
       case s: InMemoryCatalystRuntimeFilterTable#InMemoryCatalystRuntimeFilterBatchScan =>
-        s.pushedPredicates().toSeq
-      case _ => Seq.empty
+        s.pushedCatalystPredicates
+      case other =>
+        fail(s"Expected InMemoryCatalystRuntimeFilterBatchScan, got $other")
     }
   }
 
