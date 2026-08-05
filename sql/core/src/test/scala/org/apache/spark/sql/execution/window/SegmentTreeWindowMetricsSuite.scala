@@ -34,8 +34,6 @@ class SegmentTreeWindowMetricsSuite extends SharedSparkSession with SQLMetricsTe
 
   import testImplicits._
 
-  override def withSQLConf[T](confs: (String, String)*)(f: => T): T =
-    super.withSQLConf((SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false") +: confs: _*)(f)
 
   /**
    * Run `df` and return the first Window node's seg-tree counter values as Long. (Other metrics
