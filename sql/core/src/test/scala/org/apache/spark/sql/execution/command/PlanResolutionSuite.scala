@@ -21,7 +21,7 @@ import java.net.URI
 import java.util.Collections
 
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Mockito.{mock, when, withSettings}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.SparkUnsupportedOperationException
@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.SupportsTableStateOptions
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
@@ -184,7 +185,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val ident = invocation.getArguments()(0).asInstanceOf[Identifier]
       val version = invocation.getArguments()(1).asInstanceOf[String]
       (ident.name, version) match {
-        case ("tab", "v1") => table
+        case ("tab", "v1" | "v2") => table
         case ("tab", _) => throw new RuntimeException("Unknown version: " + version)
         case _ => throw new NoSuchTableException(Seq(ident.name))
       }
@@ -3392,6 +3393,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     AnalysisContext.withNewAnalysisContext {
       val ctx = AnalysisContext.get
       assert(ctx.relationCache.isEmpty)
+      assert(ctx.tableCache.isEmpty)
 
       // create two unresolved relations without time travel
       val unresolved1 = UnresolvedRelation(Seq("testcat", "tab"))
@@ -3408,6 +3410,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       // after first resolution, cache should have 1 entry (without time travel)
       assert(ctx.relationCache.size == 1)
       assert(ctx.relationCache.keys.head.timeTravelSpec.isEmpty)
+      assert(ctx.tableCache.size == 1)
 
       // create unresolved relation with time travel spec
       val timeTravelSpec = AsOfVersion("v1")
@@ -3422,6 +3425,17 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
       // after time travel resolution, cache should have 2 entries (with and without time travel)
       assert(ctx.relationCache.size == 2)
+      assert(ctx.tableCache.size == 2)
+
+      val otherTimeTravelSpec = AsOfVersion("v2")
+      val resolved4 = resolve(
+        UnresolvedRelation(Seq("testcat", "tab")),
+        Some(otherTimeTravelSpec))
+      assert(resolved4.timeTravelSpec.contains(otherTimeTravelSpec))
+
+      // Distinct parsed time-travel specs are distinct state pins even with identical raw options.
+      assert(ctx.relationCache.size == 3)
+      assert(ctx.tableCache.size == 3)
     }
   }
 
@@ -3483,8 +3497,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         cacheOpts: java.util.Map[String, String],
         readOpts: java.util.Map[String, String]): DataSourceV2Relation = {
       AnalysisContext.withNewAnalysisContext {
-        val sharedCache: RelationCache = (_, _) => Some(cachedRelationWith(cacheOpts))
-        val rule = new RelationResolution(catalogManagerWithDefault, sharedCache)
+        val sharedRelationCache: RelationCache = (criteria, _) =>
+          Some(cachedRelationWith(cacheOpts)).filter(criteria.matches)
+        val rule = new RelationResolution(catalogManagerWithDefault, sharedRelationCache)
         val unresolved =
           UnresolvedRelation(Seq("testcat", "tab"), new CaseInsensitiveStringMap(readOpts))
         rule.resolveRelation(unresolved) match {
@@ -3511,6 +3526,126 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       "differing options must not reuse the cached relation")
     assert(fresh.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty,
       "differing options should freshly load, not reuse the cached relation")
+  }
+
+  test("table-state cache uses first-resolution-wins shared relation cache matching") {
+    def newTable(id: String): Table = {
+      val t = mock(classOf[Table])
+      when(t.id()).thenReturn(id)
+      when(t.name()).thenReturn("tab")
+      when(t.columns()).thenReturn(Array(Column.create("i", IntegerType)))
+      when(t.capabilities()).thenReturn(java.util.Set.of())
+      t
+    }
+
+    def options(splitSize: String): CaseInsensitiveStringMap = {
+      new CaseInsensitiveStringMap(
+        java.util.Map.of("state", "s1", "split-size", splitSize))
+    }
+
+    def run(
+        firstSplitSize: String,
+        secondSplitSize: String,
+        sharedRelationCacheEntries: (
+            TableCatalog,
+            Identifier,
+            Table,
+            Table) => Seq[LogicalPlan]): (
+        DataSourceV2Relation,
+        DataSourceV2Relation,
+        Table,
+        Table,
+        Int) = {
+      val currentTable = newTable("table-id")
+      val cachedTable = newTable("table-id")
+      val catalogBase = mock(
+        classOf[TableCatalog],
+        withSettings().extraInterfaces(classOf[SupportsTableStateOptions]))
+      val catalog = catalogBase
+        .asInstanceOf[TableCatalog with SupportsTableStateOptions]
+      when(catalog.name()).thenReturn("statecat")
+      when(catalog.tableStateOptionKeys()).thenReturn(java.util.Set.of("state"))
+      var loads = 0
+      when(catalog.loadTable(
+        any[Identifier],
+        any[TableContext],
+        any[CaseInsensitiveStringMap])).thenAnswer((_: InvocationOnMock) => {
+        loads += 1
+        currentTable
+      })
+
+      val manager = mock(classOf[CatalogManager])
+      when(manager.catalog(any())).thenReturn(catalog)
+      when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
+      val ident = Identifier.of(Array.empty[String], "tab")
+      val sharedRelationCacheCandidates =
+        sharedRelationCacheEntries(catalog, ident, currentTable, cachedTable)
+      val sharedRelationCache: RelationCache =
+        (criteria, _) => sharedRelationCacheCandidates.find(criteria.matches)
+      val resolver = new RelationResolution(manager, sharedRelationCache)
+
+      def resolveWith(splitSize: String): DataSourceV2Relation = {
+        val unresolved = UnresolvedRelation(Seq("statecat", "tab"), options(splitSize))
+        resolver.resolveRelation(unresolved) match {
+          case Some(AsDataSourceV2Relation(relation)) => relation
+          case other => fail(s"failed to resolve as v2 relation: $other")
+        }
+      }
+
+      AnalysisContext.withNewAnalysisContext {
+        val first = resolveWith(firstSplitSize)
+        val second = resolveWith(secondSplitSize)
+        assert(AnalysisContext.get.tableCache.size == 1)
+        assert(AnalysisContext.get.relationCache.size == 2)
+        (first, second, currentTable, cachedTable, loads)
+      }
+    }
+
+    def cachedRelation(
+        catalog: TableCatalog,
+        ident: Identifier,
+        table: Table,
+        splitSize: String,
+        tag: Long): DataSourceV2Relation = {
+      val relation = DataSourceV2Relation.create(
+        table,
+        Some(catalog),
+        Some(ident),
+        options(splitSize))
+      relation.setTagValue(LogicalPlan.PLAN_ID_TAG, tag)
+      relation
+    }
+
+    // Situation A: the full-option cached match appears after a same-name decoy. It establishes
+    // the initial pin. A later same-state lookup scans past a same-ID/different-Table candidate
+    // and reuses only the candidate containing the exact pinned object.
+    val situationA = run("5", "9", { (catalog, ident, _, cachedTable) =>
+      val wrongId = newTable("other-id")
+      val olderExact = newTable("table-id")
+      val wrongVersionForNine = newTable("table-id")
+      Seq(
+        cachedRelation(catalog, ident, wrongId, "5", 1L),
+        cachedRelation(catalog, ident, cachedTable, "5", 2L),
+        cachedRelation(catalog, ident, olderExact, "5", 3L),
+        cachedRelation(catalog, ident, wrongVersionForNine, "9", 4L),
+        cachedRelation(catalog, ident, cachedTable, "9", 5L))
+    })
+    assert(situationA._1.table eq situationA._4)
+    assert(situationA._2.table eq situationA._4)
+    assert(situationA._1.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(2L))
+    assert(situationA._2.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(5L))
+    assert(situationA._5 == 1)
+
+    // Situation B: a nonmatching option bag resolves first and pins the current Table. The later
+    // full-option shared relation cache entry has the same ID, but cannot replace that concrete
+    // pin.
+    val situationB = run("9", "5", { (catalog, ident, _, cachedTable) =>
+      Seq(cachedRelation(catalog, ident, cachedTable, "5", 6L))
+    })
+    assert(situationB._1.table eq situationB._3)
+    assert(situationB._2.table eq situationB._3)
+    assert(situationB._2.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty)
+    assert(situationB._5 == 1)
   }
 
   private def resolve(

@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext
-import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, RelationCache, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, RelationCache, SharedRelationCacheCriteria, SharedRelationCacheTableMatch, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
@@ -481,6 +481,29 @@ private[sql] object CatalogV2Util {
       case _: NoSuchDatabaseException => None
     }
 
+  /**
+   * Projects a complete read option map to the options that may select table state.
+   *
+   * Catalogs must explicitly opt in to projection. For all other catalogs, every option is kept
+   * so that reusing a concrete table cannot silently combine states the catalog considers
+   * different.
+   */
+  def tableStateOptions(
+      catalog: CatalogPlugin,
+      options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = catalog match {
+    case supports: SupportsTableStateOptions =>
+      val stateKeys = supports.tableStateOptionKeys().asScala
+        .map(_.toLowerCase(Locale.ROOT))
+        .toSet
+      val projected = options.entrySet().asScala.collect {
+        case entry if stateKeys.contains(entry.getKey.toLowerCase(Locale.ROOT)) =>
+          entry.getKey -> entry.getValue
+      }.toMap
+      new CaseInsensitiveStringMap(projected.asJava)
+    case _ =>
+      options
+  }
+
   def getTable(
       catalog: CatalogPlugin,
       ident: Identifier,
@@ -534,24 +557,46 @@ private[sql] object CatalogV2Util {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
-  def isSameTable(
-      rel: DataSourceV2Relation,
+  def lookupSharedRelationCacheByTableId(
+      sharedRelationCache: RelationCache,
       catalog: CatalogPlugin,
       ident: Identifier,
-      table: Table): Boolean = {
-    rel.catalog.contains(catalog) && rel.identifier.contains(ident) && rel.table.id == table.id
+      tableId: String,
+      options: CaseInsensitiveStringMap,
+      conf: SQLConf): Option[DataSourceV2Relation] = {
+    val criteria = SharedRelationCacheCriteria(
+      catalog,
+      ident,
+      options,
+      SharedRelationCacheTableMatch.ByTableId(tableId))
+    lookupSharedRelationCache(sharedRelationCache, criteria, conf)
   }
 
-  def lookupCachedRelation(
-      cache: RelationCache,
+  def lookupSharedRelationCacheByTableInstance(
+      sharedRelationCache: RelationCache,
       catalog: CatalogPlugin,
       ident: Identifier,
       table: Table,
+      options: CaseInsensitiveStringMap,
       conf: SQLConf): Option[DataSourceV2Relation] = {
-    val nameParts = ident.toQualifiedNameParts(catalog)
-    val cached = cache.lookup(nameParts, conf.resolver)
-    cached.collect {
-      case r: DataSourceV2Relation if isSameTable(r, catalog, ident, table) => r
+    val criteria = SharedRelationCacheCriteria(
+      catalog,
+      ident,
+      options,
+      SharedRelationCacheTableMatch.ByTableInstance(table))
+    lookupSharedRelationCache(sharedRelationCache, criteria, conf)
+  }
+
+  /**
+   * Finds the first cached relation satisfying all lookup criteria. The shared relation cache
+   * evaluates the criteria against every same-name candidate in deterministic cache order.
+   */
+  private def lookupSharedRelationCache(
+      sharedRelationCache: RelationCache,
+      criteria: SharedRelationCacheCriteria,
+      conf: SQLConf): Option[DataSourceV2Relation] = {
+    sharedRelationCache.lookup(criteria, conf.resolver).collect {
+      case r: DataSourceV2Relation => r
     }
   }
 

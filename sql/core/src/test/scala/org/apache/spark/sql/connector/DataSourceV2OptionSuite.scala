@@ -17,17 +17,32 @@
 
 package org.apache.spark.sql.connector
 
+import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisContext,
+  RelationCache,
+  RelationResolution,
+  UnresolvedRelation,
+  V2TableReference}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, InMemoryCatalog, InMemoryRowLevelOperationTableCatalog, Table, TimeTravel}
+import org.apache.spark.sql.connector.catalog.{
+  Identifier,
+  InMemoryBaseTable,
+  InMemoryCatalog,
+  InMemoryRowLevelOperationTableCatalog,
+  SupportsTableStateOptions,
+  Table,
+  TableWritePrivilege,
+  TimeTravel}
 import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class LoadCountingInMemoryCatalog extends InMemoryCatalog {
   val singleArgLoads = new AtomicInteger(0)
@@ -38,6 +53,11 @@ class LoadCountingInMemoryCatalog extends InMemoryCatalog {
   }
 }
 
+class StateAwareInMemoryCatalog extends LoadCountingInMemoryCatalog
+  with SupportsTableStateOptions {
+  override def tableStateOptionKeys(): util.Set[String] = util.Set.of("snapshot")
+}
+
 class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
   import testImplicits._
 
@@ -45,6 +65,20 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
   private def inMemoryCatalog: InMemoryCatalog =
     catalog("testcat").asInstanceOf[InMemoryCatalog]
+
+  private def withStateAwareTable(
+      f: (StateAwareInMemoryCatalog, String) => Unit): Unit = {
+    withSQLConf(
+      "spark.sql.catalog.statecat" -> classOf[StateAwareInMemoryCatalog].getName,
+      "spark.sql.catalog.statecat.copyOnLoad" -> "true") {
+      val tableName = "statecat.ns.table"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName (id bigint, data string)")
+        sql(s"INSERT INTO $tableName VALUES (1, 'a'), (2, 'b')")
+        f(catalog("statecat").asInstanceOf[StateAwareInMemoryCatalog], tableName)
+      }
+    }
+  }
 
   test("SPARK-36680: Supports Dynamic Table Options for SQL Select") {
     val t1 = s"${catalogAndNamespace}table"
@@ -548,17 +582,15 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: a self-join with different options loads the table once per option bag") {
+  test("catalogs without state-option support load the table once per complete option bag") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
       inMemoryCatalog.resetLoadTableCalls()
 
-      // The two references share a name but carry different options. Because a catalog's
-      // options-aware loadTable can return a different Table depending on the options, the analyzer
-      // relation cache is keyed on the options, so each reference triggers its own loadTable rather
-      // than reusing the first reference's Table.
+      // The catalog does not classify its options, so Spark conservatively treats both complete
+      // option bags as different table states.
       val df = sql(s"SELECT a.id FROM $t1 WITH (`split-size` = 5) a " +
         s"JOIN $t1 WITH (`split-size` = 9) b ON a.id = b.id")
       df.queryExecution.analyzed
@@ -587,6 +619,267 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         case s: DataSourceV2ScanRelation => s.relation.options.get("split-size")
       }.sorted
       assert(splitSizes === Seq("5", "9"))
+    }
+  }
+
+  test("same table state shares one Table while preserving each reference's options") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      stateCatalog.resetLoadTableCalls()
+      stateCatalog.singleArgLoads.set(0)
+
+      val df = sql(s"SELECT a.id FROM $tableName " +
+        s"WITH (`SnApShOt` = 's1', `split-size` = 5) a JOIN $tableName " +
+        s"WITH (`snapshot` = 's1', `split-size` = 9) b ON a.id = b.id")
+
+      val analyzedRelations = df.queryExecution.analyzed.collect {
+        case r: DataSourceV2Relation if r.options.containsKey("split-size") => r
+      }
+      assert(analyzedRelations.size == 2)
+      assert(analyzedRelations.map(_.options.get("split-size")).sorted == Seq("5", "9"))
+      assert(analyzedRelations.map(_.options.get("snapshot")).distinct == Seq("s1"))
+      assert(analyzedRelations.head.table eq analyzedRelations.last.table)
+
+      val analysisLoads = stateCatalog.loadTableCalls.filter(_._2.get("snapshot") == "s1")
+      assert(analysisLoads.size == 1,
+        s"expected one catalog load for state s1 during analysis, got: $analysisLoads")
+
+      stateCatalog.resetLoadTableCalls()
+      stateCatalog.singleArgLoads.set(0)
+      assert(df.collect().toSeq == Seq(Row(1), Row(2)))
+
+      val refreshLoads = stateCatalog.loadTableCalls.filter(_._2.get("snapshot") == "s1")
+      assert(refreshLoads.size == 1,
+        s"expected one catalog load for state s1 during refresh, got: $refreshLoads")
+      val refreshedRelations = df.queryExecution.optimizedPlan.collect {
+        case s: DataSourceV2ScanRelation if s.relation.options.containsKey("split-size") =>
+          s.relation
+      }
+      assert(refreshedRelations.size == 2)
+      assert(refreshedRelations.head.table eq refreshedRelations.last.table)
+    }
+  }
+
+  test("shared relation cache and refresh preserve first-resolution-wins table state") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      val cached = spark.read
+        .option("snapshot", "s1")
+        .option("split-size", "5")
+        .table(tableName)
+      cached.cache()
+      try {
+        cached.collect()
+        val cachedTable = cached.queryExecution.analyzed.collectFirst {
+          case r: DataSourceV2Relation => r.table
+        }.getOrElse(fail("expected a cached v2 relation"))
+
+        def relations(df: DataFrame): Seq[DataSourceV2Relation] = {
+          df.queryExecution.analyzed.collect {
+            case r: DataSourceV2Relation if r.options.containsKey("snapshot") => r
+          }
+        }
+
+        stateCatalog.resetLoadTableCalls()
+        val cachedFirst = sql(s"SELECT a.id FROM $tableName " +
+          s"WITH (`snapshot` = 's1', `split-size` = 5) a JOIN $tableName " +
+          s"WITH (`snapshot` = 's1', `split-size` = 9) b ON a.id = b.id")
+        val cachedFirstRelations = relations(cachedFirst)
+        assert(cachedFirstRelations.size == 2)
+        assert(cachedFirstRelations.forall(_.table eq cachedTable))
+        assert(stateCatalog.loadTableCalls.count(_._2.get("snapshot") == "s1") == 1)
+
+        stateCatalog.resetLoadTableCalls()
+        assert(cachedFirst.collect().map(_.getLong(0)).sorted.toSeq == Seq(1L, 2L))
+        assert(stateCatalog.loadTableCalls.isEmpty,
+          s"shared relation cache pin should avoid refresh reloads, got: " +
+            stateCatalog.loadTableCalls)
+
+        stateCatalog.resetLoadTableCalls()
+        val uncachedFirst = sql(s"SELECT a.id FROM $tableName " +
+          s"WITH (`snapshot` = 's1', `split-size` = 9) a JOIN $tableName " +
+          s"WITH (`snapshot` = 's1', `split-size` = 5) b ON a.id = b.id")
+        val uncachedFirstRelations = relations(uncachedFirst)
+        assert(uncachedFirstRelations.size == 2)
+        assert(uncachedFirstRelations.head.table eq uncachedFirstRelations.last.table)
+        assert(uncachedFirstRelations.forall(_.table ne cachedTable))
+        assert(stateCatalog.loadTableCalls.count(_._2.get("snapshot") == "s1") == 1)
+
+        stateCatalog.resetLoadTableCalls()
+        assert(uncachedFirst.collect().map(_.getLong(0)).sorted.toSeq == Seq(1L, 2L))
+        assert(stateCatalog.loadTableCalls.count(_._2.get("snapshot") == "s1") == 1)
+      } finally {
+        cached.unpersist()
+      }
+    }
+  }
+
+  test("streaming references participate in the query table-state cache") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      stateCatalog.resetLoadTableCalls()
+      val df = sql(s"SELECT a.id FROM STREAM $tableName " +
+        s"WITH (`snapshot` = 's1', `split-size` = 5) a JOIN STREAM $tableName " +
+        s"WITH (`snapshot` = 's1', `split-size` = 9) b ON a.id = b.id")
+      val relations = df.queryExecution.analyzed.collect {
+        case r: StreamingRelationV2 if r.extraOptions.containsKey("snapshot") => r
+      }
+
+      assert(relations.size == 2)
+      assert(relations.map(_.extraOptions.get("split-size")).sorted == Seq("5", "9"))
+      assert(relations.head.table eq relations.last.table)
+      val stateLoads = stateCatalog.loadTableCalls.count(_._2.get("snapshot") == "s1")
+      assert(stateLoads == 1, s"expected one streaming table load, got: $stateLoads")
+    }
+  }
+
+  test("different table-state option values establish separate table pins") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      stateCatalog.resetLoadTableCalls()
+      stateCatalog.singleArgLoads.set(0)
+
+      val df = sql(s"SELECT a.id FROM $tableName " +
+        s"WITH (`snapshot` = 's1', `split-size` = 5) a JOIN $tableName " +
+        s"WITH (`snapshot` = 's2', `split-size` = 9) b ON a.id = b.id")
+      val relations = df.queryExecution.analyzed.collect {
+        case r: DataSourceV2Relation if r.options.containsKey("snapshot") => r
+      }
+
+      assert(relations.size == 2)
+      assert(relations.map(_.options.get("snapshot")).sorted == Seq("s1", "s2"))
+      assert(relations.head.table ne relations.last.table)
+      val loadedStates = stateCatalog.loadTableCalls
+        .map(_._2.get("snapshot"))
+        .filter(_ != null)
+        .sorted
+      assert(loadedStates == Seq("s1", "s2"))
+    }
+  }
+
+  test("persistent write targets bypass both query-scoped read caches") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      stateCatalog.resetLoadTableCalls()
+      val resolver = new RelationResolution(
+        spark.sessionState.catalogManager,
+        RelationCache.empty)
+      val options = new CaseInsensitiveStringMap(
+        java.util.Map.of("snapshot", "s1", "split-size", "5"))
+      val read = UnresolvedRelation(tableName.split("\\.").toSeq, options)
+      val write = read.requireWritePrivileges(Set(TableWritePrivilege.INSERT))
+
+      def resolve(relation: UnresolvedRelation): DataSourceV2Relation = {
+        resolver.resolveRelation(relation).flatMap(_.collectFirst {
+          case r: DataSourceV2Relation => r
+        }).getOrElse(fail(s"failed to resolve ${relation.name} as a v2 relation"))
+      }
+
+      AnalysisContext.withNewAnalysisContext {
+        val readRelation = resolve(read)
+        val writeRelation = resolve(write)
+
+        assert(readRelation.table ne writeRelation.table)
+        assert(AnalysisContext.get.tableCache.size == 1)
+        assert(AnalysisContext.get.relationCache.size == 1)
+      }
+
+      assert(stateCatalog.loadTableCalls.size == 2)
+      assert(stateCatalog.loadTableCalls.count(_._1.writePrivileges().isEmpty) == 1)
+      assert(stateCatalog.loadTableCalls.count(
+        _._1.writePrivileges().contains(TableWritePrivilege.INSERT)) == 1)
+      assert(stateCatalog.loadTableCalls.forall(_._2.get("snapshot") == "s1"))
+      assert(stateCatalog.loadTableCalls.forall(_._2.get("split-size") == "5"))
+    }
+  }
+
+  test("V2TableReference write targets bypass the table-state cache") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      val original = spark.read
+        .option("snapshot", "s1")
+        .option("split-size", "5")
+        .table(tableName)
+        .queryExecution
+        .analyzed
+        .collectFirst { case r: DataSourceV2Relation => r }
+        .getOrElse(fail("expected a v2 relation"))
+      val readRef = V2TableReference.createForTransaction(original)
+      val writeRef = V2TableReference.createForWriteTarget(original)
+      val resolver = new RelationResolution(
+        spark.sessionState.catalogManager,
+        RelationCache.empty)
+
+      stateCatalog.resetLoadTableCalls()
+      stateCatalog.singleArgLoads.set(0)
+      AnalysisContext.withNewAnalysisContext {
+        val readRelation = resolver.resolveReference(readRef).asInstanceOf[DataSourceV2Relation]
+        val writeRelation = resolver.resolveReference(writeRef).asInstanceOf[DataSourceV2Relation]
+
+        assert(readRelation.table ne writeRelation.table)
+        assert(AnalysisContext.get.tableCache.size == 1)
+        assert(AnalysisContext.get.relationCache.size == 1)
+      }
+
+      assert(stateCatalog.singleArgLoads.get() == 2)
+      assert(stateCatalog.loadTableCalls.size == 1)
+      assert(stateCatalog.loadTableCalls.head._2.get("snapshot") == "s1")
+      assert(stateCatalog.loadTableCalls.head._2.get("split-size") == "5")
+    }
+  }
+
+  test("nested view resolution shares the query table-state cache") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      withView("state_nested_view") {
+        sql(s"CREATE VIEW state_nested_view AS SELECT * FROM $tableName " +
+          s"WITH (`snapshot` = 's1', `split-size` = 5)")
+        stateCatalog.resetLoadTableCalls()
+
+        val df = sql(s"SELECT v.id FROM state_nested_view v JOIN $tableName " +
+          s"WITH (`snapshot` = 's1', `split-size` = 9) b ON v.id = b.id")
+        val relations = df.queryExecution.analyzed.collect {
+          case r: DataSourceV2Relation if r.options.containsKey("snapshot") => r
+        }
+
+        assert(relations.size == 2)
+        assert(relations.map(_.options.get("split-size")).sorted == Seq("5", "9"))
+        assert(relations.head.table eq relations.last.table)
+        val stateLoads = stateCatalog.loadTableCalls.count(_._2.get("snapshot") == "s1")
+        assert(stateLoads == 1, s"expected one nested-view table load, got: $stateLoads")
+      }
+    }
+  }
+
+  test("cacheable V2TableReference resolution participates in the table-state cache") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      withTempView("state_view") {
+        val cached = spark.read
+          .option("snapshot", "s1")
+          .option("split-size", "5")
+          .table(tableName)
+        cached.cache()
+        try {
+          cached.collect()
+          val cachedTable = cached.queryExecution.analyzed.collectFirst {
+            case r: DataSourceV2Relation => r.table
+          }.getOrElse(fail("expected a cached v2 relation"))
+          cached.createOrReplaceTempView("state_view")
+          stateCatalog.resetLoadTableCalls()
+          stateCatalog.singleArgLoads.set(0)
+
+          val df = sql(s"SELECT v.id FROM state_view v JOIN $tableName " +
+            s"WITH (`snapshot` = 's1', `split-size` = 9) b ON v.id = b.id")
+          val relations = df.queryExecution.analyzed.collect {
+            case r: DataSourceV2Relation if r.options.containsKey("snapshot") => r
+          }
+
+          assert(relations.size == 2)
+          assert(relations.map(_.options.get("split-size")).sorted == Seq("5", "9"))
+          assert(relations.forall(_.table eq cachedTable))
+          assert(stateCatalog.singleArgLoads.get() == 1,
+            s"expected one table load while re-resolving the query, got: " +
+              stateCatalog.singleArgLoads.get())
+          assert(stateCatalog.loadTableCalls.size == 1)
+          assert(stateCatalog.loadTableCalls.head._2.get("snapshot") == "s1")
+          assert(stateCatalog.loadTableCalls.head._2.get("split-size") == "5")
+        } finally {
+          cached.unpersist()
+        }
+      }
     }
   }
 
