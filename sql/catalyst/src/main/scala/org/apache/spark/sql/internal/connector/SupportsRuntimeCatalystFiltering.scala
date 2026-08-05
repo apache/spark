@@ -39,6 +39,9 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * Returns attributes this scan can be filtered by at runtime.
    *
    * Spark will call [[filter]] if it can derive a runtime filter for any of these attributes.
+   * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
+   * references and attributes pruned out of the read schema fail to resolve when Spark builds
+   * the scan relation.
    */
   def filterAttributes(): Array[NamedReference]
 
@@ -48,6 +51,10 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * Any runtime predicate that references only attributes in this set is considered fully pushed
    * and will not be evaluated again after the scan. These attributes must also be returned by
    * [[filterAttributes]].
+   *
+   * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
+   * references and attributes pruned out of the read schema fail to resolve when Spark builds
+   * the scan relation.
    */
   def fullyPushedFilterAttributes(): Array[NamedReference] = Array.empty
 
@@ -58,20 +65,19 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * Implementations may use the expressions to prune initially planned
    * [[org.apache.spark.sql.connector.read.InputPartition]]s.
    *
+   * If the scan also implements
+   * [[org.apache.spark.sql.connector.read.SupportsReportPartitioning]], it must preserve
+   * the originally reported partitioning during runtime filtering. While applying runtime
+   * predicates, the scan may detect that some
+   * [[org.apache.spark.sql.connector.read.InputPartition]]s have no matching data, in which
+   * case it can either replace the initially planned
+   * [[org.apache.spark.sql.connector.read.InputPartition]]s that have no matching data with
+   * empty [[org.apache.spark.sql.connector.read.InputPartition]]s, or report only a subset of
+   * the original partition values (omitting those with no data) via
+   * [[org.apache.spark.sql.connector.read.Batch#planInputPartitions]]. The scan must not
+   * report new partition values that were not present in the original partitioning.
+   *
    * Note that Spark will call [[Scan.toBatch]] again after filtering the scan at runtime.
    */
   def filter(expressions: Array[Expression]): Unit
-
-  /**
-   * Returns the predicates that are pushed to the data source via [[filter]].
-   *
-   * This method does not indicate whether a predicate is fully pushed. Spark infers that from
-   * [[fullyPushedFilterAttributes]]. The returned predicates may fully or partially help the data
-   * source prune initially planned
-   * [[org.apache.spark.sql.connector.read.InputPartition]]s.
-   *
-   * It's possible that there are no runtime predicates and [[filter]] is never called;
-   * an empty array should be returned for this case.
-   */
-  def pushedPredicates(): Array[Expression] = Array.empty
 }
