@@ -188,8 +188,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       } else {
         Seq.empty
       }
+      // Only drop a filter from postScanFilters if the scan will really receive it. Pushdown
+      // screens out what the source cannot evaluate, and a filter rejected there after being
+      // dropped here would be evaluated nowhere, so both sides apply the same test.
       val fullyPushedRuntimeFilters = scalarSubqueryFilters.filter { f =>
-        f.references.subsetOf(relation.fullyPushedRuntimeFilterAttrs)
+        f.references.subsetOf(relation.fullyPushedRuntimeFilterAttrs) &&
+          PushDownUtils.isPushablePartitionFilter(f, includeSubquery = true)
       }
       // dynamicFilters need no such check: a DynamicPruningSubquery over a non-deterministic
       // filtering plan is itself non-deterministic, so CleanupDynamicPruningFilters has already

@@ -96,6 +96,32 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
+  test("non-deterministic predicate on fully pushed attributes -> evaluated after the scan") {
+    val tbl = s"$catalogName.tbl_nondeterministic"
+    val dim = s"$catalogName.dim_nondeterministic"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part) " +
+        "TBLPROPERTIES('fully-pushed-filter-attributes' = 'part')")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES (3)")
+
+      // A non-deterministic filter is never pushed, so it must keep its post-scan FilterExec even
+      // though it only references a fully pushed attribute. Dropping it there would leave nothing
+      // to evaluate it and the scan would return the nonmatching partitions too.
+      val df = sql(
+        s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim) OR rand() < 0.5")
+      // The row in the matching partition always qualifies, the others qualify at random.
+      assert(df.collect().contains(Row(3, 3)))
+
+      assertScalarSubqueryEvaluatedAfterScan(df, expected = true)
+      assertScalarSubqueryRuntimeFilters(df, expectedCount = 0)
+      assertPushedCatalystPredicates(df, 0)
+    }
+  }
+
   test("predicate on partly fully pushed filter attributes -> evaluated after the scan") {
     val tbl = s"$catalogName.tbl_partly_pushed"
     val dim = s"$catalogName.dim_partly_pushed"

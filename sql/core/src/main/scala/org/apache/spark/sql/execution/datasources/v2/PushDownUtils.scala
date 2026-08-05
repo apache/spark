@@ -234,7 +234,7 @@ object PushDownUtils extends Logging {
         val catalystFilters = runtimeFilters
           .flatMap(unwrapRuntimeFilterExpression)
           .filterNot(_ == Literal.TrueLiteral)
-          .filter(isPushablePartitionFilter)
+          .filter(isPushablePartitionFilter(_))
         if (catalystFilters.nonEmpty) {
           catalystScan.filter(catalystFilters.toArray)
           true
@@ -427,7 +427,7 @@ object PushDownUtils extends Logging {
     val partitionAttributes = partitionFields.map(_.attrRef)
     val (partFilters, nonPartitionFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionAttributes, flattenedFilters)
-    val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter)
+    val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter(_))
     val (partitionPredicates, errorPartitionPredicates) = pushable.partitionMap { e =>
       PartitionPredicateImpl(e, partitionFields).toLeft(e)
     }
@@ -477,10 +477,25 @@ object PushDownUtils extends Logging {
       case f => Some(f.transform { case s: ExecScalarSubquery => s.toLiteral })
     }
 
-  private def isPushablePartitionFilter(f: Expression) =
+  /**
+   * Whether the data source can be trusted to evaluate `f` in place of Spark: a non-deterministic
+   * expression would not give the same answer twice, and a Python UDF or a subquery cannot be
+   * evaluated by the source at all. Spark will attempt to push only these expressions to the
+   * data source.
+   *
+   * Spark will also call this before dropping a fully pushed runtime filter from the
+   * post-scan filters, so that it never removes the only evaluator of a filter that Spark
+   * refuses to push.
+   *
+   * @param includeSubquery whether a subquery in `f` should be tolerated. Only safe for a runtime
+   * filter, which is pushed at execution time, after its subquery has been evaluated.
+   */
+  private[v2] def isPushablePartitionFilter(
+      f: Expression,
+      includeSubquery: Boolean = false): Boolean =
     f.deterministic &&
-      !SubqueryExpression.hasSubquery(f) &&
-      !f.exists(_.isInstanceOf[PythonUDF])
+      !f.exists(_.isInstanceOf[PythonUDF]) &&
+      (includeSubquery || !SubqueryExpression.hasSubquery(f))
 
   /**
    * Replaces all partition column references with canonical [[AttributeReference]]s
