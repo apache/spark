@@ -33,7 +33,7 @@ from pyspark.core.broadcast import (
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 
 
-class _ArrowBroadcastValue:
+class ExampleArrowBroadcastValue:
     def __init__(self, values):
         self.values = values
 
@@ -47,7 +47,7 @@ class _ArrowBroadcastValue:
         return cls(value.to_pylist())
 
 
-class _ArrowStreamBroadcastValue:
+class ExampleArrowStreamBroadcastValue:
     def __init__(self, values):
         self.values = values
 
@@ -61,7 +61,7 @@ class _ArrowStreamBroadcastValue:
         return cls(value.column("value").to_pylist())
 
 
-class _ArrowBroadcastWithoutReconstructor:
+class ExampleArrowBroadcastWithoutReconstructor:
     def __init__(self, values):
         self.values = values
 
@@ -95,8 +95,8 @@ class ArrowBroadcastTest(unittest.TestCase):
         ]
         broadcasts = [self.sc.broadcast(value, useArrow=True) for value in values]
         custom_broadcasts = [
-            self.sc.broadcast(_ArrowBroadcastValue([8, 9]), useArrow=True),
-            self.sc.broadcast(_ArrowStreamBroadcastValue([10, 11]), useArrow=True),
+            self.sc.broadcast(ExampleArrowBroadcastValue([8, 9]), useArrow=True),
+            self.sc.broadcast(ExampleArrowStreamBroadcastValue([10, 11]), useArrow=True),
         ]
 
         for broadcast, expected in zip(broadcasts, values):
@@ -184,8 +184,8 @@ class ArrowBroadcastSerializationTest(unittest.TestCase):
 
     def test_custom_arrow_serialization(self):
         values = [
-            _ArrowBroadcastValue([1, 2]),
-            _ArrowStreamBroadcastValue([3, 4]),
+            ExampleArrowBroadcastValue([1, 2]),
+            ExampleArrowStreamBroadcastValue([3, 4]),
         ]
         broadcast = Broadcast.__new__(Broadcast)
 
@@ -211,7 +211,7 @@ class ArrowBroadcastSerializationTest(unittest.TestCase):
         broadcast = Broadcast.__new__(Broadcast)
         values_and_use_arrow = [
             ({"a": [1, 2, 3]}, True),
-            (_ArrowBroadcastWithoutReconstructor([4, 5]), True),
+            (ExampleArrowBroadcastWithoutReconstructor([4, 5]), True),
         ]
 
         for value, use_arrow in values_and_use_arrow:
@@ -236,7 +236,7 @@ class ArrowBroadcastSerializationTest(unittest.TestCase):
 
     def test_pickle_fallback_without_pyarrow(self):
         broadcast = Broadcast.__new__(Broadcast)
-        value = _ArrowBroadcastValue([1, 2])
+        value = ExampleArrowBroadcastValue([1, 2])
         output = tempfile.NamedTemporaryFile(delete=False)
         path = output.name
         try:
