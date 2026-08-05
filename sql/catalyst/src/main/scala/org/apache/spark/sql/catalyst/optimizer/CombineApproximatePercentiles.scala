@@ -113,12 +113,14 @@ object CombineApproximatePercentiles extends Rule[LogicalPlan] {
     // PhysicalAggregation already shares a digest within each canonical group. Fusion must both
     // remove a digest and preserve cases where canonical percentages evaluate differently.
     physicalGroups.sizeCompare(1) > 0 && physicalGroups.values.forall { group =>
-      group.iterator.map { expression =>
+      val percentages = group.iterator.map { expression =>
         expression.aggregateFunction
           .asInstanceOf[ApproximatePercentile]
           .percentageExpression
           .eval()
-      }.toSet.sizeCompare(1) == 0
+      }
+      val first = percentages.next()
+      percentages.forall(_ == first)
     }
   }
 
