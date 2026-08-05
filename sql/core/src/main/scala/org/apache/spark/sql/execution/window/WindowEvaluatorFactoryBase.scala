@@ -250,7 +250,7 @@ trait WindowEvaluatorFactoryBase {
             new FrameLessOffsetWindowFunctionFrame(
               target,
               ordinal,
-              // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+              // OFFSET frame functions are guaranteed to be OffsetWindowFunction.
               functions.map(_.asInstanceOf[OffsetWindowFunction]),
               childOutput,
               (expressions, schema) => MutableProjection.create(expressions, schema),
@@ -261,7 +261,7 @@ trait WindowEvaluatorFactoryBase {
             new UnboundedOffsetWindowFunctionFrame(
               target,
               ordinal,
-              // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+              // OFFSET frame functions are guaranteed to be OffsetWindowFunction.
               functions.map(_.asInstanceOf[OffsetWindowFunction]),
               childOutput,
               (expressions, schema) => MutableProjection.create(expressions, schema),
@@ -273,7 +273,7 @@ trait WindowEvaluatorFactoryBase {
             new UnboundedPrecedingOffsetWindowFunctionFrame(
               target,
               ordinal,
-              // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+              // OFFSET frame functions are guaranteed to be OffsetWindowFunction.
               functions.map(_.asInstanceOf[OffsetWindowFunction]),
               childOutput,
               (expressions, schema) => MutableProjection.create(expressions, schema),
@@ -298,19 +298,7 @@ trait WindowEvaluatorFactoryBase {
 
         // Shrinking Frame.
         case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
-          if (isMinMaxOnly) { target: InternalRow =>
-            {
-              val lb = createBoundOrdering(frameType, lower, timeZone)
-              numMonotonicDequeFrames.foreach(_ += 1)
-              new SlidingWindowMinMaxFunctionFrame(
-                target,
-                processor,
-                lb,
-                None,
-                functions,
-                childOutput)
-            }
-          } else if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
+          if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
             val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
             // Shrinking-frame queries `[lower, n)` on `WindowSegmentTree` touch the LRU
             // for exactly two blocks per query: (1) the lower-edge partial block, and
