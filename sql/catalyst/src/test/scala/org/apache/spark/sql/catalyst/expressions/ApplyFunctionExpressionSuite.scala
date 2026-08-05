@@ -31,7 +31,7 @@ class ApplyFunctionExpressionSuite extends SparkFunSuite {
     override def produceResult(input: InternalRow): Int = input.getInt(0)
   }
 
-  test("ApplyFunctionExpression is stateful and produces fresh copies") {
+  test("SPARK-58578: ApplyFunctionExpression is stateful and produces fresh copies") {
     val expr = ApplyFunctionExpression(
       intIdentity, Seq(BoundReference(0, IntegerType, nullable = false)))
     assert(expr.stateful, "ApplyFunctionExpression.stateful should be true")
