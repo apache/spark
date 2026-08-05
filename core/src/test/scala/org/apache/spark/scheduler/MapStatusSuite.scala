@@ -330,20 +330,35 @@ class MapStatusSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-48290: every block tied at the cutoff size is recorded, at a bounded cost") {
-    // The small blocks are the majority, so the median block size is smallBlockSize. All of the
-    // tied blocks share one size, so recording them costs a bitmap and that single size, rather
-    // than an id and a size per block, and the number of them does not have to be capped.
+  /**
+   * Asserts that every block tied at the cutoff size is recorded, and that recording them costs no
+   * more than the block id bitmap this status has always carried.
+   *
+   * All of the tied blocks share one size, so recording them costs a bitmap and that single size,
+   * rather than an id and a size per block, and the number of them does not have to be capped.
+   * What a bitmap costs depends on where the ids fall, not on how many there are, so the caller
+   * chooses the layout: a contiguous run of tied reducers compresses into a single run container,
+   * while alternating ids are the densest thing a bitmap can be asked to hold and degenerate into
+   * a fixed size container. Neither may cost more than a bit per reduce partition, which is what
+   * `emptyBlocks` has always cost for the same layout, so both are asserted against a status that
+   * holds those very ids as empty blocks instead.
+   */
+  private def assertTiedBlocksAreRecordedCompactly(interleaveTiedBlocks: Boolean): Unit = {
+    // The small blocks are the majority, so the median block size is smallBlockSize.
     val smallBlocksLength = 25001
     val tiedBlocksLength = 24999
+    val numBlocks = smallBlocksLength + tiedBlocksLength
     val smallBlockSize = 1024L
     // Far more blocks share this size than the accurate block number would allow to be recorded
     // individually, and it is the cutoff size itself: it is above the median times the skew
     // factor, so the skew threshold is exactly this size.
     val tiedBlockSize = 8 * 1024L
-    // A bitmap over 50000 block ids costs at most 6.25 KiB even when it degenerates to a dense
-    // container, and this one is a single run.
-    val maxRetainedBytes = 8 * 1024
+    // A RoaringBitmap over ids below 65536 holds one container, and a container denser than 4096
+    // ids becomes a fixed 8 KiB bitmap, so no layout of these ids costs more than that. The rest
+    // of the status is a location, two short huge block arrays and a handful of scalars.
+    val maxRetainedBytes = 8 * 1024 + 1024
+    // Recording the ties may not cost materially more than holding the same ids as empty blocks.
+    val maxRetainedBytesOverEmptyBlocks = 512
 
     // No skew related config is set: this asserts the out of the box behavior.
     val conf = new SparkConf()
@@ -351,8 +366,22 @@ class MapStatusSuite extends SparkFunSuite {
     doReturn(conf).when(env).conf
     SparkEnv.set(env)
 
-    val allBlocks = createArray(smallBlocksLength, smallBlockSize) ++:
-      createArray(tiedBlocksLength, tiedBlockSize)
+    val allBlocks = new Array[Long](numBlocks)
+    var numTiedBlocksPlaced = 0
+    for (i <- 0 until numBlocks) {
+      val isTied = if (interleaveTiedBlocks) {
+        i % 2 == 1 && numTiedBlocksPlaced < tiedBlocksLength
+      } else {
+        i >= smallBlocksLength
+      }
+      if (isTied) {
+        allBlocks(i) = tiedBlockSize
+        numTiedBlocksPlaced += 1
+      } else {
+        allBlocks(i) = smallBlockSize
+      }
+    }
+    assert(numTiedBlocksPlaced === tiedBlocksLength)
     assert(tiedBlockSize < conf.get(config.SHUFFLE_ACCURATE_BLOCK_THRESHOLD),
       "the tied blocks must not be recorded as huge blocks")
     assert(Utils.median(allBlocks, false) *
@@ -360,20 +389,41 @@ class MapStatusSuite extends SparkFunSuite {
       "the cutoff size, not the median times the skew factor, must set the skew threshold")
 
     val loc = BlockManagerId("a", "b", 10)
-    val status = compressAndDecompressMapStatus(MapStatus(loc, allBlocks, 5L))
+    val serializer = new JavaSerializer(new SparkConf).newInstance()
+    val serialized = serializer.serialize(MapStatus(loc, allBlocks, 5L))
+    val serializedBytes = serialized.remaining()
+    val status = serializer.deserialize[MapStatus](serialized)
     assert(status.isInstanceOf[HighlyCompressedMapStatus])
-    for (i <- 0 until smallBlocksLength) {
-      assert(status.getSizeForBlock(i) === smallBlockSize,
-        "the average size must not be inflated by the tied blocks")
+    for (i <- 0 until numBlocks) {
+      if (allBlocks(i) == tiedBlockSize) {
+        assert(status.getSizeForBlock(i) === compressAndDecompressSize(tiedBlockSize),
+          "every tied block must be recorded so that AQE sees the skew")
+      } else {
+        assert(status.getSizeForBlock(i) === smallBlockSize,
+          "the average size must not be inflated by the tied blocks")
+      }
     }
-    for (i <- 0 until tiedBlocksLength) {
-      assert(status.getSizeForBlock(smallBlocksLength + i) ===
-        compressAndDecompressSize(tiedBlockSize),
-        "every tied block must be recorded so that AQE sees the skew")
-    }
+
+    // The same reduce ids, held as empty blocks rather than as ties. This status records no skew
+    // at all, so what it retains is the cost of one bitmap over this layout and nothing else.
+    val emptyBlocks = allBlocks.map(size => if (size == tiedBlockSize) 0L else size)
+    val statusWithEmptyBlocks =
+      compressAndDecompressMapStatus(MapStatus(loc, emptyBlocks, 5L))
+    val retainedByEmptyBlocks = SizeEstimator.estimate(statusWithEmptyBlocks.asInstanceOf[AnyRef])
+
     val retained = SizeEstimator.estimate(status.asInstanceOf[AnyRef])
     assert(retained < maxRetainedBytes,
       s"recording $tiedBlocksLength tied blocks retained $retained bytes")
+    assert(serializedBytes < maxRetainedBytes,
+      s"recording $tiedBlocksLength tied blocks serialized to $serializedBytes bytes")
+    assert(retained - retainedByEmptyBlocks < maxRetainedBytesOverEmptyBlocks,
+      s"recording $tiedBlocksLength tied blocks retained $retained bytes, against " +
+        s"$retainedByEmptyBlocks bytes for a status holding the same ids as empty blocks")
+  }
+
+  test("SPARK-48290: every block tied at the cutoff size is recorded, at a bounded cost") {
+    assertTiedBlocksAreRecordedCompactly(interleaveTiedBlocks = false)
+    assertTiedBlocksAreRecordedCompactly(interleaveTiedBlocks = true)
   }
 
   /**
