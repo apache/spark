@@ -342,7 +342,7 @@ class BlockManagerMaster(
   /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */
   private def tell(message: Any): Unit = {
     if (!driverEndpoint.askSync[Boolean](message)) {
-      throw SparkCoreErrors.unexpectedBlockManagerMasterEndpointResultError()
+      throw SparkCoreErrors.unexpectedBlockManagerMasterEndpointResultError(message)
     }
   }
 

@@ -60,7 +60,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     EnsureRequirements.apply(smjExec1) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _), _) =>
         assert(leftKeys === Seq(exprA, exprB))
         assert(rightKeys === Seq(exprB, exprA))
       case other => fail(other.toString)
@@ -71,7 +71,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprB :: Nil, exprB :: exprA :: Nil, Inner, None, plan2, plan1)
     EnsureRequirements.apply(smjExec2) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _), _) =>
         assert(leftKeys === Seq(exprB, exprA))
         assert(rightKeys === Seq(exprA, exprB))
@@ -84,7 +84,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprD :: exprC :: Nil, exprB :: exprA :: Nil, Inner, None, plan1, plan1)
     EnsureRequirements.apply(smjExec3) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _), _) =>
         assert(leftKeys === Seq(exprC, exprD))
         assert(rightKeys === Seq(exprA, exprB))
@@ -126,8 +126,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     )
     EnsureRequirements.apply(smjExec2) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-      SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
-      SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
+      SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _), _) =>
         assert(leftKeys === Seq(exprC, exprB, exprD))
         assert(rightKeys === Seq(exprD, exprA, exprC))
       case other => fail(other.toString)
@@ -145,7 +145,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprB :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan2)
     EnsureRequirements.apply(smjExec1) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
         assert(leftKeys === Seq(exprB, exprA))
         assert(rightKeys === Seq(exprB, exprC))
@@ -159,7 +159,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprB :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan3)
     EnsureRequirements.apply(smjExec2) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _), _) =>
         assert(leftKeys === Seq(exprB, exprA))
         assert(rightKeys === Seq(exprB, exprC))
@@ -173,7 +173,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     EnsureRequirements.apply(smjExec3) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _), _) =>
         assert(leftKeys === Seq(exprB, exprC))
         assert(rightKeys === Seq(exprB, exprA))
       case other => fail(other.toString)
@@ -319,7 +319,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(p: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(p: HashPartitioning, _, _, _, _), _), _) =>
           assert(leftKeys === Seq(exprA, exprB))
           assert(rightKeys === Seq(exprC, exprD))
           assert(p.expressions == Seq(exprC))
@@ -335,7 +335,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _, ShuffleExchangeExec(p: HashPartitioning, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(p: HashPartitioning, _, _, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
           assert(leftKeys === Seq(exprA, exprB))
           assert(rightKeys === Seq(exprC, exprD))
@@ -353,7 +353,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(p: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(p: HashPartitioning, _, _, _, _), _), _) =>
           assert(leftKeys === Seq(exprA, exprB))
           assert(rightKeys === Seq(exprC, exprD))
           assert(p.expressions == Seq(exprC))
@@ -372,7 +372,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
       SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
-      SortExec(_, _, ShuffleExchangeExec(p: HashPartitioning, _, _, _), _), _) =>
+      SortExec(_, _, ShuffleExchangeExec(p: HashPartitioning, _, _, _, _), _), _) =>
         assert(leftKeys === Seq(exprA, exprB, exprB))
         assert(rightKeys === Seq(exprA, exprC, exprC))
         assert(p.expressions == Seq(exprA, exprC, exprA))
@@ -388,7 +388,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
       SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
-      SortExec(_, _, ShuffleExchangeExec(p: HashPartitioning, _, _, _), _), _) =>
+      SortExec(_, _, ShuffleExchangeExec(p: HashPartitioning, _, _, _, _), _), _) =>
         assert(leftKeys === Seq(exprA, exprB, exprB))
         assert(rightKeys === Seq(exprA, exprC, exprD))
         assert(p.expressions == Seq(exprA, exprC, exprA))
@@ -444,8 +444,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
           assert(left.numPartitions == 5)
           assert(right.numPartitions == 5)
         case other => fail(other.toString)
@@ -462,7 +462,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
         SortExec(_, _, DummySparkPlan(_, _, left: HashPartitioning, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
           assert(left.numPartitions == 10)
           assert(right.numPartitions == 10)
           assert(right.expressions == Seq(exprC, exprD))
@@ -481,8 +481,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
           assert(left.numPartitions == 5)
           assert(left.expressions == Seq(exprA, exprB))
           assert(right.numPartitions == 5)
@@ -492,7 +492,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
         SortExec(_, _, DummySparkPlan(_, _, left: HashPartitioning, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
           assert(left.numPartitions == 1)
           assert(right.numPartitions == 1)
           assert(right.expressions == Seq(exprC))
@@ -510,8 +510,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
           assert(left.numPartitions == conf.numShufflePartitions)
           assert(left.expressions == Seq(exprA, exprB))
           assert(right.numPartitions == conf.numShufflePartitions)
@@ -529,7 +529,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
         SortExec(_, _, DummySparkPlan(_, _, left: PartitioningCollection, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
           assert(left.numPartitions == 10)
           assert(right.numPartitions == 10)
           assert(right.expressions == Seq(exprA))
@@ -545,7 +545,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         Inner, None, plan1, plan2)
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, right: PartitioningCollection, _, _), _), _) =>
           assert(left.numPartitions == 20)
           assert(left.expressions == Seq(exprC))
@@ -587,7 +587,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
         SortExec(_, _, DummySparkPlan(_, _, left: HashPartitioning, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
           assert(left.expressions === Seq(exprA, exprB))
           assert(right.expressions === Seq(exprC, exprD))
           assert(left.numPartitions == 6)
@@ -606,7 +606,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, right: HashPartitioning, _, _), _), _) =>
           assert(left.expressions === Seq(exprA, exprB))
           assert(right.expressions === Seq(exprC, exprD))
@@ -624,7 +624,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, right: HashPartitioning, _, _), _), _) =>
           assert(left.expressions === Seq(exprA, exprB))
           assert(right.expressions === Seq(exprC, exprD))
@@ -644,7 +644,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, right: HashPartitioning, _, _), _), _) =>
           assert(left.expressions === Seq(exprA, exprB))
           assert(right.expressions === Seq(exprC, exprD))
@@ -666,8 +666,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: Nil, exprC :: exprD :: Nil, Inner, None, plan1, plan2)
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
           assert(left.expressions === Seq(exprA, exprB))
           assert(right.expressions === Seq(exprC, exprD))
           assert(left.numPartitions == conf.numShufflePartitions)
@@ -691,7 +691,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
           EnsureRequirements.apply(smjExec) match {
             case SortMergeJoinExec(leftKeys, rightKeys, _, _,
             SortExec(_, _, DummySparkPlan(_, _, left: HashPartitioning, _, _), _),
-            SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+            SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
               assert(leftKeys === Seq(exprA, exprB))
               assert(rightKeys === Seq(exprC, exprD))
               assert(left.numPartitions == 9)
@@ -714,8 +714,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       var smjExec = SortMergeJoinExec(exprA :: Nil, exprC :: Nil, Inner, None, plan1, plan2)
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
           assert(leftKeys === Seq(exprA))
           assert(rightKeys === Seq(exprC))
           assert(left.numPartitions == 20)
@@ -733,7 +733,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       EnsureRequirements.apply(smjExec) match {
         case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
           assert(leftKeys === Seq(exprA))
           assert(rightKeys === Seq(exprC))
           assert(right.numPartitions == 10)
@@ -765,8 +765,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         } else {
           EnsureRequirements.apply(smjExec) match {
             case SortMergeJoinExec(leftKeys, rightKeys, _, _,
-            SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
-            SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+            SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
+            SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
               assert(leftKeys === Seq(exprA))
               assert(rightKeys === Seq(exprC))
               assert(left.numPartitions == 5)
@@ -875,8 +875,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
     EnsureRequirements.apply(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
+        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
         assert(left.expressions === Seq(exprA, exprB, exprB))
         assert(right.expressions === Seq(exprA, exprC, exprC))
       case other => fail(other.toString)
@@ -951,8 +951,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprB :: exprC :: Nil, exprA :: exprB :: exprC :: Nil, Inner, None, plan1, plan2)
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
-      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
-      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
         assert(left.expressions === Seq(exprA, exprB, exprC))
         assert(right.expressions === Seq(exprA, exprB, exprC))
       case other => fail(other.toString)
@@ -969,8 +969,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
-      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
-      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
         assert(left.expressions === Seq(exprA, exprB, exprB))
         assert(right.expressions === Seq(exprA, exprC, exprC))
       case other => fail(other.toString)
@@ -987,8 +987,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
-      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
-      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
         assert(left.expressions === Seq(exprA, exprB, exprB))
         assert(right.expressions === Seq(exprA, exprC, exprC))
       case other => fail(other.toString)
@@ -1008,8 +1008,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
-      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _), _),
-      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _), _), _) =>
+      SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
+      SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
         assert(left.expressions === Seq(exprA, exprB, exprB))
         assert(right.expressions === Seq(exprA, exprC, exprC))
       case other => fail(other.toString)
@@ -1130,7 +1130,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case ShuffledHashJoinExec(_, _, _, _, _,
         DummySparkPlan(_, _, left: KeyedPartitioning, _, _),
         ShuffleExchangeExec(KeyedPartitioning(attrs, pks, _, _),
-        DummySparkPlan(_, _, SinglePartition, _, _), _, _), _) =>
+        DummySparkPlan(_, _, SinglePartition, _, _), _, _, _), _) =>
           assert(left.expressions == a1 :: Nil)
           assert(attrs == a1 :: Nil)
           assert(partitionKeys == pks.map(_.row))
@@ -1234,8 +1234,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       EnsureRequirements.apply(join) match {
         case SortMergeJoinExec(_, _, _, _,
-          SortExec(_, _, ShuffleExchangeExec(p1: HashPartitioning, _, _, _), _),
-          SortExec(_, _, ShuffleExchangeExec(p2: HashPartitioning, _, _, _), _), _) =>
+          SortExec(_, _, ShuffleExchangeExec(p1: HashPartitioning, _, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(p2: HashPartitioning, _, _, _, _), _), _) =>
           // Both sides should be shuffled to default partitions
           assert(p1.numPartitions == 10)
           assert(p2.numPartitions == 10)
@@ -1259,8 +1259,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       EnsureRequirements.apply(join) match {
         case SortMergeJoinExec(_, _, _, _,
-          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
-          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _), _) =>
           // Both sides shuffled due to key mismatch
         case other => fail(s"Expected shuffles on both sides, but got: $other")
       }
@@ -1278,7 +1278,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       EnsureRequirements.apply(join) match {
         case SortMergeJoinExec(_, _, _, _,
-          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _),
           SortExec(_, _, _: DummySparkPlan, _), _) =>
           // Left side shuffled, right side kept as-is
         case other => fail(s"Expected shuffle on the left side, but got: $other")
@@ -1296,8 +1296,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       EnsureRequirements.apply(join) match {
         case SortMergeJoinExec(_, _, _, _,
-          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _),
-          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _), _), _) =>
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _, _, _), _), _) =>
           // Both sides shuffled due to canCreatePartitioning = false
         case other => fail(s"Expected shuffles on both sides, but got: $other")
       }
@@ -1371,8 +1371,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       EnsureRequirements.apply(join) match {
         case SortMergeJoinExec(_, _, _, _,
-          SortExec(_, _, ShuffleExchangeExec(p1: HashPartitioning, _, _, _), _),
-          SortExec(_, _, ShuffleExchangeExec(p2: HashPartitioning, _, _, _), _), _) =>
+          SortExec(_, _, ShuffleExchangeExec(p1: HashPartitioning, _, _, _, _), _),
+          SortExec(_, _, ShuffleExchangeExec(p2: HashPartitioning, _, _, _, _), _), _) =>
           // Both sides should be shuffled because partition keys not in join keys
           assert(p1.numPartitions == 10)
           assert(p2.numPartitions == 10)

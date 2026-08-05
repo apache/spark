@@ -43,6 +43,12 @@ import org.apache.spark.unsafe.Platform
     _FUNC_(array1, array2) - Returns the cosine similarity between two float vectors.
     The vectors must have the same dimension.
   """,
+  arguments = """
+    Arguments:
+      * array1 - An ARRAY of FLOAT values representing the first vector.
+      * array2 - An ARRAY of FLOAT values representing the second vector. It must have the
+          same dimension as array1.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F));
@@ -100,6 +106,12 @@ case class VectorCosineSimilarity(left: Expression, right: Expression)
   usage = """
     _FUNC_(array1, array2) - Returns the inner product (dot product) between two float vectors.
     The vectors must have the same dimension.
+  """,
+  arguments = """
+    Arguments:
+      * array1 - An ARRAY of FLOAT values representing the first vector.
+      * array2 - An ARRAY of FLOAT values representing the second vector. It must have the
+          same dimension as array1.
   """,
   examples = """
     Examples:
@@ -159,6 +171,12 @@ case class VectorInnerProduct(left: Expression, right: Expression)
     _FUNC_(array1, array2) - Returns the Euclidean (L2) distance between two float vectors.
     The vectors must have the same dimension.
   """,
+  arguments = """
+    Arguments:
+      * array1 - An ARRAY of FLOAT values representing the first vector.
+      * array2 - An ARRAY of FLOAT values representing the second vector. It must have the
+          same dimension as array1.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F));
@@ -217,6 +235,12 @@ case class VectorL2Distance(left: Expression, right: Expression)
     _FUNC_(vector, degree) - Returns the Lp norm of a float vector using the specified degree.
     Degree defaults to 2.0 (Euclidean norm) if unspecified. Supported values: 1.0 (L1 norm),
     2.0 (L2 norm), float('inf') (infinity norm).
+  """,
+  arguments = """
+    Arguments:
+      * vector - An ARRAY of FLOAT values representing the vector.
+      * degree - A FLOAT specifying the norm degree. Defaults to 2.0 when omitted. Supported
+          values are 1.0 (L1 norm), 2.0 (L2 norm), and float('inf') (infinity norm).
   """,
   examples = """
     Examples:
@@ -283,6 +307,13 @@ case class VectorNorm(vector: Expression, degree: Expression)
     _FUNC_(vector, degree) - Normalizes a float vector to unit length using the specified norm degree.
     Degree defaults to 2.0 (Euclidean norm) if unspecified. Supported values: 1.0 (L1 norm),
     2.0 (L2 norm), float('inf') (infinity norm).
+  """,
+  arguments = """
+    Arguments:
+      * vector - An ARRAY of FLOAT values representing the vector to normalize.
+      * degree - A FLOAT specifying the norm degree used for normalization. Defaults to 2.0
+          when omitted. Supported values are 1.0 (L1 norm), 2.0 (L2 norm), and float('inf')
+          (infinity norm).
   """,
   examples = """
     Examples:
@@ -555,6 +586,11 @@ trait VectorAggregateBase extends ImperativeAggregate
     _FUNC_(array) - Returns the element-wise mean of float vectors in a group.
     All vectors must have the same dimension.
   """,
+  arguments = """
+    Arguments:
+      * array - An ARRAY of FLOAT values representing a vector. All vectors aggregated in the
+          group must have the same dimension.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (array(1.0F, 2.0F)), (array(3.0F, 4.0F)) AS tab(col);
@@ -634,6 +670,11 @@ case class VectorAvg(
   usage = """
     _FUNC_(array) - Returns the element-wise sum of float vectors in a group.
     All vectors must have the same dimension.
+  """,
+  arguments = """
+    Arguments:
+      * array - An ARRAY of FLOAT values representing a vector. All vectors aggregated in the
+          group must have the same dimension.
   """,
   examples = """
     Examples:

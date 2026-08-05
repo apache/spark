@@ -385,6 +385,21 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
     assert(relation.timeTravelSpec.contains(expectedTimeTravelSpec))
   }
 
+  test("SPARK-58389: read options are forwarded to the catalog's loadTable") {
+    sql(s"create table $catalogName.t1 (id bigint) using $format")
+    val cat = catalog(catalogName).asInstanceOf[InMemoryTableCatalog]
+    cat.resetLoadTableCalls()
+
+    // spark.read.format(...).option(...).load() goes through the SupportsCatalogOptions read
+    // path in DataSourceV2Utils, which now forwards the user options to CatalogV2Util.getTable.
+    load("t1", Some(catalogName)).collect()
+
+    val opts = cat.lastLoadTableOptions
+    assert(opts.isDefined, "loadTable(context, options) was not invoked")
+    // The user-provided read options reach the catalog (e.g. the table name selector).
+    assert(opts.get.get("name") === "t1")
+  }
+
   private def load(
       name: String,
       catalogOpt: Option[String],

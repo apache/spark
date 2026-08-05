@@ -2070,6 +2070,18 @@ object SampleMethod {
 
 object Sample {
   /**
+   * Resolves the seed of a sample, generating a random one when the user did not specify one.
+   *
+   * Generated seeds are non-negative. A pushed-down sample renders its seed into SQL as
+   * `REPEATABLE (<seed>)`, and the seed in that grammar does not accept a sign. A
+   * user-specified seed is returned unchanged, negative values included.
+   */
+  def resolveSeed(seed: Option[Long]): Long = {
+    // `Utils` in this file is o.a.s.util.collection.Utils, so qualify the one we want here.
+    seed.getOrElse(org.apache.spark.util.Utils.random.nextLong() & Long.MaxValue)
+  }
+
+  /**
    * Convenience constructor that wraps a concrete seed in [[Some]].
    * Use the case-class constructor directly with [[None]] when no seed
    * was specified and a random seed should be generated at execution time.

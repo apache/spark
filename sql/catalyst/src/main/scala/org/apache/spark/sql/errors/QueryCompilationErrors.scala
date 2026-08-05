@@ -1240,6 +1240,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     unsupportedTableOperationError(table.name(), "batch scan")
   }
 
+  def unsupportedBatchWriteError(table: Table): Throwable = {
+    unsupportedTableOperationError(table.name(), "batch write")
+  }
+
   def unsupportedStreamingScanError(table: Table): Throwable = {
     unsupportedTableOperationError(table.name(), "either micro-batch or continuous scan")
   }
@@ -4833,6 +4837,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "singlePassOutput" -> singlePassOutput.toString
       )
     )
+  }
+
+  def missingAttributesError(
+      operator: LogicalPlan,
+      missingInput: Iterable[Attribute],
+      input: Iterable[Attribute],
+      attributesWithSameName: Iterable[Attribute]): Throwable = {
+    val missingAttributes = missingInput.map(toSQLExpr).mkString(", ")
+    val inputAttributes = input.map(toSQLExpr).mkString(", ")
+    val operatorString = operator.simpleString(SQLConf.get.maxToStringFields)
+    if (attributesWithSameName.nonEmpty) {
+      new AnalysisException(
+        errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
+        messageParameters = Map(
+          "missingAttributes" -> missingAttributes,
+          "input" -> inputAttributes,
+          "operator" -> operatorString,
+          "operation" -> attributesWithSameName.map(toSQLExpr).mkString(", ")
+        ),
+        origin = operator.origin
+      )
+    } else {
+      new AnalysisException(
+        errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
+        messageParameters = Map(
+          "missingAttributes" -> missingAttributes,
+          "input" -> inputAttributes,
+          "operator" -> operatorString
+        ),
+        origin = operator.origin
+      )
+    }
   }
 
   def resolutionValidationError(cause: Throwable, plan: LogicalPlan): Throwable = {

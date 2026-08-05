@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, VectorUDT}
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasHandleInvalid, HasLabelCol}
 import org.apache.spark.ml.util._
@@ -314,9 +314,9 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     require(!hasLabelCol(schema) || !$(forceIndexLabel),
       "If label column already exists, forceIndexLabel can not be set with true.")
     if (hasLabelCol(schema)) {
-      StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
+      StructType(schema.fields :+ StructField($(featuresCol), SQLDataTypes.VectorType, true))
     } else {
-      StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true) :+
+      StructType(schema.fields :+ StructField($(featuresCol), SQLDataTypes.VectorType, true) :+
         StructField($(labelCol), DoubleType, true))
     }
   }

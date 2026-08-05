@@ -22,9 +22,9 @@ import org.apache.spark.udf.worker.{CancelResponse, ExecutionError, FinishRespon
 /**
  * :: Experimental ::
  * The terminal outcome a [[WorkerSession]] settles on, returned by
- * [[WorkerSession#close]]. Mirrors the four terminal `WorkerSession.SessionState`s,
- * so close() reports the outcome faithfully rather than collapsing failures into
- * a clean cancel.
+ * [[WorkerSession#close]]. Enumerates the terminal outcomes, carried by the
+ * single `WorkerSession.SessionState.Terminal`, so close() reports the outcome
+ * faithfully rather than collapsing failures into a clean cancel.
  *
  * '''Clean outcomes''' ([[Finished]] / [[Cancelled]]) wrap the worker's
  * `FinishResponse` / `CancelResponse` -- per-execution metrics, an optional
@@ -35,11 +35,12 @@ import org.apache.spark.udf.worker.{CancelResponse, ExecutionError, FinishRespon
  * `FinishResponse` was already produced when a `Cancel` arrives the engine still
  * receives [[Finished]], otherwise [[Cancelled]].
  *
- * '''Failure outcomes''' ([[Failed]] / [[TransportFailed]]) carry the cause
- * instead of a proto terminator (none arrived, so they have no metrics). They
- * exist so a failure is not reported as a benign cancel -- in particular an
- * error raised during finish/close, '''after all data has been drained''',
- * reaches the caller only through this value, never through the result iterator.
+ * '''Failure outcomes''' ([[Failed]] / [[TransportFailed]] / [[Interrupted]])
+ * carry the cause instead of a proto terminator (none arrived, so they have no
+ * metrics). They prevent a failure from being reported as a benign cancel. In
+ * particular, an error raised during finish/close, '''after all data has been
+ * drained''', reaches the caller only through this value, never through the
+ * result iterator.
  */
 @Experimental
 sealed trait Termination
@@ -59,8 +60,25 @@ object Termination {
   final case class Failed(error: ExecutionError) extends Termination
 
   /**
-   * A transport failure, timeout, or interrupt tore the stream down before any
-   * terminator arrived. Carries the underlying cause.
+   * A transport failure or timeout tore the stream down before any terminator
+   * arrived. Carries the underlying cause. Leaves the worker in an unknown state,
+   * so it is not salvageable (see [[WorkerSession.isWorkerSalvageable]]).
    */
   final case class TransportFailed(cause: Throwable) extends Termination
+
+  /**
+   * The session was interrupted (an [[InterruptedException]] on the engine
+   * thread driving it, e.g. a Spark task kill) before a terminator arrived. A
+   * best-effort `Cancel` is sent and its `CancelResponse` awaited only briefly
+   * (the interrupted thread must unwind promptly rather than block); this
+   * terminal is settled only when that brief wait expires without an ack -- if
+   * the worker acks in time the session settles a cooperative [[Cancelled]]
+   * instead. So it is distinct from a [[Cancelled]] (which carries the drained
+   * `CancelResponse`) and from a [[TransportFailed]] (a genuine transport
+   * fault). Although the interrupt is an engine-side event, the missing
+   * acknowledgement leaves the worker's state unknown, so it is not salvageable
+   * without a separate liveness proof (see [[WorkerSession.isWorkerSalvageable]]).
+   * Carries the interrupt cause.
+   */
+  final case class Interrupted(cause: Throwable) extends Termination
 }

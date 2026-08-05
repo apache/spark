@@ -243,6 +243,14 @@ object HllSketchAgg {
     _FUNC_(expr, allowDifferentLgConfigK) - Returns the merged HllSketch's updatable binary representation.
       `allowDifferentLgConfigK` (optional) Allow sketches with different lgConfigK values
        to be unioned (defaults to false).""",
+  arguments = """
+    Arguments:
+      * expr - The binary representation of an HllSketch to merge.
+          An expression that evaluates to binary.
+      * allowDifferentLgConfigK - Optional. Whether to allow sketches with different
+          lgConfigK values to be unioned. An expression that evaluates to a boolean.
+          Defaults to false.
+  """,
   examples = """
     Examples:
       > SELECT hll_sketch_estimate(_FUNC_(sketch, true)) FROM (SELECT hll_sketch_agg(col) as sketch FROM VALUES (1) tab(col) UNION ALL SELECT hll_sketch_agg(col, 20) as sketch FROM VALUES (1) tab(col));

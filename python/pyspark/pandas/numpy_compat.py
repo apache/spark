@@ -60,14 +60,23 @@ unary_np_spark_mappings = {
     "log": F.log,
     "log10": F.log10,
     "log1p": F.log1p,
+    "log2": lambda c: F.when(c == 0, F.lit(float("-inf"))).otherwise(F.log2(c)),
     "logical_not": lambda c: ~(c.cast(BooleanType())),
     "matmul": lambda _: NotImplemented,  # Can return a NumPy array in pandas.
     "negative": F.negative,
     "positive": F.positive,
     "rad2deg": F.degrees,
     "radians": F.radians,
-    "reciprocal": pandas_udf(  # type: ignore[call-overload]
-        lambda s: np.reciprocal(s), DoubleType()
+    "reciprocal": lambda c: F.when(
+        F.typeof(c).isin("float", "double"),
+        F.when(c.isNull(), c.cast("double"))
+        .when(
+            c == 0,
+            F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
+        )
+        .otherwise(F.lit(1.0) / c),
+    ).otherwise(
+        pandas_udf(np.reciprocal, DoubleType())(c)  # type: ignore[call-overload]
     ),
     "rint": lambda c: F.rint(c.cast("double")),
     "sign": F.signum,
@@ -98,24 +107,27 @@ binary_np_spark_mappings = {
     "copysign": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.copysign(s1, s2), DoubleType()
     ),
-    "float_power": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.float_power(s1, s2), DoubleType()
-    ),
+    "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
     "floor_divide": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.floor_divide(s1, s2), DoubleType()
     ),
-    "fmax": pandas_udf(lambda s1, s2: np.fmax(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "fmin": pandas_udf(lambda s1, s2: np.fmin(s1, s2), DoubleType()),  # type: ignore[call-overload]
+    "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
+    .when(F.isnan(c2.cast("double")), c1)
+    .otherwise(F.greatest(c1, c2))
+    .cast("double"),
+    "fmin": lambda c1, c2: F.least(c1, c2).cast("double"),
     "fmod": pandas_udf(lambda s1, s2: np.fmod(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "heaviside": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.heaviside(s1, s2), DoubleType()
-    ),
+    "heaviside": lambda c1, c2: F.when(
+        c1.isNull() | F.isnan(c1.cast("double")),
+        c1.cast("double"),
+    )
+    .when(c1 < 0, F.lit(0.0))
+    .when(c1 == 0, c2.cast("double"))
+    .otherwise(F.lit(1.0)),
     "hypot": F.hypot,
     "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "ldexp": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.ldexp(s1, s2), DoubleType()
-    ),
+    "ldexp": lambda c1, c2: c1.cast("double") * F.pow(F.lit(2.0), c2),
     # F.shiftleft accepts literal counts only; call_function also accepts a column.
     # NumPy returns zero for counts outside an int64's bit width, unlike JVM shifts.
     "left_shift": lambda c1, c2: F.when((c2 < 0) | (c2 >= 64), F.lit(0)).otherwise(

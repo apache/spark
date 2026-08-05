@@ -51,6 +51,13 @@ import org.apache.spark.util.Utils
  */
 @ExpressionDescription(
   usage = "_FUNC_(class, method[, arg1[, arg2 ..]]) - Calls a method with reflection.",
+  arguments = """
+    Arguments:
+      * class - A literal string with the fully qualified name of the class.
+      * method - A literal string with the name of the static method to call.
+      * argN - Optional arguments passed to the method. Only primitive and string
+          types are supported, and each argument is matched to the method signature.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('java.util.UUID', 'randomUUID');

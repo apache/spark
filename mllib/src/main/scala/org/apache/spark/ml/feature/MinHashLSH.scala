@@ -24,7 +24,7 @@ import scala.util.Random
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
@@ -201,7 +201,7 @@ class MinHashLSH(override val uid: String) extends LSH[MinHashLSHModel] with Has
 
   @Since("2.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
     validateAndTransformSchema(schema)
   }
 
