@@ -29,8 +29,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, LogicalRelation}
@@ -269,7 +270,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ CreateTable(ResolvedV1CommandIdentifier(ident), _, _, tableSpec: TableSpec, _)
+    case c @ CreateTable(ResolvedV1CommandIdentifier(ident), _, _, tableSpec: TableSpec, _, _, _)
         if c.resolved && c.columns.forall(_.isDefaultValueTypeCoerced) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
@@ -279,6 +280,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.unsupportedTableOperationError(
             ident, "CONSTRAINT")
         }
+        failIfWriteDistributionOrOrdering(
+          ident, "CREATE TABLE", c.writeDistributionMode, c.writeOrdering)
         // For V1 CREATE TABLE command, the default value expression is hidden in the
         // StructField metadata, and won't be constant folded by the optimizer. Here we
         // manually constant fold it, as exist default needs to be a constant.
@@ -300,7 +303,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case c @ CreateTableAsSelect(
-        ResolvedV1CommandIdentifier(ident), _, _, tableSpec: TableSpec, writeOptions, _, _) =>
+        ResolvedV1CommandIdentifier(ident), _, _, tableSpec: TableSpec, writeOptions, _, _, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider,
         tableSpec.options ++ writeOptions,
@@ -313,6 +316,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.unsupportedTableOperationError(
             ident, "CONSTRAINT")
         }
+        failIfWriteDistributionOrOrdering(
+          ident, "CREATE TABLE AS SELECT", c.writeDistributionMode, c.writeOrdering)
         constructV1TableCmd(Some(c.query), c.tableSpec, ident, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
@@ -324,7 +329,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
-    case c @ ReplaceTable(ResolvedV1CommandIdentifier(ident), _, _, _, _) if c.resolved =>
+    case c @ ReplaceTable(ResolvedV1CommandIdentifier(ident), _, _, _, _, _, _) if c.resolved =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -333,7 +338,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
-    case c @ ReplaceTableAsSelect(ResolvedV1CommandIdentifier(ident), _, _, _, _, _, _) =>
+    case c @ ReplaceTableAsSelect(ResolvedV1CommandIdentifier(ident), _, _, _, _, _, _, _, _) =>
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -718,6 +723,22 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case CreateUserDefinedFunction(
         ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _, _, _, _) =>
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
+  }
+
+  /**
+   * A v1 table has nowhere to record a write distribution or ordering, so converting the plan to a
+   * v1 command would silently drop the clause and hand back a table with none of the requested
+   * layout. Reject it instead.
+   */
+  private def failIfWriteDistributionOrOrdering(
+      ident: TableIdentifier,
+      operation: String,
+      writeDistributionMode: String,
+      writeOrdering: Seq[V2SortOrder]): Unit = {
+    if (WriteDistributionAndOrdering.isRequested(writeDistributionMode, writeOrdering)) {
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        ident, s"$operation ... DISTRIBUTED BY/ORDERED BY")
+    }
   }
 
   private def constructV1TableCmd(
