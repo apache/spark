@@ -480,6 +480,8 @@ class SparkConnectClientTestCase(unittest.TestCase):
             session.stop()
 
     def test_session_hook_preserves_operation_id(self):
+        execute_plan_req = None
+
         class TestHook(RemoteSparkSession.Hook):
             def __init__(self, _session):
                 pass
@@ -490,19 +492,27 @@ class SparkConnectClientTestCase(unittest.TestCase):
                 replacement.ClearField("operation_id")
                 return replacement
 
+        class TestService(MockService):
+            def ExecutePlan(self, req, metadata, timeout=None):
+                nonlocal execute_plan_req
+                execute_plan_req = req
+                return super().ExecutePlan(req, metadata, timeout)
+
         session = (
             RemoteSparkSession.builder.remote("sc://foo")._registerHook(TestHook).getOrCreate()
         )
         try:
-            mock = MockService(session.client._session_id)
+            mock = TestService(session.client._session_id)
             session.client._stub = mock
             session.client.disable_reattachable_execute()
 
             df = session.range(1)
             df.collect()
             self.assertIsNotNone(df.executionInfo)
-            self.assertEqual(mock.req.operation_id, df.executionInfo.operation_id)
-            uuid.UUID(mock.req.operation_id)
+            self.assertIsNotNone(execute_plan_req)
+            assert execute_plan_req is not None
+            self.assertEqual(execute_plan_req.operation_id, df.executionInfo.operation_id)
+            uuid.UUID(execute_plan_req.operation_id)
         finally:
             session.stop()
 

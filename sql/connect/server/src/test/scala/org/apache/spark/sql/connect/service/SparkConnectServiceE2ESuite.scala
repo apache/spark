@@ -45,8 +45,8 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     val jobStarted = new CountDownLatch(1)
     val listener = new SparkListener {
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        val operationId = jobStart.properties.getProperty(
-          SparkContext.SPARK_CONNECT_OPERATION_ID_PROPERTY)
+        val operationId =
+          jobStart.properties.getProperty(SparkContext.SPARK_CONNECT_OPERATION_ID_PROPERTY)
         if (operationId != null) {
           operationIdFromJob.set(operationId)
           jobStarted.countDown()

@@ -699,7 +699,7 @@ private[sql] class SparkConnectClient(
 case class PlanCompressionOptions(thresholdBytes: Int, algorithm: String)
 
 private final class SparkConnectOperationIdException(val operationId: String)
-  extends RuntimeException(s"Spark Connect operation ID: $operationId", null, false, false)
+    extends RuntimeException(s"Spark Connect operation ID: $operationId", null, false, false)
 
 object SparkConnectClient {
 
@@ -710,8 +710,8 @@ object SparkConnectClient {
    */
   @DeveloperApi
   def getOperationId(error: Throwable): Option[String] = {
-    error.getSuppressed.collectFirst {
-      case marker: SparkConnectOperationIdException => marker.operationId
+    error.getSuppressed.collectFirst { case marker: SparkConnectOperationIdException =>
+      marker.operationId
     }
   }
 
