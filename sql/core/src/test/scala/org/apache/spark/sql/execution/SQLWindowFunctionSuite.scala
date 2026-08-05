@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.TestUtils.assertSpilled
+import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf.{WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD, WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD, WINDOW_EXEC_BUFFER_SPILL_THRESHOLD, WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -308,6 +308,26 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("window function: count distinct stays in hash at the fallback threshold") {
+    withSQLConf(
+      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "5",
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> "2") {
+      val result = sql(
+        """
+          |SELECT max(distinct_count)
+          |FROM (
+          |  SELECT count(DISTINCT id % 2) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS distinct_count
+          |  FROM range(100)
+          |)
+        """.stripMargin)
+      assertNotSpilled(sparkContext, "count distinct window at hash fallback threshold") {
+        checkAnswer(result, Row(2L))
+      }
+    }
+  }
+
   test("window function: count distinct with a binary-unstable collation") {
     checkAnswer(
       sql(
@@ -433,7 +453,7 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
   test("window function: distinct foldable inputs share an empty-key frame") {
     withSQLConf(
       WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1",
-      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> "1") {
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> "0") {
       val result = sql(
         """
           |SELECT id,

@@ -4681,8 +4681,8 @@ object SQLConf {
   val WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD =
     buildConf("spark.sql.windowExec.distinct.hash.fallbackThreshold")
       .internal()
-      .doc("Threshold for number of distinct keys in the in-memory hash map before a window " +
-        "DISTINCT aggregate falls back to external sorting")
+      .doc("Maximum number of distinct keys kept in the in-memory hash map. A new key after " +
+        "this threshold makes a window DISTINCT aggregate fall back to external sorting")
       .version("4.4.0")
       .fallbackConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
