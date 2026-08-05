@@ -1215,11 +1215,14 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         def check():
             self.assertEqual(1, stub.attach_calls)
             self.assertEqual(1, stub.release_calls)
-            # ReattachExecute must have received the header. Without the list()
-            # fix, self._metadata would be the exhausted generator and this fails.
+            # All three RPC types must receive the header. If list(metadata) on
+            # line 114 runs before ExecutePlan (which it does), but ExecutePlan
+            # still uses the raw `metadata` parameter instead of self._metadata,
+            # then passing a generator would leave execute_metadata[0] empty.
+            self.assertEqual(1, len(stub.execute_metadata))
+            self.assertIn(expected_header, stub.execute_metadata[0])
             self.assertEqual(1, len(stub.attach_metadata))
             self.assertIn(expected_header, stub.attach_metadata[0])
-            # Every ReleaseExecute call must also carry the header.
             self.assertGreater(len(stub.release_metadata), 0)
             for meta in stub.release_metadata:
                 self.assertIn(expected_header, meta)

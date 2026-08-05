@@ -116,7 +116,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
             self._iterator: Optional[Iterator[pb2.ExecutePlanResponse]] = iter(
                 self._stub.ExecutePlan(
                     self._initial_request,
-                    metadata=metadata,
+                    metadata=self._metadata,
                     timeout=self._reattachable_execute_plan_timeout,
                 )
             )
