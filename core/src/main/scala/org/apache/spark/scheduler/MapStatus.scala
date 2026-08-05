@@ -363,6 +363,12 @@ private[spark] object HighlyCompressedMapStatus {
         // status, and MapOutputTracker sums those. The hidden ones fall back to `avgSize`, which
         // they raise in the process, so AQE's skew threshold moves up along with the sizes it is
         // compared against. Recording all of the ties is what keeps them visible.
+        //
+        // The ties are held as a bitmap over the reduce ids, so recording all of them costs at
+        // most a bit per reduce partition, which is the bound `emptyBlocks` above has always had.
+        // The condition below also keeps the ties a minority of the blocks: it requires the
+        // median times the skew factor to be at or below the cutoff, so the median block is
+        // smaller than the cutoff and fewer than half of the blocks can be tied at it.
         recordSkewedTies = skewCutoff > 0 && skewThreshold <= skewCutoff.toDouble
         skewThreshold
       } else {
