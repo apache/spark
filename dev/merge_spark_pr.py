@@ -48,6 +48,11 @@ from urllib.request import urlopen
 from urllib.request import Request
 from urllib.error import HTTPError
 
+# Shared with dev/pr_merge_status.py so the two committer tools agree on where a PR landed.
+# Importable because Python puts this script's own directory first on sys.path.
+from spark_merge_footer import branches_with_merge_footer as _branches_with_merge_footer
+from spark_merge_footer import has_merge_footer
+
 try:
     import jira.client
 
@@ -415,69 +420,6 @@ def get_json(url):
         sys.exit(-1)
 
 
-def merge_footer_pr(message):
-    """The PR number in `message`'s generated merge footer, or None if it has none.
-
-    A commit message cannot be searched for "Closes #N from " to identify the merge of N:
-    `merge_pr` passes the PR body through as its own `git commit -m` paragraph, so a body
-    discussing or reverting another commit can quote that commit's entire footer, structure
-    included. What is unforgeable is *position*: `merge_pr` appends the footer last, so the
-    generated one is the final "Closes" paragraph in the message. Later `cherry-pick -x`
-    lines may follow it, but no further "Closes" paragraph can. So read the last one and
-    compare its number, rather than searching for a number anywhere.
-
-    >>> footer = "Closes #1 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nSigned-off-by: C <c@e.org>"
-    >>> merge_footer_pr("[SPARK-1][SQL] Title\\n\\nSome body.\\n\\n" + footer)
-    1
-    >>> merge_footer_pr("[SPARK-1][SQL] Title\\n\\n" + footer.replace("Authored", "Lead-authored"))
-    1
-    >>> merge_footer_pr("[SPARK-1][SQL] Title\\n\\nNo footer here.") is None
-    True
-
-    A cherry-pick keeps the footer, with `-x` provenance appended after it:
-
-    >>> pick = footer + "\\n(cherry picked from commit abc123)\\nSigned-off-by: C <c@e.org>"
-    >>> merge_footer_pr("[SPARK-1][SQL] Title\\n\\n" + pick)
-    1
-
-    A body quoting another PR's complete footer does not shadow the real one:
-
-    >>> quoted = "Reverting:\\n\\n" + footer + "\\n\\nSee above."
-    >>> own = footer.replace("#1", "#2")
-    >>> merge_footer_pr("[SPARK-2][SQL] Later\\n\\n%s\\n\\n%s" % (quoted, own))
-    2
-    """
-    # \s*$ tolerates trailing whitespace. The blank line and authors paragraph reject prose
-    # that merely mentions a PR; taking the LAST match rejects a body quoting a real footer.
-    footer = re.compile(
-        r"^Closes #(\d+) from \S+\s*$\n\n(?:Lead-authored-by|Authored-by):",
-        re.MULTILINE,
-    )
-    matches = footer.findall(message)
-    return int(matches[-1]) if matches else None
-
-
-def has_merge_footer(message, pr_num):
-    """Whether `message`'s generated merge footer closes `pr_num`. See `merge_footer_pr`.
-
-    >>> footer = "Closes #1 from a/b.\\n\\nAuthored-by: A <a@e.org>\\nSigned-off-by: C <c@e.org>"
-    >>> has_merge_footer("[SPARK-1][SQL] Title\\n\\n" + footer, 1)
-    True
-    >>> has_merge_footer("[SPARK-1][SQL] Title\\n\\n" + footer, 2)
-    False
-
-    A commit whose body quotes another PR's full footer is not taken for that PR's merge:
-
-    >>> quoted = "Reverting:\\n\\n" + footer + "\\n\\nSee above."
-    >>> later = "[SPARK-2][SQL] Later\\n\\n%s\\n\\n%s" % (quoted, footer.replace("#1", "#2"))
-    >>> has_merge_footer(later, 1)
-    False
-    >>> has_merge_footer(later, 2)
-    True
-    """
-    return merge_footer_pr(message) == pr_num
-
-
 def merge_commit_candidates(pr_events):
     """Split `pr_events` into (closed_commits, referenced_commits), each oldest-first.
 
@@ -730,57 +672,19 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
 def branches_with_merge_footer(pr_num, branch_names):
     """Release branches from `branch_names` that already carry `pr_num`'s merge footer.
 
-    A cherry-pick is a new commit, so `git branch --contains <merge_hash>` finds only the
-    branch the change was merged into; what identifies a backport is the footer, which
-    `cherry-pick -x` copies verbatim (the same signal `dev/pr_merge_status.py` reads).
-    `git log --grep` only narrows the walk -- it matches the fragment anywhere in a message,
-    including inside a copied PR body -- so every candidate is confirmed with
-    `has_merge_footer` before its branches count as already backported.
-    Best-effort: this only sees branches already fetched into PUSH_REMOTE_NAME's tracking
-    refs, so a backport pushed from elsewhere and not yet fetched is simply not reported --
-    the committer is still prompted and can type any branch.
+    Thin wrapper over the shared reader in `spark_merge_footer`, adding this script's own
+    policy: a git failure here must not abort a merge that may already have pushed, so it
+    warns and reports nothing rather than exiting. Per that module's refresh policy no fetch
+    is issued, so a backport not yet fetched into PUSH_REMOTE_NAME's tracking refs is simply
+    not reported -- the committer is still prompted and can type any branch.
     """
-    trailer = "Closes #%s from " % pr_num
     try:
-        # %x00 delimits records so a commit message (which spans lines) stays one field.
-        out = run_cmd(
-            [
-                "git",
-                "log",
-                "--remotes=%s" % PUSH_REMOTE_NAME,
-                "--fixed-strings",
-                "--grep",
-                trailer,
-                "--format=%H %B%x00",
-            ]
+        landed = _branches_with_merge_footer(
+            pr_num, PUSH_REMOTE_NAME, lambda args: run_cmd(["git"] + args)
         )
     except Exception as e:
         print_error("Could not scan for existing backports of #%s (%s)." % (pr_num, e))
         return []
-
-    landed = set()
-    prefix = "%s/" % PUSH_REMOTE_NAME
-    for record in out.split("\0"):
-        record = record.strip("\n")
-        if not record:
-            continue
-        commit_hash, _, message = record.partition(" ")
-        # --grep matched somewhere in the message; only the generated footer counts.
-        if not has_merge_footer(message, pr_num):
-            continue
-        refs = run_cmd(
-            [
-                "git",
-                "for-each-ref",
-                "--contains",
-                commit_hash,
-                "--format=%(refname:short)",
-                "refs/remotes/%s/" % PUSH_REMOTE_NAME,
-            ]
-        )
-        for ref in refs.splitlines():
-            if ref.startswith(prefix):
-                landed.add(ref[len(prefix) :])
     # Keep branch_names' newest-first order, and drop anything not a known release branch.
     return [b for b in branch_names if b in landed]
 
