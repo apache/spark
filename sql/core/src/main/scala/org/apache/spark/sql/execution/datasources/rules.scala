@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, RewritableTransform, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
@@ -323,28 +323,82 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       SchemaUtils.checkTransformDuplication(
         partitioning, "in the partitioning", isCaseSensitive)
 
+      // Deliberately no duplicate check for the write ordering. Reusing
+      // checkTransformDuplication here was wrong: it drops a bucket transform's width, which is
+      // right for partitioning (two widths on one column conflict) but rejects
+      // `ORDERED BY bucket(4, id), bucket(8, id)`, two legitimate sort keys. And unlike a repeated
+      // partition column, a repeated sort key is merely redundant rather than contradictory, so
+      // there is nothing here that needs rejecting.
+
       if (schema.isEmpty) {
         if (partitioning.nonEmpty) {
           throw QueryCompilationErrors.specifyPartitionNotAllowedWhenTableSchemaNotDefinedError()
+        }
+        // Same for the write ordering: with no columns and no query there is nothing to resolve it
+        // against, so say that rather than letting CheckAnalysis blame each sort key in turn for
+        // being absent from a schema that does not exist.
+        if (create.writeOrdering.nonEmpty) {
+          throw QueryCompilationErrors
+            .specifyWriteOrderingNotAllowedWhenTableSchemaNotDefinedError()
         }
 
         create
       } else {
         // Resolve and normalize partition columns as necessary
         val resolver = conf.resolver
+        // Throws an exception if a reference cannot be resolved
+        def normalizeReferences(transform: RewritableTransform): Transform = {
+          val rewritten = transform.references().map { ref =>
+            val position = SchemaUtils
+              .findColumnPosition(ref.fieldNames().toImmutableArraySeq, schema, resolver)
+            FieldReference(SchemaUtils.getColumnName(position, schema))
+          }
+          transform.withReferences(rewritten.toImmutableArraySeq)
+        }
+
         val normalizedPartitions = partitioning.map {
-          case transform: RewritableTransform =>
-            val rewritten = transform.references().map { ref =>
-              // Throws an exception if the reference cannot be resolved
-              val position = SchemaUtils
-                .findColumnPosition(ref.fieldNames().toImmutableArraySeq, schema, resolver)
-              FieldReference(SchemaUtils.getColumnName(position, schema))
-            }
-            transform.withReferences(rewritten.toImmutableArraySeq)
+          case transform: RewritableTransform => normalizeReferences(transform)
           case other => other
         }
 
-        create.withPartitioning(normalizedPartitions)
+        // The write ordering's references are normalized the same way, so that ORDERED BY ID on a
+        // column `id` reaches the connector as `id`. Unlike the partitioning above, a reference
+        // that simply is not there is left alone rather than thrown on: CheckAnalysis rejects it
+        // with one error for every transform kind, whereas throwing here would report the
+        // rewritable ones differently from the rest. This is per reference, not per transform --
+        // one unresolvable reference must not stop its siblings being normalized, or CheckAnalysis
+        // would go on to report those siblings as missing too.
+        //
+        // One case does still throw from here: `findNestedField` raises INVALID_FIELD_NAME when the
+        // path traverses a non-struct (`ORDERED BY (m.key)` on a MAP), rather than returning None.
+        // That is the same error the reference would have earned later, so the only difference is
+        // that it arrives before its siblings are normalized.
+        def normalizeResolvableReferences(transform: RewritableTransform): Transform = {
+          val rewritten = transform.references().map { ref =>
+            val fieldNames = ref.fieldNames().toImmutableArraySeq
+            if (schema.findNestedField(fieldNames, resolver = resolver).isDefined) {
+              FieldReference(
+                SchemaUtils.getColumnName(
+                  SchemaUtils.findColumnPosition(fieldNames, schema, resolver), schema))
+            } else {
+              ref
+            }
+          }
+          transform.withReferences(rewritten.toImmutableArraySeq)
+        }
+
+        val normalizedOrdering = create.writeOrdering.map { sortOrder =>
+          sortOrder.expression() match {
+            case transform: RewritableTransform =>
+              LogicalExpressions.sort(
+                normalizeResolvableReferences(transform),
+                sortOrder.direction(),
+                sortOrder.nullOrdering())
+            case _ => sortOrder
+          }
+        }
+
+        create.withPartitioning(normalizedPartitions).withWriteOrdering(normalizedOrdering)
       }
   }
 

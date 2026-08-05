@@ -105,20 +105,22 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
    */
   private def fetchDefaultCollation(plan: LogicalPlan): Option[String] = {
     plan match {
-      case CreateTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _) =>
+      case CreateTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _) =>
         tableSpec.collation
 
-      case CreateTableAsSelect(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _) =>
+      case CreateTableAsSelect(
+          _: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _, _, _) =>
         tableSpec.collation
 
-      case ReplaceTableAsSelect(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _) =>
+      case ReplaceTableAsSelect(
+          _: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _, _, _) =>
         tableSpec.collation
 
       // CreateView also handles CREATE OR REPLACE VIEW
       case createView: CreateView =>
         createView.collation
 
-      case ReplaceTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _) =>
+      case ReplaceTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _) =>
         tableSpec.collation
 
       // Temporary views are created via CreateViewCommand, which we can't import here.
@@ -173,25 +175,25 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
     try {
       plan match {
         case createTable@CreateTable(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _)
+        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _)
           if tableSpec.collation.isEmpty =>
           createTable.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
 
         case createTableAsSelect@CreateTableAsSelect(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _)
+        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _, _, _)
           if tableSpec.collation.isEmpty =>
           createTableAsSelect.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
 
         case replaceTableAsSelect@ReplaceTableAsSelect(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _)
+        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _, _, _)
           if tableSpec.collation.isEmpty =>
           replaceTableAsSelect.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
 
         case replaceTable@ReplaceTable(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _)
+        catalog: SupportsNamespaces, identifier), _, _, tableSpec: TableSpec, _, _, _)
           if tableSpec.collation.isEmpty =>
           replaceTable.copy(tableSpec = tableSpec.copy(
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))

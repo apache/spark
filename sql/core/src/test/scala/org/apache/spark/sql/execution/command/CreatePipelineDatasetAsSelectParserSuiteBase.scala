@@ -235,6 +235,32 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
     )
   }
 
+  test("SPARK-34586: a write distribution and ordering is unsupported") {
+    Seq(
+      "PARTITIONED BY (a) DISTRIBUTED BY PARTITION",
+      "ORDERED BY (a)",
+      "LOCALLY ORDERED BY (a)",
+      "UNORDERED",
+      // rejected before the checks that CREATE TABLE applies to these, so they are covered too
+      "DISTRIBUTED BY PARTITION",
+      "ORDERED BY (a) UNORDERED"
+    ).foreach { clauses =>
+      val ex = intercept[ParseException] {
+        parser.parsePlan(
+          s"""CREATE $datasetSqlSyntax table1 $clauses
+             |AS SELECT * FROM input""".stripMargin)
+      }
+      checkError(
+        exception = ex,
+        condition = "_LEGACY_ERROR_TEMP_0035",
+        parameters = Map("message" -> (s"A write distribution and ordering is not supported for " +
+          s"CREATE $datasetSqlSyntax statements. Please remove any DISTRIBUTED BY PARTITION, " +
+          "ORDERED BY, or UNORDERED clause specified in the statement.")),
+        queryContext = ex.getQueryContext.map(toExpectedContext)
+      )
+    }
+  }
+
   test("CTAS subquery is parsed into plan correctly") {
     Seq(
       "SELECT 1",
