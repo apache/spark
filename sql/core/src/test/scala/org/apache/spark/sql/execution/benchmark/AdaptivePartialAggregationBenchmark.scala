@@ -31,11 +31,11 @@ import org.apache.spark.sql.internal.SQLConf
  * Each scenario runs the query across the full matrix of whole-stage codegen on/off and the
  * feature disabled (`adaptive = F`, the pre-change baseline) vs enabled (`adaptive = T`), over a
  * {high, low}-cardinality x {no-spill, on-spill} grid:
- *   - high-cardinality, no spill: the no-spill tier bypasses, which should win.
+ *   - high-cardinality, no spill: the periodic check bypasses, which should win.
  *   - low-cardinality, no spill: nothing bypasses, which must not regress.
- *   - high-cardinality, forced regular-map spill: the on-spill tier bypasses instead of spilling,
+ *   - high-cardinality, forced regular-map spill: the spill check bypasses instead of spilling,
  *     which should win.
- *   - low-cardinality, forced regular-map spill: the ratio is too low for the on-spill tier to
+ *   - low-cardinality, forced regular-map spill: the ratio is too low for the spill check to
  *     bypass, so both runs spill identically (no regression).
  *
  * To run this benchmark:
@@ -81,9 +81,9 @@ object AdaptivePartialAggregationBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    // Fully distinct keys make partial aggregation useless, so the no-spill (Tier 1) sampling tier
-    // bypasses: the feature should be faster than the baseline that maintains a map entry per row.
-    runBenchmark("high-cardinality input, no-spill pass-through (Tier 1)") {
+    // Fully distinct keys make partial aggregation useless, so the periodic check bypasses: the
+    // feature should be faster than the baseline that maintains a map entry per row.
+    runBenchmark("high-cardinality input, pass-through at the periodic check") {
       val N = 8L << 20
       val benchmark = new Benchmark("adaptive partial agg, high card, no spill", N,
         output = output)
@@ -91,9 +91,9 @@ object AdaptivePartialAggregationBenchmark extends SqlBasedBenchmark {
       benchmark.run()
     }
 
-    // 1000 distinct keys over a large input: partial aggregation reduces a lot, the no-spill tier
+    // 1000 distinct keys over a large input: partial aggregation reduces a lot, the periodic check
     // never fires, and the two runs must match (no regression).
-    runBenchmark("low-cardinality input, no-spill pass-through (Tier 1)") {
+    runBenchmark("low-cardinality input, pass-through at the periodic check") {
       val N = 16L << 20
       val benchmark = new Benchmark("adaptive partial agg, low card, no spill", N,
         output = output)
@@ -102,32 +102,32 @@ object AdaptivePartialAggregationBenchmark extends SqlBasedBenchmark {
       benchmark.run()
     }
 
-    // Force the regular map to spill quickly and disable the no-spill tier (huge sample). With
+    // Force the regular map to spill quickly and disable the periodic check (huge minRows). With
     // fully distinct keys the reduction ratio is 1.0, so at the spill boundary the on-spill
-    // tier (Tier 2) bypasses instead of spilling; the baseline spills repeatedly and falls back
+    // spill check bypasses instead of spilling; the baseline spills repeatedly and falls back
     // to sort-based aggregation.
-    runBenchmark("high-cardinality input, on-spill pass-through (Tier 2)") {
+    runBenchmark("high-cardinality input, pass-through at the spill check") {
       val N = 8L << 20
       val benchmark = new Benchmark("adaptive partial agg, high card, spill", N, output = output)
-      val tier2Conf = Seq(
-        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key -> Int.MaxValue.toString,
+      val spillCheckConf = Seq(
+        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> Long.MaxValue.toString,
         "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 1048576")
-      addCodegenAdaptiveCases(benchmark, () => distinctKeyedDf(N), extraConf = tier2Conf)
+      addCodegenAdaptiveCases(benchmark, () => distinctKeyedDf(N), extraConf = spillCheckConf)
       benchmark.run()
     }
 
     // Force the regular map to spill quickly on low-cardinality input. The reduction ratio is tiny
-    // (1000 distinct keys), so even at the spill boundary the on-spill tier correctly does not
+    // (1000 distinct keys), so even at the spill boundary the spill check correctly does not
     // bypass: both runs spill and fall back to sort-based aggregation identically (no regression).
-    runBenchmark("low-cardinality input, on-spill pass-through (Tier 2)") {
+    runBenchmark("low-cardinality input, pass-through at the spill check") {
       val N = 16L << 20
       val benchmark = new Benchmark("adaptive partial agg, low card, spill", N, output = output)
-      val tier2Conf = Seq(
-        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key -> Int.MaxValue.toString,
+      val spillCheckConf = Seq(
+        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> Long.MaxValue.toString,
         "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 1048576")
       addCodegenAdaptiveCases(benchmark, () =>
         spark.range(N).selectExpr("id % 1000 as k", "id as v").groupBy("k").agg("v" -> "sum"),
-        extraConf = tier2Conf)
+        extraConf = spillCheckConf)
       benchmark.run()
     }
   }

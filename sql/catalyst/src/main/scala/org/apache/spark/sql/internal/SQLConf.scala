@@ -4164,55 +4164,37 @@ object SQLConf {
         "through as single-row partial aggregation buffers for the final aggregation to merge, " +
         "which avoids the cost of maintaining and spilling a large aggregation map with little " +
         "reduction benefit. This applies only to hash aggregation with grouping keys.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
-  val ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS =
-    buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.sampleRows")
-      .doc("The number of input rows to sample before evaluating the reduction ratio for the " +
-        s"no-spill tier of adaptive partial aggregation (see " +
-        s"'${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). From this many rows on, if the ratio " +
-        "of distinct grouping keys to processed rows is at least " +
-        s"'spark.sql.execution.aggregate.adaptivePartialAggregation." +
-        "noSpillReductionRatioThreshold', partial aggregation is bypassed for the rest of the " +
-        "input. When the ratio is below the threshold, the next evaluation happens after twice " +
-        "as many rows, so low-cardinality input is re-checked only rarely.")
-      .version("4.3.0")
+  val ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS =
+    buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.minRows")
+      .doc("The number of rows to process before adaptive partial aggregation (see " +
+        s"'${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}') evaluates the compaction ratio. The " +
+        "ratio is evaluated once this many rows have been processed since the previous " +
+        "evaluation, so a decision is never made on too few rows.")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .intConf
-      .checkValue(_ > 0, "The sample row count must be positive.")
+      .longConf
+      .checkValue(_ > 0, "The minimum row count must be positive.")
       .createWithDefault(100000)
 
-  val ADAPTIVE_PARTIAL_AGGREGATION_NO_SPILL_REDUCTION_RATIO_THRESHOLD =
-    buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation." +
-      "noSpillReductionRatioThreshold")
-      .doc("The reduction ratio threshold used by the no-spill tier of adaptive partial " +
-        s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The reduction ratio " +
-        "is the number of distinct grouping keys divided by the number of processed rows. After " +
-        s"sampling '${ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key}' rows without spilling, if " +
-        "the ratio is at least this value the partial aggregation is bypassed. A larger value " +
-        "is more conservative (keeps partial aggregation in more cases).")
-      .version("4.3.0")
+  val ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION =
+    buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.minCompaction")
+      .doc("The minimum compaction ratio required to keep the pre-shuffle partial aggregation " +
+        s"(see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The compaction ratio is the " +
+        "number of processed rows divided by the number of keys held in the aggregation maps, " +
+        "so a ratio of 10 means the partial aggregation collapses ten rows into one. When the " +
+        s"ratio is below this value after '${ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key}' rows, " +
+        "or when the aggregation map is about to spill, the partial aggregation is bypassed for " +
+        "the rest of the input. A larger value bypasses more aggressively.")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doubleConf
-      .checkValue(v => v >= 0.0 && v <= 1.0, "The reduction ratio threshold must be in [0.0, 1.0].")
-      .createWithDefault(0.9)
-
-  val ADAPTIVE_PARTIAL_AGGREGATION_SPILL_REDUCTION_RATIO_THRESHOLD =
-    buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation." +
-      "spillReductionRatioThreshold")
-      .doc("The reduction ratio threshold used by the on-spill tier of adaptive partial " +
-        s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). When the aggregation " +
-        "map is about to spill, if the ratio of distinct grouping keys to processed rows is at " +
-        "least this value the partial aggregation is bypassed for the rest of the input. It " +
-        s"falls back to '${ADAPTIVE_PARTIAL_AGGREGATION_NO_SPILL_REDUCTION_RATIO_THRESHOLD.key}' " +
-        "so that both tiers apply one policy by default. Setting it lower makes the bypass more " +
-        "likely once spilling is imminent, and 0 always bypasses instead of spilling.")
-      .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .fallbackConf(ADAPTIVE_PARTIAL_AGGREGATION_NO_SPILL_REDUCTION_RATIO_THRESHOLD)
+      .checkValue(_ >= 1.0, "The minimum compaction ratio must be at least 1.0.")
+      .createWithDefault(1.1)
 
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")
@@ -8964,14 +8946,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def adaptivePartialAggregationEnabled: Boolean =
     getConf(ADAPTIVE_PARTIAL_AGGREGATION_ENABLED)
 
-  def adaptivePartialAggregationSampleRows: Int =
-    getConf(ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS)
+  def adaptivePartialAggregationMinRows: Long =
+    getConf(ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS)
 
-  def adaptivePartialAggregationNoSpillReductionRatioThreshold: Double =
-    getConf(ADAPTIVE_PARTIAL_AGGREGATION_NO_SPILL_REDUCTION_RATIO_THRESHOLD)
-
-  def adaptivePartialAggregationSpillReductionRatioThreshold: Double =
-    getConf(ADAPTIVE_PARTIAL_AGGREGATION_SPILL_REDUCTION_RATIO_THRESHOLD)
+  def adaptivePartialAggregationMinCompaction: Double =
+    getConf(ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 

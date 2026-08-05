@@ -37,7 +37,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  *      multi-distinct).
  *   2. Triggering: the `numBypassingRows` metric proves the bypass actually fires when (and only
  *      when) it should -- high-cardinality input bypasses, low-cardinality input keeps aggregating,
- *      the feature switch and eligibility rules are honored, and both decision tiers work.
+ *      the feature switch and eligibility rules are honored, and both check points work.
  */
 class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -45,7 +45,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   import testImplicits._
 
   // A `testFallbackStartsAt` setting ("fastMapCounter, regularMapCounter") that makes the regular
-  // map fall back (spill) periodically, exercising the on-spill (Tier 2) decision path in both the
+  // map fall back (spill) periodically, exercising the spill-check decision path in both the
   // codegen and interpreted aggregation paths. Kept moderate so low-cardinality inputs (which are
   // never bypassed and therefore really spill) do not open an unbounded number of spill readers.
   private val forceSpillFallback = "4, 16"
@@ -85,8 +85,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
-          // Small sample so the no-spill (Tier 1) path triggers on modest inputs.
-          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key -> "8") ++
+          // Small sample so the no-spill (the periodic check) path triggers on modest inputs.
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "8") ++
           spillConf ++ fixedPlanConfs): _*) {
         val msg = s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap forceSpill=$forceSpill"
         withClue(msg) {
@@ -106,10 +106,12 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
    *     effective and climbs toward the input row count once the operator bypasses.
    *   - `spillBytes`: the partial aggregate's `spillSize`. Reliable only when no fallback is
    *     forced: on the interpreted path this is derived from the task-cumulative memory-spill
-   *     counter, so a forced fallback (or downstream shuffle-write spill) can inflate it. Asserted
-   *     only by the Tier 1 test, which forces no fallback; use `tasksFallBacked` otherwise.
+   *     counter, so a forced fallback (or downstream shuffle-write spill) can inflate it.
+   *     Asserted only by the periodic check test, which forces no fallback; use
+   *     `tasksFallBacked` otherwise.
    *   - `tasksFallBacked`: the partial aggregate's `numTasksFallBacked`, incremented only when the
-   *     regular map actually falls back into sort-based aggregation. When Tier 2 bypasses at the
+   *     regular map actually falls back into sort-based aggregation. When the spill check bypasses
+   *     at the
    *     spill boundary the sorter is never created, so this stays 0 -- direct, per-operator
    *     evidence the bypass replaced the sort fallback.
    */
@@ -177,12 +179,12 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
    * so nothing could ever bypass. To make the triggering tests meaningful when the two-level map is
    * on, we shrink the fast map via the first field of `testFallbackStartsAt` so rows fall through
    * to the regular map. `regularFallback` optionally sets the second field to also force the
-   * regular map to spill (for the on-spill tier); when 0 the regular map does not spill.
+   * regular map to spill (for the spill check); when 0 the regular map does not spill.
    */
   private def forEachCodegenAndMap(
-      sampleRows: Int = 8,
+      minRows: Long = 8,
       regularFallback: Int = 0,
-      noSpillThreshold: Double = -1.0)(
+      minCompaction: Double = -1.0)(
       body: String => Unit): Unit = {
     for {
       wholeStage <- Seq(true, false)
@@ -198,9 +200,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         Nil
       }
       // A negative value means "leave the threshold at its default".
-      val thresholdConf = if (noSpillThreshold >= 0.0) {
-        Seq(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_NO_SPILL_REDUCTION_RATIO_THRESHOLD.key ->
-          noSpillThreshold.toString)
+      val thresholdConf = if (minCompaction >= 0.0) {
+        Seq(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key -> minCompaction.toString)
       } else {
         Nil
       }
@@ -209,7 +210,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
-          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key -> sampleRows.toString) ++
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> minRows.toString) ++
           fallbackConf ++ thresholdConf ++ fixedPlanConfs): _*) {
         body(s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap")
       }
@@ -222,7 +223,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
 
   test("results unchanged for high-cardinality input that bypasses partial aggregation") {
     // Every grouping key is distinct, so partial aggregation reduces nothing and should be
-    // bypassed by both tiers.
+    // bypassed by the periodic check.
     checkAdaptiveMatchesReference { () =>
       spark.range(0, 200, 1, 1)
         .select($"id" as "k", ($"id" * 2) as "v")
@@ -359,7 +360,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // modes alone is vacuously true and could wrongly admit the `Final` phase of the two-phase
     // plan. With duplicate keys, a bypassing `Final` would skip its de-duplication and return
     // duplicate rows. The two-level map off variants route the rows to the regular map so the
-    // sampling tier fires and the regression would show up.
+    // periodic check fires and the regression would show up.
     checkAdaptiveMatchesReference { () =>
       spark.range(0, 1000, 1, 1)
         .select(($"id" % 10) as "c")
@@ -368,7 +369,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("results unchanged when a large frozen map is output before pass-through streaming") {
-    // A larger sample lets the map accumulate many keys before the no-spill tier bypasses, so the
+    // A larger sample lets the map accumulate many keys before the periodic check bypasses, so the
     // early map output (which also frees the map) spans several drain cycles and re-enters the
     // map-output function; the results must still match the feature-off reference.
     val query = () => spark.range(0, 400000, 1, 1)
@@ -378,7 +379,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     withSQLConf(
       (Seq(
         SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
-        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key -> "200000",
+        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "200000",
         SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false") ++ fixedPlanConfs): _*) {
       val reference = withSQLConf(
         SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "false") {
@@ -651,8 +652,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("Tier 1 (no-spill) fires when the sample shows no reduction, without spilling") {
-    // No forced regular-map spill: only the no-spill sampling tier can trigger the bypass. Fully
+  test("the periodic check fires when the sample shows no reduction, without spilling") {
+    // No forced regular-map spill: only the periodic check can trigger the bypass. Fully
     // distinct keys over a small sample cross `noSpillReductionRatioThreshold`, so rows bypass and
     // the regular map never spills.
     forEachCodegenAndMap() { clue =>
@@ -662,18 +663,20 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         .agg(sum($"v") as "s")
       withClue(clue) {
         val c = runAndReadCounters(df)
-        assert(c.skipped > 0, "Tier 1 should bypass fully distinct input under the sample")
-        assert(c.spillBytes == 0, "Tier 1 must decide before any spill happens")
-        assert(c.tasksFallBacked == 0, "Tier 1 must not fall back to sort-based aggregation")
+        assert(c.skipped > 0,
+          "the periodic check should bypass fully distinct input under the sample")
+        assert(c.spillBytes == 0, "the periodic check must decide before any spill happens")
+        assert(c.tasksFallBacked == 0,
+          "the periodic check must not fall back to sort-based aggregation")
       }
     }
   }
 
-  test("Tier 2 (on-spill) fires when the map would spill on high-cardinality input") {
+  test("the spill check fires when the map would spill on high-cardinality input") {
     // Force the regular map to fall back quickly. High-cardinality input that reaches the fallback
-    // point should bypass via the on-spill tier rather than spilling. Use a sample larger than the
-    // input so Tier 1 cannot fire first and the on-spill tier is the one exercised.
-    forEachCodegenAndMap(sampleRows = 100000, regularFallback = 16) { clue =>
+    // point should bypass via the spill check rather than spilling. Use a sample larger than the
+    // input so the periodic check cannot fire first and the spill check is the one exercised.
+    forEachCodegenAndMap(minRows = 100000, regularFallback = 16) { clue =>
       val df = () => spark.range(0, 200, 1, 1)
         .select($"id" as "k", $"id" as "v")
         .groupBy($"k")
@@ -681,21 +684,57 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       withClue(clue) {
         val c = runAndReadCounters(df)
         assert(c.skipped > 0,
-          "Tier 2 should bypass high-cardinality input at the spill boundary")
-        // The whole point of Tier 2 is to bypass *instead of* falling back to sort-based
+          "the spill check should bypass high-cardinality input at the spill boundary")
+        // The whole point of the spill check is to bypass *instead of* falling back to sort-based
         // aggregation, so the sorter is never created. `numTasksFallBacked` is the reliable
         // per-operator signal for that (the `spillSize` metric on the interpreted path is derived
         // from the task-cumulative memory-spill counter and can be inflated by unrelated spilling
         // such as the downstream shuffle write, so it is not asserted here).
-        assert(c.tasksFallBacked == 0, "Tier 2 must replace the sort fallback, not trigger it")
+        assert(c.tasksFallBacked == 0,
+          "the spill check must replace the sort fallback, not trigger it")
+      }
+    }
+  }
+
+  test("a new in-memory map epoch after a spill can still bypass") {
+    // A spill starts a new in-memory map epoch and restarts the row counters, so an input whose
+    // cardinality only turns unfavorable after an early spill is still caught. The first 100 rows
+    // repeat 5 keys and keep the aggregation effective while the forced fallback makes the map
+    // spill; the remaining 300 rows are fully distinct, so the new epoch is judged ineffective and
+    // the rest of the input is passed through. Both the spill and the bypass must be observable.
+    for {
+      wholeStage <- Seq(true, false)
+      twoLevelMap <- Seq(true, false)
+    } {
+      val fastCap = if (twoLevelMap) 4 else 1
+      withSQLConf(
+        (Seq(
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "8",
+          "spark.sql.TungstenAggregate.testFallbackStartsAt" -> s"$fastCap, 40") ++
+          fixedPlanConfs): _*) {
+        val df = () => spark.range(0, 400, 1, 1)
+          .select(when($"id" < 100, $"id" % 5).otherwise($"id") as "k", $"id" as "v")
+          .groupBy($"k")
+          .agg(sum($"v") as "s")
+        withClue(s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap") {
+          val c = runAndReadCounters(df)
+          assert(c.tasksFallBacked > 0,
+            "the low-cardinality prefix should still spill and fall back to sort")
+          assert(c.skipped > 0,
+            "the high-cardinality tail after the spill should be passed through")
+        }
       }
     }
   }
 
   test("without the feature the same input really does fall back to sort") {
-    // Sanity check for the Tier 2 assertion above: with adaptive disabled, the identical
+    // Sanity check for the the spill check assertion above: with adaptive disabled, the identical
     // high-cardinality input under the same forced fallback genuinely falls back to sort-based
-    // aggregation. This proves Tier 2's `tasksFallBacked == 0` reflects the bypass and not merely
+    // aggregation. This proves the spill check's `tasksFallBacked == 0` reflects the bypass and
+    // not merely
     // an input that never reached the spill boundary.
     for {
       wholeStage <- Seq(true, false)
@@ -723,35 +762,34 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("spill tier decides identically at the exact ratio boundary with codegen on and off") {
-    // The on-spill tier evaluates the ratio over the rows already aggregated, excluding the failed
-    // insertion that becomes the first pass-through row, so both execution paths must judge the
-    // same row set and reach the same decision. `id % 40` over 400 rows gives 40 distinct keys
-    // when the map fills at 50 aggregated rows, i.e. a ratio of exactly 0.8: at the threshold the
-    // bypass fires, just above it (0.85) it does not.
-    Seq(0.8 -> true, 0.85 -> false).foreach { case (threshold, shouldBypass) =>
+  test("the spill check decides identically at the exact ratio boundary with codegen on and off") {
+    // The check before a spill evaluates the ratio over the rows already aggregated, excluding the
+    // failed insertion that becomes the first pass-through row, so both execution paths must judge
+    // the same row set and reach the same decision. `id % 40` over 400 rows gives 40 keys when the
+    // map fills at 50 aggregated rows, i.e. a compaction ratio of exactly 1.25: demanding 1.25 the
+    // aggregation is kept (`50 < 40 * 1.25` is false), demanding 1.3 it is bypassed.
+    Seq(1.25 -> false, 1.3 -> true).foreach { case (minCompaction, shouldBypass) =>
       val skippedPerCodegen = Seq(true, false).map { wholeStage =>
         withSQLConf(
           (Seq(
             SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
             SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
             SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
-            // A sample larger than the input keeps the no-spill tier out of the picture.
-            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SAMPLE_ROWS.key -> "100000",
-            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_SPILL_REDUCTION_RATIO_THRESHOLD.key ->
-              threshold.toString,
+            // A `minRows` larger than the input keeps the periodic check out of the picture.
+            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "100000",
+            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key -> minCompaction.toString,
             "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 50") ++
             fixedPlanConfs): _*) {
           val df = () => spark.range(0, 400, 1, 1)
             .select(($"id" % 40) as "k", $"id" as "v")
             .groupBy($"k")
             .agg(sum($"v") as "s")
-          withClue(s"threshold=$threshold wholeStage=$wholeStage") {
+          withClue(s"minCompaction=$minCompaction wholeStage=$wholeStage") {
             numBypassingRows(df)
           }
         }
       }
-      withClue(s"threshold=$threshold skipped=$skippedPerCodegen") {
+      withClue(s"minCompaction=$minCompaction skipped=$skippedPerCodegen") {
         assert(skippedPerCodegen.forall(_ > 0) == shouldBypass,
           s"expected bypass=$shouldBypass at the ratio boundary")
         assert(skippedPerCodegen.map(_ > 0).distinct.length == 1,
@@ -760,26 +798,26 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("a zero threshold always bypasses once the sample has been processed") {
-    // 0 is the most aggressive setting: the ratio check `distinctKeys >= rows * 0` always holds,
-    // so even a low-cardinality input that the default threshold keeps aggregating is bypassed
-    // right after the sample. The results must still match the feature-off reference.
-    forEachCodegenAndMap(noSpillThreshold = 0.0) { clue =>
+  test("a very high minCompaction always bypasses once minRows has been processed") {
+    // Demanding an unreachable compaction ratio is the most aggressive setting: even a
+    // low-cardinality input that the default threshold keeps aggregating is bypassed at the first
+    // check point. The results must still match the feature-off reference.
+    forEachCodegenAndMap(minCompaction = 1000000.0) { clue =>
       val df = () => spark.range(0, 600, 1, 1)
         .select(($"id" % 5) as "k", $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
         assert(numBypassingRows(df) > 0,
-          "a zero threshold must bypass even a low-cardinality input")
+          "an unreachable compaction ratio must bypass even a low-cardinality input")
       }
     }
   }
 
   test("larger sample defers the decision so a small high-cardinality input is not bypassed") {
-    // With a sample larger than the whole input and no regular-map spill forced, the Tier 1 check
+    // With a sample larger than the whole input and no regular-map spill forced, the periodic check
     // point is never reached, so nothing bypasses even though the keys are fully distinct.
-    forEachCodegenAndMap(sampleRows = 100000) { clue =>
+    forEachCodegenAndMap(minRows = 100000) { clue =>
       val df = () => spark.range(0, 200, 1, 1)
         .select($"id" as "k", $"id" as "v")
         .groupBy($"k")

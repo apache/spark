@@ -96,8 +96,10 @@ class TungstenAggregationIterator(
     spillSize: SQLMetric,
     avgHashProbe: SQLMetric,
     numTasksFallBacked: SQLMetric,
-    numBypassingRows: SQLMetric = null,
-    adaptivePartialAggConfig: Option[AdaptivePartialAggregationConfig] = None)
+    numBypassingRows: SQLMetric,
+    adaptivePartialAggEnabled: Boolean,
+    adaptiveMinRows: Long,
+    adaptiveMinCompaction: Double)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -182,20 +184,19 @@ class TungstenAggregationIterator(
   // after each becomes full then using sort to merge these spills, finally do sort
   // based aggregation.
   //
-  // When adaptive partial aggregation is enabled (see [[AdaptivePartialAggregationConfig]]), the
-  // processing may stop early and switch to pass-through mode: the remaining input rows are not
-  // added to the map but are instead emitted as single-row partial buffers by the output stage
-  // (see `passThroughOutput`). Two tiers decide the switch, both evaluated only before any spill
-  // has happened (so `externalSorter == null`), which keeps the reduction-ratio estimate based on
-  // the full set of processed rows and guarantees `passThrough` never coexists with sort-based
-  // aggregation:
-  //   - no-spill tier: from `sampleRows` rows on while the map is in memory, if
-  //     distinctKeys / processedRows >= noSpillReductionRatioThreshold; the sampling window doubles
-  //     after each sub-threshold check, so a low-cardinality input is re-evaluated only rarely.
-  //   - on-spill tier: when the map is about to spill for the first time, if
-  //     distinctKeys / processedRows >= spillReductionRatioThreshold. In this case we do NOT spill;
-  //     the full in-memory map is kept for normal output and the row that could not be inserted
-  //     becomes the first pass-through row.
+  // When adaptive partial aggregation is enabled (`adaptivePartialAggEnabled`), the processing may
+  // stop early and switch to pass-through mode: the remaining input rows are not added to the map
+  // but are instead emitted as single-row partial buffers by the output stage (see
+  // `nextPassThroughOutput`). One predicate decides both check points -- the aggregation is
+  // ineffective when `processedRows < distinctKeys * minCompaction`, i.e. it does not collapse
+  // `minCompaction` rows into one key:
+  //   - periodically, every `minRows` processed rows;
+  //   - when the map is about to spill, in which case the spill is skipped entirely and the row
+  //     that could not be inserted becomes the first pass-through row.
+  // A spill starts a new in-memory map epoch: the row counters restart so that epoch is judged on
+  // its own rows, which lets an input whose cardinality only turns unfavorable later still be
+  // passed through. Pass-through may therefore coexist with earlier spills; the output stage
+  // drains the sort-based (or map) output first and streams the remaining rows afterwards.
   private def processInputs(fallbackStartsAt: (Int, Int)): Unit = {
     if (groupingExpressions.isEmpty) {
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
@@ -209,17 +210,15 @@ class TungstenAggregationIterator(
     } else {
       var i = 0
       var processedRows = 0L
-      // Eligibility and the thresholds are fixed for the lifetime of this iterator, so unwrap them
-      // once instead of re-checking the `Option` for every row.
-      val adaptiveEnabled = adaptivePartialAggConfig.isDefined
-      val noSpillRatioThreshold =
-        adaptivePartialAggConfig.map(_.noSpillReductionRatioThreshold).getOrElse(0.0)
-      val spillRatioThreshold =
-        adaptivePartialAggConfig.map(_.spillReductionRatioThreshold).getOrElse(0.0)
-      // The next row count at which the no-spill tier re-evaluates the reduction ratio. It starts
-      // at `sampleRows` and doubles after each sub-threshold check, so the ratio is checked only
-      // rarely once the input proves low-cardinality.
-      var nextSampleRow = adaptivePartialAggConfig.map(_.sampleRows.toLong).getOrElse(0L)
+      val minRows = adaptiveMinRows
+      // The processed-row count at which the compaction ratio is evaluated next. It advances by
+      // `minRows` after every check, and restarts after a spill so the new in-memory map epoch is
+      // judged on its own rows.
+      var nextCheckRow = minRows
+      // The partial aggregation is ineffective when it does not collapse `minCompaction` rows into
+      // one key. There is no fast map on this path, so the map's keys are all the operator holds.
+      def ineffective(): Boolean =
+        processedRows < hashMap.getNumKeys().toDouble * adaptiveMinCompaction
       while (inputIter.hasNext && !passThrough) {
         val newInput = inputIter.next()
         val groupingKey = groupingProjection.apply(newInput)
@@ -228,11 +227,10 @@ class TungstenAggregationIterator(
           buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
         }
         if (buffer == null) {
-          // The map is full and would normally spill. On the first spill, adaptive partial
-          // aggregation may instead bypass: keep the in-memory map as-is, pass this row and all
-          // remaining rows through, and skip the spill entirely.
-          if (adaptiveEnabled && externalSorter == null && processedRows > 0 &&
-              hashMap.getNumKeys().toDouble >= processedRows * spillRatioThreshold) {
+          // The map is full and would normally spill. Adaptive partial aggregation may instead
+          // bypass: keep the in-memory map as-is, pass this row and all remaining rows through,
+          // and skip the spill entirely.
+          if (adaptivePartialAggEnabled && processedRows > 0 && ineffective()) {
             passThrough = true
             // `newInput` could not be inserted; stash a copy as the first pass-through row so it
             // is not lost when we drain the rest of `inputIter`.
@@ -245,6 +243,10 @@ class TungstenAggregationIterator(
               externalSorter.merge(sorter)
             }
             i = 0
+            // The map starts a new in-memory epoch, so the counters restart and the ratio of that
+            // epoch alone decides whether the remaining rows are passed through.
+            processedRows = 0L
+            nextCheckRow = minRows
             buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
             if (buffer == null) {
               // failed to allocate the first page
@@ -256,15 +258,13 @@ class TungstenAggregationIterator(
           processRow(buffer, newInput)
           i += 1
           processedRows += 1
-          // No-spill tier: from the sampling window on, if the map is still fully in memory and
-          // the reduction ratio is too high to be worthwhile, bypass partial aggregation for the
-          // rest. The window doubles after each sub-threshold check so low-cardinality input is
-          // re-evaluated only rarely while a late high-cardinality tail can still be caught.
-          if (adaptiveEnabled && externalSorter == null && processedRows == nextSampleRow) {
-            if (hashMap.getNumKeys().toDouble >= processedRows * noSpillRatioThreshold) {
+          // Periodic check: if the aggregation is not collapsing enough rows, bypass it for the
+          // rest of the input.
+          if (adaptivePartialAggEnabled && processedRows == nextCheckRow) {
+            if (ineffective()) {
               passThrough = true
             } else {
-              nextSampleRow = nextSampleRow * 2
+              nextCheckRow += minRows
             }
           }
         }
@@ -413,12 +413,12 @@ class TungstenAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   // Indicates that partial aggregation has been bypassed and the remaining input rows should be
-  // passed through as single-row partial buffers. Set in `processInputs` by either adaptive tier.
-  // Because both tiers only trigger before any spill, pass-through never coexists with sort-based
-  // aggregation, so the output order is: map entries first, then the pass-through rows.
+  // passed through as single-row partial buffers. Set in `processInputs` by either check point.
+  // It may coexist with earlier spills, so the output order is: sort-based (or map) output first,
+  // then the pass-through rows.
   private[this] var passThrough: Boolean = false
 
-  // The row that could not be inserted at the on-spill tier trigger point. It is stashed here (as
+  // The row that could not be inserted at the spill check. It is stashed here (as
   // a copy) so it becomes the first pass-through row rather than being lost.
   private[this] var pendingPassThroughRow: InternalRow = null
 
@@ -445,9 +445,7 @@ class TungstenAggregationIterator(
     // Reset the buffer to initial values, then update it with this single row.
     passThroughAggregationBuffer.copyFrom(initialAggregationBuffer)
     processRow(passThroughAggregationBuffer, row)
-    if (numBypassingRows != null) {
-      numBypassingRows += 1
-    }
+    numBypassingRows += 1
     generateOutput(groupingKey, passThroughAggregationBuffer)
   }
 
@@ -501,7 +499,7 @@ class TungstenAggregationIterator(
 
   override final def next(): UnsafeRow = {
     if (hasNext) {
-      val res = if (sortBased) {
+      val res = if (sortBased && sortedInputHasNewGroup) {
         // Process the current group.
         processCurrentSortedGroup()
         // Generate output row for the current group.
