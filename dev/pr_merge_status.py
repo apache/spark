@@ -230,8 +230,9 @@ def main():
     # its merge there, since a merge always lands on the base branch.
     majors = {m for m in (latest_major(remote), branch_major(base)) if m is not None}
 
-    # fetch_branches above satisfies the shared reader's refresh policy: it reads local
-    # remote-tracking refs only, so they must already be current.
+    # The shared reader consumes local remote-tracking refs only, so fetch_branches above is
+    # what refreshes them -- best-effort, since it warns and continues on a failed fetch,
+    # leaving the refs possibly stale (a recently merged PR could look unmerged).
     all_landed = branches_with_merge_footer(pr, remote, lambda args: git(*args))
     landed = {
         branch: commit[:11]

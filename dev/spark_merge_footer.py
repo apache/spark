@@ -41,14 +41,15 @@ Two properties make reading it reliable, and both are easy to get wrong:
 - `git log --grep` matches its pattern anywhere in a message, so it can only narrow the
   walk; every candidate it returns must still be validated with `has_merge_footer`.
 
-This module is import-only: it never exits, prints, or runs git itself. Callers pass a
-`run_git` callable and so keep their own error-handling policy -- `dev/pr_merge_status.py`
-exits on a git failure, while `dev/merge_spark_pr.py` must not abort a merge in progress.
+When imported, nothing here exits, prints, or runs git: callers pass a `run_git` callable and
+so keep their own error-handling policy -- `dev/pr_merge_status.py` exits on a git failure,
+while `dev/merge_spark_pr.py` must not abort a merge in progress. (Running this file directly
+executes its doctests and exits nonzero if any fail.)
 
 Refresh policy: `branches_with_merge_footer` reads local remote-tracking refs only and
 never fetches. A caller that needs current data fetches first (as `pr_merge_status.py`
-does); a caller that must not touch the network mid-run simply accepts that a branch not
-yet fetched goes unreported.
+does, best-effort); a caller that must not touch the network mid-run simply accepts that a
+branch not yet fetched goes unreported.
 """
 
 import re

@@ -1758,7 +1758,7 @@ def main():
     # Instead, they're closed by committers.
     # A PR might have multiple merge commits, if it's reopened and merged again. We shall
     # cherry-pick PRs in closed state with the latest merge hash.
-    # If the PR is still open(reopened), we shall not cherry-pick it but perform the normal
+    # If the PR is still open (reopened), we shall not cherry-pick it but perform the normal
     # merge as it could have been reverted earlier.
     merge_hash, message = (None, None)
     if pr["state"] == "closed":
