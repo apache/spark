@@ -25,7 +25,6 @@ import org.apache.spark.sql.{functions => F, AnalysisException, Column}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
   CaseSensitivityLabels,
@@ -257,10 +256,10 @@ class AutoCdcMergeFlow(
     sessionCaseSensitive: Boolean
 ) extends ResolvedFlow {
   private[graph] val effectiveResolver: Resolver = SchemaInferenceUtils.resolverFor(
-    sqlConf
-      .get(SQLConf.CASE_SENSITIVE.key)
-      .map(_.trim.toBoolean)
-      .getOrElse(sessionCaseSensitive))
+    SchemaInferenceUtils.effectiveCaseSensitivity(
+      tableIdentifier = destinationIdentifier,
+      flows = Seq(this),
+      sessionCaseSensitive = sessionCaseSensitive))
 
   requireReservedPrefixAbsentInSourceColumns()
   requireReservedFrameworkColumnsAbsentInSourceColumns()
