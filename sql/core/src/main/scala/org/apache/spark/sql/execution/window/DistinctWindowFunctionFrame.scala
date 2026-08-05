@@ -30,20 +30,20 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
  * Computes one or more equivalent DISTINCT aggregate expressions for a frame whose lower bound is
  * UNBOUNDED PRECEDING.
  *
- * Such a frame only grows as output advances. For each qualifying input row this frame finds the
- * first output row whose upper bound contains it. A bounded BytesToBytesMap removes duplicates
- * up to the hash fallback threshold. If another new key arrives, the frame permanently falls back
- * to an external sorter for the rest of the window partition. That sorter finds the earliest event
- * for every key, then a second external sorter orders those events by index. `write` feeds each
- * unique, normalized DISTINCT input to the aggregate processor when its event becomes visible.
+ * Such a frame never removes rows: it either covers the entire partition or only grows as output
+ * advances. For each qualifying input row this frame finds the first output row whose upper bound
+ * contains it. A bounded BytesToBytesMap removes duplicates up to the hash fallback threshold. If
+ * another new key arrives, the frame permanently falls back to an external sorter for the rest of
+ * the window partition. That sorter finds the earliest event for every key, then a second external
+ * sorter orders those events by index. `write` feeds each unique, normalized DISTINCT input to the
+ * aggregate processor when its event becomes visible.
  */
-private[window] final class DistinctWindowFunctionFrame(
+private[window] abstract class DistinctWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     distinctExpressions: Seq[Expression],
     filter: Option[Expression],
     inputSchema: Seq[Attribute],
-    upperBound: Option[BoundOrdering],
     spillSize: SQLMetric,
     hashFallbackThreshold: Int,
     spillThreshold: Int,
@@ -73,20 +73,14 @@ private[window] final class DistinctWindowFunctionFrame(
 
   private var eventSorter: UnsafeKVExternalSorter = _
   private var eventIterator: UnsafeKVExternalSorter#KVSorterIterator = _
-  private var boundaryIterator: Iterator[UnsafeRow] = Iterator.empty
-  private var nextBoundaryRow: UnsafeRow = _
-  private var boundaryInputIndex = 0
-  private var partitionSize = 0
   private var nextEventIndex = Int.MaxValue
 
   Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => close()))
 
-  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+  override final def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     closeEventResources()
     nextEventIndex = Int.MaxValue
-    partitionSize = rows.length
-    boundaryInputIndex = 0
-    processor.initialize(partitionSize)
+    processor.initialize(rows.length)
     val partitionIndex = Option(TaskContext.get()).map(_.partitionId()).getOrElse(0)
     boundFilter.foreach(_.initialize(partitionIndex))
 
@@ -108,51 +102,18 @@ private[window] final class DistinctWindowFunctionFrame(
         newEventSorter.cleanupResources()
       }
     }
-
-    upperBound match {
-      case Some(_) =>
-        boundaryIterator = rows.generateIterator()
-        nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
-      case None =>
-        boundaryIterator = Iterator.empty
-        nextBoundaryRow = null
-        boundaryInputIndex = partitionSize
-    }
+    prepareUpperBound(rows)
   }
 
-  private def populateFirstVisibleRows(
+  protected def populateFirstVisibleRows(
       rows: ExternalAppendOnlyUnsafeRowArray,
-      firstVisibleRows: FirstVisibleRowsBuilder): Unit = {
-    upperBound match {
-      case None =>
-        val iterator = rows.generateIterator()
-        var inputIndex = 0
-        while (iterator.hasNext) {
-          addCandidate(iterator.next(), 0, inputIndex, firstVisibleRows)
-          inputIndex += 1
-        }
+      firstVisibleRows: FirstVisibleRowsBuilder): Unit
 
-      case Some(bound) =>
-        val inputIterator = rows.generateIterator()
-        val outputIterator = rows.generateIterator()
-        var nextInput = WindowFunctionFrame.getNextOrNull(inputIterator)
-        var inputIndex = 0
-        var outputIndex = 0
+  protected def prepareUpperBound(rows: ExternalAppendOnlyUnsafeRowArray): Unit
 
-        while (outputIterator.hasNext && nextInput != null) {
-          val currentOutput = outputIterator.next()
-          while (nextInput != null &&
-              bound.compare(nextInput, inputIndex, currentOutput, outputIndex) <= 0) {
-            addCandidate(nextInput, outputIndex, inputIndex, firstVisibleRows)
-            inputIndex += 1
-            nextInput = WindowFunctionFrame.getNextOrNull(inputIterator)
-          }
-          outputIndex += 1
-        }
-    }
-  }
+  protected def updateUpperBound(index: Int, current: InternalRow): Unit
 
-  private def addCandidate(
+  protected final def addCandidate(
       row: InternalRow,
       firstVisibleIndex: Int,
       inputIndex: Int,
@@ -175,7 +136,7 @@ private[window] final class DistinctWindowFunctionFrame(
    * a record, all map entries are transferred to one external sorter. The rest of this window
    * partition goes directly to that sorter and never returns to hash-based deduplication.
    */
-  private final class FirstVisibleRowsBuilder extends AutoCloseable {
+  protected final class FirstVisibleRowsBuilder extends AutoCloseable {
     private val map = if (canUseHashDedup) {
       val taskMemoryManager = TaskContext.get().taskMemoryManager()
       new BytesToBytesMap(taskMemoryManager, 64, taskMemoryManager.pageSizeBytes())
@@ -366,7 +327,7 @@ private[window] final class DistinctWindowFunctionFrame(
     }
   }
 
-  override def write(index: Int, current: InternalRow): Unit = {
+  override final def write(index: Int, current: InternalRow): Unit = {
     var bufferUpdated = index == 0
     while (nextEventIndex <= index) {
       processor.update(eventIterator.getValue)
@@ -376,19 +337,10 @@ private[window] final class DistinctWindowFunctionFrame(
     if (bufferUpdated) {
       processor.evaluate(target)
     }
-
-    upperBound.foreach { bound =>
-      while (nextBoundaryRow != null &&
-          bound.compare(nextBoundaryRow, boundaryInputIndex, current, index) <= 0) {
-        boundaryInputIndex += 1
-        nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
-      }
-    }
+    updateUpperBound(index, current)
   }
 
-  override def currentLowerBound(): Int = 0
-
-  override def currentUpperBound(): Int = boundaryInputIndex
+  override final def currentLowerBound(): Int = 0
 
   private def closeEventResources(): Unit = {
     if (eventIterator != null) {
@@ -401,5 +353,118 @@ private[window] final class DistinctWindowFunctionFrame(
     }
   }
 
-  override def close(): Unit = closeEventResources()
+  override final def close(): Unit = closeEventResources()
+}
+
+/**
+ * Computes DISTINCT aggregates over the entire window partition.
+ */
+private[window] final class UnboundedDistinctWindowFunctionFrame(
+    target: InternalRow,
+    processor: AggregateProcessor,
+    distinctExpressions: Seq[Expression],
+    filter: Option[Expression],
+    inputSchema: Seq[Attribute],
+    spillSize: SQLMetric,
+    hashFallbackThreshold: Int,
+    spillThreshold: Int,
+    spillSizeThreshold: Long)
+  extends DistinctWindowFunctionFrame(
+    target,
+    processor,
+    distinctExpressions,
+    filter,
+    inputSchema,
+    spillSize,
+    hashFallbackThreshold,
+    spillThreshold,
+    spillSizeThreshold) {
+
+  private var partitionSize = 0
+
+  override protected def populateFirstVisibleRows(
+      rows: ExternalAppendOnlyUnsafeRowArray,
+      firstVisibleRows: FirstVisibleRowsBuilder): Unit = {
+    val iterator = rows.generateIterator()
+    var inputIndex = 0
+    while (iterator.hasNext) {
+      addCandidate(iterator.next(), 0, inputIndex, firstVisibleRows)
+      inputIndex += 1
+    }
+  }
+
+  override protected def prepareUpperBound(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    partitionSize = rows.length
+  }
+
+  override protected def updateUpperBound(index: Int, current: InternalRow): Unit = {}
+
+  override def currentUpperBound(): Int = partitionSize
+}
+
+/**
+ * Computes DISTINCT aggregates for a growing frame with an UNBOUNDED PRECEDING lower bound.
+ */
+private[window] final class UnboundedPrecedingDistinctWindowFunctionFrame(
+    target: InternalRow,
+    processor: AggregateProcessor,
+    distinctExpressions: Seq[Expression],
+    filter: Option[Expression],
+    inputSchema: Seq[Attribute],
+    upperBound: BoundOrdering,
+    spillSize: SQLMetric,
+    hashFallbackThreshold: Int,
+    spillThreshold: Int,
+    spillSizeThreshold: Long)
+  extends DistinctWindowFunctionFrame(
+    target,
+    processor,
+    distinctExpressions,
+    filter,
+    inputSchema,
+    spillSize,
+    hashFallbackThreshold,
+    spillThreshold,
+    spillSizeThreshold) {
+
+  private var boundaryIterator: Iterator[UnsafeRow] = Iterator.empty
+  private var nextBoundaryRow: UnsafeRow = _
+  private var boundaryInputIndex = 0
+
+  override protected def populateFirstVisibleRows(
+      rows: ExternalAppendOnlyUnsafeRowArray,
+      firstVisibleRows: FirstVisibleRowsBuilder): Unit = {
+    val inputIterator = rows.generateIterator()
+    val outputIterator = rows.generateIterator()
+    var nextInput = WindowFunctionFrame.getNextOrNull(inputIterator)
+    var inputIndex = 0
+    var outputIndex = 0
+
+    while (outputIterator.hasNext && nextInput != null) {
+      val currentOutput = outputIterator.next()
+      while (nextInput != null &&
+          upperBound.compare(nextInput, inputIndex, currentOutput, outputIndex) <= 0) {
+        addCandidate(nextInput, outputIndex, inputIndex, firstVisibleRows)
+        inputIndex += 1
+        nextInput = WindowFunctionFrame.getNextOrNull(inputIterator)
+      }
+      outputIndex += 1
+    }
+  }
+
+  override protected def prepareUpperBound(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    boundaryInputIndex = 0
+    boundaryIterator = rows.generateIterator()
+    nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
+  }
+
+  override protected def updateUpperBound(index: Int, current: InternalRow): Unit = {
+    while (nextBoundaryRow != null &&
+        upperBound.compare(nextBoundaryRow, boundaryInputIndex, current, index) <= 0) {
+      boundaryInputIndex += 1
+      nextBoundaryRow = WindowFunctionFrame.getNextOrNull(boundaryIterator)
+    }
+  }
+
+  override def currentUpperBound(): Int = boundaryInputIndex
 }
