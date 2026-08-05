@@ -521,21 +521,33 @@ abstract class InMemoryBaseTable(
     private var _pushedFilters: Array[Filter] = Array.empty
 
     override def build: Scan = {
-      val scan = if (InMemoryBaseTable.this.ordering.nonEmpty) {
-        new InMemoryBatchScanWithOrdering(
-          data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema,
-          options)
-      } else {
-        InMemoryBatchScan(
-          data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema,
-          options)
+      val scan = createScan(
+        data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema, options)
+      scan match {
+        case s: InMemoryBatchScan =>
+          if (evaluableFilters.nonEmpty) {
+            s.filter(evaluableFilters)
+          }
+          s.pushedFilters = _pushedFilters
+        case _ =>
       }
-      if (evaluableFilters.nonEmpty) {
-        scan.filter(evaluableFilters)
-      }
-      scan.pushedFilters = _pushedFilters
       recordScanEvent(_pushedFilters)
       scan
+    }
+
+    /**
+     * Creates the batch scan for [[build]].
+     */
+    protected def createScan(
+        partitions: Seq[InputPartition],
+        readSchema: StructType,
+        tableSchema: StructType,
+        options: CaseInsensitiveStringMap): BatchScanBaseClass = {
+      if (InMemoryBaseTable.this.ordering.nonEmpty) {
+        new InMemoryBatchScanWithOrdering(partitions, readSchema, tableSchema, options)
+      } else {
+        InMemoryBatchScan(partitions, readSchema, tableSchema, options)
+      }
     }
 
     override def pruneColumns(requiredSchema: StructType): Unit = {

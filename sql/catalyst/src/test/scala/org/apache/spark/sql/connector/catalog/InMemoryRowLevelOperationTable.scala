@@ -19,15 +19,19 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, Expression, GenericInternalRow, Predicate => CatalystPredicate}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
+import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -78,7 +82,10 @@ class InMemoryRowLevelOperationTable private (
   private final val SUPPORTS_DELTAS = "supports-deltas"
   private final val SPLIT_UPDATES = "split-updates"
   private final val NO_METADATA = "no-metadata"
+  private final val USE_CATALYST_RUNTIME_FILTERING = "use-catalyst-runtime-filtering"
   private final val noMetadata = properties.getOrDefault(NO_METADATA, "false") == "true"
+  private final val useCatalystRuntimeFiltering =
+    properties.getOrDefault(USE_CATALYST_RUNTIME_FILTERING, "false") == "true"
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -133,7 +140,7 @@ class InMemoryRowLevelOperationTable private (
 
   case class PartitionBasedOperation(command: Command, options: CaseInsensitiveStringMap)
     extends RowLevelOperation with RowLevelOperationWithOptions {
-    var configuredScan: InMemoryBatchScan = _
+    var configuredScan: BatchScanBaseClass = _
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
       if (noMetadata) {
@@ -144,12 +151,8 @@ class InMemoryRowLevelOperationTable private (
     }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new InMemoryScanBuilder(schema, options) {
-        override def build: Scan = {
-          val scan = super.build()
-          configuredScan = scan.asInstanceOf[InMemoryBatchScan]
-          scan
-        }
+      newRowLevelScanBuilder(options) { scan =>
+        configuredScan = scan
       }
     }
 
@@ -186,7 +189,7 @@ class InMemoryRowLevelOperationTable private (
     override def description(): String = "InMemoryPartitionReplaceOperation"
   }
 
-  private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
+  private case class PartitionBasedReplaceData(scan: BatchScanBaseClass)
     extends TestBatchWrite {
 
     override protected def doCommit(
@@ -216,7 +219,7 @@ class InMemoryRowLevelOperationTable private (
     override def rowId(): Array[NamedReference] = Array(PK_COLUMN_REF)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new InMemoryScanBuilder(schema, options)
+      newRowLevelScanBuilder(options)(_ => ())
     }
 
     override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder = {
@@ -266,6 +269,94 @@ class InMemoryRowLevelOperationTable private (
     }
 
     override def abort(messages: Array[WriterCommitMessage]): Unit = {}
+  }
+
+  /**
+   * Builds a scan for row-level operations. When
+   * `use-catalyst-runtime-filtering` is set, the scan implements
+   * [[SupportsRuntimeCatalystFiltering]] so group filtering goes through the Catalyst path.
+   */
+  private def newRowLevelScanBuilder(
+      options: CaseInsensitiveStringMap)(
+      onBuild: BatchScanBaseClass => Unit): ScanBuilder = {
+    new InMemoryScanBuilder(schema, options) {
+      override protected def createScan(
+          partitions: Seq[InputPartition],
+          readSchema: StructType,
+          tableSchema: StructType,
+          options: CaseInsensitiveStringMap): BatchScanBaseClass = {
+        if (useCatalystRuntimeFiltering) {
+          InMemoryCatalystRowLevelBatchScan(partitions, readSchema, tableSchema, options)
+        } else {
+          super.createScan(partitions, readSchema, tableSchema, options)
+        }
+      }
+
+      override def build: Scan = {
+        val scan = super.build().asInstanceOf[BatchScanBaseClass]
+        onBuild(scan)
+        scan
+      }
+    }
+  }
+
+  /**
+   * Row-level batch scan that receives runtime filters as Catalyst expressions.
+   * Evaluates partition-column predicates against each partition key so group filtering
+   * actually prunes partitions (needed for `replacedPartitions` assertions).
+   */
+  case class InMemoryCatalystRowLevelBatchScan(
+      var _data: Seq[InputPartition],
+      readSchema: StructType,
+      tableSchema: StructType,
+      options: CaseInsensitiveStringMap)
+    extends BatchScanBaseClass(_data, readSchema, tableSchema)
+    with SupportsRuntimeCatalystFiltering {
+
+    private val _catalystPredicates = ArrayBuffer.empty[Expression]
+
+    override def filterAttributes(): Array[NamedReference] = {
+      val scanFields = readSchema.fields.map(_.name).toSet
+      partitioning.flatMap(_.references())
+        .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+    }
+
+    override def filter(expressions: Array[Expression]): Unit = {
+      _catalystPredicates ++= expressions
+      val partAttrs = partitionAttributes
+      if (partAttrs.isEmpty) return
+
+      val resolver = SQLConf.get.resolver
+      expressions.foreach { expr =>
+        val remapped = expr.transform {
+          case a: AttributeReference =>
+            partAttrs.find(p => resolver(p.name, a.name)).getOrElse(a)
+        }
+        if (remapped.references.forall(r => partAttrs.exists(_.exprId == r.exprId))) {
+          val bound = BindReferences.bindReference(remapped, partAttrs)
+          val pred = CatalystPredicate.createInterpreted(bound)
+          data = data.filter { p =>
+            try {
+              pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
+            } catch {
+              case _: Exception => true
+            }
+          }
+        }
+      }
+    }
+
+    /** Predicates recorded by [[filter]], for test assertions only. */
+    def pushedCatalystPredicates: Seq[Expression] = _catalystPredicates.toSeq
+
+    private def partitionAttributes: Seq[AttributeReference] = {
+      partitioning.flatMap(_.references()).flatMap { ref =>
+        val name = ref.fieldNames.mkString(".")
+        readSchema.find(_.name == name).orElse(tableSchema.find(_.name == name)).map { f =>
+          AttributeReference(f.name, f.dataType, f.nullable)()
+        }
+      }.toSeq
+    }
   }
 }
 
