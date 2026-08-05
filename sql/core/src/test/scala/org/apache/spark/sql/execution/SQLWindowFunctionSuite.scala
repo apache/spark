@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.internal.SQLConf.{WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD, WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD, WINDOW_EXEC_BUFFER_SPILL_THRESHOLD, WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD}
+import org.apache.spark.sql.execution.window.WindowExec
+import org.apache.spark.sql.internal.SQLConf.{ADAPTIVE_EXECUTION_ENABLED, WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD, WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD, WINDOW_EXEC_BUFFER_SPILL_THRESHOLD, WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD}
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class WindowData(month: Int, area: String, product: Int)
@@ -305,6 +306,29 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
       assertSpilled(sparkContext, "count distinct window hash fallback") {
         checkAnswer(result, Row(3L))
       }
+    }
+  }
+
+  test("window function: distinct event sorter spill size is reported") {
+    withSQLConf(
+      ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "5",
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> Int.MaxValue.toString) {
+      val result = sql(
+        """
+          |SELECT max(distinct_count)
+          |FROM (
+          |  SELECT count(DISTINCT id) OVER (
+          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS distinct_count
+          |  FROM range(100)
+          |)
+        """.stripMargin)
+      checkAnswer(result, Row(100L))
+      val window = result.queryExecution.executedPlan.collectFirst {
+        case window: WindowExec => window
+      }.get
+      assert(window.metrics("spillSize").value > 0)
     }
   }
 
