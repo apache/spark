@@ -5478,6 +5478,47 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
         s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
     }
   }
+
+  test("SPARK-58207: non-deterministic scalar subquery filters are not pushed into " +
+    "runtimeFilters") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    val dim = s"${catalogAndNamespace}dim"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
+      for (i <- 0 until 10) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES (3)")
+
+      // `part = (subquery) OR rand() < 0.5` references only the partition column and holds a
+      // scalar subquery, so it is a candidate for runtime pushdown, but it is non-deterministic.
+      // Routing it would push it to the source for pruning while the FilterExec above the scan
+      // re-evaluates it, and a partition the source dropped on its own evaluation could not be
+      // recovered.
+      val df = sql(
+        s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim) OR rand() < 0.5")
+      df.collect()
+
+      val batchScan = collect(df.queryExecution.executedPlan) {
+        case b: BatchScanExec => b
+      }.head
+      assert(batchScan.runtimeFilters.isEmpty,
+        s"Expected no runtime filters for a non-deterministic filter, " +
+          s"got ${batchScan.runtimeFilters}")
+
+      // No pruning at the source, and the filter is still evaluated by Spark after the scan.
+      val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
+      assert(numPartitions == 10,
+        s"Expected all 10 partitions to be retained, got $numPartitions")
+      val postScanConditions = collect(df.queryExecution.executedPlan) {
+        case f: FilterExec => f.condition
+      }
+      assert(postScanConditions.exists(!_.deterministic),
+        s"Expected the non-deterministic filter above the scan, got $postScanConditions")
+    }
+  }
 }
 
 class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {
