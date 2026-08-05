@@ -289,9 +289,10 @@ object DatasetManager extends Logging {
         // The user schema describes the logical table; the engine owns the reserved AUTO CDC
         // metadata column(s). Append any that the incoming flows produce but the user omitted,
         // so the created table matches what the AUTO CDC MERGE writes at runtime.
+        val specifiedNames = ss.fieldNames.toSet
         val omittedReservedFields = AutoCdcMergeFlow
           .reservedFields(resolvedDataflowGraph.inferredSchema(table.identifier))
-          .filterNot(f => ss.fieldNames.contains(f.name))
+          .filterNot(f => specifiedNames.contains(f.name))
         StructType(ss.fields ++ omittedReservedFields)
       case None =>
         resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
