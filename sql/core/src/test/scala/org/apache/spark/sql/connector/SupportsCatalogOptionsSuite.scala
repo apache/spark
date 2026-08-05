@@ -27,14 +27,15 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SaveMode}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NoSuchTableException, TableAlreadyExistsException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryTableCatalog, SupportsCatalogOptions, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryBaseTable, InMemoryTableCatalog, SupportsCatalogOptions, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{AppendDataExec, DataSourceV2Relation, OverwriteByExpressionExec}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
@@ -400,6 +401,60 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
     val opts = cat.lastLoadTableOptions
     assert(opts.isDefined, "loadTable(context, options) was not invoked")
     assert(opts.get.isEmpty)
+  }
+
+  test("SPARK-58389: write options are forwarded to SupportsCatalogOptions loadTable") {
+    sql(s"create table $catalogName.t1 (id bigint) using $format")
+    val cat = catalog(catalogName).asInstanceOf[InMemoryTableCatalog]
+    val loadOption = "load-option"
+    val loadValue = "load-value"
+    val writeOption = "write-option"
+
+    Seq(
+      (SaveMode.Append, "append", java.util.Set.of(TableWritePrivilege.INSERT)),
+      (SaveMode.Overwrite, "overwrite",
+        java.util.Set.of(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
+    ).foreach { case (mode, optionValue, expectedPrivileges) =>
+      cat.resetLoadTableCalls()
+      val Seq(qe) = withQueryExecutionsCaptured(spark) {
+        spark.range(1).write
+          .format(format)
+          .option("name", "t1")
+          .option("catalog", catalogName)
+          .option(loadOption, loadValue)
+          .option(writeOption, optionValue)
+          .mode(mode)
+          .save()
+      }
+
+      val matchingCalls = cat.loadTableCalls.filter {
+        case (_, options) => options.get(loadOption) == loadValue
+      }
+      assert(matchingCalls.nonEmpty, "loadTable(context, options) was not invoked for the write")
+      matchingCalls.foreach { case (context, options) =>
+        assert(context.writePrivileges() === expectedPrivileges)
+        assert(options.get("name") === "t1")
+        assert(options.get("catalog") === catalogName)
+        assert(options.get(writeOption) === optionValue)
+      }
+
+      val actualWriteOptions = mode match {
+        case SaveMode.Append =>
+          qe.executedPlan.collectFirst {
+            case AppendDataExec(_, _, write, _, _) =>
+              write.toBatch.asInstanceOf[InMemoryBaseTable#Append].info.options
+          }
+        case SaveMode.Overwrite =>
+          qe.executedPlan.collectFirst {
+            case OverwriteByExpressionExec(_, _, write, _, _) =>
+              write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend].info.options
+          }
+        case other => fail(s"unexpected save mode: $other")
+      }
+      assert(actualWriteOptions.isDefined, "expected a V2 in-memory batch write")
+      assert(actualWriteOptions.get.get(loadOption) === loadValue)
+      assert(actualWriteOptions.get.get(writeOption) === optionValue)
+    }
   }
 
   private def load(

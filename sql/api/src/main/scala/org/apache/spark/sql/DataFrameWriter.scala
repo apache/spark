@@ -267,7 +267,8 @@ abstract class DataFrameWriter[T] {
    *    +---+---+
    * }}}
    *
-   * Because it inserts data to an existing table, format or options will be ignored.
+   * Because it inserts data to an existing table, the format is ignored. For data source V2
+   * tables, options are forwarded to the table load and write.
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit

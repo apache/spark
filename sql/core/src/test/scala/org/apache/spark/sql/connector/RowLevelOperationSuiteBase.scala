@@ -179,9 +179,9 @@ abstract class RowLevelOperationSuiteBase
     }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
   }
 
-  // asserts the given SQL options reached every layer that should carry them: the rewritten
-  // DataSourceV2Relation, the RowLevelOperationInfo passed to the operation builder, and the
-  // write builder's LogicalWriteInfo
+  // Asserts the given SQL options reached every V2 layer that should carry them: the target
+  // catalog load, the rewritten DataSourceV2Relation, the RowLevelOperationInfo passed to the
+  // operation builder, and the write builder's LogicalWriteInfo.
   protected def checkRowLevelOperationOptions(
       func: => Unit,
       expectedOptions: (String, String)*): Unit = {
@@ -191,13 +191,27 @@ abstract class RowLevelOperationSuiteBase
       case wd: WriteDelta => wd.table
     }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
       .asInstanceOf[DataSourceV2Relation]
+    assert(writeRelation.catalog.nonEmpty, "expected a catalog-backed V2 write relation")
+    assert(writeRelation.identifier.nonEmpty, "expected a catalog-backed V2 write identifier")
     val operation = writeRelation.table.asInstanceOf[RowLevelOperationTable].operation
       .asInstanceOf[RowLevelOperationWithOptions]
+    assertLastTransactionWriteLoadOptions(expectedOptions: _*)
+
     expectedOptions.foreach { case (key, value) =>
       assert(writeRelation.options.get(key) === value, s"relation option '$key'")
       assert(operation.options.get(key) === value, s"row-level operation option '$key'")
       assert(table.lastWriteInfo.options().get(key) === value, s"write option '$key'")
     }
+  }
+
+  protected def assertLastTransactionWriteLoadOptions(
+      expectedOptions: (String, String)*): Unit = {
+    val targetLoads = catalog.lastTransaction.catalog.loadTableCalls.filter {
+      case (context, options) =>
+        !context.writePrivileges().isEmpty &&
+          expectedOptions.forall { case (key, value) => options.get(key) == value }
+    }
+    assert(targetLoads.nonEmpty, "target loadTable did not receive the row-level write options")
   }
 
   protected def assertNoScanPlanning(plan: LogicalPlan): Unit = {

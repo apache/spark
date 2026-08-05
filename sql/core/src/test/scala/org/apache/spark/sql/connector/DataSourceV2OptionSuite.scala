@@ -21,6 +21,8 @@ import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
@@ -35,13 +37,19 @@ import org.apache.spark.sql.connector.catalog.{
   InMemoryBaseTable,
   InMemoryCatalog,
   InMemoryRowLevelOperationTableCatalog,
+  InMemoryTableCatalog,
+  StagedTable,
+  StagingTableCatalog,
   Table,
   TableChange,
+  TableInfo,
   TableWritePrivilege,
   TimeTravel}
-import org.apache.spark.sql.execution.CommandResultExec
+import org.apache.spark.sql.connector.write.Write
+import org.apache.spark.sql.execution.{CommandResultExec, QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class LoadCountingInMemoryCatalog extends InMemoryCatalog {
@@ -58,6 +66,34 @@ class StateAwareInMemoryCatalog extends LoadCountingInMemoryCatalog {
   // option projection. Production catalogs should declare only raw user option keys.
   override def tableStateOptionKeys(): util.Set[String] =
     util.Set.of("snapshot", UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+}
+
+class NullReturningInMemoryCatalog extends InMemoryCatalog {
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    super.createTable(ident, tableInfo)
+    null
+  }
+}
+
+class NullReturningStagingInMemoryCatalog extends InMemoryCatalog with StagingTableCatalog {
+  override def stageCreate(ident: Identifier, tableInfo: TableInfo): StagedTable = {
+    createTable(ident, tableInfo)
+    null
+  }
+
+  override def stageReplace(ident: Identifier, tableInfo: TableInfo): StagedTable = {
+    dropTable(ident)
+    createTable(ident, tableInfo)
+    null
+  }
+
+  override def stageCreateOrReplace(ident: Identifier, tableInfo: TableInfo): StagedTable = {
+    if (tableExists(ident)) {
+      dropTable(ident)
+    }
+    createTable(ident, tableInfo)
+    null
+  }
 }
 
 class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
@@ -90,6 +126,63 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     assert(loadOptions.forall { options =>
       options.size() == 1 && options.get("snapshot") == expectedSnapshot
     }, s"expected only snapshot=$expectedSnapshot to be forwarded, got: $loadOptions")
+  }
+
+  private val loadOption = "load-option"
+  private val loadOptionValue = "load-value"
+  private val writeOption = "write-option"
+  private val writeOptionValue = "write-value"
+
+  private def assertTargetOptions(
+      options: CaseInsensitiveStringMap): org.scalatest.Assertion = {
+    assert(options.get(loadOption) === loadOptionValue)
+    assert(options.get(writeOption) === writeOptionValue)
+  }
+
+  private def assertWriteLoad(
+      tableCatalog: InMemoryTableCatalog,
+      expectedPrivileges: Set[TableWritePrivilege]): Unit = {
+    val matchingCalls = tableCatalog.loadTableCalls.filter {
+      case (_, options) => options.get(loadOption) == loadOptionValue
+    }
+    assert(matchingCalls.nonEmpty,
+      s"loadTable did not receive $loadOption=$loadOptionValue")
+    matchingCalls.foreach { case (context, options) =>
+      assertTargetOptions(options)
+      assert(context.writePrivileges() === expectedPrivileges.asJava)
+    }
+  }
+
+  private def assertWriteLoad(expectedPrivileges: Set[TableWritePrivilege]): Unit = {
+    assertWriteLoad(inMemoryCatalog, expectedPrivileges)
+  }
+
+  private def inMemoryWriteOptions(write: Write): CaseInsensitiveStringMap = {
+    write.toBatch match {
+      case append: InMemoryBaseTable#Append => append.info.options
+      case overwrite: InMemoryBaseTable#TruncateAndAppend => overwrite.info.options
+      case dynamic: InMemoryBaseTable#DynamicOverwrite => dynamic.info.options
+      case other => fail(s"expected a V2 in-memory batch write, got ${other.getClass.getName}")
+    }
+  }
+
+  private def collectInMemoryWriteOptions(plan: SparkPlan): Seq[CaseInsensitiveStringMap] = {
+    val direct = plan.collect {
+      case AppendDataExec(_, _, write, _, _) => inMemoryWriteOptions(write)
+      case OverwriteByExpressionExec(_, _, write, _, _) => inMemoryWriteOptions(write)
+      case OverwritePartitionsDynamicExec(_, _, write, _, _) => inMemoryWriteOptions(write)
+    }
+    val commandResults = plan.collect {
+      case CommandResultExec(_, commandPhysicalPlan, _) =>
+        collectInMemoryWriteOptions(commandPhysicalPlan)
+    }.flatten
+    direct ++ commandResults
+  }
+
+  private def assertV2Write(captured: Seq[QueryExecution]): Unit = {
+    val writeOptions = captured.flatMap(qe => collectInMemoryWriteOptions(qe.executedPlan))
+    assert(writeOptions.nonEmpty, "expected a V2 in-memory batch write")
+    writeOptions.foreach(assertTargetOptions)
   }
 
   test("SPARK-36680: Supports Dynamic Table Options for SQL Select") {
@@ -161,11 +254,14 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
-      val df = sql(s"INSERT INTO $t1 WITH (`write.split-size` = 10) VALUES (1, 'a'), (2, 'b')")
+      inMemoryCatalog.resetLoadTableCalls()
+      val df = sql(s"INSERT INTO $t1 WITH (`$loadOption` = '$loadOptionValue', " +
+        s"`$writeOption` = '$writeOptionValue') VALUES (1, 'a'), (2, 'b')")
 
       var collected = df.queryExecution.optimizedPlan.collect {
         case CommandResult(_, AppendData(relation: DataSourceV2Relation, _, _, _, _, _, _), _, _) =>
-          assert(relation.options.get("write.split-size") == "10")
+          assert(relation.table.isInstanceOf[InMemoryBaseTable])
+          assertTargetOptions(relation.options)
       }
       assert (collected.size == 1)
 
@@ -174,9 +270,10 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           _, AppendDataExec(_, _, write, _, _),
           _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
-          assert(append.info.options.get("write.split-size") === "10")
+          assertTargetOptions(append.info.options)
       }
       assert (collected.size == 1)
+      assertWriteLoad(Set(TableWritePrivilege.INSERT))
 
       val insertResult = sql(s"SELECT * FROM $t1")
       checkAnswer(insertResult, Seq(Row(1, "a"), Row(2, "b")))
@@ -288,27 +385,32 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      inMemoryCatalog.resetLoadTableCalls()
       val captured = withQueryExecutionsCaptured(spark) {
         Seq(1 -> "a", 2 -> "b").toDF("id", "data")
           .write
-          .option("write.split-size", "10")
+          .option(loadOption, loadOptionValue)
+          .option(writeOption, writeOptionValue)
           .mode("append")
           .insertInto(t1)
       }
       assert(captured.size === 1)
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case AppendData(_: DataSourceV2Relation, _, writeOptions, _, _, _, _) =>
-          assert(writeOptions("write.split-size") == "10")
+        case AppendData(relation: DataSourceV2Relation, _, writeOptions, _, _, _, _) =>
+          assert(relation.table.isInstanceOf[InMemoryBaseTable])
+          assert(writeOptions(loadOption) === loadOptionValue)
+          assert(writeOptions(writeOption) === writeOptionValue)
       }
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
         case AppendDataExec(_, _, write, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
-          assert(append.info.options.get("write.split-size") === "10")
+          assertTargetOptions(append.info.options)
       }
       assert (collected.size == 1)
+      assertWriteLoad(Set(TableWritePrivilege.INSERT))
     }
   }
 
@@ -316,26 +418,31 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      inMemoryCatalog.resetLoadTableCalls()
       val captured = withQueryExecutionsCaptured(spark) {
         Seq(1 -> "a", 2 -> "b").toDF("id", "data")
           .writeTo(t1)
-          .option("write.split-size", "10")
+          .option(loadOption, loadOptionValue)
+          .option(writeOption, writeOptionValue)
           .append()
       }
       assert(captured.size === 1)
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case AppendData(_: DataSourceV2Relation, _, writeOptions, _, _, _, _) =>
-          assert(writeOptions("write.split-size") == "10")
+        case AppendData(relation: DataSourceV2Relation, _, writeOptions, _, _, _, _) =>
+          assert(relation.table.isInstanceOf[InMemoryBaseTable])
+          assert(writeOptions(loadOption) === loadOptionValue)
+          assert(writeOptions(writeOption) === writeOptionValue)
       }
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
         case AppendDataExec(_, _, write, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
-          assert(append.info.options.get("write.split-size") === "10")
+          assertTargetOptions(append.info.options)
       }
       assert (collected.size == 1)
+      assertWriteLoad(Set(TableWritePrivilege.INSERT))
     }
   }
 
@@ -344,14 +451,16 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+      inMemoryCatalog.resetLoadTableCalls()
 
-      val df = sql(s"INSERT OVERWRITE $t1 WITH (`write.split-size` = 10) " +
-        s"VALUES (3, 'c'), (4, 'd')")
+      val df = sql(s"INSERT OVERWRITE $t1 WITH (`$loadOption` = '$loadOptionValue', " +
+        s"`$writeOption` = '$writeOptionValue') VALUES (3, 'c'), (4, 'd')")
       var collected = df.queryExecution.optimizedPlan.collect {
         case CommandResult(_,
           OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _),
           _, _) =>
-          assert(relation.options.get("write.split-size") === "10")
+          assert(relation.table.isInstanceOf[InMemoryBaseTable])
+          assertTargetOptions(relation.options)
       }
       assert (collected.size == 1)
 
@@ -360,9 +469,10 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           _, OverwriteByExpressionExec(_, _, write, _, _),
           _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
-          assert(append.info.options.get("write.split-size") === "10")
+          assertTargetOptions(append.info.options)
       }
       assert (collected.size == 1)
+      assertWriteLoad(Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
 
       val insertResult = sql(s"SELECT * FROM $t1")
       checkAnswer(insertResult, Seq(Row(3, "c"), Row(4, "d")))
@@ -374,27 +484,33 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+      inMemoryCatalog.resetLoadTableCalls()
 
       val captured = withQueryExecutionsCaptured(spark) {
         Seq(3 -> "c", 4 -> "d").toDF("id", "data")
           .writeTo(t1)
-          .option("write.split-size", "10")
+          .option(loadOption, loadOptionValue)
+          .option(writeOption, writeOptionValue)
           .overwritePartitions()
       }
       assert(captured.size === 1)
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, writeOptions, _, _, _) =>
-          assert(writeOptions("write.split-size") === "10")
+        case OverwritePartitionsDynamic(
+            relation: DataSourceV2Relation, _, writeOptions, _, _, _) =>
+          assert(relation.table.isInstanceOf[InMemoryBaseTable])
+          assert(writeOptions(loadOption) === loadOptionValue)
+          assert(writeOptions(writeOption) === writeOptionValue)
       }
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
         case OverwritePartitionsDynamicExec(_, _, write, _, _) =>
           val dynOverwrite = write.toBatch.asInstanceOf[InMemoryBaseTable#DynamicOverwrite]
-          assert(dynOverwrite.info.options.get("write.split-size") === "10")
+          assertTargetOptions(dynOverwrite.info.options)
       }
       assert (collected.size == 1)
+      assertWriteLoad(Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
     }
   }
 
@@ -403,15 +519,17 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+      inMemoryCatalog.resetLoadTableCalls()
 
-      val df = sql(s"INSERT INTO $t1 WITH (`write.split-size` = 10) " +
-        s"REPLACE WHERE TRUE " +
+      val df = sql(s"INSERT INTO $t1 WITH (`$loadOption` = '$loadOptionValue', " +
+        s"`$writeOption` = '$writeOptionValue') REPLACE WHERE TRUE " +
         s"VALUES (3, 'c'), (4, 'd')")
       var collected = df.queryExecution.optimizedPlan.collect {
         case CommandResult(_,
           OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _),
           _, _) =>
-          assert(relation.options.get("write.split-size") == "10")
+          assert(relation.table.isInstanceOf[InMemoryBaseTable])
+          assertTargetOptions(relation.options)
       }
       assert (collected.size == 1)
 
@@ -420,9 +538,10 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           _, OverwriteByExpressionExec(_, _, write, _, _),
           _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
-          assert(append.info.options.get("write.split-size") === "10")
+          assertTargetOptions(append.info.options)
       }
       assert (collected.size == 1)
+      assertWriteLoad(Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
 
       val insertResult = sql(s"SELECT * FROM $t1")
       checkAnswer(insertResult, Seq(Row(3, "c"), Row(4, "d")))
@@ -433,10 +552,12 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      inMemoryCatalog.resetLoadTableCalls()
       val captured = withQueryExecutionsCaptured(spark) {
         Seq(1 -> "a", 2 -> "b").toDF("id", "data")
           .write
-          .option("write.split-size", "10")
+          .option(loadOption, loadOptionValue)
+          .option(writeOption, writeOptionValue)
           .mode("overwrite")
           .insertInto(t1)
       }
@@ -444,17 +565,64 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case OverwriteByExpression(_: DataSourceV2Relation, _, _, writeOptions, _, _, _, _) =>
-          assert(writeOptions("write.split-size") === "10")
+        case OverwriteByExpression(
+            relation: DataSourceV2Relation, _, _, writeOptions, _, _, _, _) =>
+          assert(relation.table.isInstanceOf[InMemoryBaseTable])
+          assert(writeOptions(loadOption) === loadOptionValue)
+          assert(writeOptions(writeOption) === writeOptionValue)
       }
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
         case OverwriteByExpressionExec(_, _, write, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
-          assert(append.info.options.get("write.split-size") === "10")
+          assertTargetOptions(append.info.options)
       }
       assert (collected.size == 1)
+      assertWriteLoad(Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
+    }
+  }
+
+  test("SPARK-58389: DataFrameWriter dynamic partition overwrite forwards options") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) PARTITIONED BY (id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+      inMemoryCatalog.resetLoadTableCalls()
+
+      val captured = withSQLConf(
+        SQLConf.PARTITION_OVERWRITE_MODE.key ->
+          SQLConf.PartitionOverwriteMode.DYNAMIC.toString) {
+        withQueryExecutionsCaptured(spark) {
+          Seq(2 -> "updated", 3 -> "new").toDF("id", "data")
+            .write
+            .option(loadOption, loadOptionValue)
+            .option(writeOption, writeOptionValue)
+            .mode("overwrite")
+            .insertInto(t1)
+        }
+      }
+      assert(captured.size === 1)
+
+      val qe = captured.head
+      val logicalWrites = qe.optimizedPlan.collect {
+        case OverwritePartitionsDynamic(
+            relation: DataSourceV2Relation, _, writeOptions, _, _, _) =>
+          assert(relation.table.isInstanceOf[InMemoryBaseTable])
+          assert(writeOptions(loadOption) === loadOptionValue)
+          assert(writeOptions(writeOption) === writeOptionValue)
+      }
+      assert(logicalWrites.size === 1)
+
+      val physicalWrites = qe.executedPlan.collect {
+        case OverwritePartitionsDynamicExec(_, _, write, _, _) =>
+          val dynamicOverwrite = write.toBatch.asInstanceOf[InMemoryBaseTable#DynamicOverwrite]
+          assertTargetOptions(dynamicOverwrite.info.options)
+      }
+      assert(physicalWrites.size === 1)
+      assertWriteLoad(Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
+      checkAnswer(sql(s"SELECT * FROM $t1"),
+        Seq(Row(1, "a"), Row(2, "updated"), Row(3, "new")))
     }
   }
 
@@ -463,28 +631,129 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
+      inMemoryCatalog.resetLoadTableCalls()
 
       val captured = withQueryExecutionsCaptured(spark) {
         Seq(3 -> "c", 4 -> "d").toDF("id", "data")
           .writeTo(t1)
-          .option("write.split-size", "10")
+          .option(loadOption, loadOptionValue)
+          .option(writeOption, writeOptionValue)
           .overwrite(lit(true))
       }
       assert(captured.size === 1)
       val qe = captured.head
 
       var collected = qe.optimizedPlan.collect {
-        case OverwriteByExpression(_: DataSourceV2Relation, _, _, writeOptions, _, _, _, _) =>
-          assert(writeOptions("write.split-size") === "10")
+        case OverwriteByExpression(
+            relation: DataSourceV2Relation, _, _, writeOptions, _, _, _, _) =>
+          assert(relation.table.isInstanceOf[InMemoryBaseTable])
+          assert(writeOptions(loadOption) === loadOptionValue)
+          assert(writeOptions(writeOption) === writeOptionValue)
       }
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
         case OverwriteByExpressionExec(_, _, write, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
-          assert(append.info.options.get("write.split-size") === "10")
+          assertTargetOptions(append.info.options)
       }
       assert (collected.size == 1)
+      assertWriteLoad(Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
+    }
+  }
+
+  test("SPARK-58389: DataFrameWriter saveAsTable forwards options while loading the target") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      Seq(
+        ("append", Set(TableWritePrivilege.INSERT)),
+        ("overwrite", Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE))
+      ).foreach { case (mode, expectedPrivileges) =>
+        inMemoryCatalog.resetLoadTableCalls()
+
+        val captured = withQueryExecutionsCaptured(spark) {
+          Seq(1 -> "a").toDF("id", "data")
+            .write
+            .option(loadOption, loadOptionValue)
+            .option(writeOption, writeOptionValue)
+            .mode(mode)
+            .saveAsTable(t1)
+        }
+
+        assertWriteLoad(expectedPrivileges)
+        assertV2Write(captured)
+      }
+    }
+  }
+
+  test("SPARK-58389: schema evolution reload forwards write options") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint)")
+      inMemoryCatalog.resetLoadTableCalls()
+
+      val captured = withQueryExecutionsCaptured(spark) {
+        Seq(1L -> "a").toDF("id", "data")
+          .writeTo(t1)
+          .option(loadOption, loadOptionValue)
+          .option(writeOption, writeOptionValue)
+          .withSchemaEvolution()
+          .append()
+      }
+
+      val matchingCalls = inMemoryCatalog.loadTableCalls.filter {
+        case (_, options) => options.get(loadOption) == loadOptionValue
+      }
+      assert(matchingCalls.size >= 2, "expected initial target load and post-evolution reload")
+      matchingCalls.foreach { case (context, options) =>
+        assertTargetOptions(options)
+        assert(context.writePrivileges() === java.util.Set.of(TableWritePrivilege.INSERT))
+      }
+      assertV2Write(captured)
+    }
+  }
+
+  Seq(
+    "non-staging" -> classOf[NullReturningInMemoryCatalog],
+    "staging" -> classOf[NullReturningStagingInMemoryCatalog]
+  ).foreach { case (catalogType, catalogClass) =>
+    test(s"SPARK-58389: $catalogType CTAS/RTAS fallback loads forward write options") {
+      val catalogName = s"${catalogType.replace('-', '_')}_null_catalog"
+      registerCatalog(catalogName, catalogClass)
+      val fallbackCatalog = catalog(catalogName).asInstanceOf[InMemoryCatalog]
+      val t1 = s"$catalogName.table"
+      withTable(t1) {
+        fallbackCatalog.resetLoadTableCalls()
+        val createExecutions = withQueryExecutionsCaptured(spark) {
+          spark.range(1).writeTo(t1)
+            .option(loadOption, loadOptionValue)
+            .option(writeOption, writeOptionValue)
+            .create()
+        }
+        assertWriteLoad(fallbackCatalog, Set(TableWritePrivilege.INSERT))
+        assertV2Write(createExecutions)
+
+        fallbackCatalog.resetLoadTableCalls()
+        val replaceExecutions = withQueryExecutionsCaptured(spark) {
+          spark.range(1, 2).writeTo(t1)
+            .option(loadOption, loadOptionValue)
+            .option(writeOption, writeOptionValue)
+            .replace()
+        }
+        assertWriteLoad(fallbackCatalog, Set(TableWritePrivilege.INSERT))
+        assertV2Write(replaceExecutions)
+
+        fallbackCatalog.resetLoadTableCalls()
+        val createOrReplaceExecutions = withQueryExecutionsCaptured(spark) {
+          spark.range(2, 3).writeTo(t1)
+            .option(loadOption, loadOptionValue)
+            .option(writeOption, writeOptionValue)
+            .createOrReplace()
+        }
+        assertWriteLoad(fallbackCatalog, Set(TableWritePrivilege.INSERT))
+        assertV2Write(createOrReplaceExecutions)
+      }
     }
   }
 
@@ -1278,6 +1547,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       // options. A later option-free reference to the same table must not inherit them.
       withTempView("v") {
         spark.read.option("split-size", "5").table(t1).createOrReplaceTempView("v")
+        inMemoryCatalog.resetLoadTableCalls()
         val df = sql(s"SELECT v.id FROM v JOIN $t1 b ON v.id = b.id")
 
         val splitSizes = df.queryExecution.analyzed.collect {
@@ -1288,6 +1558,9 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           s"option leaked to the option-free reference, got: $splitSizes")
         assert(splitSizes.contains(None),
           s"expected an option-free reference, got: $splitSizes")
+        assert(inMemoryCatalog.loadTableCalls.exists {
+          case (_, options) => options.get("split-size") == "5"
+        }, "V2TableReference temp-view reload did not receive the view options")
       }
     }
   }
