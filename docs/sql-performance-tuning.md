@@ -353,6 +353,8 @@ Subplan merging can be turned off entirely by adding the rule to `spark.sql.opti
 spark.sql.optimizer.excludedRules=org.apache.spark.sql.execution.planmerging.MergeSubplans
 ```
 
+Use exactly that name: the rule was called `MergeScalarSubqueries` before Spark 4.2 and sat in a different package before Spark 4.3, and unknown names in `spark.sql.optimizer.excludedRules` are silently ignored, so an older name carried over from a previous version does not turn the rule off. See the [SQL migration guide](sql-migration-guide.html) for the old names.
+
 ## Adaptive Query Execution
 Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan, which is enabled by default since Apache Spark 3.2.0. Spark SQL can turn on and off AQE by `spark.sql.adaptive.enabled` as an umbrella configuration.
 
