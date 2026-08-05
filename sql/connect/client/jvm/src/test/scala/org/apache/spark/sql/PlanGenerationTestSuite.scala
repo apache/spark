@@ -1855,6 +1855,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.unbase64(fn.col("g"))
   }
 
+  functionTest("to_base32") {
+    fn.to_base32(fn.col("g").cast("binary"))
+  }
+
+  functionTest("from_base32") {
+    fn.from_base32(fn.col("g"))
+  }
+
   functionTest("rpad") {
     fn.rpad(fn.col("g"), 10, "-")
   }
