@@ -19,7 +19,7 @@ from pyspark.sql.connect.client.retries import Retrying, RetryException
 from threading import RLock
 import uuid
 from collections.abc import Generator
-from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, ClassVar
+from typing import Optional, Any, Iterator, Iterable, List, Tuple, Callable, cast, ClassVar
 from concurrent.futures import Future, ThreadPoolExecutor
 import os
 import weakref
@@ -111,7 +111,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # throw error on first self._has_next().
         # Convert metadata to a list to ensure it remains re-iterable across all RPCs
         # (ReattachExecute, ReleaseExecute), so auth headers are always present.
-        self._metadata = list(metadata)
+        self._metadata: List[Tuple[str, str]] = list(metadata)
         with disable_gc():
             self._iterator: Optional[Iterator[pb2.ExecutePlanResponse]] = iter(
                 self._stub.ExecutePlan(
