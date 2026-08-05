@@ -24,6 +24,8 @@ import java.util.{Base64 => JBase64, HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.commons.codec.binary.{Base32 => CommonsBase32}
+
 import org.apache.spark.QueryContext
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.catalyst.InternalRow
@@ -279,6 +281,12 @@ case class ConcatWs(children: Seq[Expression])
     The function returns NULL if the index exceeds the length of the array
     and `spark.sql.ansi.enabled` is set to false. If `spark.sql.ansi.enabled` is set to true,
     it throws ArrayIndexOutOfBoundsException for invalid indices.
+  """,
+  arguments = """
+    Arguments:
+      * n - An integer expression giving the 1-based index of the input to return.
+      * input1, input2, ... - The input expressions to select from. They can be strings
+          or binary values.
   """,
   examples = """
     Examples:
@@ -997,7 +1005,7 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
   override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
     CollationSupport.StringReplace.exec(srcEval.asInstanceOf[UTF8String],
-      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String], collationId);
+      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String], collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1249,6 +1257,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   @transient private var lastMatching: UTF8String = _
   @transient private var lastReplace: UTF8String = _
   @transient private var dict: JMap[String, String] = _
+  override def stateful: Boolean = true
 
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
 
@@ -1939,7 +1948,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
 
   override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
     CollationSupport.SubstringIndex.exec(str.asInstanceOf[UTF8String],
-      delim.asInstanceOf[UTF8String], count.asInstanceOf[Int], collationId);
+      delim.asInstanceOf[UTF8String], count.asInstanceOf[Int], collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2023,7 +2032,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
             0
           } else {
             CollationSupport.StringLocate.exec(l.asInstanceOf[UTF8String],
-              r.asInstanceOf[UTF8String], s.asInstanceOf[Int] - 1, collationId) + 1;
+              r.asInstanceOf[UTF8String], s.asInstanceOf[Int] - 1, collationId) + 1
           }
         }
       }
@@ -3349,6 +3358,110 @@ object UnBase64 {
   }
 }
 
+/**
+ * Converts the argument from binary to a base 32 string.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(bin) - Converts the argument from a binary `bin` to a base 32 string.",
+  arguments = """
+    Arguments:
+      * bin - The binary value to encode as a base 32 string.
+        An expression that evaluates to a binary.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('foobar');
+       MZXW6YTBOI======
+      > SELECT _FUNC_(x'666f6f626172');
+       MZXW6YTBOI======
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+case class Base32(child: Expression)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[Base32],
+    dataType,
+    "encode",
+    Seq(child),
+    Seq(BinaryType),
+    returnNullable = false)
+
+  override def toString: String = s"$prettyName($child)"
+
+  override def prettyName: String = "to_base32"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+object Base32 {
+  private lazy val codec = new CommonsBase32()
+
+  def encode(input: Array[Byte]): UTF8String = {
+    UTF8String.fromBytes(codec.encode(input))
+  }
+}
+
+/**
+ * Converts the argument from a base 32 string to BINARY.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Converts the argument from a base 32 string `str` to a binary.",
+  arguments = """
+    Arguments:
+      * str - The base 32 string to decode to binary.
+        An expression that evaluates to a string.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('MZXW6YTBOI======');
+       foobar
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+case class UnBase32(child: Expression)
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ImplicitCastInputTypes {
+
+  override def dataType: DataType = BinaryType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[UnBase32],
+    dataType,
+    "decode",
+    Seq(child),
+    inputTypes,
+    returnNullable = false)
+
+  override def toString: String = s"$prettyName($child)"
+
+  override def prettyName: String = "from_base32"
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+object UnBase32 {
+  private lazy val codec = new CommonsBase32()
+
+  def decode(input: UTF8String): Array[Byte] = {
+    codec.decode(input.getBytes)
+  }
+}
+
 object Decode {
   def createExpr(params: Seq[Expression]): Expression = {
     params.length match {
@@ -3737,6 +3850,7 @@ case class FormatNumber(x: Expression, d: Expression)
   // as a decimal separator.
   @transient
   private lazy val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
+  override def stateful: Boolean = true
 
   override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
     right.dataType match {

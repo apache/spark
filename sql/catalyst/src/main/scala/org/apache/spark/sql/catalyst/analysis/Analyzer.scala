@@ -132,9 +132,9 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
  * @param maxNestedViewDepth The maximum allowed depth of nested view resolution.
- * @param relationCache A mapping from qualified table names and time travel spec to resolved
- *                      relations. This can ensure that the table is resolved only once if a table
- *                      is used multiple times in a query.
+ * @param relationCache A mapping from (qualified table name, time travel spec, options) to
+ *                      resolved relations. This can ensure that the table is resolved only once if
+ *                      a table is used multiple times in a query with the same options.
  * @param referredTempViewNames All the temp view names referred by the current view we are
  *                              resolving. It's used to make sure the relation resolution is
  *                              consistent between view creation and view resolution. For example,
@@ -154,8 +154,7 @@ case class AnalysisContext(
     resolutionPathEntries: Option[Seq[Seq[String]]] = None,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
-    relationCache: mutable.Map[(Seq[String], Option[TimeTravelSpec]), LogicalPlan] =
-      mutable.Map.empty,
+    relationCache: mutable.Map[RelationCacheKey, LogicalPlan] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
     // 1. If we are resolving a view, this field will be restored from the view metadata,
     //    by calling `AnalysisContext.withAnalysisContext(viewDesc)`.
@@ -638,7 +637,8 @@ class Analyzer(
       Seq(
         ResolveWithCTE,
         ExtractDistributedSequenceID,
-        ResolveAsOfJoin) ++
+        ResolveAsOfJoin,
+        ResolveTranspiledPythonUDFOptions) ++
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),
@@ -4706,7 +4706,50 @@ object ResolveUnresolvedHaving extends Rule[LogicalPlan] {
     plan.resolveOperatorsWithPruning(_.containsPattern(UNRESOLVED_HAVING), ruleId) {
       case u @ UnresolvedHaving(havingCondition, child)
         if havingCondition.resolved && child.resolved =>
-        Filter(condition = havingCondition, child = child)
+        val filter = Filter(condition = havingCondition, child = child)
+        insertFilterBeforeWindow(filter).getOrElse(filter)
+    }
+  }
+
+  /**
+   * Searches through Project and Generate nodes for a Window chain and places HAVING below every
+   * Window in that chain. This restores SQL clause order for plans produced by queries such as:
+   *
+   * {{{
+   * SELECT explode(array(a)), count(*) OVER ()
+   * FROM VALUES (1), (2), (NULL) AS t(a)
+   * GROUP BY a
+   * HAVING a IS NOT NULL
+   * }}}
+   *
+   * Returns None unless the condition can be evaluated below every Window in the chain.
+   */
+  private def insertFilterBeforeWindow(filter: Filter): Option[LogicalPlan] = filter.child match {
+    case project: Project =>
+      insertFilterBeforeWindow(filter.copy(child = project.child))
+        .map(child => project.withNewChildren(Seq(child)))
+    case generate: Generate =>
+      insertFilterBeforeWindow(filter.copy(child = generate.child))
+        .map(child => generate.withNewChildren(Seq(child)))
+    case window: Window =>
+      insertFilterBeforeWindowChain(filter, window)
+    case _ =>
+      None
+  }
+
+  private def insertFilterBeforeWindowChain(
+      filter: Filter,
+      window: Window): Option[LogicalPlan] = {
+    if (!filter.condition.references.subsetOf(window.child.outputSet)) {
+      None
+    } else {
+      val child = window.child match {
+        case childWindow: Window =>
+          insertFilterBeforeWindowChain(filter, childWindow)
+        case child =>
+          Some(filter.copy(child = child))
+      }
+      child.map(child => window.withNewChildren(Seq(child)))
     }
   }
 }

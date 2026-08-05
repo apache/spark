@@ -1126,6 +1126,10 @@ case class UnixMicros(child: Expression) extends TimestampToLongBase {
 // scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the number of nanoseconds since 1970-01-01 00:00:00 UTC.",
+  arguments = """
+    Arguments:
+      * timestamp - A nanosecond-precision timestamp value (TIMESTAMP_LTZ or TIMESTAMP_NTZ).
+  """,
   examples = """
     Examples:
       > SET spark.sql.timestampNanosTypes.enabled=true;

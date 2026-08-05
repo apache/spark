@@ -191,6 +191,10 @@ case class ArraySize(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(map) - Returns an unordered array containing the keys of the map.",
+  arguments = """
+    Arguments:
+      * map - A map expression whose keys are returned as an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
@@ -226,6 +230,11 @@ case class MapKeys(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(map, key) - Returns true if the map contains the key.",
+  arguments = """
+    Arguments:
+      * map - A map expression to search.
+      * key - A key to look for. Its type must match, or be coercible to, the map's key type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), 1);
@@ -488,6 +497,10 @@ object ArraysZip {
  */
 @ExpressionDescription(
   usage = "_FUNC_(map) - Returns an unordered array containing the values of the map.",
+  arguments = """
+    Arguments:
+      * map - A map expression whose values are returned as an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
@@ -522,6 +535,10 @@ case class MapValues(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(map) - Returns an unordered array of all entries in the given map.",
+  arguments = """
+    Arguments:
+      * map - A map expression whose entries are returned as an array of key-value structs.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
@@ -697,6 +714,11 @@ case class MapEntries(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(map, ...) - Returns the union of all the given maps",
+  arguments = """
+    Arguments:
+      * map - A map expression. There can be one or more of them, and all must share
+          compatible key and value types.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(3, 'c'));
@@ -825,6 +847,10 @@ case class MapConcat(children: Seq[Expression])
  */
 @ExpressionDescription(
   usage = "_FUNC_(arrayOfEntries) - Returns a map created from the given array of entries.",
+  arguments = """
+    Arguments:
+      * arrayOfEntries - An array of two-field key-value structs from which the map is built.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
@@ -1621,6 +1647,12 @@ case class ArrayContains(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = "_FUNC_(array, value) - Return index (0-based) of the search value, " +
     "if it is contained in the array; otherwise, (-<insertion point> - 1).",
+  arguments = """
+    Arguments:
+      * array - A sorted array expression to search in.
+      * value - The value to search for. Its type must match, or be coercible to, the
+          array's element type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), 2);
@@ -3022,6 +3054,11 @@ case class TryElementAt(left: Expression, right: Expression, replacement: Expres
  */
 @ExpressionDescription(
   usage = "_FUNC_(col1, col2, ..., colN) - Returns the concatenation of col1, col2, ..., colN.",
+  arguments = """
+    Arguments:
+      * colN - An expression to concatenate. There can be one or more of them, and all must be
+          of the same type: strings, binaries, or arrays.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark', 'SQL');
@@ -3243,6 +3280,11 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
  */
 @ExpressionDescription(
   usage = "_FUNC_(arrayOfArrays) - Transforms an array of arrays into a single array.",
+  arguments = """
+    Arguments:
+      * arrayOfArrays - An array whose elements are themselves arrays; they are concatenated
+          in order into one array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(array(1, 2), array(3, 4)));

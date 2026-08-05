@@ -27,7 +27,7 @@ import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions.{col, input_file_name, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -105,6 +105,19 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   protected def corruptEntryBytes: Array[Byte] =
     s"This is not a valid $format file".getBytes("UTF-8")
 
+  /**
+   * Whether [[writeArchiveFailingAfterFirstEntry]] is supported, gating the mid-advance
+   * corrupt-skip regression test. From the container trait.
+   */
+  protected def supportsMidAdvanceFailure: Boolean
+
+  /**
+   * Writes an archive at `dest` whose first entry (`firstEntry`) reads cleanly but which then fails
+   * while advancing to a later entry. From the container trait.
+   */
+  protected def writeArchiveFailingAfterFirstEntry(
+      dest: File, firstEntry: (String, Array[Byte])): Unit
+
   /** An archive extension whose reader fails on corrupt bytes (used by the corrupt-file tests). */
   protected def corruptArchiveExtension: String
 
@@ -169,6 +182,19 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
    * read.
    */
   protected def localizesEntries: Boolean = false
+
+  /**
+   * Prefix of the per-entry temp dir a [[localizesEntries]] format unpacks each entry into (e.g.
+   * `parquet-archive`); its inference variant is `<prefix>-infer`. Gates the shared temp-dir
+   * cleanup tests.
+   */
+  protected def archiveTempDirPrefix: String = ""
+
+  /**
+   * The config key toggling this format's vectorized/columnar reader, if it has one. When set, the
+   * shared localize-path read test runs with the reader both on and off.
+   */
+  protected def vectorizedReaderConfKey: Option[String] = None
 
   /** Sample data with a nested struct column, used by the complex-type test. */
   protected def complexSampleDf: DataFrame =
@@ -514,6 +540,98 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
               intercept[SparkException](read(dir.getCanonicalPath).collect())
             }
           }
+        }
+      }
+    }
+
+    // Temp dirs (of `prefix`) surviving under the executor-local dir; the read/inference variants
+    // must be removed on task completion, so `after -- before` catches a leak.
+    def archiveTempDirs(prefix: String): Set[String] = {
+      val localDir = new File(Utils.getLocalDir(spark.sparkContext.getConf))
+      Option(localDir.listFiles()).getOrElse(Array.empty)
+        .filter(_.getName.startsWith(prefix)).map(_.getName).toSet
+    }
+
+    val vectorizedCases = vectorizedReaderConfKey.map(Seq(_)).getOrElse(Seq.empty)
+      .flatMap(key => Seq(true, false).map(key -> _))
+    (if (vectorizedCases.nonEmpty) vectorizedCases else Seq("" -> false)).foreach {
+      case (confKey, vectorized) =>
+        val label = if (confKey.isEmpty) "" else s" with vectorized reader = $vectorized"
+        test(s"archive reads return the same rows$label") {
+          val conf = if (confKey.isEmpty) Map.empty[String, String]
+            else Map(confKey -> vectorized.toString)
+          withSQLConf(conf.toSeq: _*) {
+            assertArchiveMatchesDir(
+              Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
+          }
+        }
+    }
+
+    test("an abandoned read (LIMIT) over an archive returns partial rows and cleans up") {
+      withArchiveFile() { archive =>
+        val parts = (0 until 4).map(i => entryName(i) -> encodeFile(sampleDf((i, s"v$i"))))
+        writeArchive(archive, parts)
+        val before = archiveTempDirs(archiveTempDirPrefix)
+        assert(read(archive.getCanonicalPath).limit(2).collect().length == 2)
+        assert((archiveTempDirs(archiveTempDirPrefix) -- before).isEmpty,
+          "the read's temp dir was not cleaned up")
+      }
+    }
+
+    test("extensionless entries are read and inferred like a directory of part-files") {
+      val data = sampleDf((1, "Alice"), (2, "Bob"))
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq("part-00000" -> encodeFile(data)))
+        checkAnswer(read(archive.getCanonicalPath), data)
+        assert(inferredSchema(Seq(archive.getCanonicalPath)).fieldNames.toSet == Set("id", "name"),
+          "an extensionless entry should be inferred like a directory of part-files")
+      }
+    }
+
+    test("a corrupt archive cleans up its read temp dir rather than leaking it") {
+      // A corrupt archive throws before the read returns an iterator, but must not leak its dir.
+      withArchiveFile(corruptArchiveExtension) { archive =>
+        writeCorruptArchive(archive)
+        val before = archiveTempDirs(archiveTempDirPrefix)
+        intercept[SparkException](read(archive.getCanonicalPath).collect())
+        assert((archiveTempDirs(archiveTempDirPrefix) -- before).isEmpty,
+          "a corrupt archive leaked its read temp dir")
+      }
+    }
+
+    test("a corrupt archive cleans up its inference temp dir rather than leaking it") {
+      // Inference localizes entries too, on a worker without a TaskContext; a corrupt archive
+      // throws during that eager localize and must not leak the inference temp dir.
+      withArchiveFile(corruptArchiveExtension) { archive =>
+        writeCorruptArchive(archive)
+        val before = archiveTempDirs(s"$archiveTempDirPrefix-infer")
+        intercept[SparkException](inferredSchema(Seq(archive.getCanonicalPath)))
+        assert((archiveTempDirs(s"$archiveTempDirPrefix-infer") -- before).isEmpty,
+          "a corrupt archive leaked its inference temp dir")
+      }
+    }
+
+    test("archive inference unions differing fields across entries with mergeSchema=true") {
+      // mergeSchema=true folds every entry's schema; over an archive, one unpacked entry at a time.
+      // Compare field name/type pairs as a set rather than by exact StructType equality: field
+      // order across archive entries follows the parallel merge order and is not a guaranteed
+      // contract, and some formats (ORC) merge entries unordered. Only the name/type union matters.
+      val withName = sampleDf((1, "Alice"), (2, "Bob"))
+      val idExtra = Seq((3, 30)).toDF("id", "extra")
+      val entries = Seq(entryName(0) -> encodeFile(withName), entryName(1) -> encodeFile(idExtra))
+      val merge = Map("mergeSchema" -> "true")
+      def fieldTypes(s: StructType): Set[(String, DataType)] =
+        s.fields.map(f => f.name -> f.dataType).toSet
+      withArchiveFile() { archive =>
+        writeArchive(archive, entries)
+        val archiveSchema = inferredSchema(Seq(archive.getCanonicalPath), merge)
+        withTempDir { dir =>
+          entries.foreach { case (n, b) => Files.write(new File(dir, n).toPath, b) }
+          assert(archiveSchema.fieldNames.toSet == Set("id", "name", "extra"),
+            s"expected the union of entry fields, got $archiveSchema")
+          assert(fieldTypes(archiveSchema) ==
+            fieldTypes(inferredSchema(Seq(dir.getCanonicalPath), merge)),
+            s"archive mergeSchema inference diverged from a directory read; got $archiveSchema")
         }
       }
     }

@@ -325,73 +325,49 @@ def verify_scalar_result(result: Any, num_rows: int) -> Any:
                 "actual": type(result).__name__,
             },
         )
-    if result_length != num_rows:
-        # TODO: change error class to RESULT_ROWS_MISMATCH
-        raise PySparkRuntimeError(
-            errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
-            messageParameters={
-                "udf_type": "arrow_udf",
-                "expected": str(num_rows),
-                "actual": str(result_length),
-            },
-        )
+    verify_result_row_count(result_length, num_rows)
     return result
 
 
-def verify_iterator_exhausted(iterator: Iterator, error_class: str) -> None:
+def verify_iterator_exhausted(iterator: Iterator) -> None:
     """Verify that an iterator has been fully consumed."""
     try:
         next(iterator)
     except StopIteration:
         pass
     else:
-        raise PySparkRuntimeError(errorClass=error_class, messageParameters={})
+        raise PySparkRuntimeError(errorClass="INPUT_NOT_FULLY_CONSUMED", messageParameters={})
 
 
 def verify_output_row_limit(
     iterator: Iterator,
     max_rows: Union[int, Callable[[], int]],
-    error_class: str,
 ) -> Iterator:
     """Yield elements while verifying total rows do not exceed a limit (fail-fast)."""
     total_rows = 0
     for element in iterator:
         total_rows += len(element)
         if total_rows > (max_rows() if callable(max_rows) else max_rows):
-            raise PySparkRuntimeError(errorClass=error_class, messageParameters={})
+            raise PySparkRuntimeError(errorClass="OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={})
         yield element
 
 
-def verify_output_row_count(
+def verify_iter_result_row_count(
     iterator: Iterator,
-    expected_rows: Union[int, Callable[[], int]],
-    error_class: str,
+    expected_rows: Callable[[], int],
 ) -> Iterator:
-    """Yield elements and verify final row count matches expected exactly."""
+    """Yield elements and verify final row count matches expected exactly.
+
+    ``expected_rows`` is a callable because the expected count is only known once
+    the iterator is fully consumed (input rows are counted lazily as a side effect
+    of pulling batches), so it must be read after this generator is exhausted.
+    """
     actual_rows = 0
     for element in iterator:
         actual_rows += len(element)
         yield element
 
-    expected = expected_rows() if callable(expected_rows) else expected_rows
-    if actual_rows != expected:
-        raise PySparkRuntimeError(
-            errorClass=error_class,
-            messageParameters={
-                "output_length": str(actual_rows),
-                "input_length": str(expected),
-            },
-        )
-
-
-def wrap_udf(f, args_offsets, kwargs_offsets, return_type):
-    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
-
-    if return_type.needConversion():
-        toInternal = return_type.toInternal
-        return args_kwargs_offsets, lambda *a: toInternal(func(*a))
-    else:
-        return args_kwargs_offsets, lambda *a: func(*a)
+    verify_result_row_count(actual_rows, expected_rows())
 
 
 def _verify_column_schema(
@@ -685,8 +661,15 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
         return func, None, None, return_type
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
         return func, None, None, None
+    # Batched (plain Python) UDFs: (args_kwargs_offsets, eval func); apply kwargs binding and
+    # convert each result to the internal representation only when the return type requires it.
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
-        return wrap_udf(func, args_offsets, kwargs_offsets, return_type)
+        func, args_kwargs_offsets = wrap_kwargs_support(func, args_offsets, kwargs_offsets)
+        if return_type.needConversion():
+            toInternal = return_type.toInternal
+            return args_kwargs_offsets, lambda *a: toInternal(func(*a))
+        else:
+            return args_kwargs_offsets, lambda *a: func(*a)
     else:
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
@@ -2026,24 +2009,19 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             limited = verify_output_row_limit(
                 process_results(),
                 lambda: num_input_rows,
-                error_class="OUTPUT_EXCEEDS_INPUT_ROWS",
             )
 
             # Apply row count match check (final)
-            matched = verify_output_row_count(
+            matched = verify_iter_result_row_count(
                 limited,
                 lambda: num_input_rows,
-                error_class="RESULT_ROWS_MISMATCH",
             )
 
             # Yield batches
             yield from matched
 
             # Verify iterator consumed
-            verify_iterator_exhausted(
-                args_iter,
-                error_class="INPUT_NOT_FULLY_CONSUMED",
-            )
+            verify_iterator_exhausted(args_iter)
 
         # profiling is not supported for UDF
         return func, None, ser, ser
@@ -3057,15 +3035,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                                 "actual": type(result).__name__,
                             },
                         )
-                    if len(result) != num_rows:
-                        raise PySparkRuntimeError(
-                            errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
-                            messageParameters={
-                                "udf_type": "pandas_udf",
-                                "expected": str(num_rows),
-                                "actual": str(len(result)),
-                            },
-                        )
+                    verify_result_row_count(len(result), num_rows)
                     # struct_in_pandas="dict": UDF must return DataFrame for struct types
                     if isinstance(udf_return_type, StructType) and not isinstance(
                         result, pd.DataFrame
@@ -3151,24 +3121,19 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             limited = verify_output_row_limit(
                 process_results(),
                 lambda: num_input_rows,
-                error_class="OUTPUT_EXCEEDS_INPUT_ROWS",
             )
 
             # Apply row count match check (final)
-            matched = verify_output_row_count(
+            matched = verify_iter_result_row_count(
                 limited,
                 lambda: num_input_rows,
-                error_class="RESULT_ROWS_MISMATCH",
             )
 
             # Yield batches
             yield from matched
 
             # Verify iterator consumed
-            verify_iterator_exhausted(
-                args_iter,
-                error_class="INPUT_NOT_FULLY_CONSUMED",
-            )
+            verify_iterator_exhausted(args_iter)
 
         # profiling is not supported for UDF
         return func, None, ser, ser

@@ -132,6 +132,7 @@ ELSE	false
 ELSEIF	false
 END	false
 ENFORCED	false
+ERROR	false
 ESCAPE	false
 ESCAPED	false
 EVOLUTION	false
@@ -210,6 +211,7 @@ ITEMS	false
 ITERATE	false
 JOIN	false
 JSON	false
+JSON_TABLE	false
 KEY	false
 KEYS	false
 LANGUAGE	false

@@ -974,33 +974,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
-            val missingAttributes = o.missingInput.map(attr => toSQLExpr(attr)).mkString(", ")
-            val input = o.inputSet.map(attr => toSQLExpr(attr)).mkString(", ")
-
             val resolver = plan.conf.resolver
             val attrsWithSameName = o.missingInput.filter { missing =>
               o.inputSet.exists(input => resolver(missing.name, input.name))
             }
 
-            if (attrsWithSameName.nonEmpty) {
-              val sameNames = attrsWithSameName.map(attr => toSQLExpr(attr)).mkString(", ")
-              o.failAnalysis(
-                errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-                messageParameters = Map(
-                  "missingAttributes" -> missingAttributes,
-                  "input" -> input,
-                  "operator" -> operator.simpleString(SQLConf.get.maxToStringFields),
-                  "operation" -> sameNames
-                ))
-            } else {
-              o.failAnalysis(
-                errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-                messageParameters = Map(
-                  "missingAttributes" -> missingAttributes,
-                  "input" -> input,
-                  "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
-                ))
-            }
+            throw QueryCompilationErrors.missingAttributesError(
+              operator = o,
+              missingInput = o.missingInput,
+              input = o.inputSet,
+              attributesWithSameName = attrsWithSameName
+            )
 
           case p @ Project(projectList, _) =>
             checkForUnspecifiedWindow(projectList)

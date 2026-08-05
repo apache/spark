@@ -130,6 +130,11 @@ package object util extends Logging {
     case c: Cast if !c.containsTag(Cast.USER_SPECIFIED_CAST) =>
       PrettyAttribute(usePrettyExpression(c.child, shouldTrimTempResolvedColumn).sql, c.dataType)
     case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+    // Present a transpiled UDF exactly like the UDF it wraps, so auto-generated
+    // column names stay `f(a)` whether or not transpilation engages (the node
+    // carries the rewrite options as extra children, which must not leak into
+    // user-visible names).
+    case t: TranspiledPythonUDF => PrettyPythonUDF(t.name, t.dataType, t.pythonUDFExpr.children)
   }
 
   def quoteIdentifier(name: String): String = {

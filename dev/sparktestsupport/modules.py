@@ -410,6 +410,21 @@ streaming_kinesis_asl = Module(
 )
 
 
+credential_aws = Module(
+    name="credential-aws",
+    dependencies=[tags, core],
+    source_file_regexes=[
+        "connector/credential-aws/",
+    ],
+    build_profile_flags=[
+        "-Pcredential-aws",
+    ],
+    sbt_test_goals=[
+        "credential-aws/test",
+    ],
+)
+
+
 streaming_kafka_0_10 = Module(
     name="streaming-kafka-0-10",
     dependencies=[streaming, core],
@@ -627,6 +642,9 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_udf_combinations",
         "pyspark.sql.tests.test_udf_profiler",
+        "pyspark.sql.tests.test_udf_transpile_hypothesis",
+        "pyspark.sql.tests.test_udf_transpile_parity",
+        "pyspark.sql.tests.test_udf_transpile_unit",
         "pyspark.sql.tests.test_unified_udf",
         "pyspark.sql.tests.test_udtf",
         "pyspark.sql.tests.test_tvf",

@@ -74,7 +74,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     SchemaUtils.validateVectorCompatibleColumn(schema, getFeaturesCol)
     val schemaWithPredictionCol = SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
-    SchemaUtils.appendColumn(schemaWithPredictionCol, $(probabilityCol), new VectorUDT)
+    SchemaUtils.appendColumn(schemaWithPredictionCol, $(probabilityCol), SQLDataTypes.VectorType)
   }
 }
 

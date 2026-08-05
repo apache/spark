@@ -499,6 +499,30 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(UnBase64(Literal.create(null, StringType)), null, create_row("abdef"))
   }
 
+  test("to_base32/from_base32 for string") {
+    // RFC 4648 (section 10) test vectors.
+    checkEvaluation(Base32(Literal("".getBytes("UTF-8"))), "")
+    checkEvaluation(Base32(Literal("f".getBytes("UTF-8"))), "MY======")
+    checkEvaluation(Base32(Literal("fo".getBytes("UTF-8"))), "MZXQ====")
+    checkEvaluation(Base32(Literal("foo".getBytes("UTF-8"))), "MZXW6===")
+    checkEvaluation(Base32(Literal("foob".getBytes("UTF-8"))), "MZXW6YQ=")
+    checkEvaluation(Base32(Literal("fooba".getBytes("UTF-8"))), "MZXW6YTB")
+    checkEvaluation(Base32(Literal("foobar".getBytes("UTF-8"))), "MZXW6YTBOI======")
+
+    assert(!Base32(Literal("foo".getBytes("UTF-8"))).nullable)
+    assert(Base32(Literal.create(null, BinaryType)).nullable)
+    assert(!UnBase32(Literal("MZXW6YTBOI======")).nullable)
+    assert(UnBase32(Literal.create(null, StringType)).nullable)
+
+    checkEvaluation(UnBase32(Literal("MZXW6YTBOI======")), "foobar".getBytes("UTF-8"))
+    checkEvaluation(UnBase32(Literal("MY======")), "f".getBytes("UTF-8"))
+
+    // Round trip.
+    checkEvaluation(Base32(UnBase32(Literal("MZXW6YTBOI======"))), "MZXW6YTBOI======")
+    checkEvaluation(Base32(UnBase32(Literal(""))), "")
+    checkEvaluation(Base32(UnBase32(Literal.create(null, StringType))), null)
+  }
+
   test("encode/decode for string") {
     val a = $"a".string.at(0)
     val b = $"b".binary.at(0)
@@ -2267,5 +2291,24 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           s"Expression $expr should be context independent foldable")
       }
     }
+  }
+
+  test("StringTranslate and FormatNumber are stateful and produce fresh copies") {
+    val src = Literal("aeiou")
+    val matching = Literal("aeiou")
+    val replace = Literal("12345")
+    val translate = StringTranslate(src, matching, replace)
+    assert(translate.stateful, "StringTranslate.stateful should be true")
+    val translateCopy = translate.freshCopyIfContainsStatefulExpression()
+    assert(translateCopy ne translate,
+      "freshCopyIfContainsStatefulExpression should return a new instance for StringTranslate")
+
+    val num = Literal(1234567.89)
+    val fmt = Literal(2)
+    val formatNumber = FormatNumber(num, fmt)
+    assert(formatNumber.stateful, "FormatNumber.stateful should be true")
+    val formatNumberCopy = formatNumber.freshCopyIfContainsStatefulExpression()
+    assert(formatNumberCopy ne formatNumber,
+      "freshCopyIfContainsStatefulExpression should return a new instance for FormatNumber")
   }
 }
