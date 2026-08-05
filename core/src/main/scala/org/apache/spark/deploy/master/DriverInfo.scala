@@ -19,6 +19,7 @@ package org.apache.spark.deploy.master
 
 import java.util.Date
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.DriverDescription
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.util.Utils
@@ -55,4 +56,25 @@ private[deploy] class DriverInfo(
   def withResources(r: Map[String, ResourceInformation]): Unit = _resources = r
 
   def resources: Map[String, ResourceInformation] = _resources
+
+  private[deploy] def redactedCopy(conf: SparkConf): DriverInfo = {
+    val redactedCommand = desc.command.copy(
+      environment = Utils.redact(conf, desc.command.environment.toSeq).toMap,
+      javaOpts = Utils.redactCommandLineArgs(conf, desc.command.javaOpts))
+    val redactedDesc = desc.copy(command = redactedCommand)
+    val copy = new DriverInfo(startTime, id, redactedDesc, submitDate)
+    copy.withResources(_resources)
+    copy
+  }
+
+  @transient private var _conf: SparkConf = _
+
+  private[deploy] def withConf(conf: SparkConf): this.type = {
+    _conf = conf
+    this
+  }
+
+  private def writeReplace(): AnyRef = {
+    if (_conf == null) this else redactedCopy(_conf)
+  }
 }

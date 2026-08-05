@@ -25,8 +25,9 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{JsonTestUtils, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
-import org.apache.spark.deploy.master.{ApplicationInfo, RecoveryState, WorkerInfo}
+import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, RecoveryState, WorkerInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.Utils
 
 class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
@@ -136,6 +137,63 @@ class JsonProtocolSuite extends SparkFunSuite with JsonTestUtils {
     // Non-sensitive values pass through.
     assert(commandStr.contains("/usr/lib/jvm/default"))
     assert(commandStr.contains("-Xmx2g"))
+  }
+
+  test("SPARK-58592: redactedCopy redacts secrets in ApplicationInfo and DriverInfo") {
+    val conf = new SparkConf()
+    val secretEnv = Map(
+      "PASSWORD" -> "topsecret",
+      "JAVA_HOME" -> "/usr/lib/jvm/default")
+    val secretJavaOpts = Seq(
+      "-Dspark.executorEnv.TOKEN=env-token",
+      "-Xmx2g")
+    val cmd = Command("mainClass", List("arg1"), secretEnv, Seq(), Seq(), secretJavaOpts)
+
+    val appDesc = ApplicationDescription("name", Some(4), cmd, "appUiUrl", defaultResourceProfile)
+    val appInfo = new ApplicationInfo(0, "app-1", appDesc, new Date(0), null, Int.MaxValue)
+    val redactedApp = appInfo.redactedCopy(conf)
+    assert(!redactedApp.desc.command.environment.contains("topsecret"))
+    assert(redactedApp.desc.command.environment("PASSWORD") == Utils.REDACTION_REPLACEMENT_TEXT)
+    assert(redactedApp.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
+    assert(!redactedApp.desc.command.javaOpts.contains("env-token"))
+    assert(redactedApp.desc.command.javaOpts.contains("-Xmx2g"))
+
+    val driverDesc = DriverDescription("hdfs://some.jar", 100, 3, false, cmd)
+    val driverInfo = new DriverInfo(0, "driver-1", driverDesc, new Date(0))
+    val redactedDriver = driverInfo.redactedCopy(conf)
+    assert(!redactedDriver.desc.command.environment.contains("topsecret"))
+    assert(redactedDriver.desc.command.environment("PASSWORD") == Utils.REDACTION_REPLACEMENT_TEXT)
+    assert(redactedDriver.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
+    assert(!redactedDriver.desc.command.javaOpts.contains("env-token"))
+    assert(redactedDriver.desc.command.javaOpts.contains("-Xmx2g"))
+  }
+
+  test("SPARK-58592: writeReplace redacts secrets when Java-serialized for persistence") {
+    val conf = new SparkConf()
+    val secretEnv = Map("PASSWORD" -> "topsecret", "JAVA_HOME" -> "/usr/lib/jvm/default")
+    val secretJavaOpts = Seq("-Dspark.executorEnv.TOKEN=env-token", "-Xmx2g")
+    val cmd = Command("mainClass", List("arg1"), secretEnv, Seq(), Seq(), secretJavaOpts)
+    val serializer = new JavaSerializer(conf).newInstance()
+
+    val appDesc = ApplicationDescription("name", Some(4), cmd, "appUiUrl", defaultResourceProfile)
+    val appInfo = new ApplicationInfo(
+      0, "app-1", appDesc, new Date(0), null, Int.MaxValue).withConf(conf)
+    val deserializedApp = serializer.deserialize[ApplicationInfo](serializer.serialize(appInfo))
+    assert(!deserializedApp.desc.command.environment.contains("topsecret"))
+    assert(deserializedApp.desc.command.environment("PASSWORD") == Utils.REDACTION_REPLACEMENT_TEXT)
+    assert(deserializedApp.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
+    assert(!deserializedApp.desc.command.javaOpts.contains("env-token"))
+    assert(deserializedApp.desc.command.javaOpts.contains("-Xmx2g"))
+
+    val driverDesc = DriverDescription("hdfs://some.jar", 100, 3, false, cmd)
+    val driverInfo = new DriverInfo(0, "driver-1", driverDesc, new Date(0)).withConf(conf)
+    val deserializedDriver = serializer.deserialize[DriverInfo](serializer.serialize(driverInfo))
+    assert(!deserializedDriver.desc.command.environment.contains("topsecret"))
+    assert(deserializedDriver.desc.command.environment("PASSWORD") ==
+      Utils.REDACTION_REPLACEMENT_TEXT)
+    assert(deserializedDriver.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
+    assert(!deserializedDriver.desc.command.javaOpts.contains("env-token"))
+    assert(deserializedDriver.desc.command.javaOpts.contains("-Xmx2g"))
   }
 
   test("SPARK-46883: writeClusterUtilization") {

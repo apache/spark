@@ -22,6 +22,7 @@ import java.util.Date
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.ApplicationDescription
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceUtils}
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
@@ -203,5 +204,24 @@ private[spark] class ApplicationInfo(
     } else {
       System.currentTimeMillis() - startTime
     }
+  }
+
+  private[deploy] def redactedCopy(conf: SparkConf): ApplicationInfo = {
+    val redactedCommand = desc.command.copy(
+      environment = Utils.redact(conf, desc.command.environment.toSeq).toMap,
+      javaOpts = Utils.redactCommandLineArgs(conf, desc.command.javaOpts))
+    val redactedDesc = desc.copy(command = redactedCommand)
+    new ApplicationInfo(startTime, id, redactedDesc, submitDate, driver, defaultCores)
+  }
+
+  @transient private var _conf: SparkConf = _
+
+  private[deploy] def withConf(conf: SparkConf): this.type = {
+    _conf = conf
+    this
+  }
+
+  private def writeReplace(): AnyRef = {
+    if (_conf == null) this else redactedCopy(_conf)
   }
 }
