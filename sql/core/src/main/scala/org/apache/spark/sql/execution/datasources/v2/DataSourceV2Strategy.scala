@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder, WriteDistributionAndOrdering}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -252,7 +252,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
     case c @ CreateTable(ResolvedIdentifier(catalog, ident), columns, partitioning,
-        tableSpec: TableSpec, ifNotExists) =>
+        tableSpec: TableSpec, ifNotExists, writeDistributionMode, writeOrdering) =>
       val tableCatalog = catalog.asTableCatalog
       ResolveDefaultColumns.validateCatalogForDefaultValue(columns, tableCatalog, ident)
       ResolveTableConstraints.validateCatalogForTableConstraint(
@@ -260,6 +260,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val statementType = "CREATE TABLE"
       GeneratedColumn.validateCatalogForGeneratedColumn(columns, tableCatalog, ident)
       IdentityColumn.validateIdentityColumn(c.tableSchema, tableCatalog, ident)
+      WriteDistributionAndOrdering.validateCatalogForWriteDistributionAndOrdering(
+        tableCatalog, ident, statementType, writeDistributionMode, writeOrdering)
 
       CreateTableExec(
         catalog.asTableCatalog,
@@ -267,17 +269,24 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         columns.map(_.toV2Column(statementType)).toArray,
         partitioning,
         qualifyLocInTableSpec(tableSpec),
-        ifNotExists) :: Nil
+        ifNotExists,
+        writeDistributionMode,
+        writeOrdering) :: Nil
 
     case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec: TableSpec,
-        options, ifNotExists, true) =>
+        options, ifNotExists, true, writeDistributionMode, writeOrdering) =>
+      WriteDistributionAndOrdering.validateCatalogForWriteDistributionAndOrdering(
+        catalog.asTableCatalog, ident, "CREATE TABLE AS SELECT",
+        writeDistributionMode, writeOrdering)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicCreateTableAsSelectExec(staging, ident, parts, query,
-            qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
+            qualifyLocInTableSpec(tableSpec), options, ifNotExists,
+            writeDistributionMode, writeOrdering) :: Nil
         case _ =>
           CreateTableAsSelectExec(catalog.asTableCatalog, ident, parts, query,
-            qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
+            qualifyLocInTableSpec(tableSpec), options, ifNotExists,
+            writeDistributionMode, writeOrdering) :: Nil
       }
 
     // CREATE TABLE ... LIKE ... for a v2 catalog target.
@@ -309,7 +318,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r, includeTimeTravel = true)) :: Nil
 
     case c @ ReplaceTable(
-        ResolvedIdentifier(catalog, ident), columns, parts, tableSpec: TableSpec, orCreate) =>
+        ResolvedIdentifier(catalog, ident), columns, parts, tableSpec: TableSpec, orCreate,
+        writeDistributionMode, writeOrdering) =>
       val tableCatalog = catalog.asTableCatalog
       ResolveDefaultColumns.validateCatalogForDefaultValue(columns, tableCatalog, ident)
       ResolveTableConstraints.validateCatalogForTableConstraint(
@@ -317,15 +327,19 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val statementType = "REPLACE TABLE"
       GeneratedColumn.validateCatalogForGeneratedColumn(columns, tableCatalog, ident)
       IdentityColumn.validateIdentityColumn(c.tableSchema, tableCatalog, ident)
+      WriteDistributionAndOrdering.validateCatalogForWriteDistributionAndOrdering(
+        tableCatalog, ident, statementType, writeDistributionMode, writeOrdering)
 
       val v2Columns = columns.map(_.toV2Column(statementType)).toArray
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident, v2Columns, parts,
-            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
+            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache,
+            writeDistributionMode, writeOrdering) :: Nil
         case _ =>
           ReplaceTableExec(tableCatalog, ident, v2Columns, parts,
-            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
+            qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache,
+            writeDistributionMode, writeOrdering) :: Nil
       }
 
     // CheckViewReferences guarantees the catalog is a ViewCatalog by the time these strategy
@@ -485,7 +499,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DropViewExec(catalog, ident, ifExists, invalidateFunc) :: Nil
 
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
-        parts, query, tableSpec: TableSpec, options, orCreate, true) =>
+        parts, query, tableSpec: TableSpec, options, orCreate, true,
+        writeDistributionMode, writeOrdering) =>
+      WriteDistributionAndOrdering.validateCatalogForWriteDistributionAndOrdering(
+        catalog.asTableCatalog, ident, "REPLACE TABLE AS SELECT",
+        writeDistributionMode, writeOrdering)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
@@ -496,7 +514,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             qualifyLocInTableSpec(tableSpec),
             options,
             orCreate = orCreate,
-            invalidateCache) :: Nil
+            invalidateCache,
+            writeDistributionMode,
+            writeOrdering) :: Nil
         case _ =>
           ReplaceTableAsSelectExec(
             catalog.asTableCatalog,
@@ -506,7 +526,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             qualifyLocInTableSpec(tableSpec),
             options,
             orCreate = orCreate,
-            invalidateCache) :: Nil
+            invalidateCache,
+            writeDistributionMode,
+            writeOrdering) :: Nil
       }
 
     case AppendWrite(r @ ExtractV2Table(v1: SupportsWrite), Some(write), analyzedQuery)

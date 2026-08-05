@@ -92,5 +92,19 @@ public enum TableCatalogCapability {
    * {@link TableCatalog#createTable}.
    * See {@link Column#identityColumnSpec()}.
    */
-  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS
+  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
+
+  /**
+   * Signals that the TableCatalog supports a write distribution and ordering requested upon table
+   * creation in SQL.
+   * <p>
+   * Without this capability, any create/replace table statement carrying such a request fails with
+   * {@code UNSUPPORTED_FEATURE.TABLE_OPERATION} while the statement is planned -- before anything
+   * is created or dropped -- rather than creating a table that silently lacks the requested layout.
+   * <p>
+   * The request is expressed with syntax {@code DISTRIBUTED BY PARTITION} and/or
+   * {@code [LOCALLY] ORDERED BY ...} / {@code UNORDERED}, and is passed to APIs like
+   * {@link TableCatalog#createTable}.
+   */
+  SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING
 }
