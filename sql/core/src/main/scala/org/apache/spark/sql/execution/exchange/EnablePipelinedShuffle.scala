@@ -17,30 +17,28 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
- * WIP / opt-in (SPARK-57399 local-repartition v2). Rewrites every hash-partitioning
- * [[ShuffleExchangeExec]] in a batch physical plan to `pipelined = true`, so its shuffle is
- * served by the in-process pipelined channel manager and the concurrent-stage scheduler runs
- * the map and reduce stages together. This is the minimal SQL entry point that lets a batch
- * query exercise the v2 execution path; a production version would be a targeted,
- * cost/shape-aware replacement rather than a blanket rewrite.
+ * WIP / opt-in (SPARK-57399 local-repartition v2). Rewrites EVERY [[ShuffleExchangeExec]] in a
+ * batch physical plan to `pipelined = true`, so each shuffle is served by the in-process
+ * pipelined channel manager and the concurrent-stage scheduler runs the map and reduce stages
+ * together. This is the minimal SQL entry point that lets a batch query exercise the v2
+ * execution path; a production version would be a targeted, cost/shape-aware replacement
+ * rather than a blanket rewrite.
  *
  * Enabled only when `spark.sql.pipelinedShuffle.enabled=true`. It runs in the non-AQE
  * `preparations` list, so it also requires AQE to be off (under AQE the plan is hidden behind
  * an opaque `AdaptiveSparkPlanExec` leaf and this rule sees no exchanges).
  *
- * Conservative all-or-nothing gate to avoid the DAGScheduler's job-shape rejections:
- *   - Rewrites only when EVERY `ShuffleExchangeExec` in the plan is `HashPartitioning`. A
- *     `SinglePartition`/`RangePartitioning` exchange produces a regular `ShuffleDependency`;
- *     mixing regular and pipelined shuffles in one job is rejected, so if any such exchange
- *     is present the rule leaves the whole plan alone. (Broadcasts are not shuffles and are
- *     fine.)
- *   - Skips when any exchange is reused (a `ReusedExchangeExec` present), since a pipelined
- *     producer with more than one consumer (fan-out) is rejected.
+ * Rewriting ALL shuffles (not just hash-partitioning ones) keeps the job all-pipelined, which
+ * the DAGScheduler requires: a mix of pipelined and regular shuffles in one job is rejected.
+ * SinglePartition and RangePartitioning exchanges pipeline fine -- the channel transport only
+ * routes by `partitioner.getPartition(key)` and does not care which partitioning produced the
+ * id (SinglePartition is the numPartitions == 1 degenerate case). The only remaining gate is
+ * reuse: a pipelined producer with more than one consumer (fan-out) is rejected, so if any
+ * exchange in the plan is reused the rule leaves the whole plan regular.
  */
 case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
 
@@ -52,15 +50,11 @@ case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
     val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
     if (shuffles.isEmpty) return plan
 
-    // All shuffles must be hash-partitioning; otherwise a regular shuffle would coexist with
-    // the pipelined ones (mixed job -> rejected).
-    val allHash = shuffles.forall(_.outputPartitioning.isInstanceOf[HashPartitioning])
-    // Any reuse means a shuffle has more than one consumer (fan-out -> rejected).
-    val hasReuse = plan.exists(_.isInstanceOf[ReusedExchangeExec])
-
-    if (!allHash || hasReuse) {
-      logWarning("EnablePipelinedShuffle: plan has a non-hash or reused shuffle; leaving it " +
-        "regular to avoid a mixed/fan-out pipelined job.")
+    // A reused exchange has more than one consumer; a pipelined producer cannot fan out, so
+    // leave the whole plan regular rather than produce a rejected job.
+    if (plan.exists(_.isInstanceOf[ReusedExchangeExec])) {
+      logWarning("EnablePipelinedShuffle: plan has a reused exchange; leaving it regular to " +
+        "avoid a fan-out pipelined job.")
       return plan
     }
 
