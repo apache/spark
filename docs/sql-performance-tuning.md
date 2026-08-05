@@ -258,6 +258,78 @@ SELECT /*+ BROADCAST(r) */ * FROM src s JOIN records r ON s.key = r.key
 
 For more details please refer to the documentation of [Join Hints](sql-ref-syntax-qry-select-hints.html#join-hints).
 
+## Merging Subplans
+
+Spark merges subplans that return a single row and read the same input, so that input is scanned once instead of once per subplan. The candidates are non-correlated deterministic scalar subqueries and non-grouping aggregates (aggregates without `GROUP BY`). The merged subplan is evaluated once and outputs a single struct, and each original site reads its own field out of that struct. This optimization is enabled by default.
+
+For example, in the following query both subqueries scan `store_sales`:
+
+```sql
+SELECT
+  (SELECT min(ss_net_paid) FROM store_sales),
+  (SELECT max(ss_net_paid) FROM store_sales)
+```
+
+They are merged into one aggregate that computes `min` and `max` together, so `store_sales` is read once. In `EXPLAIN` output a merged subplan shows up as a subquery whose single output column is named `mergedValue`, and the sites that share it as `ReusedSubquery`.
+
+Two subplans are merged when their plans match node by node: `Project` lists are unioned, `Aggregate`s must have the same grouping and use the same aggregation implementation (so a `min` is not merged with a `collect_list`), `Filter`s must have the same condition, `Join`s must have the same type, condition and hints, and the leaves must read the same input. Subplans that differ only in their `WHERE` conditions can be merged as well, by turning each side's condition into a boolean column and giving each side's aggregate expressions a `FILTER (WHERE ...)` clause. That is controlled by the configurations below. Queries that still contain a `WITH` clause when this rule runs (one that was not inlined) are skipped.
+
+When only one of the two subplans has a filter, merging is always beneficial, because the unfiltered side reads all the data anyway. This case is on by default, unless the filter has to cross a `Join` to reach the aggregate, which needs the through-join configuration below. When both sides have a filter (the symmetric case), the merged scan filter becomes `OR(f1, f2)`, which is less selective than either original filter and can therefore read more data - for example when the filters prune partitions or Parquet row groups. That is why the symmetric case is disabled by default.
+
+Still, it is worth considering on queries that compute several differently filtered aggregates over the same table, which is a common analytical shape:
+
+```sql
+SELECT
+  (SELECT avg(ss_net_paid) FROM store_sales WHERE ss_quantity BETWEEN 1 AND 20),
+  (SELECT avg(ss_net_paid) FROM store_sales WHERE ss_quantity BETWEEN 21 AND 40)
+```
+
+In TPC-DS benchmark runs, enabling symmetric filter propagation made `q9` and `q28` about 3.5x faster, and enabling it together with propagation through joins made `q88` about 7x and `q90` about 2x faster. See [SPARK-40193](https://issues.apache.org/jira/browse/SPARK-40193) and [SPARK-56677](https://issues.apache.org/jira/browse/SPARK-56677) for these measurements. The trade-off depends on the tables: the gain is largest when the differing filters are on columns the data source cannot prune on, and the risk is highest on heavily partitioned or file-pruned tables where the widened filter loses that pruning. Validate it on your own workload before enabling it in production.
+
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+  <tr>
+    <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.enabled</code></td>
+    <td>true</td>
+    <td>
+      When true, subplans that differ only in their filter conditions can be merged by propagating the filters up to the enclosing non-grouping aggregates. This is the umbrella configuration of the three below: none of them has any effect when this is false. Subplans with the same filter condition are merged regardless of this configuration.
+    </td>
+    <td>4.2.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code></td>
+    <td>false</td>
+    <td>
+      When true, two non-grouping aggregate subplans that both have a filter condition can also be merged. Disabled by default because the merged filter is widened to <code>OR(f1, f2)</code>, which may read more data than the two original filters, especially on heavily partitioned or file-pruned tables.
+    </td>
+    <td>4.2.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.throughJoin.enabled</code></td>
+    <td>false</td>
+    <td>
+      When true, filter conditions can also propagate through <code>Join</code> nodes, which lets subplans that differ only in their filter conditions and share a common join be merged. When false, no filter is propagated across a join, not even when only one of the two subplans has a filter. A filter only propagates from the preserved side of the join: the left side of <code>LEFT OUTER</code>/<code>LEFT SEMI</code>/<code>LEFT ANTI</code>, the right side of <code>RIGHT OUTER</code>, or either side of <code>INNER</code>/<code>CROSS</code>. <code>FULL OUTER</code> joins are never eligible. Subplans that differ in their filters typically have a filter on both sides, so this is usually set together with <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code>.
+    </td>
+    <td>4.2.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.dsv2SymmetricFilterPropagation.enabled</code></td>
+    <td>false</td>
+    <td>
+      When true, two DataSource V2 scans that pushed the same strictly enforced filters but carry different best-effort (post-scan) filters can be merged even when <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code> is false. In this case widening cannot change the set of rows the scan is required to return, as the strict filters are re-pushed unchanged and the enclosing <code>Filter</code> re-checks the rest above the scan. This applies only to V2 sources that opt in to scan merging with the <code>SCAN_MERGING</code> table capability; no built-in source does.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+</table>
+
+Subplan merging can be turned off entirely by adding the rule to `spark.sql.optimizer.excludedRules`:
+
+```
+spark.sql.optimizer.excludedRules=org.apache.spark.sql.execution.planmerging.MergeSubplans
+```
+
+Use exactly that name: the rule was called `MergeScalarSubqueries` before Spark 4.2 and sat in a different package before Spark 4.3, and unknown names in `spark.sql.optimizer.excludedRules` are silently ignored, so an older name carried over from a previous version does not turn the rule off. See the [SQL migration guide](sql-migration-guide.html) for the old names.
+
 ## Adaptive Query Execution
 Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan, which is enabled by default since Apache Spark 3.2.0. Spark SQL can turn on and off AQE by `spark.sql.adaptive.enabled` as an umbrella configuration.
 
