@@ -114,14 +114,6 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(a.toString.contains("writePrivileges"))
   }
 
-  private def viewWithDependencies(dependencies: Option[DependencyList]): View = {
-    val builder = new View.Builder()
-      .withSchema(new StructType().add("i", IntegerType))
-      .withQueryText("SELECT i FROM cat.ns.events")
-    dependencies.foreach(builder.withViewDependencies)
-    builder.build()
-  }
-
   test("viewInfoBuilderFrom preserves the dependency list") {
     val dependencies = DependencyList.of(Array(Dependency.table(Array("cat", "ns", "events"))))
     val existing = viewWithDependencies(Some(dependencies))
@@ -133,5 +125,13 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     val existing = viewWithDependencies(None)
     val rebuilt = CatalogV2Util.viewInfoBuilderFrom(existing).build()
     assert(rebuilt.viewDependencies() === null)
+  }
+
+  private def viewWithDependencies(dependencies: Option[DependencyList]): View = {
+    val builder = new View.Builder()
+      .withSchema(new StructType().add("i", IntegerType))
+      .withQueryText("SELECT i FROM cat.ns.events")
+    dependencies.foreach(builder.withViewDependencies)
+    builder.build()
   }
 }
