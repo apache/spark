@@ -748,6 +748,23 @@ class ArrowTestsMixin:
         self.spark.createDataFrame(pdf, schema=self.schema)
         self.assertTrue(pdf.equals(pdf_copy))
 
+    def test_createDataFrame_pandas_chunked_array_backed(self):
+        # SPARK-46776: pa.Array.from_pandas can return a pa.ChunkedArray when the
+        # input pandas Series is backed by a multi-chunk pyarrow array (e.g. the
+        # pyarrow-backed string extension dtype). pa.RecordBatch.from_arrays does
+        # not accept ChunkedArray, so createDataFrame previously failed with
+        # "Cannot convert pyarrow.lib.ChunkedArray to pyarrow.lib.Array".
+        chunked = pa.chunked_array([pa.array(["a", "b"]), pa.array(["c", "d", "e"])])
+        self.assertEqual(chunked.num_chunks, 2)
+        pdf = pd.DataFrame({"s": pd.Series(chunked, dtype="string[pyarrow]")})
+
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                    df = self.spark.createDataFrame(pdf)
+                self.assertEqual(df.count(), 5)
+                self.assertEqual([r.s for r in df.collect()], ["a", "b", "c", "d", "e"])
+
     def test_createDataFrame_arrow_truncate_timestamp(self):
         t_in = pa.Table.from_arrays(
             [pa.array([1234567890123456789], type=pa.timestamp("ns", tz="UTC"))], names=["ts"]
@@ -889,7 +906,7 @@ class ArrowTestsMixin:
         expected = [tuple(list(e) for e in rec) for rec in pdf.to_records(index=False)]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_createDataFrame_arrow_with_array_type_nulls(self):
         t = pa.table({"a": [[1, 2], None, [3, 4]], "b": [["x", "y"], ["y", "z"], None]})
@@ -901,7 +918,7 @@ class ArrowTestsMixin:
         ]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_toPandas_with_array_type(self):
         for arrow_enabled in [True, False]:
@@ -918,7 +935,7 @@ class ArrowTestsMixin:
         result = [tuple(list(e) for e in rec) for rec in pdf.to_records(index=False)]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_toArrow_with_array_type_nulls(self):
         expected = [([1, 2], ["x", "y"]), (None, ["y", "z"]), ([3, 4], None)]
@@ -933,7 +950,7 @@ class ArrowTestsMixin:
         ]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_createDataFrame_pandas_with_map_type(self):
         with self.quiet():

@@ -32,6 +32,10 @@ memory usage and GC pressure. You can call `spark.catalog.uncacheTable("tableNam
 
 To list relations cached with an explicit name, use `spark.catalog.listCachedTables()`. Entries cached only via `Dataset.cache()` without a name are not included.
 
+Spark supports two cache formats:
+- **Default cache format**: The standard in-memory columnar cache (used by default).
+- **Arrow cache format**: An Apache Arrow-based cache that can improve read performance for columnar workloads and enables Arrow ecosystem interoperability. See [Arrow Cache Format documentation](sql-arrow-cache-format.html) for details and configuration.
+
 Configuration of in-memory caching can be done via `spark.conf.set` or by running
 `SET key=value` commands using SQL.
 
@@ -141,7 +145,8 @@ Coalesce hints allow Spark SQL users to control the number of output files just 
 tuning and reducing the number of output files. The "COALESCE" hint only has a partition number as a
 parameter. The "REPARTITION" hint has a partition number, columns, or both/neither of them as parameters.
 The "REPARTITION_BY_RANGE" hint must have column names and a partition number is optional. The "REBALANCE"
-hint has an initial partition number, columns, or both/neither of them as parameters.
+hint has an initial partition number, columns, or both/neither of them as parameters. The "REBALANCE_BY_SIZE"
+hint requires an advisory partition size, optionally followed by columns.
 
 ```sql
 SELECT /*+ COALESCE(3) */ * FROM t;
@@ -155,6 +160,10 @@ SELECT /*+ REBALANCE */ * FROM t;
 SELECT /*+ REBALANCE(3) */ * FROM t;
 SELECT /*+ REBALANCE(c) */ * FROM t;
 SELECT /*+ REBALANCE(3, c) */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE(134217728) */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE(134217728, c) */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE('128m') */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE('128m', c) */ * FROM t;
 ```
 
 For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
@@ -249,6 +258,78 @@ SELECT /*+ BROADCAST(r) */ * FROM src s JOIN records r ON s.key = r.key
 
 For more details please refer to the documentation of [Join Hints](sql-ref-syntax-qry-select-hints.html#join-hints).
 
+## Merging Subplans
+
+Spark merges subplans that return a single row and read the same input, so that input is scanned once instead of once per subplan. The candidates are non-correlated deterministic scalar subqueries and non-grouping aggregates (aggregates without `GROUP BY`). The merged subplan is evaluated once and outputs a single struct, and each original site reads its own field out of that struct. This optimization is enabled by default.
+
+For example, in the following query both subqueries scan `store_sales`:
+
+```sql
+SELECT
+  (SELECT min(ss_net_paid) FROM store_sales),
+  (SELECT max(ss_net_paid) FROM store_sales)
+```
+
+They are merged into one aggregate that computes `min` and `max` together, so `store_sales` is read once. In `EXPLAIN` output a merged subplan shows up as a subquery whose single output column is named `mergedValue`, and the sites that share it as `ReusedSubquery`.
+
+Two subplans are merged when their plans match node by node: `Project` lists are unioned, `Aggregate`s must have the same grouping and use the same aggregation implementation (so a `min` is not merged with a `collect_list`), `Filter`s must have the same condition, `Join`s must have the same type, condition and hints, and the leaves must read the same input. Subplans that differ only in their `WHERE` conditions can be merged as well, by turning each side's condition into a boolean column and giving each side's aggregate expressions a `FILTER (WHERE ...)` clause. That is controlled by the configurations below. Queries that still contain a `WITH` clause when this rule runs (one that was not inlined) are skipped.
+
+When only one of the two subplans has a filter, merging is always beneficial, because the unfiltered side reads all the data anyway. This case is on by default, unless the filter has to cross a `Join` to reach the aggregate, which needs the through-join configuration below. When both sides have a filter (the symmetric case), the merged scan filter becomes `OR(f1, f2)`, which is less selective than either original filter and can therefore read more data - for example when the filters prune partitions or Parquet row groups. That is why the symmetric case is disabled by default.
+
+Still, it is worth considering on queries that compute several differently filtered aggregates over the same table, which is a common analytical shape:
+
+```sql
+SELECT
+  (SELECT avg(ss_net_paid) FROM store_sales WHERE ss_quantity BETWEEN 1 AND 20),
+  (SELECT avg(ss_net_paid) FROM store_sales WHERE ss_quantity BETWEEN 21 AND 40)
+```
+
+In TPC-DS benchmark runs, enabling symmetric filter propagation made `q9` and `q28` about 3.5x faster, and enabling it together with propagation through joins made `q88` about 7x and `q90` about 2x faster. See [SPARK-40193](https://issues.apache.org/jira/browse/SPARK-40193) and [SPARK-56677](https://issues.apache.org/jira/browse/SPARK-56677) for these measurements. The trade-off depends on the tables: the gain is largest when the differing filters are on columns the data source cannot prune on, and the risk is highest on heavily partitioned or file-pruned tables where the widened filter loses that pruning. Validate it on your own workload before enabling it in production.
+
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+  <tr>
+    <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.enabled</code></td>
+    <td>true</td>
+    <td>
+      When true, subplans that differ only in their filter conditions can be merged by propagating the filters up to the enclosing non-grouping aggregates. This is the umbrella configuration of the three below: none of them has any effect when this is false. Subplans with the same filter condition are merged regardless of this configuration.
+    </td>
+    <td>4.2.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code></td>
+    <td>false</td>
+    <td>
+      When true, two non-grouping aggregate subplans that both have a filter condition can also be merged. Disabled by default because the merged filter is widened to <code>OR(f1, f2)</code>, which may read more data than the two original filters, especially on heavily partitioned or file-pruned tables.
+    </td>
+    <td>4.2.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.throughJoin.enabled</code></td>
+    <td>false</td>
+    <td>
+      When true, filter conditions can also propagate through <code>Join</code> nodes, which lets subplans that differ only in their filter conditions and share a common join be merged. When false, no filter is propagated across a join, not even when only one of the two subplans has a filter. A filter only propagates from the preserved side of the join: the left side of <code>LEFT OUTER</code>/<code>LEFT SEMI</code>/<code>LEFT ANTI</code>, the right side of <code>RIGHT OUTER</code>, or either side of <code>INNER</code>/<code>CROSS</code>. <code>FULL OUTER</code> joins are never eligible. Subplans that differ in their filters typically have a filter on both sides, so this is usually set together with <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code>.
+    </td>
+    <td>4.2.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.optimizer.mergeSubplans.filterPropagation.dsv2SymmetricFilterPropagation.enabled</code></td>
+    <td>false</td>
+    <td>
+      When true, two DataSource V2 scans that pushed the same strictly enforced filters but carry different best-effort (post-scan) filters can be merged even when <code>spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled</code> is false. In this case widening cannot change the set of rows the scan is required to return, as the strict filters are re-pushed unchanged and the enclosing <code>Filter</code> re-checks the rest above the scan. This applies only to V2 sources that opt in to scan merging with the <code>SCAN_MERGING</code> table capability; no built-in source does.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+</table>
+
+Subplan merging can be turned off entirely by adding the rule to `spark.sql.optimizer.excludedRules`:
+
+```
+spark.sql.optimizer.excludedRules=org.apache.spark.sql.execution.planmerging.MergeSubplans
+```
+
+Use exactly that name: the rule was called `MergeScalarSubqueries` before Spark 4.2 and sat in a different package before Spark 4.3, and unknown names in `spark.sql.optimizer.excludedRules` are silently ignored, so an older name carried over from a previous version does not turn the rule off. See the [SQL migration guide](sql-migration-guide.html) for the old names.
+
 ## Adaptive Query Execution
 Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan, which is enabled by default since Apache Spark 3.2.0. Spark SQL can turn on and off AQE by `spark.sql.adaptive.enabled` as an umbrella configuration.
 
@@ -291,6 +372,14 @@ This feature coalesces the post shuffle partitions based on the map output stati
        The minimum size of shuffle partitions after coalescing. This is useful when the target size is ignored during partition coalescing, which is the default case.
      </td>
      <td>3.2.0</td>
+   </tr>
+   <tr>
+     <td><code>spark.sql.adaptive.coalescePartitions.maxReducerPartitionsPerTask</code></td>
+     <td>Int.MaxValue</td>
+     <td>
+       The maximum number of contiguous reducer partitions that may be coalesced into a single task. This limits the reducer-partition fan-in independently of the advisory partition size.
+     </td>
+     <td>4.3.0</td>
    </tr>
    <tr>
      <td><code>spark.sql.adaptive.coalescePartitions.initialPartitionNum</code></td>
@@ -366,6 +455,38 @@ AQE converts sort-merge join to shuffled hash join when all post shuffle partiti
          Configures the maximum size in bytes per partition that can be allowed to build local hash map. If this value is not smaller than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> and all the partition sizes are not larger than this config, join selection prefers to use shuffled hash join instead of sort merge join regardless of the value of <code>spark.sql.join.preferSortMergeJoin</code>.
        </td>
        <td>3.2.0</td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled</code></td>
+       <td>true</td>
+       <td>
+         When true, Spark converts a sort-merge join to a shuffled hash join during adaptive execution when the build side's materialized per-partition sizes are all within <code>spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold</code> (which additionally requires <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> to not be larger than it). This is the master switch for the conversion. By default it only looks through the join's own required sort to reach a direct input shuffle; set <code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled</code> to true to also look through non-shuffle operators (such as aggregate, project, filter and window) sitting between the join and its input shuffle.
+       </td>
+       <td>4.3.0</td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled</code></td>
+       <td>false</td>
+       <td>
+         When true, the sort-merge join to shuffled hash join conversion additionally looks through non-shuffle operators (such as aggregate, project, filter and window) sitting between the join and its input shuffle, instead of only the join's own required sort. Has no effect unless <code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled</code> is true.
+       </td>
+       <td>4.3.0</td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.minWideningFactor</code></td>
+       <td>1.0</td>
+       <td>
+         The lower bound applied to the row-widening factor used when the sort-merge-join to shuffled-hash-join conversion bounds a build side's shuffled hash map size. The factor scales the input shuffle bytes by the estimated per-row size growth of the operators between the join and its shuffle; a larger lower bound is more conservative and makes the conversion less likely when statistics may under-estimate the build size. Must be positive.
+       </td>
+       <td>4.3.0</td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.costEvaluator.countLocalSort.enabled</code></td>
+       <td>(value of <code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled</code>)</td>
+       <td>
+         When true, the default AQE cost evaluator also counts the number of local sorts as a lower-priority tiebreaker below the number of shuffles, so that among plans with the same number of shuffles the one with fewer local sorts is preferred. For example, a sort-merge join is replaced by a shuffled hash join only when the conversion does not push extra sorts elsewhere in the plan. Defaults to the value of <code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled</code>, so it is enabled together with the look-through conversion.
+       </td>
+       <td>4.3.0</td>
      </tr>
   </table>
 
@@ -461,9 +582,9 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.requireAllClusterKeysForCoPartition</code></td>
       <td>true</td>
       <td>
-        When true, require the join or MERGE keys to be same and in the same order as the partition keys to eliminate shuffle. Hence, set to <b>false</b> in this situation to eliminate shuffle.
+        When true, storage-partitioned join requires every join or MERGE key to be covered by some partition key (rather than matching the partition keys positionally) to eliminate shuffle. When the partition keys cover only part of the join or MERGE keys, set to <b>false</b> to eliminate shuffle, at the risk of data skew and reduced parallelism from the coarser storage partitioning.
       </td>
-      <td>3.4.0</td>
+      <td>3.3.0</td>
     </tr>
     <tr>
       <td><code>spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled</code></td>
@@ -474,10 +595,10 @@ The following SQL properties enable Storage Partition Join in different join que
       <td>3.4.0</td>
     </tr>
     <tr>
-      <td><code>spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled</code></td>
+      <td><code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code></td>
       <td>false</td>
       <td>
-        When enabled, try to avoid shuffle if join or MERGE condition does not include all partition columns. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true, and <code>spark.sql.requireAllClusterKeysForCoPartition</code> to be false.
+        When enabled, try to avoid shuffle if join or MERGE condition does not include all partition columns. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true.
       </td>
       <td>4.0.0</td>
     </tr>
@@ -533,7 +654,6 @@ ON t.dep = s.dep AND t.id = s.id
 SET 'spark.sql.sources.v2.bucketing.enabled' 'true'
 SET 'spark.sql.iceberg.planning.preserve-data-grouping' 'true'
 SET 'spark.sql.sources.v2.bucketing.pushPartValues.enabled' 'true'
-SET 'spark.sql.requireAllClusterKeysForCoPartition' 'false'
 SET 'spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled' 'true'
 
 -- Plan with Storage Partition Join

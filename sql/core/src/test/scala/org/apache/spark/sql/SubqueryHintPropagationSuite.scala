@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, J
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SubqueryHintPropagationSuite extends QueryTest with SharedSparkSession {
+class SubqueryHintPropagationSuite extends SharedSparkSession {
 
   setupTestData()
 

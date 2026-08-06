@@ -229,7 +229,8 @@ case class UnionLoopExec(
               val optimizedPlan = prevDF.queryExecution.optimizedPlan
               val (stats, constraints) = rewriteStatsAndConstraints(r, optimizedPlan,
                 sameOutput = false)
-              logicalRDD.copy(output = r.output)(prevDF.sparkSession, stats, constraints)
+              logicalRDD.copy(output = r.output)(
+                prevDF.sparkSession, stats, constraints, fromCheckpoint = false)
           }
       }
 

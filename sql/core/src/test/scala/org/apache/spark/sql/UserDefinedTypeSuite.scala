@@ -52,7 +52,7 @@ private[sql] class YearUDT extends UserDefinedType[Year] {
   private[spark] override def asNullable: YearUDT = this
 }
 
-class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with ParquetTest
+class UserDefinedTypeSuite extends SharedSparkSession with ParquetTest
     with ExpressionEvalHelper {
   import testImplicits._
 

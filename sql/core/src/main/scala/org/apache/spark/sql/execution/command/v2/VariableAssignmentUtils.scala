@@ -68,7 +68,8 @@ object VariableAssignmentUtils {
       case FakeLocalCatalog => scriptingVariableManager.get
 
       case FakeSystemCatalog if tempVariableManager.get(namePartsCaseAdjusted).isEmpty =>
-        throw unresolvedVariableError(namePartsCaseAdjusted, Seq("SYSTEM", "SESSION"))
+        throw unresolvedVariableError(
+          namePartsCaseAdjusted, Seq(Seq("SYSTEM", "SESSION")), varRef.origin)
 
       case FakeSystemCatalog => tempVariableManager
 
@@ -81,6 +82,6 @@ object VariableAssignmentUtils {
       Literal(value, varRef.dataType)
     )
 
-    variableManager.set(namePartsCaseAdjusted, varDef)
+    variableManager.set(namePartsCaseAdjusted, varDef, varRef.origin)
   }
 }

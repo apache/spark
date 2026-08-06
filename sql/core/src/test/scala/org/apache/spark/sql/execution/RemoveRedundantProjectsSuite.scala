@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.internal.SQLConf
@@ -26,8 +26,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 abstract class RemoveRedundantProjectsSuiteBase
-  extends QueryTest
-    with SharedSparkSession
+  extends SharedSparkSession
     with AdaptiveSparkPlanHelper {
   import testImplicits._
 

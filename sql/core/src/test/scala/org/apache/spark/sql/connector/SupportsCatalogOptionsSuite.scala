@@ -26,7 +26,7 @@ import scala.util.Try
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NoSuchTableException, TableAlreadyExistsException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
 import org.apache.spark.unsafe.types.UTF8String
 
-class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
+class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
 
@@ -285,7 +285,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
         sql(s"create table t1 (id bigint) using $format")
       }
 
-      assert(e.getMessage.contains("Cannot find catalog plugin class"))
+      assert(e.getMessage.contains("cannot find the plugin class"))
       assert(e.getMessage.contains("InvalidCatalogClass"))
     } finally {
       spark.sessionState.catalogManager.reset()
@@ -383,6 +383,21 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
   private def checkTimeTravel(ds: Dataset[_], expectedTimeTravelSpec: TimeTravelSpec): Unit = {
     val relation = ds.logicalPlan.asInstanceOf[DataSourceV2Relation]
     assert(relation.timeTravelSpec.contains(expectedTimeTravelSpec))
+  }
+
+  test("SPARK-58389: read options are forwarded to the catalog's loadTable") {
+    sql(s"create table $catalogName.t1 (id bigint) using $format")
+    val cat = catalog(catalogName).asInstanceOf[InMemoryTableCatalog]
+    cat.resetLoadTableCalls()
+
+    // spark.read.format(...).option(...).load() goes through the SupportsCatalogOptions read
+    // path in DataSourceV2Utils, which now forwards the user options to CatalogV2Util.getTable.
+    load("t1", Some(catalogName)).collect()
+
+    val opts = cat.lastLoadTableOptions
+    assert(opts.isDefined, "loadTable(context, options) was not invoked")
+    // The user-provided read options reach the catalog (e.g. the table name selector).
+    assert(opts.get.get("name") === "t1")
   }
 
   private def load(

@@ -192,7 +192,7 @@ class ShuffledRowRDD(
     val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
     val reader = split.asInstanceOf[ShuffledRowRDDPartition].spec match {
       case CoalescedPartitionSpec(startReducerIndex, endReducerIndex, _) =>
-        SparkEnv.get.shuffleManager.getReader(
+        SparkEnv.get.shuffleManagerFor(dependency).getReader(
           dependency.shuffleHandle,
           startReducerIndex,
           endReducerIndex,
@@ -200,7 +200,7 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case PartialReducerPartitionSpec(reducerIndex, startMapIndex, endMapIndex, _) =>
-        SparkEnv.get.shuffleManager.getReader(
+        SparkEnv.get.shuffleManagerFor(dependency).getReader(
           dependency.shuffleHandle,
           startMapIndex,
           endMapIndex,
@@ -210,7 +210,7 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case PartialMapperPartitionSpec(mapIndex, startReducerIndex, endReducerIndex) =>
-        SparkEnv.get.shuffleManager.getReader(
+        SparkEnv.get.shuffleManagerFor(dependency).getReader(
           dependency.shuffleHandle,
           mapIndex,
           mapIndex + 1,
@@ -220,7 +220,7 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case CoalescedMapperPartitionSpec(startMapIndex, endMapIndex, numReducers) =>
-        SparkEnv.get.shuffleManager.getReader(
+        SparkEnv.get.shuffleManagerFor(dependency).getReader(
           dependency.shuffleHandle,
           startMapIndex,
           endMapIndex,

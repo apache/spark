@@ -129,7 +129,12 @@ class UnsafeRowSuite extends SparkFunSuite {
   test("calling get(ordinal, datatype) on null columns") {
     val row = InternalRow.apply(null)
     val unsafeRow = UnsafeProjection.create(Array[DataType](NullType)).apply(row)
-    for (dataType <- DataTypeTestUtils.atomicTypes) {
+    // Iterate `atomicTypes` plus the parameterized nanosecond timestamp types, which aren't yet
+    // included in `DataTypeTestUtils.atomicTypes` but should still return null for null columns
+    // (their physical row support was added in SPARK-56981).
+    val typesToCheck: Set[DataType] = DataTypeTestUtils.atomicTypes.toSet[DataType] ++
+      Set(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
+    for (dataType <- typesToCheck) {
       assert(unsafeRow.get(0, dataType) === null)
     }
   }

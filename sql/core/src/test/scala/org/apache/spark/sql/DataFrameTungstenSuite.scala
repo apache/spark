@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
  * This is here for now so I can make sure Tungsten project is tested without refactoring existing
  * end-to-end test infra. In the long run this should just go away.
  */
-class DataFrameTungstenSuite extends QueryTest with SharedSparkSession {
+class DataFrameTungstenSuite extends SharedSparkSession {
   import testImplicits._
 
   test("test simple types") {

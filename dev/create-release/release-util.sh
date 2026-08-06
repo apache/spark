@@ -86,8 +86,10 @@ function check_for_tag {
 function get_release_info {
   if [ -z "$GIT_BRANCH" ]; then
     # If no branch is specified, found out the latest branch from the repo.
+    # Exclude master (preview / next major integration) and branch-4.x (rolling Spark 4
+    # integration; minors cut from branch-4.x as branch-4.N such as branch-4.2 or branch-4.1).
     GIT_BRANCH=$(git ls-remote --heads "$ASF_REPO" |
-      grep -v refs/heads/master |
+      grep -Ev 'refs/heads/(master|branch-4\.x)' |
       awk '{print $2}' |
       sort -r |
       head -n 1 |

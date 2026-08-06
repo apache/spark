@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession {
+abstract class TimeFunctionsSuiteBase extends SharedSparkSession {
   import testImplicits._
 
   // Helper method to assert that two DataFrames with TimeType values are approximately equal.
@@ -87,7 +87,7 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
   }
 
   test("SPARK-52882: current_time function with specified precision") {
-    (0 to 6).foreach { precision: Int =>
+    (0 to TimeType.MAX_PRECISION).foreach { precision: Int =>
       // Create a dummy DataFrame with a single row to test the current_time(precision) function.
       val df = spark.range(1)
 
@@ -106,6 +106,27 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
       // Check that both methods produce approximately the same result.
       assertTwoTimesAreApproximatelyEqual(result1, result2)
     }
+  }
+
+  test("SPARK-57558: localtime function") {
+    val df = spark.range(1)
+
+    // localtime() returns TIME with default precision
+    val result1 = df.selectExpr("localtime()")
+    assert(result1.schema.fields.head.dataType == TimeType(TimeType.MICROS_PRECISION))
+
+    // localtime(3) returns TIME(3)
+    val result2 = df.selectExpr("localtime(3)")
+    assert(result2.schema.fields.head.dataType == TimeType(3))
+
+    // Bare LOCALTIME keyword (no parens) returns TIME
+    val result3 = spark.sql("SELECT LOCALTIME")
+    assert(result3.schema.fields.head.dataType == TimeType(TimeType.MICROS_PRECISION))
+
+    // localtime() and current_time() produce approximately the same result
+    val ltResult = df.selectExpr("localtime()")
+    val ctResult = df.selectExpr("current_time()")
+    assertTwoTimesAreApproximatelyEqual(ltResult, ctResult)
   }
 
   test("SPARK-52881: make_time function") {

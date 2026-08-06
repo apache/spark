@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Name resolution is the process by which [identifiers](sql-ref-identifier.html) are resolved to specific column-, field-, parameter-, or table-references.
+Name resolution is the process by which [identifiers](sql-ref-identifier.html) are resolved to specific column-, field-, parameter-, table-, function-, or variable-references.
 
 ## Column, field, parameter, and variable resolution
 
@@ -50,7 +50,7 @@ In detail, resolution of identifiers to a specific reference follows these rules
 
    1. **Parameterless function reference**
 
-      If the identifier is unqualified and matches `current_user`, `current_date`, or `current_timestamp`: Resolve it as one of these functions.
+      If the identifier is unqualified and matches `current_user`, `current_date`, `current_time`, `current_timestamp`, or `current_path`: Resolve it as one of these functions.
 
    1. **Column DEFAULT specification**
 
@@ -137,7 +137,10 @@ In detail, resolution of identifiers to a specific reference follows these rules
 
 1. **Session Variables**
 
-   1. Match the identifier to a variable name. If the identifier is qualified, the qualifier must be `session` or `system.session`.
+   1. Match the identifier to a session variable name.
+      If the identifier is qualified, the qualifier must be `session` or `system.session`.
+      If the identifier is unqualified, `system.session` must be present on the
+      [SQL Path](sql-ref-syntax-aux-conf-mgmt-set-path.html) (the default path includes it).
    1. If the identifier is qualified, match to a field or map key of a variable following rule 1.c
 
 ### Limitations
@@ -256,37 +259,54 @@ This restriction also applies to parameter references in SQL functions.
   frm.a  lat.b  func.c
 ```
 
+## Object name resolution
+
+Tables, views, and functions follow the same resolution rule. It depends on how many parts the
+identifier has.
+
+### Fully qualified (3 parts) &mdash; `catalog.schema.object`
+
+The reference is unique and is looked up in `catalog.schema`. `system.builtin.object` identifies
+a built-in function; `system.session.object` identifies a temporary view, function, or session
+variable.
+
+### Partially qualified (2 parts) &mdash; `schema.object`
+
+The identifier is qualified with `current_catalog` &mdash; producing
+`current_catalog.schema.object` &mdash; unless the leading part is `session` (or `builtin`, for
+functions). In that case Spark uses the
+[mini-path](sql-ref-identifier.html#reserved-system-names) to choose the implicit catalog,
+returning the first match:
+
+| `spark.sql.legacy.persistentCatalogFirst` | Mini-path tried in order |
+| :-------------------------------------- | :----------------------- |
+| `false` (default) | the system namespace (`system.session.x` / `system.builtin.x`), then the current catalog's `session.x` / `builtin.x` |
+| `true` (legacy)   | the current catalog's `session.x` / `builtin.x`, then the system namespace (`system.session.x` / `system.builtin.x`) |
+
+### Unqualified (1 part) &mdash; `object`
+
+In queries and DML, Spark walks the [SQL Path](sql-ref-syntax-aux-conf-mgmt-set-path.html) and
+returns the first match. In DDL, the identifier is qualified with `current_catalog.current_schema`.
+
+> Note: persistent views and SQL UDFs capture the SQL Path at `CREATE` time. When the view or
+> function is invoked, its body resolves names &mdash; tables, views, and functions &mdash;
+> against that frozen path, not the invoker's current path. `current_schema()` and
+> `current_path()` inside the body still return the invoker's context. See
+> [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
+
 ## Table and view resolution
 
-An identifier in table-reference can be any one of the following:
+A table reference can be a persistent table or view, a temporary view, or a common table
+expression (CTE).
 
-- Persistent table or view
-- Common table expression (CTE)
-- [Temporary view](sql-ref-syntax-ddl-create-view.html)
+Resolution follows [Object name resolution](#object-name-resolution), with one addition for
+unqualified references: when the reference is inside a `WITH` clause, Spark first matches the
+identifier against CTEs from the innermost `WITH` outward. If no CTE matches, Spark walks the
+SQL Path.
 
-Resolution of an identifier depends on whether it is qualified:
-
-- **Qualified**
-
-  If the identifier is fully qualified with three parts: `catalog.schema.relation`, it is unique.
-
-  If the identifier consists of two parts: `schema.relation`, it is further qualified with the result of `SELECT current_catalog()` to make it unique.
-
-- **Unqualified**
-
-  1. **Common table expression**
-
-     If the reference is within the scope of a `WITH` clause, match the identifier to a CTE starting with the immediately containing `WITH` clause and moving outwards from there.
-
-  1. **Temporary view**
-
-     Match the identifier to any temporary view defined within the current session.
-
-  1. **Persisted table**
-
-     Fully qualify the identifier by pre-pending the result of `SELECT current_catalog()` and `SELECT current_schema()` and look it up as a persistent relation.
-
-If the relation cannot be resolved to any table, view, or CTE, Databricks raises a TABLE_OR_VIEW_NOT_FOUND error.
+If the relation cannot be resolved, Spark raises `TABLE_OR_VIEW_NOT_FOUND`. The error includes
+the effective search path, for example
+`searchPath = [system.builtin, system.session, spark_catalog.default]`.
 
 ### Examples
 
@@ -317,7 +337,13 @@ If the relation cannot be resolved to any table, view, or CTE, Databricks raises
 > SELECT c1 FROM rel;
  2
 
--- Temporary views cannot be qualified, so qualifiecation resolved to the table:
+-- A temporary view can be qualified with `session` or `system.session`:
+> SELECT c1 FROM session.rel;
+ 2
+> SELECT c1 FROM system.session.rel;
+ 2
+
+-- Other 2-part qualifications resolve to the persisted table:
 > SELECT c1 FROM default.rel;
  1
 
@@ -343,45 +369,34 @@ If the relation cannot be resolved to any table, view, or CTE, Databricks raises
                    SELECT 1),
                 cte;
   [TABLE_OR_VIEW_NOT_FOUND] The table or view `cte` cannot be found.
+
+-- PATH drives unqualified relation lookup order
+> CREATE SCHEMA db_a;
+> CREATE SCHEMA db_b;
+> CREATE TABLE db_a.t USING parquet AS SELECT 1 AS v;
+> CREATE TABLE db_b.t USING parquet AS SELECT 2 AS v;
+
+> SET PATH = spark_catalog.db_a, spark_catalog.db_b, system.builtin;
+> SELECT v FROM t;
+ 1
+
+> SET PATH = spark_catalog.db_b, spark_catalog.db_a, system.builtin;
+> SELECT v FROM t;
+ 2
+
+-- Three-part `system.session.x` references the temporary scope only:
+> SELECT * FROM system.session.no_such_view;
+  [TABLE_OR_VIEW_NOT_FOUND] ... `system`.`session`.`no_such_view` ...
 ```
 
 ## Function resolution
 
-A function reference is recognized by the mandatory trailing set of parentheses.
+A function reference is recognized by the trailing parentheses, and follows
+[Object name resolution](#object-name-resolution).
 
-It can resolve to:
-
-- A builtin function provided by Spark,
-- A temporary user defined function scoped to the current session, or
-- A persistent user defined function.
-
-Resolution of a function name depends on whether it is qualified:
-
-- **Qualified**
-
-  If the name is fully qualified with three parts: `catalog.schema.function`, it is unique.
-
-  If the name consists of two parts: `schema.function`, it is further qualified with the result of `SELECT current_catalog()` to make it unique.
-
-  The function is then looked up in the catalog.
-
-- **Unqualified**
-
-  For unqualified function names Spark follows a fixed order of precedence (`PATH`):
-
-  1. **Builtin function**
-
-     If a function by this name exists among the set of built-in functions, that function is chosen.
-
-  1. **Temporary function**
-
-     If a function by this name exists among the set of temporary functions, that function is chosen.
-
-  1. **Persisted function**
-
-     Fully qualify the function name by pre-pending the result of `SELECT current_catalog()` and `SELECT current_schema()` and look it up as a persistent function.
-
-If the function cannot be resolved Spark raises an `UNRESOLVED_ROUTINE` error.
+If the function cannot be resolved, Spark raises `UNRESOLVED_ROUTINE`. The error includes the
+effective search path, for example
+`searchPath = [system.builtin, system.session, spark_catalog.default]`.
 
 ### Examples
 
@@ -420,4 +435,45 @@ If the function cannot be resolved Spark raises an `UNRESOLVED_ROUTINE` error.
 -- To resolve the persistent function it now needs qualification
 > SELECT spark_catalog.default.func(4, 3);
  6
+
+-- A built-in can always be reached by qualification, even when shadowed.
+-- Put system.session ahead of system.builtin so a matching temp `abs` shadows the built-in.
+> SET PATH = system.session, system.builtin, spark_catalog.default;
+> CREATE TEMPORARY FUNCTION abs(x INT) RETURNS INT RETURN x + 100;
+
+-- Unqualified abs(-5) resolves to the temp (-5 + 100 = 95).
+> SELECT abs(-5);
+ 95
+
+-- system.builtin.abs and builtin.abs reach the built-in around the shadow.
+> SELECT system.builtin.abs(-5);
+ 5
+> SELECT builtin.abs(-5);
+ 5
+
+-- session.abs reaches the temp explicitly.
+> SELECT session.abs(-5);
+ 95
+
+> DROP TEMPORARY FUNCTION abs;
+> SET PATH = DEFAULT_PATH;
+
+-- PATH controls unqualified routine lookup order
+> CREATE SCHEMA path_a;
+> CREATE SCHEMA path_b;
+> CREATE FUNCTION path_a.pick() RETURNS INT RETURN 10;
+> CREATE FUNCTION path_b.pick() RETURNS INT RETURN 20;
+
+> SET PATH = spark_catalog.path_a, spark_catalog.path_b, system.builtin;
+> SELECT pick();
+ 10
+
+> SET PATH = spark_catalog.path_b, spark_catalog.path_a, system.builtin;
+> SELECT pick();
+ 20
+
+-- Unresolved routine lists the effective search path
+> SET PATH = spark_catalog.default, system.builtin;
+> SELECT does_not_exist();
+  [UNRESOLVED_ROUTINE] ... searchPath: [`spark_catalog`.`default`, `system`.`builtin`] ...
 ```

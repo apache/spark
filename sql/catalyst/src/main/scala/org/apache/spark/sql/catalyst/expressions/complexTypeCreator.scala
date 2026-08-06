@@ -55,6 +55,11 @@ trait NoThrow
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
+  arguments = """
+    Arguments:
+      * expr - An expression of any type to include as an array element. Zero or more
+          expressions can be given, and they must share a common type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1, 2, 3);
@@ -179,6 +184,14 @@ private [sql] object GenArrayData {
  */
 @ExpressionDescription(
   usage = "_FUNC_(key0, value0, key1, value1, ...) - Creates a map with the given key/value pairs.",
+  arguments = """
+    Arguments:
+      * keyN - An expression for the N-th map key. Keys must not be NULL and all keys must
+          share a common type.
+      * valueN - An expression for the value paired with keyN. All values must share a common
+          type. Keys and values are supplied as alternating arguments, so the total number of
+          arguments must be even.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
@@ -299,6 +312,13 @@ object CreateMap {
   usage = """
     _FUNC_(keys, values) - Creates a map with a pair of the given key/value arrays. All elements
       in keys should not be null""",
+  arguments = """
+    Arguments:
+      * keys - The array providing the keys of the map.
+        An expression that evaluates to an array.
+      * values - The array providing the values of the map.
+        An expression that evaluates to an array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(1.0, 3.0), array('2', '4'));
@@ -416,7 +436,12 @@ object CreateStruct {
       null,
       "struct",
       "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
-      "",
+      """
+        |    Arguments:
+        |      * colN - The field values of the struct. There can be zero or more of them,
+        |          each an expression of any type. Field names are assigned as `colN` by
+        |          default unless the value is a named expression.
+        |  """.stripMargin,
       """
         |    Examples:
         |      > SELECT _FUNC_(1, 2, 3);
@@ -439,6 +464,13 @@ object CreateStruct {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
+  arguments = """
+    Arguments:
+      * nameN - A STRING literal giving the name of the N-th struct field. It must not be NULL.
+      * valN - An expression of any type providing the value for the field named nameN. Names
+          and values are supplied as alternating arguments, so the total number of arguments
+          must be even.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
@@ -470,7 +502,11 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
           case gsf: GetStructField => gsf.metadata
           case _ => Metadata.empty
         }
-        StructField(name.toString, expr.dataType, expr.nullable, metadata)
+        // A null field name is invalid input (checkInputDataTypes flags it as UNEXPECTED_NULL),
+        // but dataType is evaluated eagerly by the encoder before type checking; keep it null-safe
+        // and preserve the null name rather than throwing a NullPointerException (SPARK-57736).
+        StructField(if (name == null) null else name.toString, expr.dataType, expr.nullable,
+          metadata)
     }
     StructType(fields)
   }
@@ -562,6 +598,15 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`. Both `pairDelim` and `keyValueDelim` are treated as regular expressions.",
+  arguments = """
+    Arguments:
+      * text - The text to split into key/value pairs.
+        An expression that evaluates to a string.
+      * pairDelim - The delimiter regular expression separating pairs, defaults to ','.
+        An expression that evaluates to a string.
+      * keyValueDelim - The delimiter regular expression separating key and value, defaults to ':'.
+        An expression that evaluates to a string.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');

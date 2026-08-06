@@ -76,6 +76,7 @@ private[spark] object History {
         "(e.g., S3 Lifecycle Policies) for those. " +
         "Example: \"s3a://.*,gs://.*\" disables scanning for all S3 and GCS directories.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -189,6 +190,14 @@ private[spark] object History {
     ConfigBuilder("spark.history.fs.eventLog.rolling.onDemandLoadEnabled")
       .doc("Whether to look up rolling event log locations on demand manner before listing files.")
       .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val EVENT_LOG_SINGLE_ON_DEMAND_LOAD_ENABLED =
+    ConfigBuilder("spark.history.fs.eventLog.onDemandLoadEnabled")
+      .doc("Whether to look up single event log locations on demand manner before listing files.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 

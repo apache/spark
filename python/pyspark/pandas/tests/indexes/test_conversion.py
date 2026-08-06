@@ -24,7 +24,6 @@ from pyspark.pandas.utils import (
     SPARK_CONF_ARROW_ENABLED,
     SPARK_CONF_PANDAS_STRUCT_MODE,
 )
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import is_ansi_mode_test
 
 
@@ -306,7 +305,6 @@ class ConversionMixin:
 class ConversionTests(
     ConversionMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

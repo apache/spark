@@ -552,6 +552,36 @@ left join
      order by t_inner.b1,t_inner.b2 desc limit 1
  ) as lateral_table;
 
+-- lateral join after NATURAL/USING JOIN: outer attribute visibility
+
+-- lateral after NATURAL JOIN: unqualified key resolves to the merged column
+WITH nj1(k, v1) AS (VALUES (1, 'a')),
+     nj2(k, v2) AS (VALUES (1, 'b'))
+SELECT * FROM nj1 NATURAL JOIN nj2,
+LATERAL (SELECT k AS unq_k);
+
+-- lateral after NATURAL JOIN: qualified keys resolve to original columns
+WITH nj1(k, v1) AS (VALUES (1, 'a')),
+     nj2(k, v2) AS (VALUES (1, 'b'))
+SELECT * FROM nj1 NATURAL JOIN nj2,
+LATERAL (SELECT k AS unq_k, nj1.k AS qual_nj1k, nj2.k AS qual_nj2k);
+
+-- lateral after USING JOIN: unqualified and qualified keys
+WITH uj1(k, v1) AS (VALUES (1, 'a')),
+     uj2(k, v2) AS (VALUES (1, 'b'))
+SELECT * FROM uj1 JOIN uj2 USING (k),
+LATERAL (SELECT k AS unq_k, uj1.k AS qual_uj1k, uj2.k AS qual_uj2k);
+
+-- lateral cannot see column hidden by a subquery alias
+WITH cte1(k, v1) AS (VALUES (1, 'a'))
+SELECT * FROM (SELECT k FROM cte1 ORDER BY v1) sub,
+LATERAL (SELECT v1 AS leaked);
+
+-- lateral cannot see column not in GROUP BY output
+WITH cte1(k, v1) AS (VALUES (1, 'a'), (2, 'b'), (3, 'c'))
+SELECT * FROM (SELECT k FROM cte1 GROUP BY k) g,
+LATERAL (SELECT v1 AS leaked);
+
 -- clean up
 DROP VIEW t1;
 DROP VIEW t2;

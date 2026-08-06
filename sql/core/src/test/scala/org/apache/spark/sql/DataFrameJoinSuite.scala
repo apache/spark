@@ -35,8 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFrameJoinSuite extends QueryTest
-  with SharedSparkSession
+class DataFrameJoinSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
@@ -448,7 +447,7 @@ class DataFrameJoinSuite extends QueryTest
             }
             assert(broadcastExchanges.size == 1)
             val tables = broadcastExchanges.head.collect {
-              case FileSourceScanExec(_, _, _, _, _, _, _, _, Some(tableIdent), _) => tableIdent
+              case FileSourceScanExec(_, _, _, _, _, _, _, _, Some(tableIdent), _, _) => tableIdent
             }
             assert(tables.size == 1)
             assert(tables.head ===

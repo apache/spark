@@ -22,8 +22,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class EmptyInSuite extends QueryTest
-with SharedSparkSession {
+class EmptyInSuite extends SharedSparkSession {
   import testImplicits._
 
   val row = identity[(java.lang.Integer, java.lang.Double)](_)

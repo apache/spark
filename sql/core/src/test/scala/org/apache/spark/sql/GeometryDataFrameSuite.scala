@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
+class GeometryDataFrameSuite extends SharedSparkSession {
 
   val point1 = "010100000000000000000031400000000000001C40"
     .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
@@ -133,7 +133,8 @@ class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
   test("createDataFrame and round-trip with Geometry SRIDs") {
     // Covers PROJ-sourced SRIDs, the Spark-specific SRID 0,
     // and OGC-overridden SRIDs (4326, 4267, 4269).
-    Seq(0, 3857, 2000, 4326, 4267, 4269, 102100).foreach { srid =>
+    // Includes newer PROJ registry SRIDs (e.g. after PROJ 9.8.x): ESRI:102964, ESRI:104030.
+    Seq(0, 3857, 2000, 4326, 4267, 4269, 102100, 102964, 104030).foreach { srid =>
       val geom = Geometry.fromWKB(point1, srid)
       val schema = StructType(Seq(StructField("g", GeometryType(srid), nullable = false)))
       checkAnswer(
@@ -190,6 +191,24 @@ class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
     val df = spark.sql(s"SELECT ST_GeomFromWKB(X'$pointString')")
     val expectedGeom = Geometry.fromWKB(pointBytes, 0)
     checkAnswer(df, Seq(Row(expectedGeom)))
+  }
+
+  test("SPARK-57058: ORDER BY on a Geometry column fails with INVALID_ORDERING_TYPE") {
+    val rdd = sparkContext.parallelize(Seq(
+      Row(Geometry.fromWKB(point1, 0)),
+      Row(Geometry.fromWKB(point2, 0))))
+    val schema = StructType(Seq(StructField("g", GeometryType(0), nullable = false)))
+    spark.createDataFrame(rdd, schema).createOrReplaceTempView("geo_t")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("SELECT g FROM geo_t ORDER BY g").collect()
+      },
+      condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      parameters = Map(
+        "functionName" -> "`sortorder`",
+        "dataType" -> "\"GEOMETRY(0)\"",
+        "sqlExpr" -> "\"g ASC NULLS FIRST\""),
+      queryContext = Array(ExpectedContext("g", 29, 29)))
   }
 
   test("geospatial feature disabled") {

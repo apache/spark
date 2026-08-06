@@ -415,6 +415,17 @@ class _TreeClassifierParams(Params):
         typeConverter=TypeConverters.toString,
     )
 
+    pruneTree: Param[bool] = Param(
+        Params._dummy(),
+        "pruneTree",
+        "If true, the trained tree will undergo a pruning process after training, in which "
+        + "sibling leaf nodes with the same prediction are merged into their parent. The "
+        + "resulting tree will be smaller and have faster predictions. Class probabilities "
+        + "remain available after pruning. "
+        + "If false, no pruning is applied after training.",
+        typeConverter=TypeConverters.toBoolean,
+    )
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -424,6 +435,13 @@ class _TreeClassifierParams(Params):
         Gets the value of impurity or its default value.
         """
         return self.getOrDefault(self.impurity)
+
+    @since("4.3.0")
+    def getPruneTree(self) -> bool:
+        """
+        Gets the value of pruneTree or its default value.
+        """
+        return self.getOrDefault(self.pruneTree)
 
 
 class _TreeRegressorParams(_HasVarianceImpurity):

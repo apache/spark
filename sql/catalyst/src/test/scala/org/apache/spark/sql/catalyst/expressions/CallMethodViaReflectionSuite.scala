@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types._
 
 /** A static class for testing purpose. */
@@ -50,6 +52,17 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
   // Get rid of the $ so we are getting the companion object's name.
   private val staticClassName = ReflectStaticClass.getClass.getName.stripSuffix("$")
   private val dynamicClassName = classOf[ReflectDynamicClass].getName
+
+  /**
+   * Runs `f` with the given regular expression patterns set as the reflect allow list. The config
+   * is static, so it cannot be set via `withSQLConf`; we install a fresh `SQLConf` instead. Using
+   * `setConfString` keeps the `checkValue` validation in the path.
+   */
+  private def withAllowList(patterns: String*)(f: => Unit): Unit = {
+    val conf = new SQLConf()
+    conf.setConfString(StaticSQLConf.REFLECT_ALLOW_LIST.key, patterns.mkString(","))
+    SQLConf.withExistingConf(conf)(f)
+  }
 
   test("findMethod via reflection for static methods") {
     assert(findMethod(staticClassName, "method1", Seq.empty).exists(_.getName == "method1"))
@@ -157,6 +170,44 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
     checkEvaluation(createExpr(staticClassName, "method2", 2), "m2")
     checkEvaluation(createExpr(staticClassName, "method3", 3), "m3")
     checkEvaluation(createExpr(staticClassName, "method4", 4, "four"), "m4four")
+  }
+
+  test("SPARK-57448: allow list restricts reflective calls when set") {
+    def methodNotAllowed(methodName: String): DataTypeMismatch =
+      DataTypeMismatch(
+        errorSubClass = "METHOD_NOT_ALLOWED",
+        messageParameters = Map(
+          "methodName" -> methodName,
+          "className" -> staticClassName,
+          "config" -> toSQLConf(StaticSQLConf.REFLECT_ALLOW_LIST.key))
+      )
+
+    // An empty allow list (the default) allows every call.
+    assert(createExpr(staticClassName, "method1").checkInputDataTypes().isSuccess)
+
+    // When set, only methods whose canonical name matches a pattern are allowed.
+    withAllowList(s"$staticClassName.method1") {
+      assert(createExpr(staticClassName, "method1").checkInputDataTypes().isSuccess)
+      assert(createExpr(staticClassName, "method2", 2).checkInputDataTypes() ==
+        methodNotAllowed("method2"))
+    }
+
+    // Regular expression patterns are supported.
+    withAllowList("java\\.util\\..*") {
+      assert(createExpr("java.util.UUID", "randomUUID").checkInputDataTypes().isSuccess)
+    }
+  }
+
+  test("SPARK-57448: invalid regular expression in the allow list is rejected") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        withAllowList("(unclosed") {}
+      },
+      condition = "INVALID_CONF_VALUE.REQUIREMENT",
+      parameters = Map(
+        "confName" -> StaticSQLConf.REFLECT_ALLOW_LIST.key,
+        "confValue" -> "(unclosed",
+        "confRequirement" -> "Every entry must be a valid regular expression."))
   }
 
   test("escaping of class and method names") {

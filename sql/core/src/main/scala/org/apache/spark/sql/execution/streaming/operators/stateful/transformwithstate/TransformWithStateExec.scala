@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -35,6 +36,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
 
 /**
@@ -88,6 +90,12 @@ case class TransformWithStateExec(
     initialState)
   with ObjectProducerExec {
 
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(super.output)
+
+  private lazy val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(keyExpressions.toStructType)
+
   override def shortName: String = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
 
   // We need to just initialize key and value deserializer once per partition.
@@ -133,12 +141,11 @@ case class TransformWithStateExec(
   override def getColFamilySchemas(
       shouldBeNullable: Boolean
   ): Map[String, StateStoreColFamilySchema] = {
-    val keySchema = keyExpressions.toStructType
     // we have to add the default column family schema because the RocksDBStateEncoder
     // expects this entry to be present in the stateSchemaProvider.
     val defaultSchema = StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      0, keyExpressions.toStructType, 0, DUMMY_VALUE_ROW_SCHEMA,
-      Some(NoPrefixKeyStateEncoderSpec(keySchema)))
+      0, stateKeySchema, 0, DUMMY_VALUE_ROW_SCHEMA,
+      Some(NoPrefixKeyStateEncoderSpec(stateKeySchema)))
 
     // For Scala, the user can't explicitly set nullability on schema, so there is
     // no reason to throw an error, and we can simply set the schema to nullable.
@@ -147,8 +154,36 @@ case class TransformWithStateExec(
         shouldCheckNullable = false, shouldSetNullable = shouldBeNullable) ++
         Map(StateStore.DEFAULT_COL_FAMILY_NAME -> defaultSchema)
     closeProcessorHandle()
-    columnFamilySchemas
+    widenColFamilyGroupingKeys(columnFamilySchemas)
   }
+
+  private def widenColFamilyGroupingKeys(
+      schemas: Map[String, StateStoreColFamilySchema])
+      : Map[String, StateStoreColFamilySchema] = {
+    if (!WidenStatefulOpNullability.isEnabled) return schemas
+    val original = keyEncoder.schema
+    val widened = stateKeySchema
+    def widenKey(ks: StructType): StructType =
+      WidenStatefulOpNullability.widenGroupingKeyInSchema(ks, original, widened)
+    schemas.map { case (name, cf) =>
+      val widenedSpec = cf.keyStateEncoderSpec.map {
+        case NoPrefixKeyStateEncoderSpec(ks) =>
+          NoPrefixKeyStateEncoderSpec(widenKey(ks))
+        case PrefixKeyScanStateEncoderSpec(ks, n) =>
+          PrefixKeyScanStateEncoderSpec(widenKey(ks), n)
+        case RangeKeyScanStateEncoderSpec(ks, o) =>
+          RangeKeyScanStateEncoderSpec(widenKey(ks), o)
+        case TimestampAsPrefixKeyStateEncoderSpec(ks) =>
+          TimestampAsPrefixKeyStateEncoderSpec(widenKey(ks))
+        case TimestampAsPostfixKeyStateEncoderSpec(ks) =>
+          TimestampAsPostfixKeyStateEncoderSpec(widenKey(ks))
+      }
+      name -> cf.copy(
+        keySchema = widenKey(cf.keySchema),
+        keyStateEncoderSpec = widenedSpec)
+    }
+  }
+
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
     val stateVariableInfos = getDriverProcessorHandle().getStateVariableInfos
@@ -248,11 +283,17 @@ case class TransformWithStateExec(
       timeMode: TimeMode,
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     val numExpiredTimers = longMetric("numExpiredTimers")
+    // SPARK-56566: Timers are always scanned without a lower bound (full scan up to the current
+    // batch timestamp / eviction watermark). We intentionally do not pass
+    // prevBatchTimestampMs / lateEventsWatermark as the exclusive lower bound here:
+    // registerTimer has no guard on the registered expiry, so a user-registered timer with expiry
+    // at or below the previous batch's lower bound would be silently dropped by a bounded scan.
+    // Revisit once registerTimer enforces ts > currentBatchTimestamp / watermark.
     timeMode match {
       case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
         val batchTimestamp = batchTimestampMs.get
-        processorHandle.getExpiredTimers(batchTimestamp, prevBatchTimestampMs)
+        processorHandle.getExpiredTimers(batchTimestamp)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             numExpiredTimers += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
@@ -261,26 +302,7 @@ case class TransformWithStateExec(
       case EventTime =>
         assert(eventTimeWatermarkForEviction.isDefined)
         val watermark = eventTimeWatermarkForEviction.get
-        // Use the late-events watermark as the scan lower bound only when we can prove that
-        // it equals the previous batch's eviction watermark for this operator. That holds
-        // when STATEFUL_OPERATOR_ALLOW_MULTIPLE is true.
-        //
-        // When STATEFUL_OPERATOR_ALLOW_MULTIPLE is false (legacy mode), lateEvents == eviction
-        // for the same batch, so using it would collapse the eviction range to (wm, wm] = empty
-        // and silently stop firing timers. Fall back to None (full scan) in that mode, as we
-        // don't expect the legacy mode to be used by many users.
-        //
-        // The prevBatchTimestampMs.isDefined check guards against the first batch, where
-        // watermark propagation yields Some(0) for late events even though no timers have been
-        // processed yet, which would incorrectly skip timers registered at timestamp 0.
-        val prevWatermark =
-          if (prevBatchTimestampMs.isDefined &&
-              conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
-            eventTimeWatermarkForLateEvents
-          } else {
-            None
-          }
-        processorHandle.getExpiredTimers(watermark, prevWatermark)
+        processorHandle.getExpiredTimers(watermark)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             numExpiredTimers += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
@@ -414,9 +436,9 @@ case class TransformWithStateExec(
             val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
             val store = StateStore.get(
               storeProviderId = storeProviderId,
-              keyEncoder.schema,
+              stateKeySchema,
               DUMMY_VALUE_ROW_SCHEMA,
-              NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
+              NoPrefixKeyStateEncoderSpec(stateKeySchema),
               version = stateInfo.get.storeVersion,
               stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
               stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata,
@@ -436,9 +458,9 @@ case class TransformWithStateExec(
       if (isStreaming) {
         child.execute().mapPartitionsWithStateStore[InternalRow](
           getStateInfo,
-          keyEncoder.schema,
+          stateKeySchema,
           DUMMY_VALUE_ROW_SCHEMA,
-          NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
+          NoPrefixKeyStateEncoderSpec(stateKeySchema),
           session.sessionState,
           Some(session.streams.stateStoreCoordinator),
           useColumnFamilies = true
@@ -486,9 +508,9 @@ case class TransformWithStateExec(
     // Create StateStoreProvider for this partition
     val stateStoreProvider = StateStoreProvider.createAndInit(
       providerId,
-      keyEncoder.schema,
+      stateKeySchema,
       DUMMY_VALUE_ROW_SCHEMA,
-      NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
+      NoPrefixKeyStateEncoderSpec(stateKeySchema),
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,

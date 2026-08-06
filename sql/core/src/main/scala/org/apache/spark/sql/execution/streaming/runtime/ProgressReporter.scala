@@ -648,13 +648,9 @@ abstract class ProgressContext(
    * New execution stats will only retain the values as a snapshot of the query status.
    * (E.g. for stateful operators, numRowsTotal is a snapshot of the status, whereas
    * numRowsUpdated is bound to the batch.)
-   * TODO(SPARK-56537): We do not seem to clear up all values in StateOperatorProgress which are
-   * bound to the batch. Fix this.
    */
   private def resetExecStatsForNoExecution(originExecStats: ExecutionStats): ExecutionStats = {
-    val newStatefulOperators = originExecStats.stateOperators.map { so =>
-      so.copy(newNumRowsUpdated = 0, newNumRowsDroppedByWatermark = 0, newNumRowsRemoved = 0)
-    }
+    val newStatefulOperators = originExecStats.stateOperators.map(_.copyForNoExecution())
     val newEventTimeStats = if (originExecStats.eventTimeStats.contains("watermark")) {
       Map("watermark" -> progressReporter.formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
     } else {

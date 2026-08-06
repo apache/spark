@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.AttributeMap
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, EqualTo, IsNull, Or}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, NO_BROADCAST_HASH, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -153,6 +153,21 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
       assert(canBroadcastBySize(left, SQLConf.get) === false)
       assert(canBroadcastBySize(right, SQLConf.get) === true)
+    }
+  }
+
+  test("canPlanAsBroadcastHashJoin should respect size for single-column null-aware anti join") {
+    val leftKey = left.output.head
+    val rightKey = right.output.head
+    val condition = Or(EqualTo(leftKey, rightKey), IsNull(EqualTo(leftKey, rightKey)))
+    val nullAwareAntiJoin = Join(left, right, LeftAnti, Some(condition), JoinHint.NONE)
+    val largeRight = right.copy(rowCount = 20000000, size = Some(20000000))
+
+    withSQLConf(
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      assert(canPlanAsBroadcastHashJoin(nullAwareAntiJoin, SQLConf.get))
+      assert(!canPlanAsBroadcastHashJoin(nullAwareAntiJoin.copy(right = largeRight), SQLConf.get))
     }
   }
 

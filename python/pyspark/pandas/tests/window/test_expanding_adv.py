@@ -17,12 +17,16 @@
 
 import pandas as pd
 
+from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.window.test_expanding import ExpandingTestingFuncMixin
 
 
 class ExpandingAdvMixin(ExpandingTestingFuncMixin):
+    def test_expanding_median(self):
+        self._test_expanding_func("median", lambda x: x.quantile(0.5, "lower"))
+
     def test_expanding_quantile(self):
         self._test_expanding_func(lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower"))
 
@@ -31,6 +35,16 @@ class ExpandingAdvMixin(ExpandingTestingFuncMixin):
 
     def test_expanding_var(self):
         self._test_expanding_func("var", int_almost=True)
+
+    def test_expanding_sem(self):
+        self._test_expanding_func("sem", int_almost=True)
+        self._test_expanding_func(lambda x: x.sem(ddof=0), lambda x: x.sem(ddof=0), int_almost=True)
+        # A single-element window with ddof=0: the population std of one element is 0, so
+        # pandas 3 returns 0.0 (not null); pandas < 3 returns nan. Both are matched here.
+        # Guards against a var_samp-based sem, which is null at count == 1.
+        pser = pd.Series([5.0, 6.0, 7.0])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.expanding(1).sem(ddof=0), pser.expanding(1).sem(ddof=0))
 
     def test_expanding_skew(self):
         self._test_expanding_func("skew", int_almost=True)

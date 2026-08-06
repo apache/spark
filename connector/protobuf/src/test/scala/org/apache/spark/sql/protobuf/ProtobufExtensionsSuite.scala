@@ -20,7 +20,7 @@ import com.google.protobuf.DescriptorProtos.FileDescriptorSet
 import com.google.protobuf.DynamicMessage
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf.PROTOBUF_EXTENSIONS_SUPPORT_ENABLED
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
@@ -28,8 +28,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ProtobufUtils => CommonProtobufUtils}
 
 class ProtobufExtensionsSuite
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with ProtobufTestBase
     with Serializable {
 

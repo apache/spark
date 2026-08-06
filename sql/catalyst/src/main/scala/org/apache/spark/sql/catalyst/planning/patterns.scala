@@ -432,7 +432,7 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
  *  - the read relation that can be either [[DataSourceV2Relation]] or [[DataSourceV2ScanRelation]]
  *  depending on whether the planning has already happened;
  */
-object GroupBasedRowLevelOperation {
+object GroupBasedRowLevelOperation extends RowLevelOperationExtractor {
   type ReturnType = (ReplaceData, Expression, Option[Expression], LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
@@ -445,8 +445,34 @@ object GroupBasedRowLevelOperation {
     case _ =>
       None
   }
+}
 
-  private def findReadRelation(
+/**
+ * An extractor for row-level commands such as DELETE, UPDATE, MERGE that were rewritten using plans
+ * that operate on individual rows (row deltas).
+ *
+ * This class extracts the following entities:
+ *  - the delta-based rewrite plan;
+ *  - the condition that defines matching rows;
+ *  - the group filter condition;
+ *  - the read relation that can be either [[DataSourceV2Relation]] or [[DataSourceV2ScanRelation]]
+ *  depending on whether the planning has already happened;
+ */
+object DeltaBasedRowLevelOperation extends RowLevelOperationExtractor {
+  type ReturnType = (WriteDelta, Expression, Option[Expression], LogicalPlan)
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    case wd @ WriteDelta(ExtractV2Table(table), cond, query, _, _, groupFilterCond, _) =>
+      val readRelation = findReadRelation(table, query, allowMultipleReads = false)
+      readRelation.map((wd, cond, groupFilterCond, _))
+
+    case _ =>
+      None
+  }
+}
+
+trait RowLevelOperationExtractor {
+  protected def findReadRelation(
       table: Table,
       plan: LogicalPlan,
       allowMultipleReads: Boolean): Option[LogicalPlan] = {

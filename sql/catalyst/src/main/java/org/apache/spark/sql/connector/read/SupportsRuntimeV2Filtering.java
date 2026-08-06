@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.sources.Filter;
 
@@ -29,7 +30,14 @@ import org.apache.spark.sql.sources.Filter;
  * data source V2 {@link Predicate} instead of data source V1 {@link Filter}.
  * {@link SupportsRuntimeV2Filtering} is preferred over {@link SupportsRuntimeFiltering}
  * and only one of them should be implemented by the data sources.
- *
+ * <p>
+ * <b>Iterative filtering:</b> When {@link #supportsIterativePushdown()} returns true,
+ * {@link #filter(Predicate[])} may be called <i>multiple times</i> on the same
+ * {@link Scan} instance. The first call pushes translated V2 predicates; the second call
+ * pushes {@link PartitionPredicate} instances derived from runtime filters whose translated
+ * form was not already accepted (via {@link #pushedPredicates()}) in the first call.
+ * The implementation must accumulate state across all calls, and
+ * {@link #pushedPredicates()} must return predicates from all of them.
  * <p>
  * Note that Spark will push runtime filters only if they are beneficial.
  *
@@ -59,9 +67,47 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * partition values (omitting those with no data) via {@link Batch#planInputPartitions()}. The
    * scan must not report new partition values that were not present in the original partitioning.
    * <p>
+   * This method may be called multiple times with additional predicates (e.g.
+   * {@link PartitionPredicate}) when {@link #supportsIterativePushdown()} returns true.
+   * The implementation must accumulate state across all calls so that
+   * {@link #pushedPredicates()} can return predicates from all of them.
+   * <p>
    * Note that Spark will call {@link Scan#toBatch()} again after filtering the scan at runtime.
    *
    * @param predicates data source V2 predicates used to filter the scan at runtime
    */
   void filter(Predicate[] predicates);
+
+  /**
+   * Returns the predicates that are pushed to the data source via
+   * {@link #filter(Predicate[])}.
+   * <p>
+   * When iterative filtering is supported and {@link #filter(Predicate[])} was called
+   * multiple times, this method must return predicates from <i>all</i> calls.
+   * <p>
+   * It's possible that there are no runtime predicates and
+   * {@link #filter(Predicate[])} is never called;
+   * an empty array should be returned for this case.
+   *
+   * @since 4.2.0
+   */
+  default Predicate[] pushedPredicates() {
+    return new Predicate[0];
+  }
+
+  /**
+   * Returns true if this scan supports iterative runtime filtering. When true,
+   * {@link #filter(Predicate[])} may be called multiple times with additional
+   * predicates. The implementation must accumulate state across all calls,
+   * and {@link #pushedPredicates()} must return predicates from all of them.
+   * See the class-level Javadoc for the full contract.
+   * <p>
+   * When enabled, Spark will derive {@link PartitionPredicate} instances from the runtime
+   * filters and push them via a subsequent {@link #filter(Predicate[])} call.
+   *
+   * @since 4.2.0
+   */
+  default boolean supportsIterativePushdown() {
+    return false;
+  }
 }

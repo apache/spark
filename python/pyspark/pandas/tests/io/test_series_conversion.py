@@ -22,7 +22,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import have_jinja2, jinja2_requirement_message
 
 
@@ -68,7 +67,6 @@ class SeriesConversionTestsMixin:
 class SeriesConversionTests(
     SeriesConversionTestsMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

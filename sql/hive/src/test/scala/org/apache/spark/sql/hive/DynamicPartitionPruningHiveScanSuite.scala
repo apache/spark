@@ -23,11 +23,10 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
 
 abstract class DynamicPartitionPruningHiveScanSuiteBase
-    extends DynamicPartitionPruningSuiteBase with TestHiveSingleton with SQLTestUtils {
+    extends DynamicPartitionPruningSuiteBase with TestHiveSingleton {
 
   override val tableFormat: String = "hive"
 

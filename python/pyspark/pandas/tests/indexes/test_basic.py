@@ -22,6 +22,7 @@ import pandas as pd
 
 import pyspark.pandas as ps
 from pyspark.loose_version import LooseVersion
+from pyspark.pandas.config import option_context
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
@@ -192,6 +193,45 @@ class IndexBasicMixin:
         psmidx = ps.from_pandas(pmidx)
 
         self.assertRaises(PandasNotImplementedError, lambda: psmidx.factorize())
+
+    def test_equals(self):
+        # Single Index
+        pidx = pd.Index(["a", "b", "c"])
+        psidx = ps.from_pandas(pidx)
+        self.assert_eq(pidx.equals(pidx), psidx.equals(psidx))
+
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                pidx.equals(pd.Index(["a", "b", "c"])),
+                psidx.equals(ps.Index(["a", "b", "c"])),
+            )
+            self.assert_eq(
+                pidx.equals(pd.Index(["b", "b", "a"])),
+                psidx.equals(ps.Index(["b", "b", "a"])),
+            )
+            # equals ignores the name (unlike identical)
+            self.assert_eq(
+                pd.Index([1, 2, 3], name="x").equals(pd.Index([1, 2, 3], name="y")),
+                ps.Index([1, 2, 3], name="x").equals(ps.Index([1, 2, 3], name="y")),
+            )
+
+        # MultiIndex
+        pmidx = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        psmidx = ps.from_pandas(pmidx)
+        self.assert_eq(pmidx.equals(pmidx), psmidx.equals(psmidx))
+
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                pmidx.equals(pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])),
+                psmidx.equals(ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])),
+            )
+            self.assert_eq(
+                pmidx.equals(pd.MultiIndex.from_tuples([("c", "z"), ("b", "y"), ("a", "x")])),
+                psmidx.equals(ps.MultiIndex.from_tuples([("c", "z"), ("b", "y"), ("a", "x")])),
+            )
+
+        # Index vs MultiIndex (different type) -> not equal
+        self.assert_eq(pidx.equals(pmidx), psidx.equals(psmidx))
 
 
 class IndexBasicTests(

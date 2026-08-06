@@ -18,14 +18,14 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.catalyst.plans.logical.{ArrowEvalPython, BatchEvalPython, Limit, LocalLimit}
-import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
+class ExtractPythonUDFsSuite extends SharedSparkSession {
   import testImplicits._
 
   val batchedPythonUDF = new MyDummyPythonUDF

@@ -53,6 +53,12 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       e)
   }
 
+  def nanosTimestampUnsupportedWithLegacyParserError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+      messageParameters = Map("config" -> toSQLConf(SqlApiConf.LEGACY_TIME_PARSER_POLICY_KEY)))
+  }
+
   def stateStoreHandleNotInitialized(): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "STATE_STORE_HANDLE_NOT_INITIALIZED",

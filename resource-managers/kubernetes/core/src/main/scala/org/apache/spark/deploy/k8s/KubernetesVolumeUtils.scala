@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s
 import java.lang.Long.parseLong
 
 import org.apache.spark.SparkConf
-import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
 
 /**
@@ -27,8 +27,9 @@ import org.apache.spark.deploy.k8s.Config._
  *
  * A utility class used for K8s operations internally and Spark K8s operator.
  */
-@Unstable
+@Stable
 @DeveloperApi
+@Since("2.4.0")
 object KubernetesVolumeUtils {
   /**
    * Extract Spark volume configuration properties with a given name prefix.

@@ -27,7 +27,7 @@ class DataSourceRegistration:
     """
     Wrapper for data source registration.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     def __init__(self, sparkSession: "SparkSession"):

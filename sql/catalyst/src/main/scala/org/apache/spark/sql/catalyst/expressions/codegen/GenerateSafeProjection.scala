@@ -155,15 +155,24 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       case (e, i) =>
         val evaluationCode = e.genCode(ctx)
         val converter = convertToSafe(ctx, evaluationCode.value, e.dataType)
-        evaluationCode.code.toString +
+        val setValue =
+          s"""
+            ${converter.code}
+            ${CodeGenerator.setColumn("mutableRow", e.dataType, i, converter.value)};
+          """
+        val writeField = if (evaluationCode.isNull == FalseLiteral) {
+          // The expression is statically non-nullable, so the setNullAt branch is dead.
+          setValue
+        } else {
           s"""
             if (${evaluationCode.isNull}) {
               mutableRow.setNullAt($i);
             } else {
-              ${converter.code}
-              ${CodeGenerator.setColumn("mutableRow", e.dataType, i, converter.value)};
+              $setValue
             }
           """
+        }
+        evaluationCode.code.toString + writeField
     }
     val allExpressions = ctx.splitExpressionsWithCurrentInputs(expressionCodes)
 
@@ -188,8 +197,9 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           ${ctx.initPartition()}
         }
 
-        public java.lang.Object apply(java.lang.Object _i) {
-          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+        ${CodeGenerator.function1ApplyBridge(ctx.INPUT_ROW)}
+
+        public InternalRow apply(InternalRow ${ctx.INPUT_ROW}) {
           $allExpressions
           return mutableRow;
         }

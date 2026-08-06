@@ -145,6 +145,28 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             },
         )
 
+    def test_select_column_replaced_by_withcolumn(self):
+        from pyspark.errors.exceptions.connect import AnalysisException
+
+        # Selecting the original DataFrame's column after `withColumn` replaces it
+        # with a cast: the plan-id-tagged reference must resolve to the overwritten
+        # alias rather than the inner column. With non-strict DataFrame column
+        # resolution, the analyzer falls back to name-based resolution for the
+        # tagged attribute and the query succeeds.
+        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
+            df = self.connect.sql("SELECT 123 AS c")
+            df.withColumn("c", CF.col("c").cast("string")).select(df["c"]).collect()
+
+        # Under strict DataFrame column resolution (the default), the tagged
+        # reference cannot be resolved: the resolved attribute from the original
+        # plan is filtered out at the shadowing `withColumn` Project, and
+        # name-based fallback is disabled, so analysis fails with
+        # CANNOT_RESOLVE_DATAFRAME_COLUMN.
+        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
+            df = self.connect.sql("SELECT 123 AS c")
+            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+                df.withColumn("c", CF.col("c").cast("string")).select(df["c"]).collect()
+
     def test_column_with_null(self):
         # SPARK-41751: test isNull, isNotNull, eqNullSafe
 

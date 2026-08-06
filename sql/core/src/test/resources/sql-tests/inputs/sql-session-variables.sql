@@ -83,6 +83,19 @@ DROP TEMPORARY VARIABLE var1;
 SET VARIABLE title = 'Test variable in aggregate';
 SELECT (SELECT MAX(id) FROM RANGE(10) WHERE id < title) FROM VALUES 1, 2 AS t(title);
 
+SET VARIABLE title = 'Dropped struct variable -- field access vs qualified name';
+-- `session.a` is ambiguous: (a) 2-part qualified variable, or (b) field `a` of a 1-part
+-- variable `session`. Variable resolution tries (a) first via longest match, falls back to
+-- (b). With `session` declared as a struct, (b) succeeds. After the variable is dropped,
+-- both interpretations fail and the SELECT falls through to column resolution, which
+-- reports `UNRESOLVED_COLUMN`. Because either interpretation could have been intended,
+-- the variable error path (when reached) must dump the full SQL path -- see
+-- `VariableResolution.searchPathEntriesForError`.
+DECLARE OR REPLACE VARIABLE session STRUCT<a INT> = NAMED_STRUCT('a', 1);
+SELECT session.a;
+DROP TEMPORARY VARIABLE session;
+SELECT session.a;
+
 SET VARIABLE title = 'Test qualifiers - fail';
 DECLARE OR REPLACE VARIABLE builtin.var1 INT;
 DECLARE OR REPLACE VARIABLE system.sesion.var1 INT;

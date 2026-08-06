@@ -33,7 +33,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  * Query tests for the Bloom filter aggregate and filter function.
  */
 @ExtendedSQLTest
-class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
+class BloomFilterAggregateQuerySuite extends SharedSparkSession {
   import testImplicits._
 
   // Registry requires 3-part identifiers (catalog.database.funcName) for session functions

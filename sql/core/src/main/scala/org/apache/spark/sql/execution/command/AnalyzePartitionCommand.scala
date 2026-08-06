@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -75,7 +75,7 @@ case class AnalyzePartitionCommand(
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
-    if (tableMeta.tableType == CatalogTableType.VIEW) {
+    if (tableMeta.isViewLike) {
       throw QueryCompilationErrors.analyzeTableNotSupportedOnViewsError()
     }
 

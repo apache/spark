@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkIntervalUtils, Ti
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils._
+import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, Decimal, UpCastRule, YearMonthIntervalType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.SparkStringUtils
@@ -37,7 +38,7 @@ import org.apache.spark.util.SparkStringUtils
  * the read methods. If upcasting is allowed for the given vector, then all allowed read methods
  * must be implemented.
  */
-private[arrow] abstract class ArrowVectorReader {
+private[connect] abstract class ArrowVectorReader {
   def isNull(i: Int): Boolean
   def getBoolean(i: Int): Boolean = unsupported()
   def getByte(i: Int): Byte = unsupported()
@@ -68,6 +69,15 @@ object ArrowVectorReader {
   def apply(
       targetDataType: DataType,
       vector: FieldVector,
+      timeZoneId: String): ArrowVectorReader =
+    ConnectTypeOps
+      .forDataType(targetDataType)
+      .map(_.createArrowVectorReader(vector))
+      .getOrElse(applyDefault(targetDataType, vector, timeZoneId))
+
+  private def applyDefault(
+      targetDataType: DataType,
+      vector: FieldVector,
       timeZoneId: String): ArrowVectorReader = {
     val vectorDataType = ArrowUtils.fromArrowType(vector.getField.getType)
     if (!UpCastRule.canUpCast(vectorDataType, targetDataType)) {
@@ -85,8 +95,10 @@ object ArrowVectorReader {
       case v: DecimalVector => new DecimalVectorReader(v)
       case v: VarCharVector => new VarCharVectorReader(v)
       case v: LargeVarCharVector => new LargeVarCharVectorReader(v)
+      case v: ViewVarCharVector => new ViewVarCharVectorReader(v)
       case v: VarBinaryVector => new VarBinaryVectorReader(v)
       case v: LargeVarBinaryVector => new LargeVarBinaryVectorReader(v)
+      case v: ViewVarBinaryVector => new ViewVarBinaryVectorReader(v)
       case v: DurationVector => new DurationVectorReader(v)
       case v: IntervalYearVector => new IntervalYearVectorReader(v)
       case v: DateDayVector => new DateDayVectorReader(v, timeZoneId)
@@ -205,6 +217,11 @@ private[arrow] class LargeVarCharVectorReader(v: LargeVarCharVector)
   override def getString(i: Int): String = Text.decode(vector.get(i))
 }
 
+private[arrow] class ViewVarCharVectorReader(v: ViewVarCharVector)
+    extends TypedArrowVectorReader[ViewVarCharVector](v) {
+  override def getString(i: Int): String = Text.decode(vector.get(i))
+}
+
 private[arrow] class VarBinaryVectorReader(v: VarBinaryVector)
     extends TypedArrowVectorReader[VarBinaryVector](v) {
   override def getBytes(i: Int): Array[Byte] = vector.get(i)
@@ -213,6 +230,12 @@ private[arrow] class VarBinaryVectorReader(v: VarBinaryVector)
 
 private[arrow] class LargeVarBinaryVectorReader(v: LargeVarBinaryVector)
     extends TypedArrowVectorReader[LargeVarBinaryVector](v) {
+  override def getBytes(i: Int): Array[Byte] = vector.get(i)
+  override def getString(i: Int): String = SparkStringUtils.getHexString(getBytes(i))
+}
+
+private[arrow] class ViewVarBinaryVectorReader(v: ViewVarBinaryVector)
+    extends TypedArrowVectorReader[ViewVarBinaryVector](v) {
   override def getBytes(i: Int): Array[Byte] = vector.get(i)
   override def getString(i: Int): String = SparkStringUtils.getHexString(getBytes(i))
 }
@@ -279,7 +302,7 @@ private[arrow] class TimeStampMicroVectorReader(v: TimeStampMicroVector, timeZon
   override def getString(i: Int): String = formatter.format(utcMicros(i))
 }
 
-private[arrow] class TimeVectorReader(v: TimeNanoVector)
+private[connect] class TimeVectorReader(v: TimeNanoVector)
     extends TypedArrowVectorReader[TimeNanoVector](v) {
   private lazy val formatter = TimeFormatter.getFractionFormatter()
   private def nanos(i: Int): Long = vector.get(i)

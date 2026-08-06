@@ -205,3 +205,51 @@ select to_timestamp('2020-12-31-366', 'yyyy-MM-dd-DDD')
 struct<to_timestamp(2020-12-31-366, yyyy-MM-dd-DDD):timestamp>
 -- !query output
 2020-12-31 00:00:00
+
+
+-- !query
+select to_time('00:00:00')
+-- !query schema
+struct<to_time(00:00:00):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+select to_time('12', 'HH')
+-- !query schema
+struct<to_time(12, HH):time(6)>
+-- !query output
+12:00:00
+
+
+-- !query
+select to_time('12:34', 'HH:mm')
+-- !query schema
+struct<to_time(12:34, HH:mm):time(6)>
+-- !query output
+12:34:00
+
+
+-- !query
+select to_time('12:34:56', 'HH:mm:ss')
+-- !query schema
+struct<to_time(12:34:56, HH:mm:ss):time(6)>
+-- !query output
+12:34:56
+
+
+-- !query
+select to_time('12:34:56.123456', 'HH:mm:ss.SSSSSS')
+-- !query schema
+struct<to_time(12:34:56.123456, HH:mm:ss.SSSSSS):time(6)>
+-- !query output
+12:34:56.123456
+
+
+-- !query
+select to_time('01:02:03 PM', 'hh:mm:ss a')
+-- !query schema
+struct<to_time(01:02:03 PM, hh:mm:ss a):time(6)>
+-- !query output
+13:02:03

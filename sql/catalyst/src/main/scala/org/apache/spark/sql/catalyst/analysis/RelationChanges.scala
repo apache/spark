@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{RELATION_CHANGES, TreePattern}
-import org.apache.spark.sql.connector.catalog.ChangelogInfo
+import org.apache.spark.sql.connector.catalog.ChangelogContext
 
 /**
  * A logical node used to query Change Data Capture (CDC) changes for a table relation.
@@ -33,10 +33,10 @@ import org.apache.spark.sql.connector.catalog.ChangelogInfo
  * [[UnresolvedLeafNode]]). Tree traversals like `transformUp` will not visit `relation`.
  *
  * @param relation the table relation (typically an [[UnresolvedRelation]])
- * @param changelogInfo the CDC query parameters (range, deduplication mode, etc.)
+ * @param changelogContext the CDC query context (range, deduplication mode, etc.)
  */
 case class RelationChanges(
     relation: LogicalPlan,
-    changelogInfo: ChangelogInfo) extends UnresolvedLeafNode {
+    changelogContext: ChangelogContext) extends UnresolvedLeafNode {
   override val nodePatterns: Seq[TreePattern] = Seq(RELATION_CHANGES)
 }

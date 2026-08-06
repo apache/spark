@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import List, Sequence
 
 from pyspark.pipelines.output import Output
-from pyspark.pipelines.flow import Flow
+from pyspark.pipelines.flow import AutoCdcFlow, Flow
 from pyspark.pipelines.graph_element_registry import GraphElementRegistry
 
 
@@ -34,6 +34,7 @@ class LocalGraphElementRegistry(GraphElementRegistry):
     def __init__(self) -> None:
         self._outputs: List[Output] = []
         self._flows: List[Flow] = []
+        self._auto_cdc_flows: List[AutoCdcFlow] = []
         self._sql_files: List[SqlFile] = []
 
     def register_output(self, output: Output) -> None:
@@ -41,6 +42,9 @@ class LocalGraphElementRegistry(GraphElementRegistry):
 
     def register_flow(self, flow: Flow) -> None:
         self._flows.append(flow)
+
+    def register_auto_cdc_flow(self, flow: AutoCdcFlow) -> None:
+        self._auto_cdc_flows.append(flow)
 
     def register_sql(self, sql_text: str, file_path: Path) -> None:
         self._sql_files.append(SqlFile(sql_text, file_path))
@@ -52,6 +56,10 @@ class LocalGraphElementRegistry(GraphElementRegistry):
     @property
     def flows(self) -> Sequence[Flow]:
         return self._flows
+
+    @property
+    def auto_cdc_flows(self) -> Sequence[AutoCdcFlow]:
+        return self._auto_cdc_flows
 
     @property
     def sql_files(self) -> Sequence[SqlFile]:

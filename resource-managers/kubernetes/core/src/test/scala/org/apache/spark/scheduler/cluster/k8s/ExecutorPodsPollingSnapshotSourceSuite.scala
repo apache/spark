@@ -44,6 +44,9 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
   private var podOperations: PODS = _
 
   @Mock
+  private var namespacedPodOperations: PODS_WITH_NAMESPACE = _
+
+  @Mock
   private var appIdLabeledPods: LABELED_PODS = _
 
   @Mock
@@ -62,7 +65,9 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
     MockitoAnnotations.openMocks(this).close()
     pollingExecutor = new DeterministicScheduler()
     when(kubernetesClient.pods()).thenReturn(podOperations)
-    when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+    when(podOperations.inNamespace(defaultConf.get(KUBERNETES_NAMESPACE)))
+      .thenReturn(namespacedPodOperations)
+    when(namespacedPodOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
       .thenReturn(appIdLabeledPods)
     when(appIdLabeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
       .thenReturn(executorRoleLabeledPods)

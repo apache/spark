@@ -18,6 +18,9 @@
 package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.metric.CustomMetric;
+import org.apache.spark.sql.connector.metric.CustomTaskMetric;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * Represents a table which can be atomically truncated.
@@ -34,4 +37,39 @@ public interface TruncatableTable extends Table {
    * @since 3.2.0
    */
   boolean truncateTable();
+
+  /**
+   * Truncate a table with per-statement options from a {@code DELETE ... WITH (key=value)} clause.
+   * <p>
+   * The default implementation ignores {@code options} and delegates to {@link #truncateTable()},
+   * which preserves backward compatibility for connectors that do not need per-statement options.
+   *
+   * @param options per-statement options from the {@code WITH} clause; empty if none were given
+   * @return true if the table was truncated successfully, false otherwise
+   * @since 4.3.0
+   */
+  default boolean truncateTable(CaseInsensitiveStringMap options) {
+    return truncateTable();
+  }
+
+  /**
+   * Returns an array of supported custom metrics with name and description.
+   * By default it returns empty array.
+   *
+   * @since 4.2.0
+   */
+  default CustomMetric[] supportedCustomMetrics() {
+    return new CustomMetric[]{};
+  }
+
+  /**
+   * Returns an array of custom metrics which are collected with values at the driver side only.
+   * Note that these metrics must be included in the supported custom metrics reported by
+   * `supportedCustomMetrics`.
+   *
+   * @since 4.2.0
+   */
+  default CustomTaskMetric[] reportDriverMetrics() {
+    return new CustomTaskMetric[]{};
+  }
 }

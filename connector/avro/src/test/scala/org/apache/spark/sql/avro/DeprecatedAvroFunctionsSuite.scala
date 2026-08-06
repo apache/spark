@@ -23,14 +23,14 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, GenericRecordBuilder}
 import org.apache.avro.io.EncoderFactory
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 @deprecated("This test suite will be removed.", "3.0.0")
-class DeprecatedAvroFunctionsSuite extends QueryTest with SharedSparkSession {
+class DeprecatedAvroFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("roundtrip in to_avro and from_avro - int and string") {

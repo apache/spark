@@ -239,7 +239,15 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     var ret = 0
-    var prefix = ""
+    // Accumulated input that has not yet formed a complete statement. The
+    // interactive loop is line-level: we buffer input until the user types a
+    // line ending with `;`, then ask the parser-based [[SqlStatementSplitter]]
+    // to split the buffered text into statements. Line-level buffering keeps
+    // multi-line input accumulating until the user signals end-of-statement
+    // with `;`, so constructs that span several lines -- an un-closed
+    // bracketed comment (SPARK-33100, SPARK-37471) or a `BEGIN ... END`
+    // scripting block -- are assembled in full before being split.
+    var buffer = ""
 
     def currentDB = {
       if (!SparkSQLEnv.sparkSession.sessionState.conf
@@ -255,6 +263,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
       classOf[CliDriver], "spacesForString", classOf[String] -> currentDB)
 
+    val sqlParser = SparkSQLEnv.sparkSession.sessionState.sqlParser
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
 
@@ -262,21 +271,47 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       // SPARK-55198: call line.trim to also skip comment line with leading whitespaces,
       // this keeps the behavior align with HIVE-8396
       if (!line.trim.startsWith("--")) {
-        if (prefix.nonEmpty) {
-          prefix += '\n'
-        }
-
-        if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
-          line = prefix + line
-          ret = cli.processLine(line, true)
-          prefix = ""
-          currentPrompt = promptWithCurrentDB
+        val trimmed = line.trim
+        if (trimmed.endsWith(";") && !trimmed.endsWith("\\;")) {
+          // The line ends with `;` (and not the Hive-compat `\;` continuation
+          // escape) -- the user signaled end of statement. Ask the splitter
+          // to split the accumulated buffer into statements. The splitter
+          // correctly handles `;` inside quoted strings, comments, and SQL
+          // scripting compound blocks (`BEGIN ... END`).
+          val candidate = if (buffer.isEmpty) line else buffer + "\n" + line
+          val splitResult = sqlParser.splitStatements(candidate)
+          // An un-terminated bracketed comment cannot be completed by
+          // appending more SQL; flush it to the backend so the user sees a
+          // parse error rather than staying stuck on the continuation prompt
+          // forever (SPARK-37555).
+          val flushPartial =
+            splitResult.hasUnclosedComment && splitResult.partialStatement.nonEmpty
+          if (splitResult.completeStatements.nonEmpty || flushPartial) {
+            val parts =
+              splitResult.completeStatements.iterator.map(s => s.statement + s.terminator).toBuffer
+            if (flushPartial) parts += splitResult.partialStatement
+            ret = cli.processLine(parts.mkString("\n"), true)
+          }
+          buffer = if (flushPartial) "" else splitResult.partialStatement
+          currentPrompt =
+            if (buffer.isEmpty) promptWithCurrentDB else continuedPromptWithDBSpaces
         } else {
-          prefix = prefix + line
+          // The line does not signal end of statement (no trailing `;`, or
+          // the trailing `;` is escaped as `\;`). Accumulate and wait for
+          // more input. The `\;` escape survives into the buffer and is
+          // reattached at execution time by `processLine` (via its
+          // `oneCmd.endsWith("\\")` branch).
+          buffer = if (buffer.isEmpty) line else buffer + "\n" + line
           currentPrompt = continuedPromptWithDBSpaces
         }
       }
       line = reader.readLine(currentPrompt + "> ")
+    }
+
+    // Stdin closed with un-terminated trailing input. Pass it to the backend so the
+    // user gets a parse error rather than silently dropping their input.
+    if (buffer.nonEmpty) {
+      ret = cli.processLine(buffer, true)
     }
 
     closeHiveSessionStateIfStarted(sessionState)
@@ -583,7 +618,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       var lastRet: Int = 0
 
       // we can not use "split" function directly as ";" may be quoted
-      val commands = splitSemiColon(line).asScala
+      val commands = splitStatements(line)
       var command: String = ""
       for (oneCmd <- commands) {
         if (oneCmd.endsWith("\\")) {
@@ -613,110 +648,15 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     }
   }
 
-  // Adapted splitSemiColon from Hive 2.3's CliDriver.splitSemiColon.
-  // Note: [SPARK-31595] if there is a `'` in a double quoted string, or a `"` in a single quoted
-  // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
-  // hence we refined this function a little bit.
-  // Note: [SPARK-33100] Ignore a semicolon inside a bracketed comment in spark-sql.
-  private[hive] def splitSemiColon(line: String): JList[String] = {
-    var insideSingleQuote = false
-    var insideDoubleQuote = false
-    var insideSimpleComment = false
-    var bracketedCommentLevel = 0
-    var escape = false
-    var beginIndex = 0
-    var leavingBracketedComment = false
-    var isStatement = false
-    val ret = new JArrayList[String]
-
-    def insideBracketedComment: Boolean = bracketedCommentLevel > 0
-    def insideComment: Boolean = insideSimpleComment || insideBracketedComment
-    def statementInProgress(index: Int): Boolean = isStatement || (!insideComment &&
-      index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
-
-    for (index <- 0 until line.length) {
-      // Checks if we need to decrement a bracketed comment level; the last character '/' of
-      // bracketed comments is still inside the comment, so `insideBracketedComment` must keep true
-      // in the previous loop and we decrement the level here if needed.
-      if (leavingBracketedComment) {
-        bracketedCommentLevel -= 1
-        leavingBracketedComment = false
-      }
-
-      if (line.charAt(index) == '\'' && !insideComment) {
-        // take a look to see if it is escaped
-        // See the comment above about SPARK-31595
-        if (!escape && !insideDoubleQuote) {
-          // flip the boolean variable
-          insideSingleQuote = !insideSingleQuote
-        }
-      } else if (line.charAt(index) == '\"' && !insideComment) {
-        // take a look to see if it is escaped
-        // See the comment above about SPARK-31595
-        if (!escape && !insideSingleQuote) {
-          // flip the boolean variable
-          insideDoubleQuote = !insideDoubleQuote
-        }
-      } else if (line.charAt(index) == '-') {
-        val hasNext = index + 1 < line.length
-        if (insideDoubleQuote || insideSingleQuote || insideComment) {
-          // Ignores '-' in any case of quotes or comment.
-          // Avoids to start a comment(--) within a quoted segment or already in a comment.
-          // Sample query: select "quoted value --"
-          //                                    ^^ avoids starting a comment if it's inside quotes.
-        } else if (hasNext && line.charAt(index + 1) == '-') {
-          // ignore quotes and ; in simple comment
-          insideSimpleComment = true
-        }
-      } else if (line.charAt(index) == ';') {
-        if (insideSingleQuote || insideDoubleQuote || insideComment) {
-          // do not split
-        } else {
-          if (isStatement) {
-            // split, do not include ; itself
-            ret.add(line.substring(beginIndex, index))
-          }
-          beginIndex = index + 1
-          isStatement = false
-        }
-      } else if (line.charAt(index) == '\n') {
-        // with a new line the inline simple comment should end.
-        if (!escape) {
-          insideSimpleComment = false
-        }
-      } else if (line.charAt(index) == '/' && !insideSimpleComment) {
-        val hasNext = index + 1 < line.length
-        if (insideSingleQuote || insideDoubleQuote) {
-          // Ignores '/' in any case of quotes
-        } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
-          // Decrements `bracketedCommentLevel` at the beginning of the next loop
-          leavingBracketedComment = true
-        } else if (hasNext && line.charAt(index + 1) == '*') {
-          bracketedCommentLevel += 1
-        }
-      }
-      // set the escape
-      if (escape) {
-        escape = false
-      } else if (line.charAt(index) == '\\') {
-        escape = true
-      }
-
-      isStatement = statementInProgress(index)
-    }
-    // Check the last char is end of nested bracketed comment.
-    val endOfBracketedComment = leavingBracketedComment && bracketedCommentLevel == 1
-    // Spark SQL support simple comment and nested bracketed comment in query body.
-    // But if Spark SQL receives a comment alone, it will throw parser exception.
-    // In Spark SQL CLI, if there is a completed comment in the end of whole query,
-    // since Spark SQL CLL use `;` to split the query, CLI will pass the comment
-    // to the backend engine and throw exception. CLI should ignore this comment,
-    // If there is an uncompleted statement or an uncompleted bracketed comment in the end,
-    // CLI should also pass this part to the backend engine, which may throw an exception
-    // with clear error message.
-    if (!endOfBracketedComment && (isStatement || insideBracketedComment)) {
-      ret.add(line.substring(beginIndex))
-    }
-    ret
+  // Splits SQL into individual statements via the parser-based
+  // [[org.apache.spark.sql.catalyst.parser.SqlStatementSplitter]]. The returned
+  // list contains the text of every complete statement (without its terminator)
+  // followed by the trailing partial statement, if any -- the shape that
+  // [[processLine]] consumes.
+  // Note: [SPARK-31595], [SPARK-33100], [SPARK-54876]
+  private[hive] def splitStatements(line: String): List[String] = {
+    val result = SparkSQLEnv.sparkSession.sessionState.sqlParser.splitStatements(line)
+    val complete = result.completeStatements.iterator.map(_.statement).toList
+    if (result.partialStatement.isEmpty) complete else complete :+ result.partialStatement
   }
 }

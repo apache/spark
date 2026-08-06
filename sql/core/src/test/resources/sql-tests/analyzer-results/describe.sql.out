@@ -313,28 +313,28 @@ org.apache.spark.sql.AnalysisException
 DESC v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, false, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
 DESC TABLE v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, false, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
 DESC FORMATTED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
 DESC EXTENDED v
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, `spark_catalog`.`default`.`v`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.v, spark_catalog.default.v
 
 
 -- !query
@@ -379,7 +379,7 @@ ExplainCommand 'DescribeColumn 'b, false, [info_name#x, info_value#x], SimpleMod
 -- !query
 EXPLAIN DESCRIBE t PARTITION (c='Us', d=2)
 -- !query analysis
-ExplainCommand 'DescribeRelation [c=Us, d=2], false, [col_name#x, data_type#x, comment#x], SimpleMode
+ExplainCommand 'DescribeTablePartition unresolvedpartitionspec((c,Us), (d,2), None), false, [col_name#x, data_type#x, comment#x], SimpleMode
 
 
 -- !query

@@ -523,7 +523,26 @@ class SparkSession(SparkConversionMixin):
                                     messageParameters={},
                                 )
 
-                            if url.startswith("local") or (
+                            reuse_local = str(
+                                opts.get(
+                                    "spark.local.connect.reuse",
+                                    os.environ.get("SPARK_LOCAL_CONNECT_REUSE", ""),
+                                )
+                            ).lower() in ("1", "true")
+
+                            if url.startswith("local") and reuse_local:
+                                from pyspark.sql.connect.local_server import (
+                                    reuse_or_start_local_connect_server,
+                                )
+
+                                # Opt-in: reconnect to a persistent local Connect server (starting
+                                # one on the first run) instead of booting a fresh in-process server
+                                # every process. See `pyspark.sql.connect.local_server`.
+                                url = reuse_or_start_local_connect_server(url, opts)
+                                for k in list(opts):
+                                    if k.startswith("spark.local.connect."):
+                                        opts.pop(k)
+                            elif url.startswith("local") or (
                                 is_api_mode_connect and not url.startswith("sc://")
                             ):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
@@ -607,12 +626,19 @@ class SparkSession(SparkConversionMixin):
                 from pyspark.core.context import SparkContext
 
                 with self._lock:
-                    # Build SparkConf from options
-                    sparkConf = SparkConf()
-                    for key, value in self._options.items():
-                        sparkConf.set(key, str(value))
-
-                    sc = SparkContext.getOrCreate(sparkConf)
+                    instantiated_session = SparkSession._instantiatedSession
+                    # Get SparkContext
+                    if (
+                        instantiated_session is not None
+                        and instantiated_session._sc._jsc is not None
+                    ):
+                        sc = instantiated_session._sc
+                    else:
+                        sparkConf = SparkConf()
+                        for key, value in self._options.items():
+                            sparkConf.set(key, value)
+                        # This SparkContext may be an existing one.
+                        sc = SparkContext.getOrCreate(sparkConf)
                     jSparkSessionClass = SparkSession._get_j_spark_session_class(sc._jvm)
                     # Create a new SparkSession in the JVM
                     jSparkSession = jSparkSessionClass.builder().config(self._options).create()
@@ -1749,7 +1775,7 @@ class SparkSession(SparkConversionMixin):
         return self.createDataFrame([], schema)
 
     def sql(
-        self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None, **kwargs: Any
+        self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List[Any]]] = None, **kwargs: Any
     ) -> "ParentDataFrame":
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
@@ -2281,11 +2307,14 @@ class SparkSession(SparkConversionMixin):
                         messageParameters={"normalized_path": normalized_path},
                     )
         if archive:
-            self._sc.addArchive(*path)
+            for p in path:
+                self._sc.addArchive(p)
         elif pyfile:
-            self._sc.addPyFile(*path)
+            for p in path:
+                self._sc.addPyFile(p)
         elif file:
-            self._sc.addFile(*path)  # type: ignore[arg-type]
+            for p in path:
+                self._sc.addFile(p)
 
     addArtifact = addArtifacts
 

@@ -174,6 +174,10 @@ private[rest] class StandaloneSubmitRequestServlet(
     conf: SparkConf)
   extends SubmitRequestServlet {
 
+  override protected def maxRequestSizeBytes: Long =
+    Option(conf).map(_.get(config.MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE))
+      .getOrElse(super.maxRequestSizeBytes)
+
   private def replacePlaceHolder(variable: String) = variable match {
     case s"{{$name}}" if System.getenv(name) != null => System.getenv(name)
     case _ => variable
@@ -194,6 +198,13 @@ private[rest] class StandaloneSubmitRequestServlet(
     // Required fields, including the main class because python is not yet supported
     val appResource = Option(request.appResource).getOrElse {
       throw new SubmitRestMissingFieldException("Application jar is missing.")
+    }
+    Option(this.conf).foreach { c =>
+      val patterns = c.get(config.MASTER_REST_SERVER_ALLOWED_APP_RESOURCE_PATTERNS).map(_.r)
+      if (patterns.nonEmpty &&
+          !patterns.exists(_.pattern.matcher(appResource).matches())) {
+        throw new SubmitRestMissingFieldException("Valid application jar path is required")
+      }
     }
     val mainClass = Option(request.mainClass).getOrElse {
       throw new SubmitRestMissingFieldException("Main class is missing.")

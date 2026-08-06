@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, EmptyTableFunctionRegistry, FakeV2SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.DefaultCatalogManager
 
 /**
  * An optimizer used in test code.
@@ -29,6 +29,6 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 object SimpleTestOptimizer extends SimpleTestOptimizer
 
 class SimpleTestOptimizer extends Optimizer(
-  new CatalogManager(
+  new DefaultCatalogManager(
     FakeV2SessionCatalog,
     new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry)))

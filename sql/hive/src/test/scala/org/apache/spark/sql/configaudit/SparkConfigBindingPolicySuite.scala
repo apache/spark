@@ -25,6 +25,14 @@ import org.apache.spark.internal.config.{ConfigBindingPolicy, ConfigEntry}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 
+/**
+ * Enforces that every Spark config declares a `ConfigBindingPolicy`. The exceptions file
+ * `conf/binding-policy-exceptions/configs-without-binding-policy-exceptions` is a frozen list
+ * of configs that predate the binding policy and must only ever shrink: new configs must
+ * declare a policy via `.withBindingPolicy()` when building the config entry (see the
+ * [[ConfigBindingPolicy]] scaladoc for how to choose a policy). The `binding-policy` CI job
+ * rejects any PR that adds entries to the exceptions file.
+ */
 class SparkConfigBindingPolicySuite extends SparkFunSuite {
 
   override def beforeAll(): Unit = {
@@ -36,7 +44,7 @@ class SparkConfigBindingPolicySuite extends SparkFunSuite {
 
   test("Test adding bindingPolicy to config") {
     val allConfigs = SQLConf.getConfigEntries().asScala.filter { entry =>
-      entry.key == SQLConf.VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS.key
+      entry.key == SQLConf.PLAN_CHANGE_LOG_LEVEL.key
     }
     assert(allConfigs.head.bindingPolicy.isDefined)
     assert(allConfigs.head.bindingPolicy.get == ConfigBindingPolicy.SESSION)
@@ -57,8 +65,11 @@ class SparkConfigBindingPolicySuite extends SparkFunSuite {
     if (missingBindingPolicyConfigs.nonEmpty) {
       fail(
         s"The following configs do not have bindingPolicy field set. You need to define it " +
-        "by using .withBindingPolicy(ConfigBindingPolicy.SESSION/PERSISTED) when you build " +
-        "the config entry.\n" +
+        "by using .withBindingPolicy(ConfigBindingPolicy.SESSION/PERSISTED/NOT_APPLICABLE) " +
+        "when you build the config entry. See the ConfigBindingPolicy scaladoc for how to " +
+        "choose a policy. DO NOT add new entries to the exceptions file: it is a frozen " +
+        "list of configs that predate the binding policy and must only ever shrink (the " +
+        "binding-policy CI job rejects any addition).\n" +
         missingBindingPolicyConfigs.mkString("\n")
       )
     }

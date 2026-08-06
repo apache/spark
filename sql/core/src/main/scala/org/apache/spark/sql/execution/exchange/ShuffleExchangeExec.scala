@@ -30,7 +30,9 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow, UnsafeRowChecksum}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute, BoundReference, CollationAwareMurmur3Hash, Literal, Pmod, UnsafeProjection,
+  UnsafeRow, UnsafeRowChecksum}
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -189,7 +191,8 @@ case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
     shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS,
-    advisoryPartitionSize: Option[Long] = None)
+    advisoryPartitionSize: Option[Long] = None,
+    pipelined: Boolean = false)
   extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =
@@ -202,6 +205,17 @@ case class ShuffleExchangeExec(
   ) ++ readMetrics ++ writeMetrics
 
   override def nodeName: String = "Exchange"
+
+  // `pipelined` is only meaningful for a Real-Time Mode plan, and the default arg string is
+  // positional, so printing it unconditionally would add a bare `false` to every shuffle in every
+  // plan. Show it only when set, and name it when shown.
+  override def stringArgs: Iterator[Any] = {
+    // `pipelined` is the last field, so drop it positionally rather than by value; argString drops
+    // the child on its own. Exchange's `[plan_id=...]` suffix is re-appended here.
+    val argsWithoutPipelined = productIterator.toSeq.dropRight(1).iterator
+    val pipelinedArg = if (pipelined) Iterator("isPipelined=true") else Iterator.empty
+    argsWithoutPipelined ++ pipelinedArg ++ Iterator(s"[plan_id=$id]")
+  }
 
   private lazy val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
@@ -241,17 +255,23 @@ case class ShuffleExchangeExec(
    */
   @transient
   lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
-    val dep = ShuffleExchangeExec.prepareShuffleDependency(
-      inputRDD,
-      child.output,
-      outputPartitioning,
-      serializer,
-      writeMetrics)
-    metrics("numPartitions").set(dep.partitioner.numPartitions)
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(
-      sparkContext, executionId, metrics("numPartitions") :: Nil)
-    dep
+    // Wrap in the exchange's RDD scope so that any wrapper RDDs created during shuffle dependency
+    // preparation (e.g. by prepareShuffleDependency's mapPartitionsInternal calls) get this
+    // exchange's scope ID.
+    RDDOperationScope.withScope(sparkContext, nodeName, false, true, rddScopeId) {
+      val dep = ShuffleExchangeExec.prepareShuffleDependency(
+        inputRDD,
+        child.output,
+        outputPartitioning,
+        serializer,
+        writeMetrics,
+        pipelined)
+      metrics("numPartitions").set(dep.partitioner.numPartitions)
+      val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+      SQLMetrics.postDriverMetricUpdates(
+        sparkContext, executionId, metrics("numPartitions") :: Nil)
+      dep
+    }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -293,7 +313,10 @@ object ShuffleExchangeExec {
     // corner-cases where a partitioner constructed with `numPartitions` partitions may output
     // fewer partitions (like RangePartitioner, for example).
     val conf = SparkEnv.get.conf
-    val shuffleManager = SparkEnv.get.shuffleManager
+    // This decision concerns the regular (materialized) shuffle path only. A pipelined shuffle is
+    // served by a separate pipelined manager (see SparkEnv.shuffleManagerFor) and does not go
+    // through here, so inspect the blocking manager's type directly.
+    val shuffleManager = SparkEnv.get.blockingShuffleManager
     val sortBasedShuffleOn = shuffleManager.isInstanceOf[SortShuffleManager]
     val bypassMergeThreshold = conf.get(config.SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD)
     val numParts = partitioner.numPartitions
@@ -336,13 +359,18 @@ object ShuffleExchangeExec {
       outputAttributes: Seq[Attribute],
       newPartitioning: Partitioning,
       serializer: Serializer,
-      writeMetrics: Map[String, SQLMetric])
+      writeMetrics: Map[String, SQLMetric],
+      pipelined: Boolean = false)
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
       case HashPartitioning(_, n) =>
         // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
         // `HashPartitioning.partitionIdExpression` to produce partitioning key.
+        new PartitionIdPassthrough(n)
+      case NullAwareHashPartitioning(_, n) =>
+        // The null-aware extractor below produces partition IDs directly:
+        // Pmod(hash, n) for non-NULL keys, and a round-robin counter for NULL keys.
         new PartitionIdPassthrough(n)
       case ShufflePartitionIdPassThrough(_, n) =>
         // For ShufflePartitionIdPassThrough, the DirectShufflePartitionID expression directly
@@ -398,11 +426,37 @@ object ShuffleExchangeExec {
       case h: HashPartitioning =>
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
+      case h: NullAwareHashPartitioning =>
+        // Non-NULL keys must produce the same partition id as
+        // HashPartitioning.partitionIdExpression so opted-in HashShuffleSpec and
+        // NullAwareHashShuffleSpec inputs stay aligned.
+        val joinKeyProjection = UnsafeProjection.create(h.expressions, outputAttributes)
+        val boundJoinKeys = h.expressions.zipWithIndex.map { case (expr, index) =>
+          BoundReference(index, expr.dataType, expr.nullable)
+        }
+        val partitionIdExpression = Pmod(
+          new CollationAwareMurmur3Hash(boundJoinKeys),
+          Literal(h.numPartitions))
+        val partitionIdProjection = UnsafeProjection.create(partitionIdExpression :: Nil)
+        var nullKeyPartition =
+          new XORShiftRandom(TaskContext.get().partitionId()).nextInt(h.numPartitions)
+        row => {
+          val joinKeys = joinKeyProjection(row)
+          if (joinKeys.anyNull()) {
+            // NULL join keys cannot match under ordinary equi-join semantics. Spread them
+            // round-robin within each map task so identical rows do not collapse to one reducer.
+            val partition = nullKeyPartition
+            nullKeyPartition = (nullKeyPartition + 1) % h.numPartitions
+            partition
+          } else {
+            partitionIdProjection(joinKeys).getInt(0)
+          }
+        }
       case RangePartitioning(sortingExpressions, _) =>
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case KeyedPartitioning(expressions, _, _) =>
+      case KeyedPartitioning(expressions, _, _, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
       case s: ShufflePartitionIdPassThrough =>
         // For ShufflePartitionIdPassThrough, the expression directly evaluates to the partition ID
@@ -414,9 +468,14 @@ object ShuffleExchangeExec {
 
     val isRoundRobin = newPartitioning.isInstanceOf[RoundRobinPartitioning] &&
       newPartitioning.numPartitions > 1
+    val isNullAwareHashPartitioning =
+      newPartitioning.isInstanceOf[NullAwareHashPartitioning] &&
+        newPartitioning.numPartitions > 1
+    val needsDeterministicLocalSort =
+      (isRoundRobin || isNullAwareHashPartitioning) && SQLConf.get.sortBeforeRepartition
 
     val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
-      // [SPARK-23207] Have to make sure the generated RoundRobinPartitioning is deterministic,
+      // [SPARK-23207] Have to make sure stateful row-to-partition assignment is deterministic,
       // otherwise a retry task may output different rows and thus lead to data loss.
       //
       // Currently we following the most straight-forward way that perform a local sort before
@@ -424,7 +483,7 @@ object ShuffleExchangeExec {
       //
       // Note that we don't perform local sort if the new partitioning has only 1 partition, under
       // that case all output rows go to the same partition.
-      val newRdd = if (isRoundRobin && SQLConf.get.sortBeforeRepartition) {
+      val newRdd = if (needsDeterministicLocalSort) {
         rdd.mapPartitionsInternal { iter =>
           val recordComparatorSupplier = new Supplier[RecordComparator] {
             override def get: RecordComparator = new RecordBinaryComparator()
@@ -463,7 +522,17 @@ object ShuffleExchangeExec {
       }
 
       // round-robin function is order sensitive if we don't sort the input.
-      val isOrderSensitive = isRoundRobin && !SQLConf.get.sortBeforeRepartition
+      // Stateful partition assignment is order-sensitive when it depends on row visitation order.
+      //
+      // A pipelined shuffle is exempt. Marking the map RDD order-sensitive only serves to make it
+      // INDETERMINATE when its own input is UNORDERED (see
+      // MapPartitionsRDD.getOutputDeterministicLevel), which tells the scheduler a retry cannot be
+      // trusted and the stage must be rolled back and recomputed. A pipelined stage is never
+      // retried (a pipelined task set gets a single attempt) and never recomputed, and the
+      // DAGScheduler rejects an indeterminate pipelined producer outright -- so keeping the flag
+      // would reject a chain of round-robin repartitions rather than protect anything.
+      val isOrderSensitive = (isRoundRobin || isNullAwareHashPartitioning) &&
+        !SQLConf.get.sortBeforeRepartition && !pipelined
       if (needToCopyObjectsBeforeShuffle(part)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
@@ -490,15 +559,30 @@ object ShuffleExchangeExec {
       }
     }
     val dependency =
-      new ShuffleDependency[Int, InternalRow, InternalRow](
-        rddWithPartitionIds,
-        new PartitionIdPassthrough(part.numPartitions),
-        serializer,
-        shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
-        rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize),
-        _checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled,
-        checksumMismatchQueryLevelRollbackEnabled =
-          SQLConf.get.shuffleChecksumMismatchQueryLevelRollbackEnabled)
+      if (pipelined) {
+        // A pipelined shuffle is transient and incrementally readable: the DAGScheduler
+        // co-schedules its producer and consumer stages instead of materializing the shuffle
+        // first. The PipelinedShuffleDependency type is the entire opt-in -- routing to the
+        // streaming shuffle manager and pipelined-group co-scheduling both follow from it. The
+        // checksum-mismatch retry knobs are intentionally not carried over: a transient shuffle is
+        // never recomputed, so PipelinedShuffleDependency does not expose them (they stay off).
+        new PipelinedShuffleDependency[Int, InternalRow, InternalRow](
+          rddWithPartitionIds,
+          new PartitionIdPassthrough(part.numPartitions),
+          serializer,
+          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
+          rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize))
+      } else {
+        new ShuffleDependency[Int, InternalRow, InternalRow](
+          rddWithPartitionIds,
+          new PartitionIdPassthrough(part.numPartitions),
+          serializer,
+          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
+          rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize),
+          _checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled,
+          checksumMismatchQueryLevelRollbackEnabled =
+            SQLConf.get.shuffleChecksumMismatchQueryLevelRollbackEnabled)
+      }
 
     dependency
   }

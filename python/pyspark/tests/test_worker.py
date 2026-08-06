@@ -1,4 +1,3 @@
-# -*- encoding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -214,11 +213,39 @@ class WorkerMemoryTest(unittest.TestCase):
             return resource.getrlimit(resource.RLIMIT_AS)
 
         actual = rdd.map(lambda _: getrlimit()).collect()
-        self.assertTrue(len(actual) == 1)
-        self.assertTrue(len(actual[0]) == 2)
+        self.assertEqual(len(actual), 1)
+        self.assertEqual(len(actual[0]), 2)
         [(soft_limit, hard_limit)] = actual
         self.assertEqual(soft_limit, 2 * 1024 * 1024 * 1024)
         self.assertEqual(hard_limit, 2 * 1024 * 1024 * 1024)
+
+    def tearDown(self):
+        self.sc.stop()
+
+
+@unittest.skipIf(
+    not has_resource_module or sys.platform != "linux",
+    "Memory limit feature in Python worker is dependent on "
+    "Python's 'resource' module on Linux; however, not found or not on Linux.",
+)
+class WorkerMemoryFractionalTaskCpusTest(unittest.TestCase):
+    def setUp(self):
+        class_name = self.__class__.__name__
+        conf = SparkConf().set("spark.executor.pyspark.memory", "2g")
+        conf = conf.set("spark.task.cpus", "0.5")
+        self.sc = SparkContext("local[4]", class_name, conf=conf)
+
+    def test_memory_limit_split_across_fractional_task_slots(self):
+        # SPARK-58192: with spark.task.cpus=0.5 each executor core fits two concurrent
+        # tasks, so each Python worker gets half of the executor-wide pyspark memory.
+        rdd = self.sc.parallelize(range(1), 1)
+
+        def getrlimit():
+            return resource.getrlimit(resource.RLIMIT_AS)
+
+        [(soft_limit, hard_limit)] = rdd.map(lambda _: getrlimit()).collect()
+        self.assertEqual(soft_limit, 1024 * 1024 * 1024)
+        self.assertEqual(hard_limit, 1024 * 1024 * 1024)
 
     def tearDown(self):
         self.sc.stop()

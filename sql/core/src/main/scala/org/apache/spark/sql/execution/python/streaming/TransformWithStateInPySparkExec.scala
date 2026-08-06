@@ -27,6 +27,7 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.logical.TransformWithStateInPySpark
@@ -39,7 +40,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOper
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{TransformWithStateExecBase, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaValidationResult, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProvider, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RangeKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaValidationResult, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProvider, StateStoreProviderId, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
@@ -51,7 +52,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
  *
  * @param functionExpr function called on each group
  * @param groupingAttributes used to group the data
- * @param output used to define the output rows
+ * @param outputAttrs used to define the output rows
  * @param outputMode defines the output mode for the statefulProcessor
  * @param timeMode The time mode semantics of the stateful processor for timers and TTL.
  * @param stateInfo Used to identify the state store for a given operator.
@@ -69,7 +70,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
 case class TransformWithStateInPySparkExec(
     functionExpr: Expression,
     groupingAttributes: Seq[Attribute],
-    output: Seq[Attribute],
+    outputAttrs: Seq[Attribute],
     outputMode: OutputMode,
     timeMode: TimeMode,
     stateInfo: Option[StatefulOperatorStateInfo],
@@ -93,6 +94,9 @@ case class TransformWithStateInPySparkExec(
     child,
     initialStateGroupingAttrs,
     initialState) {
+
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(outputAttrs)
 
   // NOTE: This is needed to comply with existing release of transformWithStateInPandas.
   override def shortName: String = if (
@@ -127,15 +131,48 @@ case class TransformWithStateInPySparkExec(
   // Each state variable has its own schema, this is a dummy one.
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
+  private lazy val widenedGroupingKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(groupingKeySchema)
+
   override def getColFamilySchemas(
       shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema] = {
     // For Python, the user can explicitly set nullability on schema, so
     // we need to throw an error if the schema is nullable
-    driverProcessorHandle.getColumnFamilySchemas(
+    val schemas = driverProcessorHandle.getColumnFamilySchemas(
       shouldCheckNullable = shouldBeNullable,
       shouldSetNullable = shouldBeNullable
     )
+    widenColFamilyGroupingKeys(schemas)
   }
+
+  private def widenColFamilyGroupingKeys(
+      schemas: Map[String, StateStoreColFamilySchema])
+      : Map[String, StateStoreColFamilySchema] = {
+    if (!WidenStatefulOpNullability.isEnabled) return schemas
+    val original = groupingKeySchema
+    val widened = widenedGroupingKeySchema
+    def widenKey(ks: StructType): StructType =
+      WidenStatefulOpNullability.widenGroupingKeyInSchema(
+        ks, original, widened)
+    schemas.map { case (name, cf) =>
+      val widenedSpec = cf.keyStateEncoderSpec.map {
+        case NoPrefixKeyStateEncoderSpec(ks) =>
+          NoPrefixKeyStateEncoderSpec(widenKey(ks))
+        case PrefixKeyScanStateEncoderSpec(ks, n) =>
+          PrefixKeyScanStateEncoderSpec(widenKey(ks), n)
+        case RangeKeyScanStateEncoderSpec(ks, o) =>
+          RangeKeyScanStateEncoderSpec(widenKey(ks), o)
+        case TimestampAsPrefixKeyStateEncoderSpec(ks) =>
+          TimestampAsPrefixKeyStateEncoderSpec(widenKey(ks))
+        case TimestampAsPostfixKeyStateEncoderSpec(ks) =>
+          TimestampAsPostfixKeyStateEncoderSpec(widenKey(ks))
+      }
+      name -> cf.copy(
+        keySchema = widenKey(cf.keySchema),
+        keyStateEncoderSpec = widenedSpec)
+    }
+  }
+
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
     driverProcessorHandle.getStateVariableInfos

@@ -21,7 +21,7 @@ import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -32,8 +32,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DataTypes, StructField, StructType}
 
 trait JDBCV2JoinPushdownIntegrationSuiteBase
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with DataSourcePushdownTestUtils {
   val catalogName: String = "join_pushdown_catalog"
   val namespace: String = "join_schema"

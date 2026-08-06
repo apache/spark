@@ -166,7 +166,7 @@ case class RealTimeStreamScanExec(
       supportsColumnar,
       customMetrics
     )
-    postDriverMetrics()
+    postDriverMetrics(scan.reportDriverMetrics())
     inputRDD
   }
 }

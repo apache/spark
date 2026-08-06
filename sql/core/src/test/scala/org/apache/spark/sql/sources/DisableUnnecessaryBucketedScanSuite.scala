@@ -22,7 +22,7 @@ import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
@@ -51,7 +51,6 @@ class DisableUnnecessaryBucketedScanWithoutHiveSupportSuiteAE
 
 abstract class DisableUnnecessaryBucketedScanSuite
   extends QueryTest
-  with SQLTestUtils
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._

@@ -21,7 +21,6 @@ import re
 from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesStringOpsAdvMixin:
@@ -236,7 +235,6 @@ class SeriesStringOpsAdvMixin:
 class SeriesStringOpsAdvTests(
     SeriesStringOpsAdvMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

@@ -26,6 +26,7 @@ import ammonite.compiler.iface.CodeWrapper
 import ammonite.interp.{Interpreter, Watchable}
 import ammonite.main.Defaults
 import ammonite.repl.Repl
+import ammonite.runtime.Storage
 import ammonite.util.{Bind, Imports, Name, PredefInfo, Ref, Res, Util}
 import ammonite.util.Util.newLine
 
@@ -102,9 +103,13 @@ Spark session available as 'spark'.
         |""".stripMargin
     // Please note that we make ammonite generate classes instead of objects.
     // Classes tend to have superior serialization behavior when using UDFs.
+    // SPARK-56448: Use Storage.InMemory to avoid stale compile cache across restarts.
+    // The default Storage.Folder persists compiled predef classes under ~/.ammonite. On a
+    // subsequent REPL start, the cached CodePredef references a stale ArgsPredef, causing NPE.
     val main = new ammonite.Main(
       welcomeBanner = Option(splash.format(spark_version, spark.version)),
       predefCode = predefCode,
+      storageBackend = new Storage.InMemory(),
       replCodeWrapper = ExtendedCodeClassWrapper,
       scriptCodeWrapper = ExtendedCodeClassWrapper,
       inputStream = inputStream,

@@ -22,10 +22,10 @@ import java.nio.file.{Files, Path, Paths}
 
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.CodegenMetrics
-import org.apache.spark.sql.Artifact
+import org.apache.spark.sql.{AnalysisException, Artifact}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.storage.CacheId
@@ -251,6 +251,30 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
     val copiedClassFile = Paths.get(destFSDir.toString, "smallClassFileCopied.class").toFile
     assert(copiedClassFile.exists())
+  }
+
+  test("SPARK-58531: allowDestLocal cannot be set from a session") {
+    // The conf gates writes to a local filesystem destination on the driver, so it must stay a
+    // static conf: a session that could turn it on would be able to write to arbitrary paths on
+    // the driver. Guard against it being made session-settable again.
+    val key = StaticSQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key
+    assert(SQLConf.isStaticConfigKey(key))
+    checkError(
+      exception = intercept[AnalysisException](spark.conf.set(key, "true")),
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> s""""$key""""))
+  }
+
+  test("SPARK-58531: StaticSQLConf can initialize before SQLConf") {
+    // Use a fresh process because both objects may already be initialized in this test JVM.
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val process = Utils.executeCommand(
+      Seq(
+        s"$sparkHome/bin/spark-class",
+        StaticSQLConfInitializationTestApp.getClass.getCanonicalName.stripSuffix("$")),
+      new File(sparkHome),
+      Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
+    assert(process.waitFor() === 0)
   }
 
   test("Removal of resources") {
@@ -712,5 +736,12 @@ class ArtifactManagerSuite extends SharedSparkSession {
       assert(count4 == count3,
         s"$msg: codegen should not happen again as classloader is not changed")
     }
+  }
+}
+
+object StaticSQLConfInitializationTestApp {
+  def main(args: Array[String]): Unit = {
+    val key = StaticSQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key
+    require(key == "spark.sql.artifact.copyFromLocalToFs.allowDestLocal")
   }
 }

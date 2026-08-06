@@ -49,7 +49,7 @@ class SparkConnectCreationTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
         df = self.connect.createDataFrame(pdf)
         rows = df.filter(df.a == CF.lit(3)).collect()
-        self.assertTrue(len(rows) == 1)
+        self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][0], 3)
         self.assertEqual(rows[0][1], "c")
 

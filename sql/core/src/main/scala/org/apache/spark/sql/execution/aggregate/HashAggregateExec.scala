@@ -23,7 +23,6 @@ import scala.collection.mutable
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.LogKeys.CONFIG
-import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -176,6 +175,16 @@ case class HashAggregateExec(
 
   def getTaskContext(): TaskContext = {
     TaskContext.get()
+  }
+
+  /**
+   * Registers a task-completion hook to close the generated fast hash map, so that the close hook
+   * is a plain method call on this plan, with the listener being a lambda in compiled Scala code,
+   * rather than an anonymous `TaskCompletionListener` emitted per fast hash map (one fewer
+   * generated inner class per map). This is called by the generated Java class, should be public.
+   */
+  def addFastHashMapCloseHook(fastHashMap: AutoCloseable): Unit = {
+    TaskContext.get().addTaskCompletionListener[Unit](_ => fastHashMap.close())
   }
 
   def getEmptyAggregationBuffer(): InternalRow = {
@@ -489,13 +498,7 @@ case class HashAggregateExec(
     // output (e.g. aggregate followed by limit).
     val addHookToCloseFastHashMap = if (isFastHashMapEnabled) {
       s"""
-         |$thisPlan.getTaskContext().addTaskCompletionListener(
-         |  new org.apache.spark.util.TaskCompletionListener() {
-         |    @Override
-         |    public void onTaskCompletion(org.apache.spark.TaskContext context) {
-         |      $fastHashMapTerm.close();
-         |    }
-         |});
+         |$thisPlan.addFastHashMapCloseHook($fastHashMapTerm);
        """.stripMargin
     } else ""
 
@@ -526,9 +529,15 @@ case class HashAggregateExec(
       finishRegularHashMap
     }
 
+    // `partitionIndex` is passed as a parameter so any bare `partitionIndex`
+    // reference in the child's produce resolves to the local parameter, not
+    // the protected `BufferedRowIterator.partitionIndex` field. When
+    // `addNewFunction` spills this helper into a nested class (as can happen
+    // once the outer class passes the code-size threshold), the bare field
+    // reference fails with `IllegalAccessError`.
     val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
-         |private void $doAgg() throws java.io.IOException {
+         |private void $doAgg(int partitionIndex) throws java.io.IOException {
          |  ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
          |  $finishHashMap
          |}
@@ -615,7 +624,7 @@ case class HashAggregateExec(
        |  $addHookToCloseFastHashMap
        |  $hashMapTerm = $thisPlan.createHashMap();
        |  long $beforeAgg = System.nanoTime();
-       |  $doAggFuncName();
+       |  $doAggFuncName(partitionIndex);
        |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
        |}
        |// output the result
@@ -654,8 +663,6 @@ case class HashAggregateExec(
       case _ => ("true", "", "")
     }
 
-    val oomeClassName = classOf[SparkOutOfMemoryError].getName
-
     val findOrInsertRegularHashMap: String =
       s"""
          |// generate grouping key
@@ -681,7 +688,7 @@ case class HashAggregateExec(
          |    $unsafeRowKeys, $unsafeRowKeyHash);
          |  if ($unsafeRowBuffer == null) {
          |    // failed to allocate the first page
-         |    throw new $oomeClassName("AGGREGATE_OUT_OF_MEMORY", new java.util.HashMap());
+         |    throw QueryExecutionErrors.aggregateOutOfMemoryError();
          |  }
          |}
        """.stripMargin

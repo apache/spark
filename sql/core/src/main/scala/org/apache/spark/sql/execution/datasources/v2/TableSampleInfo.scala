@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
+
 case class TableSampleInfo(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
-    seed: Long)
+    seed: Long,
+    sampleMethod: SampleMethod = SampleMethod.Bernoulli)

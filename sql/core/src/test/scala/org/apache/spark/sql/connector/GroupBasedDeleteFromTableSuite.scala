@@ -47,6 +47,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
     checkLastWriteLog(
       writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(3, 3, "hr")),
       writeWithMetadataLogEntry(metadata = Row("hr", 2), data = Row(4, 4, "hr")))
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 2)
   }
 
   test("delete with nondeterministic conditions") {
@@ -86,6 +87,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
       Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
 
     checkReplacedPartitions(Seq("hr"))
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
   }
 
   test("delete with subqueries and runtime group filtering") {
@@ -118,6 +120,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
         Row(1, 300, "hr") :: Row(3, 120, "hr") :: Row(4, 150, "software") :: Nil)
 
       checkReplacedPartitions(Seq("software"))
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
     }
   }
 
@@ -166,6 +169,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
         Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
 
       checkReplacedPartitions(Seq("hr"))
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
     }
   }
 
@@ -199,6 +203,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
         Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
 
       checkReplacedPartitions(Seq("hr"))
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
     }
   }
 
@@ -229,6 +234,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
         Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
 
       checkReplacedPartitions(Seq("software", "hr"))
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 2)
     }
   }
 }

@@ -21,7 +21,6 @@ import re
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesStringOpsMixin:
@@ -170,7 +169,6 @@ class SeriesStringOpsMixin:
 class SeriesStringOpsTests(
     SeriesStringOpsMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

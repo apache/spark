@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
@@ -314,7 +313,7 @@ private[sql] case class JDBCRelation(
       finalSchema: StructType,
       predicates: Array[Predicate],
       groupByColumns: Option[Array[String]],
-      tableSample: Option[TableSampleInfo],
+      tableSampleClause: Option[String],
       limit: Int,
       sortOrders: Array[String],
       offset: Int): RDD[Row] = {
@@ -328,7 +327,7 @@ private[sql] case class JDBCRelation(
       jdbcOptions,
       Some(finalSchema),
       groupByColumns,
-      tableSample,
+      tableSampleClause,
       limit,
       sortOrders,
       offset,

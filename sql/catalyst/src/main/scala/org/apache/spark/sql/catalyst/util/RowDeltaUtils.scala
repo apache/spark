@@ -26,7 +26,6 @@ object RowDeltaUtils {
   final val UPDATE_OPERATION: Int = 2
   final val INSERT_OPERATION: Int = 3
   final val REINSERT_OPERATION: Int = 4
-  final val WRITE_OPERATION: Int = 5
-  final val WRITE_WITH_METADATA_OPERATION: Int = 6
+  final val COPY_OPERATION: Int = 5
   final val ORIGINAL_ROW_ID_VALUE_PREFIX: String = "__original_row_id_"
 }

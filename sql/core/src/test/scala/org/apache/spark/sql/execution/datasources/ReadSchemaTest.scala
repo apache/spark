@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.File
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -67,7 +67,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  *     -> ToDecimalTypeTest
  */
 
-trait ReadSchemaTest extends QueryTest with SharedSparkSession {
+trait ReadSchemaTest extends SharedSparkSession {
   val format: String
   val options: Map[String, String] = Map.empty[String, String]
 }

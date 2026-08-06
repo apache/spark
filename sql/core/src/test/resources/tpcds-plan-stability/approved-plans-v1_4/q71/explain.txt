@@ -13,7 +13,7 @@
                   :     :     +- * Filter (3)
                   :     :        +- * ColumnarToRow (2)
                   :     :           +- Scan parquet spark_catalog.default.item (1)
-                  :     +- Union (24)
+                  :     +- * Union (24)
                   :        :- * Project (11)
                   :        :  +- * BroadcastHashJoin Inner BuildRight (10)
                   :        :     :- * Filter (8)
@@ -69,23 +69,23 @@ PartitionFilters: [isnotnull(ws_sold_date_sk#8), dynamicpruningexpression(ws_sol
 PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_sold_time_sk)]
 ReadSchema: struct<ws_sold_time_sk:int,ws_item_sk:int,ws_ext_sales_price:decimal(7,2)>
 
-(7) ColumnarToRow [codegen id : 3]
+(7) ColumnarToRow
 Input [4]: [ws_sold_time_sk#5, ws_item_sk#6, ws_ext_sales_price#7, ws_sold_date_sk#8]
 
-(8) Filter [codegen id : 3]
+(8) Filter
 Input [4]: [ws_sold_time_sk#5, ws_item_sk#6, ws_ext_sales_price#7, ws_sold_date_sk#8]
 Condition : (isnotnull(ws_item_sk#6) AND isnotnull(ws_sold_time_sk#5))
 
 (9) ReusedExchange [Reuses operator id: 43]
 Output [1]: [d_date_sk#10]
 
-(10) BroadcastHashJoin [codegen id : 3]
+(10) BroadcastHashJoin
 Left keys [1]: [ws_sold_date_sk#8]
 Right keys [1]: [d_date_sk#10]
 Join type: Inner
 Join condition: None
 
-(11) Project [codegen id : 3]
+(11) Project
 Output [3]: [ws_ext_sales_price#7 AS ext_price#11, ws_item_sk#6 AS sold_item_sk#12, ws_sold_time_sk#5 AS time_sk#13]
 Input [5]: [ws_sold_time_sk#5, ws_item_sk#6, ws_ext_sales_price#7, ws_sold_date_sk#8, d_date_sk#10]
 
@@ -97,23 +97,23 @@ PartitionFilters: [isnotnull(cs_sold_date_sk#17), dynamicpruningexpression(cs_so
 PushedFilters: [IsNotNull(cs_item_sk), IsNotNull(cs_sold_time_sk)]
 ReadSchema: struct<cs_sold_time_sk:int,cs_item_sk:int,cs_ext_sales_price:decimal(7,2)>
 
-(13) ColumnarToRow [codegen id : 5]
+(13) ColumnarToRow
 Input [4]: [cs_sold_time_sk#14, cs_item_sk#15, cs_ext_sales_price#16, cs_sold_date_sk#17]
 
-(14) Filter [codegen id : 5]
+(14) Filter
 Input [4]: [cs_sold_time_sk#14, cs_item_sk#15, cs_ext_sales_price#16, cs_sold_date_sk#17]
 Condition : (isnotnull(cs_item_sk#15) AND isnotnull(cs_sold_time_sk#14))
 
 (15) ReusedExchange [Reuses operator id: 43]
 Output [1]: [d_date_sk#18]
 
-(16) BroadcastHashJoin [codegen id : 5]
+(16) BroadcastHashJoin
 Left keys [1]: [cs_sold_date_sk#17]
 Right keys [1]: [d_date_sk#18]
 Join type: Inner
 Join condition: None
 
-(17) Project [codegen id : 5]
+(17) Project
 Output [3]: [cs_ext_sales_price#16 AS ext_price#19, cs_item_sk#15 AS sold_item_sk#20, cs_sold_time_sk#14 AS time_sk#21]
 Input [5]: [cs_sold_time_sk#14, cs_item_sk#15, cs_ext_sales_price#16, cs_sold_date_sk#17, d_date_sk#18]
 
@@ -125,35 +125,35 @@ PartitionFilters: [isnotnull(ss_sold_date_sk#25), dynamicpruningexpression(ss_so
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_time_sk)]
 ReadSchema: struct<ss_sold_time_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
 
-(19) ColumnarToRow [codegen id : 7]
+(19) ColumnarToRow
 Input [4]: [ss_sold_time_sk#22, ss_item_sk#23, ss_ext_sales_price#24, ss_sold_date_sk#25]
 
-(20) Filter [codegen id : 7]
+(20) Filter
 Input [4]: [ss_sold_time_sk#22, ss_item_sk#23, ss_ext_sales_price#24, ss_sold_date_sk#25]
 Condition : (isnotnull(ss_item_sk#23) AND isnotnull(ss_sold_time_sk#22))
 
 (21) ReusedExchange [Reuses operator id: 43]
 Output [1]: [d_date_sk#26]
 
-(22) BroadcastHashJoin [codegen id : 7]
+(22) BroadcastHashJoin
 Left keys [1]: [ss_sold_date_sk#25]
 Right keys [1]: [d_date_sk#26]
 Join type: Inner
 Join condition: None
 
-(23) Project [codegen id : 7]
+(23) Project
 Output [3]: [ss_ext_sales_price#24 AS ext_price#27, ss_item_sk#23 AS sold_item_sk#28, ss_sold_time_sk#22 AS time_sk#29]
 Input [5]: [ss_sold_time_sk#22, ss_item_sk#23, ss_ext_sales_price#24, ss_sold_date_sk#25, d_date_sk#26]
 
 (24) Union
 
-(25) BroadcastHashJoin [codegen id : 9]
+(25) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [i_item_sk#1]
 Right keys [1]: [sold_item_sk#12]
 Join type: Inner
 Join condition: None
 
-(26) Project [codegen id : 9]
+(26) Project [codegen id : 6]
 Output [4]: [i_brand_id#2, i_brand#3, ext_price#11, time_sk#13]
 Input [6]: [i_item_sk#1, i_brand_id#2, i_brand#3, ext_price#11, sold_item_sk#12, time_sk#13]
 
@@ -164,14 +164,14 @@ Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [Or(EqualTo(t_meal_time,breakfast           ),EqualTo(t_meal_time,dinner              )), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int,t_meal_time:string>
 
-(28) ColumnarToRow [codegen id : 8]
+(28) ColumnarToRow [codegen id : 5]
 Input [4]: [t_time_sk#30, t_hour#31, t_minute#32, t_meal_time#33]
 
-(29) Filter [codegen id : 8]
+(29) Filter [codegen id : 5]
 Input [4]: [t_time_sk#30, t_hour#31, t_minute#32, t_meal_time#33]
 Condition : (((t_meal_time#33 = breakfast           ) OR (t_meal_time#33 = dinner              )) AND isnotnull(t_time_sk#30))
 
-(30) Project [codegen id : 8]
+(30) Project [codegen id : 5]
 Output [3]: [t_time_sk#30, t_hour#31, t_minute#32]
 Input [4]: [t_time_sk#30, t_hour#31, t_minute#32, t_meal_time#33]
 
@@ -179,17 +179,17 @@ Input [4]: [t_time_sk#30, t_hour#31, t_minute#32, t_meal_time#33]
 Input [3]: [t_time_sk#30, t_hour#31, t_minute#32]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
 
-(32) BroadcastHashJoin [codegen id : 9]
+(32) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [time_sk#13]
 Right keys [1]: [t_time_sk#30]
 Join type: Inner
 Join condition: None
 
-(33) Project [codegen id : 9]
+(33) Project [codegen id : 6]
 Output [5]: [i_brand_id#2, i_brand#3, ext_price#11, t_hour#31, t_minute#32]
 Input [7]: [i_brand_id#2, i_brand#3, ext_price#11, time_sk#13, t_time_sk#30, t_hour#31, t_minute#32]
 
-(34) HashAggregate [codegen id : 9]
+(34) HashAggregate [codegen id : 6]
 Input [5]: [i_brand_id#2, i_brand#3, ext_price#11, t_hour#31, t_minute#32]
 Keys [4]: [i_brand#3, i_brand_id#2, t_hour#31, t_minute#32]
 Functions [1]: [partial_sum(UnscaledValue(ext_price#11))]
@@ -200,7 +200,7 @@ Results [5]: [i_brand#3, i_brand_id#2, t_hour#31, t_minute#32, sum#35]
 Input [5]: [i_brand#3, i_brand_id#2, t_hour#31, t_minute#32, sum#35]
 Arguments: hashpartitioning(i_brand#3, i_brand_id#2, t_hour#31, t_minute#32, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
-(36) HashAggregate [codegen id : 10]
+(36) HashAggregate [codegen id : 7]
 Input [5]: [i_brand#3, i_brand_id#2, t_hour#31, t_minute#32, sum#35]
 Keys [4]: [i_brand#3, i_brand_id#2, t_hour#31, t_minute#32]
 Functions [1]: [sum(UnscaledValue(ext_price#11))]
@@ -211,7 +211,7 @@ Results [5]: [i_brand_id#2 AS brand_id#37, i_brand#3 AS brand#38, t_hour#31, t_m
 Input [5]: [brand_id#37, brand#38, t_hour#31, t_minute#32, ext_price#39]
 Arguments: rangepartitioning(ext_price#39 DESC NULLS LAST, brand_id#37 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
-(38) Sort [codegen id : 11]
+(38) Sort [codegen id : 8]
 Input [5]: [brand_id#37, brand#38, t_hour#31, t_minute#32, ext_price#39]
 Arguments: [ext_price#39 DESC NULLS LAST, brand_id#37 ASC NULLS FIRST], true, 0
 

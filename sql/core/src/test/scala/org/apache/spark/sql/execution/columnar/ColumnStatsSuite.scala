@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[BooleanColumnStats], BOOLEAN, Array(true, false, 0))
@@ -32,6 +33,8 @@ class ColumnStatsSuite extends SparkFunSuite {
   testDecimalColumnStats(Array(null, null, 0))
   testIntervalColumnStats(Array(null, null, 0))
   testStringColumnStats(Array(null, null, 0))
+  testTimestampNanosColumnStats(TIMESTAMP_NTZ_NANOS, Array(null, null, 0))
+  testTimestampNanosColumnStats(TIMESTAMP_LTZ_NANOS, Array(null, null, 0))
 
   def testColumnStats[T <: PhysicalDataType, U <: ColumnStats](
       columnStatsClass: Class[U],
@@ -140,6 +143,40 @@ class ColumnStatsSuite extends SparkFunSuite {
           if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
         }.sum
       }
+    }
+  }
+
+  def testTimestampNanosColumnStats(
+      columnType: ColumnType[TimestampNanosVal],
+      initialStatistics: Array[Any]): Unit = {
+
+    val columnStatsName = classOf[TimestampNanosColumnStats].getSimpleName
+
+    test(s"$columnStatsName ($columnType): empty") {
+      val columnStats = new TimestampNanosColumnStats
+      columnStats.collectedStatistics.zip(initialStatistics).foreach {
+        case (actual, expected) => assert(actual === expected)
+      }
+    }
+
+    test(s"$columnStatsName ($columnType): non-empty collects min/max bounds") {
+      import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+
+      val columnStats = new TimestampNanosColumnStats
+      val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
+      rows.foreach(columnStats.gatherStats(_, 0))
+
+      val values = rows.take(10).map(_.get(0,
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
+        .asInstanceOf[TimestampNanosVal])
+      val ordering = Ordering.fromLessThan[TimestampNanosVal](_.compareTo(_) < 0)
+      val stats = columnStats.collectedStatistics
+
+      assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
+      assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
+      assertResult(10, "Wrong null count")(stats(2))
+      assertResult(20, "Wrong row count")(stats(3))
+      assertResult(TimestampNanosVal.SIZE_IN_BYTES * 10 + 4 * 10, "Wrong size in bytes")(stats(4))
     }
   }
 

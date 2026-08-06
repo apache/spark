@@ -340,7 +340,7 @@ class WindowSpec:
     """
 
     def __new__(cls, jspec: "JavaObject") -> "WindowSpec":
-        from pyspark.sql.classic.WindowSpec import WindowSpec  # type: ignore[import-not-found]
+        from pyspark.sql.classic.window import WindowSpec
 
         return WindowSpec.__new__(WindowSpec, jspec)
 

@@ -17,18 +17,30 @@
 package org.apache.spark.sql.connect.planner
 
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 
+import org.mockito.Mockito.atLeastOnce
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.sql.connect.SparkConnectTestUtils
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.test.SharedSparkSession
 
 class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSugar {
+
+  // A session holder that is NOT registered in the global SparkConnectService.sessionManager
+  // (unlike SparkConnectTestUtils.createDummySessionHolder). The closing-session tests below call
+  // sessionHolder.close() directly, bypassing the manager; a holder registered in the manager's
+  // store at that point would stay there as a closed entry, and a later suite's
+  // invalidateAllSessions() would fail closing it a second time (SESSION_ALREADY_CLOSED).
+  private def unregisteredSessionHolder(): SessionHolder = {
+    SessionHolder(userId = "testUser", sessionId = UUID.randomUUID().toString, session = spark)
+  }
 
   private def mockQuery(): StreamingQuery = {
     val query = mock[StreamingQuery]
@@ -77,5 +89,107 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
 
     // No more entries left in it now.
     assert(cache.listEntriesForTesting().isEmpty)
+  }
+
+  test("CleanerCache: a runner registered for a closing session is cleaned up immediately") {
+    // Mirrors the SparkConnectStreamingQueryCache shutdown-race guard. A runner registered after
+    // SessionHolder.close() has already run cleanUpAll() (for a query started concurrently with
+    // close()) would otherwise be missed by both reapers and strand a Python worker.
+    val cleaner = mock[AutoCloseable]
+    val query = mockQuery()
+    val sessionHolder = unregisteredSessionHolder()
+    val cache = new StreamingForeachBatchHelper.CleanerCache(sessionHolder)
+
+    // Mark the session as closing before the runner is registered.
+    sessionHolder.close()
+    assert(sessionHolder.isClosing)
+
+    val listenersBefore = spark.streams.listListeners().length
+    cache.registerCleanerForQuery(query, cleaner)
+
+    // The runner must not be stranded: it is closed and never cached.
+    verify(cleaner, times(1)).close()
+    assert(cache.listEntriesForTesting().isEmpty)
+    // The fast path must not register a (leaking) listener on the closing session's streams.
+    assert(spark.streams.listListeners().length == listenersBefore)
+  }
+
+  test("CleanerCache.cleanUpAll unregisters the streaming listener") {
+    // close() does not remove the StreamingRunnerCleanerListener (it is not tracked in the
+    // session's listenerCache), so cleanUpAll() must drop it; otherwise the listener keeps the
+    // cache / session reachable after the session is closed.
+    val cleaner = mock[AutoCloseable]
+    val query = mockQuery()
+    val cache = new StreamingForeachBatchHelper.CleanerCache(
+      SparkConnectTestUtils.createDummySessionHolder(spark))
+
+    cache.registerCleanerForQuery(query, cleaner)
+    val listener = cache.listenerForTesting
+    assert(spark.streams.listListeners().contains(listener))
+
+    cache.cleanUpAll()
+
+    verify(cleaner, times(1)).close()
+    assert(!spark.streams.listListeners().contains(listener))
+  }
+
+  test("CleanerCache: listener is recoverable -- re-registered after cleanUpAll") {
+    // streamingListener is no longer a one-shot lazy val: after cleanUpAll() removes it, a later
+    // registration must re-add a working listener so the cache is safe to reuse.
+    val cache = new StreamingForeachBatchHelper.CleanerCache(
+      SparkConnectTestUtils.createDummySessionHolder(spark))
+
+    cache.registerCleanerForQuery(mockQuery(), mock[AutoCloseable])
+    val firstListener = cache.listenerForTesting
+    assert(spark.streams.listListeners().contains(firstListener))
+
+    cache.cleanUpAll()
+    assert(!spark.streams.listListeners().contains(firstListener))
+
+    // Reuse: a new registration re-registers a listener on session.streams.
+    cache.registerCleanerForQuery(mockQuery(), mock[AutoCloseable])
+    val secondListener = cache.listenerForTesting
+    assert(spark.streams.listListeners().contains(secondListener))
+
+    cache.cleanUpAll()
+    assert(!spark.streams.listListeners().contains(secondListener))
+  }
+
+  test("CleanerCache: registration racing with session shutdown strands no runner or listener") {
+    // Mirrors the SparkConnectStreamingQueryCache race test for the foreachBatch cleaner:
+    // registration runs concurrently with the shutdown sequence (close() marks the session closing,
+    // then cleanUpAll() reaps runners and the listener). Whatever the interleaving, the runner must
+    // be closed and no listener may be left registered on session.streams.
+    val baselineListeners = spark.streams.listListeners().length
+    val numIterations = 200
+    (1 to numIterations).foreach { _ =>
+      val cleaner = mock[AutoCloseable]
+      val query = mockQuery()
+      val sessionHolder = unregisteredSessionHolder()
+      val cache = new StreamingForeachBatchHelper.CleanerCache(sessionHolder)
+
+      val startLatch = new CountDownLatch(1)
+      val closeThread = new Thread(() => {
+        startLatch.await()
+        sessionHolder.close() // Marks the session closing.
+        cache.cleanUpAll() // Mirrors close()'s runner + listener reaping.
+      })
+      val registerThread = new Thread(() => {
+        startLatch.await()
+        cache.registerCleanerForQuery(query, cleaner)
+      })
+      closeThread.start()
+      registerThread.start()
+      startLatch.countDown()
+      closeThread.join()
+      registerThread.join()
+
+      // The runner must be closed by one of the paths: the fast path, the post-insert guard, or
+      // cleanUpAll(). registerCleanerForQuery and cleanUpAll are synchronous, so this is settled
+      // once both threads have joined.
+      verify(cleaner, atLeastOnce()).close()
+    }
+    // No iteration may leave a listener registered on the shared streams manager.
+    assert(spark.streams.listListeners().length == baselineListeners)
   }
 }

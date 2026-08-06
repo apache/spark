@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -104,7 +104,7 @@ case class AnalyzeColumnCommand(
   private def analyzeColumnInCatalog(sparkSession: SparkSession): Unit = {
     val sessionState = sparkSession.sessionState
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdent)
-    if (tableMeta.tableType == CatalogTableType.VIEW) {
+    if (tableMeta.isViewLike) {
       // Analyzes a catalog view if the view is cached
       val plan = sparkSession.table(tableIdent.quotedString).logicalPlan
       if (!analyzeColumnInCachedData(plan, sparkSession)) {

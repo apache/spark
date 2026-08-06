@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
 
-class CSVParsingOptionsSuite extends QueryTest with SharedSparkSession {
+class CSVParsingOptionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("SPARK-49955: null string value does not mean corrupted file") {

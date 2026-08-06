@@ -27,7 +27,6 @@ import org.apache.orc.TypeDescription
 
 import org.apache.spark.TestUtils
 import org.apache.spark.memory.MemoryMode
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -37,7 +36,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.unsafe.types.UTF8String.fromString
 
-class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
+class OrcColumnarBatchReaderSuite extends SharedSparkSession {
 
   import testImplicits._
 

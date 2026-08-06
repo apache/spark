@@ -22,7 +22,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /** These tests exercise passing constant but non-literal OPTIONS lists, and folding them. */
-class TableOptionsConstantFoldingSuite extends QueryTest with SharedSparkSession {
+class TableOptionsConstantFoldingSuite extends SharedSparkSession {
   val prefix = "create table t (col int) using json options "
 
   /** Helper method to create a table with a OPTIONS list and then check the resulting value. */

@@ -529,10 +529,8 @@ RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cat
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
-  "messageParameters" : {
-    "msg" : "Frame bound value must be a literal."
-  },
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_WINDOW_FRAME_BOUND",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -616,9 +614,26 @@ SELECT val, cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER BY ca
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1037",
+  "errorClass" : "WINDOW_FUNCTION_FRAME_NOT_ORDERED",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "wf" : "row_number()"
+    "wf_expr" : "row_number()",
+    "wf_name" : "row_number"
+  }
+}
+
+
+-- !query
+SELECT lead(t) OVER ()
+FROM VALUES ('A'), ('B'), ('C') AS tbl(t)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WINDOW_FUNCTION_FRAME_NOT_ORDERED",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "wf_expr" : "lead(tbl.t, 1, NULL)",
+    "wf_name" : "lead"
   }
 }
 

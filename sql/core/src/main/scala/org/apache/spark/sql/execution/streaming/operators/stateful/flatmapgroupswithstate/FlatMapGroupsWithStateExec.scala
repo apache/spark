@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -36,6 +37,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Streamin
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.streaming.GroupStateTimeout.NoTimeout
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 /**
@@ -71,6 +73,11 @@ trait FlatMapGroupsWithStateExecBase
 
   lazy val stateManager: StateManager =
     createStateManager(stateEncoder, isTimeoutEnabled, stateFormatVersion)
+
+  private lazy val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(groupingAttributes.toStructType)
+  private lazy val stateValueSchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.stateSchema)
 
   /**
    * Distribute by grouping attributes - We need the underlying data and the initial state data
@@ -200,7 +207,7 @@ trait FlatMapGroupsWithStateExecBase
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
-      groupingAttributes.toStructType, 0, stateManager.stateSchema))
+      stateKeySchema, 0, stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -243,9 +250,9 @@ trait FlatMapGroupsWithStateExecBase
           val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
           val store = StateStore.get(
             storeProviderId,
-            groupingAttributes.toStructType,
-            stateManager.stateSchema,
-            NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
+            stateKeySchema,
+            stateValueSchema,
+            NoPrefixKeyStateEncoderSpec(stateKeySchema),
             stateInfo.get.storeVersion,
             stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
             None,
@@ -257,9 +264,9 @@ trait FlatMapGroupsWithStateExecBase
     } else {
       child.execute().mapPartitionsWithStateStore[InternalRow](
         getStateInfo,
-        groupingAttributes.toStructType,
-        stateManager.stateSchema,
-        NoPrefixKeyStateEncoderSpec(groupingAttributes.toStructType),
+        stateKeySchema,
+        stateValueSchema,
+        NoPrefixKeyStateEncoderSpec(stateKeySchema),
         session.sessionState,
         Some(session.streams.stateStoreCoordinator)
       ) { case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
@@ -425,6 +432,9 @@ case class FlatMapGroupsWithStateExec(
     skipEmittingInitialStateKeys: Boolean,
     child: SparkPlan)
   extends FlatMapGroupsWithStateExecBase with BinaryExecNode with  ObjectProducerExec {
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(super.output)
+
   import GroupStateImpl._
   import FlatMapGroupsWithStateExecHelper._
 

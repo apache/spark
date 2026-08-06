@@ -17,6 +17,8 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Handler for parameter substitution across different Spark SQL contexts.
@@ -107,14 +109,39 @@ object ParameterHandler {
    * @param expr The expression to convert (must be a Literal)
    * @return SQL string representation
    */
-  private def convertToSql(expr: Expression): String = expr match {
-    case lit: Literal => lit.sql
-    case other =>
-      throw new IllegalArgumentException(
-        s"ParameterHandler only accepts resolved Literal expressions. " +
-        s"Received: ${other.getClass.getSimpleName}. " +
-        s"All parameters must be resolved using SparkSession.resolveAndValidateParameters " +
-        s"before being passed to the pre-parser.")
+  private def convertToSql(expr: Expression): String = {
+    // Converts an expression to its SQL representation. If the expression's type contains collated
+    // types, strips collations from nested literals and wraps the whole expression in
+    // CAST to preserve the collation with implicit strength. Without this, Literal.sql
+    // produces `'value' COLLATE collationName` which re-parses with explicit strength.
+    def toSqlWithImplicitCollation(e: Expression): String = {
+      if (!DataTypeUtils.hasNonDefaultStringCharOrVarcharType(e.dataType)) {
+        e.sql
+      } else {
+        val stripped = e.transform {
+          case lit: Literal
+              if DataTypeUtils.hasNonDefaultStringCharOrVarcharType(lit.dataType) =>
+            Literal.create(
+              lit.value, SchemaUtils.replaceCollatedStringWithString(lit.dataType))
+        }
+        s"CAST(${stripped.sql} AS ${e.dataType.sql})"
+      }
+    }
+
+    expr match {
+      case lit: Literal if lit.value == null =>
+        // NULL literals should have default collation strength, so even though `lit.sql` will wrap
+        // NULL in a CAST, `CollationTypeCoercion` will resolve it as default.
+        lit.sql
+      case lit: Literal =>
+        toSqlWithImplicitCollation(lit)
+      case other =>
+        throw new IllegalArgumentException(
+          s"ParameterHandler only accepts resolved Literal expressions. " +
+          s"Received: ${other.getClass.getSimpleName}. " +
+          s"All parameters must be resolved using SparkSession.resolveAndValidateParameters " +
+          s"before being passed to the pre-parser.")
+    }
   }
 
   /**

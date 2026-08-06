@@ -257,6 +257,14 @@ object AgnosticEncoders {
   case class InstantEncoder(override val lenientSerialization: Boolean)
       extends LeafEncoder[Instant](TimestampType)
   case object LocalDateTimeEncoder extends LeafEncoder[LocalDateTime](TimestampNTZType)
+  // Nanosecond-precision counterparts of `LocalDateTimeEncoder` / `InstantEncoder(false)`.
+  // They are used by `RowEncoder` when the schema declares a `TimestampNTZNanosType(p)` or
+  // `TimestampLTZNanosType(p)` column, so Dataset create/collect roundtrips preserve full
+  // nanosecond precision. See SPARK-57033.
+  case class LocalDateTimeNanosEncoder(precision: Int)
+      extends LeafEncoder[LocalDateTime](TimestampNTZNanosType(precision))
+  case class InstantNanosEncoder(precision: Int)
+      extends LeafEncoder[Instant](TimestampLTZNanosType(precision))
   case object LocalTimeEncoder extends LeafEncoder[LocalTime](TimeType())
 
   case class SparkDecimalEncoder(dt: DecimalType) extends LeafEncoder[Decimal](dt)

@@ -33,8 +33,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class DatasetCacheSuite extends QueryTest
-  with SharedSparkSession
+class DatasetCacheSuite extends SharedSparkSession
   with TimeLimits
   with AdaptiveSparkPlanHelper {
   import testImplicits._

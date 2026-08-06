@@ -48,7 +48,7 @@ case class BatchEvalPythonUDTFExec(
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan)
-  extends EvalPythonUDTFExec with PythonSQLMetrics {
+  extends EvalPythonUDTFExec with PythonPickleBatchMetrics {
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private[this] val sessionUUID = {
@@ -70,9 +70,12 @@ case class BatchEvalPythonUDTFExec(
     EvaluatePython.registerPicklers()  // register pickler for Row
 
     // Input iterator to Python.
-    // For Python UDTF, we don't have a separate configuration for the batch size yet.
+    // For Python UDTF, we don't have a separate configuration for the batch size yet, and no byte
+    // cap (maxBytesPerBatch stays at the -1 default). We still pass pythonMetrics so the peak
+    // pickled-batch size is recorded: the UDTF path pickles through the same contiguous-allocation
+    // code as BatchEvalPythonExec and carries the same OOM risk, so the observability applies here.
     val inputIterator = BatchEvalPythonExec.getInputIterator(
-      iter, schema, 100, conf.pysparkBinaryAsBytes)
+      iter, schema, 100, conf.pysparkBinaryAsBytes, pythonMetrics = pythonMetrics)
 
     // Output iterator for results from Python.
     val outputIterator =

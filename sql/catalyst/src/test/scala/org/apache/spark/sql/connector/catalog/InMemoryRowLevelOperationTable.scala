@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.time.Instant
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -25,32 +24,61 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
-import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage, WriteSummary}
+import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
-class InMemoryRowLevelOperationTable(
+/**
+ * Test helper trait mixed into the in-memory row-level operations so tests can verify that
+ * per-statement SQL options reach the operation via [[RowLevelOperationInfo#options]].
+ */
+trait RowLevelOperationWithOptions {
+  def options: CaseInsensitiveStringMap
+}
+
+class InMemoryRowLevelOperationTable private (
     name: String,
-    schema: StructType,
+    columns: Array[Column],
     partitioning: Array[Transform],
     properties: util.Map[String, String],
-    constraints: Array[Constraint] = Array.empty)
+    constraints: Array[Constraint],
+    tableId: String)
   extends InMemoryTable(
     name,
-    CatalogV2Util.structTypeToV2Columns(schema),
+    columns,
     partitioning,
     properties,
-    constraints)
+    constraints,
+    id = tableId)
   with SupportsRowLevelOperations {
+
+  def this(
+      name: String,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint] = Array.empty,
+      tableId: String = java.util.UUID.randomUUID().toString) = {
+    this(
+      name = name,
+      columns = CatalogV2Util.structTypeToV2Columns(schema),
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints,
+      tableId = tableId)
+  }
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
   private final val SUPPORTS_DELTAS = "supports-deltas"
   private final val SPLIT_UPDATES = "split-updates"
+  private final val NO_METADATA = "no-metadata"
+  private final val noMetadata = properties.getOrDefault(NO_METADATA, "false") == "true"
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -59,21 +87,60 @@ class InMemoryRowLevelOperationTable(
   // used in row-level operation tests to verify passed records
   // (operation, id, metadata, row)
   var lastWriteLog: Seq[InternalRow] = Seq.empty
+  // used in delete-with-options tests to verify options reach the connector on the deleteWhere path
+  var lastDeleteOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+
+  override def deleteWhere(
+      predicates: Array[Predicate], options: CaseInsensitiveStringMap): Unit = {
+    lastDeleteOptions = options
+    deleteWhere(predicates)
+  }
+
+  override def copy(): Table = {
+    val copied = InMemoryRowLevelOperationTable.withColumns(
+      name = name,
+      columns = columns(),
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints,
+      tableId = id)
+    dataMap.synchronized {
+      dataMap.foreach { case (key, splits) =>
+        val copiedSplits = splits.map { bufferedRows =>
+          val copiedBufferedRows = new BufferedRows(bufferedRows.key, bufferedRows.schema)
+          copiedBufferedRows.rows ++= bufferedRows.rows.map(_.copy())
+          copiedBufferedRows
+        }
+        copied.dataMap.put(key, copiedSplits)
+      }
+    }
+    copied.commits ++= commits.map(_.copy())
+    copied.setVersionAndValidatedVersionFrom(this)
+    copied.replacedPartitions = replacedPartitions
+    copied.lastWriteInfo = lastWriteInfo
+    copied.lastWriteLog = lastWriteLog
+    copied
+  }
 
   override def newRowLevelOperationBuilder(
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
     if (properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true") {
-      () => DeltaBasedOperation(info.command)
+      () => DeltaBasedOperation(info.command, info.options)
     } else {
-      () => PartitionBasedOperation(info.command)
+      () => PartitionBasedOperation(info.command, info.options)
     }
   }
 
-  case class PartitionBasedOperation(command: Command) extends RowLevelOperation {
+  case class PartitionBasedOperation(command: Command, options: CaseInsensitiveStringMap)
+    extends RowLevelOperation with RowLevelOperationWithOptions {
     var configuredScan: InMemoryBatchScan = _
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
-      Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+      if (noMetadata) {
+        Array.empty
+      } else {
+        Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+      }
     }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
@@ -89,22 +156,29 @@ class InMemoryRowLevelOperationTable(
     override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
       lastWriteInfo = info
       new WriteBuilder {
-        override def build(): Write = new Write with RequiresDistributionAndOrdering {
-          override def requiredDistribution: Distribution = {
-            Distributions.clustered(Array(PARTITION_COLUMN_REF))
+        override def build(): Write = if (noMetadata) {
+          new Write {
+            override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
+            override def description: String = "InMemoryWrite"
           }
+        } else {
+          new Write with RequiresDistributionAndOrdering {
+            override def requiredDistribution: Distribution = {
+              Distributions.clustered(Array(PARTITION_COLUMN_REF))
+            }
 
-          override def requiredOrdering: Array[SortOrder] = {
-            Array[SortOrder](
-              LogicalExpressions.sort(
-                PARTITION_COLUMN_REF,
-                SortDirection.ASCENDING,
-                SortDirection.ASCENDING.defaultNullOrdering()))
+            override def requiredOrdering: Array[SortOrder] = {
+              Array[SortOrder](
+                LogicalExpressions.sort(
+                  PARTITION_COLUMN_REF,
+                  SortDirection.ASCENDING,
+                  SortDirection.ASCENDING.defaultNullOrdering()))
+            }
+
+            override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
+
+            override def description: String = "InMemoryWrite"
           }
-
-          override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
-
-          override def description: String = "InMemoryWrite"
         }
       }
     }
@@ -112,18 +186,11 @@ class InMemoryRowLevelOperationTable(
     override def description(): String = "InMemoryPartitionReplaceOperation"
   }
 
-  abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
-
-    override def commit(messages: Array[WriterCommitMessage], metrics: WriteSummary): Unit = {
-      commit(messages)
-      commits += Commit(Instant.now().toEpochMilli, Some(metrics))
-    }
-  }
-
   private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
-    extends RowLevelOperationBatchWrite {
+    extends TestBatchWrite {
 
-    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
+    override protected def doCommit(
+        messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       val readRows = scan.data.flatMap(_.asInstanceOf[BufferedRows].rows)
       val readPartitions = readRows.map(r => getKey(r, schema)).distinct
@@ -134,11 +201,16 @@ class InMemoryRowLevelOperationTable(
     }
   }
 
-  case class DeltaBasedOperation(command: Command) extends RowLevelOperation with SupportsDelta {
+  case class DeltaBasedOperation(command: Command, options: CaseInsensitiveStringMap)
+    extends RowLevelOperation with SupportsDelta with RowLevelOperationWithOptions {
     private final val PK_COLUMN_REF = FieldReference("pk")
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
-      Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+      if (noMetadata) {
+        Array.empty
+      } else {
+        Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+      }
     }
 
     override def rowId(): Array[NamedReference] = Array(PK_COLUMN_REF)
@@ -150,22 +222,28 @@ class InMemoryRowLevelOperationTable(
     override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder = {
       lastWriteInfo = info
       new DeltaWriteBuilder {
-        override def build(): DeltaWrite = new DeltaWrite with RequiresDistributionAndOrdering {
-
-          override def requiredDistribution(): Distribution = {
-            Distributions.clustered(Array(PARTITION_COLUMN_REF))
+        override def build(): DeltaWrite = if (noMetadata) {
+          new DeltaWrite {
+            override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
           }
+        } else {
+          new DeltaWrite with RequiresDistributionAndOrdering {
 
-          override def requiredOrdering(): Array[SortOrder] = {
-            Array[SortOrder](
-              LogicalExpressions.sort(
-                PARTITION_COLUMN_REF,
-                SortDirection.ASCENDING,
-                SortDirection.ASCENDING.defaultNullOrdering())
-            )
+            override def requiredDistribution(): Distribution = {
+              Distributions.clustered(Array(PARTITION_COLUMN_REF))
+            }
+
+            override def requiredOrdering(): Array[SortOrder] = {
+              Array[SortOrder](
+                LogicalExpressions.sort(
+                  PARTITION_COLUMN_REF,
+                  SortDirection.ASCENDING,
+                  SortDirection.ASCENDING.defaultNullOrdering())
+              )
+            }
+
+            override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
           }
-
-          override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
         }
       }
     }
@@ -175,12 +253,12 @@ class InMemoryRowLevelOperationTable(
     }
   }
 
-  private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite with DeltaBatchWrite{
+  private object TestDeltaBatchWrite extends TestBatchWrite with DeltaBatchWrite {
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DeltaWriterFactory = {
       new DeltaBufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
 
-    override def commit(messages: Array[WriterCommitMessage]): Unit = {
+    override protected def doCommit(messages: Array[WriterCommitMessage]): Unit = {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       withDeletes(newData)
       withData(newData, columns())
@@ -208,7 +286,8 @@ private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
   override def delete(meta: InternalRow, id: InternalRow): Unit = {
     val pk = id.getInt(0)
     buffer.deletes += pk
-    val logEntry = new GenericInternalRow(Array[Any](DELETE, pk, meta.copy(), null))
+    val metaCopy = if (meta != null) meta.copy() else null
+    val logEntry = new GenericInternalRow(Array[Any](DELETE, pk, metaCopy, null))
     buffer.log += logEntry
   }
 
@@ -216,13 +295,15 @@ private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
     val pk = id.getInt(0)
     buffer.deletes += pk
     buffer.rows.append(row.copy())
-    val logEntry = new GenericInternalRow(Array[Any](UPDATE, pk, meta.copy(), row.copy()))
+    val metaCopy = if (meta != null) meta.copy() else null
+    val logEntry = new GenericInternalRow(Array[Any](UPDATE, pk, metaCopy, row.copy()))
     buffer.log += logEntry
   }
 
   override def reinsert(meta: InternalRow, row: InternalRow): Unit = {
     buffer.rows.append(row.copy())
-    val logEntry = new GenericInternalRow(Array[Any](REINSERT, null, meta.copy(), row.copy()))
+    val metaCopy = if (meta != null) meta.copy() else null
+    val logEntry = new GenericInternalRow(Array[Any](REINSERT, null, metaCopy, row.copy()))
     buffer.log += logEntry
   }
 
@@ -237,4 +318,59 @@ private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
   }
 
   override def commit(): WriterCommitMessage = buffer
+}
+
+object InMemoryRowLevelOperationTable {
+  def withColumns(
+      name: String,
+      columns: Array[Column],
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint] = Array.empty,
+      tableId: String = java.util.UUID.randomUUID().toString): InMemoryRowLevelOperationTable = {
+    new InMemoryRowLevelOperationTable(
+      name, columns, partitioning, properties, constraints, tableId)
+  }
+}
+
+/**
+ * An in-memory table that implements only [[TruncatableTable]] (NOT [[SupportsDeleteV2]]).
+ * Used to exercise the [[TruncateTableExec]] planning path for DELETE statements with no WHERE.
+ */
+class InMemoryTruncatableOnlyTable(
+    name: String,
+    columns: Array[Column],
+    partitioning: Array[Transform],
+    properties: util.Map[String, String],
+    constraints: Array[Constraint])
+  extends InMemoryBaseTable(name, columns, partitioning, properties, constraints)
+  with TruncatableTable {
+
+  var lastTruncateOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    InMemoryBaseTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
+    InMemoryBaseTable.maybeSimulateFailedTableWrite(info.options)
+    new InMemoryWriterBuilder(info) {
+      override def truncate(): WriteBuilder = {
+        writer = new TruncateAndAppend(this.info)
+        streamingWriter = new StreamingTruncateAndAppend(this.info)
+        this
+      }
+    }
+  }
+
+  override def truncateTable(): Boolean = {
+    lastTruncateOptions = CaseInsensitiveStringMap.empty()
+    dataMap.synchronized { dataMap.clear() }
+    increaseVersion()
+    true
+  }
+
+  override def truncateTable(options: CaseInsensitiveStringMap): Boolean = {
+    lastTruncateOptions = options
+    dataMap.synchronized { dataMap.clear() }
+    increaseVersion()
+    true
+  }
 }

@@ -150,7 +150,7 @@ def find_pipeline_spec(current_dir: Path) -> Path:
 
 def load_pipeline_spec(spec_path: Path) -> PipelineSpec:
     """Load the pipeline spec from a YAML file at the given path."""
-    with spec_path.open("r") as f:
+    with spec_path.open("r", encoding="utf-8") as f:
         return unpack_pipeline_spec(yaml.safe_load(f))
 
 
@@ -253,6 +253,7 @@ def register_definitions(
                         assert module_spec.loader is not None, (
                             f"Module spec has no loader for {file}"
                         )
+                        module.__dict__["spark"] = spark
                         with add_pipeline_analysis_context(
                             spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
                         ):
@@ -260,7 +261,7 @@ def register_definitions(
                                 module_spec.loader.exec_module(module)
                     elif file.suffix == ".sql":
                         log_with_curr_timestamp(f"Registering SQL file {file}...")
-                        with file.open("r") as f:
+                        with file.open("r", encoding="utf-8") as f:
                             sql = f.read()
                         file_path_relative_to_spec = file.relative_to(path)
                         registry.register_sql(sql, file_path_relative_to_spec)
@@ -324,30 +325,31 @@ def run(
         spark_builder = spark_builder.config(key, value)
 
     spark = spark_builder.getOrCreate()
-
-    log_with_curr_timestamp("Creating dataflow graph...")
-    dataflow_graph_id = create_dataflow_graph(
-        spark,
-        default_catalog=spec.catalog,
-        default_database=spec.database,
-        sql_conf=spec.configuration,
-    )
-
-    log_with_curr_timestamp("Registering graph elements...")
-    registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
-    register_definitions(spec_path, registry, spec, spark, dataflow_graph_id)
-
-    log_with_curr_timestamp("Starting run...")
-    result_iter = start_run(
-        spark,
-        dataflow_graph_id,
-        full_refresh=full_refresh,
-        full_refresh_all=full_refresh_all,
-        refresh=refresh,
-        dry=dry,
-        storage=spec.storage,
-    )
+    # Stop the session even if graph creation, registration, or the run itself fails, so a failure
+    # after the session is created does not leak it.
     try:
+        log_with_curr_timestamp("Creating dataflow graph...")
+        dataflow_graph_id = create_dataflow_graph(
+            spark,
+            default_catalog=spec.catalog,
+            default_database=spec.database,
+            sql_conf=spec.configuration,
+        )
+
+        log_with_curr_timestamp("Registering graph elements...")
+        registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
+        register_definitions(spec_path, registry, spec, spark, dataflow_graph_id)
+
+        log_with_curr_timestamp("Starting run...")
+        result_iter = start_run(
+            spark,
+            dataflow_graph_id,
+            full_refresh=full_refresh,
+            full_refresh_all=full_refresh_all,
+            refresh=refresh,
+            dry=dry,
+            storage=spec.storage,
+        )
         handle_pipeline_events(result_iter)
     finally:
         spark.stop()

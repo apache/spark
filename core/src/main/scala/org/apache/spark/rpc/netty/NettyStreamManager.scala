@@ -59,7 +59,8 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
       case other =>
         val dir = dirs.get(ftype)
         require(dir != null, s"Invalid stream URI: $ftype not found.")
-        new File(dir, fname)
+        val canonicalFile = new File(dir, fname).getCanonicalFile
+        if (canonicalFile.getPath.startsWith(dir.getPath + File.separator)) canonicalFile else null
     }
 
     if (file != null && file.isFile()) {

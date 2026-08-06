@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.test.SharedSparkSession
 
-class PathFilterStrategySuite extends QueryTest with SharedSparkSession {
+class PathFilterStrategySuite extends SharedSparkSession {
 
   test("SPARK-31962: PathFilterStrategies - modifiedAfter option") {
     val options =

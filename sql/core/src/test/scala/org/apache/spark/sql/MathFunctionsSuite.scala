@@ -33,7 +33,7 @@ private object MathFunctionsTestData {
   case class NullDoubles(a: java.lang.Double)
 }
 
-class MathFunctionsSuite extends QueryTest with SharedSparkSession {
+class MathFunctionsSuite extends SharedSparkSession {
   import MathFunctionsTestData._
   import testImplicits._
 

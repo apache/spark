@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
@@ -41,7 +41,7 @@ class BucketedWriteWithoutHiveSupportSuite extends BucketedWriteSuite with Share
   override protected def fileFormatsToTest: Seq[String] = Seq("parquet", "json")
 }
 
-abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
+abstract class BucketedWriteSuite extends QueryTest {
   import testImplicits._
 
   protected def fileFormatsToTest: Seq[String]

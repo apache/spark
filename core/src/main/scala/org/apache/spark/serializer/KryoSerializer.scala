@@ -47,7 +47,7 @@ import org.apache.spark.internal.io.FileCommitProtocol._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.{BoundedPriorityQueue, ByteBufferInputStream, NextIterator, SerializableConfiguration, SerializableJobConf, Utils}
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -236,6 +236,9 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[ArrayBuffer[Any]])
     kryo.register(classOf[Array[Array[Byte]]])
     kryo.register(classOf[UTF8String])
+    // Nanosecond-timestamp min/max bounds inside cached-batch statistics rows
+    // (TimestampNanosColumnStats and the Arrow cache's vector-side stats).
+    kryo.register(classOf[TimestampNanosVal])
 
     // We can't load those class directly in order to avoid unnecessary jar dependencies.
     // We load them safely, ignore it if the class not found.
@@ -620,6 +623,8 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.sql.columnar.CachedBatchSerializer",
       "org.apache.spark.sql.columnar.SimpleMetricsCachedBatchSerializer",
       "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer",
+      "org.apache.spark.sql.execution.columnar.ArrowCachedBatch",
+      "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer",
 
       "org.apache.spark.ml.attribute.Attribute",
       "org.apache.spark.ml.attribute.AttributeGroup",

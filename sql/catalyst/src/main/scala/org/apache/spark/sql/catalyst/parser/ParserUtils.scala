@@ -105,16 +105,6 @@ object ParserUtils extends SparkParserUtils {
     Option(value).toSeq.map(x => key -> string(x))
   }
 
-  /** Validate the condition. If it doesn't throw a parse exception. */
-  def validate(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
-    if (!f) {
-      throw new ParseException(
-        errorClass = "_LEGACY_ERROR_TEMP_0064",
-        messageParameters = Map("msg" -> message),
-        ctx)
-    }
-  }
-
   /** the column name pattern in quoted regex without qualifier */
   val escapedIdentifier = "`((?s).+)`".r
 

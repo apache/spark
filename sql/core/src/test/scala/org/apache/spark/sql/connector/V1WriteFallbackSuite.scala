@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -39,14 +39,14 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.execution.datasources.v2.{AppendDataExecV1, OverwriteByExpressionExecV1}
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.SQLConf.{OPTIMIZER_MAX_ITERATIONS, V2_SESSION_CATALOG_IMPLEMENTATION}
+import org.apache.spark.sql.internal.SQLConf.{ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER, OPTIMIZER_MAX_ITERATIONS, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
-class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
+class V1WriteFallbackSuite extends SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
 
@@ -144,6 +144,8 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
         .master("local[1]")
         .withExtensions(_.injectPostHocResolutionRule(_ => OnlyOnceRule))
         .withExtensions(_.injectOptimizerRule(_ => OnlyOnceOptimizerRule))
+        // Dual-running Analyzers would lead to rule being invoked twice
+        .config(ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
         .config(OPTIMIZER_MAX_ITERATIONS.key, "1")
         .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
         .getOrCreate()
@@ -252,6 +254,9 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
 class V1WriteFallbackSessionCatalogSuite
   extends InsertIntoTests(supportsDynamicOverwrite = false, includeSQLOnlyTests = true)
   with SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {
+
+  // V1 fallback writes do not flow through V2TableWriteExec, so no InsertSummary is emitted.
+  override protected def checkInsertMetrics(tableName: String, numInsertedRows: Long): Unit = ()
 
   override protected val v2Format = classOf[InMemoryV1Provider].getName
   override protected val catalogClassName: String = classOf[V1FallbackTableCatalog].getName

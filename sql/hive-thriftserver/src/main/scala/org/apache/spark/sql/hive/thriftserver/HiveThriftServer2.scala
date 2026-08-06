@@ -34,6 +34,7 @@ import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui._
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -158,7 +159,9 @@ private[hive] class HiveThriftServer2(sparkSession: SparkSession)
     addService(sparkSqlCliService)
 
     val thriftCliService = if (isHTTPTransportMode(hiveConf)) {
-      new ThriftHttpCLIService(sparkSqlCliService)
+      val sniHostCheckEnabled = sparkSession.conf.get(
+        StaticSQLConf.HIVE_THRIFT_SERVER_HTTP_SNI_HOST_CHECK_ENABLED)
+      new ThriftHttpCLIService(sparkSqlCliService, sniHostCheckEnabled)
     } else {
       new ThriftBinaryCLIService(sparkSqlCliService)
     }

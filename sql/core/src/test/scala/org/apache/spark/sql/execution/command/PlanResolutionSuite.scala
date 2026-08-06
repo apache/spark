@@ -27,16 +27,16 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationCache, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableWritePrivilege, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, TableChange, TableContext, TableWritePrivilege, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -47,6 +47,7 @@ import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, Partitio
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
@@ -139,6 +140,12 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       .add("s", "string")
       .add("point", new StructType().add("x", "int").add("y", "int")))
     when(t.tableType).thenReturn(tableType)
+    // Mockito returns false for unstubbed Boolean methods, so analyzer code paths that
+    // dispatch through `CatalogTable.isViewLike` (e.g. `Analyzer.lookupTableOrView`'s v1
+    // session-catalog branch) would misclassify a mocked VIEW fixture as a table. Stub
+    // the method to compute from the just-stubbed `tableType` so any view-like type
+    // (VIEW today, METRIC_VIEW or future kinds) resolves correctly.
+    when(t.isViewLike).thenReturn(CatalogTable.isViewLike(tableType))
     when(t.provider).thenReturn(Some(provider))
     when(t.identifier).thenReturn(
       ident.asTableIdentifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
@@ -146,6 +153,15 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.properties).thenReturn(Map.empty)
     when(t.comment).thenReturn(None)
     when(t.collation).thenReturn(None)
+    if (tableType == CatalogTableType.VIEW) {
+      // Stub the view-only fields that resolution reads through `V1View.builderFrom`.
+      // Mockito returns `null` for unstubbed Object methods, which would NPE the moment
+      // builderFrom calls `.getOrElse` / `.asJava` / `.toArray` on a null Option/Seq/Map.
+      when(t.viewText).thenReturn(None)
+      when(t.viewCatalogAndNamespace).thenReturn(Seq.empty)
+      when(t.viewSQLConfigs).thenReturn(Map.empty)
+      when(t.viewQueryColumnNames).thenReturn(Seq.empty)
+    }
     V1Table(t)
   }
 
@@ -175,6 +191,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     })
     when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
       .thenCallRealMethod()
+    // The options-aware overload runs the real default dispatch, which delegates to the
+    // stubbed overloads above.
+    when(newCatalog.loadTable(any(), any[TableContext](), any[CaseInsensitiveStringMap]()))
+      .thenCallRealMethod()
     when(newCatalog.name()).thenReturn("testcat")
     newCatalog
   }
@@ -193,6 +213,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       }
     })
     when(newCatalog.loadTable(any(), any[java.util.Set[TableWritePrivilege]]()))
+      .thenCallRealMethod()
+    // The options-aware overload runs the real default dispatch, which delegates to the
+    // stubbed overloads above.
+    when(newCatalog.loadTable(any(), any[TableContext](), any[CaseInsensitiveStringMap]()))
       .thenCallRealMethod()
     when(newCatalog.name()).thenReturn(CatalogManager.SESSION_CATALOG_NAME)
     newCatalog
@@ -221,6 +245,16 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath = SQLConf.get.resolutionSearchPath(Seq(testCat.name()))
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath)
     manager
   }
 
@@ -230,6 +264,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       invocation.getArguments()(0).asInstanceOf[String] match {
         case "testcat" =>
           testCat
+        case CatalogManager.SESSION_CATALOG_NAME =>
+          v2SessionCatalog
         case name => throw QueryExecutionErrors.catalogNotFoundError(name)
       }
     })
@@ -237,6 +273,17 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array("default"))
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath2 = SQLConf.get.resolutionSearchPath(
+      (v2SessionCatalog.name() +: Array("default")).toSeq)
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath2)
     manager
   }
 
@@ -778,8 +825,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
     checkError(
       e,
-      condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-      parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -943,13 +990,13 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           comparePlans(parsed2, expected2)
         } else {
           parsed1 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
+            case DescribeRelation(_: ResolvedTable, isExtended, _) =>
               assert(!isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
           }
 
           parsed2 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
+            case DescribeRelation(_: ResolvedTable, isExtended, _) =>
               assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
@@ -965,10 +1012,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
-            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, _) =>
+            case DescribeTablePartition(_: ResolvedTable, partitionSpec, isExtended, _) =>
               assert(!isExtended)
-              assert(partitionSpec == Map("a" -> "1"))
-            case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
+              assert(partitionSpec == UnresolvedPartitionSpec(Map("a" -> "1")))
+            case _ => fail("Expect DescribeTablePartition, but got:\n" + parsed3.treeString)
           }
         }
     }
@@ -1359,6 +1406,23 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     )
   }
 
+  test("INSERT INTO REPLACE WHERE with column list") {
+    val parsed = parseAndResolve(
+      """INSERT INTO testcat.tab (i, s)
+        |REPLACE WHERE i = 1
+        |SELECT * FROM v2Table""".stripMargin)
+    parsed match {
+      case overwriteByExpression: OverwriteByExpression =>
+        // ResolveInsertInto resolves the column list into a Project and converts the statement
+        // into a by-name OverwriteByExpression whose delete expression is the REPLACE WHERE
+        // condition, resolved against the target table.
+        assert(overwriteByExpression.isByName)
+        assert(overwriteByExpression.deleteExpr.resolved)
+      case other =>
+        fail(s"Expected OverwriteByExpression, but got: $other")
+    }
+  }
+
   test("INSERT INTO REPLACE ON is blocked when feature flag is disabled") {
     withSQLConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED.key -> "false") {
       val ex = intercept[ParseException] {
@@ -1475,7 +1539,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   None,
                   None,
                   None,
-                  false))) =>
+                  false,
+                  false)),
+                _) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterColumns")
           }
@@ -1490,7 +1556,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   Some("new comment"),
                   None,
                   None,
-                  false))) =>
+                  false,
+                  false)),
+                _) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterColumns")
           }
@@ -1507,6 +1575,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                     None,
                     None,
                     None,
+                    false,
                     false),
                   AlterColumnSpec(
                     column2: ResolvedFieldName,
@@ -1515,7 +1584,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                     None,
                     None,
                     Some(DefaultValueExpression(_, _, _)),
-                    false))) =>
+                    false,
+                    false)),
+                _) =>
               assert(column1.name == Seq("i"))
               assert(column2.name == Seq("s"))
             case _ => fail("expect AlterColumns")
@@ -1603,7 +1674,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Some(comment),
               None,
               None,
-              false))) =>
+              false,
+              false)),
+            _) =>
           assert(comment == "an index")
         case _ => fail("expect AlterTableAlterColumn with comment change only")
       }
@@ -1618,7 +1691,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Some(comment),
               None,
               None,
-              false))) =>
+              false,
+              false)),
+            _) =>
           assert(comment == "an index")
           assert(dataType == LongType)
         case _ => fail("expect AlterTableAlterColumn with type and comment changes")
@@ -1653,7 +1728,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       val catalog = if (isSessionCatalog) v2SessionCatalog else testCat
       val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
-        case AlterColumns(r: ResolvedTable, _) =>
+        case AlterColumns(r: ResolvedTable, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case Project(_, AsDataSourceV2Relation(r)) =>
@@ -1662,7 +1737,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case DescribeRelation(r: ResolvedTable, _, _, _) =>
+        case DescribeRelation(r: ResolvedTable, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: ResolvedTable, _, _) =>
@@ -3332,7 +3407,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
       // after first resolution, cache should have 1 entry (without time travel)
       assert(ctx.relationCache.size == 1)
-      assert(ctx.relationCache.keys.head._2.isEmpty)
+      assert(ctx.relationCache.keys.head.timeTravelSpec.isEmpty)
 
       // create unresolved relation with time travel spec
       val timeTravelSpec = AsOfVersion("v1")
@@ -3388,6 +3463,54 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       assert(resolved1.identifier == resolved2.identifier)
       assert(resolved1.timeTravelSpec == resolved2.timeTravelSpec)
     }
+  }
+
+  test("SPARK-58389: shared relation cache is reused only when the read's options match") {
+    val ident = Identifier.of(Array.empty[String], "tab")
+    val cachedTable = testCat.loadTable(ident)
+
+    // A shared relation cache entry (as if left by an earlier CACHE TABLE) built with a specific
+    // set of options. The `id` tag lets the test tell a cache reuse apart from a fresh load, since
+    // both would otherwise carry the same mock `Table`.
+    def cachedRelationWith(opts: java.util.Map[String, String]): DataSourceV2Relation = {
+      val r = DataSourceV2Relation.create(
+        cachedTable, Some(testCat), Some(ident), new CaseInsensitiveStringMap(opts))
+      r.setTagValue(LogicalPlan.PLAN_ID_TAG, 4242L)
+      r
+    }
+
+    def resolveWith(
+        cacheOpts: java.util.Map[String, String],
+        readOpts: java.util.Map[String, String]): DataSourceV2Relation = {
+      AnalysisContext.withNewAnalysisContext {
+        val sharedCache: RelationCache = (_, _) => Some(cachedRelationWith(cacheOpts))
+        val rule = new RelationResolution(catalogManagerWithDefault, sharedCache)
+        val unresolved =
+          UnresolvedRelation(Seq("testcat", "tab"), new CaseInsensitiveStringMap(readOpts))
+        rule.resolveRelation(unresolved) match {
+          case Some(AsDataSourceV2Relation(relation)) => relation
+          case other => fail(s"failed to resolve as v2 relation: $other")
+        }
+      }
+    }
+
+    // Same options as the cached entry: the cache is reused (the tagged cached relation flows
+    // through, so the tag survives).
+    val reused = resolveWith(
+      java.util.Map.of("split-size", "5"), java.util.Map.of("split-size", "5"))
+    assert(reused.options.get("split-size") === "5")
+    assert(reused.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(4242L),
+      "matching options should reuse the cached relation")
+
+    // Different options: the cache is NOT reused. The relation is freshly loaded with this read's
+    // options, so it does not carry the cached entry's option or its tag.
+    val fresh = resolveWith(
+      java.util.Map.of("cachedOnly", "stale"), java.util.Map.of("split-size", "5"))
+    assert(fresh.options.get("split-size") === "5")
+    assert(!fresh.options.containsKey("cachedOnly"),
+      "differing options must not reuse the cached relation")
+    assert(fresh.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty,
+      "differing options should freshly load, not reuse the cached relation")
   }
 
   private def resolve(

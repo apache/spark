@@ -25,6 +25,8 @@ The SET command sets a property, returns the value of an existing property or re
 
 To set SQL variables defined with [DECLARE VARIABLE](sql-ref-syntax-ddl-declare-variable.html) use [SET VAR](sql-ref-syntax-aux-set-var.html).
 
+To change the session SQL Path used for unqualified name resolution use [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
+
 ### Syntax
 
 ```sql
@@ -72,3 +74,4 @@ SET spark.sql.variable.substitute;
 
 * [RESET](sql-ref-syntax-aux-conf-mgmt-reset.html)
 * [SET VAR](sql-ref-syntax-aux-set-var.html)
+* [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html)

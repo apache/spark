@@ -24,12 +24,10 @@ import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.columnar.{DefaultCachedBatch, DefaultCachedBatchKryoSerializer}
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
 
-class CacheTableInKryoSuite extends QueryTest
-  with SQLTestUtils
-  with SharedSparkSession {
+class CacheTableInKryoSuite extends SharedSparkSession {
 
   override def sparkConf: SparkConf = {
     super.sparkConf
@@ -57,6 +55,14 @@ class CacheTableInKryoSuite extends QueryTest
         checkAnswer(sql("SELECT a, b, c FROM t1").persist(StorageLevel.DISK_ONLY),
             Seq(Row("apache", "spark", "community"), Row("Apache", "Spark", "Community")))
     }
+  }
+
+  test("SPARK-58408: TimestampNanosVal stats should be registered in KryoSerializer") {
+    // Cached-batch statistics rows carry TimestampNanosVal min/max bounds for
+    // nanosecond-timestamp columns (TimestampNanosColumnStats), so persisting such a cache
+    // through Kryo with registrationRequired must find the class registered.
+    val df = sql("SELECT CAST('2025-01-06 12:30:45.123456789' AS TIMESTAMP_NTZ(9)) AS ts")
+    assert(df.persist(StorageLevel.DISK_ONLY).count() === 1)
   }
 
   test("SPARK-51813 DefaultCachedBatchKryoSerializer do not propagate nulls") {

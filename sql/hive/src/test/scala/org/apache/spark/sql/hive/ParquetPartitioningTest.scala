@@ -21,7 +21,6 @@ import java.io.File
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
@@ -47,7 +46,7 @@ case class ParquetDataWithKeyAndComplexTypes(
 /**
  * A collection of tests for parquet data with various forms of partitioning.
  */
-abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
+abstract class ParquetPartitioningTest extends QueryTest with TestHiveSingleton {
   import testImplicits._
 
   var partitionedTableDir: File = null

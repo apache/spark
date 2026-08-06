@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.runtime
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.{Logging, LogKeys, MessageWithContext}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, RangePartitioning}
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.operators.stateful._
 
 object RealTimeModeAllowlist extends Logging {
@@ -55,7 +57,17 @@ object RealTimeModeAllowlist extends Logging {
     "org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec",
     "org.apache.spark.sql.execution.exchange.BroadcastExchangeExec",
     "org.apache.spark.sql.execution.exchange.ReusedExchangeExec",
+    // A pipelined (streaming) shuffle repartitions a stateful query's input by key. In Real-Time
+    // Mode the DAGScheduler co-schedules the shuffle's producer and consumer stages via a
+    // PipelinedShuffleDependency (see IncrementalExecution's pipelined-shuffle rule), so the
+    // exchange is a supported member of a pipelined group rather than a materialization barrier.
+    "org.apache.spark.sql.execution.exchange.ShuffleExchangeExec",
     "org.apache.spark.sql.execution.joins.BroadcastHashJoinExec",
+    // Streaming deduplication and the state-store access operators it plans into. These run in the
+    // pipelined-shuffle consumer stage, keyed by the same columns the shuffle repartitions on.
+    "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreRestoreExec",
+    "org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreSaveExec",
+    "org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDeduplicateExec",
     classOf[EventTimeWatermarkExec].getName
   )
 
@@ -120,12 +132,37 @@ object RealTimeModeAllowlist extends Logging {
     collectNodesWhoseSubtreeHasRTS(root)._2
   }
 
+  /**
+   * Whether this operator is supported in Real-Time Mode.
+   *
+   * Membership in `allowedOperators` is the general rule, but a shuffle needs a second look: only
+   * some partitionings can run in Real-Time Mode. A `RangePartitioning` cannot, because building
+   * its `RangePartitioner` runs a separate job that samples the input to compute range bounds (see
+   * `ShuffleExchangeExec.prepareShuffleDependency`), and that job cannot complete while the source
+   * keeps producing. Rejecting it here fails the query fast with the usual allowlist error instead
+   * of letting it stall on a sampling job that never finishes.
+   */
+  private def isAllowed(node: SparkPlan): Boolean = {
+    allowedOperators.contains(node.getClass.getName) && (node match {
+      case e: ShuffleExchangeExec => supportsPartitioning(e.outputPartitioning)
+      case _ => true
+    })
+  }
+
+  /**
+   * Whether a shuffle with this partitioning is supported in Real-Time Mode. See `isAllowed` for
+   * why range partitioning is not.
+   */
+  private def supportsPartitioning(partitioning: Partitioning): Boolean = {
+    !partitioning.isInstanceOf[RangePartitioning]
+  }
+
   def checkAllowedPhysicalOperator(operator: SparkPlan, throwException: Boolean): Unit = {
     val nodesToCheck = collectRealtimeNodes(operator)
     val violations = nodesToCheck
       .collect {
         case node =>
-          if (allowedOperators.contains(node.getClass.getName)) {
+          if (isAllowed(node)) {
             None
           } else {
             Some(node.getClass.getName)

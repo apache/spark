@@ -20,17 +20,20 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, Date, Driver, ResultSetMetaData, SQLException, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
+import java.util.Locale
 import java.util.ServiceLoader
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException, SparkThrowable,
+  SparkUnsupportedOperationException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromYearMonthString, getDuration}
@@ -40,7 +43,7 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
-import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
@@ -399,6 +402,17 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    // SPARK-53454: Produce portable SQL for AlwaysTrue/AlwaysFalse predicates.
+    // Some databases (Oracle, DB2) do not support bare TRUE/FALSE in WHERE clauses.
+    // The result is parenthesized so it stays valid when nested as an operand of a
+    // larger expression (e.g. "a" = (1 = 1) or (1 = 1) IS NOT NULL), not just as a
+    // standalone WHERE predicate.
+    override def build(expr: Expression): String = expr match {
+      case _: AlwaysTrue => "(1 = 1)"
+      case _: AlwaysFalse => "(1 = 0)"
+      case _ => super.build(expr)
+    }
+
     // Some dialects do not support boolean type and this convenient util function is
     // provided to generate SQL string without boolean values.
     protected def inputToSQLNoBool(input: Expression): String = input match {
@@ -573,7 +587,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
     val rs = conn.getMetaData.getSchemas(null, schema)
     while (rs.next()) {
-      if (rs.getString(1) == schema) return true;
+      if (rs.getString(1) == schema) return true
     }
     false
   }
@@ -704,11 +718,11 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   def getTableCommentQuery(table: String, comment: String): String = {
-    s"COMMENT ON TABLE $table IS '$comment'"
+    s"COMMENT ON TABLE $table IS '${escapeSql(comment)}'"
   }
 
   def getSchemaCommentQuery(schema: String, comment: String): String = {
-    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '$comment'"
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '${escapeSql(comment)}'"
   }
 
   def removeSchemaCommentQuery(schema: String): String = {
@@ -797,6 +811,15 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Returns true if the given exception indicates the object exists but cannot be read as a
+   * table or view (e.g. a synonym that resolves to a procedure, or an invalid view), as opposed
+   * to not existing at all (see `isObjectNotFoundException`). Dialects override this to recognize
+   * their own error codes; the default is false.
+   */
+  @Since("4.3.0")
+  def isNotSelectableObjectException(e: SQLException): Boolean = false
+
+  /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
    * @param e The dialect specific exception.
    * @param condition The error condition assigned in the case of an unclassified `e`
@@ -868,10 +891,31 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def supportsOffset: Boolean = false
 
+  @deprecated("Use compileTableSample instead", "4.2.0")
   def supportsTableSample: Boolean = false
 
+  @deprecated("Use compileTableSample instead", "4.2.0")
   def getTableSample(sample: TableSampleInfo): String =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
+
+  /**
+   * Compile a [[org.apache.spark.sql.execution.datasources.v2.TableSampleInfo]] into a
+   * SQL `TABLESAMPLE` clause, or return [[scala.None]] if the dialect cannot represent
+   * the requested sampling semantics (e.g. sampling with replacement).
+   *
+   * The default implementation delegates to [[getTableSample]] when [[supportsTableSample]]
+   * is true and the requested sample is BERNOULLI without replacement (the contract
+   * predating this method), and returns [[scala.None]] otherwise.
+   */
+  @Since("4.2.0")
+  def compileTableSample(sample: TableSampleInfo): Option[String] = {
+    if (supportsTableSample && !sample.withReplacement &&
+        sample.sampleMethod == SampleMethod.Bernoulli) {
+      Some(getTableSample(sample))
+    } else {
+      None
+    }
+  }
 
   def supportsHint: Boolean = false
 
@@ -950,6 +994,59 @@ private[sql] trait NoLegacyJDBCError extends JdbcDialect {
 @DeveloperApi
 object JdbcDialects {
 
+  @volatile private[this] var dialectsByUrlPrefix = List[(String, JdbcDialect)]()
+
+  /**
+   * Register an existing dialect for an additional JDBC URL prefix. The registration affects
+   * dialect lookup only; Spark still passes the original URL to the JDBC driver. Registering the
+   * same prefix again replaces its previous dialect. These registrations are used only when no
+   * registered dialect handles the URL through [[JdbcDialect#canHandle]].
+   *
+   * The prefix must start with `jdbc:` and end with `:`. Matching is case-insensitive.
+   * For example, a MySQL-compatible wrapper can reuse the built-in MySQL dialect:
+   *
+   * {{{
+   * JdbcDialects.registerDialectForUrlPrefix(
+   *   "jdbc:aws-wrapper:mysql:",
+   *   JdbcDialects.getBuiltInDialect("mysql"))
+   * }}}
+   *
+   * @param urlPrefix The additional JDBC URL prefix.
+   * @param dialect The existing dialect to use for URLs with the prefix.
+   */
+  @Since("4.3.0")
+  def registerDialectForUrlPrefix(urlPrefix: String, dialect: JdbcDialect): Unit = synchronized {
+    val prefix = normalizePrefix(urlPrefix)
+    dialectsByUrlPrefix = ((prefix, dialect) :: dialectsByUrlPrefix.filterNot(_._1 == prefix))
+      .sortBy { case (registeredPrefix, _) => -registeredPrefix.length }
+  }
+
+  /**
+   * Unregister the dialect associated with an additional JDBC URL prefix. Does nothing if the
+   * prefix is not registered.
+   *
+   * @param urlPrefix The additional JDBC URL prefix.
+   */
+  @Since("4.3.0")
+  def unregisterDialectForUrlPrefix(urlPrefix: String): Unit = synchronized {
+    val prefix = normalizePrefix(urlPrefix)
+    dialectsByUrlPrefix = dialectsByUrlPrefix.filterNot(_._1 == prefix)
+  }
+
+  private def normalizePrefix(prefix: String): String = {
+    val normalized = prefix.toLowerCase(Locale.ROOT)
+    require(normalized.startsWith("jdbc:") && normalized.endsWith(":"),
+      s"JDBC URL prefixes must start with 'jdbc:' and end with ':': $prefix")
+    normalized
+  }
+
+  private def getDialectForUrlPrefix(url: String): Option[JdbcDialect] = {
+    val normalizedUrl = url.toLowerCase(Locale.ROOT)
+    dialectsByUrlPrefix.collectFirst {
+      case (prefix, dialect) if normalizedUrl.startsWith(prefix) => dialect
+    }
+  }
+
   /**
    * Register a dialect for use on all new matching jdbc `org.apache.spark.sql.DataFrame`.
    * Reading an existing dialect will cause a move-to-front.
@@ -980,11 +1077,45 @@ object JdbcDialects {
   }
   registerDialects()
 
+  private val builtInDialects: Map[String, JdbcDialect] = dialects.collect {
+    case dialect: MySQLDialect => "mysql" -> dialect
+    case dialect: PostgresDialect => "postgresql" -> dialect
+    case dialect: DB2Dialect => "db2" -> dialect
+    case dialect: MsSqlServerDialect => "sqlserver" -> dialect
+    case dialect: DerbyDialect => "derby" -> dialect
+    case dialect: OracleDialect => "oracle" -> dialect
+    case dialect: TeradataDialect => "teradata" -> dialect
+    case dialect: H2Dialect => "h2" -> dialect
+    case dialect: SnowflakeDialect => "snowflake" -> dialect
+    case dialect: DatabricksDialect => "databricks" -> dialect
+  }.toMap
+
+  /**
+   * Return a built-in JDBC dialect by name. The lookup is case-insensitive. Supported names are
+   * `mysql`, `postgresql`, `db2`, `sqlserver`, `derby`, `oracle`, `teradata`, `h2`, `snowflake`,
+   * and `databricks`.
+   *
+   * @param name The name of the built-in JDBC dialect.
+   */
+  @Since("4.3.0")
+  def getBuiltInDialect(name: String): JdbcDialect = {
+    Option(name).flatMap(name => builtInDialects.get(name.toLowerCase(Locale.ROOT))).getOrElse {
+      throw new SparkIllegalArgumentException(
+        errorClass = "UNSUPPORTED_BUILT_IN_JDBC_DIALECT",
+        messageParameters = Map(
+          "name" -> String.valueOf(name),
+          "supportedNames" -> builtInDialects.keys.toSeq.sorted.mkString(", ")))
+    }
+  }
+
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
    */
   def get(url: String): JdbcDialect = {
-    val matchingDialects = dialects.filter(_.canHandle(url))
+    val matchingDialects = dialects.filter(_.canHandle(url)) match {
+      case Nil => getDialectForUrlPrefix(url).toList
+      case matches => matches
+    }
     matchingDialects.length match {
       case 0 => NoopDialect
       case 1 => matchingDialects.head

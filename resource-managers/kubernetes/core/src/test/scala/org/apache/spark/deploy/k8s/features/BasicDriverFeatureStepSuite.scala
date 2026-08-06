@@ -143,6 +143,31 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(featureStep.getAdditionalPodSystemProperties() === expectedSparkConf)
   }
 
+  test("Set allowPrivilegeEscalation to false on the driver container by default") {
+    val sparkConf = new SparkConf().set(CONTAINER_IMAGE, "spark-driver:latest")
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val pod = new BasicDriverFeatureStep(conf).configurePod(SparkPod.initialPod())
+    assert(pod.container.getSecurityContext.getAllowPrivilegeEscalation === false)
+  }
+
+  test("Support spark.kubernetes.driver.securityContext.allowPrivilegeEscalation") {
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_DRIVER_ALLOW_PRIVILEGE_ESCALATION, true)
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val pod = new BasicDriverFeatureStep(conf).configurePod(SparkPod.initialPod())
+    assert(pod.container.getSecurityContext.getAllowPrivilegeEscalation === true)
+  }
+
+  test("driver allowPrivilegeEscalation falls back to the shared config") {
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION, true)
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+    val pod = new BasicDriverFeatureStep(conf).configurePod(SparkPod.initialPod())
+    assert(pod.container.getSecurityContext.getAllowPrivilegeEscalation === true)
+  }
+
   test("Check driver pod respects kubernetes driver request cores") {
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")

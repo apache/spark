@@ -37,9 +37,11 @@ DROP VIEW [ IF EXISTS ] view_identifier
 
 * **view_identifier**
 
-    Specifies the view name to be dropped. The view name may be optionally qualified with a database name.
+    Specifies the view name to be dropped. The name may be optionally qualified with a database
+    name (or a catalog and database). A name qualified with `session` or `system.session`
+    targets a temporary view.
 
-    **Syntax:** `[ database_name. ] view_name`
+    **Syntax:** `[ catalog_name. ] [ database_name. ] view_name`
 
 ### Examples
 
@@ -53,12 +55,20 @@ DROP VIEW userdb.employeeView;
 -- Assumes a view named `employeeView` does not exist.
 -- Throws exception
 DROP VIEW employeeView;
-Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeeView;
-(state=,code=0)
+Error: TABLE_OR_VIEW_NOT_FOUND
 
 -- Assumes a view named `employeeView` does not exist,Try with IF EXISTS
 -- this time it will not throw exception
 DROP VIEW IF EXISTS employeeView;
+
+-- A temporary view that shadows a persistent view with the same name.
+-- An unqualified DROP VIEW drops the temporary view first; qualifying with `session`
+-- always targets the temporary view explicitly.
+CREATE VIEW default.recent_orders AS SELECT * FROM orders WHERE order_date > current_date - 7;
+CREATE TEMPORARY VIEW recent_orders AS SELECT * FROM orders WHERE order_date = current_date;
+
+DROP VIEW session.recent_orders;             -- drops the temporary view
+DROP VIEW default.recent_orders;             -- drops the persistent view
 ```
 
 ### Related Statements

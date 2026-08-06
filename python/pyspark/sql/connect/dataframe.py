@@ -107,17 +107,18 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql.plot import PySparkPlotAccessor
 
 
 class DataFrame(ParentDataFrame):
     def __new__(
         cls,
-        plan: plan.LogicalPlan,
-        session: "SparkSession",
+        *args: Any,
+        **kwargs: Any,
     ) -> "DataFrame":
-        self = object.__new__(cls)
-        self.__init__(plan, session)  # type: ignore[misc]
-        return self
+        # ParentDataFrame by default creates classic DataFrame for backward compatibility.
+        # We have to do an explicit object.__new__ to avoid that.
+        return object.__new__(cls)
 
     def __init__(
         self,
@@ -376,6 +377,13 @@ class DataFrame(ParentDataFrame):
         other = self._check_same_session(other)
         return DataFrame(
             plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
+            session=self._session,
+        )
+
+    def zip(self, other: ParentDataFrame) -> ParentDataFrame:
+        other = self._check_same_session(other)
+        return DataFrame(
+            plan.Zip(self._plan, other._plan),
             session=self._session,
         )
 
@@ -723,6 +731,30 @@ class DataFrame(ParentDataFrame):
             how = how.lower().replace("_", "")
         return DataFrame(
             plan.LateralJoin(left=self._plan, right=other._plan, on=on, how=how),
+            session=self._session,
+        )
+
+    def nearestByJoin(
+        self,
+        other: ParentDataFrame,
+        rankingExpression: Column,
+        numResults: int,
+        mode: str,
+        direction: str,
+        *,
+        joinType: str = "inner",
+    ) -> ParentDataFrame:
+        other = self._check_same_session(other)
+        return DataFrame(
+            plan.NearestByJoin(
+                left=self._plan,
+                right=other._plan,
+                ranking_expression=rankingExpression,
+                num_results=int(numResults),
+                join_type=joinType,
+                mode=mode,
+                direction=direction,
+            ),
             session=self._session,
         )
 
@@ -1363,8 +1395,8 @@ class DataFrame(ParentDataFrame):
                 min_non_nulls = None
             else:
                 raise PySparkValueError(
-                    errorClass="CANNOT_BE_EMPTY",
-                    messageParameters={"arg_name": "how", "arg_value": str(how)},
+                    errorClass="VALUE_NOT_ALLOWED",
+                    messageParameters={"arg_name": "how", "allowed_values": "['any', 'all']"},
                 )
 
         if thresh is not None:
@@ -1632,8 +1664,8 @@ class DataFrame(ParentDataFrame):
             method = "pearson"
         if not method == "pearson":
             raise PySparkValueError(
-                errorClass="VALUE_NOT_PEARSON",
-                messageParameters={"arg_name": "method", "arg_value": method},
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "method", "allowed_values": "['pearson']"},
             )
         table, _ = DataFrame(
             plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
@@ -2303,7 +2335,9 @@ class DataFrame(ParentDataFrame):
         def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
             def flatten() -> Iterator[Row]:
                 for table in itr:
-                    columnar_data = [column.to_pylist() for column in table.columns]
+                    columnar_data = [
+                        ArrowTableToRowsConversion._to_pylist(column) for column in table.columns
+                    ]
                     for i in range(0, table.num_rows):
                         values = [
                             field_converters[j](columnar_data[j][i])  # type: ignore[misc]
@@ -2402,7 +2436,7 @@ class DataFrame(ParentDataFrame):
         return self._execution_info
 
     @property
-    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+    def plot(self) -> "PySparkPlotAccessor":
         from pyspark.sql.plot import PySparkPlotAccessor
 
         return PySparkPlotAccessor(self)

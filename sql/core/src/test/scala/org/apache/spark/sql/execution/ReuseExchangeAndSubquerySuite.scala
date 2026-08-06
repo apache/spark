@@ -22,7 +22,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedSparkSession {
+class ReuseExchangeAndSubquerySuite extends SharedSparkSession {
 
   val tableFormat: String = "parquet"
 

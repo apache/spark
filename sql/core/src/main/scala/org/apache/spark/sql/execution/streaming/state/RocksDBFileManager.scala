@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.{File, FileInputStream, InputStream}
+import java.io.{File, FileInputStream, FileNotFoundException, InputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
@@ -25,6 +25,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.{mutable, Map}
 import scala.math._
+import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
@@ -976,11 +977,48 @@ class RocksDBFileManager(
    */
   private def unzipBatchZipFileFromDfs(
       version: Long, checkpointUniqueId: Option[String], localDir: File): Seq[File] = {
-    if (checkpointUniqueId.isDefined) {
-      Utils.unzipFilesFromInputStream(
-        fm.open(dfsBatchZipFile(version, checkpointUniqueId)), localDir)
-    } else {
-      Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version, checkpointUniqueId), localDir)
+    try {
+      if (checkpointUniqueId.isDefined) {
+        Utils.unzipFilesFromInputStream(
+          fm.open(dfsBatchZipFile(version, checkpointUniqueId)), localDir)
+      } else {
+        Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version, checkpointUniqueId), localDir)
+      }
+    } catch {
+      case e: FileNotFoundException =>
+        // The snapshot zip for this version is missing. The most common cause is that the
+        // asynchronous maintenance thread has not uploaded the snapshot yet (e.g. reading state
+        // with the snapshotStartBatchId option immediately after writing). Enrich the error with
+        // the snapshot/changelog files that ARE present in DFS, so the situation is diagnosable
+        // straight from the logs (in particular for intermittent failures in scheduled jobs).
+        // e.getMessage already names the missing zip path, so we do not repeat it; the original
+        // exception is preserved as the cause so its stack trace is not lost.
+        val enriched = new FileNotFoundException(
+          s"${e.getMessage}\nFailed to load the snapshot file for version $version" +
+          checkpointUniqueId.map(id => s" (checkpointUniqueId=$id)").getOrElse("") +
+          s". Files currently present in $dfsRootDir: ${listDfsFilesForDiagnostics()}")
+        enriched.initCause(e)
+        throw enriched
+    }
+  }
+
+  /**
+   * Best-effort listing of the snapshot (.zip) and changelog (.changelog) files present in the
+   * DFS checkpoint root. Used only to enrich diagnostics when a snapshot load fails; never throws.
+   */
+  private def listDfsFilesForDiagnostics(): String = {
+    try {
+      val path = new Path(dfsRootDir)
+      if (!fm.exists(path)) {
+        "<DFS checkpoint root does not exist>"
+      } else {
+        val names = fm.list(path).map(_.getPath.getName)
+        val snapshots = names.filter(_.endsWith(".zip")).sorted
+        val changelogs = names.filter(_.endsWith(".changelog")).sorted
+        s"snapshots=[${snapshots.mkString(", ")}], changelogs=[${changelogs.mkString(", ")}]"
+      }
+    } catch {
+      case NonFatal(t) => s"<failed to list DFS files for diagnostics: ${t.getMessage}>"
     }
   }
 
@@ -1048,7 +1086,7 @@ class RocksDBFileManager(
 
   /** Log the files present in a directory. This is useful for debugging. */
   private def logFilesInDir(dir: File, msg: MessageWithContext): Unit = {
-    lazy val files = Option(Utils.recursiveList(dir)).getOrElse(Array.empty).map { f =>
+    lazy val files = Utils.recursiveList(dir).map { f =>
       s"${f.getAbsolutePath} - ${f.length()} bytes"
     }
     logDebug(msg + log" - ${MDC(LogKeys.NUM_FILES, files.length)} files\n\t" +

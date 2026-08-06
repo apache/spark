@@ -68,7 +68,7 @@ Project [scalar-subquery#x [id#xL] AS scalarsubquery(id)#x]
 :  +- WithCTE
 :     :- CTERelationDef xxxx, false
 :     :  +- SubqueryAlias unreferenced
-:     :     +- Project [outer(id#xL)]
+:     :     +- Project [outer(id#xL) AS id#xL]
 :     :        +- OneRowRelation
 :     +- Project [1 AS 1#x]
 :        +- OneRowRelation
@@ -87,7 +87,7 @@ Project [scalar-subquery#x [id#xL] AS scalarsubquery(id)#xL]
 :     :  +- SubqueryAlias unreferenced
 :     :     +- Project [1 AS 1#x]
 :     :        +- OneRowRelation
-:     +- Project [outer(id#xL)]
+:     +- Project [outer(id#xL) AS id#xL]
 :        +- OneRowRelation
 +- Range (0, 1, step=1)
 

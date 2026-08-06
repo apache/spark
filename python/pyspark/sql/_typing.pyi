@@ -86,8 +86,10 @@ class UserDefinedFunctionLike(Protocol):
     def __call__(self, *args: ColumnOrName) -> Column: ...
     def asNondeterministic(self) -> UserDefinedFunctionLike: ...
 
+ProfileResults = Dict[Union[int, str], Tuple[Optional[pstats.Stats], Optional[CodeMapDict]]]
+
 class ProfileResult(TypedDict, total=False):
     perf: pstats.Stats
     memory: CodeMapDict
 
-ProfileResults = Dict[Union[int, str], ProfileResult]
+ProfileResultsV2 = Dict[Union[int, str], ProfileResult]

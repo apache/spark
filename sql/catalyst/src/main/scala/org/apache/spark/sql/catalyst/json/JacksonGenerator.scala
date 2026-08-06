@@ -159,6 +159,19 @@ class JacksonGenerator(
         timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(row.getLong(ordinal)))
       gen.writeString(timestampString)
 
+    case t: TimestampLTZNanosType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val timestampString =
+          timestampFormatter.formatNanos(row.getTimestampLTZNanos(ordinal), t.precision)
+        gen.writeString(timestampString)
+
+    case t: TimestampNTZNanosType =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val timestampString =
+          timestampNTZFormatter.formatWithoutTimeZoneNanos(
+            row.getTimestampNTZNanos(ordinal), t.precision)
+        gen.writeString(timestampString)
+
     case DateType =>
       (row: SpecializedGetters, ordinal: Int) =>
         val dateString = dateFormatter.format(row.getInt(ordinal))

@@ -530,6 +530,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
           .divide(that.toJavaBigDecimal, DecimalType.MAX_SCALE + 1, MATH_CONTEXT.getRoundingMode))
     }
 
+  /**
+   * Divides `this` by `that` rounding the result to `scale` fractional digits with HALF_UP.
+   * Returns the same result as `this / that` followed by rounding to `scale`, but with a single
+   * division, which stays in the compact representation when the quotient fits in a Long.
+   */
+  def div(that: Decimal, scale: Int): Decimal =
+    if (that.isZero) null
+    else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal, scale, RoundingMode.HALF_UP))
+
   def %(that: Decimal): Decimal =
     if (that.isZero) null
     else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))

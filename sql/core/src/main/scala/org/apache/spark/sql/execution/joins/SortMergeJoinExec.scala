@@ -121,6 +121,17 @@ case class SortMergeJoinExec(
     }
   }
 
+  /**
+   * For join types that preserve all streamed rows, split the condition into
+   * streamed-only and rest. The streamed-only part can be evaluated once per streamed row
+   * before walking the buffered matches.
+   */
+  private lazy val (streamedOnlyCondition, restCondition):
+      (Option[Expression], Option[Expression]) = {
+    StreamedSideJoinCondition.split(
+      condition, joinType, streamedPlan, conf.splitStreamedSideJoinCondition)
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val spillSize = longMetric("spillSize")
@@ -140,7 +151,9 @@ case class SortMergeJoinExec(
       sizeInBytesSpillThreshold,
       numOutputRows,
       spillSize,
-      onlyBufferFirstMatchedRow
+      onlyBufferFirstMatchedRow,
+      streamedOnlyCondition,
+      restCondition
     )
     if (conf.usePartitionEvaluator) {
       left.execute().zipPartitionsWithEvaluator(right.execute(), evaluatorFactory)
@@ -191,7 +204,13 @@ case class SortMergeJoinExec(
   }
 
   private def genComparison(ctx: CodegenContext, a: Seq[ExprCode], b: Seq[ExprCode]): String = {
-    val comparisons = a.zip(b).zipWithIndex.map { case ((l, r), i) =>
+    // The first key compare always runs, so emit it unguarded. Each subsequent key compare runs
+    // only when previous keys were equal (comp == 0).
+    val pairs = a.zip(b).zipWithIndex
+    val firstCompare = pairs.headOption.map { case ((l, r), i) =>
+      s"comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};"
+    }.getOrElse("comp = 0;")
+    val restCompares = pairs.drop(1).map { case ((l, r), i) =>
       s"""
          |if (comp == 0) {
          |  comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};
@@ -199,8 +218,8 @@ case class SortMergeJoinExec(
        """.stripMargin.trim
     }
     s"""
-       |comp = 0;
-       |${comparisons.mkString("\n")}
+       |$firstCompare
+       |${restCompares.mkString("\n")}
      """.stripMargin
   }
 
@@ -216,11 +235,18 @@ case class SortMergeJoinExec(
     val streamedRow = ctx.addMutableState("InternalRow", "streamedRow", forceInline = true)
     val bufferedRow = ctx.addMutableState("InternalRow", "bufferedRow", forceInline = true)
 
-    // Create variables for join keys from both sides.
+    // Create variables for join keys from both sides. Filter out `FalseLiteral` `isNull`
+    // terms before building the disjunction so the emitted check has no statically-dead
+    // `false` operands. When every key is statically non-nullable, the disjunction is
+    // empty and we skip emitting the check (and the dead handler branch) entirely.
     val streamedKeyVars = createJoinKey(ctx, streamedRow, streamedKeys, streamedOutput)
-    val streamedAnyNull = streamedKeyVars.map(_.isNull).mkString(" || ")
+    val nullableStreamedIsNulls = streamedKeyVars.map(_.isNull).filter(_ != FalseLiteral)
+    val streamedKeysNullable = nullableStreamedIsNulls.nonEmpty
+    val streamedAnyNull = nullableStreamedIsNulls.mkString(" || ")
     val bufferedKeyTmpVars = createJoinKey(ctx, bufferedRow, bufferedKeys, bufferedOutput)
-    val bufferedAnyNull = bufferedKeyTmpVars.map(_.isNull).mkString(" || ")
+    val nullableBufferedIsNulls = bufferedKeyTmpVars.map(_.isNull).filter(_ != FalseLiteral)
+    val bufferedKeysNullable = nullableBufferedIsNulls.nonEmpty
+    val bufferedAnyNull = nullableBufferedIsNulls.mkString(" || ")
     // Copy the buffered key as class members so they could be used in next function call.
     val bufferedKeyVars = copyKeys(ctx, bufferedKeyTmpVars)
 
@@ -287,6 +313,27 @@ case class SortMergeJoinExec(
         s"$matches.add((UnsafeRow) $bufferedRow);"
       }
 
+    val checkStreamedAnyNull = if (streamedKeysNullable) {
+      s"""
+         |if ($streamedAnyNull) {
+         |  $handleStreamedAnyNull
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
+    val checkBufferedAnyNull = if (bufferedKeysNullable) {
+      s"""
+         |if ($bufferedAnyNull) {
+         |  $bufferedRow = null;
+         |  continue;
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
     // Generate a function to scan both streamed and buffered sides to find a match.
     // Return whether a match is found.
     //
@@ -329,9 +376,7 @@ case class SortMergeJoinExec(
          |    if (!streamedIter.hasNext()) return false;
          |    $streamedRow = (InternalRow) streamedIter.next();
          |    ${streamedKeyVars.map(_.code).mkString("\n")}
-         |    if ($streamedAnyNull) {
-         |      $handleStreamedAnyNull
-         |    }
+         |    ${checkStreamedAnyNull.trim}
          |    if (!$matches.isEmpty()) {
          |      ${genComparison(ctx, streamedKeyVars, matchedKeyVars)}
          |      if (comp == 0) {
@@ -348,10 +393,7 @@ case class SortMergeJoinExec(
          |        }
          |        $bufferedRow = (InternalRow) bufferedIter.next();
          |        ${bufferedKeyTmpVars.map(_.code).mkString("\n")}
-         |        if ($bufferedAnyNull) {
-         |          $bufferedRow = null;
-         |          continue;
-         |        }
+         |        ${checkBufferedAnyNull.trim}
          |        ${bufferedKeyVars.map(_.code).mkString("\n")}
          |      }
          |      ${genComparison(ctx, streamedKeyVars, bufferedKeyVars)}
@@ -440,13 +482,6 @@ case class SortMergeJoinExec(
 
   override def needCopyResult: Boolean = true
 
-  /**
-   * This is called by generated Java class, should be public.
-   */
-  def getTaskContext(): TaskContext = {
-    TaskContext.get()
-  }
-
   override def doProduce(ctx: CodegenContext): String = {
     // Specialize `doProduce` code for full outer join, because full outer join needs to
     // buffer both sides of join.
@@ -491,7 +526,28 @@ case class SortMergeJoinExec(
           s"SortMergeJoin.doProduce should not take $x as the JoinType")
     }
 
-    val (streamedBeforeLoop, condCheck, loadStreamed) = if (condition.isDefined) {
+    // Generate streamed-only condition check for join types that preserve streamed rows.
+    val (streamedOnlyPre, streamedOnlyGuard) =
+      if (streamedOnlyCondition.isDefined) {
+        ctx.currentVars = streamedVars
+        val ev = BindReferences.bindReference(
+          streamedOnlyCondition.get, streamedPlan.output).genCode(ctx)
+        val isNullVar = ctx.freshName("streamedOnlyIsNull")
+        val valueVar = ctx.freshName("streamedOnlyValue")
+        val pre =
+          s"""
+             |${ev.code}
+             |boolean $isNullVar = ${ev.isNull};
+             |boolean $valueVar = ${ev.value};
+           """.stripMargin
+        (pre, Some(s"!$isNullVar && $valueVar"))
+      } else {
+        ("", None)
+      }
+
+    val conditionForCodegen = if (streamedOnlyGuard.isDefined) restCondition else condition
+
+    val (streamedBeforeLoop, condCheck, loadStreamed) = if (conditionForCodegen.isDefined) {
       // Split the code of creating variables based on whether it's used by condition or not.
       val loaded = ctx.freshName("loaded")
       val (streamedBefore, streamedAfter) = splitVarsByCondition(streamedOutput, streamedVars)
@@ -499,7 +555,7 @@ case class SortMergeJoinExec(
       // Generate code for condition
       ctx.currentVars = streamedVars ++ bufferedVars
       val cond = BindReferences.bindReference(
-        condition.get, streamedPlan.output ++ bufferedPlan.output).genCode(ctx)
+        conditionForCodegen.get, streamedPlan.output ++ bufferedPlan.output).genCode(ctx)
       // Evaluate the columns those used by condition before loop
       val before = joinType match {
         case LeftAnti =>
@@ -550,10 +606,14 @@ case class SortMergeJoinExec(
       (evaluateVariables(streamedVars), "", "")
     }
 
-    val beforeLoop =
+    val existsVarDecl = existsVar.map(v => s"boolean $v = false;").getOrElse("")
+
+    val beforeLoopWithoutGuard =
       s"""
          |${streamedVarDecl.mkString("\n")}
          |${streamedBeforeLoop.trim}
+         |$streamedOnlyPre
+         |$existsVarDecl
          |scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
        """.stripMargin
     val outputRow =
@@ -561,9 +621,39 @@ case class SortMergeJoinExec(
          |$numOutput.add(1);
          |${consume(ctx, resultVars)}
        """.stripMargin
+    val guardOutputRow = joinType match {
+      case LeftOuter | RightOuter =>
+        val defaultBufferedVars =
+          genOneSideJoinVars(ctx, bufferedRow, bufferedPlan, setDefaultValue = true)
+        val guardResultVars = joinType match {
+          case RightOuter => defaultBufferedVars ++ streamedVars
+          case _ => streamedVars ++ defaultBufferedVars
+        }
+        s"""
+           |$numOutput.add(1);
+           |${consume(ctx, guardResultVars)}
+         """.stripMargin
+      case _ => outputRow
+    }
     val findNextJoinRows = s"$findNextJoinRowsFuncName($streamedInput, $bufferedInput)"
     val thisPlan = ctx.addReferenceObj("plan", this)
     val eagerCleanup = s"$thisPlan.cleanupResources();"
+
+    // For join types with a streamed-only guard, prepend the guard to beforeLoop
+    // so the row is emitted before the inner loop.
+    val beforeLoop = streamedOnlyGuard match {
+      case Some(guard) =>
+        s"""
+           |$beforeLoopWithoutGuard
+           |if (!($guard)) {
+           |  InternalRow $bufferedRow = null;
+           |  $loadStreamed
+           |  $guardOutputRow
+           |  continue;
+           |}
+         """.stripMargin
+      case None => beforeLoopWithoutGuard
+    }
 
     val doJoin = joinType match {
       case _: InnerLike =>
@@ -591,16 +681,9 @@ case class SortMergeJoinExec(
     }
 
     val initJoin = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initJoin")
+    val helperCls = classOf[JoinHelper].getName
     val addHookToRecordMetrics =
-      s"""
-         |$thisPlan.getTaskContext().addTaskCompletionListener(
-         |  new org.apache.spark.util.TaskCompletionListener() {
-         |    @Override
-         |    public void onTaskCompletion(org.apache.spark.TaskContext context) {
-         |      ${metricTerm(ctx, "spillSize")}.add($matches.spillSize());
-         |    }
-         |});
-       """.stripMargin
+      s"$helperCls.recordSpillSizeOnTaskCompletion($matches, ${metricTerm(ctx, "spillSize")});"
 
     s"""
        |if (!$initJoin) {
@@ -766,7 +849,6 @@ case class SortMergeJoinExec(
        |while ($streamedInput.hasNext()) {
        |  $findNextJoinRows;
        |  $beforeLoop
-       |  boolean $exists = false;
        |
        |  while (!$exists && $matchIterator.hasNext()) {
        |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
@@ -802,11 +884,17 @@ case class SortMergeJoinExec(
     val leftInputRow = ctx.addMutableState("InternalRow", "leftInputRow", forceInline = true)
     val rightInputRow = ctx.addMutableState("InternalRow", "rightInputRow", forceInline = true)
 
-    // Create variables for join keys from both sides.
+    // Create variables for join keys from both sides. As in `genScanner`, drop FalseLiteral
+    // `isNull` terms before joining the disjunction so the emitted check has no dead `false`
+    // operands; omit the check entirely when every key is statically non-nullable.
     val leftKeyVars = createJoinKey(ctx, leftInputRow, leftKeys, left.output)
-    val leftAnyNull = leftKeyVars.map(_.isNull).mkString(" || ")
+    val nullableLeftIsNulls = leftKeyVars.map(_.isNull).filter(_ != FalseLiteral)
+    val leftKeysNullable = nullableLeftIsNulls.nonEmpty
+    val leftAnyNull = nullableLeftIsNulls.mkString(" || ")
     val rightKeyVars = createJoinKey(ctx, rightInputRow, rightKeys, right.output)
-    val rightAnyNull = rightKeyVars.map(_.isNull).mkString(" || ")
+    val nullableRightIsNulls = rightKeyVars.map(_.isNull).filter(_ != FalseLiteral)
+    val rightKeysNullable = nullableRightIsNulls.nonEmpty
+    val rightAnyNull = nullableRightIsNulls.mkString(" || ")
     val matchedKeyVars = copyKeys(ctx, leftKeyVars)
     val leftMatchedKeyVars = createJoinKey(ctx, leftInputRow, leftKeys, left.output)
     val rightMatchedKeyVars = createJoinKey(ctx, rightInputRow, rightKeys, right.output)
@@ -880,6 +968,30 @@ case class SortMergeJoinExec(
     //  - Step 3: Buffer rows with same join keys from both sides into `leftBuffer` and
     //            `rightBuffer`. Reset bit sets for both buffers accordingly (`leftMatched` and
     //            `rightMatched`).
+    val checkLeftAnyNull = if (leftKeysNullable) {
+      s"""
+         |if ($leftAnyNull) {
+         |  // The left row join key is null, join it with null row
+         |  $outputLeftNoMatch
+         |  return;
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
+    val checkRightAnyNull = if (rightKeysNullable) {
+      s"""
+         |if ($rightAnyNull) {
+         |  // The right row join key is null, join it with null row
+         |  $outputRightNoMatch
+         |  return;
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
     val findNextJoinRowsFuncName = ctx.freshName("findNextJoinRows")
     ctx.addNewFunction(findNextJoinRowsFuncName,
       s"""
@@ -898,18 +1010,10 @@ case class SortMergeJoinExec(
          |  }
          |
          |  ${leftKeyVars.map(_.code).mkString("\n")}
-         |  if ($leftAnyNull) {
-         |    // The left row join key is null, join it with null row
-         |    $outputLeftNoMatch
-         |    return;
-         |  }
+         |  ${checkLeftAnyNull.trim}
          |
          |  ${rightKeyVars.map(_.code).mkString("\n")}
-         |  if ($rightAnyNull) {
-         |    // The right row join key is null, join it with null row
-         |    $outputRightNoMatch
-         |    return;
-         |  }
+         |  ${checkRightAnyNull.trim}
          |
          |  ${genComparison(ctx, leftKeyVars, rightKeyVars)}
          |  if (comp < 0) {
@@ -954,16 +1058,10 @@ case class SortMergeJoinExec(
          |  }
          |
          |  // Reset bit sets of buffers accordingly
-         |  if ($leftBuffer.size() <= $leftMatched.capacity()) {
-         |    $leftMatched.clearUntil($leftBuffer.size());
-         |  } else {
-         |    $leftMatched = new $matchedClsName($leftBuffer.size());
-         |  }
-         |  if ($rightBuffer.size() <= $rightMatched.capacity()) {
-         |    $rightMatched.clearUntil($rightBuffer.size());
-         |  } else {
-         |    $rightMatched = new $matchedClsName($rightBuffer.size());
-         |  }
+         |  $leftMatched = ${classOf[JoinHelper].getName}.resetMatched(
+         |    $leftMatched, $leftBuffer.size());
+         |  $rightMatched = ${classOf[JoinHelper].getName}.resetMatched(
+         |    $rightMatched, $rightBuffer.size());
          |}
        """.stripMargin)
 
@@ -1268,11 +1366,13 @@ private[joins] class SortMergeJoinScanner(
 private class LeftOuterIterator(
     smjScanner: SortMergeJoinScanner,
     rightNullRow: InternalRow,
-    boundCondition: InternalRow => Boolean,
+    boundStreamedOnly: InternalRow => Boolean,
+    boundRest: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
     numOutputRows: SQLMetric)
   extends OneSideOuterIterator(
-    smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows) {
+    smjScanner, rightNullRow, boundStreamedOnly, boundRest,
+    resultProj, numOutputRows) {
 
   protected override def setStreamSideOutput(row: InternalRow): Unit = joinedRow.withLeft(row)
   protected override def setBufferedSideOutput(row: InternalRow): Unit = joinedRow.withRight(row)
@@ -1284,10 +1384,13 @@ private class LeftOuterIterator(
 private class RightOuterIterator(
     smjScanner: SortMergeJoinScanner,
     leftNullRow: InternalRow,
-    boundCondition: InternalRow => Boolean,
+    boundStreamedOnly: InternalRow => Boolean,
+    boundRest: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
     numOutputRows: SQLMetric)
-  extends OneSideOuterIterator(smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows) {
+  extends OneSideOuterIterator(
+    smjScanner, leftNullRow, boundStreamedOnly, boundRest,
+    resultProj, numOutputRows) {
 
   protected override def setStreamSideOutput(row: InternalRow): Unit = joinedRow.withRight(row)
   protected override def setBufferedSideOutput(row: InternalRow): Unit = joinedRow.withLeft(row)
@@ -1305,14 +1408,17 @@ private class RightOuterIterator(
  *
  * @param smjScanner a scanner that streams rows and buffers any matching rows
  * @param bufferedSideNullRow the default row to return when a streamed row has no matches
- * @param boundCondition an additional filter condition for buffered rows
+ * @param boundStreamedOnly a predicate evaluated on the streamed row only
+ * @param boundRest a predicate evaluated on the joined (left ++ right) row for the residual
+ *                  condition, bound to the physical row order produced by this iterator
  * @param resultProj how the output should be projected
  * @param numOutputRows an accumulator metric for the number of rows output
  */
 private abstract class OneSideOuterIterator(
     smjScanner: SortMergeJoinScanner,
     bufferedSideNullRow: InternalRow,
-    boundCondition: InternalRow => Boolean,
+    boundStreamedOnly: InternalRow => Boolean,
+    boundRest: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
     numOutputRows: SQLMetric) extends RowIterator {
 
@@ -1337,12 +1443,15 @@ private abstract class OneSideOuterIterator(
     rightMatchesIterator = null
     if (smjScanner.findNextOuterJoinRows()) {
       setStreamSideOutput(smjScanner.getStreamedRow)
-      if (smjScanner.getBufferedMatches.isEmpty) {
+      if (!boundStreamedOnly(smjScanner.getStreamedRow)) {
+        // Streamed-only predicate is false/null -> full condition is false -> emit null-padded row.
+        setBufferedSideOutput(bufferedSideNullRow)
+      } else if (smjScanner.getBufferedMatches.isEmpty) {
         // There are no matching rows in the buffer, so return the null row
         setBufferedSideOutput(bufferedSideNullRow)
       } else {
-        // Find the next row in the buffer that satisfied the bound condition
-        if (!advanceBufferUntilBoundConditionSatisfied()) {
+        // Find the next row in the buffer that satisfied the rest condition
+        if (!advanceBufferUntilRestConditionSatisfied()) {
           setBufferedSideOutput(bufferedSideNullRow)
         }
       }
@@ -1354,10 +1463,10 @@ private abstract class OneSideOuterIterator(
   }
 
   /**
-   * Advance to the next row in the buffer that satisfies the bound condition.
+   * Advance to the next row in the buffer that satisfies the rest condition.
    * @return whether there is such a row in the current buffer.
    */
-  private def advanceBufferUntilBoundConditionSatisfied(): Boolean = {
+  private def advanceBufferUntilRestConditionSatisfied(): Boolean = {
     var foundMatch: Boolean = false
     if (rightMatchesIterator == null) {
       rightMatchesIterator = smjScanner.getBufferedMatches.generateIterator()
@@ -1365,13 +1474,18 @@ private abstract class OneSideOuterIterator(
 
     while (!foundMatch && rightMatchesIterator.hasNext) {
       setBufferedSideOutput(rightMatchesIterator.next())
-      foundMatch = boundCondition(joinedRow)
+      foundMatch = boundRest(joinedRow)
     }
     foundMatch
   }
 
   override def advanceNext(): Boolean = {
-    val r = advanceBufferUntilBoundConditionSatisfied() || advanceStream()
+    // Only walk the buffered matches if we are in the middle of iterating them for the
+    // current streamed row. If the iterator is null, advanceStream() has just emitted a
+    // null-padded row (either no matches or the streamed-only predicate was false), so we
+    // must move to the next streamed row rather than re-create the match iterator.
+    val r = (rightMatchesIterator != null && advanceBufferUntilRestConditionSatisfied()) ||
+      advanceStream()
     if (r) numOutputRows += 1
     r
   }
@@ -1457,16 +1571,8 @@ private class SortMergeFullOuterJoinScanner(
       advancedRight()
     }
 
-    if (leftMatches.size <= leftMatched.capacity) {
-      leftMatched.clearUntil(leftMatches.size)
-    } else {
-      leftMatched = new BitSet(leftMatches.size)
-    }
-    if (rightMatches.size <= rightMatched.capacity) {
-      rightMatched.clearUntil(rightMatches.size)
-    } else {
-      rightMatched = new BitSet(rightMatches.size)
-    }
+    leftMatched = JoinHelper.resetMatched(leftMatched, leftMatches.size)
+    rightMatched = JoinHelper.resetMatched(rightMatched, rightMatches.size)
   }
 
   /**

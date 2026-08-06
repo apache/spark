@@ -33,6 +33,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 
 /**
@@ -106,15 +107,35 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
    */
   def computeSupportedSchemaChanges(
       targetTable: LogicalPlan,
-      originalSource: StructType,
-      isByName: Boolean): Array[TableChange] = {
+      sourceSchema: StructType,
+      isByName: Boolean): Seq[TableChange] = {
     val candidateChanges = computeSchemaChanges(
       targetTable.schema,
-      originalSource,
-      targetTable.schema,
-      originalSource,
-      fieldPath = Nil,
+      sourceSchema,
       isByName)
+    filterSupportedChanges(targetTable, candidateChanges)
+  }
+
+  /**
+   * Computes schema changes between two types, throwing an error with the provided
+   * target and source schemas if the types are incompatible.
+   */
+  private[catalyst] def computeSchemaChanges(
+      targetType: StructType,
+      sourceType: StructType,
+      isByName: Boolean): Seq[TableChange] = {
+    computeSchemaChanges(
+      targetType,
+      sourceType,
+      fieldPath = Nil,
+      isByName,
+      throwError =
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(targetType, sourceType))
+  }
+
+  def filterSupportedChanges(
+      targetTable: LogicalPlan,
+      candidateChanges: Seq[TableChange]): Seq[TableChange] = {
     targetTable match {
       case ExtractV2Table(t: SupportsSchemaEvolution) =>
         candidateChanges.filter {
@@ -127,72 +148,73 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
         // doesn't implement [[SupportsSchemaEvolution]], attempt to apply all changes.
         candidateChanges
       case _ =>
-        Array.empty
+        Seq.empty
     }
   }
 
-  private def computeSchemaChanges(
+  private[catalyst] def computeSchemaChanges(
       currentType: DataType,
       newType: DataType,
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: List[String],
-      isByName: Boolean): Array[TableChange] = {
+      fieldPath: Seq[String],
+      isByName: Boolean,
+      throwError: => Nothing): Seq[TableChange] = {
     (currentType, newType) match {
       case (StructType(currentFields), StructType(newFields)) =>
         if (isByName) {
           computeSchemaChangesByName(
-            currentFields, newFields, originalTarget, originalSource, fieldPath)
+            currentFields.toImmutableArraySeq,
+            newFields.toImmutableArraySeq,
+            fieldPath,
+            throwError)
         } else {
           computeSchemaChangesByPosition(
-            currentFields, newFields, originalTarget, originalSource, fieldPath)
+            currentFields.toImmutableArraySeq,
+            newFields.toImmutableArraySeq,
+            fieldPath,
+            throwError)
         }
 
       case (ArrayType(currentElementType, _), ArrayType(newElementType, _)) =>
         computeSchemaChanges(
           currentElementType,
           newElementType,
-          originalTarget,
-          originalSource,
           fieldPath :+ "element",
-          isByName)
+          isByName,
+          throwError)
 
       case (MapType(currentKeyType, currentValueType, _),
             MapType(newKeyType, newValueType, _)) =>
         val keyChanges = computeSchemaChanges(
           currentKeyType,
           newKeyType,
-          originalTarget,
-          originalSource,
           fieldPath :+ "key",
-          isByName)
+          isByName,
+          throwError)
         val valueChanges = computeSchemaChanges(
           currentValueType,
           newValueType,
-          originalTarget,
-          originalSource,
           fieldPath :+ "value",
-          isByName)
+          isByName,
+          throwError)
         keyChanges ++ valueChanges
 
       case (currentType: AtomicType, newType: AtomicType) if currentType != newType =>
-        Array(TableChange.updateColumnType(fieldPath.toArray, newType))
+        Seq(TableChange.updateColumnType(fieldPath.toArray, newType))
 
       case (currentType, newType) if currentType == newType =>
         // No change needed
-        Array.empty[TableChange]
+        Seq.empty
 
       case (_, NullType) =>
         // Don't try to change to NullType.
-        Array.empty[TableChange]
+        Seq.empty
 
       case (_: AtomicType | NullType, newType: AtomicType) =>
-        Array(TableChange.updateColumnType(fieldPath.toArray, newType))
+        Seq(TableChange.updateColumnType(fieldPath.toArray, newType))
 
       case _ =>
         // Do not support change between atomic and complex types for now
-        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
-          originalTarget, originalSource, null)
+        throwError
     }
   }
 
@@ -201,11 +223,10 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
    * differences. Nested struct fields are also matched by name.
    */
   private def computeSchemaChangesByName(
-      currentFields: Array[StructField],
-      newFields: Array[StructField],
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: List[String]): Array[TableChange] = {
+      currentFields: Seq[StructField],
+      newFields: Seq[StructField],
+      fieldPath: Seq[String],
+      throwError: => Nothing): Seq[TableChange] = {
     val currentFieldMap = toFieldMap(currentFields)
     val newFieldMap = toFieldMap(newFields)
 
@@ -216,10 +237,9 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
         computeSchemaChanges(
           f.dataType,
           newFieldMap(f.name).dataType,
-          originalTarget,
-          originalSource,
           fieldPath :+ f.name,
-          isByName = true)
+          isByName = true,
+          throwError)
       }
 
     // Collect newly added fields
@@ -238,20 +258,18 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
    * differences. Nested struct fields are also matched by position.
    */
   private def computeSchemaChangesByPosition(
-      currentFields: Array[StructField],
-      newFields: Array[StructField],
-      originalTarget: StructType,
-      originalSource: StructType,
-      fieldPath: List[String]): Array[TableChange] = {
+      currentFields: Seq[StructField],
+      newFields: Seq[StructField],
+      fieldPath: Seq[String],
+      throwError: => Nothing): Seq[TableChange] = {
     // Update existing field types by pairing fields at the same position.
     val updates = currentFields.zip(newFields).flatMap { case (currentField, newField) =>
       computeSchemaChanges(
         currentField.dataType,
         newField.dataType,
-        originalTarget,
-        originalSource,
         fieldPath :+ currentField.name,
-        isByName = false)
+        isByName = false,
+        throwError)
     }
 
     // Extra source fields beyond the target's field count are new additions.
@@ -264,7 +282,7 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     updates ++ adds
   }
 
-  private def toFieldMap(fields: Array[StructField]): Map[String, StructField] = {
+  private def toFieldMap(fields: Seq[StructField]): Map[String, StructField] = {
     val fieldMap = fields.map(field => field.name -> field).toMap
     if (SQLConf.get.caseSensitiveAnalysis) {
       fieldMap

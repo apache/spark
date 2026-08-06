@@ -27,7 +27,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -37,9 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
 
-class AvroRowReaderSuite
-  extends QueryTest
-  with SharedSparkSession {
+class AvroRowReaderSuite extends SharedSparkSession {
 
   import testImplicits._
 

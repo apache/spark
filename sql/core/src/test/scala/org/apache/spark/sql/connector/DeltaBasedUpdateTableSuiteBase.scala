@@ -21,6 +21,8 @@ import org.apache.spark.sql.{AnalysisException, Row}
 
 abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
 
+  override protected def deltaUpdate: Boolean = true
+
   test("nullable row ID attrs") {
     createAndInitTable("pk INT, salary INT, dep STRING",
       """{ "pk": 1, "salary": 300, "dep": 'hr' }
@@ -49,6 +51,8 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(10, 1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 
   test("update with nondeterministic conditions") {
@@ -63,7 +67,8 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
         sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5")
       },
       condition = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
-      parameters = Map("sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\""),
+      parameters = Map(
+        "sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\", \"((id <= 1) AND (rand() > 0.5))\""),
       context = ExpectedContext(
         fragment = "UPDATE cat.ns1.test_table SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5",
         start = 0,
@@ -87,5 +92,7 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, -1, "invalid") :: Row(2, 2, 200, "software") :: Row(3, 3, 300, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 }

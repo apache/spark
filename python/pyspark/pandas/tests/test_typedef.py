@@ -407,17 +407,15 @@ class TypeHintTestsMixin:
                 (np.dtype("object"), ArrayType(spark_type)),
             )
 
-            # For NumPy typing, NumPy version should be 1.21+
-            if LooseVersion(np.__version__) >= LooseVersion("1.21"):
-                import numpy.typing as ntp
+            import numpy.typing as ntp
 
-                self.assertEqual(
-                    as_spark_type(ntp.NDArray[numpy_or_python_type]), ArrayType(spark_type)
-                )
-                self.assertEqual(
-                    pandas_on_spark_type(ntp.NDArray[numpy_or_python_type]),
-                    (np.dtype("object"), ArrayType(spark_type)),
-                )
+            self.assertEqual(
+                as_spark_type(ntp.NDArray[numpy_or_python_type]), ArrayType(spark_type)
+            )
+            self.assertEqual(
+                pandas_on_spark_type(ntp.NDArray[numpy_or_python_type]),
+                (np.dtype("object"), ArrayType(spark_type)),
+            )
 
         with self.assertRaisesRegex(TypeError, "Type uint64 was not understood."):
             as_spark_type(np.dtype("uint64"))

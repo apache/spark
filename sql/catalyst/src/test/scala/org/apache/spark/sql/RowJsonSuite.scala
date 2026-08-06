@@ -17,20 +17,22 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
-import java.time.{LocalDate, LocalDateTime}
+import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneOffset}
 
 import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JLong, JNull, JObject, JString, JValue}
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.encoders.{ExamplePoint, ExamplePointUDT}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLType, toSQLValue}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * Test suite for [[Row]] JSON serialization.
  */
-class RowJsonSuite extends SparkFunSuite {
+class RowJsonSuite extends SparkFunSuite with SQLHelper {
   private val schema = new StructType()
     .add("c1", "string")
     .add("c2", IntegerType)
@@ -121,6 +123,57 @@ class RowJsonSuite extends SparkFunSuite {
     new ExamplePoint(3.4d, 8.98d),
     new ExamplePointUDT,
     JArray(JDouble(3.4d) :: JDouble(8.98d) :: Nil))
+
+  // A public Row holds external values, so a TimeType column carries a java.time.LocalTime, not the
+  // internal Long nanos-of-day. Row JSON must render it via the framework's formatExternal; before
+  // this fix Row.toJson called the internal-value format, which cast LocalTime to Long and threw
+  // ClassCastException for any TIME column.
+  private def timeRowJson(value: LocalTime, precision: Int): JValue =
+    new GenericRowWithSchema(Array(value), new StructType().add("a", TimeType(precision))).jsonValue
+
+  test("SPARK-57338: TIME column renders the external LocalTime in JSON") {
+    assert(timeRowJson(LocalTime.of(12, 13, 14), TimeType.MICROS_PRECISION) ===
+      JObject("a" -> JString("12:13:14")))
+    // The fraction is rendered up to nanosecond resolution with trailing zeros trimmed.
+    assert(timeRowJson(LocalTime.of(1, 2, 3, 123456000), TimeType.MICROS_PRECISION) ===
+      JObject("a" -> JString("01:02:03.123456")))
+    assert(timeRowJson(LocalTime.of(10, 30, 0, 100000000), TimeType.MICROS_PRECISION) ===
+      JObject("a" -> JString("10:30:00.1")))
+    assert(timeRowJson(LocalTime.of(1, 2, 3, 123456789), TimeType.NANOS_PRECISION) ===
+      JObject("a" -> JString("01:02:03.123456789")))
+    assert(timeRowJson(LocalTime.MIDNIGHT, TimeType.MICROS_PRECISION) ===
+      JObject("a" -> JString("00:00:00")))
+  }
+
+  test("SPARK-57338: TIME column JSON rendering is independent of the column precision") {
+    val time = LocalTime.of(1, 2, 3, 123456000)
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
+      assert(timeRowJson(time, p) === JObject("a" -> JString("01:02:03.123456")))
+    }
+  }
+
+  test("SPARK-57338: null TIME column renders as JSON null") {
+    assert(timeRowJson(null, TimeType.MICROS_PRECISION) === JObject("a" -> JNull))
+  }
+
+  // With nanosecond cast-to-string now supported through the framework (SPARK-57285), Row JSON
+  // routes the external Row value (LocalDateTime for NTZ, Instant for LTZ) through formatExternal
+  // and renders it at the column precision, rather than raising an unsupported-rendering error.
+  test("SPARK-57338: nanosecond timestamp column renders the external value in JSON") {
+    def nanosRowJson(value: Any, dt: DataType): JValue =
+      new GenericRowWithSchema(Array(value), new StructType().add("a", dt)).jsonValue
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val ldt = LocalDateTime.of(2020, 1, 1, 12, 0, 0, 123456789)
+      // NTZ renders zone-independently (the value is the UTC-grid wall clock).
+      assert(nanosRowJson(ldt, TimestampNTZNanosType(9)) ===
+        JObject("a" -> JString("2020-01-01 12:00:00.123456789")))
+      // LTZ renders in the session zone; with UTC it matches the NTZ wall clock.
+      assert(nanosRowJson(ldt.toInstant(ZoneOffset.UTC), TimestampLTZNanosType(9)) ===
+        JObject("a" -> JString("2020-01-01 12:00:00.123456789")))
+    }
+  }
 
   test("no schema") {
     val e = intercept[IllegalArgumentException] {

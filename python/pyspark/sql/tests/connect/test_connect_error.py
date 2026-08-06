@@ -21,7 +21,7 @@ from pyspark.errors import PySparkAttributeError
 from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql.types import Row
 from pyspark.sql import functions as F
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.util import is_remote_only
 
@@ -64,13 +64,33 @@ class SparkConnectErrorTests(ReusedConnectTestCase):
         with self.assertRaises(AnalysisException):
             cdf2.withColumn("x", cdf1.a + 1).schema
 
-        # Can find the target plan node, but fail to resolve with it
+        # Can find the target plan node, but the resolved attribute is not part of the outer
+        # operator's output (e.g. it was dropped by a projection).
         with self.assertRaisesRegex(
             AnalysisException,
-            "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
         ):
             cdf3 = cdf1.select(cdf1.a)
             cdf3.select(cdf1.b).schema
+
+        # Same pattern: the column from a different DataFrame is overwritten by `withColumn`.
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            cdf3 = cdf1.withColumn("a", F.lit(0))
+            cdf3.select(cdf1.a).schema
+
+        # SPARK-56547: `df["id"]` references the original `id`, but `df2`'s `id` was shadowed
+        # by `withColumn`. Previously surfaced a misleading
+        # `UNRESOLVED_COLUMN.WITH_SUGGESTION` error suggesting the same column name.
+        df = self.spark.range(10)
+        df2 = df.withColumn("id", F.col("id") + 1)
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            df2.select(df["id"]).schema
 
         # Can not find the target plan node by plan id
         with self.assertRaisesRegex(
@@ -241,9 +261,26 @@ class SparkConnectErrorTests(ReusedConnectTestCase):
         )
 
     def test_ym_interval_in_collect(self):
-        # YearMonthIntervalType is not supported in python side arrow conversion
-        with self.assertRaises(PySparkTypeError):
+        # PyArrow cannot materialize Arrow YEAR_MONTH intervals, so collecting a year-month
+        # interval over Spark Connect raises NOT_IMPLEMENTED (matching the default of the classic
+        # PySpark path). Unlike classic, PYSPARK_YM_INTERVAL_LEGACY is not honored here.
+        with self.assertRaises(PySparkNotImplementedError):
             self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").first()
+
+        # A year-month interval nested inside an array is rejected the same way (the schema-level
+        # check recurses into array/map/struct element types).
+        with self.assertRaises(PySparkNotImplementedError):
+            self.spark.sql("SELECT array(INTERVAL '10-8' YEAR TO MONTH) AS interval").first()
+
+    def test_ym_interval_empty_collect(self):
+        # Even an empty result raises NOT_IMPLEMENTED rather than returning []. PyArrow cannot
+        # build the INTERVAL_MONTHS array class at all -- `to_pylist()` raises `KeyError: 21` from
+        # get_array_class_from_type regardless of row count -- so the schema-level check covers
+        # empty results too, giving a clean error instead of an opaque PyArrow KeyError. This is
+        # one place Spark Connect diverges from classic PySpark, which returns [] for an empty
+        # result (it never reaches PyArrow materialization).
+        with self.assertRaises(PySparkNotImplementedError):
+            self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").limit(0).collect()
 
 
 if __name__ == "__main__":

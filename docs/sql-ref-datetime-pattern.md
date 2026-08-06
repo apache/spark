@@ -23,10 +23,10 @@ There are several common scenarios for datetime usage in Spark:
 
 - CSV/JSON datasources use the pattern string for parsing and formatting datetime content.
 
-- Datetime functions related to convert `StringType` to/from `DateType` or `TimestampType`.
-  For example, `unix_timestamp`, `date_format`, `to_unix_timestamp`, `from_unixtime`, `to_date`, `to_timestamp`, `from_utc_timestamp`, `to_utc_timestamp`, etc.
+- Datetime functions related to convert `StringType` to/from `DateType`, `TimeType` or `TimestampType`.
+  For example, `unix_timestamp`, `date_format`, `to_unix_timestamp`, `from_unixtime`, `to_date`, `to_time`, `to_timestamp`, `from_utc_timestamp`, `to_utc_timestamp`, etc.
 
-Spark uses pattern letters in the following table for date and timestamp parsing and formatting:
+Spark uses pattern letters in the following table for date, time and timestamp parsing and formatting:
 
 |Symbol|Meaning|Presentation|Examples|
 |------|-------|------------|--------|

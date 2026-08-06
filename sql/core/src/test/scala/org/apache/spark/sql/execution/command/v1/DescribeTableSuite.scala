@@ -26,7 +26,7 @@ import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.execution.command.{DescribeTableJson, Field, TableColumn, Type}
+import org.apache.spark.sql.execution.command.{DescribeTableJson, Field, SqlPathEntry, TableColumn, Type}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 
@@ -604,6 +604,36 @@ trait DescribeTableSuiteBase extends command.DescribeTableSuiteBase
           }
         }
       }
+  }
+
+  test("DESCRIBE EXTENDED AS JSON for view shows SQL Path when PATH is enabled") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withNamespaceAndTable("ns", "table") { t =>
+        withView("path_view") {
+          spark.sql(s"CREATE TABLE $t (id INT) USING parquet")
+          spark.sql("SET PATH = spark_catalog.default, system.builtin")
+          spark.sql(s"CREATE VIEW path_view AS SELECT * FROM $t")
+
+          // AS JSON
+          val jsonDf = spark.sql("DESCRIBE EXTENDED path_view AS JSON")
+          val jsonStr = jsonDf.select("json_metadata").head().getString(0)
+          val parsed = parse(jsonStr).extract[DescribeTableJson]
+          assert(parsed.sql_path.isDefined, s"sql_path should be present, got: $jsonStr")
+          assert(parsed.sql_path.get == List(
+            SqlPathEntry("spark_catalog", List("default")),
+            SqlPathEntry("system", List("builtin"))),
+            s"sql_path entries should match exactly, got: ${parsed.sql_path.get}")
+
+          // Regular DESCRIBE EXTENDED
+          val extDf = spark.sql("DESCRIBE EXTENDED path_view")
+          val rows = extDf.collect().map(r =>
+            (0 until r.length).map(r.getString).mkString("\t"))
+          assert(rows.exists(_.contains(
+            "spark_catalog.default, system.builtin")),
+            s"DESCRIBE EXTENDED should show exact SQL Path, got:\n${rows.mkString("\n")}")
+        }
+      }
+    }
   }
 
   test("DESCRIBE AS JSON for column throws Analysis Exception") {

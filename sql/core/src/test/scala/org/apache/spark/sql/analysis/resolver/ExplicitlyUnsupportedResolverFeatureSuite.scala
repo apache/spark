@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   ExplicitlyUnsupportedResolverFeature,
   Resolver
 }
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSparkSession {
+class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
   test("Unsupported table types") {
     withTable("csv_table") {
       spark.sql("CREATE TABLE csv_table (col1 INT) USING CSV;").collect()
@@ -42,6 +42,27 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
     withTable("orc_table") {
       spark.sql("CREATE TABLE orc_table (col1 INT) USING ORC;").collect()
       checkResolution("SELECT * FROM orc_table;", shouldPass = true)
+    }
+  }
+
+  test("ASOF JOIN MATCH_CONDITION operands requiring element-wise ordering") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkResolution(
+        """SELECT t.a, r.a FROM VALUES (ARRAY(1, 3)) AS t(a)
+          |ASOF JOIN VALUES (ARRAY(1, 2)) AS r(a) MATCH_CONDITION (t.a >= r.a);""".stripMargin,
+        expectedMessage = Some("MATCH_CONDITION with a lambda-based ordering expression")
+      )
+      checkResolution(
+        """SELECT t.a, r.a FROM VALUES (ARRAY(named_struct('seq', 1))) AS t(a)
+          |ASOF JOIN VALUES (ARRAY(named_struct('seq', 2))) AS r(a)
+          |MATCH_CONDITION (t.a >= r.a);""".stripMargin,
+        expectedMessage = Some("MATCH_CONDITION with a lambda-based ordering expression")
+      )
+      checkResolution(
+        """SELECT t.k, r.k FROM VALUES (10) AS t(k)
+          |ASOF JOIN VALUES (5) AS r(k) MATCH_CONDITION (t.k >= r.k);""".stripMargin,
+        shouldPass = true
+      )
     }
   }
 

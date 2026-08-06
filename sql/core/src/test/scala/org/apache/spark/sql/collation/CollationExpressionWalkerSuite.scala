@@ -19,7 +19,6 @@ package org.apache.spark.sql.collation
 
 import java.sql.Timestamp
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
@@ -34,7 +33,7 @@ import org.apache.spark.util.Utils
  *  This suite is introduced in order to test a bulk of expressions and functionalities related to
  *  collations
  */
-class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSession {
+class CollationExpressionWalkerSuite extends SharedSparkSession {
   import testImplicits._
 
   // Trait to distinguish different cases for generation
@@ -382,11 +381,19 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "sha1",
       "unbase64",
       "base64",
+      "to_base32",
+      "from_base32",
       "sha2",
       "sha",
       "crc32",
       "ascii",
-      "time_trunc"
+      "time_trunc",
+      // The result/sketch embeds the original item value, which now preserves the
+      // input case for collated strings, so it is not comparable across collations.
+      "approx_top_k",
+      "approx_top_k_accumulate",
+      "approx_top_k_combine",
+      "approx_top_k_estimate"
     )
 
     logInfo("Total number of expression: " + expressionCounter)

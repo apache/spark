@@ -226,7 +226,7 @@ class ReusedConnectTestCase(PySparkBaseTestCase, SQLTestUtils, PySparkErrorTestU
     not should_test_connect or is_remote_only(),
     connect_requirement_message or "Requires JVM access",
 )
-class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
+class ReusedMixedTestCase(ReusedConnectTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

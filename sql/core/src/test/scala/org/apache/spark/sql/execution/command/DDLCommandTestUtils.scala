@@ -27,7 +27,6 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -38,7 +37,7 @@ import org.apache.spark.util.Utils
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.CommandSuiteBase`
  *   - V2 In-Memory catalog: `org.apache.spark.sql.execution.command.v2.CommandSuiteBase`
  */
-trait DDLCommandTestUtils extends SQLTestUtils {
+trait DDLCommandTestUtils extends QueryTest {
   // The version of the catalog under testing such as "V1", "V2", "Hive V1".
   protected def catalogVersion: String
   // The version of the SQL command under testing such as "V1", "V2".

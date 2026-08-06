@@ -258,6 +258,33 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(100).quot(Decimal(-33)) === Decimal(BigDecimal("-3")))
   }
 
+  test("SPARK-57937: div with target scale") {
+    // `div(that, scale)` must return the same result as `/` (which divides at
+    // `DecimalType.MAX_SCALE + 1` with ROUND_DOWN) followed by rounding to the same scale.
+    def checkDiv(a: Decimal, b: Decimal, scale: Int): Unit = {
+      val expected = (a / b).toPrecision(DecimalType.MAX_PRECISION, scale)
+      val actual = a.div(b, scale)
+      assert(actual.toJavaBigDecimal.compareTo(expected.toJavaBigDecimal) === 0,
+        s"$a.div($b, $scale)")
+    }
+    assert(Decimal(100).div(Decimal(0), 10) === null)
+    // Half-way cases, both signs.
+    checkDiv(Decimal("1.00"), Decimal("8.00"), 2)
+    checkDiv(Decimal("-1.00"), Decimal("8.00"), 2)
+    checkDiv(Decimal("1.05"), Decimal("-2.00"), 3)
+    // Non-terminating expansions.
+    checkDiv(Decimal("1.00"), Decimal("3.00"), 10)
+    checkDiv(Decimal("-2.00"), Decimal("7.00"), 38)
+    val rnd = new scala.util.Random(42)
+    for (_ <- 1 to 1000) {
+      // decimal(7, 2) operands, rounded to the scale of the decimal(17, 10) result type.
+      val a = Decimal(rnd.nextInt(19999999) - 9999999, 7, 2)
+      val b = Decimal(rnd.nextInt(9999998) + 1, 7, 2)
+      checkDiv(a, b, 10)
+      checkDiv(a, -b, 10)
+    }
+  }
+
   test("negate & abs") {
     assert(-Decimal(100) === Decimal(BigDecimal("-100")))
     assert(-Decimal(-100) === Decimal(BigDecimal("100")))

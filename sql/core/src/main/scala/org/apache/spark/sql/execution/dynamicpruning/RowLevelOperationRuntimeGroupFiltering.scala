@@ -21,11 +21,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, DynamicPruningExpression, Expression, InSubquery, ListQuery, PredicateHelper, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
-import org.apache.spark.sql.catalyst.planning.GroupBasedRowLevelOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.planning.{DeltaBasedRowLevelOperation, GroupBasedRowLevelOperation}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, RowLevelWrite}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
-import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation, ExtractV2Scan}
 import org.apache.spark.util.ArrayImplicits._
@@ -34,13 +33,16 @@ import org.apache.spark.util.ArrayImplicits._
  * A rule that assigns a subquery to filter groups in row-level operations at runtime.
  *
  * Data skipping during job planning for row-level operations is limited to expressions that can be
- * converted to data source filters. Since not all expressions can be pushed down that way and
- * rewriting groups is expensive, Spark allows data sources to filter group at runtime.
- * If the primary scan in a group-based row-level operation supports runtime filtering, this rule
- * will inject a subquery to find all rows that match the condition so that data sources know
- * exactly which groups must be rewritten.
+ * converted to data source filters. Since not all expressions can be pushed down that way, Spark
+ * allows data sources to filter groups at runtime. If the primary scan in a row-level operation
+ * supports runtime filtering, this rule will inject a subquery to find all rows that match the
+ * condition so that data sources know exactly which groups have changes.
  *
- * Note this rule only applies to group-based row-level operations.
+ * Note that this rule is also beneficial for operations that deal with deltas of rows. Even if
+ * the data source is capable of handling specific changes, it is useful to first discard entire
+ * groups that are not modified. The cost of the runtime query is small as it only projects columns
+ * required to evaluate the row level operation condition. The main scan, on the other hand, must
+ * project all columns, meaning the cost of reading unaffected groups can dominate the runtime.
  */
 class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPlan])
   extends Rule[LogicalPlan] with PredicateHelper {
@@ -48,52 +50,61 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    // apply special dynamic filtering only for group-based row-level operations
     case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
-        ExtractV2Scan(scan: SupportsRuntimeV2Filtering))
-        if conf.runtimeRowLevelOperationGroupFilterEnabled && cond != TrueLiteral
-          && scan.filterAttributes().nonEmpty =>
+        ExtractV2Scan(scan: SupportsRuntimeV2Filtering)) if canInjectGroupFilters(cond, scan) =>
+      injectGroupFilters(replaceData, cond, scan)
 
-      // use reference equality on scan to find required scan relations
-      val newQuery = replaceData.query transformUp {
-        case r: DataSourceV2ScanRelation if r.scan eq scan =>
-          // use the original table instance that was loaded for this row-level operation
-          // in order to leverage a regular batch scan in the group filter query
-          val originalTable = r.relation.table.asRowLevelOperationTable.table
-          val relation = r.relation.copy(table = originalTable)
-          val tableAttrs = replaceData.table.output
-          val command = replaceData.operation.command
-          val matchingRowsPlan = buildMatchingRowsPlan(relation, cond, tableAttrs, command)
+    case DeltaBasedRowLevelOperation(writeDelta, _, Some(cond),
+        ExtractV2Scan(scan: SupportsRuntimeV2Filtering)) if canInjectGroupFilters(cond, scan) =>
+      injectGroupFilters(writeDelta, cond, scan)
+  }
 
-          val filterAttrs = scan.filterAttributes.toImmutableArraySeq
-          val buildKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrs, matchingRowsPlan)
-          val pruningKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrs, r)
-          val dynamicPruningCond = buildDynamicPruningCond(matchingRowsPlan, buildKeys, pruningKeys)
+  private def canInjectGroupFilters(
+      cond: Expression,
+      scan: SupportsRuntimeV2Filtering): Boolean = {
+    conf.runtimeRowLevelOperationGroupFilterEnabled &&
+      cond != TrueLiteral &&
+      scan.filterAttributes.nonEmpty
+  }
 
-          Filter(dynamicPruningCond, r)
-      }
-
-      // optimize subqueries to rewrite them as joins and trigger job planning
-      replaceData.copy(query = optimizeSubqueries(newQuery))
+  private def injectGroupFilters(
+      write: RowLevelWrite,
+      cond: Expression,
+      scan: SupportsRuntimeV2Filtering): LogicalPlan = {
+    // use reference equality on scan to find required scan relations
+    val newQuery = write.query transformUp {
+      case r: DataSourceV2ScanRelation if r.scan eq scan =>
+        // use the original table instance that was loaded for this row-level operation
+        // in order to leverage a regular batch scan in the group filter query
+        val originalTable = r.relation.table.asRowLevelOperationTable.table
+        val relation = r.relation.copy(table = originalTable)
+        val matchingRowsPlan = buildMatchingRowsPlan(write, relation, cond)
+        val filterAttrs = scan.filterAttributes.toImmutableArraySeq
+        val buildKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrs, matchingRowsPlan)
+        val pruningKeys = V2ExpressionUtils.resolveRefs[Attribute](filterAttrs, r)
+        Filter(buildDynamicPruningCond(matchingRowsPlan, buildKeys, pruningKeys), r)
+    }
+    // optimize subqueries to rewrite them as joins and trigger job planning
+    write.withNewQuery(optimizeSubqueries(newQuery))
   }
 
   private def buildMatchingRowsPlan(
+      write: RowLevelWrite,
       relation: DataSourceV2Relation,
-      cond: Expression,
-      tableAttrs: Seq[Attribute],
-      command: Command): LogicalPlan = {
+      cond: Expression): LogicalPlan = {
 
-    val matchingRowsPlan = command match {
+    val matchingRowsPlan = write.operation.command match {
       case DELETE =>
         Filter(cond, relation)
 
       case UPDATE =>
-        // UPDATEs with subqueries are rewritten using UNION with two identical scan relations
+        // UPDATEs with subqueries can be rewritten using UNION with two identical scan relations
         // the analyzer assigns fresh expr IDs for one of them so that attributes don't collide
         // this rule assigns runtime filters to both scan relations (will be shared at runtime)
         // and must transform the runtime filter condition to use correct expr IDs for each relation
+        // note this only applies to group-based row-level operations (i.e. ReplaceData)
         // see RewriteUpdateTable for more details
-        val attrMap = buildTableToScanAttrMap(tableAttrs, relation.output)
+        val attrMap = buildTableToScanAttrMap(write.table.output, relation.output)
         val transformedCond = cond transform {
           case attr: AttributeReference if attrMap.contains(attr) => attrMap(attr)
         }

@@ -23,7 +23,7 @@ import org.json4s.JsonAST.JString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalGeographyType}
+import org.apache.spark.sql.catalyst.types.{PhysicalBinaryViewType, PhysicalDataType}
 
 class GeographyTypeSuite extends SparkFunSuite {
 
@@ -242,7 +242,7 @@ class GeographyTypeSuite extends SparkFunSuite {
     }
   }
 
-  test("PhysicalDataType maps GeographyType to PhysicalGeographyType") {
+  test("PhysicalDataType maps GeographyType to PhysicalBinaryViewType") {
     val geometryTypes: Seq[DataType] = Seq(
       GeographyType(4326),
       GeographyType(4267),
@@ -252,7 +252,7 @@ class GeographyTypeSuite extends SparkFunSuite {
     )
     geometryTypes.foreach { geometryType =>
       val pdt = PhysicalDataType(geometryType)
-      assert(pdt.isInstanceOf[PhysicalGeographyType])
+      assert(pdt.isInstanceOf[PhysicalBinaryViewType])
     }
   }
 }

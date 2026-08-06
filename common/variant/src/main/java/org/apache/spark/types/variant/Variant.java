@@ -17,7 +17,6 @@
 
 package org.apache.spark.types.variant;
 
-import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 
 import java.io.CharArrayWriter;
@@ -246,7 +245,7 @@ public final class Variant {
   // (4 characters).
   static String escapeJson(String str) {
     try (CharArrayWriter writer = new CharArrayWriter();
-         JsonGenerator gen = new JsonFactory().createGenerator(writer)) {
+         JsonGenerator gen = JSON_FACTORY.createGenerator(writer)) {
       gen.writeString(str);
       gen.flush();
       return writer.toString();

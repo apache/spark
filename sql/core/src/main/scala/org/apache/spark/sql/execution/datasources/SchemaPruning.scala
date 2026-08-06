@@ -82,7 +82,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
       val metadataSchema =
         relation.output.collect { case FileSourceMetadataAttribute(attr) => attr }.toStructType
       val prunedMetadataSchema = if (metadataSchema.nonEmpty) {
-        pruneSchema(metadataSchema, requestedRootFields)
+        pruneMetadataSchema(metadataSchema, requestedRootFields)
       } else {
         metadataSchema
       }
@@ -113,6 +113,44 @@ object SchemaPruning extends Rule[LogicalPlan] {
     conf.nestedSchemaPruningEnabled && (
       fsRelation.fileFormat.isInstanceOf[ParquetFileFormat] ||
         fsRelation.fileFormat.isInstanceOf[OrcFileFormat])
+
+  /**
+   * Prunes a file-source metadata schema (one `StructType` containing each
+   * `FileSourceMetadataAttribute`). Unlike pruning a data file schema, this only prunes
+   * unused sibling sub-attributes (each is its own per-field extractor); kept sub-attributes'
+   * data types are preserved verbatim because the extractor produces a complete catalyst
+   * value, and shaving fields out would shift positions in that value.
+   */
+  private def pruneMetadataSchema(
+      metadataSchema: StructType,
+      requestedRootFields: Seq[RootField]): StructType = {
+    val resolver = conf.resolver
+    StructType(metadataSchema.map { topField =>
+      topField.dataType match {
+        case innerStruct: StructType =>
+          // Collect the requested sub-attribute names for this metadata attribute from the
+          // root field tree. Anything below those sub-attributes (e.g. nested struct/array
+          // element fields) is ignored, since extractor outputs aren't pruned.
+          val requestedSubNames: Set[String] = requestedRootFields.collect {
+            case rf if resolver(rf.field.name, topField.name) =>
+              rf.field.dataType match {
+                case rs: StructType => rs.fieldNames.toSet
+                case _ => Set.empty[String]
+              }
+          }.flatten.toSet
+          val keptSubFields = innerStruct.fields.filter { sub =>
+            requestedSubNames.exists(name => resolver(name, sub.name))
+          }
+          if (keptSubFields.length == innerStruct.fields.length) {
+            // Nothing to prune for this attribute; keep the original.
+            topField
+          } else {
+            topField.copy(dataType = StructType(keptSubFields))
+          }
+        case _ => topField
+      }
+    })
+  }
 
   /**
    * Normalizes the names of the attribute references in the given expressions to reflect

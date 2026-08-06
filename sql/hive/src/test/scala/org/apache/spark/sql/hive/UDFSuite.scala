@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 
 case class FunctionResult(f1: String, f2: String)
 
@@ -33,7 +32,6 @@ case class FunctionResult(f1: String, f2: String)
  */
 class UDFSuite
   extends QueryTest
-  with SQLTestUtils
   with TestHiveSingleton {
 
   import spark.implicits._
@@ -206,7 +204,7 @@ class UDFSuite
         sql(s"SELECT $functionName(value) from $testTableName")
       }
 
-      assert(e.getMessage.contains("Can not get an evaluator of the empty UDAF"))
+      assert(e.getCause.getMessage.contains("Can not get an evaluator of the empty UDAF"))
     }
   }
 

@@ -117,14 +117,14 @@ class StateTypesEncoder[V](
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
 
-    keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow]
+    keySerializer(keyOption.get).asInstanceOf[UnsafeRow]
   }
 
   /**
    * Encode the specified value in Spark UnsafeRow with no ttl.
    */
   def encodeValue(value: V): UnsafeRow = {
-    objToRowSerializer.apply(value).asInstanceOf[UnsafeRow]
+    objToRowSerializer(value).asInstanceOf[UnsafeRow]
   }
 
   /**
@@ -132,15 +132,15 @@ class StateTypesEncoder[V](
    * with provided ttl expiration.
    */
   def encodeValue(value: V, expirationMs: Long): UnsafeRow = {
-    val objRow: InternalRow = objToRowSerializer.apply(value)
-    valueTTLProjection.apply(InternalRow(objRow, expirationMs))
+    val objRow: InternalRow = objToRowSerializer(value)
+    valueTTLProjection(InternalRow(objRow, expirationMs))
   }
 
   def decodeValue(row: UnsafeRow): V = {
     if (hasTtl) {
-      rowToObjDeserializer.apply(row.getStruct(0, valEncoder.schema.length))
+      rowToObjDeserializer(row.getStruct(0, valEncoder.schema.length))
     } else {
-      rowToObjDeserializer.apply(row)
+      rowToObjDeserializer(row)
     }
   }
 
@@ -213,14 +213,14 @@ class CompositeKeyStateEncoder[K, V](
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
     val groupingKey = keyOption.get
-    val groupingKeyRow = groupingKeySerializer.apply(groupingKey)
+    val groupingKeyRow = groupingKeySerializer(groupingKey)
 
     // Create the final unsafeRow mapping column name "key" to the keyRow
     groupingKeyProjection(InternalRow(groupingKeyRow))
   }
 
   def encodeUserKey(userKey: K): UnsafeRow = {
-    val userKeyRow = userKeySerializer.apply(userKey)
+    val userKeyRow = userKeySerializer(userKey)
 
     // Create the final unsafeRow mapping column name "userKey" to the userKeyRow
     userKeyProjection(InternalRow(userKeyRow))
@@ -237,8 +237,8 @@ class CompositeKeyStateEncoder[K, V](
     }
     val groupingKey = keyOption.get
 
-    val keyRow = groupingKeySerializer.apply(groupingKey)
-    val userKeyRow = userKeySerializer.apply(userKey)
+    val keyRow = groupingKeySerializer(groupingKey)
+    val userKeyRow = userKeySerializer(userKey)
 
     // Create the final unsafeRow combining the keyRow and userKeyRow
     compositeKeyProjection(InternalRow(keyRow, userKeyRow))
@@ -253,7 +253,7 @@ class CompositeKeyStateEncoder[K, V](
    * Only user key is returned though grouping key also exist in the row.
    */
   def decodeCompositeKey(row: UnsafeRow): K = {
-    userKeyRowToObjDeserializer.apply(row.getStruct(1, userKeyEnc.schema.length))
+    userKeyRowToObjDeserializer(row.getStruct(1, userKeyEnc.schema.length))
   }
 }
 
@@ -264,7 +264,7 @@ class TTLEncoder(schema: StructType) {
 
   // Take a groupingKey UnsafeRow and turn it into a (expirationMs, groupingKey) UnsafeRow.
   def encodeTTLRow(expirationMs: Long, elementKey: UnsafeRow): UnsafeRow = {
-    ttlKeyProjection.apply(
+    ttlKeyProjection(
       InternalRow(expirationMs, elementKey.asInstanceOf[InternalRow]))
   }
 }
@@ -294,22 +294,22 @@ class TimerKeyEncoder(keyExprEnc: ExpressionEncoder[Any]) {
   private val secIndexKeyProjection = UnsafeProjection.create(keySchemaForSecIndex)
 
   def encodedKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
-    val keyRow = keySerializer.apply(groupingKey)
-    keyRowProjection.apply(InternalRow(keyRow, expiryTimestampMs))
+    val keyRow = keySerializer(groupingKey)
+    keyRowProjection(InternalRow(keyRow, expiryTimestampMs))
   }
 
   def encodeSecIndexKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
-    val keyRow = keySerializer.apply(groupingKey)
-    secIndexKeyProjection.apply(InternalRow(expiryTimestampMs, keyRow))
+    val keyRow = keySerializer(groupingKey)
+    secIndexKeyProjection(InternalRow(expiryTimestampMs, keyRow))
   }
 
   def encodePrefixKey(groupingKey: Any): UnsafeRow = {
-    val keyRow = keySerializer.apply(groupingKey)
-    prefixKeyProjection.apply(InternalRow(keyRow))
+    val keyRow = keySerializer(groupingKey)
+    prefixKeyProjection(InternalRow(keyRow))
   }
 
   def decodePrefixKey(retUnsafeRow: UnsafeRow): Any = {
-    keyDeserializer.apply(retUnsafeRow)
+    keyDeserializer(retUnsafeRow)
   }
 }
 

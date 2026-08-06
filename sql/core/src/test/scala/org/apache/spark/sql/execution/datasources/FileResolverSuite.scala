@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.ProhibitedResolver
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 
-class FileResolverSuite extends QueryTest with SharedSparkSession {
+class FileResolverSuite extends SharedSparkSession {
   private val tableSchema = new StructType().add("id", LongType)
   private val csvTableSchema = new StructType().add("_c0", StringType)
 

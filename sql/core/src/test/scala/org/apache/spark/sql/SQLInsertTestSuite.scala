@@ -25,14 +25,14 @@ import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, SQLUserDefinedType, UserDefinedType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The base trait for SQL INSERT.
  */
-trait SQLInsertTestSuite extends QueryTest with SQLTestUtils with AdaptiveSparkPlanHelper {
+trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 

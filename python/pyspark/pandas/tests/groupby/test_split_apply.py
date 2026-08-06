@@ -19,7 +19,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupbySplitApplyTestingFuncMixin:
@@ -161,7 +160,6 @@ class GroupbySplitApplyMixin(GroupbySplitApplyTestingFuncMixin):
     def test_split_apply_combine_on_series(self):
         funcs = [
             ((True, False), ["sum"]),
-            ((True, True), ["mean"]),
         ]
         self._test_split_apply_func(funcs)
 
@@ -169,7 +167,6 @@ class GroupbySplitApplyMixin(GroupbySplitApplyTestingFuncMixin):
 class GroupbySplitApplyTests(
     GroupbySplitApplyMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

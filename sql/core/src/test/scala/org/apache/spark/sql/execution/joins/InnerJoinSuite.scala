@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
-class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
+class InnerJoinSuite extends SharedSparkSession {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder
   import testImplicits.toRichColumn

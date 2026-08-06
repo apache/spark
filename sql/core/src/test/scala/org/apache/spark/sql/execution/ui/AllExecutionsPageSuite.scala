@@ -65,7 +65,9 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
 
     val page = new AllExecutionsPage(tab)
     val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+    assert(html.contains("sql-summary-bar"))
     assert(html.contains("sql-executions-table"))
+    assert(html.contains("sql-table-utils.js"))
     assert(html.contains("allexecutionspage.js"))
     assert(html.contains("datatables"))
   }

@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.catalog.ColumnDefaultValue
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.collection.BitSet
 
 /**
  * A logical plan node that contains exactly what was parsed from SQL.
@@ -173,7 +174,7 @@ case class QualifiedColType(
  *                             Only valid for static partitions.
  * @param byName               If true, reorder the data columns to match the column names of the
  *                             target table.
- * @param replaceCriteriaOpt   If specified, indicates an INSERT REPLACE ON/USING operation,
+ * @param replaceCriteriaOpt   If specified, indicates an INSERT REPLACE ON/USING/WHERE operation,
  *                             which atomically deletes existing rows that satisfy the replace
  *                             criteria and then inserts the query result rows into the table.
  * @param withSchemaEvolution  If true, enables automatic schema evolution for the operation.
@@ -188,7 +189,11 @@ case class InsertIntoStatement(
     byName: Boolean = false,
     replaceCriteriaOpt: Option[InsertReplaceCriteria] = None,
     withSchemaEvolution: Boolean = false)
-  extends UnaryParsedStatement {
+  // Extends TransactionalWrite so that QueryExecution can detect a potential transaction on the
+  // unresolved logical plan before analysis runs. InsertIntoStatement is shared between V1 and V2
+  // inserts, but the LookupCatalog.TransactionalWrite extractor only matches when the target
+  // catalog implements TransactionalCatalogPlugin, so V1 inserts are never assigned a transaction.
+  extends UnaryParsedStatement with TransactionalWrite {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")
@@ -196,21 +201,51 @@ case class InsertIntoStatement(
     "IF NOT EXISTS is only valid with static partitions")
   require(userSpecifiedCols.isEmpty || !byName,
     "BY NAME is only valid without specified cols")
-  require(replaceCriteriaOpt.isEmpty || userSpecifiedCols.isEmpty,
-    "userSpecifiedCols is not compatible with REPLACE USING/ON")
+  require(
+    !replaceCriteriaOpt.exists(_.isInstanceOf[InsertReplaceUsing]) || userSpecifiedCols.isEmpty,
+    "userSpecifiedCols is not compatible with REPLACE USING")
   require(replaceCriteriaOpt.isEmpty || partitionSpec.isEmpty,
-    "partitionSpec is not compatible with REPLACE USING/ON")
+    "partitionSpec is not compatible with REPLACE USING/ON/WHERE")
   require(replaceCriteriaOpt.isEmpty || overwrite,
-    "REPLACE USING/ON requires overwrite to be true")
+    "REPLACE USING/ON/WHERE requires overwrite to be true")
 
   override def child: LogicalPlan = query
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
     copy(query = newChild)
+
+  // `table` is a non-child LogicalPlan slot (`child = query`), so the default tree-pattern
+  // propagation in TreeNode/QueryPlan does not see patterns inside it. Add `table`'s bits here
+  // so that `containsPattern(...)` pruning correctly reports patterns living in `table`
+  // (e.g. `PARAMETER`, `PLAN_WITH_UNRESOLVED_IDENTIFIER`). The REPLACE criteria condition is an
+  // `Expression` child (`InsertReplaceCriteria` extends `Expression`), so its bits already
+  // propagate through the normal expression traversal.
+  override protected def getDefaultTreePatternBits: BitSet = {
+    val bits = super.getDefaultTreePatternBits
+    bits.union(table.treePatternBits)
+    bits
+  }
 }
 
 sealed abstract class InsertReplaceCriteria extends Expression with Unevaluable {
   override def nullable: Boolean = false
   override def dataType: DataType = throw new UnresolvedException("dataType")
+
+  /**
+   * True for INSERT ... REPLACE WHERE, which `ResolveInsertInto` rewrites into an
+   * [[OverwriteByExpression]].
+   */
+  def isReplaceWhere: Boolean = this match {
+    case _: InsertReplaceWhere => true
+    case _: InsertReplaceOn | _: InsertReplaceUsing => false
+  }
+
+  /**
+   * True for INSERT ... REPLACE ON / REPLACE USING.
+   */
+  def isReplaceOnOrUsing: Boolean = this match {
+    case _: InsertReplaceOn | _: InsertReplaceUsing => true
+    case _: InsertReplaceWhere => false
+  }
 }
 
 /**
@@ -232,5 +267,15 @@ case class InsertReplaceOn(
   override def children: Seq[Expression] = Seq(cond)
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): InsertReplaceOn =
+    copy(cond = newChildren.head)
+}
+
+/**
+ * Rows are matched based on the specified boolean condition.
+ */
+case class InsertReplaceWhere(cond: Expression) extends InsertReplaceCriteria {
+  override def children: Seq[Expression] = Seq(cond)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): InsertReplaceWhere =
     copy(cond = newChildren.head)
 }

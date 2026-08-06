@@ -11,6 +11,9 @@
     "jest-environment-jsdom": "^30.0.0",
     "jquery": "^3.7.1"
   },
+  "overrides": {
+    "js-yaml": "^4.2.0"
+  },
   "jest": {
     "testEnvironment": "jsdom",
     "transform": {}

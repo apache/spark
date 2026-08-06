@@ -46,7 +46,7 @@ package object packageobject {
   case class PackageClass(value: Int)
 }
 
-class DatasetPrimitiveSuite extends QueryTest with SharedSparkSession {
+class DatasetPrimitiveSuite extends SharedSparkSession {
   import testImplicits._
 
   test("toDS") {

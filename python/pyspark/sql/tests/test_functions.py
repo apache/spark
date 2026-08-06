@@ -146,6 +146,7 @@ class FunctionsTestsMixin:
             "ByteType",  # should be imported from pyspark.sql.types
             "Column",  # should be imported from pyspark.sql
             "DataType",  # should be imported from pyspark.sql.types
+            "MapType",  # should be imported from pyspark.sql.types
             "NumericType",  # should be imported from pyspark.sql.types
             "PySparkTypeError",  # should be imported from pyspark.errors
             "PySparkValueError",  # should be imported from pyspark.errors
@@ -300,8 +301,8 @@ class FunctionsTestsMixin:
         ct = sorted(ct, key=lambda x: x[0])
         for i, row in enumerate(ct):
             self.assertEqual(row[0], str(i))
-            self.assertTrue(row[1], 1)
-            self.assertTrue(row[2], 1)
+            self.assertEqual(row[1], 1)
+            self.assertEqual(row[2], 1)
 
     def test_math_functions(self):
         df = self.spark.createDataFrame([Row(a=i, b=2 * i) for i in range(10)])
@@ -972,6 +973,55 @@ class FunctionsTestsMixin:
         actual_with_threshold = df.select(F.levenshtein(df.l, df.r, 2).alias("b"))
         assertDataFrameEqual([Row(b=-1)], actual_with_threshold)
 
+    def test_vector_functions(self):
+        from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+
+        schema = StructType(
+            [
+                StructField("a", ArrayType(FloatType())),
+                StructField("b", ArrayType(FloatType())),
+            ]
+        )
+        df = self.spark.createDataFrame([([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])], schema)
+
+        # Similarity/distance functions
+        self.assertAlmostEqual(
+            df.select(F.vector_cosine_similarity("a", "b")).first()[0], 0.9746318, places=4
+        )
+        self.assertAlmostEqual(
+            df.select(F.vector_inner_product("a", "b")).first()[0], 32.0, places=1
+        )
+        self.assertAlmostEqual(
+            df.select(F.vector_l2_distance("a", "b")).first()[0], 5.196152, places=4
+        )
+
+        # Norm/normalize functions
+        schema2 = StructType([StructField("v", ArrayType(FloatType()))])
+        df2 = self.spark.createDataFrame([([3.0, 4.0],)], schema2)
+        self.assertAlmostEqual(
+            df2.select(F.vector_norm("v", F.lit(2.0).cast("float"))).first()[0], 5.0, places=1
+        )
+        result = df2.select(F.vector_normalize("v", F.lit(2.0).cast("float"))).first()[0]
+        self.assertAlmostEqual(result[0], 0.6, places=4)
+        self.assertAlmostEqual(result[1], 0.8, places=4)
+
+        # Aggregate functions
+        df3 = self.spark.createDataFrame([([1.0, 2.0],), ([3.0, 4.0],)], schema2)
+        avg_result = df3.select(F.vector_avg("v")).first()[0]
+        self.assertAlmostEqual(avg_result[0], 2.0, places=4)
+        self.assertAlmostEqual(avg_result[1], 3.0, places=4)
+        sum_result = df3.select(F.vector_sum("v")).first()[0]
+        self.assertAlmostEqual(sum_result[0], 4.0, places=4)
+        self.assertAlmostEqual(sum_result[1], 6.0, places=4)
+
+    def test_jaro_winkler_similarity_function(self):
+        df = self.spark.createDataFrame([("MARTHA", "MARHTA")], ["l", "r"])
+        result = df.select(F.jaro_winkler_similarity(df.l, df.r)).first()[0]
+        self.assertAlmostEqual(result, 0.9611111111111111, places=10)
+        # Null handling
+        null_result = df.select(F.jaro_winkler_similarity(df.l, F.lit(None))).first()[0]
+        self.assertIsNone(null_result)
+
     def test_between_function(self):
         df = self.spark.createDataFrame(
             [Row(a=1, b=2, c=3), Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)]
@@ -1606,7 +1656,7 @@ class FunctionsTestsMixin:
         non_file_df = self.spark.range(100).select(F.input_file_name())
 
         results = non_file_df.collect()
-        self.assertTrue(len(results) == 100)
+        self.assertEqual(len(results), 100)
 
         # [SPARK-24605]: if everything was properly reset after the last job, this should return
         # empty string rather than the file read in the last job.
@@ -1954,6 +2004,36 @@ class FunctionsTestsMixin:
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[: len(r)])
 
+    def test_counter_diff_window_function(self):
+        df = self.spark.createDataFrame(
+            [
+                (1, datetime.datetime(2026, 1, 1, 0, 0, 0), 100),
+                (2, datetime.datetime(2026, 1, 1, 0, 0, 0), 200),
+                (3, datetime.datetime(2026, 1, 1, 0, 0, 0), 50),
+                (4, datetime.datetime(2026, 1, 1, 0, 0, 0), 100),
+                (5, datetime.datetime(2026, 1, 1, 0, 1, 0), 200),
+                (6, datetime.datetime(2026, 1, 1, 0, 1, 0), 300),
+            ],
+            ["t", "st", "c"],
+        )
+        w = Window.orderBy("t")
+
+        rows = df.select("t", F.counter_diff("c").over(w).alias("d")).orderBy("t").collect()
+        self.assertEqual(
+            [(r.t, r.d) for r in rows],
+            [(1, None), (2, 100), (3, None), (4, 50), (5, 100), (6, 100)],
+        )
+
+        rows = (
+            df.select("t", F.counter_diff("c", startTime="st").over(w).alias("d"))
+            .orderBy("t")
+            .collect()
+        )
+        self.assertEqual(
+            [(r.t, r.d) for r in rows],
+            [(1, None), (2, 100), (3, None), (4, 50), (5, None), (6, 100)],
+        )
+
     def test_window_functions_without_partitionBy(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
         w = Window.orderBy("key", df.value)
@@ -2067,6 +2147,56 @@ class FunctionsTestsMixin:
             sorted(df.select(F.collect_list(df.value).alias("r")).collect()[0].r),
             ["1", "2", "2", "2"],
         )
+
+    def test_collect_union(self):
+        # array<int>: distinct union across rows; NULL arrays ignored.
+        df = self.spark.createDataFrame([([1, 2],), ([2, 3],), ([1],), (None,)], ["value"])
+        self.assertEqual(
+            sorted(df.select(F.collect_union(df.value).alias("r")).collect()[0].r),
+            [1, 2, 3],
+        )
+
+        # array<string>
+        sdf = self.spark.createDataFrame([(["a", "b"],), (["b", "c"],), (["a"],)], ["value"])
+        self.assertEqual(
+            sorted(sdf.select(F.collect_union("value").alias("r")).collect()[0].r),
+            ["a", "b", "c"],
+        )
+
+        # array<double> (buffer keyed by bit pattern; values round-trip)
+        ddf = self.spark.createDataFrame([([1.5, 2.5],), ([2.5, 3.5],)], ["value"])
+        self.assertEqual(
+            sorted(ddf.select(F.collect_union("value").alias("r")).collect()[0].r),
+            [1.5, 2.5, 3.5],
+        )
+
+        # NULL elements inside a non-null array are dropped by default (IGNORE NULLS) ...
+        ndf = self.spark.createDataFrame([([1, None],), ([2],)], "value: array<int>")
+        self.assertEqual(
+            sorted(ndf.select(F.collect_union("value").alias("r")).collect()[0].r),
+            [1, 2],
+        )
+        # ... and kept (a single null) with RESPECT NULLS (SQL clause via expr).
+        respect = ndf.select(F.expr("collect_union(value) RESPECT NULLS").alias("r")).collect()[0].r
+        self.assertEqual(sorted(respect, key=lambda x: (x is not None, x)), [None, 1, 2])
+
+        # array<struct>: the motivating case (dedups whole structs, stays element-wise).
+        struct_data = [
+            ([{"id": 1, "flag": True}, {"id": 2, "flag": False}],),
+            ([{"id": 2, "flag": False}, {"id": 3, "flag": True}],),
+        ]
+        stdf = self.spark.createDataFrame(struct_data, "value: array<struct<id:int,flag:boolean>>")
+        struct_rows = stdf.select(F.collect_union("value").alias("r")).collect()[0].r
+        self.assertEqual(
+            sorted((row.id, row.flag) for row in struct_rows),
+            [(1, True), (2, False), (3, True)],
+        )
+
+        # Per-group union.
+        gdf = self.spark.createDataFrame([("a", [1, 2]), ("a", [2, 3]), ("b", [4])], ["k", "value"])
+        rows = gdf.groupBy("k").agg(F.collect_union("value").alias("r")).orderBy("k").collect()
+        self.assertEqual(sorted(rows[0].r), [1, 2, 3])
+        self.assertEqual(sorted(rows[1].r), [4])
 
     def test_listagg_functions(self):
         df = self.spark.createDataFrame(
@@ -3247,11 +3377,15 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame(
             [("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"]
         )
+
         self.assertTrue(
             all(
                 df.select(
                     F.regexp_replace("str", r"(\d+)", "--") == "-----",
                     F.regexp_replace("str", F.col("pattern"), F.col("replacement")) == "-----",
+                    F.regexp_replace("str", r"(\d+)", "--", 5) == "100---",
+                    F.regexp_replace("str", F.col("pattern"), F.col("replacement"), F.lit(5))
+                    == "100---",
                 ).first()
             )
         )
@@ -3423,7 +3557,16 @@ class FunctionsTestsMixin:
 
     def test_variant_expressions(self):
         df = self.spark.createDataFrame(
-            [Row(json="""{ "a" : 1 }""", path="$.a"), Row(json="""{ "b" : 2 }""", path="$.b")]
+            [
+                Row(json="""{ "a" : 1 }""", path="$.a", newpath="$.z", arr="[1, 2]", arrpath="$"),
+                Row(
+                    json="""{ "b" : 2 }""",
+                    path="$.b",
+                    newpath="$.z",
+                    arr="[[3], 4]",
+                    arrpath="$[0]",
+                ),
+            ]
         )
         v = F.parse_json(df.json)
 
@@ -3431,6 +3574,73 @@ class FunctionsTestsMixin:
             self.assertEqual([r[0] for r in resultDf.collect()], expected)
 
         check(df.select(F.is_variant_null(v)), [False, False])
+        check(df.select(F.is_valid_variant(v)), [True, True])
+        check(df.select(F.to_json(F.variant_delete(v, "$.a"))), ["{}", '{"b":2}'])
+        check(df.select(F.to_json(F.variant_delete(v, df.path))), ["{}", "{}"])
+        check(
+            df.select(F.to_json(F.variant_delete(v, F.lit(None)))),
+            ['{"a":1}', '{"b":2}'],
+        )
+        check(
+            df.select(F.to_json(F.variant_insert(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(df.select(F.to_json(F.variant_insert(v, "$.z", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_insert(v, df.newpath, F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(
+            df.select(F.to_json(F.try_variant_insert(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(df.select(F.to_json(F.try_variant_insert(v, df.path, F.lit(9)))), [None, None])
+        check(df.select(F.to_json(F.try_variant_insert(v, "$.z", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_set(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(
+            df.select(F.to_json(F.variant_set(v, "$.z", F.lit(9), False))),
+            ['{"a":1}', '{"b":2}'],
+        )
+        check(df.select(F.to_json(F.variant_set(v, "$.z", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_set(v, df.newpath, F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(
+            df.select(F.to_json(F.try_variant_set(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(
+            df.select(F.to_json(F.try_variant_set(v, "$.z", F.lit(9), False))),
+            ['{"a":1}', '{"b":2}'],
+        )
+        check(df.select(F.to_json(F.try_variant_set(v, "$[0]", F.lit(9)))), [None, None])
+        check(
+            df.select(F.to_json(F.try_variant_set(v, df.newpath, F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        arr = F.parse_json(df.arr)
+        check(
+            df.select(F.to_json(F.variant_array_append(arr, "$", F.lit(9)))),
+            ["[1,2,9]", "[[3],4,9]"],
+        )
+        check(df.select(F.to_json(F.variant_array_append(arr, "$", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_array_append(arr, df.arrpath, F.lit(9)))),
+            ["[1,2,9]", "[[3,9],4]"],
+        )
+        check(
+            df.select(F.to_json(F.try_variant_array_append(arr, "$", F.lit(9)))),
+            ["[1,2,9]", "[[3],4,9]"],
+        )
+        check(df.select(F.to_json(F.try_variant_array_append(arr, "$.a", F.lit(9)))), [None, None])
+        check(
+            df.select(F.to_json(F.try_variant_array_append(arr, df.arrpath, F.lit(9)))),
+            ["[1,2,9]", "[[3,9],4]"],
+        )
         check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
         check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
 
@@ -3847,16 +4057,28 @@ class FunctionsTestsMixin:
 
     def test_st_asbinary(self):
         df = self.spark.createDataFrame(
-            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"),)],
-            ["wkb"],
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"), "XDR")],
+            ["wkb", "end"],
         )
         results = df.select(
             F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"))),
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), "NDR")),
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), "XDR")),
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), F.col("end"))),
             F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"))),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), "NDR")),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), "XDR")),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), F.col("end"))),
         ).collect()
         expected = Row(
             "0101000000000000000000F03F0000000000000040",
             "0101000000000000000000F03F0000000000000040",
+            "00000000013FF00000000000004000000000000000",
+            "00000000013FF00000000000004000000000000000",
+            "0101000000000000000000F03F0000000000000040",
+            "0101000000000000000000F03F0000000000000040",
+            "00000000013FF00000000000004000000000000000",
+            "00000000013FF00000000000004000000000000000",
         )
         self.assertEqual(results, [expected])
 
@@ -3981,7 +4203,7 @@ class FunctionsTestsMixin:
         self.assertEqual(result[1][1], ["Frank", "Dave"])  # Sales
 
 
-class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
+class FunctionsTests(FunctionsTestsMixin, ReusedSQLTestCase):
     pass
 
 

@@ -107,7 +107,7 @@ library.
 First, download Spark from the
 [Download Apache Spark](https://spark.apache.org/downloads.html) page. Choose the
 latest release in  the release drop down at the top of the page. Then choose your package type, typically
-“Pre-built for Apache Hadoop 3.3 and later”, and click the link to download.
+“Pre-built for Apache Hadoop 3.5 and later”, and click the link to download.
 
 Now extract the Spark package you just downloaded on your computer, for example:
 
@@ -228,7 +228,7 @@ Welcome to
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version 4.1.0-SNAPSHOT
+   /___/ .__/\_,_/_/ /_/\_\   version {{site.SPARK_VERSION}}
       /_/
 
 Type in expressions to have them evaluated.
@@ -276,6 +276,72 @@ The connection may also be programmatically created using _SparkSession#builder_
 
 </div>
 </div>
+
+## Faster local iteration with a persistent Connect server
+
+When you develop or test locally with
+
+```python
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.remote("local[*]").getOrCreate()
+```
+
+PySpark boots a fresh in-process Spark Connect server that lives only as long as that Python
+process. Every `python script.py` invocation (or every new test worker process) therefore re-pays
+the one-time startup cost -- JVM warmup, `SparkContext` construction, and Connect server boot --
+which can take a few seconds and makes a quick edit/run loop feel slow.
+
+To amortize that cost across runs, start one persistent local Spark Connect server and point
+every run at it:
+
+```bash
+# Start once; it stays up across runs. (--master is optional; it defaults to local[*].)
+$SPARK_HOME/sbin/start-connect-server.sh --master "local[*]"
+
+# Every run reconnects instead of booting a new server.
+python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("sc://localhost:15002").getOrCreate()'
+
+# Stop it when you are done.
+$SPARK_HOME/sbin/stop-connect-server.sh
+```
+
+Alternatively, on POSIX systems PySpark can manage this persistent server for you. With
+`SPARK_LOCAL_CONNECT_REUSE=1` set (or `spark.local.connect.reuse=true` on the builder),
+`SparkSession.builder.remote("local[*]").getOrCreate()` starts a persistent server through
+`sbin/start-connect-server.sh` on the first run and reconnects to it on later runs, so scripts
+keep the plain `local[*]` URL:
+
+```bash
+export SPARK_LOCAL_CONNECT_REUSE=1
+
+# The first run starts the server; later runs reconnect to it.
+python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("local[*]").getOrCreate()'
+
+# Stop the managed server when you are done.
+python -m pyspark.sql.connect.local_server --stop
+```
+
+The managed server is an ordinary `spark-daemon.sh` daemon, but it runs with a per-user pid
+directory and ident string so it cannot collide with a server you started by hand -- which also
+means a plain `sbin/stop-connect-server.sh` does not find it. The `--stop` command signals the
+recorded server and cleans up the discovery file; killing the server's pid directly also works,
+and the next run notices the dead server and starts a fresh one.
+
+This managed-server workflow is experimental. The `--stop` command and the discovery file
+location and format may change in a future release, for example if local server management is
+folded into a unified `spark connect` CLI.
+
+The connection details (host, port, auth token, pid, Spark version) are recorded in a discovery
+file in a private per-user directory; set `SPARK_LOCAL_CONNECT_DISCOVERY` to override its
+location. A run reconnects only to a server whose Spark version matches. After upgrading Spark,
+the server from the previous version cannot be reused and the next run fails with an error asking
+you to stop it; run the `--stop` command above and rerun to start a fresh server.
+
+Each run connects as its own Connect session, so session-local state -- temp views, runtime SQL
+configurations, and session artifacts -- is fresh on every run and never leaks between runs. State
+backed by the shared `SparkContext` (the persistent catalog/warehouse, global temp views, and
+cached datasets) *is* shared across runs, so namespace per-run databases or clear that state
+yourself if your runs must be fully isolated.
 
 ## Use Spark Connect in standalone applications
 
@@ -371,7 +437,7 @@ one may implement their own class extending `ClassFinder` for customized search 
 </div>
 
 For more information on application development with Spark Connect as well as extending Spark Connect
-with custom functionality, see [Application Development with Spark Connect](app-dev-spark-connect.html). 
+with custom functionality, see [Application Development with Spark Connect](app-dev-spark-connect.html).
 # Client application authentication
 
 While Spark Connect does not have built-in authentication, it is designed to

@@ -37,7 +37,8 @@
   out: |
     main:16: error: No overload variant of "sample" of "DataFrame" matches argument type "bool"  [call-overload]
     main:16: note: Possible overload variants:
-    main:16: note:     def sample(self, fraction: float, seed: int | None = ...) -> DataFrame
+    main:16: note:     def sample(self, *, withReplacement: bool | None = ..., fraction: float, seed: int | None = ...) -> DataFrame
+    main:16: note:     def sample(self, float, int | None = ..., /) -> DataFrame
     main:16: note:     def sample(self, withReplacement: bool | None, fraction: float, seed: int | None = ...) -> DataFrame
 
 

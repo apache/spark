@@ -37,7 +37,10 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 /**
  * A data source for reading text files. The text files must be encoded as UTF-8.
  */
-case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister {
+case class TextFileFormat()
+    extends TextBasedFileFormat
+    with DataSourceRegister
+    with SupportsArchiveFormat {
 
   override def shortName(): String = "text"
 
@@ -60,6 +63,10 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       options: Map[String, String],
       path: Path): Boolean = {
     val textOptions = new TextOptions(options)
+    if (textOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      // A tar archive is read as one sequential stream (entry by entry), so it is never split.
+      return false
+    }
     super.isSplitable(sparkSession, options, path) && !textOptions.wholeText
   }
 
@@ -108,7 +115,59 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
     val textOptions = new TextOptions(options)
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
-    readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions)
+    val perFileReader = readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions)
+    val archiveReader = readArchive(broadcastedHadoopConf, requiredSchema, textOptions)
+    // A tar archive (always a single split, see `isSplitable`) is streamed entry by entry when
+    // archive reads are enabled; otherwise the file is read directly. Archive scanning is wired
+    // into the V1 file source only, so this dispatch lives here rather than in a shared reader.
+    (file: PartitionedFile) => {
+      if (textOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
+        archiveReader(file)
+      } else {
+        perFileReader(file)
+      }
+    }
+  }
+
+  /**
+   * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry, emitting the same
+   * `value`-column rows the per-file reader produces -- each entry is read as if it were a
+   * standalone text file (one row per line, or a single row holding the whole entry when
+   * `wholeText` is set), without unpacking the archive to disk. The whole archive is a single
+   * split (see `isSplitable`).
+   */
+  private def readArchive(
+      conf: Broadcast[SerializableConfiguration],
+      requiredSchema: StructType,
+      textOptions: TextOptions): PartitionedFile => Iterator[UnsafeRow] = {
+    (file: PartitionedFile) => {
+      val confValue = conf.value.value
+      SupportsArchiveFormat.readArchiveEntries(file.toPath, confValue) { (_, in) =>
+        // Each entry is read as a standalone text file, so it gets its own row writer, exactly as
+        // `readToUnsafeMem` builds one per file.
+        val emptyUnsafeRow = new UnsafeRow(0)
+        val unsafeRowWriter = new UnsafeRowWriter(1)
+        // Mirrors `readToUnsafeMem`: an empty required schema (e.g. `count`) yields one empty row
+        // per record; otherwise each record is written into the single `value` column.
+        def toRow(bytes: Array[Byte], length: Int): UnsafeRow = {
+          if (requiredSchema.isEmpty) {
+            emptyUnsafeRow
+          } else {
+            unsafeRowWriter.reset()
+            unsafeRowWriter.write(0, bytes, 0, length)
+            unsafeRowWriter.getRow()
+          }
+        }
+        if (textOptions.wholeText) {
+          val content = in.readAllBytes()
+          Iterator.single(toRow(content, content.length))
+        } else {
+          lineIterator(in, textOptions.lineSeparatorInRead).map { line =>
+            toRow(line.getBytes, line.getLength)
+          }
+        }
+      }
+    }
   }
 
   private def readToUnsafeMem(

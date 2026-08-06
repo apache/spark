@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Optional, OptionalLong}
+import java.util.{Collections, Optional, OptionalLong}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
@@ -25,15 +25,17 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatisti
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
+import org.apache.spark.sql.internal.connector.V2StatisticsUtils
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -95,7 +97,7 @@ abstract class DataSourceV2RelationBase(
       table.asReadable.newScanBuilder(options).build() match {
         case r: SupportsReportStatistics =>
           val statistics = r.estimateStatistics()
-          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
+          DataSourceV2Relation.transformV2Stats(statistics, conf.defaultSizeInBytes, output)
         case _ =>
           Statistics(sizeInBytes = conf.defaultSizeInBytes)
       }
@@ -158,8 +160,22 @@ case class DataSourceV2Relation(
  * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
  *                               rows in the scan across different partitions
  * @param ordering if set, the ordering provided by the scan
- * @param pushedFilters Catalyst expressions for filters that were fully pushed to the data
- *                      source and do not appear as post-scan filters
+ * @param pushedFilters Catalyst expressions for filters that were fully pushed to the data source
+ *                      and do not appear as post-scan filters. These reference the relation's
+ *                      (pre-pruning) output, so they may reference columns pruned out of `output`
+ *                      (e.g. an unselected partition column the source enforces internally). This
+ *                      complete set is what lets `PlanMerger` soundly compare and re-enforce a
+ *                      scan's filters when fusing two scans via a Spark-side scan merge
+ *                      (`TableCapability.SCAN_MERGING`).
+ * @param mergeableScan whether this scan may be fused with an equivalent scan by a Spark-side scan
+ *                      merge (see `TableCapability.SCAN_MERGING`).
+ *                      Default false (not mergeable): only the plain column-pruning + filter
+ *                      pushdown path in `V2ScanRelationPushDown` sets this true, and only when the
+ *                      scan carries nothing a rebuilt scan cannot reproduce. A scan with a
+ *                      non-reproducible pushdown (aggregate, join, variant extraction, limit,
+ *                      offset, top-N, sample) or by any other rule stays not-mergeable by default,
+ *                      so merging is safe by construction -- a new scan-relation build site need
+ *                      not opt out.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -167,10 +183,13 @@ case class DataSourceV2ScanRelation(
     output: Seq[AttributeReference],
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     ordering: Option[Seq[SortOrder]] = None,
-    pushedFilters: Seq[Expression] = Seq.empty) extends LeafNode with NamedRelation {
+    pushedFilters: Seq[Expression] = Seq.empty,
+    mergeableScan: Boolean = false) extends LeafNode with NamedRelation {
 
   // TODO: Override validConstraints to return ExpressionSet(pushedFilters) so that pushed
   // filters participate in constraint propagation (InferFiltersFromConstraints, PruneFilters).
+  // Note: pushedFilters may reference columns pruned out of `output`, so constraint use must first
+  // intersect with `outputSet` (a constraint has to reference the node's output).
   // This changes which filters InferFiltersFromConstraints adds or removes (e.g., it may
   // skip adding IsNotNull when the scan already implies it, or infer new filters across
   // joins), so plan stability testing is needed first.
@@ -189,6 +208,14 @@ case class DataSourceV2ScanRelation(
 
   override def name: String = relation.name
 
+  // A leaf relation references no upstream attributes. `pushedFilters` (and, for that matter,
+  // partitioning/ordering) are scan metadata, not references to resolve, and `pushedFilters` may
+  // reference columns pruned out of `output` (e.g. an unselected partition column). Without this
+  // override those would surface as `missingInput`, which the optimizer's plan-change validation
+  // flags as dangling references. `mapExpressions`/`transformExpressions` still rewrite the
+  // metadata expressions -- they iterate the product directly, independent of `references`.
+  override def references: AttributeSet = AttributeSet.empty
+
   override def simpleString(maxFields: Int): String = {
     val outputString = truncatedString(output, "[", ", ", "]", maxFields)
     val nameWithTimeTravelSpec = relation.timeTravelSpec match {
@@ -199,13 +226,30 @@ case class DataSourceV2ScanRelation(
   }
 
   override def computeStats(): Statistics = {
-    scan match {
-      case r: SupportsReportStatistics =>
-        val statistics = r.estimateStatistics()
-        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
-      case _ =>
-        Statistics(sizeInBytes = conf.defaultSizeInBytes)
+    if (conf.cboEnabled || conf.planStatsEnabled) {
+      computeFullStats()
+    } else {
+      computeSizeOnlyStats()
     }
+  }
+
+  private def computeFullStats(): Statistics = {
+    V2StatisticsUtils.computeStats(scan) match {
+      case Some(v2Stats) =>
+        DataSourceV2Relation.transformV2Stats(v2Stats, conf.defaultSizeInBytes, output)
+      case _ => defaultSizeOnlyStats
+    }
+  }
+
+  private def computeSizeOnlyStats(): Statistics = {
+    V2StatisticsUtils.computeSizeInBytes(scan, EstimationUtils.getSizePerRow(output)) match {
+      case Some(sizeInBytes) => Statistics(sizeInBytes = sizeInBytes)
+      case _ => defaultSizeOnlyStats
+    }
+  }
+
+  private def defaultSizeOnlyStats: Statistics = {
+    Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
 
   override def doCanonicalize(): DataSourceV2ScanRelation = {
@@ -220,7 +264,9 @@ case class DataSourceV2ScanRelation(
       ordering = ordering.map(
         _.map(o => o.copy(child = QueryPlan.normalizeExpressions(o.child, output)))
       ),
-      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, output))
+      // pushedFilters may reference columns pruned out of `output` (see the field doc), so they are
+      // normalized against the relation's full output rather than `output`.
+      pushedFilters = pushedFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
     )
   }
 }
@@ -276,7 +322,7 @@ case class StreamingDataSourceV2ScanRelation(
   override def computeStats(): Statistics = scan match {
     case r: SupportsReportStatistics =>
       val statistics = r.estimateStatistics()
-      DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
+      DataSourceV2Relation.transformV2Stats(statistics, conf.defaultSizeInBytes, output)
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
@@ -320,6 +366,10 @@ object ExtractV2ScanInfo {
 }
 
 object DataSourceV2Relation {
+
+  private val EMPTY_V2_COLUMN_STATS =
+    Collections.emptyMap[NamedReference, ColumnStatistics]()
+
   def create(
       table: Table,
       catalog: Option[CatalogPlugin],
@@ -329,7 +379,13 @@ object DataSourceV2Relation {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     // The v2 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
-    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
+    // We also strip internal metadata that may have leaked onto the table columns, so it does
+    // not surface on the relation's output. Column IDs (FIELD_ID_METADATA_KEY) are an exception:
+    // although the key is listed in INTERNAL_METADATA_KEYS so that other paths drop it, the
+    // column-ID feature deliberately surfaces field IDs on the relation's output, so we keep them.
+    val schema = removeInternalMetadata(
+      CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema),
+      keepFieldIds = true)
     DataSourceV2Relation(table, toAttributes(schema), catalog, identifier, options, timeTravelSpec)
   }
 
@@ -413,22 +469,23 @@ object DataSourceV2Relation {
    */
   def transformV2Stats(
       v2Statistics: V2Statistics,
-      defaultRowCount: Option[BigInt],
       defaultSizeInBytes: Long,
       output: Seq[Attribute] = Seq.empty): Statistics = {
     val numRows: Option[BigInt] = if (v2Statistics.numRows().isPresent) {
       Some(v2Statistics.numRows().getAsLong)
     } else {
-      defaultRowCount
+      None
     }
 
     var colStats: Seq[(Attribute, ColumnStat)] = Seq.empty[(Attribute, ColumnStat)]
-    if (!v2Statistics.columnStats().isEmpty) {
-      val v2ColumnStat = v2Statistics.columnStats()
-      val keys = v2ColumnStat.keySet()
+    // columnStats() may be null even when numRows/sizeInBytes are present, so normalize it to an
+    // empty map before conversion to avoid an NPE.
+    val v2ColumnStats = Option(v2Statistics.columnStats()).getOrElse(EMPTY_V2_COLUMN_STATS)
+    if (!v2ColumnStats.isEmpty) {
+      val keys = v2ColumnStats.keySet()
 
       keys.forEach(key => {
-        val colStat = v2ColumnStat.get(key)
+        val colStat = v2ColumnStats.get(key)
         val distinct: Option[BigInt] =
           if (colStat.distinctCount().isPresent) Some(colStat.distinctCount().getAsLong) else None
         val min: Option[Any] = if (colStat.min().isPresent) Some(colStat.min().get) else None
@@ -457,9 +514,20 @@ object DataSourceV2Relation {
         })
       })
     }
+    val attributeStats = AttributeMap(colStats)
+    // Prefer the source-reported size. Otherwise infer a projection-aware size from the row count
+    // (numRows * outputRowSize via getOutputSize). Fall back to the default size when neither is
+    // available.
+    val sizeInBytes = if (v2Statistics.sizeInBytes().isPresent) {
+      BigInt(v2Statistics.sizeInBytes().getAsLong)
+    } else if (numRows.isDefined) {
+      EstimationUtils.getOutputSize(output, numRows.get, attributeStats)
+    } else {
+      BigInt(defaultSizeInBytes)
+    }
     Statistics(
-      sizeInBytes = v2Statistics.sizeInBytes().orElse(defaultSizeInBytes),
+      sizeInBytes = sizeInBytes,
       rowCount = numRows,
-      attributeStats = AttributeMap(colStats))
+      attributeStats = attributeStats)
   }
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import scala.collection.AbstractIterator
+
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -27,8 +29,17 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * An Iterator to walk through the InternalRows from a CachedBatch
+ *
+ * Extends `AbstractIterator` rather than mixing in `Iterator` directly. A subclass of this type
+ * is produced by runtime codegen, and javac (the alternative codegen backend) cannot subclass a
+ * scalac-compiled class that fixes a trait's type parameter while mixing the trait in directly:
+ * the mixin forwarders scalac emits on such a class are raw, carrying no `Signature` attribute,
+ * so javac sees e.g. `Object minBy(Function1, Ordering)` clash with `IterableOnceOps`'
+ * `<B> A minBy(Function1<A, B>, Ordering<B>)`. `AbstractIterator` stays generic in its element
+ * type, so its forwarders keep their signatures and no clash arises. Janino does not perform
+ * this check, so the direct form worked there.
  */
-abstract class ColumnarIterator extends Iterator[InternalRow] {
+abstract class ColumnarIterator extends AbstractIterator[InternalRow] {
   def initialize(input: Iterator[DefaultCachedBatch], columnTypes: Array[DataType],
     columnIndexes: Array[Int]): Unit
 }
@@ -90,6 +101,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case BinaryType => classOf[BinaryColumnAccessor].getName
         case CalendarIntervalType => classOf[IntervalColumnAccessor].getName
         case VariantType => classOf[VariantColumnAccessor].getName
+        case _: TimestampNTZNanosType => classOf[TimestampNTZNanosColumnAccessor].getName
+        case _: TimestampLTZNanosType => classOf[TimestampLTZNanosColumnAccessor].getName
         case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
           classOf[CompactDecimalColumnAccessor].getName
         case dt: DecimalType => classOf[DecimalColumnAccessor].getName
@@ -102,7 +115,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       val createCode = dt match {
         case t if CodeGenerator.isPrimitiveType(dt) =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
-        case NullType | BinaryType | CalendarIntervalType | VariantType =>
+        case NullType | BinaryType | CalendarIntervalType | VariantType |
+            _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case other =>
           s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),
@@ -162,7 +176,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       import java.nio.ByteOrder;
       import scala.collection.Iterator;
       import org.apache.spark.sql.types.DataType;
-      import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
       import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
 

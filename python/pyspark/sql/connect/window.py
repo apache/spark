@@ -62,7 +62,6 @@ class WindowSpec(ParentWindowSpec):
         frame: Optional[WindowFrame],
     ) -> "WindowSpec":
         self = object.__new__(cls)
-        self.__init__(partitionSpec, orderSpec, frame)  # type: ignore[misc]
         return self
 
     def __getnewargs__(self) -> Tuple[Any, ...]:

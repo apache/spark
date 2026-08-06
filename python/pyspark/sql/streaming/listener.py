@@ -1115,6 +1115,7 @@ def _test() -> None:
     import sys
     import doctest
     import os
+    from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession
     import pyspark.sql.streaming.listener
     from py4j.protocol import Py4JError
@@ -1122,10 +1123,11 @@ def _test() -> None:
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.streaming.listener.__dict__.copy()
+    sc = SparkContext("local[4]", "PythonTest")
     try:
         spark = SparkSession._getActiveSessionOrCreate()
     except Py4JError:
-        spark = SparkSession(sc)  # type: ignore[name-defined] # noqa: F821
+        spark = SparkSession(sc)
 
     globs["spark"] = spark
 

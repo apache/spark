@@ -563,3 +563,61 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"TIMESTAMP\""
   }
 }
+
+
+-- !query
+SELECT listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'))
+-- !query schema
+struct<listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST):string>
+-- !query output
+x,y
+
+
+-- !query
+SELECT listagg(v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'))
+-- !query schema
+struct<listagg(CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST):string>
+-- !query output
+x,x,y
+
+
+-- !query
+SELECT listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string DESC) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'))
+-- !query schema
+struct<listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) DESC NULLS LAST):string>
+-- !query output
+y,x
+
+
+-- !query
+SELECT listagg(DISTINCT v:a.b::string, ',') WITHIN GROUP (ORDER BY v:a.b::string) FROM (SELECT parse_json('{"a": {"b": "x"}}') v UNION ALL SELECT parse_json('{"a": {"b": "y"}}') UNION ALL SELECT parse_json('{"a": {"b": "x"}}'))
+-- !query schema
+struct<listagg(DISTINCT CAST(variant_get(v, $.a.b) AS b AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a.b) AS b AS STRING) ASC NULLS FIRST):string>
+-- !query output
+x,y
+
+
+-- !query
+SELECT grp, listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT 1 grp, parse_json('{"a": "x"}') v UNION ALL SELECT 1, parse_json('{"a": "y"}') UNION ALL SELECT 2, parse_json('{"a": "x"}') UNION ALL SELECT 2, parse_json('{"a": "x"}') UNION ALL SELECT 1, parse_json('{"a": "x"}')) GROUP BY grp
+-- !query schema
+struct<grp:int,listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST):string>
+-- !query output
+1	x,y
+2	x
+
+
+-- !query
+SELECT listagg(DISTINCT (v:a)::double::string, ',') WITHIN GROUP (ORDER BY (v:a)::double) FROM (SELECT parse_json('{"a": 1.1}') v UNION ALL SELECT parse_json('{"a": 2.2}') UNION ALL SELECT parse_json('{"a": 1.1}'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "castType" : "\"STRING\"",
+    "funcName" : "`listagg`",
+    "inputType" : "\"DOUBLE\""
+  }
+}

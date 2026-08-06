@@ -89,6 +89,52 @@ object MathUtils {
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
+  // Positive modulo (`pmod`): the remainder `a % n` adjusted to share the sign of `n`.
+  // Unlike `floorMod`, this matches the `pmod` SQL function / `HashPartitioning` semantics.
+  // Shared by `Pmod`'s eval and codegen paths so the two never diverge.
+
+  def pmod(a: Int, n: Int): Int = {
+    val r = a % n
+    if (r < 0) (r + n) % n else r
+  }
+
+  def pmod(a: Long, n: Long): Long = {
+    val r = a % n
+    if (r < 0) (r + n) % n else r
+  }
+
+  def pmod(a: Byte, n: Byte): Byte = {
+    val r = a % n
+    if (r < 0) ((r + n) % n).toByte else r.toByte
+  }
+
+  def pmod(a: Short, n: Short): Short = {
+    val r = a % n
+    if (r < 0) ((r + n) % n).toShort else r.toShort
+  }
+
+  def pmod(a: Float, n: Float): Float = {
+    val r = a % n
+    if (r < 0) (r + n) % n else r
+  }
+
+  def pmod(a: Double, n: Double): Double = {
+    val r = a % n
+    if (r < 0) (r + n) % n else r
+  }
+
+  // Casts a rounded double (the result of Math.ceil/Math.floor) to long, throwing an arithmetic
+  // overflow error when the value cannot be represented as a long. NaN is passed through to the
+  // JVM cast (which yields 0), matching the previous behavior. Shared by the eval and codegen
+  // paths of `Ceil`/`Floor` so the two never diverge.
+  def doubleToLong(value: Double, context: QueryContext): Long = {
+    if (!value.isNaN &&
+      (value < Long.MinValue.toDouble || value >= Long.MaxValue.toDouble)) {
+      throw ExecutionErrors.arithmeticOverflowError("long overflow", context = context)
+    }
+    value.toLong
+  }
+
   def withOverflow[A](f: => A, hint: String = "", context: QueryContext = null): A = {
     try {
       f

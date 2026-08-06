@@ -550,12 +550,8 @@ class TableValuedFunction:
 
         Examples
         --------
-        >>> spark.tvf.sql_keywords().show()
-        +-------------+--------+
-        |      keyword|reserved|
-        +-------------+--------+
-        ...
-        +-------------+--------+...
+        >>> spark.tvf.sql_keywords().columns
+        ['keyword', 'reserved']
         """
         return self._fn("sql_keywords")
 

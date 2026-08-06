@@ -18,20 +18,21 @@ from typing import Any, Callable, no_type_check
 
 import numpy as np
 
-from pyspark.sql import functions as F
+from pyspark.sql import Column, functions as F
 from pyspark.sql.pandas.functions import pandas_udf
-from pyspark.sql.types import DoubleType, LongType, BooleanType
+from pyspark.sql.types import DoubleType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
+
 
 unary_np_spark_mappings = {
     "abs": F.abs,
     "absolute": F.abs,
     "arccos": F.acos,
-    "arccosh": pandas_udf(lambda s: np.arccosh(s), DoubleType()),  # type: ignore[call-overload]
+    "arccosh": F.acosh,
     "arcsin": F.asin,
-    "arcsinh": pandas_udf(lambda s: np.arcsinh(s), DoubleType()),  # type: ignore[call-overload]
+    "arcsinh": F.asinh,
     "arctan": F.atan,
-    "arctanh": pandas_udf(lambda s: np.arctanh(s), DoubleType()),  # type: ignore[call-overload]
+    "arctanh": F.atanh,
     "bitwise_not": F.bitwiseNOT,
     "cbrt": F.cbrt,
     "ceil": F.ceil,
@@ -39,46 +40,83 @@ unary_np_spark_mappings = {
     "conj": lambda _: NotImplemented,
     "conjugate": lambda _: NotImplemented,  # It requires complex type
     "cos": F.cos,
-    "cosh": pandas_udf(lambda s: np.cosh(s), DoubleType()),  # type: ignore[call-overload]
-    "deg2rad": pandas_udf(lambda s: np.deg2rad(s), DoubleType()),  # type: ignore[call-overload]
+    "cosh": F.cosh,
+    "deg2rad": F.radians,
     "degrees": F.degrees,
     "exp": F.exp,
-    "exp2": pandas_udf(lambda s: np.exp2(s), DoubleType()),  # type: ignore[call-overload]
+    "exp2": lambda c: F.pow(F.lit(2.0), c),
     "expm1": F.expm1,
-    "fabs": pandas_udf(lambda s: np.fabs(s), DoubleType()),  # type: ignore[call-overload]
+    "fabs": lambda c: F.abs(c.cast("double")),
     "floor": F.floor,
     "frexp": lambda _: NotImplemented,  # 'frexp' output lengths become different
     # and it cannot be supported via pandas UDF.
-    "invert": pandas_udf(lambda s: np.invert(s), DoubleType()),  # type: ignore[call-overload]
-    "isfinite": lambda c: c != float("inf"),
-    "isinf": lambda c: c == float("inf"),
+    "invert": F.bitwise_not,
+    "isfinite": lambda c: F.coalesce(
+        ~(F.isnan(c) | (c == float("inf")) | (c == float("-inf"))), F.lit(False)
+    ),
+    "isinf": lambda c: F.coalesce((c == float("inf")) | (c == float("-inf")), F.lit(False)),
     "isnan": F.isnan,
     "isnat": lambda c: NotImplemented,  # pandas-on-Spark and PySpark does not have Nat concept.
     "log": F.log,
     "log10": F.log10,
     "log1p": F.log1p,
-    "log2": pandas_udf(lambda s: np.log2(s), DoubleType()),  # type: ignore[call-overload]
+    "log2": lambda c: F.when(c == 0, F.lit(float("-inf"))).otherwise(F.log2(c)),
     "logical_not": lambda c: ~(c.cast(BooleanType())),
     "matmul": lambda _: NotImplemented,  # Can return a NumPy array in pandas.
-    "negative": lambda c: c * -1,
-    "positive": lambda c: c,
-    "rad2deg": pandas_udf(lambda s: np.rad2deg(s), DoubleType()),  # type: ignore[call-overload]
+    "negative": F.negative,
+    "positive": F.positive,
+    "rad2deg": F.degrees,
     "radians": F.radians,
-    "reciprocal": pandas_udf(  # type: ignore[call-overload]
-        lambda s: np.reciprocal(s), DoubleType()
+    "reciprocal": lambda c: F.when(
+        F.typeof(c).isin("float", "double"),
+        F.when(c.isNull(), c.cast("double"))
+        .when(
+            c == 0,
+            F.when(c.cast("string") == "-0.0", F.lit(float("-inf"))).otherwise(F.lit(float("inf"))),
+        )
+        .otherwise(F.lit(1.0) / c),
+    ).otherwise(
+        pandas_udf(np.reciprocal, DoubleType())(c)  # type: ignore[call-overload]
     ),
-    "rint": pandas_udf(lambda s: np.rint(s), DoubleType()),  # type: ignore[call-overload]
-    "sign": lambda c: F.when(c == 0, 0).when(c < 0, -1).otherwise(1),
+    "rint": lambda c: F.rint(c.cast("double")),
+    "sign": F.signum,
     "signbit": lambda c: F.when(c < 0, True).otherwise(False),
     "sin": F.sin,
-    "sinh": pandas_udf(lambda s: np.sinh(s), DoubleType()),  # type: ignore[call-overload]
+    "sinh": F.sinh,
     "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType()),  # type: ignore[call-overload]
     "sqrt": F.sqrt,
-    "square": pandas_udf(lambda s: np.square(s), DoubleType()),  # type: ignore[call-overload]
+    "square": lambda c: c.cast("double") * c,
     "tan": F.tan,
-    "tanh": pandas_udf(lambda s: np.tanh(s), DoubleType()),  # type: ignore[call-overload]
-    "trunc": pandas_udf(lambda s: np.trunc(s), DoubleType()),  # type: ignore[call-overload]
+    "tanh": F.tanh,
+    "trunc": lambda c: F.when(
+        c.cast("double").isNull()
+        | F.isnan(c.cast("double"))
+        | c.cast("double").isin(float("-inf"), float("inf")),
+        c.cast("double"),
+    ).otherwise(
+        F.signum(c.cast("double"))
+        * (F.abs(c.cast("double")) - (F.abs(c.cast("double")) % F.lit(1.0)))
+    ),
 }
+
+
+def _fmod_func(c1: Column, c2: Column) -> Column:
+    c1_double = c1.cast("double")
+    c2_double = c2.cast("double")
+
+    return F.when(
+        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(c2_double == 0, F.lit(float("nan")))
+        .otherwise(F.try_mod(c1_double, c2_double)),
+    ).otherwise(
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(c2_double == 0, F.lit(0.0))
+        .otherwise(F.try_mod(c1_double, c2_double))
+    )
+
 
 binary_np_spark_mappings = {
     "arctan2": F.atan2,
@@ -88,26 +126,34 @@ binary_np_spark_mappings = {
     "copysign": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.copysign(s1, s2), DoubleType()
     ),
-    "float_power": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.float_power(s1, s2), DoubleType()
-    ),
+    "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
     "floor_divide": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.floor_divide(s1, s2), DoubleType()
     ),
-    "fmax": pandas_udf(lambda s1, s2: np.fmax(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "fmin": pandas_udf(lambda s1, s2: np.fmin(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "fmod": pandas_udf(lambda s1, s2: np.fmod(s1, s2), DoubleType()),  # type: ignore[call-overload]
+    "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
+    .when(F.isnan(c2.cast("double")), c1)
+    .otherwise(F.greatest(c1, c2))
+    .cast("double"),
+    "fmin": lambda c1, c2: F.least(c1, c2).cast("double"),
+    "fmod": _fmod_func,
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "heaviside": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.heaviside(s1, s2), DoubleType()
-    ),
+    "heaviside": lambda c1, c2: F.when(
+        c1.isNull() | F.isnan(c1.cast("double")),
+        c1.cast("double"),
+    )
+    .when(c1 < 0, F.lit(0.0))
+    .when(c1 == 0, c2.cast("double"))
+    .otherwise(F.lit(1.0)),
     "hypot": F.hypot,
     "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "ldexp": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.ldexp(s1, s2), DoubleType()
-    ),
-    "left_shift": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.left_shift(s1, s2), LongType()
+    "ldexp": lambda c1, c2: F.when(
+        c1.cast("double").isin(0.0, float("-inf"), float("inf")),
+        c1.cast("double"),
+    ).otherwise(c1.cast("double") * F.pow(F.lit(2.0), c2)),
+    # F.shiftleft accepts literal counts only; call_function also accepts a column.
+    # NumPy returns zero for counts outside an int64's bit width, unlike JVM shifts.
+    "left_shift": lambda c1, c2: F.when((c2 < 0) | (c2 >= 64), F.lit(0)).otherwise(
+        F.call_function("shiftleft", c1, c2)
     ),
     "logaddexp": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.logaddexp(s1, s2), DoubleType()
@@ -128,9 +174,11 @@ binary_np_spark_mappings = {
     "nextafter": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.nextafter(s1, s2), DoubleType()
     ),
-    "right_shift": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.right_shift(s1, s2), LongType()
-    ),
+    # F.shiftright accepts literal counts only; call_function also accepts a column.
+    # NumPy sign-extends counts outside an int64's bit width, unlike JVM shifts.
+    "right_shift": lambda c1, c2: F.when(
+        (c2 < 0) | (c2 >= 64), F.call_function("shiftright", c1, F.lit(63))
+    ).otherwise(F.call_function("shiftright", c1, c2)),
 }
 
 

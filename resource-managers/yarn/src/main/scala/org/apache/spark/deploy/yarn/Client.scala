@@ -208,6 +208,7 @@ private[spark] class Client(
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
       this.appId = newAppResponse.getApplicationId()
+      logInfo(log"Application ID is assigned: ${MDC(LogKeys.APP_ID, appId)}")
 
       // The app staging dir based on the STAGING_DIR configuration if configured
       // otherwise based on the users home directory.
@@ -709,8 +710,8 @@ private[spark] class Client(
               log"libraries under SPARK_HOME.")
           val jarsDir = new File(YarnCommandBuilderUtils.findJarsDir(
             sparkConf.getenv("SPARK_HOME")))
-          val jarsArchive = File.createTempFile(LOCALIZED_LIB_DIR, ".zip",
-            new File(Utils.getLocalDir(sparkConf)))
+          val jarsArchive = Files.createTempFile(
+            Paths.get(Utils.getLocalDir(sparkConf)), LOCALIZED_LIB_DIR, ".zip").toFile
           val bufferSize = sparkConf.get(BUFFER_SIZE)
           Using.resource(new ZipOutputStream(
             new BufferedOutputStream(new FileOutputStream(jarsArchive), bufferSize))) {
@@ -897,8 +898,8 @@ private[spark] class Client(
       }
     }
 
-    val confArchive = File.createTempFile(LOCALIZED_CONF_DIR, ".zip",
-      new File(Utils.getLocalDir(sparkConf)))
+    val confArchive = Files.createTempFile(
+      Paths.get(Utils.getLocalDir(sparkConf)), LOCALIZED_CONF_DIR, ".zip").toFile
     val confStream = new ZipOutputStream(new FileOutputStream(confArchive))
 
     logDebug(s"Creating an archive with the config files for distribution at $confArchive.")

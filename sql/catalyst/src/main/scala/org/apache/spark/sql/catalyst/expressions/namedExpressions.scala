@@ -312,7 +312,9 @@ case class AttributeReference(
   override def hashCode: Int = {
     // See http://stackoverflow.com/questions/113511/hash-code-implementation
     var h = 17
-    h = h * 37 + name.hashCode()
+    // Use Objects.hashCode to stay null-safe: an AttributeReference can carry a null name
+    // (e.g. from a StructField built with a null name), and equals already treats name nullably.
+    h = h * 37 + Objects.hashCode(name)
     h = h * 37 + dataType.hashCode()
     h = h * 37 + nullable.hashCode()
     h = h * 37 + metadata.hashCode()
@@ -727,14 +729,20 @@ object FileSourceMetadataAttribute {
    *
    * The set of supported types is limited by [[ColumnVectorUtils.populate]], which the constant
    * file metadata implementation relies on. In general, types that can be partition columns are
-   * supported (including most primitive types). Notably unsupported types include [[ObjectType]],
-   * [[UserDefinedType]], and the complex types ([[StructType]], [[MapType]], [[ArrayType]]).
+   * supported (including most primitive types), plus the complex types [[ArrayType]],
+   * [[MapType]], and [[StructType]] (recursively, as long as their element types are supported).
+   * Notably unsupported types include [[ObjectType]] and [[UserDefinedType]].
    */
-  def isSupportedType(dataType: DataType): Boolean = PhysicalDataType(dataType) match {
-    // PhysicalPrimitiveType covers: Boolean, Byte, Double, Float, Integer, Long, Null, Short
-    case _: PhysicalPrimitiveType | _: PhysicalDecimalType => true
-    case PhysicalBinaryType | PhysicalStringType(_) | PhysicalCalendarIntervalType => true
-    case _ => false
+  def isSupportedType(dataType: DataType): Boolean = dataType match {
+    case ArrayType(elementType, _) => isSupportedType(elementType)
+    case MapType(keyType, valueType, _) => isSupportedType(keyType) && isSupportedType(valueType)
+    case st: StructType => st.fields.forall(f => isSupportedType(f.dataType))
+    case _ => PhysicalDataType(dataType) match {
+      // PhysicalPrimitiveType covers: Boolean, Byte, Double, Float, Integer, Long, Null, Short
+      case _: PhysicalPrimitiveType | _: PhysicalDecimalType => true
+      case PhysicalBinaryType | PhysicalStringType(_) | PhysicalCalendarIntervalType => true
+      case _ => false
+    }
   }
 
   /** Returns the type unchanged if valid; otherwise throws [[IllegalArgumentException]]. */

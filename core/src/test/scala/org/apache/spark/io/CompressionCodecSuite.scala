@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.util.Locale
 
 import org.apache.spark.{SparkConf, SparkFunSuite, SparkIllegalArgumentException}
-import org.apache.spark.internal.config.IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED
+import org.apache.spark.internal.config.{IO_COMPRESSION_CODEC, IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED}
 import org.apache.spark.util.Utils
 
 class CompressionCodecSuite extends SparkFunSuite {
@@ -47,7 +47,9 @@ class CompressionCodecSuite extends SparkFunSuite {
 
   test("default compression codec") {
     val codec = CompressionCodec.createCodec(conf)
-    assert(codec.getClass === classOf[LZ4CompressionCodec])
+    assert(codec.getClass.getName ===
+      CompressionCodec.shortCompressionCodecNames(
+        IO_COMPRESSION_CODEC.defaultValueString))
     testCodec(codec)
   }
 

@@ -135,14 +135,6 @@ private[deploy] class Master(
   private var restServer: Option[StandaloneRestServer] = None
   private var restServerBoundPort: Option[Int] = None
 
-  {
-    val authKey = SecurityManager.SPARK_AUTH_SECRET_CONF
-    require(conf.getOption(authKey).isEmpty || !restServerEnabled,
-      s"The RestSubmissionServer does not support authentication via ${authKey}.  Either turn " +
-        "off the RestSubmissionServer with spark.master.rest.enabled=false, or do not use " +
-        "authentication.")
-  }
-
   override def onStart(): Unit = {
     logInfo(log"Starting Spark master at ${MDC(LogKeys.MASTER_URL, masterUrl)}")
     logInfo(log"Running Spark version" +

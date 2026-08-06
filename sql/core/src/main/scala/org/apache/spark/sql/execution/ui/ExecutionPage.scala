@@ -46,53 +46,52 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
     val executionId = parameterExecutionId.toLong
     val content = sqlStore.execution(executionId).map { executionUIData =>
-      val currentTime = System.currentTimeMillis()
-      val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
-        executionUIData.submissionTime
+      val isSubExec = executionUIData.rootExecutionId != executionId
+      val subExecutions = if (groupSubExecutionEnabled) {
+        sqlStore.executionsList()
+          .filter(e => e.rootExecutionId == executionId && e.executionId != executionId)
+      } else {
+        Seq.empty
+      }
 
+      // Headers and row data are rendered client-side by DataTables from the
+      // column definitions in static/sql-execution-detail.js -- intentionally
+      // no <thead>/<tbody> in the Scala template below. Adding markup headers
+      // here causes DataTables to double-render and breaks layout (SPARK-56259).
       val summary =
-        <div>
-          <ul class="list-unstyled">
-            <li>
-              <strong>Submitted Time: </strong>{UIUtils.formatDate(executionUIData.submissionTime)}
-            </li>
-            <li>
-              <strong>Duration: </strong>{UIUtils.formatDuration(duration)}
-            </li>
-            {
-              Option(executionUIData.queryId).map { qId =>
-                <li>
-                  <strong>Query ID: </strong>{qId}
-                </li>
-              }.getOrElse(Seq.empty)
-            }
-            {
-              if (executionUIData.rootExecutionId != executionId) {
-                <li>
-                  <strong>Parent Execution: </strong>
-                  <a href={"?id=" + executionUIData.rootExecutionId}>
-                    {executionUIData.rootExecutionId}
-                  </a>
-                </li>
-              }
-            }
-            {
-              if (groupSubExecutionEnabled) {
-                val subExecutions = sqlStore.executionsList()
-                  .filter(e => e.rootExecutionId == executionId && e.executionId != executionId)
-                if (subExecutions.nonEmpty) {
-                  <li>
-                    <strong>Sub Executions: </strong>
-                    {
-                      subExecutions.map { e =>
-                        <a href={"?id=" + e.executionId}>{e.executionId}</a><span>&nbsp;</span>
-                      }
-                    }
-                  </li>
+        <div class="mb-3">
+          <table id="sql-execution-table" class="table table-striped compact cell-border"
+                 style="width:100%" data-execution-id={executionId.toString}>
+          </table>
+          {
+            if (isSubExec || subExecutions.nonEmpty) {
+              <ul class="list-unstyled small text-muted mb-2">
+                {
+                  if (isSubExec) {
+                    <li>
+                      <strong>Parent Execution: </strong>
+                      <a href={"?id=" + executionUIData.rootExecutionId}>
+                        {executionUIData.rootExecutionId}
+                      </a>
+                    </li>
+                  }
                 }
-              }
+                {
+                  if (subExecutions.nonEmpty) {
+                    <li>
+                      <strong>Sub Executions: </strong>
+                      {
+                        subExecutions.map { e =>
+                          <a href={"?id=" + e.executionId}>{e.executionId}</a>
+                          <span>&nbsp;</span>
+                        }
+                      }
+                    </li>
+                  }
+                }
+              </ul>
             }
-          </ul>
+          }
           <div id="plan-viz-download-btn-container">
             <select id="plan-viz-format-select">
               <option value="svg">SVG</option>
@@ -109,6 +108,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
                     type="button" title="Copy shareable link to this execution">
               &#x1f517; Copy Link</button>
           </div>
+          <script src={UIUtils.prependBaseUri(
+            request, "/static/sql/sql-table-utils.js")}></script>
+          <script src={UIUtils.prependBaseUri(
+            request, "/static/sql/executionpage.js")}></script>
         </div>
 
       val metrics = sqlStore.executionMetrics(executionId)
@@ -128,7 +131,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     }
 
     UIUtils.headerSparkPage(
-      request, s"Details for Query $executionId", content, parent, useTimeline = true)
+      request, s"Details for Query $executionId", content, parent,
+      useDataTables = true, useTimeline = true)
   }
 
 
@@ -167,6 +171,39 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             <div>
               <input type="checkbox" id="detailed-labels-checkbox"></input>
               <span>Show metrics in graph nodes (detailed mode)</span>
+            </div>
+            <div id="plan-viz-zoom-toolbar" class="plan-viz-zoom-toolbar">
+              <div id="plan-viz-search-collapsed" class="btn-group btn-group-sm me-2"
+                   role="group" aria-label="Search">
+                <button id="plan-viz-search-toggle" type="button"
+                        class="btn btn-light border" title="Find node (/)">&#x1f50d;</button>
+              </div>
+              <div id="plan-viz-search-expanded" class="input-group input-group-sm me-2 d-none"
+                   role="group" aria-label="Search">
+                <input id="plan-viz-search-input" type="search" autocomplete="off"
+                       class="form-control form-control-sm border"
+                       placeholder="Find node..." aria-label="Find node"/>
+                <span id="plan-viz-search-count" class="input-group-text bg-light"></span>
+                <button id="plan-viz-search-prev" type="button"
+                        class="btn btn-light border"
+                        title="Previous match (Shift+Enter)">&#x2191;</button>
+                <button id="plan-viz-search-next" type="button"
+                        class="btn btn-light border"
+                        title="Next match (Enter)">&#x2193;</button>
+                <button id="plan-viz-search-close" type="button"
+                        class="btn btn-light border"
+                        title="Close search (Esc)">&times;</button>
+              </div>
+              <div class="btn-group btn-group-sm" role="group" aria-label="Zoom controls">
+                <button id="plan-viz-zoom-out" type="button"
+                        class="btn btn-light border" title="Zoom out (-)">&#x2212;</button>
+                <button id="plan-viz-zoom-reset" type="button"
+                        class="btn btn-light border" title="Reset zoom to fit (0)">
+                  <span id="plan-viz-zoom-level">100%</span>
+                </button>
+                <button id="plan-viz-zoom-in" type="button"
+                        class="btn btn-light border" title="Zoom in (+)">&#x2b;</button>
+              </div>
             </div>
           </div>
         </div>

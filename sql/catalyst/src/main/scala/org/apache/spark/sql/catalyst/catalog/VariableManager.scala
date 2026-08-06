@@ -24,6 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{FakeSystemCatalog, ResolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogManager.{SESSION_NAMESPACE, SYSTEM_CATALOG_NAME}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
@@ -49,8 +50,11 @@ trait VariableManager {
  *
    * @param nameParts Name parts of the variable.
    * @param varDef The new VariableDefinition of the variable.
+   * @param origin Origin of the SET reference, used in
+   *               [[org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError]]
+   *               if the variable is unexpectedly absent at execution time.
    */
-  def set(nameParts: Seq[String], varDef: VariableDefinition): Unit
+  def set(nameParts: Seq[String], varDef: VariableDefinition, origin: Origin): Unit
 
 /**
  * Get an existing variable.
@@ -130,11 +134,14 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
     variables.put(name, varDef)
   }
 
-  override def set(nameParts: Seq[String], varDef: VariableDefinition): Unit = synchronized {
+  override def set(
+      nameParts: Seq[String],
+      varDef: VariableDefinition,
+      origin: Origin): Unit = synchronized {
     val name = nameParts.last
     // Sanity check as this is already checked in ResolveSetVariable.
     if (!variables.contains(name)) {
-      throw unresolvedVariableError(nameParts, Seq("SYSTEM", "SESSION"))
+      throw unresolvedVariableError(nameParts, Seq(Seq("SYSTEM", "SESSION")), origin)
     }
     variables.put(name, varDef)
   }

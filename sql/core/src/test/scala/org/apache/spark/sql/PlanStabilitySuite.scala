@@ -80,6 +80,7 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
   // Do not match `id=#123` like ids as those are actually plan ids in `SubqueryExec` nodes.
   private val exprIdRegexp = "(?<prefix>(?<!id=)#)\\d+L?".r
   private val planIdRegex = "(?<prefix>(plan_id=|id=#))\\d+".r
+  private val propagatedFilterIdRegex = "(?<prefix>propagatedFilter_)\\d+".r
 
   private val clsName = this.getClass.getCanonicalName
 
@@ -188,6 +189,8 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
         subqueriesMap.getOrElseUpdate(subquery.id, subqueriesMap.size + 1)
       case subquery: SubqueryBroadcastExec =>
         subqueriesMap.getOrElseUpdate(subquery.id, subqueriesMap.size + 1)
+      case subquery: ProjectedBroadcastValueSubqueryExec =>
+        subqueriesMap.getOrElseUpdate(subquery.id, subqueriesMap.size + 1)
       case ReusedSubqueryExec(subquery) =>
         subqueriesMap.getOrElseUpdate(subquery.id, subqueriesMap.size + 1)
       case _ => -1
@@ -226,7 +229,11 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
       s"$padding$thisNode\n${subqueriesSimplified.mkString("")}${childrenSimplified.mkString("")}"
     }
 
-    simplifyNode(plan, 0)
+    val simplified = simplifyNode(plan, 0)
+    val propagatedFilterIdMap = new mutable.HashMap[String, String]()
+    propagatedFilterIdRegex.replaceAllIn(simplified,
+      m => propagatedFilterIdMap.getOrElseUpdate(
+        s"$m", s"${m.group("prefix")}${propagatedFilterIdMap.size + 1}"))
   }
 
   private def normalizeIds(plan: String): String = {
@@ -237,8 +244,14 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
     // Normalize the plan ids in Exchange and Subquery nodes.
     // See `Exchange.stringArgs` and `SubqueryExec.stringArgs`
     val planIdMap = new mutable.HashMap[String, String]()
-    planIdRegex.replaceAllIn(exprIdNormalized,
+    val planIdNormalized = planIdRegex.replaceAllIn(exprIdNormalized,
       m => planIdMap.getOrElseUpdate(s"$m", s"${m.group("prefix")}${planIdMap.size + 1}"))
+
+    // Normalize propagatedFilter aliases introduced by PlanMerger's filter propagation.
+    val propagatedFilterIdMap = new mutable.HashMap[String, String]()
+    propagatedFilterIdRegex.replaceAllIn(planIdNormalized,
+      m => propagatedFilterIdMap.getOrElseUpdate(
+        s"$m", s"${m.group("prefix")}${propagatedFilterIdMap.size + 1}"))
   }
 
   private def normalizeLocation(plan: String): String = {

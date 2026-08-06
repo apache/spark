@@ -169,6 +169,8 @@ class ArtifactManager:
         session_id: str,
         channel: grpc.Channel,
         metadata: Iterable[Tuple[str, str]],
+        add_artifacts_timeout: Optional[float] = None,
+        artifact_status_timeout: Optional[float] = None,
     ):
         self._user_context = proto.UserContext()
         if user_id is not None:
@@ -176,6 +178,8 @@ class ArtifactManager:
         self._stub = grpc_lib.SparkConnectServiceStub(channel)
         self._session_id = session_id
         self._metadata = metadata
+        self._add_artifacts_timeout = add_artifacts_timeout
+        self._artifact_status_timeout = artifact_status_timeout
 
     def _parse_artifacts(
         self, path_or_uri: str, pyfile: bool, archive: bool, file: bool
@@ -288,7 +292,11 @@ class ArtifactManager:
         self, requests: Iterator[proto.AddArtifactsRequest]
     ) -> proto.AddArtifactsResponse:
         """Separated for the testing purpose."""
-        return self._stub.AddArtifacts(requests, metadata=self._metadata)
+        return self._stub.AddArtifacts(
+            requests,
+            metadata=self._metadata,
+            timeout=self._add_artifacts_timeout,
+        )
 
     def _request_add_artifacts(self, requests: Iterator[proto.AddArtifactsRequest]) -> None:
         response: proto.AddArtifactsResponse = self._retrieve_responses(requests)
@@ -428,7 +436,9 @@ class ArtifactManager:
             user_context=self._user_context, session_id=self._session_id, names=[artifactName]
         )
         resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(
-            request, metadata=self._metadata
+            request,
+            metadata=self._metadata,
+            timeout=self._artifact_status_timeout,
         )
         status = resp.statuses.get(artifactName)
         return status.exists if status is not None else False
@@ -446,7 +456,9 @@ class ArtifactManager:
             user_context=self._user_context, session_id=self._session_id, names=artifact_names
         )
         resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(
-            request, metadata=self._metadata
+            request,
+            metadata=self._metadata,
+            timeout=self._artifact_status_timeout,
         )
 
         cached = set()

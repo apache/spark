@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   Resolver,
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.test.SharedSparkSession
 
-class AggregateResolverSuite extends QueryTest with SharedSparkSession {
+class AggregateResolverSuite extends SharedSparkSession {
   private val table = LocalRelation.fromExternalRows(
     Seq("a".attr.int, "b".attr.int),
     Seq(Row(1), Row(1))

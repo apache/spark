@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, Out
 import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
 import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{AnyTimestampNanoType, ArrayType, DataType, MapType, StructType, TimeType, UserDefinedType}
 import org.apache.spark.util.SerializableJobConf
 
 /**
@@ -113,6 +113,27 @@ case class HiveFileFormat(fileSinkConf: FileSinkDesc)
         new HiveOutputWriter(path, fileSinkConfSer, jobConf.value, dataSchema)
       }
     }
+  }
+
+  override def supportDataType(dataType: DataType): Boolean = dataType match {
+    // Hive has no TIME type, so it cannot be stored in a Hive serde table. Reject it explicitly
+    // (recursing into nested types) while preserving the default behavior for all other types.
+    case _: TimeType => false
+
+    // Hive has no nanosecond-precision timestamp type. Reject it explicitly rather than silently
+    // downgrading to microsecond precision (which the Hive serde would otherwise do).
+    case _: AnyTimestampNanoType => false
+
+    case st: StructType => st.forall { f => supportDataType(f.dataType) }
+
+    case ArrayType(elementType, _) => supportDataType(elementType)
+
+    case MapType(keyType, valueType, _) =>
+      supportDataType(keyType) && supportDataType(valueType)
+
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
+
+    case _ => true
   }
 
   override def supportFieldName(name: String): Boolean = {

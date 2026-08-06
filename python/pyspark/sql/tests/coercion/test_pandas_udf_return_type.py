@@ -79,6 +79,19 @@ class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         return "golden_pandas_udf_return_type_coercion"
 
     @property
+    def pandas_dir(self):
+        # Pandas 3 changed several defaults (datetime64 ndarrays use [us] instead
+        # of [ns], Categorical categories use str instead of object, and the same
+        # casts return microseconds instead of nanoseconds), which produces
+        # different coercion results. Use a dedicated golden file per major
+        # pandas version, kept in a versioned subdirectory, instead of patching
+        # one golden in memory.
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            return "pandas_3"
+        else:
+            return "pandas_2"
+
+    @property
     def test_data(self):
         return [
             [None, None],
@@ -104,7 +117,7 @@ class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
             np.arange(1, 3).astype("complex128"),
             [np.array([1, 2, 3], dtype=np.int32), np.array([1, 2, 3], dtype=np.int32)],
             pd.date_range("19700101", periods=2).values,
-            pd.date_range("19700101", periods=2, tz="US/Eastern").values,
+            pd.date_range("19700101", periods=2, tz="America/New_York").values,
             [pd.Timedelta("1 day"), pd.Timedelta("2 days")],
             pd.Categorical(["A", "B"]),
             pd.DataFrame({"_1": [1, 2]}),
@@ -144,7 +157,7 @@ class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
 
     def test_pandas_return_type_coercion_vanilla(self):
         self._run_pandas_udf_return_type_coercion(
-            golden_file=f"{self.prefix}_base",
+            golden_file=os.path.join(self.pandas_dir, f"{self.prefix}_base"),
             test_name="Pandas UDF",
         )
 

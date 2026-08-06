@@ -34,7 +34,6 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{LongType, ShortType}
 import org.apache.spark.tags.ExtendedSQLTest
 
@@ -45,7 +44,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  * unsafe map in [[org.apache.spark.sql.execution.joins.UnsafeHashedRelation]] is not triggered
  * without serializing the hashed relation, which does not happen in local mode.
  */
-abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
+abstract class BroadcastJoinSuiteBase extends QueryTest
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
@@ -639,7 +638,13 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
           None,
           left = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(l1, l2), 1)),
           right = DummySparkPlan())
-        assert(bhj.outputPartitioning === PartitioningCollection(expected.take(limit)))
+        // A single expanded partitioning is returned directly; multiple are wrapped in a
+        // `PartitioningCollection`.
+        val expectedPartitioning = expected.take(limit) match {
+          case Seq(p) => p
+          case ps => PartitioningCollection(ps)
+        }
+        assert(bhj.outputPartitioning === expectedPartitioning)
       }
     }
   }

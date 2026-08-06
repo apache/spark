@@ -38,6 +38,7 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.deploy.yarn.config.YARN_EXECUTOR_OOM_KILL_ENABLED
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{EXECUTOR_ENVS, EXECUTOR_LAUNCH_COMMANDS, EXECUTOR_RESOURCES}
 import org.apache.spark.internal.config._
@@ -190,7 +191,9 @@ private[yarn] class ExecutorRunnable(
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
-    YarnSparkHadoopUtil.addOutOfMemoryErrorArgument(javaOpts)
+    if (sparkConf.get(YARN_EXECUTOR_OOM_KILL_ENABLED)) {
+      YarnSparkHadoopUtil.addOutOfMemoryErrorArgument(javaOpts)
+    }
     val commands = prefixEnv ++
       Seq(Environment.JAVA_HOME.$$() + "/bin/java", "-server") ++
       javaOpts ++

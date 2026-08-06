@@ -28,6 +28,31 @@ to monitor the status and resource consumption of your Spark cluster.
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
+## Overview
+
+The Web UI is built into every Spark application: while the application is
+running, it serves a set of web pages that let you inspect what is happening
+inside it. Typical uses include monitoring a running job, diagnosing a
+failure, analyzing the execution plan of a slow SQL query, and checking how
+memory and tasks are distributed across executors.
+
+By default the Web UI is available at `http://<driver-host>:4040`. When that
+port is already in use (for example, when several Spark applications run on
+the same host), Spark tries `4041`, `4042`, and so on until it finds a free
+port, and logs the chosen port at startup. You can override the default port
+with `spark.ui.port`, and tune other UI behavior through the `spark.ui.*`
+properties documented in the [Configuration](configuration.html#spark-ui)
+reference.
+
+The Web UI is tied to the lifetime of the application: once it exits, the UI
+is no longer reachable. To inspect an application after it has finished,
+enable event logging and run the Spark History Server, which reconstructs an
+equivalent UI from the persisted event log; see
+[Monitoring and Instrumentation](monitoring.html) for setup details.
+
+The remaining sections walk through each tab in the Web UI's top navigation
+bar.
+
 ## Jobs Tab
 The Jobs tab displays a summary page of all jobs in the Spark application and a details page
 for each job. The summary page shows high-level information, such as the status, duration, and
@@ -35,64 +60,33 @@ progress of all jobs and the overall event timeline. When you click on a job on 
 page, you see the details page for that job. The details page further shows the event timeline,
 DAG visualization, and all stages of the job.
 
-The information that is displayed in this section is
-* User: Current Spark user
-* Started At: The startup time of Spark application
-* Total uptime: Time since Spark application started
+The information displayed at the top of the page includes:
+
 * Scheduling mode: See [job scheduling](job-scheduling.html#configuring-pool-properties)
 * Number of jobs per status: Active, Completed, Failed
-
-<p style="text-align: center;">
-  <img src="img/AllJobsPageDetail1.png" title="Basic info" alt="Basic info" width="20%"/>
-</p>
-
 * Event timeline: Displays in chronological order the events related to the executors (added, removed) and the jobs
-
-<p style="text-align: center;">
-  <img src="img/AllJobsPageDetail2.png" title="Event timeline" alt="Event timeline"/>
-</p>
-
 * Details of jobs grouped by status: Displays detailed information of the jobs including Job ID, description (with a link to detailed job page), submitted time, duration, stages summary and tasks progress bar
 
+The current user, application start time, and total uptime are shown in the footer at the
+bottom of every page.
+
 <p style="text-align: center;">
-  <img src="img/AllJobsPageDetail3.png" title="Details of jobs grouped by status" alt="Details of jobs grouped by status"/>
+  <img src="img/AllJobsPage.png" title="All Jobs page" alt="All Jobs page" width="100%"/>
 </p>
-
-
-When you click on a specific job, you can see the detailed information of this job.
 
 ### Jobs detail
 
 This page displays the details of a specific job identified by its job ID.
+
 * Job Status: (running, succeeded, failed)
 * Number of stages per status (active, pending, completed, skipped, failed)
-* Associated SQL Query: Link to the sql tab for this job
+* Associated SQL Query: Link to the SQL tab for this job
 * Event timeline: Displays in chronological order the events related to the executors (added, removed) and the stages of the job
+* DAG visualization: Visual representation of the directed acyclic graph of this job where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied on RDD
+* List of stages (grouped by state active, pending, completed, skipped, and failed), with columns including Stage ID, description, submitted timestamp, duration, tasks progress bar, **Input** (bytes read from storage), **Output** (bytes written to storage), **Shuffle read** (total shuffle bytes and records read locally and from remote executors), and **Shuffle write** (bytes and records written to disk for a future shuffle)
 
 <p style="text-align: center;">
-  <img src="img/JobPageDetail1.png" title="Event timeline" alt="Event timeline"/>
-</p>
-
-* DAG visualization: Visual representation of the directed acyclic graph of this job where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied on RDD.
-* An example of DAG visualization for `sc.parallelize(1 to 100).toDF.count()`
-
-<p style="text-align: center;">
-  <img src="img/JobPageDetail2.png" title="DAG" alt="DAG" width="40%">
-</p>
-
-* List of stages (grouped by state active, pending, completed, skipped, and failed)
-    * Stage ID
-    * Description of the stage
-    * Submitted timestamp
-    * Duration of the stage
-    * Tasks progress bar
-    * Input: Bytes read from storage in this stage
-    * Output: Bytes written in storage in this stage
-    * Shuffle read: Total shuffle bytes and records read, includes both data read locally and data read from remote executors
-    * Shuffle write: Bytes and records written to disk in order to be read by a shuffle in a future stage
-
-<p style="text-align: center;">
-  <img src="img/JobPageDetail3.png" title="DAG" alt="DAG">
+  <img src="img/JobPage.png" title="Job detail page" alt="Job detail page" width="100%"/>
 </p>
 
 ## Stages Tab
@@ -100,41 +94,36 @@ This page displays the details of a specific job identified by its job ID.
 The Stages tab displays a summary page that shows the current state of all stages of all jobs in
 the Spark application.
 
-At the beginning of the page is the summary with the count of all stages by status (active, pending, completed, skipped, and failed)
+At the top of the page is a summary with the count of all stages by status (active, pending,
+completed, skipped, and failed). In [Fair scheduling mode](job-scheduling.html#scheduling-within-an-application)
+a table of [pool properties](job-scheduling.html#configuring-pool-properties) is also shown.
+
+Below the summary are the stages, grouped by status (active, pending, completed, skipped, failed).
+An active stage shows a small **(kill)** link next to its description; clicking it asks Spark
+to cancel that stage. Only failed stages show the failure reason. Click a stage's description
+to open its [Stage detail](#stage-detail) page.
 
 <p style="text-align: center;">
-  <img src="img/AllStagesPageDetail1.png" title="Stages header" alt="Stages header" width="30%">
-</p>
-
-In [Fair scheduling mode](job-scheduling.html#scheduling-within-an-application) there is a table that displays [pools properties](job-scheduling.html#configuring-pool-properties)
-
-<p style="text-align: center;">
-  <img src="img/AllStagesPageDetail2.png" title="Pool properties" alt="Pool properties">
-</p>
-
-After that are the details of stages per status (active, pending, completed, skipped, failed). In active stages, it's possible to kill the stage with the kill link. Only in failed stages, failure reason is shown. Task detail can be accessed by clicking on the description.
-
-<p style="text-align: center;">
-  <img src="img/AllStagesPageDetail3.png" title="Stages detail" alt="Stages detail">
+  <img src="img/AllStagesPage.png" title="Stages tab" alt="Stages tab" width="100%">
 </p>
 
 ### Stage detail
-The stage detail page begins with information like total time across all tasks, [Locality level summary](tuning.html#data-locality), [Shuffle Read Size / Records](rdd-programming-guide.html#shuffle-operations) and Associated Job IDs.
 
-<p style="text-align: center;">
-  <img src="img/AllStagesPageDetail4.png" title="Stage header" alt="Stage header" width="30%">
-</p>
+The stage detail page begins with information like total time across all tasks,
+[Locality level summary](tuning.html#data-locality),
+[Shuffle Read Size / Records](rdd-programming-guide.html#shuffle-operations) and Associated Job IDs.
 
-There is also a visual representation of the directed acyclic graph (DAG) of this stage, where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied.
-Nodes are grouped by operation scope in the DAG visualization and labelled with the operation scope name (BatchScan, WholeStageCodegen, Exchange, etc).
-Notably, Whole Stage Code Generation operations are also annotated with the code generation id. For stages belonging to Spark DataFrame or SQL execution, this allows to cross-reference Stage execution details to the relevant details in the Web-UI SQL Tab page where SQL plan graphs and execution plans are reported.
+It also shows a visual representation of the directed acyclic graph (DAG) of this stage,
+where vertices represent the RDDs or DataFrames and the edges represent an operation to be
+applied. Nodes are grouped by operation scope in the DAG visualization and labelled with the
+operation scope name (`BatchScan`, `WholeStageCodegen`, `Exchange`, etc).
+Notably, whole-stage code generation operations are also annotated with the code generation id.
+For stages belonging to Spark DataFrame or SQL execution, this allows you to cross-reference
+stage execution details to the relevant query in the [SQL Tab](#sql-tab).
 
-<p style="text-align: center;">
-  <img src="img/AllStagesPageDetail5.png" title="Stage DAG" alt="Stage DAG" width="50%">
-</p>
+Summary metrics for all tasks are represented in a table and in a timeline:
 
-Summary metrics for all task are represented in a table and in a timeline.
-* **[Tasks deserialization time](configuration.html#compression-and-serialization)**
+* **Task deserialization time** is the time spent deserializing the task closure on an executor before it can run.
 * **Duration of tasks**.
 * **GC time** is the total JVM garbage collection time.
 * **Result serialization time** is the time spent serializing the task result on an executor before sending it back to the driver.
@@ -148,26 +137,14 @@ Summary metrics for all task are represented in a table and in a timeline.
 * **Shuffle spill (memory)** is the size of the deserialized form of the shuffled data in memory.
 * **Shuffle spill (disk)** is the size of the serialized form of the data on disk.
 
-<p style="text-align: center;">
-  <img src="img/AllStagesPageDetail6.png" title="Stages metrics" alt="Stages metrics">
-</p>
-
-Aggregated metrics by executor show the same information aggregated by executor.
-
-<p style="text-align: center;">
-  <img src="img/AllStagesPageDetail7.png" title="Stages metrics per executor" alt="Stages metrics per executors">
-</p>
-
-**[Accumulators](rdd-programming-guide.html#accumulators)** are a type of shared variables. It provides a mutable variable that can be updated inside of a variety of transformations. It is possible to create accumulators with and without name, but only named accumulators are displayed.
+The same metrics are also shown aggregated by executor.
+**[Accumulators](rdd-programming-guide.html#accumulators)** are shared variables that can be
+updated inside transformations; only named accumulators are displayed here. Finally, a tasks
+table shows the same information broken down per task, with links to executor logs and the task
+attempt number for failures.
 
 <p style="text-align: center;">
-  <img src="img/AllStagesPageDetail8.png" title="Stage accumulator" alt="Stage accumulator">
-</p>
-
-Tasks details basically includes the same information as in the summary section but detailed by task. It also includes links to review the logs and the task attempt number if it fails for any reason. If there are named accumulators, here it is possible to see the accumulator value at the end of each task.
-
-<p style="text-align: center;">
-  <img src="img/AllStagesPageDetail9.png" title="Tasks" alt="Tasks">
+  <img src="img/StagePage.png" title="Stage detail" alt="Stage detail" width="100%">
 </p>
 
 ## Storage Tab
@@ -224,8 +201,11 @@ distribution on the cluster.
 
 
 ## Environment Tab
-The Environment tab displays the values for the different environment and configuration variables,
-including JVM, Spark, and system properties.
+
+The Environment tab is the place to verify that your Spark application is
+running with the configuration you expect. It groups the environment and
+configuration information into a set of sub-tabs along the left side of the
+page; clicking one switches the panel on the right.
 
 <p style="text-align: center;">
   <img src="img/webui-env-tab.png"
@@ -235,47 +215,32 @@ including JVM, Spark, and system properties.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-This environment page has five parts. It is a useful place to check whether your properties have
-been set correctly.
-The first part 'Runtime Information' simply contains the [runtime properties](configuration.html#runtime-environment)
-like versions of Java and Scala.
-The second part 'Spark Properties' lists the [application properties](configuration.html#application-properties) like
-['spark.app.name'](configuration.html#application-properties) and 'spark.driver.memory'.
+The sub-tabs are:
 
-<p style="text-align: center;">
-  <img src="img/webui-env-hadoop.png"
-       title="Hadoop Properties"
-       alt="Hadoop Properties"
-       width="100%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-Clicking the 'Hadoop Properties' link displays properties relative to Hadoop and YARN. Note that properties like
-['spark.hadoop.*'](configuration.html#execution-behavior) are shown not in this part but in 'Spark Properties'.
-
-<p style="text-align: center;">
-  <img src="img/webui-env-sys.png"
-       title="System Properties"
-       alt="System Properties"
-       width="100%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-'System Properties' shows more details about the JVM.
-
-<p style="text-align: center;">
-  <img src="img/webui-env-class.png"
-       title="Classpath Entries"
-       alt="Classpath Entries"
-       width="100%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-
-The last part 'Classpath Entries' lists the classes loaded from different sources, which is very useful
-to resolve class conflicts.
+* **Runtime Information** &mdash; JVM, Scala, and other
+  [runtime properties](configuration.html#runtime-environment) of the driver.
+* **Spark Properties** &mdash; the effective
+  [application properties](configuration.html#application-properties)
+  (such as `spark.app.name` and `spark.driver.memory`). Note that
+  [`spark.hadoop.*`](configuration.html#execution-behavior) properties are
+  listed here, not under Hadoop Properties.
+* **Resource Profiles** &mdash; CPU, memory, and accelerator resource
+  requests for each [resource profile](configuration.html#stage-level-scheduling-overview)
+  in use.
+* **Hadoop Properties** &mdash; values loaded from Hadoop and YARN configuration
+  files.
+* **System Properties** &mdash; the underlying JVM system properties.
+* **Metrics Properties** &mdash; the configuration loaded for the
+  [metrics system](monitoring.html#metrics).
+* **Classpath Entries** &mdash; the classes loaded into the driver, broken
+  down by source. Handy when tracking down class conflicts.
 
 ## Executors Tab
-The Executors tab displays summary information about the executors that were created for the
-application, including memory and disk usage and task and shuffle information. The Storage Memory
-column shows the amount of memory used and reserved for caching data.
+The Executors tab lists every executor that has been allocated to the
+application, including the driver. Each row shows resource usage (memory,
+disk, cores), storage memory reserved for cached data, task counts, shuffle
+totals, and performance signals such as
+[GC time](tuning.html#garbage-collection-tuning).
 
 <p style="text-align: center;">
   <img src="img/webui-exe-tab.png"
@@ -285,51 +250,28 @@ column shows the amount of memory used and reserved for caching data.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-The Executors tab provides not only resource information (amount of memory, disk, and cores used by each executor)
-but also performance information ([GC time](tuning.html#garbage-collection-tuning) and shuffle information).
-
-<p style="text-align: center;">
-  <img src="img/webui-exe-err.png"
-       title="Stderr Log"
-       alt="Stderr Log"
-       width="80%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-
-Clicking the 'stderr' link of executor 0 displays detailed [standard error log](spark-standalone.html#monitoring-and-logging)
-in its console.
-
-<p style="text-align: center;">
-  <img src="img/webui-exe-thread.png"
-       title="Thread Dump"
-       alt="Thread Dump"
-       width="80%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-
-Clicking the 'Thread Dump' link of executor 0 displays the thread dump of JVM on executor 0, which is pretty useful
-for performance analysis.
+Each row carries a set of detail links &mdash; **Thread Dump**, **Heap
+Histogram**, and **Flame Graph** &mdash; that open the corresponding live
+data for that executor in a side panel without leaving the page. The panel
+can be resized by dragging its left edge. The **stderr** and **stdout**
+links open the executor's log files in a new view; the exact location of
+those logs depends on your cluster manager (see
+[Monitoring and Instrumentation](monitoring.html) for details).
 
 ## SQL Tab
-If the application executes Spark SQL queries, the SQL tab displays information, such as the duration,
-jobs, and physical and logical plans for the queries. Here we include a basic example to illustrate
-this tab:
-{% highlight scala %}
-scala> val df = Seq((1, "andy"), (2, "bob"), (2, "andy")).toDF("count", "name")
-df: org.apache.spark.sql.DataFrame = [count: int, name: string]
 
-scala> df.count
-res0: Long = 3
+### Query Listing
 
-scala> df.createGlobalTempView("df")
+The SQL tab lists all SQL and DataFrame queries submitted to the Spark
+application. Any DataFrame action that triggers execution (such as `count`,
+`show`, or `write`) shows up here, not only queries written as SQL strings.
+Here is a short example that produces a few entries:
 
-scala> spark.sql("select name,sum(count) from global_temp.df group by name").show
-+----+----------+
-|name|sum(count)|
-+----+----------+
-|andy|         3|
-| bob|         2|
-+----+----------+
+{% highlight python %}
+df = spark.createDataFrame([(1, "andy"), (2, "bob"), (2, "andy")], ["count", "name"])
+df.count()
+df.createOrReplaceTempView("df")
+spark.sql("SELECT name, SUM(count) FROM df GROUP BY name").show()
 {% endhighlight %}
 
 <p style="text-align: center;">
@@ -340,44 +282,47 @@ scala> spark.sql("select name,sum(count) from global_temp.df group by name").sho
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-Now the above three dataframe/SQL operators are shown in the list. If we click the
-'show at \<console\>: 24' link of the last query, we will see the DAG and details of the query execution.
+The listing supports sorting by column, searching, filtering by status,
+and pagination, which makes it easy to locate a specific query in
+long-running applications.
+
+### SQL Plan Visualization
+
+Each query in the listing has a graph view of its operators. Every node
+shows the operator name together with its metrics inline, and the edges
+follow the data flow. You can pan and zoom the graph to navigate large
+plans, search for a node by name, and click any node to open a side panel
+with its full details.
 
 <p style="text-align: center;">
   <img src="img/webui-sql-dag.png"
-       title="SQL DAG"
-       alt="SQL DAG"
-       width="50%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-
-The query details page displays information about the query execution time, its duration,
-the list of associated jobs, and the query execution DAG.
-The first block 'WholeStageCodegen (1)' compiles multiple operators ('LocalTableScan' and 'HashAggregate') together into a single Java
-function to improve performance, and metrics like number of rows and spill size are listed in the block.
-The annotation '(1)' in the block name is the code generation id.
-The second block 'Exchange' shows the metrics on the shuffle exchange, including
-number of written shuffle records, total data size, etc.
-
-
-<p style="text-align: center;">
-  <img src="img/webui-sql-plan.png"
-       title="logical plans and the physical plan"
-       alt="logical plans and the physical plan"
+       title="SQL plan visualization"
+       alt="SQL plan visualization"
        width="80%" />
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
-Clicking the 'Details' link on the bottom displays the logical plans and the physical plan, which
-illustrate how Spark parses, analyzes, optimizes and performs the query.
-Steps in the physical plan subject to whole stage code generation optimization, are prefixed by a star followed by
-the code generation id, for example: '*(1) LocalTableScan'
+
+### Execution Detail Page
+
+The execution detail page, opened by clicking the **ID** or **Description**
+link of any row in the query listing, gathers everything recorded for a
+single query. The header lists the
+query's submission time, duration, status, description, and the jobs and
+stages associated with it. The
+[SQL Plan Visualization](#sql-plan-visualization) shows the graph of
+operators. At the bottom of the page, a "Details" link expands the full
+text of the parsed, analyzed, and optimized logical plans together with
+the physical plan, useful when you want to see how Spark transformed your
+query during planning.
 
 ### SQL metrics
 
-The metrics of SQL operators are shown in the block of physical operators. The SQL metrics can be useful
-when we want to dive into the execution details of each operator. For example, "number of output rows"
-can answer how many rows are output after a Filter operator, "shuffle bytes written total" in an Exchange
-operator shows the number of bytes written by a shuffle.
+Each node in the [SQL Plan Visualization](#sql-plan-visualization) carries
+its own metrics inline. These metrics are useful when you want to dive into
+the execution details of each operator. For example, `number of output rows`
+shows how many rows pass through a `Filter` operator, and
+`shuffle bytes written` in an `Exchange` shows how much data the
+shuffle wrote.
 
 Here is the list of SQL metrics:
 

@@ -106,6 +106,13 @@ Data source options of XML can be set via:
   </tr>
 
   <tr>
+      <td><code>singleVariantColumn</code></td>
+      <td>(none)</td>
+      <td>If specified, the entire XML record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields. When writing, if the schema consists solely of this column, the Variant value is written directly under the row tag.</td>
+      <td>read/write</td>
+  </tr>
+
+  <tr>
     <td><code>attributePrefix</code></td>
     <td><code>_</code></td>
     <td>The prefix for attributes to differentiate attributes from elements. This will be the prefix for field names. Can be empty for reading XML, but not for writing.</td>
@@ -178,6 +185,13 @@ Data source options of XML can be set via:
     <td><code>dateFormat</code></td>
     <td><code>yyyy-MM-dd</code></td>
     <td>Sets the string that indicates a date format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to date type.</td>
+    <td>read/write</td>
+  </tr>
+
+  <tr>
+    <td><code>timeFormat</code></td>
+    <td><code>HH:mm:ss</code></td>
+    <td>Sets the string that indicates a time format. Custom time formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to time type.</td>
     <td>read/write</td>
   </tr>
 

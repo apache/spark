@@ -129,6 +129,8 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) extends sql.DataFra
       builder.putOptions(k, v)
     }
 
+    builder.setWithSchemaEvolution(_withSchemaEvolution)
+
     ds.sparkSession.execute(proto.Command.newBuilder().setWriteOperation(builder).build())
   }
 

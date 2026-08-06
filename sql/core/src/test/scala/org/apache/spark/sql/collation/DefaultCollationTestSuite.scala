@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.collation
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
-abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSession {
+abstract class DefaultCollationTestSuite extends SharedSparkSession {
 
   protected def resetCatalog: Boolean = false
 
@@ -1552,6 +1552,23 @@ abstract class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
 
         checkAnswer(sql(s"SELECT COUNT(*) FROM $testView"), Row(1))
         assertTableColumnCollation(testView, "c1", "UTF8_LCASE")
+      }
+    }
+  }
+
+  testString("ALTER SCHEMA DEFAULT COLLATION does not retroactively change a view's collation") {
+    _ =>
+    withDatabase(testSchema) {
+      sql(s"CREATE SCHEMA $testSchema")
+      sql(s"USE $testSchema")
+      withView(testView) {
+        sql(s"CREATE VIEW $testView AS SELECT 'a' AS c1")
+        assertTableColumnCollation(testView, "c1", "UTF8_BINARY")
+
+        sql(s"ALTER SCHEMA $testSchema DEFAULT COLLATION UTF8_LCASE")
+        sql(s"ALTER VIEW $testView AS SELECT 'x' AS c1, 'y' AS c2")
+        assertTableColumnCollation(testView, "c1", "UTF8_BINARY")
+        assertTableColumnCollation(testView, "c2", "UTF8_BINARY")
       }
     }
   }

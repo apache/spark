@@ -28,7 +28,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * This feature works in all contexts where string literals are accepted,
  * not just in expressions.
  */
-class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
+class StringLiteralCoalescingSuite extends SharedSparkSession {
 
   // ========================================================================
   // Basic String Literal Coalescing Tests

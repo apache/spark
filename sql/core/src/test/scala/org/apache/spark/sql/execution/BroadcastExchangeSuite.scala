@@ -32,8 +32,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
 
 @ExtendedSQLTest
-class BroadcastExchangeSuite extends SparkPlanTest
-  with SharedSparkSession
+class BroadcastExchangeSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._

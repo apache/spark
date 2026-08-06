@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Test suite for the legacy parameter substitution configuration.
  * Tests the behavior when spark.sql.legacy.parameterSubstitution.constantsOnly is enabled.
  */
-class LegacyParameterSubstitutionSuite extends QueryTest with SharedSparkSession {
+class LegacyParameterSubstitutionSuite extends SharedSparkSession {
 
   test("parameter substitution works everywhere when legacy config is disabled (default)") {
     withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "false") {

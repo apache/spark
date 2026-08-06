@@ -32,7 +32,7 @@ from pyspark.testing.utils import (
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message,
 )
-class ResourceProfileTestsMixin(object):
+class ResourceProfileTestsMixin:
     def test_map_in_arrow_without_profile(self):
         def func(iterator):
             tc = TaskContext.get()

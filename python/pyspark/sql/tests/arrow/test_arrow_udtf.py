@@ -211,9 +211,8 @@ class ArrowUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            r"(?s)Result column 'x' does not exist in the output\. "
-            r"Expected schema: x: int32\ny: string, "
-            r"got: wrong_col: int32\nanother_wrong_col: double\.",
+            r"(?s)\[RESULT_COLUMN_NAMES_MISMATCH\].*"
+            r"Missing: x, y\..*Unexpected: another_wrong_col, wrong_col\.",
         ):
             result_df = MismatchedSchemaUDTF()
             result_df.collect()
@@ -375,8 +374,8 @@ class ArrowUDTFTestsMixin:
         # Should fail with Arrow cast exception since string cannot be cast to int
         with self.assertRaisesRegex(
             PythonException,
-            "Result type of column 'id' does not match "
-            "the expected type. Expected: int32, got: string.",
+            r"(?s)\[RESULT_COLUMN_TYPES_MISMATCH\].*"
+            r"column 'id' \(expected int32, actual string\)",
         ):
             result_df = StringToIntUDTF()
             result_df.collect()

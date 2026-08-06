@@ -21,6 +21,7 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.net.Socket
 import java.nio.channels.SocketChannel
 import java.nio.charset.StandardCharsets.UTF_8
+import java.security.MessageDigest
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config.Python.{PYTHON_UNIX_DOMAIN_SOCKET_DIR, PYTHON_UNIX_DOMAIN_SOCKET_ENABLED}
@@ -65,7 +66,7 @@ private[spark] class SocketAuthHelper(val conf: SparkConf) {
       try {
         s.setSoTimeout(10000)
         val clientSecret = readUtf8(s)
-        if (secret == clientSecret) {
+        if (MessageDigest.isEqual(secret.getBytes(UTF_8), clientSecret.getBytes(UTF_8))) {
           writeUtf8("ok", s)
           shouldClose = false
         } else {

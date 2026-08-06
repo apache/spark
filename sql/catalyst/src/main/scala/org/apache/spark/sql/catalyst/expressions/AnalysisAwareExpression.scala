@@ -17,7 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-/** An expression that must be notified when the analysis phase is finished. */
+/**
+ * An expression that is notified when the analysis phase finishes, via [[markAsAnalyzed]].
+ * Implementations typically use this to capture the analyzed (but not yet optimized) form of the
+ * expression. This is useful for use-cases like DSV2 Expression conversion that want the original
+ * form of the expression, without the optimizer folding context-dependent functions (e.g.
+ * `CURRENT_TIMESTAMP`) into definition-time literals.
+ */
 trait AnalysisAwareExpression[E <: Expression] {
   def markAsAnalyzed(): E
 }

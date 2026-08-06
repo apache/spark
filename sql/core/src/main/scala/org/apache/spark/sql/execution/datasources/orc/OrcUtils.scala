@@ -17,21 +17,25 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.io.FileNotFoundException
+import java.io.{File, FileNotFoundException, IOException}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
+import org.apache.orc.mapred.{OrcInputFormat => OrcMapredInputFormat, OrcStruct}
+import org.apache.orc.mapreduce.OrcMapreduceRecordReader
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkEnv, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
@@ -43,8 +47,10 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils, SupportsArchiveFormat}
+import org.apache.spark.sql.execution.datasources.orc.types.ops.OrcTypeOps
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -78,10 +84,20 @@ object OrcUtils extends Logging {
       ignoreMissingFiles: Boolean = false): Option[TypeDescription] = {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
+    // Follow-up to SPARK-57958: This runs on `readingOrcSchemas` parmap workers (Spark task
+    // threads) during parallel/merged schema inference. When a sibling file fails and
+    // the enclosing Spark job is aborted, the worker can be interrupted between opening
+    // the ORC `Reader` (which holds an `FSDataInputStream` opened in
+    // `ReaderImpl.extractFileTail`) and closing it. `Reader.close()` performs file-system
+    // I/O, so a pending interrupt can turn it into a no-op/`ClosedByInterruptException`
+    // and orphan the stream, which later surfaces as
+    // `DebugFilesystem.assertNoOpenStreams` "possibly leaked file streams" aborting an
+    // unrelated ORC suite. Hold the reader explicitly and close it uninterruptibly so the
+    // handle is always released regardless of the enclosing task's interrupt state.
+    var reader: Reader = null
     try {
-      val schema = Utils.tryWithResource(OrcFile.createReader(file, readerOptions)) { reader =>
-        reader.getSchema
-      }
+      reader = OrcFile.createReader(file, readerOptions)
+      val schema = reader.getSchema
       if (schema.getFieldNames.size == 0) {
         None
       } else {
@@ -99,6 +115,22 @@ object OrcUtils extends Logging {
         } else {
           throw QueryExecutionErrors.cannotReadFooterForFileError(file, e)
         }
+    } finally {
+      if (reader != null) {
+        // Close without being aborted by a pending interrupt from job cancellation,
+        // then restore the interrupt status for the caller.
+        val interrupted = Thread.interrupted()
+        try {
+          reader.close()
+        } catch {
+          case NonFatal(t) =>
+            logWarning(log"Failed to close the ORC reader for ${MDC(PATH, file)}", t)
+        } finally {
+          if (interrupted) {
+            Thread.currentThread().interrupt()
+          }
+        }
+      }
     }
   }
 
@@ -153,11 +185,20 @@ object OrcUtils extends Logging {
       : Option[StructType] = {
     val ignoreCorruptFiles = new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
-    files.iterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
-      case Some(schema) =>
-        logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
-        toCatalystSchema(schema)
-    }
+    val ignoreMissingFiles =
+      new FileSourceOptions(CaseInsensitiveMap(options)).ignoreMissingFiles
+    val archiveFormatEnabled = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+    files.iterator.flatMap { file =>
+      if (archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.getPath)) {
+        readArchiveSchemas(conf, file, ignoreCorruptFiles, ignoreMissingFiles, stopAtFirst = true)
+          .headOption
+      } else {
+        readSchema(file.getPath, conf, ignoreCorruptFiles).map { schema =>
+          logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
+          toCatalystSchema(schema)
+        }
+      }
+    }.collectFirst { case schema => schema }
   }
 
   /**
@@ -167,10 +208,75 @@ object OrcUtils extends Logging {
   def readOrcSchemasInParallel(
     files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
     ignoreMissingFiles: Boolean): Seq[StructType] = {
+    // Read outside `parmap`: its worker threads do not inherit the caller's `SQLConf` thread-local,
+    // so `SQLConf.get` there would fall back to defaults and never take the archive branch.
+    val archiveEnabled = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
     ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
-      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
-        .map(toCatalystSchema)
+      if (archiveEnabled && SupportsArchiveFormat.isArchivePath(currentFile.getPath)) {
+        readArchiveSchemas(conf, currentFile, ignoreCorruptFiles, ignoreMissingFiles,
+          stopAtFirst = false)
+      } else {
+        OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
+          .map(toCatalystSchema).toSeq
+      }
     }.flatten
+  }
+
+  /**
+   * Reads ORC entry schemas from one archive.
+   *
+   * @param stopAtFirst when true, returns just the first entry's schema (sample-one); otherwise
+   *                    reads every entry so a corrupt entry fails the whole archive.
+   */
+  private def readArchiveSchemas(
+      conf: Configuration,
+      archive: FileStatus,
+      ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean,
+      stopAtFirst: Boolean): Seq[StructType] = {
+    val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), "orc-archive-infer")
+    // localizeEntries eagerly opens the first entry, so build it inside the try; the finally must
+    // still delete tempDir when a corrupt archive throws there.
+    var entries: Iterator[(String, File)] = Iterator.empty
+    try {
+      entries = SupportsArchiveFormat.localizeEntries(archive.getPath, conf, tempDir, _ => true)
+      // With ignore flags off, a corrupt entry throws to the per-archive catch below. `.toList`
+      // reads every entry (whole archive atomic); `stopAtFirst` stays lazy and stops at the first.
+      val schemas = entries.flatMap { case (_, entryFile) =>
+        try {
+          readSchema(new Path(entryFile.toURI), conf, ignoreCorruptFiles = false,
+            ignoreMissingFiles = false).map(toCatalystSchema)
+        } finally entryFile.delete()
+      }
+      if (stopAtFirst) schemas.take(1).toList else schemas.toList
+    } catch {
+      // A corrupt container throws IOException at open; a corrupt entry footer throws
+      // cannotReadFooterForFileError, whose root cause is also an IOException.
+      case e: Exception if ignoreMissingFiles &&
+          ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
+        logWarning(log"Skipped missing archive during inference: ${MDC(PATH, archive.getPath)}", e)
+        Seq.empty
+      case e: Exception if {
+            val root = Utils.getRootCause(e)
+            root.isInstanceOf[IOException] && !root.isInstanceOf[FileNotFoundException]
+          } =>
+        if (ignoreCorruptFiles) {
+          logWarning(log"Skipped the corrupt archive during inference: " +
+            log"${MDC(PATH, archive.getPath)}", e)
+          Seq.empty
+        } else if (e.isInstanceOf[SparkException]) {
+          throw e // a corrupt entry footer already is cannotReadFooterForFileError
+        } else {
+          // Match the loose-file footer error rather than leaking the raw container IOException.
+          throw QueryExecutionErrors.cannotReadFooterForFileError(archive.getPath, e)
+        }
+    } finally {
+      entries match {
+        case c: java.io.Closeable => c.close()
+        case _ =>
+      }
+      Utils.deleteRecursively(tempDir)
+    }
   }
 
   def inferSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
@@ -196,14 +302,44 @@ object OrcUtils extends Logging {
       requiredSchema: StructType,
       orcSchema: TypeDescription,
       conf: Configuration): Option[(Array[Int], Boolean)] = {
-    def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
-      orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
+    def isOrcTimestamp(dt: DataType): Boolean = dt match {
+      case TimestampType | TimestampNTZType | _: AnyTimestampNanoType => true
+      case _ => false
+    }
+
+    // The ORC reader does not coerce between timestamp families/precisions, except between
+    // nanos timestamps of the same kind (NTZ or LTZ), which share an ORC physical category and
+    // only differ by the precision applied on read. Any other mismatch (zone or micros<->nanos)
+    // would otherwise fail obscurely, so reject it with a clear error.
+    def timestampReadCompatible(orcType: DataType, dataType: DataType): Boolean =
+      (orcType, dataType) match {
+        case _ if orcType == dataType => true
+        case (_: TimestampNTZNanosType, _: TimestampNTZNanosType) => true
+        case (_: TimestampLTZNanosType, _: TimestampLTZNanosType) => true
+        case _ => false
+      }
+
+    // Recurse into struct/array/map so timestamp mismatches nested inside containers are caught
+    // too, not just top-level and struct fields.
+    def checkTypeCompatibility(orcType: DataType, dataType: DataType): Unit =
+      (orcType, dataType) match {
         case (TimestampType, TimestampNTZType) =>
           throw QueryExecutionErrors.cannotConvertOrcTimestampToTimestampNTZError()
         case (TimestampNTZType, TimestampType) =>
           throw QueryExecutionErrors.cannotConvertOrcTimestampNTZToTimestampLTZError()
-        case (t1: StructType, t2: StructType) => checkTimestampCompatibility(t1, t2)
+        case (o, d) if isOrcTimestamp(o) && isOrcTimestamp(d) && !timestampReadCompatible(o, d) =>
+          throw QueryExecutionErrors.cannotCastOrcTimestampError(o, d)
+        case (o: StructType, d: StructType) => checkTimestampCompatibility(o, d)
+        case (ArrayType(o, _), ArrayType(d, _)) => checkTypeCompatibility(o, d)
+        case (MapType(ok, ov, _), MapType(dk, dv, _)) =>
+          checkTypeCompatibility(ok, dk)
+          checkTypeCompatibility(ov, dv)
         case _ =>
+      }
+
+    def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
+      orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
+        case (orcType, dataType) => checkTypeCompatibility(orcType, dataType)
       }
     }
 
@@ -290,9 +426,10 @@ object OrcUtils extends Logging {
       s"array<${getOrcSchemaString(a.elementType)}>"
     case m: MapType =>
       s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
-    case _: DayTimeIntervalType | _: TimestampNTZType | _: TimeType => LongType.catalogString
+    case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
-    case _ => dt.catalogString
+    // Framework types (TimeType, nanosecond timestamps) supply their own ORC schema string.
+    case _ => OrcTypeOps(dt).map(_.orcSchemaString).getOrElse(dt.catalogString)
   }
 
   def orcTypeDescription(dt: DataType): TypeDescription = {
@@ -310,13 +447,16 @@ object OrcUtils extends Logging {
           val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, n.typeName)
           Some(typeDesc)
-        case tm: TimeType =>
-          val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
-          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, tm.typeName)
-          Some(typeDesc)
         case t: TimestampType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, t.typeName)
+          Some(typeDesc)
+        // Framework types (TimeType, nanosecond timestamps) supply their own ORC category; the
+        // CATALYST_TYPE_ATTRIBUTE_NAME is stamped uniformly here so the true Spark type
+        // round-trips on read.
+        case OrcTypeOps(ops) =>
+          val typeDesc = new TypeDescription(ops.orcCategory)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, dt.typeName)
           Some(typeDesc)
         case _: StringType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.STRING)
@@ -463,6 +603,10 @@ object OrcUtils extends Logging {
             case ShortType => new ShortWritable(value.toShort)
             case IntegerType => new IntWritable(value.toInt)
             case LongType => new LongWritable(value)
+            // ORC stores TIME as LONG (nanos-of-day), so its stats are
+            // IntegerColumnStatistics. OrcDeserializer converts the LongWritable
+            // back to the Spark TimeType.
+            case _: TimeType => new LongWritable(value)
             case _ => throw new IllegalArgumentException(
               s"getMinMaxFromColumnStatistics should not take type $dataType " +
               "for IntegerColumnStatistics")
@@ -533,5 +677,23 @@ object OrcUtils extends Logging {
     } else {
       resultRow
     }
+  }
+
+  def createOrcMapreduceRecordReader(
+      filePath: Path,
+      conf: Configuration,
+      fileSplit: FileSplit,
+      readerOptions: OrcFile.ReaderOptions): OrcMapreduceRecordReader[OrcStruct] = {
+    val fs = filePath.getFileSystem(conf)
+    val orcReader = OrcFile.createReader(
+      filePath,
+      OrcFile.readerOptions(conf)
+        .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf))
+        .filesystem(fs)
+        .orcTail(readerOptions.getOrcTail))
+    val options = OrcMapredInputFormat
+      .buildOptions(conf, orcReader, fileSplit.getStart, fileSplit.getLength)
+      .useSelected(true)
+    new OrcMapreduceRecordReader[OrcStruct](orcReader, options)
   }
 }

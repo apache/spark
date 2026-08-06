@@ -18,8 +18,10 @@
 package org.apache.spark.sql.errors
 
 import java.io.{File, IOException}
+import java.lang.reflect.InvocationTargetException
 import java.net.{URI, URL}
 import java.sql.{Connection, DatabaseMetaData, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
+import java.time.LocalDateTime
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
 import scala.jdk.CollectionConverters._
@@ -31,7 +33,7 @@ import org.mockito.Mockito.{mock, spy, when}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, KryoData, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, KryoData, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerator}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
@@ -47,23 +49,39 @@ import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
-import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
+import org.apache.spark.sql.execution.vectorized.{
+  ColumnVectorUtils,
+  ConstantColumnVector,
+  MutableColumnarRow,
+  OnHeapColumnVector,
+  WritableColumnVector}
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, IntegerType, LongType, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{
+  ArrayType,
+  BooleanType,
+  DataType,
+  DecimalType,
+  IntegerType,
+  LongType,
+  MetadataBuilder,
+  ObjectType,
+  StructField,
+  StructType,
+  TimestampNTZNanosType}
 import org.apache.spark.sql.vectorized.ColumnarArray
+import org.apache.spark.sql.vectorized.ColumnVector
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
 
 
 class QueryExecutionErrorsSuite
-  extends QueryTest
-  with ParquetTest
+  extends ParquetTest
   with OrcTest
   with SharedSparkSession
   with DataTypeErrorsBase {
@@ -323,6 +341,53 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("UNSUPPORTED_FEATURE - SPARK-57455: can't read nanos timestamp as micros timestamp") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      withTempPath { file =>
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(LocalDateTime.of(1970, 1, 1, 0, 0, 0, 1)))),
+          new StructType().add("ts", TimestampNTZNanosType(9)))
+        df.write.orc(file.getCanonicalPath)
+        withAllNativeOrcReaders {
+          val ex = intercept[SparkException] {
+            spark.read.schema("ts timestamp_ntz").orc(file.getCanonicalPath).collect()
+          }
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
+          checkError(
+            exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+            condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
+            parameters = Map("orcType" -> "\"TIMESTAMP_NTZ(9)\"",
+              "toType" -> "\"TIMESTAMP_NTZ\""),
+            sqlState = "0A000")
+        }
+      }
+    }
+  }
+
+  test("UNSUPPORTED_FEATURE - SPARK-57455: nanos timestamp mismatch nested in array is caught") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      withTempPath { file =>
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(
+            Seq(Row(Seq(LocalDateTime.of(1970, 1, 1, 0, 0, 0, 1))))),
+          new StructType().add("ts", ArrayType(TimestampNTZNanosType(9))))
+        df.write.orc(file.getCanonicalPath)
+        withAllNativeOrcReaders {
+          val ex = intercept[SparkException] {
+            spark.read.schema("ts array<timestamp_ntz>").orc(file.getCanonicalPath).collect()
+          }
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
+          checkError(
+            exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+            condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
+            parameters = Map("orcType" -> "\"TIMESTAMP_NTZ(9)\"",
+              "toType" -> "\"TIMESTAMP_NTZ\""),
+            sqlState = "0A000")
+        }
+      }
+    }
+  }
+
   test("SPARK-42290: NotEnoughMemory error can't be create") {
     QueryExecutionErrors.notEnoughMemoryToBuildAndBroadcastTableError(new OutOfMemoryError(), Seq())
   }
@@ -353,6 +418,28 @@ class QueryExecutionErrorsSuite
       condition = "DATETIME_OVERFLOW",
       parameters = Map("operation" -> "add 1000000L YEAR to TIMESTAMP '2022-03-09 01:02:03'"),
       sqlState = "22008")
+  }
+
+  test("DATETIME_OVERFLOW: timestamp constructors overflow") {
+    Seq(
+      (
+        s"timestamp_seconds(CAST('${Long.MaxValue}' AS BIGINT))",
+        s"create a TIMESTAMP from ${Long.MaxValue}L seconds since the epoch"),
+      (
+        s"timestamp_millis(CAST('${Long.MaxValue}' AS BIGINT))",
+        s"create a TIMESTAMP from ${Long.MaxValue}L milliseconds since the epoch"),
+      (
+        s"timestamp_seconds(CAST('${"9".repeat(38)}' AS DECIMAL(38, 0)))",
+        s"create a TIMESTAMP from ${"9".repeat(38)}BD seconds since the epoch")
+    ).foreach { case (expression, operation) =>
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"select $expression").collect()
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> operation),
+        sqlState = "22008")
+    }
   }
 
   test("CANNOT_PARSE_DECIMAL: unparseable decimal") {
@@ -820,6 +907,63 @@ class QueryExecutionErrorsSuite
           "StructType()[1.1] failure: 'TimestampType' expected but 'S' found\n\nStructType()\n^"
       ),
       sqlState = "0A000")
+  }
+
+  test("SPARK-57745: unsupported datatype in ColumnVectorUtils.appendValue") {
+    val objectType = ObjectType(classOf[java.lang.Integer])
+    val column = new OnHeapColumnVector(1, IntegerType)
+    try {
+      val appendValue = classOf[ColumnVectorUtils].getDeclaredMethod(
+        "appendValue",
+        classOf[WritableColumnVector],
+        classOf[DataType],
+        classOf[Object])
+      appendValue.setAccessible(true)
+
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          try {
+            appendValue.invoke(null, column, objectType, Integer.valueOf(1))
+          } catch {
+            case e: InvocationTargetException => throw e.getCause
+          }
+        },
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> toSQLType(objectType)),
+        sqlState = "0A000")
+    } finally {
+      column.close()
+    }
+  }
+
+  test("SPARK-57745: unsupported datatype in MutableColumnarRow.get and update") {
+    val objectType = ObjectType(classOf[java.lang.Integer])
+    val column = new OnHeapColumnVector(1, IntegerType)
+    try {
+      val dataTypeField = classOf[ColumnVector].getDeclaredField("type")
+      dataTypeField.setAccessible(true)
+      dataTypeField.set(column, objectType)
+
+      val row = new MutableColumnarRow(Array[WritableColumnVector](column))
+
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          row.get(0, objectType)
+        },
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> toSQLType(objectType)),
+        sqlState = "0A000")
+
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          row.update(0, Integer.valueOf(1))
+        },
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> toSQLType(objectType)),
+        sqlState = "0A000")
+    } finally {
+      column.close()
+    }
   }
 
   test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {

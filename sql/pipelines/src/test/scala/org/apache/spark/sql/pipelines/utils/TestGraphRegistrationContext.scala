@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.pipelines.utils
 
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{LocalTempView, PersistedView => PersistedViewType, UnresolvedRelation, ViewType}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.pipelines.graph.{DataflowGraph, FlowAnalysis, FlowFunction, GraphIdentifierManager, GraphRegistrationContext, PersistedView, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, Table, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, FlowAnalysis, FlowFunction, GraphIdentifierManager, GraphRegistrationContext, PersistedView, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, Table, TemporaryView, UnresolvedFlow, UntypedFlow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -29,7 +28,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * A test class to simplify the creation of pipelines and datasets for unit testing.
  */
 class TestGraphRegistrationContext(
-    val _spark: SparkSession,
+    val spark: SparkSession,
     val sqlConf: Map[String, String] = Map.empty)
     extends GraphRegistrationContext(
       defaultCatalog = TestGraphRegistrationContext.DEFAULT_CATALOG,
@@ -37,9 +36,8 @@ class TestGraphRegistrationContext(
       defaultSqlConf = sqlConf
     ) {
 
-  /** Re-expose as implicit so nested anonymous classes can use it without shadowing issues */
-  implicit def spark: SparkSession = _spark
-  implicit def sqlContext: SQLContext = _spark.sqlContext
+  /** Expose all registered flows for tests */
+  def getFlows: List[UnresolvedFlow] = flows.toList
 
   // scalastyle:off
   // Disable scalastyle to ignore argument count.
@@ -150,7 +148,7 @@ class TestGraphRegistrationContext(
     val qualifiedIdentifier = GraphIdentifierManager
           .parseAndQualifyTableIdentifier(
             rawTableIdentifier = GraphIdentifierManager
-              .parseTableIdentifier(name, _spark),
+              .parseTableIdentifier(name, spark),
             currentCatalog = catalog.orElse(Some(defaultCatalog)),
             currentDatabase = database.orElse(Some(defaultDatabase)))
           .identifier
@@ -176,7 +174,7 @@ class TestGraphRegistrationContext(
 
     if (query.isDefined) {
       registerFlow(
-        new UnresolvedFlow(
+        UntypedFlow(
           identifier = qualifiedIdentifier,
           destinationIdentifier = qualifiedIdentifier,
           func = query.get,
@@ -267,7 +265,7 @@ class TestGraphRegistrationContext(
     )
 
     registerFlow(
-      new UnresolvedFlow(
+      UntypedFlow(
         identifier = viewIdentifier,
         destinationIdentifier = viewIdentifier,
         func = query,
@@ -309,9 +307,9 @@ class TestGraphRegistrationContext(
       catalog: Option[String] = None,
       database: Option[String] = None
   ): Unit = {
-    val rawFlowIdentifier = GraphIdentifierManager.parseTableIdentifier(name, _spark)
+    val rawFlowIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark)
     val rawDestinationIdentifier =
-      GraphIdentifierManager.parseTableIdentifier(destinationName, _spark)
+      GraphIdentifierManager.parseTableIdentifier(destinationName, spark)
 
     val flowWritesToView = getViews
         .filter(_.isInstanceOf[TemporaryView])
@@ -339,7 +337,7 @@ class TestGraphRegistrationContext(
       }
 
     registerFlow(
-      new UnresolvedFlow(
+      UntypedFlow(
         identifier = flowIdentifier,
         destinationIdentifier = flowDestinationIdentifier,
         func = query,
@@ -360,19 +358,31 @@ class TestGraphRegistrationContext(
   /**
    * Creates a flow function from a logical plan that reads from a table with the given name.
    */
-  def readFlowFunc(name: String): FlowFunction = {
-    FlowAnalysis.createFlowFunctionFromLogicalPlan(UnresolvedRelation(TableIdentifier(name)))
+  def readFlowFunc(
+       name: String,
+       extraOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+  ): FlowFunction = {
+    FlowAnalysis.createFlowFunctionFromLogicalPlan(
+      UnresolvedRelation(
+        tableIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark),
+        extraOptions = extraOptions,
+        isStreaming = false
+      )
+    )
   }
 
   /**
    * Creates a flow function from a logical plan that reads a stream from a table with the given
    * name.
    */
-  def readStreamFlowFunc(name: String): FlowFunction = {
+  def readStreamFlowFunc(
+       name: String,
+       extraOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+  ): FlowFunction = {
     FlowAnalysis.createFlowFunctionFromLogicalPlan(
       UnresolvedRelation(
-        TableIdentifier(name),
-        extraOptions = CaseInsensitiveStringMap.empty(),
+        tableIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark),
+        extraOptions = extraOptions,
         isStreaming = true
       )
     )

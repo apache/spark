@@ -149,6 +149,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark extends BenchmarkBase {
           SparkEnv.get.memoryManager.pageSizeBytes,
           numSpillThreshold,
           Long.MaxValue,
+          -1, // bounded merge not applicable — benchmark does not sort
           false)
 
         rows.foreach(x =>

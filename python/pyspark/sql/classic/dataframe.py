@@ -99,17 +99,18 @@ if TYPE_CHECKING:
     from pyspark.sql.group import GroupedData
     from pyspark.sql.observation import Observation
     from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql.plot import PySparkPlotAccessor
 
 
 class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def __new__(
         cls,
-        jdf: "JavaObject",
-        sql_ctx: Union["SQLContext", "SparkSession"],
+        *args: Any,
+        **kwargs: Any,
     ) -> "DataFrame":
-        self = object.__new__(cls)
-        self.__init__(jdf, sql_ctx)  # type: ignore[misc]
-        return self
+        # ParentDataFrame by default calls DataFrame.__new__ for backward compatibility.
+        # We have to do an explicit object.__new__ to avoid infinite recursion.
+        return object.__new__(cls)
 
     def __init__(
         self,
@@ -646,7 +647,14 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 
     @overload
-    def sample(self, fraction: float, seed: Optional[int] = ...) -> ParentDataFrame: ...
+    def sample(
+        self, *, withReplacement: Optional[bool] = None, fraction: float, seed: Optional[int] = ...
+    ) -> ParentDataFrame: ...
+
+    @overload
+    def sample(
+        self, withReplacement: float, fraction: Optional[int] = ..., /
+    ) -> ParentDataFrame: ...
 
     @overload
     def sample(
@@ -656,7 +664,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         seed: Optional[int] = ...,
     ) -> ParentDataFrame: ...
 
-    def sample(  # type: ignore[misc]
+    def sample(
         self,
         withReplacement: Optional[Union[float, bool]] = None,
         fraction: Optional[Union[int, float]] = None,
@@ -769,6 +777,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.crossJoin(other._jdf)
         return DataFrame(jdf, self.sparkSession)
 
+    def zip(self, other: ParentDataFrame) -> ParentDataFrame:
+        return DataFrame(self._jdf.zip(other._jdf), self.sparkSession)
+
     def join(
         self,
         other: ParentDataFrame,
@@ -811,6 +822,21 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.lateralJoin(other._jdf, on._jc)
         else:
             jdf = self._jdf.lateralJoin(other._jdf, on._jc, how)
+        return DataFrame(jdf, self.sparkSession)
+
+    def nearestByJoin(
+        self,
+        other: ParentDataFrame,
+        rankingExpression: Column,
+        numResults: int,
+        mode: str,
+        direction: str,
+        *,
+        joinType: str = "inner",
+    ) -> ParentDataFrame:
+        jdf = self._jdf.nearestByJoin(
+            other._jdf, rankingExpression._jc, int(numResults), mode, direction, joinType
+        )
         return DataFrame(jdf, self.sparkSession)
 
     # TODO(SPARK-22947): Fix the DataFrame API.
@@ -1330,8 +1356,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     ) -> ParentDataFrame:
         if how is not None and how not in ["any", "all"]:
             raise PySparkValueError(
-                errorClass="VALUE_NOT_ANY_OR_ALL",
-                messageParameters={"arg_name": "how", "arg_type": how},
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "how", "allowed_values": "['any', 'all']"},
             )
 
         if subset is None:
@@ -1413,6 +1439,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
+        *,
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
@@ -1424,7 +1451,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
-    def replace(  # type: ignore[misc]
+    def replace(
         self,
         to_replace: Union[
             "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]
@@ -1667,8 +1694,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             method = "pearson"
         if not method == "pearson":
             raise PySparkValueError(
-                errorClass="VALUE_NOT_PEARSON",
-                messageParameters={"arg_name": "method", "arg_value": method},
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "method", "allowed_values": "['pearson']"},
             )
         return self._jdf.stat().corr(col1, col2, method)
 
@@ -1983,7 +2010,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         )
 
     @property
-    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+    def plot(self) -> "PySparkPlotAccessor":
         from pyspark.sql.plot import PySparkPlotAccessor
 
         return PySparkPlotAccessor(self)

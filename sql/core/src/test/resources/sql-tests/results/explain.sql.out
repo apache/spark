@@ -211,7 +211,7 @@ struct<plan:string>
 * HashAggregate (10)
 +- Exchange (9)
    +- * HashAggregate (8)
-      +- Union (7)
+      +- * Union (7)
          :- * Filter (3)
          :  +- * ColumnarToRow (2)
          :     +- Scan parquet spark_catalog.default.explain_temp1 (1)
@@ -241,16 +241,16 @@ Location [not included in comparison]/{warehouse_dir}/explain_temp1]
 PushedFilters: [IsNotNull(key), GreaterThan(key,1)]
 ReadSchema: struct<key:int,val:int>
 
-(5) ColumnarToRow [codegen id : 2]
+(5) ColumnarToRow
 Input [2]: [key#x, val#x]
 
-(6) Filter [codegen id : 2]
+(6) Filter
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 1))
 
-(7) Union
+(7) Union [codegen id : 1]
 
-(8) HashAggregate [codegen id : 3]
+(8) HashAggregate [codegen id : 1]
 Input [2]: [key#x, val#x]
 Keys [2]: [key#x, val#x]
 Functions: []
@@ -261,7 +261,7 @@ Results [2]: [key#x, val#x]
 Input [2]: [key#x, val#x]
 Arguments: hashpartitioning(key#x, val#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
 
-(10) HashAggregate [codegen id : 4]
+(10) HashAggregate [codegen id : 2]
 Input [2]: [key#x, val#x]
 Keys [2]: [key#x, val#x]
 Functions: []

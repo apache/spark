@@ -29,7 +29,6 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.pandas.utils import is_testing
 
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Constructor'
@@ -576,7 +575,6 @@ class FrameConstructorMixin:
 class FrameConstructorTests(
     FrameConstructorMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

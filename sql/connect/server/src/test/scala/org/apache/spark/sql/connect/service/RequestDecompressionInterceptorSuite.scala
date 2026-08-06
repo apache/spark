@@ -25,11 +25,10 @@ import com.github.luben.zstd.Zstd
 import com.google.protobuf.ByteString
 import io.grpc.{Metadata, ServerCall, ServerCallHandler, Status}
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.test.SharedSparkSession
 
-class RequestDecompressionInterceptorSuite extends SparkFunSuite with SharedSparkSession {
+class RequestDecompressionInterceptorSuite extends SharedSparkSession {
   private val testUserId = "testUserId"
   private val testSessionId = UUID.randomUUID().toString
   private val testUserCtx = proto.UserContext

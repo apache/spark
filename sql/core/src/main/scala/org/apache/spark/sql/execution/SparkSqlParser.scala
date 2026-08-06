@@ -25,12 +25,12 @@ import scala.jdk.CollectionConverters._
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
   GlobalTempView, LocalTempView, PersistedView,
-  PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
-  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
+  SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
+  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedProcedure,
+  UnresolvedTableOrViewSearchPathMode}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.util.Utils.getUriBuilder
 
@@ -100,6 +101,27 @@ class SparkSqlParser extends AbstractSqlParser {
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     parseInternal(command, None)(toResult)
   }
+
+  /**
+   * Split a SQL string into individual statements at `;` boundaries.
+   *
+   * The emitted statements are pieces of the original input -- `${...}` variable
+   * references are NOT expanded here, so they survive into each emitted statement
+   * and are substituted for real per-statement at parse time (see [[parseInternal]]).
+   * This is important for the `spark-sql` CLI's batch mode: a `${x}` whose value
+   * comes from a `SET x=...` in the same batch must resolve to the post-`SET`
+   * value, which is only available *after* the earlier statement executes.
+   *
+   * To still recognize `BEGIN ... END` compound block boundaries when a body
+   * contains a `${...}` reference, the splitter is invoked with a validation
+   * preprocessor that replaces every `${...}` with a fixed valid identifier.
+   * The placeholder makes the candidate region parse-equivalent regardless of
+   * whether (or how) the variable is set, while the emitted statement keeps
+   * the original `${...}` so per-statement substitution at execution still
+   * runs against the real session config (with earlier `SET`s applied).
+   */
+  override def splitStatements(sqlText: String): SqlStatementSplitResult =
+    SqlStatementSplitter.split(sqlText, SparkSqlParser.substituteVariablesForValidation)
 
   /**
    * Internal parse method that handles both parameter substitution and regular parsing.
@@ -164,6 +186,42 @@ class SparkSqlParser extends AbstractSqlParser {
     CurrentOrigin.withOrigin(originToUse) {
       super.parse(paramSubstituted)(toResult)
     }
+  }
+}
+
+object SparkSqlParser {
+
+  /**
+   * Identifier used to stand in for every `${...}` variable reference when
+   * the splitter validates a candidate compound block. It is intentionally
+   * shaped so that a real user identifier cannot collide with it; it is also
+   * a structurally well-formed Spark SQL identifier (letters + underscores
+   * only) so the parser accepts it in nearly every position a `${...}` might
+   * appear.
+   */
+  private[execution] val VariableRefPlaceholder = "__SPARK_VAR_PLACEHOLDER__"
+
+  /**
+   * Regex matching a `${...}` variable reference. Mirrors
+   * [[org.apache.spark.internal.config.ConfigReader.REF_RE]]: an optional
+   * `prefix:` followed by a non-whitespace name, enclosed in `${ }`.
+   */
+  private val variableRefRe = """\$\{(?:\w+?:)?\S+?\}""".r
+
+  /**
+   * Validation-time preprocessor for the splitter (see
+   * [[SparkSqlParser.splitStatements]]): replaces every `${...}` reference
+   * with [[VariableRefPlaceholder]] so candidate regions parse regardless of
+   * whether the referenced variable is set. The emitted statement keeps the
+   * original `${...}` and is substituted for real at execution time. If
+   * variable substitution is disabled in the session conf, the input is
+   * returned unchanged (matching the behavior of the real substituter).
+   */
+  private[execution] def substituteVariablesForValidation(input: String): String = {
+    if (input == null || input.isEmpty || !input.contains("${")) return input
+    if (!SQLConf.get.variableSubstituteEnabled) return input
+    variableRefRe.replaceAllIn(
+      input, _ => scala.util.matching.Regex.quoteReplacement(VariableRefPlaceholder))
   }
 }
 
@@ -255,25 +313,6 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
-  private def withCatalogIdentClause(
-      ctx: CatalogIdentifierReferenceContext,
-      builder: Seq[String] => LogicalPlan): LogicalPlan = {
-    val exprCtx = ctx.expression
-    if (exprCtx != null) {
-      // resolve later in analyzer
-      PlanWithUnresolvedIdentifier(withOrigin(exprCtx) { expression(exprCtx) }, Nil,
-        (ident, _) => builder(ident))
-    } else if (ctx.errorCapturingIdentifier() != null) {
-      // resolve immediately
-      builder.apply(Seq(getIdentifierText(ctx.errorCapturingIdentifier())))
-    } else if (ctx.stringLit() != null) {
-      // resolve immediately
-      builder.apply(Seq(string(visitStringLit(ctx.stringLit()))))
-    } else {
-      throw SparkException.internalError("Invalid catalog name")
-    }
-  }
-
   /**
    * Create a [[SetCommand]] logical plan.
    *
@@ -349,6 +388,19 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[SetPathCommand]] to set the session SQL path.
+   * Example SQL :
+   * {{{
+   *   SET PATH = spark_catalog.default, system.builtin;
+   *   SET PATH = DEFAULT_PATH;
+   *   SET PATH = SYSTEM_PATH, spark_catalog.myschema;
+   * }}}
+   */
+  override def visitSetPath(ctx: SetPathContext): LogicalPlan = withOrigin(ctx) {
+    SetPathCommand(ctx.pathElement().asScala.map(visitPathElement).toSeq)
+  }
+
+  /**
    * Create a [[SetCommand]] logical plan to set [[SQLConf.SESSION_LOCAL_TIMEZONE]]
    * Example SQL :
    * {{{
@@ -417,15 +469,13 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   private def extractUnquotedResourcePath(ctx: RefreshResourceContext): String = withOrigin(ctx) {
     val unquotedPath = remainder(ctx.REFRESH.getSymbol).trim
-    validate(
-      unquotedPath != null && !unquotedPath.isEmpty,
-      "Resource paths cannot be empty in REFRESH statements. Use / to match everything",
-      ctx)
+    if (unquotedPath == null || unquotedPath.isEmpty) {
+      throw QueryParsingErrors.emptyRefreshResourcePathError(ctx)
+    }
     val forbiddenSymbols = Seq(" ", "\n", "\r", "\t")
-    validate(
-      !forbiddenSymbols.exists(unquotedPath.contains(_)),
-      "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths",
-      ctx)
+    if (forbiddenSymbols.exists(unquotedPath.contains(_))) {
+      throw QueryParsingErrors.invalidRefreshResourcePathError(ctx)
+    }
     unquotedPath
   }
 
@@ -636,7 +686,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   override def visitFailSetRole(ctx: FailSetRoleContext): LogicalPlan = withOrigin(ctx) {
-    invalidStatement("SET ROLE", ctx);
+    invalidStatement("SET ROLE", ctx)
   }
 
   /**
@@ -827,12 +877,12 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     if (ctx.METRICS(0) == null) {
       throw QueryParsingErrors.missingClausesForOperation(
-        ctx, "WITH METRICS", "METRIC VIEW CREATION")
+        ctx, "WITH METRICS", "CREATE METRIC VIEW")
     }
 
     if (ctx.routineLanguage(0) == null) {
       throw QueryParsingErrors.missingClausesForOperation(
-        ctx, "LANGUAGE", "METRIC VIEW CREATION")
+        ctx, "LANGUAGE", "CREATE METRIC VIEW")
     }
 
     val languageCtx = ctx.routineLanguage(0)
@@ -849,7 +899,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       .getOrElse(Map.empty)
     val codeLiteral = visitCodeLiteral(ctx.codeLiteral())
 
-    CreateMetricViewCommand(
+    CreateMetricView(
       withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
       userSpecifiedColumns,
       visitCommentSpecList(ctx.commentSpec()),
@@ -1419,8 +1469,8 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[DescribeColumn]] or [[DescribeRelation]] or [[DescribeRelationAsJsonCommand]]
-   * command.
+   * Create a [[DescribeColumn]], [[DescribeRelation]], [[DescribeTablePartition]], or
+   * [[DescribeRelationJsonCommand]] command.
    */
   override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
@@ -1429,7 +1479,11 @@ class SparkSqlAstBuilder extends AstBuilder {
       val tableName = ctx.identifierReference.getText.split("\\.").lastOption.getOrElse("table")
       throw QueryCompilationErrors.describeJsonNotExtendedError(tableName)
     }
-    val relation = createUnresolvedTableOrView(ctx.identifierReference, "DESCRIBE TABLE")
+    val relation = createUnresolvedTableOrView(
+      ctx.identifierReference,
+      "DESCRIBE TABLE",
+      allowTempView = true,
+      UnresolvedTableOrViewSearchPathMode.QueryLike)
     if (ctx.describeColName != null) {
       if (ctx.partitionSpec != null) {
         throw QueryParsingErrors.descColumnForPartitionUnsupportedError(ctx)
@@ -1442,7 +1496,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           isExtended)
       }
     } else {
-      val partitionSpec = if (ctx.partitionSpec != null) {
+      val rawSpec = if (ctx.partitionSpec != null) {
         // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
         visitPartitionSpec(ctx.partitionSpec).map {
           case (key, Some(value)) => key -> value
@@ -1453,11 +1507,37 @@ class SparkSqlAstBuilder extends AstBuilder {
         Map.empty[String, String]
       }
       if (asJson) {
-        DescribeRelationJsonCommand(relation, partitionSpec, isExtended)
+        // DescribeRelationJsonCommand uses the raw Map directly (V1 path only).
+        DescribeRelationJsonCommand(relation, rawSpec, isExtended)
+      } else if (rawSpec.nonEmpty) {
+        DescribeTablePartition(relation, UnresolvedPartitionSpec(rawSpec), isExtended)
       } else {
-        DescribeRelation(relation, partitionSpec, isExtended)
+        DescribeRelation(relation, isExtended)
       }
     }
+  }
+
+  /**
+   * Overrides `SHOW PARTITIONS` parsing to intercept the `AS JSON` variant.
+   *
+   * When `AS JSON` is absent, parsing is delegated to the superclass
+   * ([[AstBuilder#visitShowPartitions]]), which produces a [[ShowPartitions]] logical plan.
+   *
+   * When `AS JSON` is present, this method produces a [[ShowPartitionsJsonCommand]] directly -
+   * a runnable command that returns partition metadata as a single-row JSON document.
+   *
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW PARTITIONS multi_part_name [partition_spec] [AS JSON];
+   * }}}
+   */
+  override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.JSON == null) return super.visitShowPartitions(ctx)
+    val relation = createUnresolvedTable(ctx.identifierReference, "SHOW PARTITIONS AS JSON")
+    val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
+      UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
+    }
+    ShowPartitionsJsonCommand(relation, partitionKeys.map(_.spec))
   }
 
   override def visitShowProcedures(ctx: ShowProceduresContext): LogicalPlan = withOrigin(ctx) {
@@ -1476,6 +1556,38 @@ class SparkSqlAstBuilder extends AstBuilder {
       Option(ctx.pattern).map(x => string(visitStringLit(x))))
   }
 
+  /**
+   * Create a [[ShowTablesJsonCommand]] or [[ShowTables]] command.
+   */
+  override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.JSON == null) return super.visitShowTables(ctx)
+    val ns = if (ctx.identifierReference() != null) {
+      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+    } else {
+      CurrentNamespace
+    }
+    val pattern = Option(ctx.pattern).map(x => string(visitStringLit(x)))
+    ShowTablesJsonCommand(ns, pattern, isExtended = false)
+  }
+
+  /**
+   * Create a [[ShowTablesJsonCommand]], [[ShowTablesExtended]], or [[ShowTablePartition]] command.
+   */
+  override def visitShowTableExtended(
+      ctx: ShowTableExtendedContext): LogicalPlan = withOrigin(ctx) {
+    val asJson = ctx.JSON != null
+    if (asJson && ctx.partitionSpec != null) {
+      throw QueryCompilationErrors.showTableExtendedJsonWithPartitionError()
+    }
+    if (!asJson || ctx.partitionSpec != null) return super.visitShowTableExtended(ctx)
+    val ns = if (ctx.identifierReference() != null) {
+      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+    } else {
+      CurrentNamespace
+    }
+    ShowTablesJsonCommand(ns, Some(string(visitStringLit(ctx.pattern))), isExtended = true)
+  }
+
   override def visitDescribeProcedure(
       ctx: DescribeProcedureContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference(), procIdentifier =>
@@ -1492,6 +1604,19 @@ class SparkSqlAstBuilder extends AstBuilder {
     CreateFlowCommand(
       name = ident,
       flowOperation = flowOperation,
+      comment = commentOpt
+    )
+  }
+
+  override def visitCreateFlowAutoCdc(
+      ctx: CreateFlowAutoCdcContext): LogicalPlan = withOrigin(ctx) {
+    val flowHeaderCtx = ctx.createPipelineFlowHeader()
+    val ident = withIdentClause(flowHeaderCtx.flowName, UnresolvedIdentifier(_))
+    val commentOpt = Option(flowHeaderCtx.commentSpec()).map(visitCommentSpec)
+    val autoCdcInto = buildAutoCdcInto(ctx.autoCdcCommand())
+    CreateFlowCommand(
+      name = ident,
+      flowOperation = autoCdcInto,
       comment = commentOpt
     )
   }
@@ -1528,7 +1653,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       partitionExpressions(partTransforms, partCols, ctx) ++
         clusterBySpec.map(_.asTransform)
 
-    // Because the createTableClauses grammar is reused for createPipelineDataset but pipeline
+    // Because the createTableClauses grammar is reused for pipeline datasets but pipeline
     // datasets don't support bucketing, options, storage location, or Hive SerDe, validate they
     // are not set.
     if (bucketSpec.isDefined) {
@@ -1571,6 +1696,10 @@ class SparkSqlAstBuilder extends AstBuilder {
     )
 
     if (createPipelineDatasetHeaderCtx.materializedView() != null) {
+      if (ctx.autoCdcBody() != null) {
+        throw operationNotAllowed(
+          "AUTO CDC is only supported for STREAMING TABLE, not MATERIALIZED VIEW.", ctx)
+      }
       val query: ParserRuleContext = Option(ctx.query).getOrElse(
         throw operationNotAllowed(
           s"Unable to find query for CREATE $syntaxTypeErrorStr statement.", ctx)
@@ -1585,25 +1714,45 @@ class SparkSqlAstBuilder extends AstBuilder {
         ifNotExists = ifNotExists
       )
     } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
-      Option(ctx.query) match {
-        case Some(query) =>
-          CreateStreamingTableAsSelect(
-            name = datasetIdentifier,
-            columns = colDefs,
-            partitioning = partitioning,
-            tableSpec = spec,
-            query = plan(query),
-            originalText = source(query),
-            ifNotExists = ifNotExists
-          )
-        case None =>
-          CreateStreamingTable(
-            name = datasetIdentifier,
-            columns = colDefs,
-            partitioning = partitioning,
-            tableSpec = spec,
-            ifNotExists = ifNotExists
-          )
+      if (ctx.autoCdcBody() != null) {
+        val params = parseAutoCdcParams(ctx.autoCdcBody().autoCdcParameters())
+        CreateStreamingTableAutoCdc(
+          name = datasetIdentifier,
+          columns = colDefs,
+          partitioning = partitioning,
+          tableSpec = spec,
+          ifNotExists = ifNotExists,
+          source = params.source,
+          keys = params.keys,
+          deleteCondition = params.deleteCondition,
+          sequenceByExpr = params.sequencing,
+          includeColumns = params.includeColumns,
+          excludeColumns = params.excludeColumns,
+          storedAsScdType = params.storedAsScdType,
+          trackHistoryColumns = params.trackHistoryColumns,
+          trackHistoryExceptColumns = params.trackHistoryExceptColumns
+        )
+      } else {
+        Option(ctx.query) match {
+          case Some(query) =>
+            CreateStreamingTableAsSelect(
+              name = datasetIdentifier,
+              columns = colDefs,
+              partitioning = partitioning,
+              tableSpec = spec,
+              query = plan(query),
+              originalText = source(query),
+              ifNotExists = ifNotExists
+            )
+          case None =>
+            CreateStreamingTable(
+              name = datasetIdentifier,
+              columns = colDefs,
+              partitioning = partitioning,
+              tableSpec = spec,
+              ifNotExists = ifNotExists
+            )
+        }
       }
     } else {
       // Should never be possible based on grammar definition.

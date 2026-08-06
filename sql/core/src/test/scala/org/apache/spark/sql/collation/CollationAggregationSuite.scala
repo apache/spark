@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.collation
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class CollationAggregationSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
   test("group by collated column doesn't work with obj hash aggregate") {

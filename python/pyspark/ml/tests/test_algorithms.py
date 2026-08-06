@@ -190,9 +190,9 @@ class KMeansTests(SparkSessionTestCase):
         kmeans = KMeans(k=3, seed=1, distanceMeasure="cosine")
         model = kmeans.fit(df)
         result = model.transform(df).collect()
-        self.assertTrue(result[0].prediction == result[1].prediction)
-        self.assertTrue(result[2].prediction == result[3].prediction)
-        self.assertTrue(result[4].prediction == result[5].prediction)
+        self.assertEqual(result[0].prediction, result[1].prediction)
+        self.assertEqual(result[2].prediction, result[3].prediction)
+        self.assertEqual(result[4].prediction, result[5].prediction)
 
 
 class LDATest(SparkSessionTestCase):

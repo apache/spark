@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobArtifactSet, PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, EmptyRow, Expression, JoinedRow, NamedArgumentExpression, NamedExpression, PythonFuncExpression, PythonUDAF, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -255,8 +256,11 @@ class ArrowWindowPythonEvaluatorFactory(
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
+      // In pipelined mode the queue's add() runs in the writer thread and remove() runs in
+      // the task thread; use lock-free mode to skip per-row synchronization.
+      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
       val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), childOutput.length)
+        new File(Utils.getLocalDir(SparkEnv.get.conf)), childOutput.length, lockFree = pipelined)
       context.addTaskCompletionListener[Unit] { _ =>
         queue.close()
       }

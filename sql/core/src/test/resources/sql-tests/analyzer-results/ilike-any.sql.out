@@ -199,10 +199,8 @@ SELECT company FROM ilike_any_table WHERE company ILIKE ANY ()
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
-  "messageParameters" : {
-    "msg" : "Expected something between '(' and ')'."
-  },
+  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_QUANTIFIED_PATTERN",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

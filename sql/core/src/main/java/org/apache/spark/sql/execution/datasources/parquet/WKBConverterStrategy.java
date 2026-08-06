@@ -46,6 +46,6 @@ enum WKBToGeographyConverter implements WKBConverterStrategy {
 
   @Override
   public byte[] convert(byte[] wkb, int srid) {
-    return STUtils.stGeogFromWKB(wkb).getBytes();
+    return STUtils.stGeogFromWKB(wkb, srid).getBytes();
   }
 }

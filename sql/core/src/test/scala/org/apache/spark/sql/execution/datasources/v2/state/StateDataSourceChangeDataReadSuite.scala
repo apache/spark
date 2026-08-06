@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata, CommitMetadataV2}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.{col, window}
@@ -233,17 +233,20 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
 
   test("ERROR: mixed checkpoint format versions not supported") {
     withTempDir { tempDir =>
-      val commitLog = new CommitLog(spark,
-        new File(tempDir.getAbsolutePath, "commits").getAbsolutePath)
+      // Test setup writes commit log entries.
+      withWritableCheckpoint {
+        val commitLog = new CommitLog(spark,
+          new File(tempDir.getAbsolutePath, "commits").getAbsolutePath)
 
-      // Start version: treated as v1 (no operator unique ids)
-      val startMetadata = CommitMetadata(0, None)
-      assert(commitLog.add(0, startMetadata))
+        // Start version: treated as v1 (no operator unique ids)
+        val startMetadata = CommitMetadata(0)
+        assert(commitLog.add(0, startMetadata))
 
-      // End version: treated as v2 (operator 0 has unique ids)
-      val endMetadata = CommitMetadata(0,
-        Some(Map[Long, Array[Array[String]]](0L -> Array(Array("uid")))))
-      assert(commitLog.add(1, endMetadata))
+        // End version: treated as v2 (operator 0 has unique ids)
+        val endMetadata = CommitMetadataV2(0,
+          Some(Map[Long, Array[Array[String]]](0L -> Array(Array("uid")))))
+        assert(commitLog.add(1, endMetadata))
+      }
 
       val exc = intercept[StateDataSourceMixedCheckpointFormatVersionsNotSupported] {
         spark.read.format("statestore")
@@ -414,6 +417,23 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
       )
 
       checkAnswer(stateDf, expectedDf)
+    }
+  }
+
+  test("read flatMapGroupsWithState state change feed") {
+    withTempDir { tempDir =>
+      runFlatMapGroupsWithStateQuery(tempDir.getAbsolutePath)
+      val df = spark.read.format("statestore")
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+        .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+        .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+        .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
+        .load()
+      assert(df.collect().nonEmpty,
+        "expected flatMapGroupsWithState state change feed to return change records")
+      val keys = df.selectExpr("key.value AS k").collect().map(_.getString(0)).toSet
+      assert(keys == Set("hello", "world", "scala"),
+        s"unexpected change-feed keys: $keys")
     }
   }
 

@@ -47,7 +47,8 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
           if (filtersOpt.exists(table.canDeleteWhere)) {
             logDebug(s"Switching to delete with filters: " +
               s"${filtersOpt.get.mkString("[", ", ", "]")}")
-            DeleteFromTableWithFilters(relation, filtersOpt.get.toImmutableArraySeq)
+            DeleteFromTableWithFilters(
+              relation, filtersOpt.get.toImmutableArraySeq, relation.options)
           } else {
             tryDeleteWithPartitionPredicates(table, relation, normalizedPredicates)
               .getOrElse {
@@ -90,7 +91,7 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
     } yield {
       logDebug(s"Switching to delete with PartitionPredicate filters: " +
         s"${combined.mkString("[", ", ", "]")}")
-      DeleteFromTableWithFilters(relation, combined.toImmutableArraySeq)
+      DeleteFromTableWithFilters(relation, combined.toImmutableArraySeq, relation.options)
     }
   }
 
@@ -114,7 +115,7 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
         val command = rd.operation.command
         Some(rd, command, cond, originalTable)
 
-      case wd @ WriteDelta(_, cond, _, originalTable, _, _) =>
+      case wd @ WriteDelta(_, cond, _, originalTable, _, _, _) =>
         val command = wd.operation.command
         Some(wd, command, cond, originalTable)
 

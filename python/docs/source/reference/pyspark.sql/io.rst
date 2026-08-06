@@ -24,6 +24,7 @@ Input/Output
 .. autosummary::
     :toctree: api/
 
+    DataFrameReader.changes
     DataFrameReader.csv
     DataFrameReader.format
     DataFrameReader.jdbc

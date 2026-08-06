@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String, VariantVal}
 
 class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -133,6 +133,28 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
     val child = Literal(1)
     val prettyString = ToPrettyString(child)
     assert(prettyString.sql === child.sql)
+  }
+
+  test("SPARK-57256: TimestampNTZNanos as pretty strings") {
+    def ntzNanos(micros: Long, nanos: Short): Expression =
+      ToPrettyString(Literal.create(new TimestampNanosVal(micros, nanos), TimestampNTZNanosType(9)))
+    checkEvaluation(ntzNanos(0L, 1), "1970-01-01 00:00:00.000000001")
+    checkEvaluation(ntzNanos(1L, 0), "1970-01-01 00:00:00.000001")
+    checkEvaluation(
+      ToPrettyString(Literal.create(TimestampNanosVal.ZERO, TimestampNTZNanosType(9))),
+      "1970-01-01 00:00:00")
+  }
+
+  test("SPARK-57256: TimestampLTZNanos as pretty strings") {
+    def ltzNanos(micros: Long, nanos: Short): Expression =
+      ToPrettyString(Literal.create(new TimestampNanosVal(micros, nanos), TimestampLTZNanosType(9)))
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      checkEvaluation(ltzNanos(0L, 1), "1970-01-01 00:00:00.000000001")
+      checkEvaluation(ltzNanos(1L, 0), "1970-01-01 00:00:00.000001")
+      checkEvaluation(
+        ToPrettyString(Literal.create(TimestampNanosVal.ZERO, TimestampLTZNanosType(9))),
+        "1970-01-01 00:00:00")
+    }
   }
 
   test("Time as pretty strings") {

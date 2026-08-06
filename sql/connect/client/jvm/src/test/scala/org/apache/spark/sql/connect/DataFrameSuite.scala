@@ -68,14 +68,39 @@ class DataFrameSuite extends QueryTest with RemoteSparkSession {
   }
 
   test("lazy column validation") {
-    val session = spark
-    import session.implicits._
+    // The test relies on strict plan-id-based resolution: with the name-based fallback
+    // enabled, df1("x") would resolve to df2.x via the join output and df4.schema would
+    // succeed. Pin the config directly via spark.conf.set/unset; the lazy SQLConf entry
+    // trips withSQLConf's isModifiable check on the Connect server, so we cannot use that
+    // helper here.
+    spark.conf.set("spark.sql.analyzer.strictDataFrameColumnResolution", "true")
+    try {
+      val session = spark
+      import session.implicits._
 
-    val df1 = Seq(1 -> "y").toDF("a", "y")
-    val df2 = Seq(1 -> "x").toDF("a", "x")
-    val df3 = df1.join(df2, df1("a") === df2("a"))
-    val df4 = df3.select(df1("x")) // <- No exception here
+      val df1 = Seq(1 -> "y").toDF("a", "y")
+      val df2 = Seq(1 -> "x").toDF("a", "x")
+      val df3 = df1.join(df2, df1("a") === df2("a"))
+      val df4 = df3.select(df1("x")) // <- No exception here
 
-    intercept[AnalysisException] { df4.schema }
+      intercept[AnalysisException] { df4.schema }
+    } finally {
+      spark.conf.unset("spark.sql.analyzer.strictDataFrameColumnResolution")
+    }
+  }
+
+  test("zip") {
+    val sparkSession = spark
+    import sparkSession.implicits._
+
+    val df = Seq((1, 2, 3), (4, 5, 6)).toDF("a", "b", "c")
+    val left = df.select("a")
+    val right = df.select("b")
+
+    val zipped = left.zip(right)
+    assert(zipped.columns === Array("a", "b"))
+    val rows = zipped.collect().sortBy(_.getInt(0))
+    assert(rows(0).getInt(0) === 1 && rows(0).getInt(1) === 2)
+    assert(rows(1).getInt(0) === 4 && rows(1).getInt(1) === 5)
   }
 }

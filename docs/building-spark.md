@@ -27,7 +27,7 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.9.15 and Java 17/21.
+Building Spark using Maven requires Maven 3.9.16 and Java 17/21/25.
 Spark requires Scala 2.13; support for Scala 2.12 was removed in Spark 4.0.0.
 
 ### Setting up Maven's Memory Usage
@@ -80,6 +80,7 @@ For more information on usage, run `./dev/make-distribution.sh --help`
 ## Specifying the Hadoop Version and Enabling YARN
 
 You can enable the `yarn` profile and specify the exact version of Hadoop to compile against through the `hadoop.version` property.
+Spark requires Hadoop 3.4.0 or later; building against older Hadoop versions is not supported.
 
 Example:
 

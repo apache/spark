@@ -49,6 +49,8 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
 
   def appName: String = get("spark.app.name", "spark")
 
+  def sparkVersion: String = SPARK_VERSION
+
   def namespace: String = get(KUBERNETES_NAMESPACE)
 
   def imagePullPolicy: String = get(CONTAINER_IMAGE_PULL_POLICY)
@@ -96,6 +98,20 @@ class KubernetesDriverConf(
     clock: Clock = new SystemClock())
   extends KubernetesConf(sparkConf) with Logging {
 
+  /**
+   * Java-friendly constructor that accepts a nullable String for proxyUser
+   * instead of Option[String].
+   */
+  @Since("4.3.0")
+  def this(
+      sparkConf: SparkConf,
+      appId: String,
+      mainAppResource: MainAppResource,
+      mainClass: String,
+      appArgs: Array[String],
+      proxyUser: String) =
+    this(sparkConf, appId, mainAppResource, mainClass, appArgs, Option(proxyUser))
+
   def driverNodeSelector: Map[String, String] =
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX)
 
@@ -122,7 +138,7 @@ class KubernetesDriverConf(
 
   override def labels: Map[String, String] = {
     val presetLabels = Map(
-      SPARK_VERSION_LABEL -> SPARK_VERSION,
+      SPARK_VERSION_LABEL -> sparkVersion,
       SPARK_APP_ID_LABEL -> appId,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
@@ -199,7 +215,7 @@ private[spark] class KubernetesExecutorConf(
 
   override def labels: Map[String, String] = {
     val presetLabels = Map(
-      SPARK_VERSION_LABEL -> SPARK_VERSION,
+      SPARK_VERSION_LABEL -> sparkVersion,
       SPARK_EXECUTOR_ID_LABEL -> executorId,
       SPARK_APP_ID_LABEL -> appId,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
