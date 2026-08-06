@@ -202,7 +202,7 @@ It lists `master` and the latest major's release branches the commit reached (e.
 
 PR title format is `[SPARK-xxxx][COMPONENT] Title`. Draft, WIP, MINOR, and TRIVIAL PRs may omit the JIRA ID. The component tag is derived from the JIRA component name: take the last word and uppercase it (e.g. `Project Infra` → `[INFRA]`, `Spark Core` → `[CORE]`, `Structured Streaming` → `[STREAMING]`, `SQL` → `[SQL]`).
 
-If a PR follows up on one or more earlier PRs, reuse their existing JIRA ticket(s). Do not create a new JIRA ticket for the follow-up PR.
+If a PR follows up on one or more earlier PRs whose changes have not been released, reuse their existing JIRA ticket(s) and add `[FOLLOWUP]` to the PR title. If any earlier change has been released, create a new JIRA ticket and do not use `[FOLLOWUP]`.
 
 Infer the PR title from the changes. If no ticket ID is given and the PR is not draft, WIP, MINOR, or TRIVIAL, create one using `dev/create_spark_jira.py`, using the PR title (without the JIRA ID and component tag) as the ticket title.
 
