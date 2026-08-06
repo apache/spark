@@ -17,8 +17,6 @@
 
 package org.apache.spark.shuffle.local.pipelined
 
-import java.util.concurrent.ConcurrentHashMap
-
 import org.apache.spark.{ShuffleDependency, SparkConf, TaskContext}
 import org.apache.spark.shuffle.{BaseShuffleHandle, PipelinedShuffleManager, ShuffleHandle, ShuffleReader, ShuffleReadMetricsReporter, ShuffleWriteMetricsReporter, ShuffleWriter}
 
@@ -39,14 +37,21 @@ import org.apache.spark.shuffle.{BaseShuffleHandle, PipelinedShuffleManager, Shu
  * the stage itself, not in any output tracker). This is why it implements the
  * `PipelinedShuffleManager` trait directly instead of subclassing the concrete streaming
  * manager.
+ *
+ * This manager deliberately keeps NO per-shuffle registry. An early version recorded each
+ * shuffle's map-task count at registration and looked it up in getReader -- and lost it when
+ * an unregisterShuffle arrived BETWEEN registration and the job running, which happens
+ * legitimately: Dataset.rdd builds the RDD inside a SQL execution scope that ends (and, with
+ * spark.sql.classic.shuffleDependency.fileCleanup.enabled, removes the shuffle from every
+ * manager) before any job has run. The reader then saw a missing entry as numMaps = 0 and
+ * silently under-read the channel. The count is instead stamped into the shuffle handle at
+ * registration ([[ChannelShuffleHandle.numMaps]]): the handle travels with the dependency
+ * into every task, a plain Int field survives task serialization (the dependency's own `rdd`
+ * reference is @transient and is null inside a deserialized task), and no later unregister
+ * can take it away.
  */
 private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   extends PipelinedShuffleManager {
-
-  // Number of map tasks per shuffle, so a reader knows how many end-of-stream markers to
-  // expect before it can finish. Populated at registration on the driver and read on the
-  // executor; single-executor, so the same instance serves both.
-  private val numMapsByShuffle = new ConcurrentHashMap[Int, Int]()
 
   // Rows accumulated per output partition before a batch is handed across the channel in one
   // queue operation. Batching amortizes the queue's per-operation lock cost; per-row hand-off
@@ -58,10 +63,8 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
 
   override def registerShuffle[K, V, C](
       shuffleId: Int,
-      dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-    numMapsByShuffle.put(shuffleId, dependency.rdd.partitions.length)
-    new BaseShuffleHandle(shuffleId, dependency)
-  }
+      dependency: ShuffleDependency[K, V, C]): ShuffleHandle =
+    new ChannelShuffleHandle(shuffleId, dependency, dependency.rdd.partitions.length)
 
   override def getWriter[K, V](
       handle: ShuffleHandle,
@@ -84,16 +87,28 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
     // partitions into one reader task, so the reader must honor the whole range. Map-index
     // bounds are irrelevant to the channel transport (all map tasks share each partition's
     // queue). The final 5-arg getReader forwards here with the correct partition range.
-    val h = handle.asInstanceOf[BaseShuffleHandle[K, _, C]]
-    new ChannelShuffleReader[K, C](
-      h, startPartition, endPartition, numMapsByShuffle.get(h.shuffleId))
+    //
+    // numMaps -- how many end-of-stream markers to expect per queue -- was stamped into the
+    // handle at registration, never kept in mutable manager state (see class scaladoc).
+    val h = handle.asInstanceOf[ChannelShuffleHandle[K, _, C]]
+    new ChannelShuffleReader[K, C](h, startPartition, endPartition, h.numMaps)
   }
 
   override def unregisterShuffle(shuffleId: Int): Boolean = {
-    numMapsByShuffle.remove(shuffleId)
     ChannelShuffleRendezvous.removeShuffle(shuffleId)
     true
   }
 
   override def stop(): Unit = {}
 }
+
+/**
+ * The channel manager's shuffle handle: a [[BaseShuffleHandle]] plus the producer's map-task
+ * count, captured at registration while the dependency's (transient) RDD is still reachable.
+ * The reader needs it to know how many end-of-stream markers close a queue.
+ */
+private[spark] class ChannelShuffleHandle[K, V, C](
+    shuffleId: Int,
+    dependency: ShuffleDependency[K, V, C],
+    val numMaps: Int)
+  extends BaseShuffleHandle(shuffleId, dependency)

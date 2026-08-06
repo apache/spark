@@ -96,11 +96,13 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
     }
   }
 
-  test("groupBy with ORDER BY (hash + single-partition exchanges) is all-pipelined") {
-    // A trailing ORDER BY adds a SinglePartition exchange on top of the groupBy's hash
-    // exchange. The relaxed rule pipelines BOTH (a mixed hash-pipelined / single-regular job
-    // would be rejected); this confirms SinglePartition pipelines and the all-pipelined job
-    // is admitted and correct.
+  test("groupBy with ORDER BY (hash + range exchanges) is all-pipelined") {
+    // A trailing ORDER BY adds a RANGE exchange (global sort with 4 shuffle partitions ->
+    // RangePartitioning) on top of the groupBy's hash exchange. The relaxed rule pipelines
+    // BOTH (a mixed pipelined/regular job would be rejected). Range is the interesting case:
+    // RangePartitioner construction runs a SAMPLE job over the exchange's child -- which here
+    // reads the pipelined hash shuffle -- before the main job runs, so this also exercises
+    // two successive jobs over the same single-shot pipelined producer.
     withPipelinedSession { spark =>
       import spark.implicits._
       val df = spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 7))
@@ -112,10 +114,52 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
       }
       assert(exchanges.nonEmpty && exchanges.forall(_.pipelined),
         s"every exchange should be pipelined; plan:\n${df.queryExecution.executedPlan}")
+      // Pin the partitioning shapes so this test can't silently stop covering range.
+      val partitionings = exchanges.map(_.outputPartitioning.getClass.getSimpleName).sorted
+      assert(exchanges.exists(_.outputPartitioning.isInstanceOf[
+          org.apache.spark.sql.catalyst.plans.physical.RangePartitioning]),
+        s"expected a RangePartitioning exchange, got: $partitionings; " +
+          s"plan:\n${df.queryExecution.executedPlan}")
       // Result is correct AND globally ordered by k.
       val expected = (0L until 1000L).groupBy(_ % 7).map { case (k, vs) => (k, vs.size.toLong) }
         .toSeq.sortBy(_._1)
       assert(rows.toSeq === expected)
+    }
+  }
+
+  test("repartitionByRange (pure range exchange) runs through the pipelined channel shuffle") {
+    // A range exchange directly over the scan: RangePartitioner samples the scan (a job with
+    // no shuffle at all), then the main job runs the pipelined range shuffle. Verifies the
+    // channel transport is agnostic to the partitioner kind, and rows land range-partitioned.
+    withPipelinedSession { spark =>
+      import spark.implicits._
+      val df = spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 100))
+        .repartitionByRange($"k")
+        // spark_partition_id() records which output partition each row landed in without
+        // leaving the DataFrame API (Dataset.rdd would execute a separate QueryExecution).
+        .select($"k", org.apache.spark.sql.functions.spark_partition_id().as("p"))
+
+      val partitioned = df.as[(Long, Int)].collect().map { case (k, p) => (p, k) }
+      val exchanges = collect(df.queryExecution.executedPlan) {
+        case s: ShuffleExchangeExec => s
+      }
+      assert(exchanges.nonEmpty && exchanges.forall(_.pipelined),
+        s"expected a pipelined exchange; plan:\n${df.queryExecution.executedPlan}")
+      assert(exchanges.exists(_.outputPartitioning.isInstanceOf[
+          org.apache.spark.sql.catalyst.plans.physical.RangePartitioning]),
+        s"expected RangePartitioning; plan:\n${df.queryExecution.executedPlan}")
+
+      // No rows lost, and the partitioning is a genuine range split: key ranges of distinct
+      // partitions must not overlap.
+      assert(partitioned.length === 1000)
+      val ranges = partitioned.groupBy(_._1).map { case (p, rows) =>
+        (p, rows.map(_._2).min, rows.map(_._2).max)
+      }.toSeq.sortBy(_._2)
+      ranges.sliding(2).foreach {
+        case Seq((p1, _, max1), (p2, min2, _)) =>
+          assert(max1 <= min2, s"partitions $p1 and $p2 overlap: max($p1)=$max1 > min($p2)=$min2")
+        case _ =>
+      }
     }
   }
 
@@ -147,6 +191,46 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
       val r = (0L until 120L).map(i => (i % 6, i))
       val expected = (for ((lk, lv) <- l; (rk, rv) <- r if lk == rk) yield (lk, lv, rv)).toSet
       assert(rows.toSet === expected)
+    }
+  }
+
+  test("global aggregate (single-partition exchange) runs through the pipelined channel") {
+    // An ungrouped aggregate requires AllTuples, planned as a SinglePartition exchange: the
+    // channel's numPartitions == 1 degenerate case (everything routes to queue 0).
+    withPipelinedSession { spark =>
+      import spark.implicits._
+      val df = spark.range(0, 1000, 1, 2).agg(org.apache.spark.sql.functions.sum($"id"))
+
+      val result = df.as[Long].collect()
+      val exchanges = collect(df.queryExecution.executedPlan) {
+        case s: ShuffleExchangeExec => s
+      }
+      assert(exchanges.nonEmpty && exchanges.forall(_.pipelined),
+        s"expected a pipelined exchange; plan:\n${df.queryExecution.executedPlan}")
+      assert(exchanges.exists(_.outputPartitioning ==
+          org.apache.spark.sql.catalyst.plans.physical.SinglePartition),
+        s"expected a SinglePartition exchange; plan:\n${df.queryExecution.executedPlan}")
+      assert(result.toSeq === Seq((0L until 1000L).sum))
+    }
+  }
+
+  test("Dataset.rdd (shuffle unregistered before the job runs) loses no rows") {
+    // Dataset.rdd builds the RDD inside a SQL execution scope that ENDS before any job runs;
+    // with spark.sql.classic.shuffleDependency.fileCleanup.enabled (the default under
+    // testing), the scope's end removes the shuffle from every manager -- BEFORE the collect
+    // below executes it. An early manager version kept the per-shuffle map-task count in a
+    // registry keyed by shuffleId; the unregister wiped it, the reader treated the missing
+    // entry as numMaps = 0, stopped at the first end-of-stream marker, and silently dropped
+    // whatever one writer had not yet enqueued (a race, ~2/3 reproducible). numMaps is now
+    // derived from the handle's own dependency, which cannot be unregistered away.
+    withPipelinedSession { spark =>
+      import spark.implicits._
+      val df = spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 100))
+        .repartitionByRange($"k")
+      val rows = df.rdd.mapPartitionsWithIndex { (idx, iter) =>
+        iter.map(row => (idx, row.getLong(1)))
+      }.collect()
+      assert(rows.length === 1000)
     }
   }
 }
