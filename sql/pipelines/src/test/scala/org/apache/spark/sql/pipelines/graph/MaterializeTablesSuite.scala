@@ -1289,6 +1289,65 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     }
   }
 
+  test("SPARK-58517: a case-only fold picks the same spelling for the materialized table and for " +
+    "downstream resolution, in either flow declaration order") {
+    // The table's schema is derived twice from the same flows, by two different callers: the graph
+    // materializes the table from `inferSchemas`, while downstream flows resolve against the
+    // `VirtualTableInput` schema, whose `availableFlows` is in declaration order, not sorted. Both
+    // go through `inferSchemaFromFlows`, which merges in sorted flow identifier order, so the
+    // surviving spelling is the same on both paths and does not depend on declaration order. Were
+    // the two to disagree, the downstream view would persist a column spelled differently from the
+    // source column it selects, and -- because `diffSchemas` keys on exact names -- reordering the
+    // flow definitions would turn the next refresh into a drop-then-add of that column.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      // `f_eu` sorts before `f_us`, so `value` is the surviving spelling in both orders.
+      def graphWithFlowsDeclared(usFirst: Boolean): DataflowGraph = {
+        val usDf = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(1, "a"))),
+          new StructType().add("id", IntegerType).add("Value", StringType))
+        val euDf = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(2, "b"))),
+          new StructType().add("id", IntegerType).add("value", StringType))
+
+        new TestGraphRegistrationContext(spark) {
+          registerTable("events")
+          val registerUs = () => registerFlow("events", "f_us", dfFlowFunc(usDf))
+          val registerEu = () => registerFlow("events", "f_eu", dfFlowFunc(euDf))
+          if (usFirst) {
+            registerUs()
+            registerEu()
+          } else {
+            registerEu()
+            registerUs()
+          }
+          // Reads the table, so it resolves against the VirtualTableInput schema.
+          registerMaterializedView(
+            "events_summary",
+            query = sqlFlowFunc(spark, "SELECT id, value FROM events"))
+        }.resolveToDataflowGraph()
+      }
+
+      Seq(true, false).foreach { usFirst =>
+        val graph = graphWithFlowsDeclared(usFirst)
+        val sessionCaseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
+        val eventsIdentifier = fullyQualifiedIdentifier("events")
+
+        val materializedSchema = graph.inferSchemas(sessionCaseSensitive)(eventsIdentifier)
+        assert(
+          materializedSchema.fieldNames.toSeq === Seq("id", "value"),
+          s"materialized schema for usFirst=$usFirst")
+
+        // The downstream view's own schema reflects what it resolved against upstream: Spark takes
+        // the resolved attribute's name, so a `Value` upstream would surface here as `Value`.
+        val summarySchema = graph
+          .inferSchemas(sessionCaseSensitive)(fullyQualifiedIdentifier("events_summary"))
+        assert(
+          summarySchema.fieldNames.toSeq === Seq("id", "value"),
+          s"downstream schema for usFirst=$usFirst")
+      }
+    }
+  }
+
   test("multi-flow schema inference keeps case-only column differences distinct under " +
     "case-sensitive resolution") {
     withRecordingCatalog {

@@ -119,8 +119,16 @@ object SchemaInferenceUtils {
    * `tableIdentifier`, falling back to `sessionCaseSensitive` for flows that do not set it. Under
    * case-insensitive analysis, flows emitting column names that differ only in case contribute a
    * single column, and a declared column matches a flow column differing only in case -- consistent
-   * with how the rest of the engine resolves those names. If two flows differ only in column
-   * casing, the first flow's spelling wins because flows are merged in the order provided.
+   * with how the rest of the engine resolves those names.
+   *
+   * When flows differ only in column casing, the surviving spelling is the one from the flow with
+   * the lowest identifier: `flows` is merged in sorted identifier order, not in the order given.
+   * Sorting here rather than at the call sites keeps every caller agreeing on the result, since the
+   * schemas they derive are compared against each other -- the graph's inferred schema materializes
+   * the table, while [[org.apache.spark.sql.pipelines.graph.VirtualTableInput]] produces the schema
+   * downstream flows resolve against, and `diffSchemas` keys column identity on the exact name. Two
+   * callers ordering the same flows differently would spell one column two ways, leaving a
+   * downstream view disagreeing with its source and turning the next refresh into a drop-then-add.
    */
   def inferSchemaFromFlows(
       tableIdentifier: TableIdentifier,
@@ -142,19 +150,22 @@ object SchemaInferenceUtils {
       sessionCaseSensitive = sessionCaseSensitive
     )
 
-    val inferredSchema = flows.map(_.schema).fold(new StructType()) { (schemaSoFar, schema) =>
-      try {
-        SchemaMergingUtils.mergeSchemas(schemaSoFar, schema, caseSensitive)
-      } catch {
-        case NonFatal(e) =>
-          throw GraphErrors.unableToInferSchemaError(
-            tableIdentifier,
-            schemaSoFar,
-            schema,
-            cause = Option(e)
-          )
+    val inferredSchema = flows
+      .sortBy(_.identifier.unquotedString)
+      .map(_.schema)
+      .fold(new StructType()) { (schemaSoFar, schema) =>
+        try {
+          SchemaMergingUtils.mergeSchemas(schemaSoFar, schema, caseSensitive)
+        } catch {
+          case NonFatal(e) =>
+            throw GraphErrors.unableToInferSchemaError(
+              tableIdentifier,
+              schemaSoFar,
+              schema,
+              cause = Option(e)
+            )
+        }
       }
-    }
 
     val datasetType = GraphElementTypeUtils.getDatasetTypeForMaterializedViewOrStreamingTable(flows)
     // We merge the inferred schema with the user-specified schema to pick up any schema metadata
