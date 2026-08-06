@@ -25,15 +25,20 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
 /**
- * WIP correctness runner (SPARK-57399 local-repartition v2): runs selected TPC-DS queries
- * twice in ONE session -- pipelined rule off (regular shuffle baseline) then on -- and
- * compares full result sets. Correctness only: local[64] clears the gang slot check by
- * oversubscribing 16 cores, which makes timing meaningless by design.
+ * WIP runner (SPARK-57399 local-repartition v2) with two modes:
+ *
+ *   - `verify`: runs each TPC-DS query twice in ONE session -- pipelined rule off (regular
+ *     shuffle baseline) then on -- and compares full result sets. Uses local[128] purely to
+ *     clear the gang slot check by oversubscribing the cores; timing meaningless.
+ *   - `bench`: same off/on structure but TIMED (1 warm-up + best of 5), on local[N =
+ *     physical cores] so the pipelined group does not oversubscribe and the comparison is
+ *     fair. A query whose whole-group demand exceeds N is REJECTED by gang admission and
+ *     reported as such -- itself an honest datapoint about the slot ceiling.
  *
  * Usage (data: dsdgen .dat files; parquet is built on first run):
  * {{{
  *   build/sbt "sql/Test/runMain org.apache.spark.sql.execution.exchange.TPCDSPipelinedRunner
- *     <datDir> <parquetDir> q3 q42 q55 ..."
+ *     <verify|bench> <datDir> <parquetDir> q3 q42 q55 ..."
  * }}}
  */
 object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
@@ -74,11 +79,16 @@ object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
   }
 
   def main(args: Array[String]): Unit = {
-    require(args.length >= 3, "args: <datDir> <parquetDir> <query> [query...]")
-    val (datDir, parquetDir, queries) = (args(0), args(1), args.drop(2).toSeq)
+    require(args.length >= 4, "args: <verify|bench> <datDir> <parquetDir> <query> [query...]")
+    val mode = args(0)
+    require(mode == "verify" || mode == "bench", s"unknown mode $mode")
+    val (datDir, parquetDir, queries) = (args(1), args(2), args.drop(3).toSeq)
+    val master =
+      if (mode == "bench") s"local[${Runtime.getRuntime.availableProcessors()}]"
+      else "local[128]"
 
     val spark = SparkSession.builder()
-      .master("local[128]")
+      .master(master)
       .appName("tpcds-pipelined-correctness")
       .config("spark.shuffle.manager.incremental",
         "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")
@@ -91,8 +101,19 @@ object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
       // suites do.
       .config("spark.sql.legacy.charVarcharAsString", "true")
       // Fewer, larger scan partitions keep the gang's whole-group slot demand low (the big
-      // SF=1 fact scans otherwise contribute ~64 producer partitions each).
-      .config("spark.sql.files.maxPartitionBytes", "512m")
+      // SF=1 fact scans otherwise contribute ~64 producer partitions each). In bench mode
+      // the scan must be squeezed further: FilePartition planning otherwise targets
+      // defaultParallelism (16) leaf partitions, and 16 (scan) + 4 (shuffle) already
+      // exceeds the 16 honest slots -- every query would be rejected. ~32m over the 190MB
+      // store_sales gives ~6 scan partitions, so a 3-stage group is 6 + 4 + 4 = 14 <= 16.
+      // BOTH modes in the session share these settings, so the comparison stays fair --
+      // but note the whole benchmark therefore runs at reduced scan parallelism, which is
+      // itself the honest cost of the slot ceiling on a single box. (64m over the ~24
+      // small store_sales files packs to ~5 scan partitions once per-file open cost is
+      // counted; 32m still left 13, and 13 + 4 = 17 > 16 rejected everything.)
+      .config("spark.sql.files.maxPartitionBytes",
+        if (mode == "bench") "64m" else "512m")
+      .config("spark.sql.files.minPartitionNum", "1")
       .getOrCreate()
     try {
       buildParquet(spark, datDir, parquetDir)
@@ -100,36 +121,84 @@ object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
         spark.read.parquet(s"$parquetDir/$table").createOrReplaceTempView(table)
       }
 
-      queries.foreach { q =>
-        val sql = loadQuery(q)
+      if (mode == "verify") {
+        queries.foreach(q => verifyOne(spark, q))
+      } else {
         // scalastyle:off println
-        try {
-          spark.conf.set("spark.sql.pipelinedShuffle.enabled", "false")
-          val baselineDf = spark.sql(sql)
-          val baseline = baselineDf.collect()
-
-          spark.conf.set("spark.sql.pipelinedShuffle.enabled", "true")
-          val pipeDf = spark.sql(sql)
-          val (nEx, nPipe, reused, kinds) = exchangeSummary(pipeDf.queryExecution.executedPlan)
-          val result = pipeDf.collect()
-
-          val same = baseline.map(_.toString).sorted.sameElements(
-            result.map(_.toString).sorted)
-          val status = if (same) "OK " else "MISMATCH"
-          println(s"[tpcds] $q: $status rows=${result.length} " +
-            s"exchanges=$nEx pipelined=$nPipe reusedExchange=$reused kinds=$kinds")
-          if (!same) {
-            println(s"[tpcds] $q baseline=${baseline.length} rows, pipelined=${result.length}")
-          }
-        } catch {
-          case e: Exception =>
-            println(s"[tpcds] $q: FAILED ${e.getClass.getSimpleName}: " +
-              s"${Option(e.getMessage).getOrElse("").linesIterator.take(2).mkString(" / ")}")
-        }
+        println(s"[tpcds] bench on $master, 1 warm-up + best of 5 per mode")
         // scalastyle:on println
+        queries.foreach(q => benchOne(spark, q))
       }
     } finally {
       spark.stop()
     }
+  }
+
+  private def verifyOne(spark: SparkSession, q: String): Unit = {
+    val sql = loadQuery(q)
+    // scalastyle:off println
+    try {
+      spark.conf.set("spark.sql.pipelinedShuffle.enabled", "false")
+      val baseline = spark.sql(sql).collect()
+
+      spark.conf.set("spark.sql.pipelinedShuffle.enabled", "true")
+      val pipeDf = spark.sql(sql)
+      val (nEx, nPipe, reused, kinds) = exchangeSummary(pipeDf.queryExecution.executedPlan)
+      val result = pipeDf.collect()
+
+      val same = baseline.map(_.toString).sorted.sameElements(
+        result.map(_.toString).sorted)
+      val status = if (same) "OK " else "MISMATCH"
+      println(s"[tpcds] $q: $status rows=${result.length} " +
+        s"exchanges=$nEx pipelined=$nPipe reusedExchange=$reused kinds=$kinds")
+      if (!same) {
+        println(s"[tpcds] $q baseline=${baseline.length} rows, pipelined=${result.length}")
+      }
+    } catch {
+      case e: Exception =>
+        println(s"[tpcds] $q: FAILED ${e.getClass.getSimpleName}: " +
+          s"${Option(e.getMessage).getOrElse("").linesIterator.take(2).mkString(" / ")}")
+    }
+    // scalastyle:on println
+  }
+
+  private def bestMs(spark: SparkSession, sql: String): Long = {
+    spark.sql(sql).collect() // warm up
+    var best = Long.MaxValue
+    var i = 0
+    while (i < 5) {
+      val t0 = System.nanoTime()
+      spark.sql(sql).collect()
+      best = math.min(best, (System.nanoTime() - t0) / 1000000L)
+      i += 1
+    }
+    best
+  }
+
+  private def benchOne(spark: SparkSession, q: String): Unit = {
+    val sql = loadQuery(q)
+    // scalastyle:off println
+    try {
+      spark.conf.set("spark.sql.pipelinedShuffle.enabled", "false")
+      val regular = bestMs(spark, sql)
+
+      spark.conf.set("spark.sql.pipelinedShuffle.enabled", "true")
+      val (_, nPipe, _, kinds) = exchangeSummary(
+        spark.sql(sql).queryExecution.executedPlan)
+      if (nPipe == 0) {
+        println(f"[tpcds] $q%-5s regular=${regular}%5dms  pipelined=  skip (rule left plan " +
+          s"regular, kinds=$kinds)")
+      } else {
+        val pipe = bestMs(spark, sql)
+        val speedup = regular.toDouble / pipe
+        println(f"[tpcds] $q%-5s regular=${regular}%5dms  pipelined=${pipe}%5dms  " +
+          f"speedup=${speedup}%.2fx  nPipelined=$nPipe kinds=$kinds")
+      }
+    } catch {
+      case e: Exception =>
+        println(s"[tpcds] $q: FAILED ${e.getClass.getSimpleName}: " +
+          s"${Option(e.getMessage).getOrElse("").linesIterator.take(2).mkString(" / ")}")
+    }
+    // scalastyle:on println
   }
 }
