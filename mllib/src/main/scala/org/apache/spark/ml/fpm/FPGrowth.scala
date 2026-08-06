@@ -281,17 +281,16 @@ class FPGrowthModel private[ml] (
     transformSchema(dataset.schema, logging = true)
     val dt = dataset.schema($(itemsCol)).dataType
     // For each rule, examine the input items and summarize the consequents.
-    val predictUDF = SparkUserDefinedFunction((items: Seq[Any], rules: Seq[Row]) => {
+    val udf = (items: Seq[Any], rules: Seq[Row]) => {
       if (items != null) {
         val itemset = items.toSet
         rules.filter(_.getSeq[Any](0).forall(itemset.contains))
           .flatMap(_.getSeq[Any](1).filter(!itemset.contains(_))).distinct
       } else {
         Seq.empty
-      }},
-      dt,
-      Nil
-    )
+      }
+    }
+    val predictUDF = SparkUserDefinedFunction(udf, dt, Nil)
     dataset.join(
       associationRules.select("antecedent", "consequent")
         .agg(collect_set(struct("antecedent", "consequent")).as("rules")))
