@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.InSubquery
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
 
@@ -45,13 +45,11 @@ class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
 
-    // info.schema() reflects the row projection: `id` is non-nullable because the assignment
-    // supplies a non-null literal, matching master's projection-derived write schema semantics.
     checkLastWriteInfo(
-      expectedRowSchema = StructType(Seq(
-        PK_FIELD,
-        StructField("id", IntegerType, nullable = false),
-        StructField("dep", StringType, nullable = true))),
+      expectedRowSchema = StructType(table.schema.map {
+        case attr if attr.name == "id" => attr.copy(nullable = false) // input is a constant
+        case attr => attr
+      }),
       expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
       expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
 
@@ -84,10 +82,10 @@ class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
         Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
 
       checkLastWriteInfo(
-        expectedRowSchema = StructType(Seq(
-          PK_FIELD,
-          StructField("id", IntegerType, nullable = false),
-          StructField("dep", StringType, nullable = true))),
+        expectedRowSchema = StructType(table.schema.map {
+          case attr if attr.name == "id" => attr.copy(nullable = false) // input is a constant
+          case attr => attr
+        }),
         expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
         expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
 
