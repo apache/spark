@@ -262,7 +262,7 @@ abstract class StreamingJoinSuite
           s"leftTime BETWEEN rightTime - $lowerBound AND rightTime + $upperBound"),
         joinType)
 
-    val select = if (joinType == "left_semi") {
+    val select = if (joinType == "left_semi" || joinType == "left_anti") {
       joined.select($"leftKey", $"leftTime".cast("int"))
     } else {
       joined.select($"leftKey", $"rightKey", $"leftTime".cast("int"),
@@ -2632,7 +2632,7 @@ class StreamingFullOuterJoinWithoutVCFSuite extends StreamingFullOuterJoinSuite 
   override protected def testMode = Mode.WithoutVCF
 }
 
-abstract class StreamingLeftAntiJoinSuite extends StreamingJoinSuite {
+abstract class StreamingLeftAntiJoinBase extends StreamingJoinSuite {
 
   test("windowed left anti join") {
     withTempDir { checkpointDir =>
@@ -2780,6 +2780,51 @@ abstract class StreamingLeftAntiJoinSuite extends StreamingJoinSuite {
         droppedByWatermark = Seq(0), removed = Some(Seq(1)))
     )
   }
+
+  test("left anti join with watermark range condition") {
+    val (leftInput, rightInput, joined) = setupJoinWithRangeCondition("left_anti")
+
+    testStream(joined, OutputMode.Append())(
+      AddData(leftInput, (1, 5), (3, 5)),
+      // Neither left row is provably unmatched yet.
+      CheckNewAnswer(),
+      // states
+      // left: (1, 5), (3, 5)
+      // right: nothing
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      AddData(rightInput, (1, 10), (2, 5)),
+      // Right (1, 10) satisfies the range condition against left (1, 5), so that left row is
+      // marked as matched in state and must never be emitted. Unlike left semi, it is kept in
+      // state so that it can be suppressed at eviction time.
+      CheckNewAnswer(),
+      // states
+      // left: (1, 5) (now matched), (3, 5)
+      // right: (1, 10), (2, 5)
+      assertNumStateRows(
+        total = Seq(4), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      // Advance the watermark to 20 by adding rows with event time 30 on both sides. A left row is
+      // only safe to evict once no future right row can match it, which the range condition puts
+      // at leftTime + 5 < watermark, so the left rows with leftTime < 15 are evicted here:
+      // (3, 5) was never matched so it is emitted, while (1, 5) was matched so it is suppressed.
+      AddData(leftInput, (1, 30)),
+      CheckNewAnswer(),
+      AddData(rightInput, (0, 30)),
+      CheckNewAnswer(Row(3, 5)),
+      // Advance the watermark to 50, which evicts the left rows with leftTime < 45. Left (1, 30)
+      // never matched -- the only right row with key 1 was evicted long before -- so it is
+      // emitted now.
+      AddData(leftInput, (2, 60)),
+      CheckNewAnswer(),
+      AddData(rightInput, (0, 60)),
+      CheckNewAnswer(Row(1, 30))
+    )
+  }
+}
+
+abstract class StreamingLeftAntiJoinSuite extends StreamingLeftAntiJoinBase {
 
   test("left anti join is not supported in Update output mode") {
     val (_, _, joined) = setupWindowedJoin("left_anti")

@@ -476,3 +476,8 @@ class StreamingFullOuterJoinV4Suite
 class StreamingLeftSemiJoinV4Suite
   extends StreamingLeftSemiJoinBase
     with TestWithV4StateFormat
+
+@SlowSQLTest
+class StreamingLeftAntiJoinV4Suite
+  extends StreamingLeftAntiJoinBase
+    with TestWithV4StateFormat

@@ -1324,10 +1324,16 @@ regarding watermark delays and whether data will be dropped or not.
 
 ##### Anti Joins with Watermarking
 An anti join returns values from the left side of the relation that has no match with the right.
-It is also referred to as a left anti join. As with semi joins, watermark + event-time constraints
-must be specified for an anti join: since a row is emitted precisely because it has *no* match, the
-engine has to wait until the watermark guarantees that no matching row can arrive on the right side
-in future before it can emit the row.
+It is also referred to as a left anti join. As with semi joins, watermarking and event-time
+constraints must be specified for an anti join: since a row is emitted precisely because it has
+*no* match, the engine has to wait until the watermark guarantees that no matching row can arrive
+on the right side in future before it can emit the row.
+
+As for the other stateful join types, the event-time constraint can be expressed in either of two
+ways: a watermarked event-time column can appear in the equality join keys, or a watermark can be
+defined on the right side together with a time range condition (for example
+`leftTime BETWEEN rightTime - INTERVAL 1 HOUR AND rightTime`). Defining a watermark on the left
+side as well is optional, and is what allows the left side state to be cleaned up.
 
 Note that anti join is only supported in Append output mode. Update mode would have to emit rows
 early, before the watermark can rule out a future match, and such a row could be invalidated by a
