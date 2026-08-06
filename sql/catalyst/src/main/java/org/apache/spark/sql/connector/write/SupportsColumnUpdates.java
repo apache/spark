@@ -47,4 +47,22 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * root struct column {@code s} rather than any nested field.
    */
   NamedReference[] requiredDataAttributes();
+
+  /**
+   * Returns additional data column references that must be present in the narrow scan but are
+   * NOT delivered to the writer.
+   * <p>
+   * Use this for columns needed only for planning -- e.g. resolving the table's partitioning
+   * expressions against the scan output, or as clustering keys returned from
+   * {@link RequiresDistributionAndOrdering#requiredDistribution()} -- where the column itself
+   * should not appear in the row passed to
+   * {@link DataWriter#writeUpdate(Object, Object)} / {@link DeltaWriter#update} /
+   * {@link DeltaWriter#reinsert}. Columns returned here are not reflected in
+   * {@link LogicalWriteInfo#updateSchema()}.
+   * <p>
+   * Must not overlap with {@link #requiredDataAttributes()}; defaults to an empty array.
+   */
+  default NamedReference[] scanOnlyDataAttributes() {
+    return new NamedReference[0];
+  }
 }
