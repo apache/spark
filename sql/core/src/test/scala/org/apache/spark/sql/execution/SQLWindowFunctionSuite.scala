@@ -309,6 +309,47 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("window function: unbounded distinct frame skips the event sorter") {
+    withSQLConf(
+      ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "5",
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> Int.MaxValue.toString) {
+      val result = sql(
+        """
+          |SELECT max(distinct_count)
+          |FROM (
+          |  SELECT count(DISTINCT id) OVER () AS distinct_count
+          |  FROM range(100)
+          |)
+        """.stripMargin)
+      assertNotSpilled(sparkContext, "unbounded distinct window without an event sorter") {
+        checkAnswer(result, Row(100L))
+      }
+      val window = result.queryExecution.executedPlan.collectFirst {
+        case window: WindowExec => window
+      }.get
+      assert(window.metrics("spillSize").value == 0)
+    }
+  }
+
+  test("window function: unbounded distinct frame evaluates sorter output directly") {
+    withSQLConf(
+      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> Int.MaxValue.toString,
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> "2") {
+      checkAnswer(
+        sql(
+          """
+            |SELECT id,
+            |  count(DISTINCT value) OVER () AS distinct_count,
+            |  sum(DISTINCT value) OVER () AS distinct_sum,
+            |  sort_array(collect_list(DISTINCT value) OVER ()) AS distinct_values
+            |FROM VALUES (0, 3), (1, 1), (2, 3), (3, 2), (4, 1) AS data(id, value)
+          """.stripMargin),
+        Seq.tabulate(5)(id => Row(id, 3L, 6L, Seq(1, 2, 3))))
+    }
+  }
+
   test("window function: distinct event sorter spill size is reported") {
     withSQLConf(
       ADAPTIVE_EXECUTION_ENABLED.key -> "false",

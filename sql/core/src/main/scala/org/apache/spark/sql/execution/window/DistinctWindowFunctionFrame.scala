@@ -85,21 +85,12 @@ private[window] abstract class DistinctWindowFunctionFrame(
     boundFilter.foreach(_.initialize(partitionIndex))
 
     val firstVisibleRows = new FirstVisibleRowsBuilder
-    var newEventSorter: UnsafeKVExternalSorter = null
     try {
       populateFirstVisibleRows(rows, firstVisibleRows)
-      newEventSorter = firstVisibleRows.buildEvents()
+      processDistinctRows(firstVisibleRows)
       spillSize.add(firstVisibleRows.getSpillSize)
-
-      eventSorter = newEventSorter
-      newEventSorter = null
-      eventIterator = eventSorter.sortedIterator()
-      loadNextEvent()
     } finally {
       firstVisibleRows.close()
-      if (newEventSorter != null) {
-        newEventSorter.cleanupResources()
-      }
     }
     prepareFrame(rows)
   }
@@ -108,7 +99,29 @@ private[window] abstract class DistinctWindowFunctionFrame(
       rows: ExternalAppendOnlyUnsafeRowArray,
       firstVisibleRows: FirstVisibleRowsBuilder): Unit
 
+  protected def processDistinctRows(firstVisibleRows: FirstVisibleRowsBuilder): Unit
+
   protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit
+
+  protected final def prepareOrderedEvents(firstVisibleRows: FirstVisibleRowsBuilder): Unit = {
+    var newEventSorter: UnsafeKVExternalSorter = null
+    try {
+      newEventSorter = firstVisibleRows.buildEvents()
+      eventSorter = newEventSorter
+      newEventSorter = null
+      eventIterator = eventSorter.sortedIterator()
+      loadNextEvent()
+    } finally {
+      if (newEventSorter != null) {
+        newEventSorter.cleanupResources()
+      }
+    }
+  }
+
+  protected final def updateProcessorWithDistinctRows(
+      firstVisibleRows: FirstVisibleRowsBuilder): Unit = {
+    firstVisibleRows.foreachDistinctRow((key, _) => processor.update(key))
+  }
 
   protected final def addCandidate(
       row: InternalRow,
@@ -185,7 +198,8 @@ private[window] abstract class DistinctWindowFunctionFrame(
         } else {
           events = newSorter(positionSchema, eventValueSchema)
           if (sorter != null) {
-            DistinctWindowFunctionFrame.this.buildEvents(sorter, events)
+            consumeDistinctRows(
+              sorter, (key, position) => emitEvent(events, position, key))
           }
         }
         val result = events
@@ -195,6 +209,14 @@ private[window] abstract class DistinctWindowFunctionFrame(
         if (events != null) {
           events.cleanupResources()
         }
+      }
+    }
+
+    def foreachDistinctRow(consume: (UnsafeRow, UnsafeRow) => Unit): Unit = {
+      if (usingMap) {
+        drainMap(destructiveMapIterator(), consume)
+      } else if (sorter != null) {
+        consumeDistinctRows(sorter, consume)
       }
     }
 
@@ -252,9 +274,9 @@ private[window] abstract class DistinctWindowFunctionFrame(
     }
   }
 
-  private def buildEvents(
+  private def consumeDistinctRows(
       firstSorter: UnsafeKVExternalSorter,
-      events: UnsafeKVExternalSorter): Unit = {
+      consume: (UnsafeRow, UnsafeRow) => Unit): Unit = {
     val iterator = firstSorter.sortedIterator()
     var groupKey: UnsafeRow = null
     var selectedKey: UnsafeRow = null
@@ -273,14 +295,14 @@ private[window] abstract class DistinctWindowFunctionFrame(
             selectedPosition = position.copy()
           }
         } else {
-          emitEvent(events, selectedPosition, selectedKey)
+          consume(selectedKey, selectedPosition)
           groupKey = key.copy()
           selectedKey = groupKey
           selectedPosition = position.copy()
         }
       }
       if (groupKey != null) {
-        emitEvent(events, selectedPosition, selectedKey)
+        consume(selectedKey, selectedPosition)
       }
     } finally {
       iterator.close()
@@ -400,6 +422,11 @@ private[window] final class UnboundedDistinctWindowFunctionFrame(
     }
   }
 
+  override protected def processDistinctRows(
+      firstVisibleRows: FirstVisibleRowsBuilder): Unit = {
+    updateProcessorWithDistinctRows(firstVisibleRows)
+  }
+
   override protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     partitionSize = rows.length
     evaluateEntirePartition()
@@ -485,6 +512,11 @@ private[window] final class UnboundedPrecedingDistinctWindowFunctionFrame(
           outputIndex += 1
         }
     }
+  }
+
+  override protected def processDistinctRows(
+      firstVisibleRows: FirstVisibleRowsBuilder): Unit = {
+    prepareOrderedEvents(firstVisibleRows)
   }
 
   override protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
