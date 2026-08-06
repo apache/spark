@@ -4578,6 +4578,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "missingColumns" -> missingColumns.mkString("[", ", ", "]")))
   }
 
+  def splitUpdateRowIdReassignmentError(
+      connectorClass: String,
+      rowIds: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "SPLIT_UPDATE_ROW_ID_REASSIGNMENT",
+      messageParameters = Map(
+        "connector" -> connectorClass,
+        "rowIds" -> rowIds.mkString("[", ", ", "]")))
+  }
+
   def cannotRenameTableAcrossSchemaError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")

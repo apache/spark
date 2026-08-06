@@ -2350,6 +2350,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "DATA_SOURCE_WRITE_UPDATE_NOT_IMPLEMENTED" : {
+    "message" : [
+      "<class> mixes in `SupportsColumnUpdates` but does not implement `writeUpdate`. Connectors that opt into narrow column-level updates must override `writeUpdate` to handle rows in the `LogicalWriteInfo.updateSchema()` layout; the default implementation would forward narrow rows to `write`, which expects the full `LogicalWriteInfo.schema()` layout."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATETIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
       "<rangeMessage>."
@@ -7249,6 +7255,12 @@
       "Error while calling spill() on <consumerToSpill> : <message>"
     ],
     "sqlState" : "82003"
+  },
+  "SPLIT_UPDATE_ROW_ID_REASSIGNMENT" : {
+    "message" : [
+      "Cannot reassign row ID column(s) <rowIds> in a column-level UPDATE when data source <connector> represents UPDATE as delete + insert. The REINSERT path has no row-ID channel to reconstruct columns outside `requiredDataAttributes()`, so undeclared columns would become NULL. Either avoid reassigning row ID columns, or include every table column in `requiredDataAttributes()`."
+    ],
+    "sqlState" : "42000"
   },
   "SQL_CONF_NOT_FOUND" : {
     "message" : [

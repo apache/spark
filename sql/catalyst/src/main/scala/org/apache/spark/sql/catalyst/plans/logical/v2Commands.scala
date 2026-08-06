@@ -437,14 +437,16 @@ case class ReplaceData(
       case Some(projection) => DataTypeUtils.toAttributes(projection.schema)
       case None => Nil
     }
-    // `rowProjection` (INSERT-tagged rows) validates against `table.output` -- the full table
-    // shape. `updateRowProjection` (UPDATE/COPY-tagged rows) is narrow for column-update
-    // connectors, so it validates against `projectedDataAttrs` (the connector-declared narrow
-    // set) instead. When the connector does not mix in `SupportsColumnUpdates`,
+    // `rowProjection` (INSERT-tagged rows) validates against full table column set.
+    // `updateRowProjection` (UPDATE/COPY-tagged rows) is narrow for column-update
+    // connectors, so it validates against the connector-declared narrow
+    // set instead. When the connector does not mix in `SupportsColumnUpdates`,
     // `updateRowProjection` is absent and `updateResolved` is trivially true.
-    val insertResolved = table.skipSchemaResolution || inRowAttrs.isEmpty ||
+    val insertResolved = table.skipSchemaResolution ||
+      (inUpdateAttrs.nonEmpty && inRowAttrs.isEmpty) ||
       areCompatible(inRowAttrs, table.output)
-    val updateResolved = inUpdateAttrs.isEmpty || dataAttrsResolved(inUpdateAttrs)
+    val updateResolved = table.skipSchemaResolution ||
+      inUpdateAttrs.isEmpty || dataAttrsResolved(inUpdateAttrs)
     insertResolved && updateResolved
   }
 
@@ -554,13 +556,15 @@ case class WriteDelta(
       case None => Nil
     }
     // `rowProjection` (INSERT-tagged rows) validates against `outRowAttrs`. For column-update
-    // connectors, `updateRowProjection` (UPDATE/COPY/REINSERT-tagged rows) is narrow and
-    // validates against `projectedDataAttrs` (the connector-declared narrow set) instead.
-    // When the connector does not mix in `SupportsColumnUpdates`, `updateRowProjection` is
-    // absent and `updateResolved` is trivially true.
-    val insertResolved = table.skipSchemaResolution || inRowAttrs.isEmpty ||
+    // connectors, `updateRowProjection` is narrow and validates against `projectedDataAttrs`
+    // (the connector-declared narrow set) instead. When the connector does not mix in
+    // `SupportsColumnUpdates`, `updateRowProjection` is absent and `updateResolved` is trivially
+    // true.
+    val insertResolved = table.skipSchemaResolution ||
+      (inUpdateAttrs.nonEmpty && inRowAttrs.isEmpty) ||
       areCompatible(inRowAttrs, outRowAttrs)
-    val updateResolved = inUpdateAttrs.isEmpty || dataAttrsResolved(inUpdateAttrs)
+    val updateResolved = table.skipSchemaResolution ||
+      inUpdateAttrs.isEmpty || dataAttrsResolved(inUpdateAttrs)
     insertResolved && updateResolved
   }
 
