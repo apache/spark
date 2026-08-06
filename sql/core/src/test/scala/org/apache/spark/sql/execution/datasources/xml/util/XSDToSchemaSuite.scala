@@ -210,6 +210,22 @@ class XSDToSchemaSuite extends SharedSparkSession {
     assert(widenedSchema === expectedSchema)
   }
 
+  test("SPARK-56486: extendDecimalPrecision rejects an out-of-range maxPrecision") {
+    val schema = XSDToSchema.read(
+      """<?xml version="1.0" encoding="UTF-8" ?>
+        |<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+        |  <xs:element name="amount" type="xs:decimal"/>
+        |</xs:schema>
+        |""".stripMargin)
+    Seq(0, DecimalType.MAX_PRECISION + 1).foreach { invalid =>
+      val e = intercept[IllegalArgumentException] {
+        XSDToSchema.extendDecimalPrecision(schema, maxPrecision = invalid)
+      }
+      assert(e.getMessage.contains(
+        s"maxPrecision must be in [1, ${DecimalType.MAX_PRECISION}], got $invalid"))
+    }
+  }
+
   test("Test ref attribute / Issue 617") {
     val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "ref-attribute.xsd")))
     val expectedSchema = buildSchema(
