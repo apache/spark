@@ -403,9 +403,9 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
         collect_list($"v").over(winSpec(-2, 2)).as("lst")))
   }
 
-  test("DISTINCT window aggregate is rejected by analyzer regardless of seg-tree flag") {
-    // Analyzer throws DISTINCT_WINDOW_FUNCTION_UNSUPPORTED before frame
-    // construction; seg-tree flag must not alter this behavior.
+  test("DISTINCT moving-frame aggregate is rejected regardless of seg-tree flag") {
+    // The analyzer rejects this bounded frame before frame construction; the seg-tree flag must
+    // not alter this behavior.
     def run(): Unit = {
       baseDF.select($"id", $"pk",
         count_distinct($"v").over(winSpec(-3, 3)).as("cd")).collect()

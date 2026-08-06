@@ -112,7 +112,8 @@ object WindowResolution {
    * - Disallows [[FrameLessOffsetWindowFunction]] (e.g. [[Lag]]) without defined ordering or
    *   one with a frame which is defined as something other than an offset frame (e.g.
    *   `ROWS BETWEEN` is logically incompatible with offset functions).
-   * - Allows distinct aggregate expressions with an unbounded preceding frame.
+   * - Allows supported distinct aggregate expressions with orderable inputs and an unbounded
+   *   preceding frame.
    * - Disallows other distinct aggregate expressions in window functions.
    * - Disallows use of certain aggregate functions - [[ListAgg]], [[PercentileCont]],
    *   [[PercentileDisc]], [[Median]]
