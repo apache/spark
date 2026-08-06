@@ -379,21 +379,23 @@ object MultiLineXmlDataSource extends XmlDataSource {
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
 
-    val tokenRDD: RDD[String] = baseRdd.flatMap { stream =>
-      val path = new Path(stream.getPath())
-      skipInputOnError(ignoreMissingFiles, ignoreCorruptFiles) {
-        if (SupportsArchiveFormat.isArchivePath(path)) {
-          SupportsArchiveFormat.readArchiveEntries(
-            path, stream.getConfiguration,
-            archivePathFilter =
-              archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)) {
-            (_, in) =>
-            StaxXmlParser.tokenizeStream(in, parsedOptions)
+    val tokenRDD: RDD[String] = baseRdd.mapPartitions { streams =>
+      // Compile once per partition and reuse for every archive it holds.
+      val archivePathFilter = archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
+      streams.flatMap { stream =>
+        val path = new Path(stream.getPath())
+        skipInputOnError(ignoreMissingFiles, ignoreCorruptFiles) {
+          if (SupportsArchiveFormat.isArchivePath(path)) {
+            SupportsArchiveFormat.readArchiveEntries(
+              path, stream.getConfiguration, archivePathFilter = archivePathFilter) {
+              (_, in) =>
+              StaxXmlParser.tokenizeStream(in, parsedOptions)
+            }
+          } else {
+            StaxXmlParser.tokenizeStream(
+              CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
+              parsedOptions)
           }
-        } else {
-          StaxXmlParser.tokenizeStream(
-            CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
-            parsedOptions)
         }
       }
     }

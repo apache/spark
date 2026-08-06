@@ -126,6 +126,19 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("wholeFile=false honors archivePathFilter, applied on top of hidden-entry filtering") {
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(
+        "keep/a.bin" -> bytes("a"),
+        "keep/_hidden.bin" -> bytes("drop"), // matches the glob but hidden
+        "other/b.bin" -> bytes("drop")))
+      checkAnswer(
+        read(archive.getCanonicalPath, Map("wholeFile" -> "false", "archivePathFilter" -> "keep/*"))
+          .select("content"),
+        Seq(Row(bytes("a"))))
+    }
+  }
+
   test("wholeFile=false enforces SOURCES_BINARY_FILE_MAX_LENGTH per entry") {
     withArchiveFile() { archive =>
       writeArchive(archive, Seq("big.bin" -> bytes("0123456789")))

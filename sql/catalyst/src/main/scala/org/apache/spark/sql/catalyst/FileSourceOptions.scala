@@ -84,10 +84,13 @@ class FileSourceOptions(
   }
 
   /**
-   * The effective [[archivePathFilter]] compiled once per JVM, so archive reads reuse a single
-   * matcher instead of re-compiling per archive (compiling costs about twice a match). `transient`
-   * because Hadoop's `GlobPattern` is not serializable -- executors recompile from
-   * [[archivePathFilter]] on first use.
+   * The effective [[archivePathFilter]] compiled once per instance of this class, so the archive
+   * reads sharing one options object reuse a single matcher rather than re-compiling per archive.
+   * `transient` because Hadoop's `GlobPattern` is not serializable, so an executor recompiles from
+   * [[archivePathFilter]] on first use. Paths that cannot reach this value -- the schema-inference
+   * RDDs, which would have to capture the matcher in a closure, and the parallel footer/schema
+   * readers, whose signatures are fixed -- carry [[archivePathFilter]] instead and compile it
+   * themselves.
    */
   @transient lazy val archivePathFilterPattern: Option[GlobPattern] =
     archivePathFilter.map(FileSourceOptions.compileArchivePathFilter)

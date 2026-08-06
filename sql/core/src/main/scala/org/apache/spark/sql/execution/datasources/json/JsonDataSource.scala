@@ -297,20 +297,22 @@ object MultiLineJsonDataSource extends JsonDataSource {
 
     // An archive entry's stream is only valid until the shared cursor advances, so each document
     // must be consumed before the next is pulled; `JsonInferSchema.infer` does.
-    val docs: RDD[InputStream] = baseRdd.flatMap { stream =>
-      val path = new Path(stream.getPath())
-      skipInputOnError(stream.getPath(), ignoreMissingFiles, ignoreCorruptFiles) {
-        if (SupportsArchiveFormat.isArchivePath(path)) {
-          SupportsArchiveFormat.readArchiveEntries(
-            path, stream.getConfiguration,
-            archivePathFilter =
-              archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)) {
-            (_, in) =>
-            Iterator.single(in)
+    val docs: RDD[InputStream] = baseRdd.mapPartitions { streams =>
+      // Compile once per partition and reuse for every archive it holds.
+      val archivePathFilter = archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
+      streams.flatMap { stream =>
+        val path = new Path(stream.getPath())
+        skipInputOnError(stream.getPath(), ignoreMissingFiles, ignoreCorruptFiles) {
+          if (SupportsArchiveFormat.isArchivePath(path)) {
+            SupportsArchiveFormat.readArchiveEntries(
+              path, stream.getConfiguration, archivePathFilter = archivePathFilter) {
+              (_, in) =>
+              Iterator.single(in)
+            }
+          } else {
+            Iterator.single(
+              CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
           }
-        } else {
-          Iterator.single(
-            CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
         }
       }
     }

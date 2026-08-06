@@ -175,33 +175,35 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
     // Capture the glob string: the compiled GlobPattern is not serializable, so each task
     // compiles it once when the archive branch is taken.
     val archivePathFilterGlob = parsedOptions.archivePathFilter
-    def tokens(dropHeader: Boolean): RDD[Array[String]] = baseRdd.flatMap { stream =>
-      val path = new Path(stream.getPath())
-      try {
-        if (SupportsArchiveFormat.isArchivePath(path)) {
-          SupportsArchiveFormat.readArchiveEntries(
-            path, stream.getConfiguration,
-            archivePathFilter =
-              archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)) {
-            (_, in) =>
-            tokenizeForInference(in, dropHeader, parsedOptions)
+    def tokens(dropHeader: Boolean): RDD[Array[String]] = baseRdd.mapPartitions { streams =>
+      // Compile once per partition and reuse for every archive it holds.
+      val archivePathFilter = archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
+      streams.flatMap { stream =>
+        val path = new Path(stream.getPath())
+        try {
+          if (SupportsArchiveFormat.isArchivePath(path)) {
+            SupportsArchiveFormat.readArchiveEntries(
+              path, stream.getConfiguration, archivePathFilter = archivePathFilter) {
+              (_, in) =>
+              tokenizeForInference(in, dropHeader, parsedOptions)
+            }
+          } else {
+            tokenizeForInference(
+              CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
+              dropHeader, parsedOptions)
           }
-        } else {
-          tokenizeForInference(
-            CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
-            dropHeader, parsedOptions)
+        } catch {
+          case e: FileNotFoundException if parsedOptions.ignoreMissingFiles =>
+            logWarning(log"Skipped missing input: ${MDC(PATH, stream.getPath())}", e)
+            Iterator.empty
+          case e: FileNotFoundException => throw e
+          case e @ (_: RuntimeException | _: IOException) if parsedOptions.ignoreCorruptFiles =>
+            logWarning(log"Skipped the corrupted input: ${MDC(PATH, stream.getPath())}", e)
+            Iterator.empty
+          case NonFatal(e) =>
+            throw QueryExecutionErrors.cannotReadFilesError(
+              e, SparkPath.fromPathString(stream.getPath()).urlEncoded)
         }
-      } catch {
-        case e: FileNotFoundException if parsedOptions.ignoreMissingFiles =>
-          logWarning(log"Skipped missing input: ${MDC(PATH, stream.getPath())}", e)
-          Iterator.empty
-        case e: FileNotFoundException => throw e
-        case e @ (_: RuntimeException | _: IOException) if parsedOptions.ignoreCorruptFiles =>
-          logWarning(log"Skipped the corrupted input: ${MDC(PATH, stream.getPath())}", e)
-          Iterator.empty
-        case NonFatal(e) =>
-          throw QueryExecutionErrors.cannotReadFilesError(
-            e, SparkPath.fromPathString(stream.getPath()).urlEncoded)
       }
     }
     tokens(dropHeader = false).take(1).headOption match {
