@@ -32,7 +32,6 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules, FPGrowth => MLlibFPGrowth}
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.sql._
-import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -273,25 +272,12 @@ class FPGrowthModel private[ml] (
    * from all the applicable rules as prediction. The prediction column has the same data type as
    * the input column(Array[T]) and will not contain existing items in the input column. The null
    * values in the itemsCol columns are treated as empty sets.
-   * For batch datasets, transform keeps association rules as a DataFrame and joins them with the
-   * input dataset. For streaming datasets, transform collects association rules and uses broadcast
-   * for efficiency. This may bring pressure to driver memory for large sets of association rules.
+   * Internally, transform keeps association rules as a DataFrame and joins them with the input
+   * dataset.
    */
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    genericTransform(dataset)
-  }
-
-  private def genericTransform(dataset: Dataset[_]): DataFrame = {
-    if (dataset.isStreaming) {
-      genericTransformWithUDF(dataset)
-    } else {
-      genericTransformWithJoin(dataset)
-    }
-  }
-
-  private def genericTransformWithJoin(dataset: Dataset[_]): DataFrame = {
     val inputIdCol = s"${uid}_input_id"
     val input = dataset.withColumn(inputIdCol, monotonically_increasing_id())
     val rules = associationRules.select("antecedent", "consequent")
@@ -310,28 +296,6 @@ class FPGrowthModel private[ml] (
           array_except(col($(predictionCol)), input($(itemsCol))),
           emptyArray))
       .drop(inputIdCol)
-  }
-
-  private def genericTransformWithUDF(dataset: Dataset[_]): DataFrame = {
-    val rules: Array[(Seq[Any], Seq[Any])] = associationRules.select("antecedent", "consequent")
-      .rdd.map(r => (r.getSeq(0), r.getSeq(1)))
-      .collect().asInstanceOf[Array[(Seq[Any], Seq[Any])]]
-    val brRules = dataset.sparkSession.sparkContext.broadcast(rules)
-
-    val dt = dataset.schema($(itemsCol)).dataType
-    // For each rule, examine the input items and summarize the consequents
-    val predictUDF = SparkUserDefinedFunction((items: Seq[Any]) => {
-      if (items != null) {
-        val itemset = items.toSet
-        brRules.value.filter(_._1.forall(itemset.contains))
-          .flatMap(_._2.filter(!itemset.contains(_))).distinct
-      } else {
-        Seq.empty
-      }},
-      dt,
-      Nil
-    )
-    dataset.withColumn($(predictionCol), predictUDF(col($(itemsCol))))
   }
 
   @Since("2.2.0")
