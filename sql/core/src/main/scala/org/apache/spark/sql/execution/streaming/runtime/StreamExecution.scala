@@ -476,21 +476,22 @@ abstract class StreamExecution(
    *    so a user who sets one is assumed to mean it. `changelogCheckpointing` is one.
    *  - HARD OVERRIDES, applied unconditionally because honouring the user's value would break the
    *    query outright. `sortBeforeRepartition` is one: leaving it `true` makes a Real-Time Mode
-   *    query
-   *    with a round-robin repartition produce no rows at all. An override logs a warning so the
-   *    operator can see their config is not the one in force.
+   *    query with a round-robin repartition produce no rows at all. An override logs a warning so
+   *    the operator can see their config is not the one in force.
    *
    * Every change is logged, so a run's effective configuration is recoverable from the driver log.
    *
    * Deliberately NOT set here, though Databricks Runtime does default them for Real-Time Mode:
    *  - `spark.sql.streaming.stateStore.checkpointFormatVersion=2` and the RocksDB state-store
-   *    provider that version requires. Real-Time Mode does benefit from v2 -- it assigns each batch
-   *    its own state-store checkpoint ids, which matters because a failed batch is rerun from
-   *    committed offsets -- but v2 state checkpointing writes `stateUniqueIds`, and a VERSION_1
-   *    commit log rejects those (see `CommitMetadata.withStateUniqueIds`). Defaulting the
-   *    state-store version without also moving an existing checkpoint's commit log to VERSION_2
-   *    turns a working query into a failing one, and migrating an existing commit log is a
-   *    backward-compatibility decision in its own right. Left to a follow-up.
+   *    provider that version requires. Real-Time Mode does benefit from v2, since it gives each
+   *    batch its own state-store checkpoint ids and a failed batch is rerun from committed offsets.
+   *    Setting it here is not enough on its own: `CommitLog.defaultVersion` is a val read when the
+   *    commit log is constructed, and the eager `streamMetadata` above forces that construction
+   *    before this method runs, so the state store would move to v2 while the commit log stayed at
+   *    v1. Doing this properly also wants the commit log's version to be resolved from an existing
+   *    checkpoint rather than from the session config (`CheckpointVersionManager` currently handles
+   *    only `OffsetLogType`), so writes honour the format a checkpoint was created with. Left to a
+   *    follow-up.
    *  - The incremental state-cleanup factor: that mechanism does not exist in OSS yet.
    *  - The Python/Pandas UDF latency knobs: those configs do not exist in OSS.
    */
@@ -499,9 +500,8 @@ abstract class StreamExecution(
 
     // SOFT DEFAULT. Changelog checkpointing writes a changelog rather than a full snapshot on each
     // commit, which shortens the state-commit step at a batch boundary. That step is on the
-    // critical path between batches in Real-Time Mode, so this is a latency optimization. Only
-    // meaningful
-    // with RocksDB, hence the check against the provider actually in force.
+    // critical path between batches in Real-Time Mode, so this is a latency optimization. It is
+    // only meaningful with RocksDB, hence the check against the provider actually in force.
     val changelogKey = s"${RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX}.changelogCheckpointing.enabled"
     val usingRocksDb =
       conf.get(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
