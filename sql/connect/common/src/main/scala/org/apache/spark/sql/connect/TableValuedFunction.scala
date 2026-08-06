@@ -20,6 +20,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.functions.lit
 
 class TableValuedFunction(sparkSession: SparkSession) extends sql.TableValuedFunction {
 
@@ -100,8 +101,16 @@ class TableValuedFunction(sparkSession: SparkSession) extends sql.TableValuedFun
     fn("variant_explode", Seq(input))
 
   /** @inheritdoc */
+  override def variant_explode(input: Column, recursive: Boolean): Dataset[Row] =
+    fn("variant_explode", Seq(input, lit(recursive)))
+
+  /** @inheritdoc */
   override def variant_explode_outer(input: Column): Dataset[Row] =
     fn("variant_explode_outer", Seq(input))
+
+  /** @inheritdoc */
+  override def variant_explode_outer(input: Column, recursive: Boolean): Dataset[Row] =
+    fn("variant_explode_outer", Seq(input, lit(recursive)))
 
   /** @inheritdoc */
   override def python_worker_logs(): Dataset[Row] =
