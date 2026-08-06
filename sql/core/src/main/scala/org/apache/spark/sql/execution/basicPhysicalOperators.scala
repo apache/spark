@@ -920,23 +920,150 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     Seq(firstPartitioning) ++ convertedOtherPartitionings
   }
 
-  // Compares two leaf partitionings for union pass-through equivalence. Callers pass leaf
-  // partitionings only; a `PartitioningCollection` is flattened to its members by
-  // `outputPartitioning` before reaching here.
+  // Compares two leaf partitionings for the co-located pass-through in `outputPartitioning`.
+  // Callers pass leaf partitionings only; a `PartitioningCollection` is flattened to its members
+  // there. `KeyedPartitioning` never reaches here: it is merged per key position by
+  // `mergeKeyedPartitionings` and filtered out of the pass-through candidates.
   private def comparePartitioning(left: Partitioning, right: Partitioning): Boolean = {
     (left, right) match {
       case (SinglePartition, SinglePartition) => true
       case (l: HashPartitioningLike, r: HashPartitioningLike) => l == r
-      // For `KeyedPartitioning`, only the partition expressions must match (the other child's
-      // expressions have already been remapped to the first child's attributes by
-      // `prepareOutputPartitioning`). The partition keys are intentionally not compared here:
-      // children typically carry different key sets, and `outputPartitioning` merges them.
-      case (l: KeyedPartitioning, r: KeyedPartitioning) =>
-        l.expressions.length == r.expressions.length &&
-          l.expressions.zip(r.expressions).forall { case (le, re) => le.semanticEquals(re) }
       // Note: two `RangePartitioning`s with even same ordering and number of partitions
       // are not equal, because they might have different partition bounds.
       case _ => false
+    }
+  }
+
+  /**
+   * Merges the children's `KeyedPartitioning`s into the alternatives this union can report, or an
+   * empty sequence if they cannot be merged.
+   *
+   * A `UnionExec` concatenates its children's partitions in order (one child's partitions after
+   * another's), so a merged `KeyedPartitioning` describes the concatenation of the children's
+   * partition keys, one key per physical output partition. The merge works per key position, the
+   * way [[PartitioningPreservingUnaryExecNode]] narrows a projected `KeyedPartitioning` rather than
+   * dropping it: a position survives when every child partitions by the same expression for it, the
+   * first child's candidates are narrowed to the surviving positions, and each child's keys are
+   * projected to its own positions for those expressions before being concatenated. Children that
+   * agree on fewer positions than they partition by therefore still merge, at a coarser
+   * granularity, and children that list the same expressions in a different order merge by
+   * permutation.
+   *
+   * @param keyedCandidates each child's `KeyedPartitioning`s, with expressions already remapped to
+   *                        the first child's attributes; every child must offer at least one
+   * @param toUnionOutput maps the first child's attributes to this union's own output attributes
+   */
+  private def mergeKeyedPartitionings(
+      keyedCandidates: Seq[Seq[KeyedPartitioning]],
+      toUnionOutput: Partitioning => Partitioning): Seq[Partitioning] = {
+    val headCandidates = keyedCandidates.head
+
+    // Where each partition expression sits within a child. All of a child's candidates are namings
+    // of the same positions, so an expression's position does not depend on which candidate named
+    // it; a child that repeats an expression keeps its first position. Keyed on the canonicalized
+    // expression so that a `TransformExpression` matches as a whole -- `bucket(4, id)` must not
+    // match `years(id)` or `bucket(8, id)` merely because they reference the same column.
+    val otherPositions = keyedCandidates.tail.map { candidates =>
+      val positions = mutable.Map.empty[Expression, Int]
+      candidates.foreach(_.expressions.zipWithIndex.foreach { case (e, i) =>
+        positions.getOrElseUpdate(e.canonicalized, i)
+      })
+      positions
+    }
+
+    // The first child's key positions that every other child also partitions by, each with the
+    // namings admitted at that position and the positions those namings occupy in the other
+    // children. A position must be dropped unless *every* other child has it: a child that does
+    // not partition by an expression has no key column to contribute for it.
+    val retained = headCandidates.head.expressions.indices.flatMap { headPos =>
+      val located = ExpressionSet(headCandidates.map(_.expressions(headPos))).toSeq.flatMap { e =>
+        val positions = otherPositions.map(_.get(e.canonicalized))
+        Option.when(positions.forall(_.isDefined))(e.canonicalized -> positions.map(_.get))
+      }
+      located.headOption.map { case (_, otherPos) =>
+        // Namings that would project the other children at different positions imply different
+        // merged keys, and all the alternatives returned below must share one key list, so keep
+        // only those agreeing with the first survivor. Which naming that is follows the first
+        // child's candidate order and is otherwise arbitrary: when a position admits several
+        // namings landing on different positions of another child, a different pick could keep
+        // that child's positions distinct where this one collapses them. Collapsing stays correct
+        // and is reported as narrowing below, so this only ever costs granularity.
+        (headPos, located.collect { case (e, p) if p == otherPos => e }.toSet, otherPos)
+      }
+    }
+    if (retained.isEmpty) {
+      return Nil
+    }
+    val retainedHeadPositions = retained.map(_._1)
+
+    // Filter and narrow the first child's candidates instead of rebuilding them from the admitted
+    // namings: its candidate list was already bounded by `EXPRESSION_PROJECTION_CANDIDATE_LIMIT`
+    // when `PartitioningPreservingUnaryExecNode` produced it, and re-deriving the combinations
+    // could resurrect ones that limit had dropped. So no separate bound is needed here -- the
+    // result cannot be larger than the list it filters. A candidate is dropped when it names an
+    // expression the other children lack at a surviving position; the narrowing then collapses
+    // candidates that differed only at a dropped position, hence the deduplication.
+    val seen = mutable.Set.empty[Seq[Expression]]
+    val narrowedExpressions = headCandidates.flatMap { kp =>
+      val admitted = retained.forall {
+        case (headPos, namings, _) => namings.contains(kp.expressions(headPos).canonicalized)
+      }
+      if (admitted) {
+        val narrowed = retainedHeadPositions.map(kp.expressions)
+        Option.when(seen.add(narrowed.map(_.canonicalized)))(narrowed)
+      } else {
+        None
+      }
+    }.toList
+    if (narrowedExpressions.isEmpty) {
+      // Every candidate names something the other children lack at some surviving position. This
+      // can only happen when the surviving namings are split across candidates (one names the
+      // survivor at position 0, another at position 1), which needs the children to alias their
+      // partition columns in incompatible ways; recombining them is what the paragraph above
+      // deliberately avoids.
+      return Nil
+    }
+
+    // Each child's own positions for the surviving expressions, in the first child's order. Two
+    // surviving positions can land on the *same* position of another child, because that child may
+    // name one key column with two different expressions across its candidates -- the two sides of
+    // an equi-join, or two aliases of one column. The merged keys stay truthful in that case (the
+    // namings are equal-valued), but that child contributes fewer distinct key columns than it
+    // partitions by, which is a narrowing and has to be reported as one below.
+    val childPositions = keyedCandidates.indices.map { childIndex =>
+      if (childIndex == 0) retainedHeadPositions else retained.map(_._3(childIndex - 1))
+    }
+
+    // Each child's keys projected to its own positions, then concatenated in child order to match
+    // the layout `doExecute` produces. `projectKeys` takes an arbitrary position sequence, so a
+    // child that lists the expressions in a different order is simply permuted, and a child whose
+    // positions are already aligned skips the projection entirely.
+    val mergedKeys = keyedCandidates.zip(childPositions).flatMap { case (candidates, positions) =>
+      // Any candidate serves as the key source: a child's candidates share one `partitionKeys`
+      // reference and name the same positions.
+      val keySource = candidates.head
+      if (positions == keySource.expressions.indices) {
+        keySource.partitionKeys
+      } else {
+        keySource.projectKeys(positions)._2
+      }
+    }
+    val isGrouped = mergedKeys.distinct.size == mergedKeys.size
+    // Narrowed if any child contributes fewer distinct key columns than it partitions by -- its
+    // partitions that held distinct keys now share one -- or if any child's partitioning was
+    // already narrowed, which keeps the flag sticky as `PartitioningPreservingUnaryExecNode` does.
+    // Counting *distinct* positions matters: comparing against the number of surviving positions
+    // would miss a child two of them collapse onto. Read across every candidate of every child, and
+    // uniform across the alternatives returned: like the keys and `isGrouped`, it describes the
+    // merged layout rather than one naming of it, and reading it as `false` would silently drop
+    // `GroupPartitionsExec`'s skew protection.
+    val isNarrowed = keyedCandidates.zip(childPositions).exists { case (candidates, positions) =>
+      candidates.exists(_.isNarrowed) ||
+        candidates.head.expressions.length > positions.distinct.length
+    }
+
+    narrowedExpressions.map { expressions =>
+      toUnionOutput(KeyedPartitioning(expressions, mergedKeys, isGrouped, isNarrowed))
     }
   }
 
@@ -957,30 +1084,38 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       case _ => p
     }
 
-    // Case A: every child is a single `KeyedPartitioning`. A `UnionExec` concatenates its
-    // children's partitions in order (one child's partitions after another's), so the merged
-    // `KeyedPartitioning` carries the concatenation of the children's partition keys, one key
-    // per physical output partition. Children usually hold different key sets, so the merged
-    // keys often contain duplicates and `isGrouped` is false; a downstream `GroupPartitionsExec`
-    // regroups partitions that share a key. This concatenation (numPartitions = sum) is a
-    // distinct physical strategy from the co-located pass-through below (numPartitions = N), so
-    // it is kept as a separate case and never folded into a `PartitioningCollection`.
-    if (partitionings.forall(_.isInstanceOf[KeyedPartitioning])) {
-      val kps = partitionings.map(_.asInstanceOf[KeyedPartitioning])
-      val headKp = kps.head
-      // The `KeyedPartitioning`s must agree on the partition expressions to merge.
-      val compatible = kps.forall(comparePartitioning(_, headKp))
-      if (compatible) {
-        val mergedKeys = kps.flatMap(_.partitionKeys)
-        val mergedExpressions = headKp.expressions.map(_.transform {
-          case a: Attribute if attributeMap.contains(a) => attributeMap(a)
-        })
-        val isGrouped = mergedKeys.distinct.size == mergedKeys.size
-        val isNarrowed = kps.exists(_.isNarrowed)
-        return KeyedPartitioning(mergedExpressions, mergedKeys, isGrouped, isNarrowed)
-      } else {
-        return super.outputPartitioning
+    // Case A: every child offers at least one `KeyedPartitioning`, either directly or as a member
+    // of a `PartitioningCollection` (a `ProjectExec` that aliases a partition key to several output
+    // names reports one `KeyedPartitioning` per alias, and an inner join reports one per side). The
+    // merge concatenates the children's partition keys, so `numPartitions` is their sum; children
+    // usually hold different key sets, so the merged keys often contain duplicates and `isGrouped`
+    // is false, and a downstream `GroupPartitionsExec` regroups partitions that share a key. That
+    // concatenation is a distinct physical strategy from the co-located pass-through below
+    // (numPartitions = N), so Case A and Case B never contribute to the same
+    // `PartitioningCollection`. See `mergeKeyedPartitionings` for how the merge itself works.
+    //
+    // Case A is tried first, so a child offering a `KeyedPartitioning` never reaches Case B. That
+    // only shadows a co-locatable candidate if some child's collection holds both a
+    // `KeyedPartitioning` and a `HashPartitioningLike`/`SinglePartition`, which no producer builds
+    // today: `EnsureRequirements` cannot leave a join with one keyed and one hash side
+    // (`HashShuffleSpec.isCompatibleWith` rejects a `KeyedShuffleSpec`, and
+    // `KeyedShuffleSpec.createPartitioning` yields another `KeyedPartitioning`), so a join's
+    // collection is homogeneous and projection preserves that. If a mixed collection ever becomes
+    // reachable, revisit which case should win rather than leaving it to this ordering.
+    val keyedCandidates = partitionings.map { p =>
+      PartitioningCollection.flatten(p).collect { case kp: KeyedPartitioning => kp }
+    }
+    if (keyedCandidates.forall(_.nonEmpty)) {
+      val merged = mergeKeyedPartitionings(keyedCandidates, toUnionOutput)
+      if (merged.length == 1) {
+        return merged.head
+      } else if (merged.length > 1) {
+        return PartitioningCollection.fromPartitionings(merged)
       }
+      // The children agree on no key position. Falling through to Case B rather than returning
+      // `super.outputPartitioning` outright is only for uniformity: Case B needs every child to
+      // offer a co-locatable candidate too, which per the paragraph above cannot happen while
+      // every child also offers a `KeyedPartitioning`, so it yields `super.outputPartitioning`.
     }
 
     // Case B: treat each child's partitioning as a set of candidate partitionings (a
@@ -1222,22 +1357,32 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   override def usedInputs: AttributeSet = AttributeSet.empty
 
   protected override def doExecute(): RDD[InternalRow] = {
-    outputPartitioning match {
-      case _: UnknownPartitioning | _: KeyedPartitioning =>
-        // An `UnknownPartitioning` union simply concatenates its children. A
-        // `KeyedPartitioning` union does the same: its merged partition keys describe the
-        // concatenated layout (one key per physical partition), and a downstream
-        // `GroupPartitionsExec` regroups partitions that share a key. This differs from an
-        // index-co-locatable partitioning (e.g. `HashPartitioning`), where a partitioning-aware
-        // union RDD interleaves same-index partitions across children.
-        sparkContext.union(children.map(_.execute()))
-      case _ =>
-        // This union has a known, index-co-locatable partitioning, i.e., its children have the
-        // same partitioning in semantics so this union can choose not to change the partitioning
-        // by using a custom partitioning aware union RDD.
-        val nonEmptyRdds = children.map(_.execute()).filter(!_.partitions.isEmpty)
-        new SQLPartitioningAwareUnionRDD(
-          sparkContext, nonEmptyRdds, outputPartitioning.numPartitions)
+    val partitioning = outputPartitioning
+    // An `UnknownPartitioning` union simply concatenates its children. A `KeyedPartitioning`
+    // union does the same, whether it reports one `KeyedPartitioning` or a
+    // `PartitioningCollection` of alternatives: the merged partition keys describe the
+    // concatenated layout (one key per physical partition), and a downstream
+    // `GroupPartitionsExec` regroups partitions that share a key. This differs from an
+    // index-co-locatable partitioning (e.g. `HashPartitioning`), where a partitioning-aware
+    // union RDD interleaves same-index partitions across children.
+    //
+    // The two never mix in one `PartitioningCollection`: Case A of `outputPartitioning`
+    // contributes only `KeyedPartitioning`s and Case B filters them out. The `require` is a
+    // backstop -- a mixed collection has no correct arm here, because its members would disagree
+    // on whether `numPartitions` is the sum over the children or the count of one of them, so it
+    // must fail loudly instead of silently picking one layout.
+    val members = PartitioningCollection.flatten(partitioning)
+    val keyed = members.count(_.isInstanceOf[KeyedPartitioning])
+    require(keyed == 0 || keyed == members.length,
+      s"UnionExec cannot mix KeyedPartitioning with co-locatable partitionings: $partitioning")
+    if (partitioning.isInstanceOf[UnknownPartitioning] || keyed > 0) {
+      sparkContext.union(children.map(_.execute()))
+    } else {
+      // This union has a known, index-co-locatable partitioning, i.e., its children have the
+      // same partitioning in semantics so this union can choose not to change the partitioning
+      // by using a custom partitioning aware union RDD.
+      val nonEmptyRdds = children.map(_.execute()).filter(!_.partitions.isEmpty)
+      new SQLPartitioningAwareUnionRDD(sparkContext, nonEmptyRdds, partitioning.numPartitions)
     }
   }
 
