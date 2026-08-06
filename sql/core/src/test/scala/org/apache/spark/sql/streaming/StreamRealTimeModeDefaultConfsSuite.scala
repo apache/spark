@@ -59,6 +59,50 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
     observed
   }
 
+  test("a Real-Time Mode query defaults to checkpoint format v2 with the RocksDB state store") {
+    val keys = Seq(
+      SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key,
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key)
+    val observed = runRealTimeQueryAndReadConfs(keys)
+
+    assert(observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).contains("2"),
+      "Real-Time Mode should default the state-store checkpoint format to v2, got " +
+        observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
+    assert(observed(SQLConf.STATE_STORE_PROVIDER_CLASS.key)
+        .contains(classOf[RocksDBStateStoreProvider].getName),
+      "Real-Time Mode should default the state-store provider to RocksDB, got " +
+        observed(SQLConf.STATE_STORE_PROVIDER_CLASS.key))
+  }
+
+  test("pinning the state-store provider suppresses the checkpoint-format default") {
+    // The two move together: checkpoint format v2 is incompatible with
+    // HDFSBackedStateStoreProvider, which throws on checkpointFormatVersion > 1. Defaulting the
+    // version for a user who pinned the HDFS provider would break a query that works today.
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[HDFSBackedStateStoreProvider].getName) {
+      val observed = runRealTimeQueryAndReadConfs(
+        Seq(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+          SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
+      assert(observed(SQLConf.STATE_STORE_PROVIDER_CLASS.key)
+          .contains(classOf[HDFSBackedStateStoreProvider].getName),
+        "a pinned state-store provider must be left alone, got " +
+          observed(SQLConf.STATE_STORE_PROVIDER_CLASS.key))
+      assert(!observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).contains("2"),
+        "pinning the provider must also suppress the checkpoint-format default, got " +
+          observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
+    }
+  }
+
+  test("an explicit checkpoint format version is not overridden by Real-Time Mode") {
+    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
+      val observed = runRealTimeQueryAndReadConfs(
+        Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
+      assert(observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).contains("1"),
+        "an explicitly configured checkpoint format version must be left alone, got " +
+          observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
+    }
+  }
+
   test("a Real-Time Mode query defaults changelog checkpointing on with RocksDB") {
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {

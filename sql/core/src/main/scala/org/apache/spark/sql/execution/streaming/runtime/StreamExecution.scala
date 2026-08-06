@@ -163,6 +163,15 @@ abstract class StreamExecution(
   /** Isolated spark session to run the batches with. */
   protected[sql] val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
 
+  // Must run BEFORE `checkpointMetadata` below. `CommitLog.defaultVersion` is a val read when the
+  // commit log is constructed, and the eager `streamMetadata` field forces that lazy construction
+  // (it calls commitLog.getLatestBatchId). Setting the state-store checkpoint version any later
+  // would move the state store to v2 while leaving the commit log at v1, and a VERSION_1 commit log
+  // rejects the `stateUniqueIds` that v2 writes. See setStateStoreDefaultsForRealTimeMode.
+  if (trigger.isInstanceOf[RealTimeTrigger]) {
+    setStateStoreDefaultsForRealTimeMode()
+  }
+
   /**
    * Manages the metadata from this checkpoint location.
    */
@@ -464,6 +473,38 @@ abstract class StreamExecution(
   }
 
   /**
+   * Applies the state-store defaults a Real-Time Mode query wants. Separate from
+   * [[setDefaultConfsForRealTimeMode]] purely because of WHEN it has to run: these two keys are
+   * read while the commit log is constructed, which happens during this class's own
+   * initialization, so they cannot wait until `runStream`.
+   *
+   * Both are applied only when the user has pinned NEITHER, and they move together. Real-Time Mode
+   * benefits from checkpoint format v2 because it gives each batch its own state-store checkpoint
+   * ids, which matters when a failed batch is rerun from committed offsets. v2 requires RocksDB:
+   * `HDFSBackedStateStoreProvider` throws on `checkpointFormatVersion > 1`, so defaulting one
+   * without the other would turn a working query into a failing one. If the user has pinned either
+   * key, both are left alone and their combination stands or fails on its own terms.
+   *
+   * NOTE: a checkpoint's commit-log format is currently decided by the session config rather than
+   * by the format the checkpoint was created with -- `CheckpointVersionManager` resolves only
+   * `OffsetLogType`, and `CommitLog.createMetadata` defaults to the configured version. Reads are
+   * unaffected because each commit-log entry is self-describing, but resolving the write version
+   * from an existing checkpoint (as the Databricks runtime does) is a worthwhile follow-up.
+   */
+  private def setStateStoreDefaultsForRealTimeMode(): Unit = {
+    val conf = sparkSessionForStream.conf
+    val checkpointVersionKey = SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key
+    val providerKey = SQLConf.STATE_STORE_PROVIDER_CLASS.key
+    if (!conf.contains(checkpointVersionKey) && !conf.contains(providerKey)) {
+      logInfo(log"Real-Time Mode: defaulting ${MDC(CONFIG, checkpointVersionKey)}=2")
+      logInfo(log"Real-Time Mode: defaulting " +
+        log"${MDC(CONFIG, providerKey)}=RocksDBStateStoreProvider")
+      conf.set(checkpointVersionKey, "2")
+      conf.set(providerKey, classOf[RocksDBStateStoreProvider].getName)
+    }
+  }
+
+  /**
    * Applies the configuration a Real-Time Mode query needs but that is not the engine-wide default,
    * because it is only the right choice for a low-latency, long-running batch. Runs once at query
    * start, before the logical plan is forced, so a config read during planning sees the final
@@ -481,17 +522,10 @@ abstract class StreamExecution(
    *
    * Every change is logged, so a run's effective configuration is recoverable from the driver log.
    *
-   * Deliberately NOT set here, though Databricks Runtime does default them for Real-Time Mode:
-   *  - `spark.sql.streaming.stateStore.checkpointFormatVersion=2` and the RocksDB state-store
-   *    provider that version requires. Real-Time Mode does benefit from v2, since it gives each
-   *    batch its own state-store checkpoint ids and a failed batch is rerun from committed offsets.
-   *    Setting it here is not enough on its own: `CommitLog.defaultVersion` is a val read when the
-   *    commit log is constructed, and the eager `streamMetadata` above forces that construction
-   *    before this method runs, so the state store would move to v2 while the commit log stayed at
-   *    v1. Doing this properly also wants the commit log's version to be resolved from an existing
-   *    checkpoint rather than from the session config (`CheckpointVersionManager` currently handles
-   *    only `OffsetLogType`), so writes honour the format a checkpoint was created with. Left to a
-   *    follow-up.
+   * The state-store checkpoint format and provider are NOT set here -- they must be applied before
+   * the commit log is constructed, so they live in [[setStateStoreDefaultsForRealTimeMode]].
+   *
+   * Deliberately not set at all, though Databricks Runtime does default them for Real-Time Mode:
    *  - The incremental state-cleanup factor: that mechanism does not exist in OSS yet.
    *  - The Python/Pandas UDF latency knobs: those configs do not exist in OSS.
    */
