@@ -266,8 +266,9 @@ class TaskContext:
 
     def cpus(self) -> int:
         """
-        CPUs allocated to the task, rounded up to a whole number when the allocation is
-        fractional. Use :meth:`TaskContext.cpuAmount` to get the possibly fractional amount.
+        CPUs allocated to the task, rounded up to a whole number when the exact
+        allocation is fractional. Use :meth:`TaskContext.cpuAmount` to get the exact,
+        possibly fractional, amount.
 
         Returns
         -------
