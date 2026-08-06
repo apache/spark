@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitMetadataV3, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2, SinkMetadataInfo}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitLog, CommitLogType, CommitMetadataV3, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2, SinkMetadataInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
@@ -138,6 +138,11 @@ class MicroBatchExecution(
   /** True when the current query should persist V3 sink metadata in the commit log. */
   private def commitLogV3Enabled: Boolean =
     sparkSession.sessionState.conf.enableStreamingSinkEvolution
+
+  // The commit log format version to WRITE for this query run, resolved in initializeExecution:
+  // an existing checkpoint keeps the version it was created with, a fresh one takes the session
+  // config. Defaults to VERSION_1 until resolved.
+  @volatile private var commitLogFormatVersion: Int = CommitLog.VERSION_1
 
   @volatile protected[sql] var triggerExecutor: TriggerExecutor = _
 
@@ -553,6 +558,14 @@ class MicroBatchExecution(
     // Persist the resolved offset log format version on the streaming session.
     CheckpointVersionManager.setFormatVersion(
       sparkSessionForStream, OffsetLogType, offsetLogFormatVersion)
+
+    // Resolve the commit log format version the same way: an existing checkpoint keeps the version
+    // it was created with, and only a fresh one takes the version from the session config. Persist
+    // it so a later read of the config agrees with what is actually being written.
+    commitLogFormatVersion = CheckpointVersionManager.resolveCommitLogVersion(
+      sparkSessionForStream, latestCommittedBatch)
+    CheckpointVersionManager.setFormatVersion(
+      sparkSessionForStream, CommitLogType, commitLogFormatVersion)
 
     val execCtx = new MicroBatchExecutionContext(id, runId, name, triggerClock, sources, sink,
       progressReporter, -1, sparkSession,
@@ -1489,7 +1502,8 @@ class MicroBatchExecution(
       } else {
         commitLog.createMetadata(
           nextBatchWatermarkMs = watermarkTracker.currentWatermark,
-          stateUniqueIds = stateStoreCkptId)
+          stateUniqueIds = stateStoreCkptId,
+          commitLogFormatVersion = commitLogFormatVersion)
       }
       if (!commitLog.add(execCtx.batchId, metadata)) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)

@@ -35,6 +35,7 @@ case class StreamingCheckpointVersion(offsetLogVersion: Int) {
 
 sealed trait CheckpointLogType
 case object OffsetLogType extends CheckpointLogType
+case object CommitLogType extends CheckpointLogType
 
 /**
  * The `CheckpointVersionManager` is responsible for managing the versioning of the streaming
@@ -109,6 +110,32 @@ object CheckpointVersionManager extends Logging {
       logType: CheckpointLogType): Int = {
     logType match {
       case OffsetLogType => getOffsetLogVersion(sparkSessionForStream)
+      case CommitLogType => getCommitLogVersion(sparkSessionForStream)
+    }
+  }
+
+  /**
+   * The commit log format version requested by the session config. The state store checkpoint
+   * format and the commit log format move together: format v2 makes each batch write
+   * `stateUniqueIds`, which only a commit log at [[CommitLog.VERSION_2]] or above can persist.
+   */
+  private def getCommitLogVersion(sparkSessionForStream: SparkSession): Int = {
+    sparkSessionForStream.sessionState.conf
+      .getConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION)
+  }
+
+  /**
+   * Determines the commit log format version to WRITE for this query run. An existing checkpoint
+   * wins: a commit log that was created at a given version keeps being written at that version, so
+   * a session config change cannot start writing a format the checkpoint was not created with. Only
+   * a fresh checkpoint takes the version from the session config.
+   */
+  def resolveCommitLogVersion(
+      sparkSessionForStream: SparkSession,
+      latestCommittedBatch: Option[(Long, CommitMetadataBase)]): Int = {
+    latestCommittedBatch match {
+      case Some((_, commitMetadata)) => commitMetadata.version
+      case None => getFormatVersionFromSession(sparkSessionForStream, CommitLogType)
     }
   }
 
@@ -146,6 +173,9 @@ object CheckpointVersionManager extends Logging {
     logType match {
       case OffsetLogType =>
         setSparkSessionConfigsForOffsetLog(sparkSessionForStream, version)
+      case CommitLogType =>
+        sparkSessionForStream.conf
+          .set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, version.toString)
     }
   }
 }
