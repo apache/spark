@@ -241,12 +241,7 @@ When exploring or working in any directory, always check for nested `AGENTS.md` 
 directory and its ancestors. Read and follow every applicable file; instructions in a more specific
 directory take precedence for that directory's scope.
 
-A directory may carry these instructions as `CLAUDE.md` rather than `AGENTS.md`, so check **both**
-names — a directory with only a `CLAUDE.md` has project instructions you must read too. Where both
-exist, `AGENTS.md` is the real file and `CLAUDE.md` is a symlink to it, as at the repository root,
-so reading either one is enough. When adding instructions to a directory that has neither, name the
-new file `AGENTS.md` and add a `CLAUDE.md` symlink beside it (`ln -s AGENTS.md CLAUDE.md`) to keep
-one source of truth readable under both names.
+A directory may carry these instructions as `CLAUDE.md` rather than `AGENTS.md`, so check **both** names — a directory with only a `CLAUDE.md` has project instructions you must read too. Where both files exist, one is typically the real file and the other is a symlink to it, although either name may be the real file. Reading either one is sufficient. When adding instructions to a directory that has neither file, create AGENTS.md as the real file and add a CLAUDE.md symlink beside it (ln -s AGENTS.md CLAUDE.md). This keeps a single source of truth accessible under both names.
 
 ## Versioning and Branch Policy
 
