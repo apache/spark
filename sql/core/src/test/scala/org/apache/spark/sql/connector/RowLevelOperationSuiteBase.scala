@@ -355,23 +355,6 @@ abstract class RowLevelOperationSuiteBase
   }
 
   /**
-   * Asserts the set of top-level column names present in the last connector scan schema.
-   * Metadata columns are filtered out so tests can focus on data-column narrowing without
-   * having to enumerate `_partition` / `index` on every assertion.
-   */
-  protected def checkLastScanDataColumns(expectedNames: String*): Unit = {
-    val schema = Option(table.lastScanSchema).getOrElse(StructType(Nil))
-    val actual = schema.fieldNames
-      .filterNot(name => name == "_partition" || name == "index")
-      .toSet
-    val expected = expectedNames.toSet
-    assert(actual == expected,
-      s"scan data-column mismatch: expected ${expected.mkString("[", ", ", "]")} " +
-        s"but got ${actual.mkString("[", ", ", "]")} " +
-        s"(full lastScanSchema=${schema.fieldNames.mkString("[", ", ", "]")})")
-  }
-
-  /**
    * Asserts that the last connector scan schema does NOT contain any of the given columns.
    * Useful for negative narrowing assertions -- proves that a column outside the analysis-time
    * narrow set was pruned by the scan, without over-specifying what else is present (which

@@ -24,11 +24,11 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
- * Tests for UPDATE statements targeting connectors that return true from
- * [[org.apache.spark.sql.connector.write.RowLevelOperation#supportsColumnUpdates]].
+ * Tests for UPDATE statements targeting connectors that mix in
+ * [[org.apache.spark.sql.connector.write.SupportsColumnUpdates]].
  *
- * When a connector supports column updates, Spark narrows the row projection
- * (LogicalWriteInfo.schema()) to contain only the assigned/changed columns rather than
+ * When a connector supports column updates, Spark narrows the update-row projection
+ * (LogicalWriteInfo.updateSchema()) to contain only the declared columns rather than
  * the full table row.
  */
 class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
@@ -467,6 +467,19 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, -1, "hr") :: Nil)
+  }
+
+  test("column-update split: row-ID reassignment on narrow write is rejected") {
+    createAndInitTableSplit("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    val ex = intercept[org.apache.spark.sql.AnalysisException] {
+      sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 WHERE dep = 'hr'")
+    }
+    assert(ex.getCondition == "SPLIT_UPDATE_ROW_ID_REASSIGNMENT",
+      s"expected SPLIT_UPDATE_ROW_ID_REASSIGNMENT but got: ${ex.getCondition}")
   }
 
   // ---------------------------------------------------------------------------
