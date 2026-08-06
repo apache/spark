@@ -939,9 +939,6 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
         select = metricViewColumns)
       createMetricView(fullMetricViewName, mv)
 
-      // SET TBLPROPERTIES rebuilds the replacement payload from the existing view through
-      // `CatalogV2Util.viewInfoBuilderFrom`, so a metadata-only change must carry the typed
-      // dependency list over -- the catalog has no other way to recover it.
       sql(s"ALTER VIEW $fullMetricViewName SET TBLPROPERTIES ('k' = 'v')")
 
       val info = capturedViewInfo()
