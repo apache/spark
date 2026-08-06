@@ -520,8 +520,10 @@ public class TaskMemoryManager {
 
   /**
    * Render the given snapshot as the compact, bounded breakdown embedded in the
-   * {@code UNABLE_TO_ACQUIRE_MEMORY} error. Returns an empty string when there is nothing to show,
-   * so callers can append it unconditionally.
+   * {@code UNABLE_TO_ACQUIRE_MEMORY} error. Returns an empty string when there is nothing to
+   * show -- that is, when the snapshot has neither attributed nor unattributed memory to report
+   * (or when the breakdown is disabled by a limit of 0) -- so callers can append it
+   * unconditionally.
    */
   private String renderConsumerBreakdown(MemoryUsageSnapshot snapshot) {
     // Bound the message that travels to the driver and the UI. The largest consumers -- the most
@@ -573,8 +575,10 @@ public class TaskMemoryManager {
    * <p>
    * The returned string is meant to be embedded in the {@code UNABLE_TO_ACQUIRE_MEMORY} error so
    * that the consumers competing for memory at the moment of failure travel with the task failure
-   * reason all the way to the driver and the Spark UI. Returns an empty string when no consumer is
-   * holding memory, so the caller can append it unconditionally.
+   * reason all the way to the driver and the Spark UI. Returns an empty string when there is
+   * nothing to report -- no consumer is holding memory <i>and</i> there is no unattributed
+   * memory -- so the caller can append it unconditionally. A task holding only unattributed memory
+   * still gets a breakdown, consisting of the unattributed line alone.
    */
   public String getMemoryConsumptionBreakdown() {
     return renderConsumerBreakdown(snapshotMemoryUsage());
