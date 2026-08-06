@@ -213,15 +213,4 @@ private[spark] class ApplicationInfo(
     val redactedDesc = desc.copy(command = redactedCommand)
     new ApplicationInfo(startTime, id, redactedDesc, submitDate, driver, defaultCores)
   }
-
-  @transient private var _conf: SparkConf = _
-
-  private[deploy] def withConf(conf: SparkConf): this.type = {
-    _conf = conf
-    this
-  }
-
-  private def writeReplace(): AnyRef = {
-    if (_conf == null) this else redactedCopy(_conf)
-  }
 }

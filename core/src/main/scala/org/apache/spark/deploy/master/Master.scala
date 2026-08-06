@@ -506,7 +506,7 @@ private[deploy] class Master(
       context.reply(MasterStateResponse(
         address.host, address.port, restServerBoundPort,
         workers.toArray, apps.toArray, completedApps.toArray,
-        drivers.toArray, completedDrivers.toArray, state))
+        drivers.toArray, completedDrivers.toArray, state).withConf(conf))
 
     case RequestReadyz =>
       context.reply(state != RecoveryState.STANDBY)
@@ -1136,7 +1136,7 @@ private[deploy] class Master(
     } else {
       newApplicationId(date)
     }
-    new ApplicationInfo(now, appId, desc, date, driver, defaultCores).withConf(conf)
+    new ApplicationInfo(now, appId, desc, date, driver, defaultCores)
   }
 
   private[master] def registerApplication(app: ApplicationInfo): Unit = {
@@ -1349,7 +1349,7 @@ private[deploy] class Master(
     val now = System.currentTimeMillis()
     val date = new Date(now)
     val id = newDriverId(date)
-    new DriverInfo(now, id, maybeUpdateAppName(desc, id), date).withConf(conf)
+    new DriverInfo(now, id, maybeUpdateAppName(desc, id), date)
   }
 
   private def launchDriver(worker: WorkerInfo, driver: DriverInfo): Unit = {
