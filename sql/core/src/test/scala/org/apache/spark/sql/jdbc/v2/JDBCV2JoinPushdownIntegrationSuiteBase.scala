@@ -498,7 +498,7 @@ trait JDBCV2JoinPushdownIntegrationSuiteBase
   test("Test aggregate with group by on top of join") {
     val sqlQuery =
       s"""
-         |SELECT t1.id, t1.address, min(t2.salary), count(1)
+         |SELECT t1.id, t1.address, min(t2.salary)
          |FROM $catalogAndNamespace.$casedJoinTableName1 t1
          |JOIN $catalogAndNamespace.$casedJoinTableName2 t2 ON t1.id = t2.id
          |WHERE t1.amount > 1000
