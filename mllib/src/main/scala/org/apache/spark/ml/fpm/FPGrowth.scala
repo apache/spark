@@ -273,27 +273,15 @@ class FPGrowthModel private[ml] (
    * from all the applicable rules as prediction. The prediction column has the same data type as
    * the input column(Array[T]) and will not contain existing items in the input column. The null
    * values in the itemsCol columns are treated as empty sets.
-   * Internally, transform collects association rules into a single-row DataFrame and joins it with
-   * the input dataset. This may bring pressure to driver memory for large sets of association
-   * rules.
+   * Internally, transform aggregates association rules into a single-row DataFrame and joins it
+   * with the input dataset.
    */
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val rules: Array[(Seq[Any], Seq[Any])] = associationRules.select("antecedent", "consequent")
-      .rdd.map(r => (r.getSeq(0), r.getSeq(1)))
-      .collect().asInstanceOf[Array[(Seq[Any], Seq[Any])]]
     val dt = dataset.schema($(itemsCol)).dataType
-    val ruleSchema = StructType(Seq(
-      StructField("antecedent", dt, nullable = false),
-      StructField("consequent", dt, nullable = false)))
-    val rulesSchema = StructType(Seq(
-      StructField("rules", ArrayType(ruleSchema, containsNull = false), nullable = false)))
-    val rulesDataset = dataset.sparkSession.createDataFrame(
-      dataset.sparkSession.sparkContext.parallelize(Seq(Row(rules.map {
-        case (antecedent, consequent) => Row(antecedent, consequent)
-      }))),
-      rulesSchema)
+    val rules = associationRules.select("antecedent", "consequent")
+      .agg(collect_set(struct("antecedent", "consequent")).as("rules"))
     // For each rule, examine the input items and summarize the consequents.
     val predictUDF = SparkUserDefinedFunction((items: Seq[Any], rules: Seq[Row]) => {
       if (items != null) {
@@ -306,7 +294,7 @@ class FPGrowthModel private[ml] (
       dt,
       Nil
     )
-    dataset.join(rulesDataset)
+    dataset.join(rules)
       .withColumn($(predictionCol), predictUDF(col($(itemsCol)), col("rules")))
       .drop("rules")
   }
