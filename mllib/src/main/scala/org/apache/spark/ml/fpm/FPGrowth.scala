@@ -32,6 +32,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules, FPGrowth => MLlibFPGrowth}
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -272,29 +273,42 @@ class FPGrowthModel private[ml] (
    * from all the applicable rules as prediction. The prediction column has the same data type as
    * the input column(Array[T]) and will not contain existing items in the input column. The null
    * values in the itemsCol columns are treated as empty sets.
-   * Internally, transform keeps association rules as a DataFrame and joins them with the input
-   * dataset.
+   * Internally, transform collects association rules into a single-row DataFrame and joins it with
+   * the input dataset. This may bring pressure to driver memory for large sets of association
+   * rules.
    */
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val inputIdCol = s"${uid}_input_id"
-    val predictions = dataset.withColumn(inputIdCol, monotonically_increasing_id())
-      .join(
-        associationRules.select("antecedent", "consequent"),
-        size(array_except(col("antecedent"), col($(itemsCol)))) === 0)
-      .groupBy(col(inputIdCol))
-      .agg(flatten(collect_list(col("consequent"))).as($(predictionCol)))
-    val emptyArray = array().cast(dataset.schema($(itemsCol)).dataType)
-
-    dataset.withColumn(inputIdCol, monotonically_increasing_id())
-      .join(predictions, Seq(inputIdCol), "left_outer")
-      .withColumn(
-        $(predictionCol),
-        coalesce(
-          array_except(col($(predictionCol)), col($(itemsCol))),
-          emptyArray))
-      .drop(inputIdCol)
+    val rules: Array[(Seq[Any], Seq[Any])] = associationRules.select("antecedent", "consequent")
+      .rdd.map(r => (r.getSeq(0), r.getSeq(1)))
+      .collect().asInstanceOf[Array[(Seq[Any], Seq[Any])]]
+    val dt = dataset.schema($(itemsCol)).dataType
+    val ruleSchema = StructType(Seq(
+      StructField("antecedent", dt, nullable = false),
+      StructField("consequent", dt, nullable = false)))
+    val rulesSchema = StructType(Seq(
+      StructField("rules", ArrayType(ruleSchema, containsNull = false), nullable = false)))
+    val rulesDataset = dataset.sparkSession.createDataFrame(
+      dataset.sparkSession.sparkContext.parallelize(Seq(Row(rules.map {
+        case (antecedent, consequent) => Row(antecedent, consequent)
+      }))),
+      rulesSchema)
+    // For each rule, examine the input items and summarize the consequents.
+    val predictUDF = SparkUserDefinedFunction((items: Seq[Any], rules: Seq[Row]) => {
+      if (items != null) {
+        val itemset = items.toSet
+        rules.filter(_.getSeq[Any](0).forall(itemset.contains))
+          .flatMap(_.getSeq[Any](1).filter(!itemset.contains(_))).distinct
+      } else {
+        Seq.empty
+      }},
+      dt,
+      Nil
+    )
+    dataset.join(rulesDataset)
+      .withColumn($(predictionCol), predictUDF(col($(itemsCol)), col("rules")))
+      .drop("rules")
   }
 
   @Since("2.2.0")
