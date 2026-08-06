@@ -89,6 +89,8 @@ class InMemoryRowLevelOperationTable private (
   private final val COLUMN_UPDATE_FROM_INFO = "column-update-from-info"
   private final val COLUMN_UPDATE_SPLIT = "column-update-split"
   private final val COLUMN_UPDATE_EMPTY_REQ_ATTRS = "column-update-empty-req-attrs"
+  private final val COLUMN_UPDATE_SCAN_ONLY = "column-update-scan-only"
+  private final val COLUMN_UPDATE_OVERLAP = "column-update-overlap"
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -158,6 +160,10 @@ class InMemoryRowLevelOperationTable private (
       () => new PartitionBasedColumnUpdateOperation(info.command, info.updatedColumns().toSeq)
     } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT, "false") == "true") {
       () => new DeltaBasedColumnUpdateSplitOperation(info.command, info.updatedColumns().toSeq)
+    } else if (properties.getOrDefault(COLUMN_UPDATE_SCAN_ONLY, "false") == "true") {
+      () => new DeltaBasedColumnUpdateScanOnlyOperation(info.command, info.updatedColumns().toSeq)
+    } else if (properties.getOrDefault(COLUMN_UPDATE_OVERLAP, "false") == "true") {
+      () => new DeltaBasedColumnUpdateOverlapOperation(info.command, info.updatedColumns().toSeq)
     } else if (properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true") {
       () => DeltaBasedOperation(info.command, info.options)
     } else {
@@ -303,6 +309,13 @@ class InMemoryRowLevelOperationTable private (
       else (pk +: updatedCols).toArray
     }
 
+    override def scanOnlyDataAttributes(): Array[NamedReference] = {
+      val required = requiredDataAttributes().map(_.describe()).toSet
+      if (required.contains("dep")) Array.empty else Array(FieldReference("dep"))
+    }
+
+    protected def clusterColumnRef: NamedReference = PARTITION_COLUMN_REF
+
     override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder = {
       lastWriteInfo = info
       // Capture info into a local val so nested writer/commit closures see a stable schema
@@ -318,13 +331,13 @@ class InMemoryRowLevelOperationTable private (
           new DeltaWrite with RequiresDistributionAndOrdering {
 
             override def requiredDistribution(): Distribution = {
-              Distributions.clustered(Array(PARTITION_COLUMN_REF))
+              Distributions.clustered(Array(clusterColumnRef))
             }
 
             override def requiredOrdering(): Array[SortOrder] = {
               Array[SortOrder](
                 LogicalExpressions.sort(
-                  PARTITION_COLUMN_REF,
+                  clusterColumnRef,
                   SortDirection.ASCENDING,
                   SortDirection.ASCENDING.defaultNullOrdering())
               )
@@ -401,6 +414,34 @@ class InMemoryRowLevelOperationTable private (
       command: Command,
       updatedCols: Seq[NamedReference])
       extends DeltaBasedColumnUpdateOperation(command, updatedCols) {
+  }
+
+  // Declares `dep` as the write-side clustering key via `scanOnlyDataAttributes()`. `dep` must be
+  // present in the narrow scan / write query for `RequiresDistributionAndOrdering` to resolve it,
+  // but is excluded from `requiredDataAttributes()` so it never reaches the writer.
+  class DeltaBasedColumnUpdateScanOnlyOperation(
+      command: Command,
+      updatedCols: Seq[NamedReference] = Nil)
+      extends DeltaBasedColumnUpdateOperation(command, updatedCols) {
+    private final val DEP_COLUMN_REF = FieldReference("dep")
+
+    override def scanOnlyDataAttributes(): Array[NamedReference] = Array(DEP_COLUMN_REF)
+
+    override protected def clusterColumnRef: NamedReference = DEP_COLUMN_REF
+  }
+
+  // Test-only: declares `dep` in both `requiredDataAttributes()` and
+  // `scanOnlyDataAttributes()` so we can verify Spark rejects the overlapping contract.
+  class DeltaBasedColumnUpdateOverlapOperation(
+      command: Command,
+      updatedCols: Seq[NamedReference] = Nil)
+      extends DeltaBasedColumnUpdateOperation(command, updatedCols) {
+    private final val DEP_COLUMN_REF = FieldReference("dep")
+
+    override def requiredDataAttributes(): Array[NamedReference] =
+      super.requiredDataAttributes() :+ DEP_COLUMN_REF
+
+    override def scanOnlyDataAttributes(): Array[NamedReference] = Array(DEP_COLUMN_REF)
   }
 
   class DeltaBasedColumnUpdateSplitOperation(

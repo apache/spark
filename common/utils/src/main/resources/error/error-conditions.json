@@ -6973,6 +6973,12 @@
     ],
     "sqlState" : "42000"
   },
+  "REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES" : {
+    "message" : [
+      "Connector <connector> declares the same column(s) in both `requiredDataAttributes()` and `scanOnlyDataAttributes()`: <overlappingColumns>. A column must be declared in exactly one of the two methods."
+    ],
+    "sqlState" : "42000"
+  },
   "REQUIRED_PARAMETER_NOT_FOUND" : {
     "message" : [
       "Cannot invoke routine <routineName> because the parameter named <parameterName> is required, but the routine call did not supply a value. Please update the routine call to supply an argument value (either positionally at index <index> or by name) and retry the query again."

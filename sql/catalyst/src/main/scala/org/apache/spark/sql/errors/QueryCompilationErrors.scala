@@ -4578,6 +4578,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "missingColumns" -> missingColumns.mkString("[", ", ", "]")))
   }
 
+  def requiredDataAttributesOverlapScanOnlyAttributesError(
+      connectorClass: String,
+      overlappingColumns: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES",
+      messageParameters = Map(
+        "connector" -> connectorClass,
+        "overlappingColumns" -> overlappingColumns.mkString("[", ", ", "]")))
+  }
+
   def splitUpdateRowIdReassignmentError(
       connectorClass: String,
       rowIds: Seq[String]): Throwable = {
