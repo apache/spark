@@ -188,13 +188,38 @@ class NumPyCompatTestsMixin:
                     1.0,
                     1.0,
                     1.0,
+                    0.0,
+                    -0.0,
+                    np.inf,
+                    -np.inf,
                 ],
-                "exp": [2, 3, -2, -3, -3, 0, -2, 2, 2, 2, -1074, -1075, 1024],
+                "exp": [
+                    2,
+                    3,
+                    -2,
+                    -3,
+                    -3,
+                    0,
+                    -2,
+                    2,
+                    2,
+                    2,
+                    -1074,
+                    -1075,
+                    1024,
+                    1024,
+                    1024,
+                    -1075,
+                    -1075,
+                ],
             }
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(np.ldexp(psdf.x, psdf.exp), np.ldexp(pdf.x, pdf.exp), almost=True)
+        result = np.ldexp(psdf.x, psdf.exp)
+        expected = np.ldexp(pdf.x, pdf.exp)
+        self.assert_eq(result, expected, almost=True)
+        self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
 
     def test_np_fmax_fmin(self):
         for pdf in (
