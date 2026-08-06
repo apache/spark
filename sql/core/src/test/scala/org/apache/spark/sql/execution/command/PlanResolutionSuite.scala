@@ -3497,8 +3497,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         cacheOpts: java.util.Map[String, String],
         readOpts: java.util.Map[String, String]): DataSourceV2Relation = {
       AnalysisContext.withNewAnalysisContext {
-        val sharedRelationCache: RelationCache = (criteria, _) =>
-          Some(cachedRelationWith(cacheOpts)).filter(criteria.matches)
+        val sharedRelationCache: RelationCache = (_, _) => Some(cachedRelationWith(cacheOpts))
         val rule = new RelationResolution(catalogManagerWithDefault, sharedRelationCache)
         val unresolved =
           UnresolvedRelation(Seq("testcat", "tab"), new CaseInsensitiveStringMap(readOpts))
@@ -3528,7 +3527,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       "differing options should freshly load, not reuse the cached relation")
   }
 
-  test("table-state cache uses first-resolution-wins shared relation cache matching") {
+  test("table-state cache consults shared relation cache only while establishing the pin") {
     def newTable(id: String): Table = {
       val t = mock(classOf[Table])
       when(t.id()).thenReturn(id)
@@ -3546,15 +3545,16 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     def run(
         firstSplitSize: String,
         secondSplitSize: String,
-        sharedRelationCacheEntries: (
+        sharedRelationCacheEntry: (
             TableCatalog,
             Identifier,
             Table,
-            Table) => Seq[LogicalPlan]): (
+            Table) => Option[LogicalPlan]): (
         DataSourceV2Relation,
         DataSourceV2Relation,
         Table,
         Table,
+        Int,
         Int) = {
       val currentTable = newTable("table-id")
       val cachedTable = newTable("table-id")
@@ -3578,10 +3578,14 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       when(manager.catalog(any())).thenReturn(catalog)
       when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
       val ident = Identifier.of(Array.empty[String], "tab")
-      val sharedRelationCacheCandidates =
-        sharedRelationCacheEntries(catalog, ident, currentTable, cachedTable)
+      val sharedRelationCacheCandidate =
+        sharedRelationCacheEntry(catalog, ident, currentTable, cachedTable)
+      var sharedRelationCacheLookups = 0
       val sharedRelationCache: RelationCache =
-        (criteria, _) => sharedRelationCacheCandidates.find(criteria.matches)
+        (_, _) => {
+          sharedRelationCacheLookups += 1
+          sharedRelationCacheCandidate
+        }
       val resolver = new RelationResolution(manager, sharedRelationCache)
 
       def resolveWith(splitSize: String): DataSourceV2Relation = {
@@ -3597,7 +3601,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         val second = resolveWith(secondSplitSize)
         assert(AnalysisContext.get.tableCache.size == 1)
         assert(AnalysisContext.get.relationCache.size == 2)
-        (first, second, currentTable, cachedTable, loads)
+        (first, second, currentTable, cachedTable, loads, sharedRelationCacheLookups)
       }
     }
 
@@ -3616,36 +3620,29 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       relation
     }
 
-    // Situation A: the full-option cached match appears after a same-name decoy. It establishes
-    // the initial pin. A later same-state lookup scans past a same-ID/different-Table candidate
-    // and reuses only the candidate containing the exact pinned object.
+    // Situation A: the full-option cached match establishes the initial pin. The later same-state
+    // lookup reuses that pin without consulting the shared relation cache.
     val situationA = run("5", "9", { (catalog, ident, _, cachedTable) =>
-      val wrongId = newTable("other-id")
-      val olderExact = newTable("table-id")
-      val wrongVersionForNine = newTable("table-id")
-      Seq(
-        cachedRelation(catalog, ident, wrongId, "5", 1L),
-        cachedRelation(catalog, ident, cachedTable, "5", 2L),
-        cachedRelation(catalog, ident, olderExact, "5", 3L),
-        cachedRelation(catalog, ident, wrongVersionForNine, "9", 4L),
-        cachedRelation(catalog, ident, cachedTable, "9", 5L))
+      Some(cachedRelation(catalog, ident, cachedTable, "5", 2L))
     })
     assert(situationA._1.table eq situationA._4)
     assert(situationA._2.table eq situationA._4)
     assert(situationA._1.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(2L))
-    assert(situationA._2.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(5L))
+    assert(situationA._2.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty)
     assert(situationA._5 == 1)
+    assert(situationA._6 == 1)
 
     // Situation B: a nonmatching option bag resolves first and pins the current Table. The later
-    // full-option shared relation cache entry has the same ID, but cannot replace that concrete
-    // pin.
+    // table-cache hit does not consult the shared relation cache, so its full-option entry cannot
+    // affect the concrete pin.
     val situationB = run("9", "5", { (catalog, ident, _, cachedTable) =>
-      Seq(cachedRelation(catalog, ident, cachedTable, "5", 6L))
+      Some(cachedRelation(catalog, ident, cachedTable, "5", 6L))
     })
     assert(situationB._1.table eq situationB._3)
     assert(situationB._2.table eq situationB._3)
     assert(situationB._2.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty)
     assert(situationB._5 == 1)
+    assert(situationB._6 == 1)
   }
 
   private def resolve(

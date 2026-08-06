@@ -23,7 +23,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Resolver, SharedRelationCacheCriteria}
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -435,14 +436,15 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   private[sql] def lookupCachedTable(
-      criteria: SharedRelationCacheCriteria,
+      name: Seq[String],
       resolver: Resolver): Option[LogicalPlan] = {
-    findCachedRelations(criteria.nameParts, resolver).find(criteria.matches) match {
-      case Some(cachedRelation) =>
+    val cachedRelations = findCachedRelations(name, resolver)
+    cachedRelations match {
+      case cachedRelation +: _ =>
         CacheManager.logCacheOperation(
-          log"Relation cache hit for table ${MDC(TABLE_NAME, criteria.nameParts.quoted)}")
+          log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
         Some(cachedRelation)
-      case None =>
+      case _ =>
         None
     }
   }

@@ -18,50 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
-
-private[sql] sealed trait SharedRelationCacheTableMatch {
-  def matches(table: Table): Boolean
-}
-
-private[sql] object SharedRelationCacheTableMatch {
-  // Used before a query-scoped table pin exists, after loading the current table identity.
-  case class ByTableId(tableId: String) extends SharedRelationCacheTableMatch {
-    override def matches(table: Table): Boolean = table.id == tableId
-  }
-
-  // Used after a table pin exists, when the exact concrete Table must not be replaced.
-  case class ByTableInstance(table: Table) extends SharedRelationCacheTableMatch {
-    override def matches(candidate: Table): Boolean = candidate eq table
-  }
-}
-
-/** Exact criteria supported by the shared relation cache. */
-private[sql] case class SharedRelationCacheCriteria(
-    catalog: CatalogPlugin,
-    identifier: Identifier,
-    options: CaseInsensitiveStringMap,
-    tableMatch: SharedRelationCacheTableMatch) {
-
-  def nameParts: Seq[String] = catalog.name +: identifier.namespace.toSeq :+ identifier.name
-
-  def matches(plan: LogicalPlan): Boolean = plan match {
-    case relation: DataSourceV2Relation =>
-      relation.catalog.contains(catalog) &&
-        relation.identifier.contains(identifier) &&
-        relation.options == options &&
-        tableMatch.matches(relation.table)
-    case _ =>
-      false
-  }
-}
 
 private[sql] trait RelationCache {
-  def lookup(
-      criteria: SharedRelationCacheCriteria,
-      resolver: Resolver): Option[LogicalPlan]
+  def lookup(nameParts: Seq[String], resolver: Resolver): Option[LogicalPlan]
 }
 
 private[sql] object RelationCache {

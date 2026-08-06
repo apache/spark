@@ -788,7 +788,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("V2TableReference write targets bypass the table-state cache") {
+  test("transaction V2TableReference skips shared lookup and writes bypass query caches") {
     withStateAwareTable { (stateCatalog, tableName) =>
       val original = spark.read
         .option("snapshot", "s1")
@@ -799,22 +799,42 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         .collectFirst { case r: DataSourceV2Relation => r }
         .getOrElse(fail("expected a v2 relation"))
       val readRef = V2TableReference.createForTransaction(original)
+      val otherReadRef = V2TableReference.createForTransaction(original.copy(
+        options = new CaseInsensitiveStringMap(
+          java.util.Map.of("snapshot", "s1", "split-size", "9"))))
       val writeRef = V2TableReference.createForWriteTarget(original)
+      var sharedRelationCacheLookups = 0
+      val sharedRelationCache: RelationCache = (_, _) => {
+        sharedRelationCacheLookups += 1
+        None
+      }
       val resolver = new RelationResolution(
         spark.sessionState.catalogManager,
-        RelationCache.empty)
+        sharedRelationCache)
 
       stateCatalog.resetLoadTableCalls()
       stateCatalog.singleArgLoads.set(0)
       AnalysisContext.withNewAnalysisContext {
         val readRelation = resolver.resolveReference(readRef).asInstanceOf[DataSourceV2Relation]
+        val cachedReadRelation =
+          resolver.resolveReference(readRef).asInstanceOf[DataSourceV2Relation]
+        val otherReadRelation =
+          resolver.resolveReference(otherReadRef).asInstanceOf[DataSourceV2Relation]
         val writeRelation = resolver.resolveReference(writeRef).asInstanceOf[DataSourceV2Relation]
+        val readAfterWriteRelation =
+          resolver.resolveReference(readRef).asInstanceOf[DataSourceV2Relation]
 
+        assert(readRelation.table eq cachedReadRelation.table)
+        assert(readRelation.table eq otherReadRelation.table)
+        assert(readRelation.table eq readAfterWriteRelation.table)
         assert(readRelation.table ne writeRelation.table)
+        assert(readRelation.options.get("split-size") == "5")
+        assert(otherReadRelation.options.get("split-size") == "9")
         assert(AnalysisContext.get.tableCache.size == 1)
-        assert(AnalysisContext.get.relationCache.size == 1)
+        assert(AnalysisContext.get.relationCache.size == 2)
       }
 
+      assert(sharedRelationCacheLookups == 0)
       assert(stateCatalog.singleArgLoads.get() == 2)
       assert(stateCatalog.loadTableCalls.size == 1)
       assert(stateCatalog.loadTableCalls.head._2.get("snapshot") == "s1")
@@ -844,7 +864,58 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("cacheable V2TableReference resolution participates in the table-state cache") {
+  test("temporary-view V2TableReference consults shared cache only for the initial pin") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      val cached = spark.read
+        .option("snapshot", "s1")
+        .option("split-size", "5")
+        .table(tableName)
+        .queryExecution
+        .analyzed
+        .collectFirst { case r: DataSourceV2Relation => r }
+        .getOrElse(fail("expected a v2 relation"))
+      val initialRef = V2TableReference.createForTempView(cached, Seq("state_view"))
+      val otherOptionsRef = V2TableReference.createForTempView(
+        cached.copy(options = new CaseInsensitiveStringMap(
+          java.util.Map.of("snapshot", "s1", "split-size", "9"))),
+        Seq("state_view"))
+      var sharedRelationCacheLookups = 0
+      val sharedRelationCache: RelationCache = (_, _) => {
+        sharedRelationCacheLookups += 1
+        Some(cached)
+      }
+      val resolver = new RelationResolution(
+        spark.sessionState.catalogManager,
+        sharedRelationCache)
+
+      stateCatalog.resetLoadTableCalls()
+      stateCatalog.singleArgLoads.set(0)
+      AnalysisContext.withNewAnalysisContext {
+        val initialRelation =
+          resolver.resolveReference(initialRef).asInstanceOf[DataSourceV2Relation]
+        val cachedRelation =
+          resolver.resolveReference(initialRef).asInstanceOf[DataSourceV2Relation]
+        val otherOptionsRelation =
+          resolver.resolveReference(otherOptionsRef).asInstanceOf[DataSourceV2Relation]
+
+        assert(initialRelation.table eq cached.table)
+        assert(cachedRelation.table eq cached.table)
+        assert(otherOptionsRelation.table eq cached.table)
+        assert(initialRelation.options.get("split-size") == "5")
+        assert(otherOptionsRelation.options.get("split-size") == "9")
+        assert(AnalysisContext.get.tableCache.size == 1)
+        assert(AnalysisContext.get.relationCache.size == 2)
+      }
+
+      assert(sharedRelationCacheLookups == 1)
+      assert(stateCatalog.singleArgLoads.get() == 1)
+      assert(stateCatalog.loadTableCalls.size == 1)
+      assert(stateCatalog.loadTableCalls.head._2.get("snapshot") == "s1")
+      assert(stateCatalog.loadTableCalls.head._2.get("split-size") == "5")
+    }
+  }
+
+  test("temporary-view re-resolution preserves the CacheManager table pin") {
     withStateAwareTable { (stateCatalog, tableName) =>
       withTempView("state_view") {
         val cached = spark.read

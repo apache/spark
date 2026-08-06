@@ -91,8 +91,8 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
         val stateOptions = CatalogV2Util.tableStateOptions(catalog, r.options)
         val currentTable = currentTables.getOrElseUpdate((catalog, ident, stateOptions), {
           val tableName = V2TableUtil.toQualifiedName(catalog, ident)
-          lookupCachedRelation(spark, catalog, ident, r.table, r.options) match {
-            case Some(cached) =>
+          lookupCachedRelation(spark, catalog, ident, r.table) match {
+            case Some(cached) if cached.options == r.options =>
               logDebug(s"Refreshing table metadata for $tableName using shared relation cache")
               cached.table
             case _ =>
@@ -111,15 +111,8 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       spark: SparkSession,
       catalog: TableCatalog,
       ident: Identifier,
-      table: Table,
-      options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
-    CatalogV2Util.lookupSharedRelationCacheByTableId(
-      spark.sharedState.relationCache,
-      catalog,
-      ident,
-      table.id,
-      options,
-      conf)
+      table: Table): Option[DataSourceV2Relation] = {
+    CatalogV2Util.lookupCachedRelation(spark.sharedState.relationCache, catalog, ident, table, conf)
   }
 
   // it is not safe to allow any schema changes in commands (e.g. CTAS, RTAS, MERGE)
