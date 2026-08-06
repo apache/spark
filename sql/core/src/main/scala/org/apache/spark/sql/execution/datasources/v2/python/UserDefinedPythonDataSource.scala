@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import net.razorvine.pickle.Pickler
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.PythonUDF
@@ -34,6 +35,8 @@ import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUt
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.expressions.{Expressions, FieldReference, NamedReference, NullOrdering, SortDirection, SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -122,6 +125,21 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       limit = limit,
       planReadInfo = true
     ).runInPython()
+  }
+
+  /**
+   * (Driver-side) Run Python process to get the distribution and ordering required by the
+   * data source writer.
+   */
+  def writeDistributionAndOrderingInPython(
+      inputSchema: StructType,
+      options: CaseInsensitiveStringMap,
+      overwrite: Boolean): PythonWriteRequirements = {
+    new UserDefinedPythonDataSourceWriteDistributionAndOrderingRunner(
+      dataSourceCls,
+      inputSchema,
+      options.asCaseSensitiveMap().asScala.toMap,
+      overwrite).runInPython()
   }
 
   /**
@@ -379,6 +397,28 @@ private class UserDefinedPythonDataSourceRunner(
 }
 
 /**
+ * The distribution and ordering a Python data source writer requires, as reported by
+ * `DataSourceWriter.requiredDistribution` and friends. Mirrors the
+ * [[org.apache.spark.sql.connector.write.RequiresDistributionAndOrdering]] interface.
+ */
+case class PythonWriteRequirements(
+    distribution: Distribution,
+    distributionStrictlyRequired: Boolean,
+    requiredNumPartitions: Int,
+    advisoryPartitionSizeInBytes: Long,
+    ordering: Array[V2SortOrder])
+
+object PythonWriteRequirements {
+  /** The requirements of a writer that asks for nothing, i.e. the API default. */
+  val none: PythonWriteRequirements = PythonWriteRequirements(
+    distribution = Distributions.unspecified(),
+    distributionStrictlyRequired = true,
+    requiredNumPartitions = 0,
+    advisoryPartitionSizeInBytes = 0,
+    ordering = Array.empty)
+}
+
+/**
  * @param readInfo The read function and partitions, when the worker planned them. Empty in two
  *                 cases: the filter-pushdown pass deferred planning (limit pushdown enabled), or a
  *                 pushed limit was rejected (the rejecting reader may be mutated). Planning then
@@ -578,6 +618,130 @@ private class UserDefinedPythonDataSourceFilterPushdownRunner(
       isLimitPushed = isLimitPushed
     )
   }
+}
+
+/**
+ * Ask a Python data source writer for the distribution and ordering it requires.
+ *
+ * @param dataSourceCls
+ *   the Python data source class, which the worker instantiates with `options`
+ * @param inputSchema
+ *   the schema of the data being written
+ * @param options
+ *   the options of the write
+ * @param overwrite
+ *   whether the write overwrites existing data
+ */
+private class UserDefinedPythonDataSourceWriteDistributionAndOrderingRunner(
+    dataSourceCls: PythonFunction,
+    inputSchema: StructType,
+    options: Map[String, String],
+    overwrite: Boolean)
+    extends PythonPlannerRunner[PythonWriteRequirements](dataSourceCls) {
+
+  import UserDefinedPythonDataSourceWriteDistributionAndOrderingRunner._
+
+  // See the logic in `pyspark.sql.worker.data_source_write_distribution_and_ordering.py`.
+  override val workerModule = "pyspark.sql.worker.data_source_write_distribution_and_ordering"
+
+  override protected def runnerConf: Map[String, String] = {
+    super.runnerConf ++ SQLConf.get.pythonDataSourceProfiler.map(p =>
+      Map(SQLConf.PYTHON_DATA_SOURCE_PROFILER.key -> p)
+    ).getOrElse(Map.empty)
+  }
+
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // Send the Python data source class
+    PythonWorkerUtils.writePythonFunction(dataSourceCls, dataOut)
+
+    // Send the input schema of the write
+    PythonWorkerUtils.writeUTF(inputSchema.json, dataOut)
+
+    // Send the options
+    dataOut.writeInt(options.size)
+    options.iterator.foreach { case (key, value) =>
+      PythonWorkerUtils.writeUTF(key, dataOut)
+      PythonWorkerUtils.writeUTF(value, dataOut)
+    }
+
+    // Send the overwrite flag
+    dataOut.writeBoolean(overwrite)
+  }
+
+  override protected def receiveFromPython(dataIn: DataInputStream): PythonWriteRequirements = {
+    // Receive the serialized requirements or an exception raised in the Python worker.
+    val length = dataIn.readInt()
+    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(
+        action = "plan",
+        tpe = "write distribution and ordering",
+        msg = msg)
+    }
+    val json = PythonWorkerUtils.readUTF(length, dataIn)
+    val requirements = mapper.readValue(json, classOf[SerializedWriteRequirements])
+
+    PythonWriteRequirements(
+      distribution = toDistribution(requirements.distribution),
+      distributionStrictlyRequired = requirements.distributionStrictlyRequired,
+      requiredNumPartitions = requirements.requiredNumPartitions,
+      advisoryPartitionSizeInBytes = requirements.advisoryPartitionSizeInBytes,
+      ordering = requirements.ordering.map(toSortOrder).toArray)
+  }
+
+  private def toDistribution(d: SerializedDistribution): Distribution = d.name match {
+    case "UnspecifiedDistribution" => Distributions.unspecified()
+    case "ClusteredDistribution" =>
+      Distributions.clustered(d.clustering.map(toNamedReference).toArray)
+    case "OrderedDistribution" =>
+      Distributions.ordered(d.ordering.map(toSortOrder).toArray)
+    case other =>
+      // The Python worker validates the distribution type, so this is unreachable unless the
+      // two sides drift out of sync.
+      throw SparkException.internalError(s"Unexpected Python write distribution: $other")
+  }
+
+  private def toNamedReference(columnPath: collection.Seq[String]): NamedReference =
+    FieldReference(columnPath.toSeq)
+
+  private def toSortOrder(order: SerializedSortOrder): V2SortOrder = {
+    val direction = order.direction match {
+      case "ascending" => SortDirection.ASCENDING
+      case "descending" => SortDirection.DESCENDING
+      case other =>
+        throw SparkException.internalError(s"Unexpected Python sort direction: $other")
+    }
+    val nullOrdering = order.nullOrdering match {
+      // Python leaves this unset to mean "the default for this direction".
+      case None => direction.defaultNullOrdering()
+      case Some("nulls_first") => NullOrdering.NULLS_FIRST
+      case Some("nulls_last") => NullOrdering.NULLS_LAST
+      case Some(other) =>
+        throw SparkException.internalError(s"Unexpected Python null ordering: $other")
+    }
+    Expressions.sort(toNamedReference(order.columnPath), direction, nullOrdering)
+  }
+}
+
+private object UserDefinedPythonDataSourceWriteDistributionAndOrderingRunner {
+  private val mapper = new ObjectMapper().registerModules(DefaultScalaModule)
+
+  case class SerializedSortOrder(
+      columnPath: collection.Seq[String],
+      direction: String,
+      nullOrdering: Option[String])
+
+  case class SerializedDistribution(
+      name: String,
+      clustering: collection.Seq[collection.Seq[String]] = Nil,
+      ordering: collection.Seq[SerializedSortOrder] = Nil)
+
+  case class SerializedWriteRequirements(
+      distribution: SerializedDistribution,
+      distributionStrictlyRequired: Boolean,
+      requiredNumPartitions: Int,
+      advisoryPartitionSizeInBytes: Long,
+      ordering: collection.Seq[SerializedSortOrder])
 }
 
 case class PythonDataSourceReadInfo(
