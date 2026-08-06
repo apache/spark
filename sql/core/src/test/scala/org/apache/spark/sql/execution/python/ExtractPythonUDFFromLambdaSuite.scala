@@ -21,7 +21,8 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.{LambdaFunction, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.logical.ArrowEvalPython
-import org.apache.spark.sql.functions.{col, lit, transform}
+import org.apache.spark.sql.functions.{array_sort, col, forall, lit, map_filter, map_zip_with,
+  transform, transform_keys, transform_values, when, zip_with}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType}
@@ -39,6 +40,8 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
 
   private val pythonUDF = new MyDummyPythonUDF
   private val scalarPandasUDF = new MyDummyScalarPandasUDF
+  // Used where a UDF call must receive two arguments, e.g. a pairwise comparator.
+  private val pythonUDF2 = new MyDummyPythonUDF
 
   private def arrayDF = Seq(Seq(1, 2, 3)).toDF("values")
 
@@ -115,17 +118,19 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(liftedUDFs(duplicated).size == 1)
   }
 
-  test("nested higher-order functions are rejected") {
-    // The inner array only exists while the outer function iterates, so a UDF lifted onto it
-    // would still sit inside the outer lambda. Analysis must reject rather than the optimizer
-    // producing a plan that cannot be evaluated.
-    val e = intercept[AnalysisException] {
-      Seq(Seq(Seq(1, 2), Seq(3))).toDF("values")
-        .select(transform(col("values"), inner =>
-          transform(inner, x => pythonUDF(x))).as("r"))
-        .collect()
-    }
-    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
+  test("nested higher-order functions: the UDF is lifted onto the outer array") {
+    // The inner array is the outer lambda's variable, so one pass cannot lift the UDF out. The
+    // rewrite composes instead: the inner pass lifts it onto the inner array, and the outer pass
+    // lifts that result onto the outer array, incrementing the flatten depth.
+    val df = Seq(Seq(Seq(1, 2), Seq(3))).toDF("values")
+      .select(transform(col("values"), inner =>
+        transform(inner, x => pythonUDF(x))).as("r"))
+    assert(udfsInsideLambda(df).isEmpty)
+
+    val lifted = liftedUDFs(df)
+    assert(lifted.size == 1)
+    // Two levels of nesting, so the worker must flatten the argument twice.
+    assert(lifted.head.elementwiseDepths == Seq(2))
   }
 
   test("a UDF on the outer element of a nested array is lifted") {
@@ -144,6 +149,49 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(optimized.collect { case a: ArrowEvalPython => a }.isEmpty)
     assert(!optimized.toString.contains("pythonUDF"))
     assert(analyzed.expressions.flatMap(_.collect { case u: PythonUDF => u }).isEmpty)
+  }
+
+  test("every lambda-taking higher-order function is rewritten") {
+    // One assertion per function, so that a shape regressing to "UDF left inside a lambda" is
+    // caught here rather than only by the end-to-end Python suite.
+    val arrays = Seq((Seq(1, 2), Seq(3, 4))).toDF("l", "r")
+    val maps = Seq((Map("a" -> 1), Map("a" -> 2))).toDF("l", "r")
+
+    val arrayCases = Seq(
+      "transform" -> transform(col("l"), x => pythonUDF(x)),
+      "transform with index" -> transform(col("l"), (x, i) => pythonUDF(x) || i > 0),
+      "filter" -> org.apache.spark.sql.functions.filter(col("l"), x => pythonUDF(x)),
+      "exists" -> org.apache.spark.sql.functions.exists(col("l"), x => pythonUDF(x)),
+      "forall" -> forall(col("l"), x => pythonUDF(x)),
+      "zip_with" -> zip_with(col("l"), col("r"), (a, b) => pythonUDF(a) || pythonUDF(b)),
+      "array_sort" -> array_sort(col("l"),
+        (a, b) => when(pythonUDF(a) === pythonUDF(b), lit(0)).otherwise(lit(1))),
+      "aggregate merge" -> org.apache.spark.sql.functions.aggregate(
+        col("l"), lit(false), (acc, x) => acc || pythonUDF(x)),
+      "aggregate finish" -> org.apache.spark.sql.functions.aggregate(
+        col("l"), lit(0), (acc, x) => acc + x, acc => pythonUDF(acc)))
+    arrayCases.foreach { case (name, expr) =>
+      val df = arrays.select(expr.as("r"))
+      assert(udfsInsideLambda(df).isEmpty, s"UDF left inside a lambda for $name")
+    }
+
+    val mapCases = Seq(
+      "transform_keys" -> transform_keys(col("l"), (k, v) => pythonUDF(k).cast("string")),
+      "transform_values" -> transform_values(col("l"), (k, v) => pythonUDF(v)),
+      "map_filter" -> map_filter(col("l"), (k, v) => pythonUDF(v)),
+      "map_zip_with" -> map_zip_with(col("l"), col("r"), (k, a, b) => pythonUDF(a) || pythonUDF(b)))
+    mapCases.foreach { case (name, expr) =>
+      val df = maps.select(expr.as("r"))
+      assert(udfsInsideLambda(df).isEmpty, s"UDF left inside a lambda for $name")
+    }
+  }
+
+  test("a pairwise array_sort comparator is rejected") {
+    // One UDF call receiving both elements has no per-element key to precompute.
+    val e = intercept[AnalysisException] {
+      arrayDF.select(array_sort(col("values"), (a, b) => pythonUDF2(a, b).cast("int"))).collect()
+    }
+    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
   }
 
   test("a pandas UDF inside a lambda still fails analysis") {

@@ -90,23 +90,45 @@ object PythonUDF {
     val allUDFsRewritable = hof.functions.forall { f =>
       f.collect { case udf: PythonUDF => udf }.forall(isElementwiseRewritableUDF)
     }
-    allUDFsRewritable && (hof match {
-      case _: ArrayTransform | _: ArrayFilter | _: ArrayExists | _: ArrayForAll | _: ZipWith |
-           _: TransformKeys | _: TransformValues | _: MapFilter | _: MapZipWith =>
-        // The UDF is applied to each element, which is exactly the rewritable shape.
-        true
-
+    // Every higher-order function currently in Spark is handled by the rewrite, so rather than
+    // listing them, this states the two UDF *placements* that no array can precompute. A future
+    // higher-order function is accepted automatically; `ExtractPythonUDFFromLambda` rewrites any
+    // function generically from the `HigherOrderFunction` API, and `isRewritableShape` guards the
+    // one structural assumption that rewrite makes.
+    allUDFsRewritable && isRewritableShape(hof) && (hof match {
       case ArraySort(_, function, _) =>
         // A per-element sort key is rewritable; a UDF that compares the two elements in one call
-        // is not, because there is no array to precompute O(n log n) pairwise results over.
+        // is not, because precomputing every pair would be O(n^2) calls rather than O(n log n).
         !comparatorTakesBothElements(function)
 
       case ArrayAggregate(_, _, merge, _) =>
-        // A UDF on the element, or in `finish`, is rewritable. One reading the accumulator is not.
+        // A UDF on the element, or in `finish`, is rewritable. One reading the accumulator is not:
+        // the fold is sequential, so there is no array to precompute over.
         !mergeReadsAccumulator(merge)
 
-      case _ => false
+      case _ => true
     })
+  }
+
+  /**
+   * The structural assumption the generic rewrite makes: the function has exactly one lambda, whose
+   * parameters are plain lambda variables, and it iterates at least one array- or map-valued
+   * argument that the precomputed UDF results can be zipped alongside.
+   *
+   * `aggregate` is the exception: it has two lambdas and folds rather than iterates, so it has its
+   * own rewrite. Checking this rather than listing classes means a new higher-order function of a
+   * familiar shape needs no change here.
+   */
+  private def isRewritableShape(hof: HigherOrderFunction): Boolean = hof match {
+    case _: ArrayAggregate => true
+    case _ =>
+      hof.functions.length == 1 &&
+        hof.functions.head.isInstanceOf[LambdaFunction] &&
+        hof.functions.head.asInstanceOf[LambdaFunction].arguments
+          .forall(_.isInstanceOf[NamedLambdaVariable]) &&
+        hof.arguments.exists { a =>
+          a.dataType.isInstanceOf[ArrayType] || a.dataType.isInstanceOf[MapType]
+        }
   }
 
   /**

@@ -249,7 +249,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         )
 
     def test_array_sort_pairwise_comparator_still_fails(self):
-        # One UDF call receiving both elements has no per-element key, so it must keep failing.
+        # A single UDF call receiving both elements has no per-element key: precomputing every
+        # pair would be O(n^2) calls instead of O(n log n), so this stays rejected and the user is
+        # directed at the supported form, returning a sort key per element.
         df = self.spark.createDataFrame([([3, 1, 2],)], "values array<int>")
         cmp_udf = udf(lambda a, b: (a > b) - (a < b), IntegerType())
 
@@ -526,14 +528,11 @@ class UDFInHigherOrderFunctionTestsMixin:
             ).collect()
         self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
-        # A UDF in `finish` is not rewritten: a fold over a null array is null, and native
-        # Spark does not evaluate `finish` for it.
+        # A UDF in an `array_sort` comparator that receives both elements in one call has no
+        # per-element key, so it must keep failing too.
+        cmp_udf = udf(lambda a, b: (a > b) - (a < b), IntegerType())
         with self.assertRaises(AnalysisException) as ctx:
-            df.select(
-                sf.aggregate(
-                    "values", sf.lit(0), lambda acc, x: acc + x, lambda acc: plus_one(acc)
-                )
-            ).collect()
+            df.select(sf.array_sort("values", lambda a, b: cmp_udf(a, b))).collect()
         self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
     def test_pandas_udf_in_lambda_still_fails(self):

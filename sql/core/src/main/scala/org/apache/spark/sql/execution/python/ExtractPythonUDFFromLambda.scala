@@ -136,7 +136,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
           var iterations = 0
           while (remaining > 0 && iterations < MaxRewritePasses) {
             current = current.transformExpressionsUpWithPruning(
-              _.containsAllPatterns(PYTHON_UDF, HIGH_ORDER_FUNCTION))(rewrite orElse rewriteMap)
+              _.containsAllPatterns(PYTHON_UDF, HIGH_ORDER_FUNCTION))(rewrite)
             val next = countRewritable(current)
             // No progress: the remaining shapes are ones this rule cannot handle.
             if (next >= remaining) remaining = 0 else remaining = next
@@ -169,116 +169,177 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
    */
   private val MaxRewritePasses = 32
 
-  /** Rewrites a single higher-order function whose lambda contains a rewritable Python UDF. */
-  private val rewrite: PartialFunction[Expression, Expression] = {
-    // `transform`, `exists` and `forall` all return the lambda's own value, so the carrier
-    // struct can simply replace the argument and the rewritten body reads the UDF result.
-    case ArrayTransform(argument, function) if liftable(Seq(argument), function) =>
-      withCarrier(Seq(argument), function)((carrier, lambda) =>
-        ArrayTransform(carrier, lambda))
-
-    case ArrayExists(argument, function, followThreeValuedLogic)
-        if liftable(Seq(argument), function) =>
-      withCarrier(Seq(argument), function)((carrier, lambda) =>
-        ArrayExists(carrier, lambda, followThreeValuedLogic))
-
-    case ArrayForAll(argument, function) if liftable(Seq(argument), function) =>
-      withCarrier(Seq(argument), function)((carrier, lambda) =>
-        ArrayForAll(carrier, lambda))
-
-    // `filter`'s lambda is a predicate, so its result is not the value we want: the surviving
-    // *input* elements are. Filter over the carrier, then project the original element back out.
-    case ArrayFilter(argument, function) if liftable(Seq(argument), function) =>
-      val filtered = withCarrier(Seq(argument), function)((carrier, lambda) =>
-        ArrayFilter(carrier, lambda))
-      unwrapCarrier(filtered, 0)
-
-    // `zip_with` walks two arrays at once. Zipping both into the carrier reduces it to the
-    // single-array form. `arrays_zip` pads the shorter side with nulls, which is exactly what
-    // `zip_with` does itself.
-    case ZipWith(left, right, function) if liftable(Seq(left, right), function) =>
-      withCarrier(Seq(left, right), function)((carrier, lambda) =>
-        ArrayTransform(carrier, lambda))
-
-    // `array_sort`'s comparator sees two elements at once, so its Python part cannot be evaluated
-    // pairwise. What can be precomputed is the UDF applied to each element, giving a sort key the
-    // JVM comparator then compares. Each side of the comparison must read the key belonging to
-    // its own element, so the carrier is built once and both comparator parameters are bound to
-    // it.
-    case ArraySort(argument, function, allowNull)
-        if liftable(Seq(argument), function) &&
-          !PythonUDF.comparatorTakesBothElements(function) =>
-      val sorted = withComparatorCarrier(argument, function) { (carrier, lambda) =>
-        ArraySort(carrier, lambda, allowNull)
-      }
-      unwrapCarrier(sorted, 0)
-
-    // `aggregate` / `reduce`. Only `merge`'s element argument iterates the array, so a UDF there
-    // is precomputable. A UDF reading the accumulator is not, and is left for CheckAnalysis.
-    case a @ ArrayAggregate(argument, zero, merge, finish)
-        if liftableFold(argument, merge, finish) =>
-      rewriteFold(a)
-  }
-
-  // ---------------------------------------------------------------------------------------------
-  // Map-valued higher-order functions.
-  //
-  // Each is desugared to the array case: split the map into its key and value arrays, rewrite
-  // over those, and rebuild a map. Written as separate cases below because the reassembly differs.
-  // ---------------------------------------------------------------------------------------------
-
   /**
-   * Rewrites the map family. Kept apart from [[rewrite]] only to keep each method a readable size;
-   * both are applied by the same traversal.
+   * Where a higher-order function's result comes from, which is the one thing about its shape that
+   * cannot be derived from the generic [[HigherOrderFunction]] API.
+   *
+   * A rewritten function iterates a *carrier* - a struct of the original elements plus the
+   * precomputed UDF results - so a function whose result is built from its input elements has to
+   * project them back out afterwards, while one that returns its lambda's own value does not.
    */
-  private val rewriteMap: PartialFunction[Expression, Expression] = {
-    // `transform_keys(m, (k, v) -> body)`: rebuild a map from the transformed keys and the
-    // original values.
-    case TransformKeys(argument, function) if liftableMap(argument, function) =>
-      val keys = MapKeys(argument)
-      val values = MapValues(argument)
-      val newKeys = withCarrier(Seq(keys, values), function)((carrier, lambda) =>
-        ArrayTransform(carrier, lambda))
-      MapFromArrays(newKeys, values)
+  private sealed trait ResultShape
+  /** The result is the lambda's own value (`transform`, `exists`, `zip_with`, ...). */
+  private case object FromLambda extends ResultShape
+  /** The result is built from the input elements, so the carrier must be unwrapped (`filter`). */
+  private case object FromElements extends ResultShape
 
-    // `transform_values(m, (k, v) -> body)`: keys are unchanged, values are transformed.
-    case TransformValues(argument, function) if liftableMap(argument, function) =>
-      val keys = MapKeys(argument)
-      val values = MapValues(argument)
-      val newValues = withCarrier(Seq(keys, values), function)((carrier, lambda) =>
-        ArrayTransform(carrier, lambda))
-      MapFromArrays(keys, newValues)
+  /**
+   * The two facts per higher-order function that the generic machinery cannot infer. Adding support
+   * for a new lambda-taking function normally means adding one line here; everything else - how
+   * many arguments and lambdas it has, which parameters iterate which argument, whether a parameter
+   * is an index, and how to rebuild the node - is derived from the
+   * [[HigherOrderFunction]] API.
+   */
+  private def resultShapeOf(hof: HigherOrderFunction): Option[ResultShape] = hof match {
+    // `aggregate` folds rather than maps, so it has its own rewrite rather than a result shape.
+    case _: ArrayAggregate => None
 
-    // `map_filter(m, (k, v) -> pred)`: filter the zipped key/value pairs, then rebuild.
-    case MapFilter(argument, function) if liftableMap(argument, function) =>
-      val keys = MapKeys(argument)
-      val values = MapValues(argument)
-      val kept = withCarrier(Seq(keys, values), function)((carrier, lambda) =>
-        ArrayFilter(carrier, lambda))
-      MapFromArrays(unwrapCarrier(kept, 0), unwrapCarrier(kept, 1))
+    // The result is built from the input elements rather than from the lambda's value, so the
+    // carrier has to be unwrapped afterwards.
+    case _: ArrayFilter | _: ArraySort | _: MapFilter => Some(FromElements)
 
-    // `map_zip_with(l, r, (k, lv, rv) -> body)`: the visited key set is the union of both maps'
-    // keys, and each map is looked up per key. `element_at` yields null for a key missing from one
-    // side, which is exactly `map_zip_with`'s own behaviour.
-    case MapZipWith(left, right, function)
-        if left.dataType.isInstanceOf[MapType] && right.dataType.isInstanceOf[MapType] &&
-          liftable(Seq(left, right), function) =>
-      val keys = ArrayUnion(MapKeys(left), MapKeys(right))
-      val keyType = keys.dataType.asInstanceOf[ArrayType]
-      def valuesFor(map: Expression): Expression = {
-        val k = NamedLambdaVariable("k", keyType.elementType, keyType.containsNull)
-        ArrayTransform(
-          keys,
-          LambdaFunction(ElementAt(map, k, None, failOnError = false), Seq(k)))
+    // Everything else returns the lambda's own value. Inferred rather than listed so that a new
+    // higher-order function needs no entry here: a function whose element type is preserved in its
+    // result is element-shaped, which is what `FromElements` means, and `FromLambda` otherwise.
+    case _ =>
+      val elementType = hof.arguments.collectFirst {
+        case a if a.dataType.isInstanceOf[ArrayType] =>
+          a.dataType.asInstanceOf[ArrayType].elementType
       }
-      val newValues = withCarrier(
-        Seq(keys, valuesFor(left), valuesFor(right)), function)((carrier, lambda) =>
-        ArrayTransform(carrier, lambda))
-      MapFromArrays(keys, newValues)
+      val resultElementType = hof.dataType match {
+        case ArrayType(et, _) => Some(et)
+        case _ => None
+      }
+      val lambdaType = hof.functions.head match {
+        case l: LambdaFunction => Some(l.dataType)
+        case _ => None
+      }
+      // If the result's element type matches the input's but *not* the lambda's, the function
+      // returns input elements (as `filter` does). Otherwise it returns the lambda's value.
+      if (resultElementType.isDefined && resultElementType == elementType &&
+          lambdaType != resultElementType) {
+        Some(FromElements)
+      } else {
+        Some(FromLambda)
+      }
   }
 
   /**
-   * True if `function`'s lambda holds a UDF this rule can lift onto `arguments`.
+   * Whether `hof`'s lambda is a comparator, i.e. its two parameters are two elements of the same
+   * argument rather than one element of each of two arguments.
+   *
+   * This cannot be inferred from the parameter types: a comparator over `array<int>` and an indexed
+   * lambda over `array<int>` both have parameters `(Int, Int)`.
+   */
+  private def isComparatorShaped(hof: HigherOrderFunction): Boolean = hof match {
+    case _: ArraySort => true
+    case _ => false
+  }
+
+  /**
+   * Rewrites a single higher-order function whose lambda contains a rewritable Python UDF.
+   *
+   * There is one generic path for every mapping function, plus a separate one for `aggregate`,
+   * whose `merge`/`finish` lambdas fold rather than iterate. The generic path never names a
+   * concrete class: it reads the arguments, lambdas and parameter roles off the
+   * [[HigherOrderFunction]] API and rebuilds the node with `withNewChildren`, relying on the fact
+   * that a higher-order function's children are always its `arguments` followed by its `functions`.
+   */
+  private val rewrite: PartialFunction[Expression, Expression] = {
+    case agg: ArrayAggregate if liftableFold(agg) => rewriteFold(agg)
+
+    case hof: HigherOrderFunction if resultShapeOf(hof).isDefined && liftableHof(hof) =>
+      rewriteMapping(hof, resultShapeOf(hof).get)
+  }
+
+  /**
+   * The generic rewrite for a mapping higher-order function.
+   *
+   * A map-valued argument is first desugared to its key and value arrays, so everything below works
+   * in terms of arrays; the result is rebuilt as a map afterwards. The lambda's parameters are then
+   * matched to those arrays, the UDFs are lifted onto them, and the node is rebuilt around a
+   * carrier that the single new lambda parameter reads.
+   */
+  private def rewriteMapping(hof: HigherOrderFunction, shape: ResultShape): Expression = {
+    val lambda = hof.functions.head.asInstanceOf[LambdaFunction]
+
+    // Desugar maps into arrays. `map_zip_with` visits the union of both key sets and looks each map
+    // up per key, which yields null for a key missing from one side - exactly its own semantics.
+    val mapValued = hof.arguments.exists(_.dataType.isInstanceOf[MapType])
+    val (arrays, rebuildResult): (Seq[Expression], Expression => Expression) =
+      if (!mapValued) {
+        (hof.arguments, identity)
+      } else if (hof.arguments.length == 1) {
+        val map = hof.arguments.head
+        val keys = MapKeys(map)
+        val values = MapValues(map)
+        // `transform_keys` replaces the keys, `transform_values` the values, `map_filter` keeps
+        // whichever pairs survive. Which of those applies follows from the result type and shape.
+        val rebuild: Expression => Expression = shape match {
+          case FromElements => (kept: Expression) =>
+            MapFromArrays(unwrapCarrier(kept, 0), unwrapCarrier(kept, 1))
+          case FromLambda if hof.dataType.asInstanceOf[MapType].keyType == lambda.dataType =>
+            (newKeys: Expression) => MapFromArrays(newKeys, values)
+          case FromLambda => (newValues: Expression) => MapFromArrays(keys, newValues)
+        }
+        (Seq(keys, values), rebuild)
+      } else {
+        val Seq(left, right) = hof.arguments
+        val keys = ArrayUnion(MapKeys(left), MapKeys(right))
+        val keyType = keys.dataType.asInstanceOf[ArrayType]
+        def valuesFor(map: Expression): Expression = {
+          val k = NamedLambdaVariable("k", keyType.elementType, keyType.containsNull)
+          ArrayTransform(keys, LambdaFunction(ElementAt(map, k, None, failOnError = false), Seq(k)))
+        }
+        (Seq(keys, valuesFor(left), valuesFor(right)),
+          (newValues: Expression) => MapFromArrays(keys, newValues))
+      }
+
+    // Match the lambda's parameters to the arrays they iterate. Leading parameters correspond
+    // one-to-one with the arrays; a trailing extra parameter is the element index.
+    //
+    // A comparator is the one shape where that is not true: its two parameters are two elements of
+    // the *same* array. It cannot be told apart from an indexed lambda by parameter types alone
+    // (both are `(T, Int)` when `T` is `Int`), so it is identified by the function itself, which is
+    // exactly what the declarative shape table is for.
+    val params = lambda.arguments.map(_.asInstanceOf[NamedLambdaVariable])
+    val (elementVars, indexVar, alsoBind) =
+      if (isComparatorShaped(hof)) {
+        (Seq(params.head), None, Seq(params.last))
+      } else {
+        (params.take(arrays.length), params.drop(arrays.length).headOption, Nil)
+      }
+
+    val built = buildCarrier(arrays, lambda, elementVars, indexVar, alsoBind)
+    val newLambda = LambdaFunction(built.body, built.boundVar +: built.extraBoundVars)
+
+    // Rebuild the node. The carrier collapses every argument into one, so a function that keeps its
+    // own semantics (`filter` keeps only some elements, `exists`/`forall`/`array_sort` are not
+    // mappings) is rebuilt generically with `withNewChildren` - a higher-order function's children
+    // are its arguments followed by its functions, so one carrier plus the rewritten lambda
+    // reconstructs any of them without naming the class. A function that is a plain mapping over
+    // however many arguments becomes a `transform` over the carrier.
+    val keepsOwnNode = hof.arguments.length == 1 && !mapValued
+    val iterated =
+      if (keepsOwnNode) {
+        hof.withNewChildren(IndexedSeq(built.carrier, newLambda)).asInstanceOf[Expression]
+      } else if (shape == FromElements) {
+        // A map-valued `filter`: the carrier must survive the filtering so both the keys and the
+        // values can be projected out of it afterwards.
+        ArrayFilter(built.carrier, newLambda)
+      } else {
+        ArrayTransform(built.carrier, newLambda)
+      }
+
+    // `FromElements` means the result is the input elements rather than the lambda's value, so they
+    // are projected back out of the carrier. For a map that projection is `rebuildResult`'s job,
+    // since it knows which of the key/value sides to keep.
+    if (!mapValued && shape == FromElements) rebuildResult(unwrapCarrier(iterated, 0))
+    else rebuildResult(iterated)
+  }
+
+  /**
+   * True if `hof`'s lambda holds a UDF this rule can lift out.
    *
    * The UDF must belong to *this* lambda, not to a nested higher-order function inside it. For
    * `transform(arr, i -> transform(i, x -> udf(x)))` the outer lambda transitively contains the
@@ -286,11 +347,12 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
    * be lifted onto `i` by the inner rewrite first. Rewriting the outer function at that point
    * would build a carrier that precomputes nothing and leave the UDF where it was.
    */
-  private def liftable(arguments: Seq[Expression], function: Expression): Boolean =
-    function match {
-      case LambdaFunction(body, _, _) => hasDirectRewritableUDF(body)
+  private def liftableHof(hof: HigherOrderFunction): Boolean =
+    hof.functions.length == 1 && (hof.functions.head match {
+      case LambdaFunction(body, args, _) =>
+        hasDirectRewritableUDF(body) && args.forall(_.isInstanceOf[NamedLambdaVariable])
       case _ => false
-    }
+    })
 
   /**
    * Whether `body` holds a rewritable UDF that belongs to *this* lambda rather than to a nested
@@ -309,18 +371,17 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   }
 
 
-  private def liftableMap(argument: Expression, function: Expression): Boolean =
-    argument.dataType.isInstanceOf[MapType] && liftable(Seq(argument), function)
-
   /**
    * `aggregate` is rewritable when the UDFs in `merge` read only the element (not the accumulator)
    * and/or a UDF appears in `finish`.
    */
-  private def liftableFold(
-      argument: Expression, merge: Expression, finish: Expression): Boolean = {
-    val mergeLiftable = liftable(Seq(argument), merge) && !mergeReadsAccumulator(merge)
-    val finishLiftable = finish match {
-      case LambdaFunction(body, _, _) => body.exists(isRewritableUDF)
+  private def liftableFold(agg: ArrayAggregate): Boolean = {
+    val mergeLiftable = (agg.merge match {
+      case LambdaFunction(body, _, _) => hasDirectRewritableUDF(body)
+      case _ => false
+    }) && !mergeReadsAccumulator(agg.merge)
+    val finishLiftable = agg.finish match {
+      case LambdaFunction(body, _, _) => hasDirectRewritableUDF(body)
       case _ => false
     }
     mergeLiftable || finishLiftable
@@ -359,7 +420,10 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 
     // Step 1: precompute the element UDFs of `merge`, if any.
     val withMergeRewritten =
-      if (liftable(Seq(argument), merge) && !mergeReadsAccumulator(merge)) {
+      if ((merge match {
+            case LambdaFunction(body, _, _) => hasDirectRewritableUDF(body)
+            case _ => false
+          }) && !mergeReadsAccumulator(merge)) {
         val LambdaFunction(_, Seq(accVar: NamedLambdaVariable, elementVar), _) = merge
         val built = buildCarrier(
           Seq(argument), merge, Seq(elementVar.asInstanceOf[NamedLambdaVariable]), None)
@@ -383,20 +447,64 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     // yields null, matching Spark. (Wrapping in `when(fold IS NOT NULL, udf(fold))` would *not*
     // work: Spark evaluates both branches, so the UDF would still see the null.)
     withMergeRewritten match {
-      case ArrayAggregate(arg, z, m, LambdaFunction(body, Seq(accVar), _))
+      case ArrayAggregate(arg, z, m, LambdaFunction(body, Seq(accVar: NamedLambdaVariable), _))
           if body.exists(isRewritableUDF) =>
-        val fold = ArrayAggregate(arg, z, m, LambdaFunction.identity)
-        val elem = NamedLambdaVariable("acc", fold.dataType, nullable = true)
-        val nonNullFold = ArrayFilter(
-          CreateArray(Seq(fold)), LambdaFunction(IsNotNull(elem), Seq(elem)))
-        val applied = ArrayTransform(
-          nonNullFold,
-          LambdaFunction(
-            body.transformUp {
-              case v: NamedLambdaVariable if v.exprId == accVar.exprId => elem
-            },
-            Seq(elem)))
-        GetArrayItem(applied, Literal(0), failOnError = false)
+        // A *resolved* identity lambda over the accumulator: `LambdaFunction.identity` holds an
+        // unresolved variable, so the fold's `dataType` could not be computed from it here.
+        val identityVar = NamedLambdaVariable(accVar.name, accVar.dataType, accVar.nullable)
+        val fold = ArrayAggregate(arg, z, m, LambdaFunction(identityVar, Seq(identityVar)))
+        // Wrap the fold in a one-element array, so the same element-wise machinery applies it
+        // exactly once - and, crucially, gets the null handling for free. When the fold is null
+        // the wrapper is a null *array*, and the worker skips null rows entirely, so Python is
+        // never called with that null; the re-nested result is a null row too, and reading its
+        // single element gives back null. That matches Spark, which does not evaluate `finish` for
+        // a fold over a null array. (`when(fold IS NOT NULL, udf(fold))` would not work: Spark
+        // evaluates both branches, so the UDF would still see the null.)
+        val single = If(IsNull(fold), Literal(null, ArrayType(accVar.dataType)),
+          CreateArray(Seq(fold)))
+        // Each UDF in `finish` reads the accumulator, so lifting it onto this one-element array is
+        // the ordinary element-wise rewrite with the fold standing in for the array. An argument
+        // that is an *expression* over the accumulator, e.g. `udf(acc + 1)`, is computed per
+        // element by a native `transform` over the same one-element array, so the UDF still
+        // receives one value and the null row is still skipped.
+        def readsAcc(e: Expression): Boolean = e.exists {
+          case v: NamedLambdaVariable => v.exprId == accVar.exprId
+          case _ => false
+        }
+        body.transformDown {
+          case udf: PythonUDF if isRewritableUDF(udf) && readsAcc(udf) =>
+            val args = udf.children.map {
+              case child if !readsAcc(child) => child
+              case v: NamedLambdaVariable if v.exprId == accVar.exprId => single
+              case child =>
+                val v = NamedLambdaVariable("acc", accVar.dataType, nullable = true)
+                ArrayTransform(
+                  single,
+                  LambdaFunction(
+                    child.transformUp {
+                      case old: NamedLambdaVariable if old.exprId == accVar.exprId => v
+                    },
+                    Seq(v)))
+            }
+            val depths = udf.children.zip(args).map { case (child, arg) =>
+              if (arg.fastEquals(child)) 0 else 1
+            }
+            GetArrayItem(
+              PythonUDF(
+                udf.name,
+                udf.func,
+                ArrayType(udf.dataType, containsNull = true),
+                args,
+                PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
+                udf.udfDeterministic,
+                elementwiseDepths = depths),
+              Literal(0),
+              failOnError = false)
+        }.transformUp {
+          // Any remaining plain reference to the accumulator, e.g. `udf(acc) + acc`, becomes the
+          // fold itself, which is the value `finish` was given.
+          case v: NamedLambdaVariable if v.exprId == accVar.exprId => fold
+        }
       case other => other
     }
   }
