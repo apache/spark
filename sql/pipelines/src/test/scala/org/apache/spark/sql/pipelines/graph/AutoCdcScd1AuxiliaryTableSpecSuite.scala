@@ -75,7 +75,9 @@ class AutoCdcScd1AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
         deleteCondition = None,
         storedAsScdType = ScdType.Type1)))
     val graph = ctx.resolveToDataflowGraph()
-    graph.auxiliaryTableSpecs(targetIdentifier).asInstanceOf[AutoCdcAuxiliaryTableSpec]
+    val inferredSchemas = graph.inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)
+    graph.auxiliaryTableSpecs(inferredSchemas)(targetIdentifier)
+      .asInstanceOf[AutoCdcAuxiliaryTableSpec]
   }
 
   test("SCD1 aux schema is exactly the key columns plus the CDC metadata column") {
