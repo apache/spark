@@ -26,9 +26,11 @@ import org.apache.spark.unsafe.types.UTF8String;
  * https://github.com/Cyan4973/xxHash, as specified in doc/xxhash_spec.md). The output is byte
  * compatible with the reference implementation, so it matches `xxhsum` and other XXH3 tools.
  *
- * <p>All arithmetic is on 64-bit lanes; Java's signed {@code long} is used as an unsigned 64-bit
- * integer throughout ({@code >>>} for logical shift, {@link Long#rotateLeft}, and
- * {@link #unsignedMultiplyHigh} for the high half of 64x64 products).
+ * <p>The multiplication and mixing machinery operates on 64-bit lanes; Java's signed
+ * {@code long} is used as an unsigned 64-bit integer throughout ({@code >>>} for logical shift,
+ * {@link Long#rotateLeft}, and {@link #unsignedMultiplyHigh} for the high half of 64x64
+ * products). The 128-bit hash's 1-3 byte inputs are the exception: they are first composed as
+ * 32-bit {@code int}s (see {@link #len1to3128}) before being widened.
  */
 public final class XXH3 {
 
