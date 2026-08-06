@@ -260,6 +260,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val rowIdAttrs = resolveRowIdAttrs(relation, operation)
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
 
+    if (supportsColumnUpdate && operation.representUpdateAsDeleteAndInsert) {
+      validateNoRowIdReassignment(operation, assignments, rowIdAttrs)
+    }
+
     val narrowDataAttrs = if (supportsColumnUpdate) {
       computeNarrowReadAttrs(relation, connectorDataAttrs, assignments, cond)
     } else {
@@ -483,6 +487,27 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     if (missing.nonEmpty) {
       throw QueryCompilationErrors.requiredDataAttributesMissingUpdatedColumnsError(
         operation.getClass.getName, missing)
+    }
+  }
+
+  /**
+   * For connectors that opt into narrow column updates AND represent UPDATE as delete + insert,
+   * reject reassignment of any row-ID column as the REINSERT path has no row-ID channel to
+   * reconstruct columns outside `requiredDataAttributes()`.
+   */
+  private def validateNoRowIdReassignment(
+      operation: RowLevelOperation,
+      assignments: Seq[Assignment],
+      rowIdAttrs: Seq[Attribute]): Unit = {
+    val rowIdAttrSet = AttributeSet(rowIdAttrs)
+    val reassigned = assignments.collect {
+      case Assignment(key: AttributeReference, value)
+          if rowIdAttrSet.contains(key) && !isIdentityAssignment(key, value) =>
+        key.name
+    }.distinct
+    if (reassigned.nonEmpty) {
+      throw QueryCompilationErrors.splitUpdateRowIdReassignmentError(
+        operation.getClass.getName, reassigned)
     }
   }
 }
