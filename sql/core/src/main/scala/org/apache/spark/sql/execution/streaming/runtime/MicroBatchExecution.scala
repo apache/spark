@@ -82,6 +82,7 @@ class MicroBatchExecution(
       -1,
       sparkSession,
       offsetLogFormatVersionOpt = None,
+      commitLogFormatVersionOpt = None,
       previousContext = None)
 
   override def getLatestExecutionContext(): StreamExecutionContext = latestExecutionContext
@@ -138,11 +139,6 @@ class MicroBatchExecution(
   /** True when the current query should persist V3 sink metadata in the commit log. */
   private def commitLogV3Enabled: Boolean =
     sparkSession.sessionState.conf.enableStreamingSinkEvolution
-
-  // The commit log format version to WRITE for this query run, resolved in initializeExecution:
-  // an existing checkpoint keeps the version it was created with, a fresh one takes the session
-  // config. Defaults to VERSION_1 until resolved.
-  @volatile private var commitLogFormatVersion: Int = CommitLog.VERSION_1
 
   @volatile protected[sql] var triggerExecutor: TriggerExecutor = _
 
@@ -562,7 +558,7 @@ class MicroBatchExecution(
     // Resolve the commit log format version the same way: an existing checkpoint keeps the version
     // it was created with, and only a fresh one takes the version from the session config. Persist
     // it so a later read of the config agrees with what is actually being written.
-    commitLogFormatVersion = CheckpointVersionManager.resolveCommitLogVersion(
+    val commitLogFormatVersion = CheckpointVersionManager.resolveCommitLogVersion(
       sparkSessionForStream, latestCommittedBatch)
     CheckpointVersionManager.setFormatVersion(
       sparkSessionForStream, CommitLogType, commitLogFormatVersion)
@@ -570,6 +566,7 @@ class MicroBatchExecution(
     val execCtx = new MicroBatchExecutionContext(id, runId, name, triggerClock, sources, sink,
       progressReporter, -1, sparkSession,
       offsetLogFormatVersionOpt = Some(offsetLogFormatVersion),
+      commitLogFormatVersionOpt = Some(commitLogFormatVersion),
       previousContext = None)
 
     execCtx.offsetSeqMetadata = offsetLogFormatVersion match {
@@ -1503,7 +1500,9 @@ class MicroBatchExecution(
         commitLog.createMetadata(
           nextBatchWatermarkMs = watermarkTracker.currentWatermark,
           stateUniqueIds = stateStoreCkptId,
-          commitLogFormatVersion = commitLogFormatVersion)
+          commitLogFormatVersion = execCtx.commitLogFormatVersionOpt.getOrElse(
+            sparkSessionForStream.sessionState.conf
+              .getConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION)))
       }
       if (!commitLog.add(execCtx.batchId, metadata)) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
