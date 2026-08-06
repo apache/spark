@@ -6597,7 +6597,7 @@ object functions {
    * Returns a 64-bit hash value of the argument using the XXH3 algorithm.
    *
    * @param col
-   *   the column to hash. A column of string or binary type.
+   *   the column to hash, which must have string or binary type.
    * @group hash_funcs
    * @since 4.3.0
    * @return
@@ -6609,7 +6609,7 @@ object functions {
    * Returns a 128-bit XXH3 hash of the argument as a 32-character hex string.
    *
    * @param col
-   *   the column to hash. A column of string or binary type.
+   *   the column to hash, which must have string or binary type.
    * @group hash_funcs
    * @since 4.3.0
    * @return

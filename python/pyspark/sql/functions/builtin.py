@@ -14777,7 +14777,7 @@ def xxh3_64(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        target column to compute on. A column of string or binary type.
+        The target column to hash, which must have string or binary type.
 
     Returns
     -------
@@ -14808,7 +14808,7 @@ def xxh3_128(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        target column to compute on. A column of string or binary type.
+        The target column to hash, which must have string or binary type.
 
     Returns
     -------
