@@ -458,15 +458,13 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
       }
       // 2 stops before the innermost archive is opened.
       checkError(
-        exception = intercept[SparkException](readAtMaxDepth(2)).getCause
-          .asInstanceOf[SparkRuntimeException],
+        exception = intercept[SparkRuntimeException](readAtMaxDepth(2)),
         condition = "MAX_ARCHIVE_DEPTH_EXCEEDED",
         parameters = Map(
           "entry" -> s"level2.$ext!/level3.$ext", "path" -> path, "maxDepth" -> "2"))
       // 1 admits only the top archive, so even the first nested archive is too deep.
       checkError(
-        exception = intercept[SparkException](readAtMaxDepth(1)).getCause
-          .asInstanceOf[SparkRuntimeException],
+        exception = intercept[SparkRuntimeException](readAtMaxDepth(1)),
         condition = "MAX_ARCHIVE_DEPTH_EXCEEDED",
         parameters = Map("entry" -> s"level2.$ext", "path" -> path, "maxDepth" -> "1"))
     }
@@ -511,8 +509,8 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
           SQLConf.IGNORE_CORRUPT_FILES.key -> "true",
           SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH.key -> "1") {
         checkError(
-          exception = intercept[SparkException](read(archive.getCanonicalPath).collect())
-            .getCause.asInstanceOf[SparkRuntimeException],
+          exception =
+            intercept[SparkRuntimeException](read(archive.getCanonicalPath).collect()),
           condition = "MAX_ARCHIVE_DEPTH_EXCEEDED",
           parameters = Map(
             "entry" -> s"level2.$ext",
