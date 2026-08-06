@@ -26,7 +26,6 @@ import org.apache.spark.sql.internal.connector.PredicateUtils;
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface if they can
  * filter initially planned {@link InputPartition}s using predicates Spark infers at runtime.
- * Only one runtime filtering interface should be implemented by a data source.
  * <p>
  * Note that Spark will push runtime filters only if they are beneficial.
  *

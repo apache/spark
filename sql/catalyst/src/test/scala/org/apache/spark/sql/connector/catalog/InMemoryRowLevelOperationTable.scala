@@ -19,10 +19,8 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, Expression, GenericInternalRow, Predicate => CatalystPredicate}
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
@@ -30,8 +28,6 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -272,9 +268,9 @@ class InMemoryRowLevelOperationTable private (
   }
 
   /**
-   * Builds a scan for row-level operations. When
-   * `use-catalyst-runtime-filtering` is set, the scan implements
-   * [[SupportsRuntimeCatalystFiltering]] so group filtering goes through the Catalyst path.
+   * Builds a scan for row-level operations. When `use-catalyst-runtime-filtering` is set, the
+   * scan mixes in [[CatalystRuntimeFilteringScan]] so group filtering goes through the Catalyst
+   * path.
    */
   private def newRowLevelScanBuilder(
       options: CaseInsensitiveStringMap)(
@@ -301,9 +297,9 @@ class InMemoryRowLevelOperationTable private (
   }
 
   /**
-   * Row-level batch scan that receives runtime filters as Catalyst expressions.
-   * Evaluates partition-column predicates against each partition key so group filtering
-   * actually prunes partitions (needed for `replacedPartitions` assertions).
+   * Row-level batch scan that receives runtime filters as Catalyst expressions. Pruning comes
+   * from [[CatalystRuntimeFilteringScan]], so group filtering actually drops partitions (needed
+   * for `replacedPartitions` assertions).
    */
   case class InMemoryCatalystRowLevelBatchScan(
       var _data: Seq[InputPartition],
@@ -311,51 +307,12 @@ class InMemoryRowLevelOperationTable private (
       tableSchema: StructType,
       options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema)
-    with SupportsRuntimeCatalystFiltering {
-
-    private val _catalystPredicates = ArrayBuffer.empty[Expression]
+    with CatalystRuntimeFilteringScan {
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
       partitioning.flatMap(_.references())
         .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
-    }
-
-    override def filter(expressions: Array[Expression]): Unit = {
-      _catalystPredicates ++= expressions
-      val partAttrs = partitionAttributes
-      if (partAttrs.isEmpty) return
-
-      val resolver = SQLConf.get.resolver
-      expressions.foreach { expr =>
-        val remapped = expr.transform {
-          case a: AttributeReference =>
-            partAttrs.find(p => resolver(p.name, a.name)).getOrElse(a)
-        }
-        if (remapped.references.forall(r => partAttrs.exists(_.exprId == r.exprId))) {
-          val bound = BindReferences.bindReference(remapped, partAttrs)
-          val pred = CatalystPredicate.createInterpreted(bound)
-          data = data.filter { p =>
-            try {
-              pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
-            } catch {
-              case _: Exception => true
-            }
-          }
-        }
-      }
-    }
-
-    /** Predicates recorded by [[filter]], for test assertions only. */
-    def pushedCatalystPredicates: Seq[Expression] = _catalystPredicates.toSeq
-
-    private def partitionAttributes: Seq[AttributeReference] = {
-      partitioning.flatMap(_.references()).flatMap { ref =>
-        val name = ref.fieldNames.mkString(".")
-        readSchema.find(_.name == name).orElse(tableSchema.find(_.name == name)).map { f =>
-          AttributeReference(f.name, f.dataType, f.nullable)()
-        }
-      }.toSeq
     }
   }
 }

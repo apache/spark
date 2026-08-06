@@ -25,11 +25,11 @@ import java.util.OptionalLong
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Cast, EvalMode, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BindReferences, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.{ColumnImpl, SupportsStreamingUpdateAsAppend}
+import org.apache.spark.sql.internal.connector.{ColumnImpl, SupportsRuntimeCatalystFiltering, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -701,6 +701,64 @@ abstract class InMemoryBaseTable(
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
       new InMemoryMicroBatchStream(readSchema, tableSchema)
+  }
+
+  /**
+   * Reference implementation of [[SupportsRuntimeCatalystFiltering.filter]] for the in-memory
+   * fixtures: records what was pushed, and for expressions referencing only partition columns
+   * binds them against the partition key and drops partitions that do not match. Binding and
+   * interpreting rather than pattern matching a fixed set of operators is what lets the fixture
+   * honor an arbitrary pushed expression, the same way `PartitionPredicateImpl` does. Mixing
+   * classes supply their own `filterAttributes()`.
+   */
+  trait CatalystRuntimeFilteringScan extends SupportsRuntimeCatalystFiltering {
+    self: BatchScanBaseClass =>
+
+    /** The full table schema, used to locate partition columns pruned out of `readSchema`. */
+    protected def tableSchema: StructType
+
+    private val catalystPredicates = ArrayBuffer.empty[CatalystExpression]
+
+    override def filter(expressions: Array[CatalystExpression]): Unit = {
+      catalystPredicates ++= expressions
+      val partAttrs = partitionAttributes
+      if (partAttrs.isEmpty) return
+
+      val resolver = SQLConf.get.resolver
+      expressions.foreach { expr =>
+        val remapped = expr.transform {
+          case a: AttributeReference =>
+            partAttrs.find(p => resolver(p.name, a.name)).getOrElse(a)
+        }
+        // Only evaluate expressions whose refs are all partition columns, so we can bind
+        // against the partition key InternalRow (same approach as PartitionPredicateImpl).
+        if (remapped.references.forall(r => partAttrs.exists(_.exprId == r.exprId))) {
+          val bound = BindReferences.bindReference(remapped, partAttrs)
+          val pred = CatalystPredicate.createInterpreted(bound)
+          self.data = self.data.filter { p =>
+            try {
+              pred.eval(p.asInstanceOf[BufferedRows].partitionKey())
+            } catch {
+              // Keep the partition on eval failure, matching PartitionPredicateImpl.
+              case _: Exception => true
+            }
+          }
+        }
+      }
+    }
+
+    /** Predicates recorded by [[filter]], for test assertions only. */
+    def pushedCatalystPredicates: Seq[CatalystExpression] = catalystPredicates.toSeq
+
+    /** AttributeReferences matching the partition-key InternalRow field order. */
+    private def partitionAttributes: Seq[AttributeReference] = {
+      partitioning.flatMap(_.references()).flatMap { ref =>
+        val name = ref.fieldNames.mkString(".")
+        readSchema.find(_.name == name).orElse(tableSchema.find(_.name == name)).map { f =>
+          AttributeReference(f.name, f.dataType, f.nullable)()
+        }
+      }.toSeq
+    }
   }
 
   case class InMemoryBatchScan(

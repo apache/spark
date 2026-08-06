@@ -17,16 +17,20 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, GreaterThan, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, DynamicPruning, DynamicPruningExpression, EqualTo, Expression, GreaterThan, Literal, RLike}
 import org.apache.spark.sql.connector.catalog.{InMemoryCatalystRuntimeFilterTable, InMemoryTableCatalystRuntimeFilterCatalog}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{Scan, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.execution.{FilterExec, ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, DataSourceV2Strategy}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 /**
  * Tests for scans that implement
@@ -148,7 +152,7 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
     }
   }
 
-  test("untranslatable filter -> pushed instead of dropped") {
+  test("arithmetic around a scalar subquery -> subquery literalized, expression pushed intact") {
     val tbl = s"$catalogName.tbl2"
     val dim = s"$catalogName.dim2"
     withTable(tbl, dim) {
@@ -159,8 +163,9 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       sql(s"CREATE TABLE $dim (val INT) USING $v2Source")
       sql(s"INSERT INTO $dim VALUES (2)")
 
-      // `part > sub + 1` has no data source V2 translation, so the V2 interfaces would never
-      // see it. The scalar subquery is literalized but the surrounding expression is kept.
+      // The scalar subquery is literalized on the way to the scan, and the arithmetic around it
+      // survives. This one would also translate to a V2 predicate (`part > 3`, after the
+      // literalized operands are folded); see the next test for one that would not.
       val df = sql(s"SELECT * FROM $tbl WHERE part > (SELECT max(val) FROM $dim) + 1")
       checkAnswer(df, Row(4, 4))
 
@@ -168,6 +173,32 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
       val part = AttributeReference("part", IntegerType, nullable = false)()
       assertPushedCatalystPredicatesEqual(
         df, GreaterThan(part, Add(Literal(2), Literal(1))))
+    }
+  }
+
+  test("filter with no V2 translation -> pushed instead of dropped") {
+    val tbl = s"$catalogName.tbl_untranslatable"
+    val dim = s"$catalogName.dim_untranslatable"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part STRING) USING $v2Source PARTITIONED BY (part)")
+      for (i <- 0 until 5) {
+        sql(s"INSERT INTO $tbl VALUES ($i, '$i')")
+      }
+      sql(s"CREATE TABLE $dim (val STRING) USING $v2Source")
+      sql(s"INSERT INTO $dim VALUES ('3')")
+
+      // `V2ExpressionBuilder` has no RLike case, so this filter has no V2 predicate at all and
+      // the V2 interfaces would never see it. The pattern is still a subquery when the optimizer
+      // runs, so nothing rewrites the RLIKE into a translatable Contains beforehand either.
+      val df = sql(s"SELECT * FROM $tbl WHERE part RLIKE (SELECT max(val) FROM $dim)")
+      checkAnswer(df, Row(3, "3"))
+
+      assertScalarSubqueryRuntimeFilters(df)
+      val runtimeFilter = collectBatchScan(df).runtimeFilters.head
+      assert(DataSourceV2Strategy.translateScalarSubqueryFilterV2(runtimeFilter).isEmpty,
+        s"Expected no V2 translation for $runtimeFilter")
+      val part = AttributeReference("part", StringType, nullable = false)()
+      assertPushedCatalystPredicatesEqual(df, RLike(part, Literal("3")))
     }
   }
 
@@ -194,6 +225,25 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
         }.get
         assertPushedCatalystPredicatesEqual(df, dppPredicate)
       }
+    }
+  }
+
+  test("scan implementing both runtime filtering interfaces -> rejected") {
+    val tbl = s"$catalogName.tbl_both_interfaces"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Source PARTITIONED BY (part)")
+      sql(s"INSERT INTO $tbl VALUES (1, 1)")
+
+      val scanRelation = sql(s"SELECT * FROM $tbl").queryExecution.optimizedPlan.collectFirst {
+        case r: DataSourceV2ScanRelation => r
+      }.getOrElse(fail("Expected a DataSourceV2ScanRelation"))
+
+      // every runtime filtering path starts at runtimeFilterAttrs
+      val e = intercept[SparkException] {
+        scanRelation.copy(scan = new BothRuntimeFilteringInterfacesScan).runtimeFilterAttrs
+      }
+      assert(e.getMessage.contains("A scan must not implement both SupportsRuntimeV2Filtering " +
+        "and SupportsRuntimeCatalystFiltering"))
     }
   }
 
@@ -334,4 +384,17 @@ class DataSourceV2CatalystRuntimeFilterSuite extends SharedSparkSession {
           .getOrElse(a)
     }
   }
+}
+
+/** A scan violating the rule that only one runtime filtering interface may be implemented. */
+private class BothRuntimeFilteringInterfacesScan
+  extends Scan with SupportsRuntimeV2Filtering with SupportsRuntimeCatalystFiltering {
+
+  override def readSchema(): StructType = new StructType().add("part", IntegerType)
+
+  override def filterAttributes(): Array[NamedReference] = Array(FieldReference("part"))
+
+  override def filter(predicates: Array[Predicate]): Unit = {}
+
+  override def filter(expressions: Array[Expression]): Unit = {}
 }

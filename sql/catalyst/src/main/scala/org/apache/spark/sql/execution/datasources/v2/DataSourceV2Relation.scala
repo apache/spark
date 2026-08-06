@@ -201,6 +201,7 @@ case class DataSourceV2ScanRelation(
    * implements neither interface or exposes no attributes.
    */
   lazy val runtimeFilterAttrs: AttributeSet = {
+    checkRuntimeFilteringInterfaces()
     val filterAttrs = scan match {
       case s: SupportsRuntimeV2Filtering => s.filterAttributes
       case s: SupportsRuntimeCatalystFiltering => s.filterAttributes()
@@ -212,8 +213,10 @@ case class DataSourceV2ScanRelation(
 
   /**
    * Resolved attributes for which a Catalyst runtime-filtering scan fully evaluates predicates.
+   * Empty for a [[SupportsRuntimeV2Filtering]] scan, which keeps its post-scan filters.
    */
   lazy val fullyPushedRuntimeFilterAttrs: AttributeSet = {
+    checkRuntimeFilteringInterfaces()
     val filterAttrs = scan match {
       case s: SupportsRuntimeCatalystFiltering => s.fullyPushedFilterAttributes()
       case _ => Array.empty[NamedReference]
@@ -266,6 +269,14 @@ case class DataSourceV2ScanRelation(
 
   private def defaultSizeOnlyStats: Statistics = {
     Statistics(sizeInBytes = conf.defaultSizeInBytes)
+  }
+
+  private def checkRuntimeFilteringInterfaces(): Unit = scan match {
+    case _: SupportsRuntimeV2Filtering with SupportsRuntimeCatalystFiltering =>
+      throw SparkException.internalError(
+        "A scan must not implement both SupportsRuntimeV2Filtering and " +
+        s"SupportsRuntimeCatalystFiltering, but ${scan.getClass.getName} implements both.")
+    case _ =>
   }
 
   override def doCanonicalize(): DataSourceV2ScanRelation = {

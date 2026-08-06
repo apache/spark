@@ -50,7 +50,9 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    *
    * Any runtime predicate that references only attributes in this set is considered fully pushed
    * and will not be evaluated again after the scan. These attributes must also be returned by
-   * [[filterAttributes]].
+   * [[filterAttributes]]. Each attribute's value must therefore be fixed within every
+   * [[org.apache.spark.sql.connector.read.InputPartition]] the scan returns, since pruning
+   * partitions cannot fully evaluate a predicate on a column that varies within a partition.
    *
    * Each reference must be a top-level attribute present in [[Scan.readSchema]]. Nested
    * references and attributes pruned out of the read schema fail to resolve when Spark builds
@@ -64,6 +66,15 @@ trait SupportsRuntimeCatalystFiltering extends Scan {
    * The provided expressions must be interpreted as a set of predicates that are ANDed together.
    * Implementations may use the expressions to prune initially planned
    * [[org.apache.spark.sql.connector.read.InputPartition]]s.
+   *
+   * An expression may access nested fields of an attribute returned by [[filterAttributes]], as
+   * that attribute is required to be top-level. The scan is responsible for matching such
+   * accesses against its own partition layout.
+   *
+   * Spark may call this method more than once for the same scan instance: a plan can hold several
+   * scan nodes sharing one scan (e.g. the two branches of a group-based UPDATE), and each pushes
+   * its own copy of the runtime filters. Implementations must treat successive calls as additive,
+   * ANDing the new expressions with those already pushed rather than replacing them.
    *
    * If the scan also implements
    * [[org.apache.spark.sql.connector.read.SupportsReportPartitioning]], it must preserve
