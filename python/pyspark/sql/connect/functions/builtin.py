@@ -40,6 +40,7 @@ import numpy as np
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
+from pyspark.errors.utils import with_origin_to_functions as _with_origin_to_functions
 from pyspark.sql import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -5776,6 +5777,12 @@ def vector_sum(col: "ColumnOrName") -> Column:
 
 
 vector_sum.__doc__ = pysparkfuncs.vector_sum.__doc__
+
+
+# Capture the call site of the public functions above, so that a DataFrame query context can
+# point at the user code that built a failing expression. `col` is already decorated
+# directly; decorating it again here is harmless because `_with_origin` is re-entrant.
+_with_origin_to_functions(__name__)
 
 
 def _test() -> None:

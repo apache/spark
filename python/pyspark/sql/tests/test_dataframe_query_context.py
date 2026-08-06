@@ -20,6 +20,7 @@ from pyspark.errors import (
     ArithmeticException,
     QueryContextType,
     NumberFormatException,
+    ArrayIndexOutOfBoundsException,
 )
 from pyspark.sql import functions as sf
 from pyspark.testing.sqlutils import (
@@ -532,6 +533,36 @@ class DataFrameQueryContextTestsMixin:
         # Fully cleared once the outermost call completes.
         self.assertIsNone(current_origin().fragment)
         self.assertIsNone(current_origin().call_site)
+
+    def test_dataframe_query_context_functions(self):
+        # Expressions are commonly built from `pyspark.sql.functions` rather than from
+        # `Column` methods. Those functions used to capture no call site, so the context fell
+        # back to the JVM stack trace, which points at py4j reflection internals.
+        try:
+            self.spark.range(1).select(sf.element_at(sf.array(sf.lit(1)), 5)).collect()
+            self.fail("Expected the query to fail")
+        except ArrayIndexOutOfBoundsException as e:
+            call_site = e.getQueryContext()[0].callSite()
+
+        # A Python `<file>:<line>` call site, rather than the JVM stack trace fallback such
+        # as "java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)".
+        # Note that this test file itself lives under the PySpark package, whose frames are
+        # filtered out of the call site, so the innermost reported frame is its caller.
+        self.assertRegex(call_site, r"\.py:[0-9]+$")
+
+    def test_dataframe_query_context_functions_coverage(self):
+        # Public functions are decorated, while the ones taking a user defined callable or a
+        # raw expression string are deliberately left alone.
+        from pyspark.errors.utils import _ORIGIN_IGNORED_FUNCTIONS, _is_origin_wrapped
+
+        self.assertTrue(_is_origin_wrapped(sf.split))
+        self.assertTrue(_is_origin_wrapped(sf.upper))
+        self.assertTrue(_is_origin_wrapped(sf.to_date))
+
+        for name in _ORIGIN_IGNORED_FUNCTIONS:
+            func = getattr(sf, name, None)
+            if func is not None:
+                self.assertFalse(_is_origin_wrapped(func), name)
 
 
 class DataFrameQueryContextTests(DataFrameQueryContextTestsMixin, ReusedSQLTestCase):

@@ -34,6 +34,7 @@ from typing import (
     overload,
     cast,
 )
+import types
 from types import FrameType
 
 import pyspark
@@ -47,6 +48,10 @@ _current_origin = threading.local()
 # Providing DataFrame debugging options to reduce performance slowdown.
 # Default is True.
 _enable_debugging_cache = None
+
+# `spark.sql.stackTracesInDataFrameContext` cached as a (session, value) pair, so that it is
+# not read from the JVM on every decorated API call.
+_stack_traces_in_context_cache: Optional[Any] = None
 
 
 def is_debugging_enabled() -> bool:
@@ -68,6 +73,24 @@ def is_debugging_enabled() -> bool:
             _enable_debugging_cache = False
 
     return _enable_debugging_cache
+
+
+def _get_stack_traces_in_context(spark: Any) -> int:
+    """
+    Return `spark.sql.stackTracesInDataFrameContext`, cached per session.
+
+    Reading it is a JVM call (an RPC with Spark Connect), and it is read on every decorated
+    API call, so the value is cached against the session it was read from.
+    """
+    global _stack_traces_in_context_cache
+
+    cached = _stack_traces_in_context_cache
+    if cached is not None and cached[0] is spark:
+        return cached[1]
+
+    depth = int(spark.conf.get("spark.sql.stackTracesInDataFrameContext"))
+    _stack_traces_in_context_cache = (spark, depth)
+    return depth
 
 
 def current_origin() -> threading.local:
@@ -242,6 +265,24 @@ class ErrorClassesReader:
         return None
 
 
+@functools.lru_cache(maxsize=1)
+def _get_ipython_roots() -> Optional[List[str]]:
+    """
+    Return the package roots to filter out when IPython is available, or None otherwise.
+
+    Python does not cache failed imports, so probing IPython on every call site capture
+    repeats the whole module search. The probe is cached here instead.
+    """
+    try:
+        import IPython
+
+        # ipykernel is required for IPython
+        import ipykernel
+    except ImportError:
+        return None
+    return [os.path.dirname(IPython.__file__), os.path.dirname(ipykernel.__file__)]
+
+
 def _capture_call_site(depth: int) -> str:
     """
     Capture the call site information including file name, line number, and function name.
@@ -266,24 +307,21 @@ def _capture_call_site(depth: int) -> str:
 
     selected_frames: Iterator[FrameType] = itertools.islice(stack, depth)
 
-    # We try import here since IPython is not a required dependency
-    try:
+    # IPython is not a required dependency, so it is probed lazily. A failed import is not
+    # cached by Python, so the probe is done once here and the result reused; otherwise every
+    # call repeats the full module search.
+    ipython_roots = _get_ipython_roots()
+    if ipython_roots is not None:
         import IPython
-
-        # ipykernel is required for IPython
-        import ipykernel
 
         ipython = IPython.get_ipython()
         # Filtering out IPython related frames
-        ipy_root = os.path.dirname(IPython.__file__)
-        ipykernel_root = os.path.dirname(ipykernel.__file__)
         selected_frames = (
             frame
             for frame in selected_frames
-            if (ipy_root not in frame.f_code.co_filename)
-            and (ipykernel_root not in frame.f_code.co_filename)
+            if all(root not in frame.f_code.co_filename for root in ipython_roots)
         )
-    except ImportError:
+    else:
         ipython = None
 
     # Identifying the cell is useful when the error is generated from IPython Notebook
@@ -339,12 +377,7 @@ def _with_origin(func: FuncT) -> FuncT:
                 jvm_pyspark_origin = getattr(
                     spark._jvm, "org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin"
                 )
-                depth = int(
-                    spark.conf.get(  # type: ignore[arg-type]
-                        "spark.sql.stackTracesInDataFrameContext"
-                    )
-                )
-                call_site = _capture_call_site(depth)
+                call_site = _capture_call_site(_get_stack_traces_in_context(spark))
                 # Update call site when the function is called. The call site is also kept
                 # on the Python side so that nested calls can detect the outermost one.
                 set_current_origin(func.__name__, call_site)
@@ -358,7 +391,21 @@ def _with_origin(func: FuncT) -> FuncT:
         else:
             return func(*args, **kwargs)
 
+    # Marks the wrapper so that the decoration can be asserted on, since `functools.wraps`
+    # makes it otherwise indistinguishable from the function it wraps.
+    wrapper.__origin_wrapped__ = True  # type: ignore[attr-defined]
     return cast(FuncT, wrapper)
+
+
+def _is_origin_wrapped(func: Any) -> bool:
+    """
+    Whether `func` is decorated with `_with_origin`, looking through other decorators.
+    """
+    while func is not None:
+        if getattr(func, "__origin_wrapped__", False):
+            return True
+        func = getattr(func, "__wrapped__", None)
+    return False
 
 
 @overload
@@ -394,3 +441,45 @@ def with_origin_to_class(
                 if callable(method) and name not in skipping:
                     setattr(cls, name, _with_origin(method))
         return cls
+
+
+# Functions that take a user defined callable or an arbitrary expression string. The
+# interesting call site for those is inside the user's own function, or the expression
+# itself, so decorating them only adds overhead.
+_ORIGIN_IGNORED_FUNCTIONS = frozenset(
+    [
+        "udf",
+        "udtf",
+        "arrow_udf",
+        "arrow_udtf",
+        "pandas_udf",
+        "expr",
+        "broadcast",
+        "call_udf",
+        "call_function",
+    ]
+)
+
+
+def with_origin_to_functions(module_name: str) -> None:
+    """
+    Decorate the public functions of a ``pyspark.sql.functions`` module with `_with_origin`
+    to capture call site information.
+
+    Expressions are commonly built from these functions rather than from
+    :class:`Column` methods, so without this a DataFrame query context cannot point at the
+    user code that built a failing expression.
+    """
+    if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() != "true":
+        return
+
+    import sys
+
+    module = sys.modules[module_name]
+    for name, func in list(vars(module).items()):
+        if name.startswith("_") or name in _ORIGIN_IGNORED_FUNCTIONS:
+            continue
+        # Only functions defined in this module; leave imported helpers and classes alone.
+        if not isinstance(func, types.FunctionType) or func.__module__ != module_name:
+            continue
+        setattr(module, name, _with_origin(func))
