@@ -170,6 +170,16 @@ abstract class TableValuedFunction {
   def variant_explode(input: Column): Dataset[Row]
 
   /**
+   * Separates a variant object/array and, when `recursive` is true, recursively separates nested
+   * objects and arrays. Recursive output adds a leading `path` column containing each
+   * field/element's JSONPath.
+   *
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_explode(input: Column, recursive: Boolean): Dataset[Row]
+
+  /**
    * Separates a variant object/array into multiple rows containing its fields/elements. Its
    * result schema is `struct&lt;pos int, key string, value variant&gt;`. `pos` is the position of
    * the field/element in its parent object/array, and `value` is the field/element value. `key`
@@ -181,6 +191,16 @@ abstract class TableValuedFunction {
    * @since 4.0.0
    */
   def variant_explode_outer(input: Column): Dataset[Row]
+
+  /**
+   * Separates a variant object/array and, when `recursive` is true, recursively separates nested
+   * objects and arrays. Recursive output adds a leading `path` column containing each
+   * field/element's JSONPath. If the input produces no rows, a single NULL row is produced.
+   *
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_explode_outer(input: Column, recursive: Boolean): Dataset[Row]
 
   /**
    * Returns a `DataFrame` of logs collected from Python workers.

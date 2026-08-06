@@ -70,7 +70,12 @@ object MimaExcludes {
     // [SPARK-57987] Add desc field to the SQL REST API Node case class
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$"),
+    // [SQL] Add recursive mode to variant explode table-valued functions
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode_outer")
   )
 
   // Exclude rules for 4.2.x from 4.1.0

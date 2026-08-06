@@ -18,9 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions.variant
 
 import java.time.ZoneId
+import java.util.ArrayDeque
 
 import scala.util.parsing.combinator.RegexParsers
 
+import org.apache.commons.text.StringEscapeUtils
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, TypeCheckResult}
@@ -1739,33 +1741,76 @@ object VariantStripNullsExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-case class VariantExplode(child: Expression) extends UnaryExpression with Generator
-  with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+case class VariantExplode(child: Expression, recursive: Expression)
+  extends BinaryExpression with Generator
+  with ExpectsInputTypes
+  with QueryErrorsBase {
+  override def left: Expression = child
+  override def right: Expression = recursive
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType, BooleanType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val check = super.checkInputDataTypes()
+    if (check.isFailure) {
+      check
+    } else if (!recursive.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("recursive"),
+          "inputType" -> toSQLType(recursive.dataType),
+          "inputExpr" -> toSQLExpr(recursive)))
+    } else if (recursive.eval() == null) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "recursive"))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  private lazy val isRecursive = recursive.foldable && (recursive.eval() match {
+    case value: Boolean => value
+    case _ => false
+  })
 
   override def prettyName: String = "variant_explode"
 
-  override protected def withNewChildInternal(newChild: Expression): VariantExplode =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): VariantExplode =
+    copy(child = newLeft, recursive = newRight)
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val inputVariant = child.eval(input).asInstanceOf[VariantVal]
-    VariantExplode.variantExplode(inputVariant, inputVariant == null)
+    if (isRecursive) {
+      VariantExplode.variantExplodeRecursive(inputVariant, inputVariant == null)
+    } else {
+      VariantExplode.variantExplode(inputVariant, inputVariant == null)
+    }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.genCode(ctx)
     val cls = classOf[VariantExplode].getName
+    val method = if (isRecursive) "variantExplodeRecursive" else "variantExplode"
     val code = code"""
       ${childCode.code}
-      scala.collection.Seq<InternalRow> ${ev.value} = $cls.variantExplode(
+      scala.collection.Iterable<InternalRow> ${ev.value} = $cls.$method(
           ${childCode.value}, ${childCode.isNull});
     """
     ev.copy(code = code, isNull = FalseLiteral)
   }
 
   override def elementSchema: StructType = {
-    new StructType()
+    val schema = new StructType()
+    val schemaWithPath = if (isRecursive) {
+      schema.add("path", StringType, nullable = false)
+    } else {
+      schema
+    }
+    schemaWithPath
       .add("pos", IntegerType, nullable = false)
       .add("key", StringType, nullable = true)
       .add("value", VariantType, nullable = false)
@@ -1773,17 +1818,19 @@ case class VariantExplode(child: Expression) extends UnaryExpression with Genera
 }
 
 trait VariantExplodeGeneratorBuilderBase extends GeneratorBuilder {
-  override def functionSignature: Option[FunctionSignature] =
-    Some(FunctionSignature(Seq(InputParameter("input"))))
+  override def functionSignature: Option[FunctionSignature] = Some(FunctionSignature(Seq(
+    InputParameter("input"),
+    InputParameter("recursive", Some(Literal.create(false, BooleanType))))))
+
   override def buildGenerator(funcName: String, expressions: Seq[Expression]): Generator = {
-    assert(expressions.size == 1)
-    VariantExplode(expressions(0))
+    assert(expressions.size == 2)
+    VariantExplode(expressions(0), expressions(1))
   }
 }
 
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - It separates a variant object/array into multiple rows containing its fields/elements. Its result schema is `struct<pos int, key string, value variant>`. `pos` is the position of the field/element in its parent object/array, and `value` is the field/element value. `key` is the field name when exploding a variant object, or is NULL when exploding a variant array. It ignores any input that is not a variant array/object, including SQL NULL, variant null, and any other variant values.",
+  usage = "_FUNC_(expr[, recursive]) - It separates a variant object/array into multiple rows containing its fields/elements. Its result schema is `struct<pos int, key string, value variant>`. When `recursive` is true, it also emits all nested descendants and adds a leading `path string` column containing each field/element's JSONPath. `pos` is the position of the field/element in its parent object/array, and `value` is the field/element value. `key` is the field name when exploding a variant object, or is NULL when exploding a variant array. It ignores any input that is not a variant array/object, including SQL NULL, variant null, and any other variant values.",
   examples = """
     Examples:
       > SELECT * from _FUNC_(parse_json('["hello", "world"]'));
@@ -1792,6 +1839,10 @@ trait VariantExplodeGeneratorBuilderBase extends GeneratorBuilder {
       > SELECT * from _FUNC_(input => parse_json('{"a": true, "b": 3.14}'));
        0	a	true
        1	b	3.14
+      > SELECT * from _FUNC_(parse_json('{"a": [1, 2]}'), true);
+       $.a	0	a	[1,2]
+       $.a[0]	0	NULL	1
+       $.a[1]	1	NULL	2
   """,
   since = "4.0.0",
   group = "variant_funcs")
@@ -1802,7 +1853,7 @@ object VariantExplodeGeneratorBuilder extends VariantExplodeGeneratorBuilderBase
 
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - It separates a variant object/array into multiple rows containing its fields/elements. Its result schema is `struct<pos int, key string, value variant>`. `pos` is the position of the field/element in its parent object/array, and `value` is the field/element value. `key` is the field name when exploding a variant object, or is NULL when exploding a variant array. It ignores any input that is not a variant array/object, including SQL NULL, variant null, and any other variant values.",
+  usage = "_FUNC_(expr[, recursive]) - It separates a variant object/array into multiple rows containing its fields/elements. Its result schema is `struct<pos int, key string, value variant>`. When `recursive` is true, it also emits all nested descendants and adds a leading `path string` column containing each field/element's JSONPath. `pos` is the position of the field/element in its parent object/array, and `value` is the field/element value. `key` is the field name when exploding a variant object, or is NULL when exploding a variant array. It produces a single NULL row for inputs that do not produce any rows.",
   examples = """
     Examples:
       > SELECT * from _FUNC_(parse_json('["hello", "world"]'));
@@ -1811,6 +1862,10 @@ object VariantExplodeGeneratorBuilder extends VariantExplodeGeneratorBuilderBase
       > SELECT * from _FUNC_(input => parse_json('{"a": true, "b": 3.14}'));
        0	a	true
        1	b	3.14
+      > SELECT * from _FUNC_(parse_json('{"a": [1, 2]}'), true);
+       $.a	0	a	[1,2]
+       $.a[0]	0	NULL	1
+       $.a[1]	1	NULL	2
   """,
   since = "4.0.0",
   group = "variant_funcs")
@@ -1849,6 +1904,74 @@ object VariantExplode {
         }
         result
       case _ => Nil
+    }
+  }
+
+  private case class ExplodeEntry(path: String, pos: Int, key: UTF8String, value: Variant)
+
+  def variantExplodeRecursive(
+      input: VariantVal,
+      isNull: Boolean): Iterable[InternalRow] = {
+    if (isNull) {
+      return Iterable.empty
+    }
+
+    new Iterable[InternalRow] {
+      override def iterator: Iterator[InternalRow] = {
+        val stack = new ArrayDeque[ExplodeEntry]()
+        pushChildren(new Variant(input.getValue, input.getMetadata), "$", stack)
+        new Iterator[InternalRow] {
+          override def hasNext: Boolean = !stack.isEmpty
+
+          override def next(): InternalRow = {
+            val entry = stack.pop()
+            pushChildren(entry.value, entry.path, stack)
+            InternalRow(
+              UTF8String.fromString(entry.path),
+              entry.pos,
+              entry.key,
+              new VariantVal(entry.value.getValue, entry.value.getMetadata))
+          }
+        }
+      }
+    }
+  }
+
+  private def pushChildren(
+      v: Variant,
+      parentPath: String,
+      stack: ArrayDeque[ExplodeEntry]): Unit = {
+    v.getType match {
+      case Type.OBJECT =>
+        for (i <- v.objectSize() - 1 to 0 by -1) {
+          val field = v.getFieldAtIndex(i)
+          stack.push(ExplodeEntry(
+            appendObjectPath(parentPath, field.key),
+            i,
+            UTF8String.fromString(field.key),
+            field.value))
+        }
+      case Type.ARRAY =>
+        for (i <- v.arraySize() - 1 to 0 by -1) {
+          stack.push(ExplodeEntry(
+            s"$parentPath[$i]",
+            i,
+            null,
+            v.getElementAtIndex(i)))
+        }
+      case _ =>
+    }
+  }
+
+  private def appendObjectPath(parentPath: String, key: String): String = {
+    if (key.nonEmpty && !key.contains('.') && !key.contains('[')) {
+      s"$parentPath.$key"
+    } else if (!key.contains('"')) {
+      s"""$parentPath["$key"]"""
+    } else if (!key.contains('\'')) {
+      s"$parentPath['$key']"
+    } else {
+      s"""$parentPath["${StringEscapeUtils.escapeJson(key)}"]"""
     }
   }
 }
