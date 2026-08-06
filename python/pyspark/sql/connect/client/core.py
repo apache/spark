@@ -400,7 +400,7 @@ class ChannelBuilder:
                 options.append((key, value))
         return options
 
-    def metadata(self) -> Iterable[Tuple[str, str]]:
+    def metadata(self) -> List[Tuple[str, str]]:
         """
         Builds the GRPC specific metadata list to be injected into the request. All
         parameters will be converted to metadata except ones that are explicitly used

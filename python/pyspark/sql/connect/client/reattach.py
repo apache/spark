@@ -71,7 +71,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         request: pb2.ExecutePlanRequest,
         stub: grpc_lib.SparkConnectServiceStub,
         retrying: Callable[[], Retrying],
-        metadata: Iterable[Tuple[str, str]],
+        metadata: List[Tuple[str, str]],
         reattachable_execute_plan_timeout: Optional[float] = None,
         reattach_execute_timeout: Optional[float] = None,
     ):
