@@ -260,7 +260,7 @@ case class Crc32(child: Expression)
       > SELECT _FUNC_('Spark');
        80997306238743657
   """,
-  since = "4.3.0",
+  since = "4.4.0",
   group = "hash_funcs")
 case class Xxh364(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes {
@@ -297,7 +297,7 @@ case class Xxh364(child: Expression)
       > SELECT _FUNC_('Spark');
        7d57dd84c60c86ca1f4e82ab91a12b5e
   """,
-  since = "4.3.0",
+  since = "4.4.0",
   group = "hash_funcs")
 case class Xxh3128(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {

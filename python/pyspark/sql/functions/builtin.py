@@ -14772,7 +14772,7 @@ def xxh3_64(col: "ColumnOrName") -> Column:
     Unlike :func:`xxhash64`, which hashes one or more columns structurally, this hashes the raw
     bytes of a single value with seed 0, so its result is byte compatible with the reference XXH3.
 
-    .. versionadded:: 4.3.0
+    .. versionadded:: 4.4.0
 
     Parameters
     ----------
@@ -14803,7 +14803,7 @@ def xxh3_64(col: "ColumnOrName") -> Column:
 def xxh3_128(col: "ColumnOrName") -> Column:
     """Returns a 128-bit XXH3 hash of the argument as a 32-character hex string.
 
-    .. versionadded:: 4.3.0
+    .. versionadded:: 4.4.0
 
     Parameters
     ----------

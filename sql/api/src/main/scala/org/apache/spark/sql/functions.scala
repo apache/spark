@@ -6599,7 +6599,7 @@ object functions {
    * @param col
    *   the column to hash, which must have string or binary type.
    * @group hash_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    * @return
    *   Returns a column that evaluates to a long.
    */
@@ -6611,7 +6611,7 @@ object functions {
    * @param col
    *   the column to hash, which must have string or binary type.
    * @group hash_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    * @return
    *   Returns a column that evaluates to a string.
    */
