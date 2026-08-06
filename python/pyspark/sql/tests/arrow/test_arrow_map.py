@@ -55,6 +55,19 @@ class MapInArrowTestsMixin:
         expected = df.collect()
         self.assertEqual(actual, expected)
 
+    def test_map_in_arrow_legacy_accept_any_iterable(self):
+        # With the legacy flag enabled, returning a non-Iterator iterable (e.g. list) is accepted.
+        def list_not_iter(iterator):
+            return [batch for batch in iterator]
+
+        with self.sql_conf(
+            {"spark.sql.execution.pythonUDF.mapInBatch.legacy.acceptAnyIterable.enabled": True}
+        ):
+            df = self.spark.range(10)
+            actual = df.mapInArrow(list_not_iter, "id long").collect()
+            expected = df.collect()
+            self.assertEqual(actual, expected)
+
     def test_map_in_arrow_with_limit(self):
         def get_size(iterator):
             for batch in iterator:
