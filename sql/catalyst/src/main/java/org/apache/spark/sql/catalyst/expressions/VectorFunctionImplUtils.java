@@ -101,9 +101,10 @@ public class VectorFunctionImplUtils {
       i++;
     }
 
-    // `norm1Sq * norm2Sq` cannot overflow in double precision: both factors are bounded by
-    // MAX_ROUNDED_ARRAY_LENGTH * Float.MAX_VALUE^2, so their product stays well below
-    // Double.MAX_VALUE.
+    // For vectors of finite elements, `norm1Sq * norm2Sq` cannot overflow in double precision:
+    // both factors are bounded by MAX_ROUNDED_ARRAY_LENGTH * Float.MAX_VALUE^2, so their product
+    // stays well below Double.MAX_VALUE. An element that is already infinite makes the product
+    // infinite and the result NaN, exactly as it did before the accumulators were widened.
     double normProduct = Math.sqrt(norm1Sq * norm2Sq);
     if (normProduct == 0.0d) {
       return null;
@@ -462,7 +463,7 @@ public class VectorFunctionImplUtils {
 
   /**
    * Computes the Lp norm of a float vector using the specified degree.
-   * Supported degrees: 1.0 (L1), 2.0 (L2), Float.POSITIVE_INFINITY (L∞).
+   * Supported degrees: 1.0 (L1), 2.0 (L2), Float.POSITIVE_INFINITY (infinity norm).
    * Returns NULL if the vector contains NULL elements.
    * Returns 0.0 for empty vectors.
    * Throws INVALID_VECTOR_NORM_DEGREE if degree is not supported.
@@ -477,7 +478,7 @@ public class VectorFunctionImplUtils {
 
   /**
    * Normalizes a float vector to unit length using the specified norm degree.
-   * Supported degrees: 1.0 (L1), 2.0 (L2), Float.POSITIVE_INFINITY (L∞).
+   * Supported degrees: 1.0 (L1), 2.0 (L2), Float.POSITIVE_INFINITY (infinity norm).
    * Returns NULL if the vector contains NULL elements or has zero norm.
    * Returns an empty array for empty vectors.
    * Throws INVALID_VECTOR_NORM_DEGREE if degree is not supported.

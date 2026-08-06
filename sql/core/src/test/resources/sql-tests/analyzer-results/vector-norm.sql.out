@@ -621,3 +621,17 @@ SELECT vector_normalize(array(1.0e-23F, 1.0e-23F), 2.0F)
 -- !query analysis
 Project [vector_normalize(array(1.0E-23, 1.0E-23), 2.0) AS vector_normalize(array(1.0E-23, 1.0E-23), 2.0)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT vector_norm(array(float('inf'), 1.0F), 2.0F)
+-- !query analysis
+Project [vector_norm(array(cast(inf as float), 1.0), 2.0) AS vector_norm(array(inf, 1.0), 2.0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_normalize(array(float('inf'), 1.0F), 2.0F)
+-- !query analysis
+Project [vector_normalize(array(cast(inf as float), 1.0), 2.0) AS vector_normalize(array(inf, 1.0), 2.0)#x]
++- OneRowRelation

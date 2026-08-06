@@ -153,3 +153,15 @@ SELECT vector_cosine_similarity(array(1.0e-23F, 0.0F), array(1.0e-23F, 0.0F));
 
 -- vector_cosine_similarity of orthogonal tiny vectors is 0.0, not NULL
 SELECT vector_cosine_similarity(array(1.0e-23F, 1.0e-23F), array(1.0e-23F, -1.0e-23F));
+
+-- SPARK-58544: elements that are already infinite still propagate to NaN or Infinity, the wider
+-- accumulators do not change that
+
+-- vector_cosine_similarity: the norm is infinite, so the similarity is NaN
+SELECT vector_cosine_similarity(array(float('inf'), 1.0F), array(1.0F, 1.0F));
+
+-- vector_inner_product: the dot product is infinite
+SELECT vector_inner_product(array(float('inf'), 1.0F), array(1.0F, 1.0F));
+
+-- vector_l2_distance: the distance is infinite
+SELECT vector_l2_distance(array(float('inf'), 1.0F), array(0.0F, 0.0F));

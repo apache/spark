@@ -736,3 +736,19 @@ SELECT vector_normalize(array(1.0e-23F, 1.0e-23F), 2.0F)
 struct<vector_normalize(array(1.0E-23, 1.0E-23), 2.0):array<float>>
 -- !query output
 [0.70710677,0.70710677]
+
+
+-- !query
+SELECT vector_norm(array(float('inf'), 1.0F), 2.0F)
+-- !query schema
+struct<vector_norm(array(inf, 1.0), 2.0):float>
+-- !query output
+Infinity
+
+
+-- !query
+SELECT vector_normalize(array(float('inf'), 1.0F), 2.0F)
+-- !query schema
+struct<vector_normalize(array(inf, 1.0), 2.0):array<float>>
+-- !query output
+[NaN,0.0]

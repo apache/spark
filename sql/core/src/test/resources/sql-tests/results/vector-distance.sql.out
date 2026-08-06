@@ -792,3 +792,27 @@ SELECT vector_cosine_similarity(array(1.0e-23F, 1.0e-23F), array(1.0e-23F, -1.0e
 struct<vector_cosine_similarity(array(1.0E-23, 1.0E-23), array(1.0E-23, -1.0E-23)):float>
 -- !query output
 0.0
+
+
+-- !query
+SELECT vector_cosine_similarity(array(float('inf'), 1.0F), array(1.0F, 1.0F))
+-- !query schema
+struct<vector_cosine_similarity(array(inf, 1.0), array(1.0, 1.0)):float>
+-- !query output
+NaN
+
+
+-- !query
+SELECT vector_inner_product(array(float('inf'), 1.0F), array(1.0F, 1.0F))
+-- !query schema
+struct<vector_inner_product(array(inf, 1.0), array(1.0, 1.0)):float>
+-- !query output
+Infinity
+
+
+-- !query
+SELECT vector_l2_distance(array(float('inf'), 1.0F), array(0.0F, 0.0F))
+-- !query schema
+struct<vector_l2_distance(array(inf, 1.0), array(0.0, 0.0)):float>
+-- !query output
+Infinity

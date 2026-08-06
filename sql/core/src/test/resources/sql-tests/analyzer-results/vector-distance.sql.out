@@ -696,3 +696,24 @@ SELECT vector_cosine_similarity(array(1.0e-23F, 1.0e-23F), array(1.0e-23F, -1.0e
 -- !query analysis
 Project [vector_cosine_similarity(array(1.0E-23, 1.0E-23), array(1.0E-23, -1.0E-23)) AS vector_cosine_similarity(array(1.0E-23, 1.0E-23), array(1.0E-23, -1.0E-23))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT vector_cosine_similarity(array(float('inf'), 1.0F), array(1.0F, 1.0F))
+-- !query analysis
+Project [vector_cosine_similarity(array(cast(inf as float), 1.0), array(1.0, 1.0)) AS vector_cosine_similarity(array(inf, 1.0), array(1.0, 1.0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_inner_product(array(float('inf'), 1.0F), array(1.0F, 1.0F))
+-- !query analysis
+Project [vector_inner_product(array(cast(inf as float), 1.0), array(1.0, 1.0)) AS vector_inner_product(array(inf, 1.0), array(1.0, 1.0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT vector_l2_distance(array(float('inf'), 1.0F), array(0.0F, 0.0F))
+-- !query analysis
+Project [vector_l2_distance(array(cast(inf as float), 1.0), array(0.0, 0.0)) AS vector_l2_distance(array(inf, 1.0), array(0.0, 0.0))#x]
++- OneRowRelation
