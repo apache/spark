@@ -582,9 +582,9 @@ The following SQL properties enable Storage Partition Join in different join que
       <td><code>spark.sql.requireAllClusterKeysForCoPartition</code></td>
       <td>true</td>
       <td>
-        When true, require the join or MERGE keys to be same and in the same order as the partition keys to eliminate shuffle. Hence, set to <b>false</b> in this situation to eliminate shuffle.
+        When true, storage-partitioned join requires every join or MERGE key to be covered by some partition key (rather than matching the partition keys positionally) to eliminate shuffle. When the partition keys cover only part of the join or MERGE keys, set to <b>false</b> to eliminate shuffle, at the risk of data skew and reduced parallelism from the coarser storage partitioning.
       </td>
-      <td>3.4.0</td>
+      <td>3.3.0</td>
     </tr>
     <tr>
       <td><code>spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled</code></td>
@@ -595,10 +595,10 @@ The following SQL properties enable Storage Partition Join in different join que
       <td>3.4.0</td>
     </tr>
     <tr>
-      <td><code>spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled</code></td>
+      <td><code>spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled</code></td>
       <td>false</td>
       <td>
-        When enabled, try to avoid shuffle if join or MERGE condition does not include all partition columns. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true, and <code>spark.sql.requireAllClusterKeysForCoPartition</code> to be false.
+        When enabled, try to avoid shuffle if join or MERGE condition does not include all partition columns. This config requires both <code>spark.sql.sources.v2.bucketing.enabled</code> and <code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code> to be true.
       </td>
       <td>4.0.0</td>
     </tr>
@@ -654,7 +654,6 @@ ON t.dep = s.dep AND t.id = s.id
 SET 'spark.sql.sources.v2.bucketing.enabled' 'true'
 SET 'spark.sql.iceberg.planning.preserve-data-grouping' 'true'
 SET 'spark.sql.sources.v2.bucketing.pushPartValues.enabled' 'true'
-SET 'spark.sql.requireAllClusterKeysForCoPartition' 'false'
 SET 'spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled' 'true'
 
 -- Plan with Storage Partition Join
