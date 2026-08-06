@@ -22584,7 +22584,7 @@ def variant_from_arrays(keys: "ColumnOrName", values: "ColumnOrName") -> Column:
     Creates a variant object from the given arrays of keys and values. The keys must be non-null
     strings and the two arrays must have the same length.
 
-    .. versionadded:: 4.3.0
+    .. versionadded:: 4.4.0
 
     Parameters
     ----------
@@ -22619,7 +22619,7 @@ def variant_from_entries(entries: "ColumnOrName") -> Column:
     Creates a variant object from an array of key/value struct entries. The keys must be non-null
     strings.
 
-    .. versionadded:: 4.3.0
+    .. versionadded:: 4.4.0
 
     Parameters
     ----------

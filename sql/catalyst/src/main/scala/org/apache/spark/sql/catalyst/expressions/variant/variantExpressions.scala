@@ -198,7 +198,7 @@ case class ToVariantObject(child: Expression)
       > SELECT _FUNC_(array('a', 'b'), array(1, 2));
        {"a":1,"b":2}
   """,
-  since = "4.3.0",
+  since = "4.4.0",
   group = "variant_funcs")
 // scalastyle:on line.size.limit
 case class VariantFromArrays(left: Expression, right: Expression)
@@ -267,7 +267,7 @@ case class VariantFromArrays(left: Expression, right: Expression)
       > SELECT _FUNC_(array(struct('a', 1), struct('b', 2)));
        {"a":1,"b":2}
   """,
-  since = "4.3.0",
+  since = "4.4.0",
   group = "variant_funcs")
 // scalastyle:on line.size.limit
 case class VariantFromEntries(child: Expression)

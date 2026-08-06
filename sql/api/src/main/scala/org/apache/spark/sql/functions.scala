@@ -14134,7 +14134,7 @@ object functions {
    * @param values
    *   a column that evaluates to an array of values.
    * @group variant_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    * @return
    *   Returns a column that evaluates to a variant.
    */
@@ -14148,7 +14148,7 @@ object functions {
    * @param entries
    *   a column that evaluates to an array of key/value structs.
    * @group variant_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    * @return
    *   Returns a column that evaluates to a variant.
    */
