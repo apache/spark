@@ -18,7 +18,7 @@ from typing import Any, Callable, no_type_check
 
 import numpy as np
 
-from pyspark.sql import functions as F
+from pyspark.sql import Column, functions as F
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
@@ -100,7 +100,7 @@ unary_np_spark_mappings = {
 }
 
 
-def _fmod_func(c1, c2):
+def _fmod_func(c1: Column, c2: Column) -> Column:
     c1_double = c1.cast("double")
     c2_double = c2.cast("double")
 
