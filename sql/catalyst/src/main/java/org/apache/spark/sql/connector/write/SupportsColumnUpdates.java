@@ -24,6 +24,9 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * A mix-in interface for {@link RowLevelOperation}. Data sources can implement this interface to
  * receive a narrow row containing only the columns declared via {@link #requiredDataAttributes()}
  * for updated, copied, and reinserted records, instead of the full table row.
+ * <p>
+ * Currently honored only for UPDATE. DELETE and MERGE ignore this interface: those operations
+ * receive full-width rows and {@link LogicalWriteInfo#updateSchema()} is absent for them.
  *
  * @since 4.3.0
  */
