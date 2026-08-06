@@ -54,6 +54,24 @@ import static org.mockito.Mockito.*;
 
 public class UnsafeExternalSorterSuite {
 
+  private static final class DeleteFailsOnceFile extends File {
+    private int deleteAttempts;
+
+    DeleteFailsOnceFile(File file) {
+      super(file.getAbsolutePath());
+    }
+
+    @Override
+    public boolean delete() {
+      deleteAttempts++;
+      return deleteAttempts > 1 && super.delete();
+    }
+
+    int deleteAttempts() {
+      return deleteAttempts;
+    }
+  }
+
   private final SparkConf conf = new SparkConf();
 
   final LinkedList<File> spillFilesCreated = new LinkedList<>();
@@ -174,6 +192,30 @@ public class UnsafeExternalSorterSuite {
       spillSizeThreshold,
       /* spillMergeFactor */ -1,
       shouldUseRadixSort());
+  }
+
+  @Test
+  public void cleanupResourcesRetriesFailedSpillFileDeletion() throws Exception {
+    DeleteFailsOnceFile[] spillFile = new DeleteFailsOnceFile[1];
+    when(diskBlockManager.createTempLocalBlock()).thenAnswer(invocationOnMock -> {
+      TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
+      File file = File.createTempFile("spillFile", ".spill", tempDir);
+      spillFile[0] = new DeleteFailsOnceFile(file);
+      spillFilesCreated.add(spillFile[0]);
+      return Tuple2$.MODULE$.apply(blockId, spillFile[0]);
+    });
+
+    UnsafeExternalSorter sorter = newSorter();
+    insertNumber(sorter, 1);
+    sorter.spill();
+
+    sorter.cleanupResources();
+    assertTrue(spillFile[0].exists());
+    assertEquals(1, spillFile[0].deleteAttempts());
+
+    sorter.cleanupResources();
+    assertFalse(spillFile[0].exists());
+    assertEquals(2, spillFile[0].deleteAttempts());
   }
 
   @Test

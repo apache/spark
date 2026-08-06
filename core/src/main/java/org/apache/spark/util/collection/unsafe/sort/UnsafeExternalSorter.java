@@ -401,7 +401,6 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     try {
       synchronized (this) {
         deleteSpillFiles();
-        spillWriters.clear();
         if (boundedMerger != null) {
           boundedMerger.cleanupIntermediateFiles();
           boundedMerger = null;
