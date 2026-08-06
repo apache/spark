@@ -189,6 +189,10 @@
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-tos</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-huaweicloud</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
   </dependencies>
