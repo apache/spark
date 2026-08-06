@@ -58,10 +58,7 @@ private[deploy] class DriverInfo(
   def resources: Map[String, ResourceInformation] = _resources
 
   private[deploy] def redactedCopy(conf: SparkConf): DriverInfo = {
-    val redactedCommand = desc.command.copy(
-      environment = Utils.redact(conf, desc.command.environment.toSeq).toMap,
-      javaOpts = Utils.redactCommandLineArgs(conf, desc.command.javaOpts))
-    val redactedDesc = desc.copy(command = redactedCommand)
+    val redactedDesc = desc.copy(command = desc.command.redactedCopy(conf))
     val copy = new DriverInfo(startTime, id, redactedDesc, submitDate)
     copy.withResources(_resources)
     copy
