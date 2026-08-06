@@ -1077,8 +1077,12 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             case None =>
               s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
             case Some(catalystExpr) =>
+              // A transpiled option can reference the same parameter many times (null guards,
+              // sign handling, both branches of a conditional, ...) while the Python UDF it
+              // replaces evaluates each argument exactly once, so share the inputs first.
+              val shared = shareUDFInputs(catalystExpr, udfArguments(s.pythonUDFExpr))
               // Recursively apply to the children first because we may use them as inputs in parent
-              catalystExpr.mapChildren(applyExpr(_, parentIsUdf = false))
+              shared.mapChildren(applyExpr(_, parentIsUdf = false))
           }
         } else {
           // We should avoid converting a UDF node where that could break pipelining.
@@ -1092,6 +1096,76 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // transpiled wrapping one that could).
         expression.mapChildren(
           applyExpr(_, parentIsUdf = isScalarPythonUDF(expression)))
+    }
+  }
+
+  /**
+   * The call site's argument expressions, i.e. the ones `_udf_param_N` placeholders were
+   * substituted with when the [[TranspiledPythonUDF]] node was built. A grouped-agg UDF is
+   * wrapped in an [[AggregateExpression]] by `UserDefinedPythonFunction.fromUDFExpr`, so unwrap
+   * that to reach the arguments.
+   */
+  private def udfArguments(udfExpr: Expression): Seq[Expression] = udfExpr match {
+    case agg: AggregateExpression => agg.aggregateFunction.children
+    case other => other.children
+  }
+
+  /**
+   * Makes each of the UDF's non-literal arguments evaluate once, no matter how many times the
+   * transpiled option references it.
+   *
+   * A transpiled option is the option's body with every `_udf_param_N` placeholder replaced by
+   * the bound argument expression, so an argument referenced N times in the body is spliced in
+   * N times. Python evaluates each argument exactly once before calling the function, so the
+   * duplication is both wasted work and, for a nondeterministic argument, wrong: the copies are
+   * independent expression instances, and any copy sitting in a conditional branch that is not
+   * taken falls out of step with the others (e.g. `udf(lambda x: x if x > 0.5 else 0.0)(rand())`
+   * can return a value below 0.5).
+   *
+   * Rewrites the duplicated arguments to [[CommonExpressionRef]]s of a single
+   * [[CommonExpressionDef]] each and wraps the result in a [[With]]. `RewriteWithExpression`,
+   * which runs a couple of batches later, pre-evaluates those definitions in a `Project` below
+   * this operator and projects the extra columns away again -- and inlines the ones that are
+   * cheap or referenced only once, so the plan is unchanged when there is nothing to save.
+   *
+   * The `With` must wrap the whole option rather than each duplicated subtree: a `With` nested
+   * inside a conditional branch is inlined by `RewriteWithExpression` (a common expression can't
+   * be hoisted into an always-evaluated `Project` from a branch that may not run).
+   */
+  private def shareUDFInputs(option: Expression, args: Seq[Expression]): Expression = {
+    // `With` does not allow an AggregateExpression in its child to reference a common expression
+    // defined in the same scope (it would leave a dangling ref behind after the rewrite), so
+    // leave an aggregating option -- a transpiled grouped-agg UDF -- alone.
+    if (option.exists(_.isInstanceOf[AggregateExpression])) {
+      return option
+    }
+    val shareable = args.filter { arg =>
+      // Folding a literal into every use site beats reading it from a shared column, and
+      // `CommonExpressionRef` needs the definition's type, which an unresolved argument
+      // cannot supply.
+      !arg.foldable && arg.resolved &&
+        // Nondeterministic arguments passed in more than one position (e.g. `f(rand(1),
+        // rand(1))`) are ambiguous: their spliced copies are structurally identical, so there
+        // is no way to tell which parameter an occurrence came from, and sharing one definition
+        // between them would collapse two independent draws into one. Leave those inline.
+        (arg.deterministic || args.count(_ == arg) == 1) &&
+        // Nothing to share unless the option really does use the argument more than once. Note
+        // that this counts structurally equal subtrees, which is exactly what substitution
+        // produced.
+        option.collect { case e if e == arg => e }.size > 1
+    }.distinct
+    if (shareable.isEmpty) {
+      option
+    } else {
+      val exprDefs = shareable.map(CommonExpressionDef(_))
+      val refs = exprDefs.map(exprDef => new CommonExpressionRef(exprDef))
+      val substitutions = shareable.zip(refs).toMap
+      // transformDown so an argument that contains another argument as a subtree is replaced as
+      // a whole; the inner argument keeps its own definition for the occurrences outside it.
+      val replaced = option.transformDown {
+        case e if substitutions.contains(e) => substitutions(e)
+      }
+      With(replaced, exprDefs)
     }
   }
 }
