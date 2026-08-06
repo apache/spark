@@ -322,7 +322,9 @@ class ParquetFileFormat
     // An archive is read by unpacking each Parquet entry to a local temp file and reading it with
     // the plain reader (readSingleFile); readLocalizedEntries owns the unpack/iterate/cleanup.
     def readArchiveFile(file: PartitionedFile): Iterator[InternalRow] =
-      readLocalizedEntries(file, broadcastedHadoopConf.value.value, "parquet-archive") {
+      readLocalizedEntries(
+          file, broadcastedHadoopConf.value.value, "parquet-archive",
+          parquetOptions.archivePathFilterPattern) {
         entryFile => readSingleFile(entryFile)
       }
 

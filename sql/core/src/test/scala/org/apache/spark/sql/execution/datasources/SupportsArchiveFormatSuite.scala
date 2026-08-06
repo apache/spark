@@ -30,9 +30,10 @@ import org.apache.commons.compress.archivers.sevenz.{SevenZArchiveEntry, SevenZO
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
 import org.apache.commons.compress.archivers.zip.{ZipArchiveEntry, ZipArchiveOutputStream}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{GlobPattern, Path}
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException, TaskContext, TaskContextImpl}
+import org.apache.spark.sql.catalyst.FileSourceOptions
 
 /**
  * Unit tests for the streaming [[SupportsArchiveFormat]] engine: `isArchivePath` dispatch and
@@ -210,6 +211,14 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
     SupportsArchiveFormat.readArchiveEntries(new Path(file.toURI), new Configuration()) {
       (entry, in) =>
         Iterator.single((entry.getName, new String(readAll(in), StandardCharsets.UTF_8)))
+    }.toList
+
+  /** Drains every entry through `SupportsArchiveFormat` under an `archivePathFilter` glob. */
+  private def collectFiltered(file: File, glob: String): Seq[String] =
+    SupportsArchiveFormat.readArchiveEntries(
+        new Path(file.toURI), new Configuration(),
+        archivePathFilter = Some(new GlobPattern(glob))) { (entry, _) =>
+      Iterator.single(entry.getName)
     }.toList
 
   // ----- isArchivePath ------------------------------------------------------
@@ -606,5 +615,54 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
         textEntry("nested/._sidecar", "junk2")))   // dotfile in a subdir
       assert(collect(sevenZ) == Seq("real.csv" -> "kept"))
     }
+  }
+
+  // ----- archivePathFilter ---------------------------------------------------
+
+  test("readArchiveEntries: archivePathFilter keeps only entries matching the glob") {
+    withTempDir { dir =>
+      val tar = new File(dir, "filter.tar")
+      writeTar(tar, Seq(
+        textEntry("sub/a.csv", "a"),
+        textEntry("sub/b.csv", "b"),
+        textEntry("other/c.csv", "c")))
+      // The glob matches the entry's full path, so `sub/*` selects only the `sub/` entries.
+      assert(collectFiltered(tar, "sub/*") == Seq("sub/a.csv", "sub/b.csv"))
+    }
+  }
+
+  test("readArchiveEntries: archivePathFilter with a `*` glob crosses directory boundaries") {
+    withTempDir { dir =>
+      val tar = new File(dir, "filter-ext.tar")
+      writeTar(tar, Seq(
+        textEntry("top.csv", "t"),
+        textEntry("sub/nested.csv", "n"),
+        textEntry("keep.json", "j")))
+      assert(collectFiltered(tar, "*.csv") == Seq("top.csv", "sub/nested.csv"))
+    }
+  }
+
+  test("readArchiveEntries: archivePathFilter matching nothing yields an empty iterator") {
+    withTempDir { dir =>
+      val tar = new File(dir, "filter-none.tar")
+      writeTar(tar, Seq(textEntry("a.csv", "a"), textEntry("b.csv", "b")))
+      assert(collectFiltered(tar, "nomatch/*").isEmpty)
+    }
+  }
+
+  test("readArchiveEntries: archivePathFilter applies on top of hidden-entry filtering") {
+    withTempDir { dir =>
+      val tar = new File(dir, "filter-hidden.tar")
+      writeTar(tar, Seq(
+        textEntry("data/real.csv", "kept"),
+        textEntry("data/_SUCCESS", "marker"))) // matches the glob but hidden by the default regex
+      assert(collectFiltered(tar, "data/*") == Seq("data/real.csv"))
+    }
+  }
+
+  test("archivePathFilter: an invalid glob is rejected with a clear error") {
+    val ex = intercept[IllegalArgumentException](
+      FileSourceOptions.compileArchivePathFilter("["))
+    assert(ex.getMessage.contains("archivePathFilter"))
   }
 }

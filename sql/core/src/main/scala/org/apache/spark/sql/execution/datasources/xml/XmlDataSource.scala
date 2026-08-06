@@ -23,7 +23,7 @@ import java.nio.charset.{Charset, StandardCharsets}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
@@ -81,13 +81,16 @@ abstract class XmlDataSource extends Serializable with Logging with SupportsArch
    * `XmlFileFormat` read path supports archives; XML has no DSv2 reader.
    *
    * @param parser builds a fresh XML parser for each entry.
+   * @param archivePathFilter optional glob matched against the entry's full path
    */
   def readArchive(
       conf: Configuration,
       file: PartitionedFile,
       parser: () => StaxXmlParser,
-      schema: StructType): Iterator[InternalRow] =
-    SupportsArchiveFormat.readArchiveEntries(file.toPath, conf) { (_, in) =>
+      schema: StructType,
+      archivePathFilter: Option[GlobPattern]): Iterator[InternalRow] =
+    SupportsArchiveFormat.readArchiveEntries(
+        file.toPath, conf, archivePathFilter = archivePathFilter) { (_, in) =>
       readStream(in, parser(), schema)
     }
 

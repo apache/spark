@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
@@ -84,13 +84,16 @@ abstract class JsonDataSource extends Serializable with Logging with SupportsArc
    * and is intentionally left untouched.
    *
    * @param parser builds a fresh JSON parser for each entry.
+   * @param archivePathFilter optional glob matched against the entry's full path
    */
   def readArchive(
       conf: Configuration,
       file: PartitionedFile,
       parser: () => JacksonParser,
-      schema: StructType): Iterator[InternalRow] =
-    SupportsArchiveFormat.readArchiveEntries(file.toPath, conf) { (_, in) =>
+      schema: StructType,
+      archivePathFilter: Option[GlobPattern]): Iterator[InternalRow] =
+    SupportsArchiveFormat.readArchiveEntries(
+        file.toPath, conf, archivePathFilter = archivePathFilter) { (_, in) =>
       readStream(in, parser(), schema)
     }
 

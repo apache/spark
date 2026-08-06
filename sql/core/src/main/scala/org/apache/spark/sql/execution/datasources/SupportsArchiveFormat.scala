@@ -34,7 +34,7 @@ import org.apache.commons.compress.archivers.zip.ZipFile
 import org.apache.commons.io.ByteOrderMark
 import org.apache.commons.io.input.{BOMInputStream, CloseShieldInputStream}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FSDataInputStream, Path}
+import org.apache.hadoop.fs.{FSDataInputStream, GlobPattern, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.util.LineReader
 
@@ -104,16 +104,18 @@ trait SupportsArchiveFormat extends Logging {
    * Reads an archive by unpacking each entry to a temp file and applying `readEntry`, for a
    * format that needs a complete file on disk (random access).
    *
-   * @param file       the archive as a [[PartitionedFile]]
-   * @param conf       Hadoop configuration used to open the archive
-   * @param tempPrefix prefix for the per-task temp dir the entries are unpacked into
-   * @param readEntry  reads one unpacked entry file into rows
+   * @param file              the archive as a [[PartitionedFile]]
+   * @param conf              Hadoop configuration used to open the archive
+   * @param tempPrefix        prefix for the per-task temp dir the entries are unpacked into
+   * @param archivePathFilter optional glob matched against the entry's full path
+   * @param readEntry         reads one unpacked entry file into rows
    * @return iterator of rows across all entries
    */
   protected def readLocalizedEntries(
       file: PartitionedFile,
       conf: Configuration,
-      tempPrefix: String)(
+      tempPrefix: String,
+      archivePathFilter: Option[GlobPattern] = None)(
       readEntry: PartitionedFile => Iterator[InternalRow]): Iterator[InternalRow] = {
     val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), tempPrefix)
     // Register cleanup before constructing `entries`, which can throw before returning an iterator
@@ -342,10 +344,16 @@ object SupportsArchiveFormat {
    *
    * @param entry                   the archive entry to test
    * @param ignoredPathSegmentRegex per-segment filter matched against each `/`-separated component
-   * @return true if the entry is a directory or any path component is filtered out
+   * @param archivePathFilter       optional glob matched against the entry's full path
+   * @return true if the entry is a directory, any path component is filtered out, or the entry's
+   *         path does not match `archivePathFilter`
    */
-  private def shouldSkipEntry(entry: ArchiveEntry, ignoredPathSegmentRegex: Pattern): Boolean = {
+  private def shouldSkipEntry(
+      entry: ArchiveEntry,
+      ignoredPathSegmentRegex: Pattern,
+      archivePathFilter: Option[GlobPattern]): Boolean = {
     if (entry.isDirectory) return true
+    if (archivePathFilter.exists(!_.matches(entry.getName))) return true
     entry.getName.split("/").exists(c =>
       c.nonEmpty && HadoopFSUtils.shouldFilterOutPathName(c, ignoredPathSegmentRegex))
   }
@@ -359,13 +367,15 @@ object SupportsArchiveFormat {
    * @param ignoredPathSegmentRegex per-segment filter for entries to skip (defaults to the
    *                                `InMemoryFileIndex` filter); pass a custom one to match a
    *                                loose-file scan
+   * @param archivePathFilter       optional glob matched against the entry's full path
    * @param parseEntry              turns one entry's `(entry, stream)` into an iterator of results
    * @return the concatenated results across kept entries, lazily one entry at a time
    */
   def readArchiveEntries[T](
       path: Path,
       conf: Configuration,
-      ignoredPathSegmentRegex: Pattern = HadoopFSUtils.defaultIgnoredPathSegmentRegexPattern)(
+      ignoredPathSegmentRegex: Pattern = HadoopFSUtils.defaultIgnoredPathSegmentRegexPattern,
+      archivePathFilter: Option[GlobPattern] = None)(
       parseEntry: (ArchiveEntry, InputStream) => Iterator[T]): Iterator[T] = {
     val archive = openArchiveStream(path, conf)
     var closed = false
@@ -395,7 +405,9 @@ object SupportsArchiveFormat {
           var next: (ArchiveEntry, InputStream) = null
           while (next == null && archive.hasNext) {
             val entry = archive.next()
-            if (!shouldSkipEntry(entry._1, ignoredPathSegmentRegex)) next = entry
+            if (!shouldSkipEntry(entry._1, ignoredPathSegmentRegex, archivePathFilter)) {
+              next = entry
+            }
           }
           if (next == null) {
             done = true
@@ -460,17 +472,19 @@ object SupportsArchiveFormat {
    * companion so executor-side callers (a format's distributed archive inference) can use it
    * without a trait instance.
    *
-   * @param path        the archive path
-   * @param conf        Hadoop configuration used to open the archive
-   * @param localDir    directory the per-entry temp files are created under
-   * @param entryFilter which entry names to keep
+   * @param path              the archive path
+   * @param conf              Hadoop configuration used to open the archive
+   * @param localDir          directory the per-entry temp files are created under
+   * @param entryFilter       which entry names to keep
+   * @param archivePathFilter optional glob matched against the entry's full path
    */
   def localizeEntries(
       path: Path,
       conf: Configuration,
       localDir: File,
-      entryFilter: String => Boolean): Iterator[(String, File)] =
-    readArchiveEntries(path, conf) { (entry, in) =>
+      entryFilter: String => Boolean,
+      archivePathFilter: Option[GlobPattern] = None): Iterator[(String, File)] =
+    readArchiveEntries(path, conf, archivePathFilter = archivePathFilter) { (entry, in) =>
       val name = entry.getName
       if (entryFilter(name)) {
         Iterator.single((name, copyEntryToLocalFile(in, localDir, name)))
