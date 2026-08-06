@@ -118,21 +118,17 @@ def _fmod_func(c1: Column, c2: Column) -> Column:
     )
 
 
-binary_np_spark_mappings = {
-    "arctan2": F.atan2,
-    "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
-    "bitwise_or": lambda c1, c2: c1.bitwiseOR(c2),
-    "bitwise_xor": lambda c1, c2: c1.bitwiseXOR(c2),
-    "copysign": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.copysign(s1, s2), DoubleType()
-    ),
-    "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
-    "floor_divide": lambda c1, c2: F.when(
-        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
-        F.when(c1.isNull(), c1.cast("double"))
-        .when(c2.isNull(), c2.cast("double"))
-        .when(
-            F.isnan(c1.cast("double")) | F.isnan(c2.cast("double")),
+def _floor_divide_func(c1, c2):
+    c1_double = c1.cast("double")
+    c2_double = c2.cast("double")
+    has_floating_input = F.typeof(c1).isin("float", "double") | F.typeof(c2).isin(
+        "float", "double"
+    )
+
+    return F.when(
+        has_floating_input,
+        F.when(
+            F.isnan(c1_double) | F.isnan(c2_double),
             F.lit(float("nan")),
         )
         .when(
@@ -145,18 +141,32 @@ binary_np_spark_mappings = {
             .otherwise(F.lit(float("inf"))),
         )
         .when(
-            (c1.cast("double") == float("-inf")) | (c1.cast("double") == float("inf")),
+            (c1_double == float("-inf")) | (c1_double == float("inf")),
             F.lit(float("nan")),
         )
         .when(
-            (c2.cast("double") == float("-inf")) | (c2.cast("double") == float("inf")),
+            (c2_double == float("-inf")) | (c2_double == float("inf")),
             F.when(c1 == 0, (c1 / c2).cast("double"))
             .when((c1 < 0) != (c2 < 0), F.lit(-1.0))
             .otherwise(F.lit(0.0)),
         )
         .when(c1 == 0, (c1 / c2).cast("double"))
         .otherwise((c1 / c2) - F.pmod(c1 / c2, F.lit(1.0))),
-    ).otherwise(F.when(c2 == 0, F.lit(0.0)).otherwise((c1 / c2) - F.pmod(c1 / c2, F.lit(1.0)))),
+    ).otherwise(
+        F.when(c2 == 0, F.lit(0.0)).otherwise((c1 / c2) - F.pmod(c1 / c2, F.lit(1.0)))
+    ).cast("double")
+
+
+binary_np_spark_mappings = {
+    "arctan2": F.atan2,
+    "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
+    "bitwise_or": lambda c1, c2: c1.bitwiseOR(c2),
+    "bitwise_xor": lambda c1, c2: c1.bitwiseXOR(c2),
+    "copysign": pandas_udf(  # type: ignore[call-overload]
+        lambda s1, s2: np.copysign(s1, s2), DoubleType()
+    ),
+    "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
+    "floor_divide": _floor_divide_func,
     "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
     .when(F.isnan(c2.cast("double")), c1)
     .otherwise(F.greatest(c1, c2))
@@ -235,7 +245,6 @@ def maybe_dispatch_ufunc_to_dunder_op(
     aliases = {
         "absolute": "abs",
         "multiply": "mul",
-        "floor_divide": "floordiv",
         "true_divide": "truediv",
         "power": "pow",
         "remainder": "mod",
