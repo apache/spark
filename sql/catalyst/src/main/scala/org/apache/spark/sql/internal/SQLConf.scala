@@ -3055,8 +3055,8 @@ object SQLConf {
   val ARCHIVE_READER_MAX_NESTING_DEPTH =
     buildConf("spark.sql.files.archive.reader.maxNestingDepth")
       .doc("Maximum number of archive levels an archive reader opens. The top-level archive is " +
-        "depth 1, so 1 reads no nested archives and 2 reads one level of nesting. Recursing past " +
-        "this limit fails the read, guarding against zip bombs and cyclic archives.")
+        "depth 1, so 2 admits one level of nesting. Reading an archive nested deeper than " +
+        "this limit fails, guarding against zip bombs and cyclic archives.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf

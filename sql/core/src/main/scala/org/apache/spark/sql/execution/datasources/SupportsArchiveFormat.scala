@@ -280,7 +280,9 @@ object SupportsArchiveFormat {
       conf: Configuration): ArchiveEntries = {
     val n = name.toLowerCase(Locale.ROOT)
     if (n.endsWith(".tar") || n.endsWith(".tar.gz") || n.endsWith(".tgz")) {
-      val gzipped = n.endsWith(".gz") || n.endsWith(".tgz")
+      // No codec layer decompresses `in` here, unlike the path-based tar open, so unwrap gzip
+      // directly. `in` belongs to the enclosing container and is not this method's to close.
+      val gzipped = n.endsWith(".tar.gz") || n.endsWith(".tgz")
       val tar = new TarArchiveInputStream(if (gzipped) new GZIPInputStream(in) else in)
       val entries = Iterator.continually(tar.getNextEntry).takeWhile(_ != null)
         .map((_, tar: InputStream))
@@ -421,20 +423,24 @@ object SupportsArchiveFormat {
       parseEntry: (ArchiveEntry, InputStream) => Iterator[T]): Iterator[T] = {
     val maxDepth = SQLConf.get.getConf(SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH)
     streamEntries(
-      openArchiveStream(path, conf), conf, "", 1, maxDepth, ignoredPathSegmentRegex)(parseEntry)
+      openArchiveStream(path, conf), path, conf, "", 1, maxDepth,
+      ignoredPathSegmentRegex)(parseEntry)
   }
 
   /**
    * Streams one open `archive`, applying `parseEntry` to each non-skipped entry. An entry that is
    * itself an archive recurses instead, bounded by `maxDepth`.
    *
-   * @param namePrefix nested-entry name prefix ("" at the top, `inner!/` under a nested archive),
-   *                   composing the full `outer!/inner!/leaf` name each entry reports
+   * @param path       the top-level archive path, reported when the depth limit stops a read
+   * @param namePrefix nested-entry name prefix ("" at the top, `outer!/` inside the first nested
+   *                   archive and `outer!/inner!/` one level deeper), composing the full
+   *                   `outer!/inner!/leaf` name each entry reports
    * @param depth      1 for the top-level archive, incremented on each recursion
    * @param maxDepth   recursion ceiling; exceeding it fails the read (zip-bomb / cycle guard)
    */
   private def streamEntries[T](
       archive: ArchiveEntries,
+      path: Path,
       conf: Configuration,
       namePrefix: String,
       depth: Int,
@@ -479,11 +485,12 @@ object SupportsArchiveFormat {
             val stream = CloseShieldInputStream.wrap(next._2)
             currentIter = if (isArchiveFileName(next._1.getName)) {
               if (depth >= maxDepth) {
-                throw QueryExecutionErrors.maxArchiveDepthExceeded(entry.getName, maxDepth)
+                throw QueryExecutionErrors.maxArchiveDepthExceeded(
+                  entry.getName, path.toString, maxDepth)
               }
               streamEntries(
                 openNestedArchiveStream(next._1.getName, stream, conf),
-                conf, s"${entry.getName}!/", depth + 1, maxDepth,
+                path, conf, s"${entry.getName}!/", depth + 1, maxDepth,
                 ignoredPathSegmentRegex)(parseEntry)
             } else {
               parseEntry(entry, stream)
@@ -504,6 +511,12 @@ object SupportsArchiveFormat {
 
       override def close(): Unit = {
         done = true
+        // A nested archive's iterator owns its own container and spill directory, so releasing it
+        // is not covered by this level's cleanup.
+        currentIter match {
+          case c: Closeable => try c.close() catch { case NonFatal(_) => }
+          case _ =>
+        }
         currentIter = Iterator.empty
         cleanup()
       }

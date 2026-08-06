@@ -5733,7 +5733,7 @@
   },
   "MAX_ARCHIVE_DEPTH_EXCEEDED" : {
     "message" : [
-      "Cannot read archive entry <entry>: it is nested more than <maxDepth> archives deep."
+      "Cannot read archive entry <entry> in archive <path>: it is nested more than <maxDepth> archives deep."
     ],
     "sqlState" : "KD003"
   },

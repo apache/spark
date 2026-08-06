@@ -22,7 +22,7 @@ import java.nio.file.Files
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions.{col, input_file_name, struct}
 import org.apache.spark.sql.internal.SQLConf
@@ -445,17 +445,79 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     val level2 = archiveBytes(Seq(s"level3.$ext" -> level3), ext)
     withArchiveFile() { archive =>
       writeArchive(archive, Seq(s"level2.$ext" -> level2))
+      val path = new Path(archive.toURI).toString
+
+      def readAtMaxDepth(maxDepth: Int): Unit =
+        withSQLConf(SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH.key -> maxDepth.toString) {
+          read(archive.getCanonicalPath).collect()
+        }
+
       // 3 admits exactly these three levels.
       withSQLConf(SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH.key -> "3") {
         checkAnswer(read(archive.getCanonicalPath), data)
       }
       // 2 stops before the innermost archive is opened.
-      withSQLConf(SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH.key -> "2") {
-        intercept[SparkException](read(archive.getCanonicalPath).collect())
-      }
+      checkError(
+        exception = intercept[SparkException](readAtMaxDepth(2)).getCause
+          .asInstanceOf[SparkRuntimeException],
+        condition = "MAX_ARCHIVE_DEPTH_EXCEEDED",
+        parameters = Map(
+          "entry" -> s"level2.$ext!/level3.$ext", "path" -> path, "maxDepth" -> "2"))
       // 1 admits only the top archive, so even the first nested archive is too deep.
-      withSQLConf(SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH.key -> "1") {
-        intercept[SparkException](read(archive.getCanonicalPath).collect())
+      checkError(
+        exception = intercept[SparkException](readAtMaxDepth(1)).getCause
+          .asInstanceOf[SparkRuntimeException],
+        condition = "MAX_ARCHIVE_DEPTH_EXCEEDED",
+        parameters = Map("entry" -> s"level2.$ext", "path" -> path, "maxDepth" -> "1"))
+    }
+  }
+
+  test("closing a partially-read nested archive releases its spilled temp dir") {
+    // A nested zip or 7z spills to a temp dir owned by the nested iterator, so closing the outer
+    // iterator early has to close that one too. A driver-side reader (Avro header inference) takes
+    // one entry and closes, with no task completion to fall back on.
+    val ext = archiveExtensions.head
+    val nestedDirs = () => {
+      val localDir = new File(Utils.getLocalDir(spark.sparkContext.getConf))
+      Option(localDir.listFiles()).getOrElse(Array.empty)
+        .filter(_.getName.startsWith("nested-archive")).map(_.getName).toSet
+    }
+    withArchiveFile() { archive =>
+      writeNestedArchive(archive, Seq(
+        entryName(0) -> encodeFile(sampleDf((1, "Alice"))),
+        entryName(1) -> encodeFile(sampleDf((2, "Bob")))))
+      val before = nestedDirs()
+      val entries = SupportsArchiveFormat.readArchiveEntries(
+        new Path(archive.toURI), spark.sessionState.newHadoopConf()) { (entry, _) =>
+        Iterator.single(entry.getName)
+      }
+      assert(entries.hasNext)
+      entries.next()
+      entries.asInstanceOf[java.io.Closeable].close()
+      assert((nestedDirs() -- before).isEmpty,
+        s"closing early leaked the nested archive's spill dir (ext=$ext)")
+    }
+  }
+
+  test("the depth limit still fails the read under ignoreCorruptFiles") {
+    // The depth limit is a resource-safety bound, not a corrupt file, so ignoreCorruptFiles must
+    // not turn it into a skip that returns partial data.
+    val ext = archiveExtensions.head
+    val level3 = archiveBytes(Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice")))), ext)
+    val level2 = archiveBytes(Seq(s"level3.$ext" -> level3), ext)
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(s"level2.$ext" -> level2))
+      withSQLConf(
+          SQLConf.IGNORE_CORRUPT_FILES.key -> "true",
+          SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH.key -> "1") {
+        checkError(
+          exception = intercept[SparkException](read(archive.getCanonicalPath).collect())
+            .getCause.asInstanceOf[SparkRuntimeException],
+          condition = "MAX_ARCHIVE_DEPTH_EXCEEDED",
+          parameters = Map(
+            "entry" -> s"level2.$ext",
+            "path" -> new Path(archive.toURI).toString,
+            "maxDepth" -> "1"))
       }
     }
   }

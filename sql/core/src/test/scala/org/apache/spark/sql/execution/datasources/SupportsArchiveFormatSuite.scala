@@ -40,7 +40,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Unit tests for the streaming [[SupportsArchiveFormat]] engine: `isArchivePath` dispatch and
  * `readArchiveEntries` (entry ordering, gzip handling, dir/dotfile skipping, lazy advance, the
- * non-closing entry stream, and cleanup). Nothing here touches local disk -- entries are streams.
+ * non-closing entry stream, and cleanup). Entries are read as streams, except a nested zip or 7z,
+ * which needs random access and so is spilled to a temp file before it is opened.
  */
 class SupportsArchiveFormatSuite extends QueryTest with SharedSparkSession {
 
@@ -671,16 +672,17 @@ class SupportsArchiveFormatSuite extends QueryTest with SharedSparkSession {
           collect(outer)
         }
 
+      val path = new Path(outer.toURI).toString
       // Three levels are readable at the limit, and the innermost is refused one below it.
       assert(collectWithMaxDepth(3) == Seq("l2.tar!/l3.tar!/leaf.csv" -> "deep"))
       checkError(
         exception = intercept[SparkRuntimeException](collectWithMaxDepth(2)),
         condition = "MAX_ARCHIVE_DEPTH_EXCEEDED",
-        parameters = Map("entry" -> "l2.tar!/l3.tar", "maxDepth" -> "2"))
+        parameters = Map("entry" -> "l2.tar!/l3.tar", "path" -> path, "maxDepth" -> "2"))
       checkError(
         exception = intercept[SparkRuntimeException](collectWithMaxDepth(1)),
         condition = "MAX_ARCHIVE_DEPTH_EXCEEDED",
-        parameters = Map("entry" -> "l2.tar", "maxDepth" -> "1"))
+        parameters = Map("entry" -> "l2.tar", "path" -> path, "maxDepth" -> "1"))
     }
   }
 }
