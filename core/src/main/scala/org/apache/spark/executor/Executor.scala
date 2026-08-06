@@ -847,6 +847,15 @@ private[spark] class Executor(
         // requires access to properties contained within (e.g. for access control).
         Executor.taskDeserializationProps.set(taskDescription.properties)
 
+        // Apply user credentials from TaskDescription to the executor credential store.
+        // This ensures credentials are available before any task code runs, avoiding
+        // the race between RPC broadcast and task dispatch.
+        // Only apply if the version is newer than what the store already has, preventing
+        // a delayed TaskDescription from overwriting fresher credentials delivered via RPC.
+        taskDescription.userCredentials.foreach { case (version, creds) =>
+          VersionedCredentials.updateIfNewer(env.userCredentials, version, creds)
+        }
+
         updateDependencies(
           taskDescription.artifacts.files,
           taskDescription.artifacts.jars,
