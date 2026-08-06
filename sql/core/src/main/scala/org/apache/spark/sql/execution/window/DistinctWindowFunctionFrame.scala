@@ -34,9 +34,10 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
  * advances. For each qualifying input row this frame finds the first output row whose upper bound
  * contains it. A bounded BytesToBytesMap removes duplicates up to the hash fallback threshold. If
  * another new key arrives, the frame permanently falls back to an external sorter for the rest of
- * the window partition. That sorter finds the earliest event for every key, then a second external
- * sorter orders those events by index. The frame feeds each unique, normalized DISTINCT input to
- * the aggregate processor when its event becomes visible.
+ * the window partition. For a growing frame, that sorter finds the earliest event for every key,
+ * then a second external sorter orders those events by index. The frame feeds each unique,
+ * normalized DISTINCT input to the aggregate processor when its event becomes visible. A frame
+ * covering the entire partition consumes unique inputs directly because their order is undefined.
  */
 private[window] abstract class DistinctWindowFunctionFrame(
     target: InternalRow,
@@ -386,7 +387,9 @@ private[window] abstract class DistinctWindowFunctionFrame(
 }
 
 /**
- * Computes DISTINCT aggregates over the entire window partition.
+ * Computes DISTINCT aggregates over the entire window partition. Since every output row has the
+ * same set of unique inputs, their consumption order is undefined and is not restored after hash
+ * deduplication or sorting by the DISTINCT key.
  */
 private[window] final class UnboundedDistinctWindowFunctionFrame(
     target: InternalRow,

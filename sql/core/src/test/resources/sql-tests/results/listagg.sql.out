@@ -328,6 +328,18 @@ struct<grp:int,hex(listagg(DISTINCT col, X'2C') WITHIN GROUP (ORDER BY col ASC N
 
 
 -- !query
+SELECT listagg(DISTINCT col1) OVER (ORDER BY col1) FROM df
+-- !query schema
+struct<listagg(DISTINCT col1, NULL) OVER (ORDER BY col1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string>
+-- !query output
+NULL
+a
+a
+ab
+ab
+
+
+-- !query
 SELECT listagg(c1) FROM (VALUES (ARRAY('a', 'b'))) AS t(c1)
 -- !query schema
 struct<>
@@ -454,28 +466,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 73,
     "fragment" : "string_agg(col1) WITHIN GROUP (ORDER BY col1) OVER (ORDER BY col1)"
-  } ]
-}
-
-
--- !query
-SELECT listagg(DISTINCT col1) OVER (ORDER BY col1) FROM df
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "windowExpr" : "\"listagg(DISTINCT col1, NULL) OVER (ORDER BY col1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 50,
-    "fragment" : "listagg(DISTINCT col1) OVER (ORDER BY col1)"
   } ]
 }
 
