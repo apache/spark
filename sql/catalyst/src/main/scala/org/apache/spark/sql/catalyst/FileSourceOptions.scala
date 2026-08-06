@@ -73,11 +73,12 @@ class FileSourceOptions(
 
   /**
    * Glob selecting which inner archive entries to read, matched against each entry's full path
-   * within the archive (e.g. `subdir/*`, `*/*.csv`). Validated here so an invalid glob fails on the
-   * driver.
+   * within the archive (e.g. `subdir/*`, `*/*.csv`). An empty value disables the filter, matching
+   * how an empty [[ignoredPathSegmentRegex]] is treated. Validated here so an invalid glob fails on
+   * the driver.
    */
   val archivePathFilter: Option[String] = {
-    val glob = parameters.get(ARCHIVE_PATH_FILTER)
+    val glob = parameters.get(ARCHIVE_PATH_FILTER).filter(_.nonEmpty)
     glob.foreach(FileSourceOptions.compileArchivePathFilter)
     glob
   }

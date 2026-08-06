@@ -115,7 +115,7 @@ trait SupportsArchiveFormat extends Logging {
       file: PartitionedFile,
       conf: Configuration,
       tempPrefix: String,
-      archivePathFilter: Option[GlobPattern] = None)(
+      archivePathFilter: Option[GlobPattern])(
       readEntry: PartitionedFile => Iterator[InternalRow]): Iterator[InternalRow] = {
     val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), tempPrefix)
     // Register cleanup before constructing `entries`, which can throw before returning an iterator
@@ -124,7 +124,8 @@ trait SupportsArchiveFormat extends Logging {
       Utils.deleteRecursively(tempDir)
     })
     val entries =
-      try SupportsArchiveFormat.localizeEntries(file.toPath, conf, tempDir, archiveEntryFilter)
+      try SupportsArchiveFormat.localizeEntries(
+        file.toPath, conf, tempDir, archiveEntryFilter, archivePathFilter)
       catch {
         case NonFatal(e) =>
           Utils.deleteRecursively(tempDir)
@@ -375,7 +376,7 @@ object SupportsArchiveFormat {
       path: Path,
       conf: Configuration,
       ignoredPathSegmentRegex: Pattern = HadoopFSUtils.defaultIgnoredPathSegmentRegexPattern,
-      archivePathFilter: Option[GlobPattern] = None)(
+      archivePathFilter: Option[GlobPattern])(
       parseEntry: (ArchiveEntry, InputStream) => Iterator[T]): Iterator[T] = {
     val archive = openArchiveStream(path, conf)
     var closed = false
@@ -483,7 +484,7 @@ object SupportsArchiveFormat {
       conf: Configuration,
       localDir: File,
       entryFilter: String => Boolean,
-      archivePathFilter: Option[GlobPattern] = None): Iterator[(String, File)] =
+      archivePathFilter: Option[GlobPattern]): Iterator[(String, File)] =
     readArchiveEntries(path, conf, archivePathFilter = archivePathFilter) { (entry, in) =>
       val name = entry.getName
       if (entryFilter(name)) {

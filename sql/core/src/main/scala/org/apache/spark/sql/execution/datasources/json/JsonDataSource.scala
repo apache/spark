@@ -35,7 +35,7 @@ import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -287,6 +287,10 @@ object MultiLineJsonDataSource extends JsonDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType = {
     val baseRdd = JsonDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
+    // Capture the glob string: the compiled GlobPattern is not serializable, so each task
+    // compiles it once when the archive branch is taken.
+    val archivePathFilterGlob = parsedOptions.archivePathFilter
     val encoding = parsedOptions.encoding
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
@@ -297,7 +301,11 @@ object MultiLineJsonDataSource extends JsonDataSource {
       val path = new Path(stream.getPath())
       skipInputOnError(stream.getPath(), ignoreMissingFiles, ignoreCorruptFiles) {
         if (SupportsArchiveFormat.isArchivePath(path)) {
-          SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
+          SupportsArchiveFormat.readArchiveEntries(
+            path, stream.getConfiguration,
+            archivePathFilter =
+              archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)) {
+            (_, in) =>
             Iterator.single(in)
           }
         } else {

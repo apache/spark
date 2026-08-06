@@ -36,7 +36,7 @@ import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVInferSchema, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -171,11 +171,19 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val baseRdd = CSVDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
+    // Capture the glob string: the compiled GlobPattern is not serializable, so each task
+    // compiles it once when the archive branch is taken.
+    val archivePathFilterGlob = parsedOptions.archivePathFilter
     def tokens(dropHeader: Boolean): RDD[Array[String]] = baseRdd.flatMap { stream =>
       val path = new Path(stream.getPath())
       try {
         if (SupportsArchiveFormat.isArchivePath(path)) {
-          SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
+          SupportsArchiveFormat.readArchiveEntries(
+            path, stream.getConfiguration,
+            archivePathFilter =
+              archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)) {
+            (_, in) =>
             tokenizeForInference(in, dropHeader, parsedOptions)
           }
         } else {

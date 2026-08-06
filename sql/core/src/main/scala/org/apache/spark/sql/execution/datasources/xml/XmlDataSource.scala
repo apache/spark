@@ -34,7 +34,7 @@ import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, StaxXMLRecordReader, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -372,6 +372,10 @@ object MultiLineXmlDataSource extends XmlDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: XmlOptions): StructType = {
     val baseRdd = createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    // Inference must see the same entries the scan reads, so it honors archivePathFilter too.
+    // Capture the glob string: the compiled GlobPattern is not serializable, so each task
+    // compiles it once when the archive branch is taken.
+    val archivePathFilterGlob = parsedOptions.archivePathFilter
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
 
@@ -379,7 +383,11 @@ object MultiLineXmlDataSource extends XmlDataSource {
       val path = new Path(stream.getPath())
       skipInputOnError(ignoreMissingFiles, ignoreCorruptFiles) {
         if (SupportsArchiveFormat.isArchivePath(path)) {
-          SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
+          SupportsArchiveFormat.readArchiveEntries(
+            path, stream.getConfiguration,
+            archivePathFilter =
+              archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)) {
+            (_, in) =>
             StaxXmlParser.tokenizeStream(in, parsedOptions)
           }
         } else {

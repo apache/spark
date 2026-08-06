@@ -410,6 +410,21 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   // ----- shared schema-inference tests (run when `supportsSchemaInference`) --
 
   if (supportsSchemaInference) {
+    test("archivePathFilter applies to schema inference, not just the scan") {
+      // The excluded entry carries a column the kept entry lacks. Inference must skip it, otherwise
+      // the inferred schema is a superset of what the scan returns and `extra` reads back all-null.
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq(
+          s"keep/data.$fileExtension" -> encodeFile(sampleDf((1, "keep"))),
+          s"skip/data.$fileExtension" ->
+            encodeFile(Seq((2, "skip", "x")).toDF("id", "name", "extra"))))
+        val schema = inferredSchema(
+          Seq(archive.getCanonicalPath), Map("archivePathFilter" -> "keep/*"))
+        assert(!schema.fieldNames.contains("extra"),
+          s"inference read a filtered-out entry; got $schema")
+      }
+    }
+
     test("archive infers the same schema as a directory of the same files") {
       val entries = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol")))
         .zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) }
