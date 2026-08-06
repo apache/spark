@@ -305,9 +305,19 @@ object DatasetManager extends Logging {
     val (catalog, identifier) =
       PipelinesCatalogUtils.resolveTableCatalog(context.spark, table.identifier)
 
-    val outputSchema = table.specifiedSchema.getOrElse(
-      resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
-    )
+    val outputSchema = table.specifiedSchema match {
+      case Some(ss) =>
+        // The user schema describes the logical table; the engine owns the reserved AUTO CDC
+        // metadata column(s). Append any that the incoming flows produce but the user omitted,
+        // so the created table matches what the AUTO CDC MERGE writes at runtime.
+        val specifiedNames = ss.fieldNames.toSet
+        val omittedReservedFields = AutoCdcMergeFlow
+          .reservedFields(resolvedDataflowGraph.inferredSchema(table.identifier))
+          .filterNot(f => specifiedNames.contains(f.name))
+        StructType(ss.fields ++ omittedReservedFields)
+      case None =>
+        resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
+    }
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
     val clustering = table.clusterCols.map(cols =>

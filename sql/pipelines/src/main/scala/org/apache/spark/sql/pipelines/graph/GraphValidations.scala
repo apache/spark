@@ -268,8 +268,12 @@ trait GraphValidations extends Logging {
 
       t.specifiedSchema.foreach { ss =>
         // Check the inferred schema matches the specified schema. Used to catch errors where the
-        // inferred user-facing schema has columns that are not in the specified one.
-        if (inferredSchema != ss) {
+        // inferred user-facing schema has columns that are not in the specified one. The reserved
+        // AUTO CDC metadata column(s) are engine-owned, so a declared schema that differs from the
+        // inferred schema only by omitting them is accepted; the engine appends them to the
+        // effective table schema at materialization.
+        if (inferredSchema != ss &&
+            AutoCdcMergeFlow.stripReservedFields(inferredSchema) != ss) {
           val datasetType = GraphElementTypeUtils
             .getDatasetTypeForMaterializedViewOrStreamingTable(
               flowsTo(t.identifier).map(f => resolvedFlow(f.identifier))
