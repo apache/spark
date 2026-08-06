@@ -233,4 +233,54 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
       assert(rows.length === 1000)
     }
   }
+
+  test("cross-subquery exchange reuse cannot create a shared pipelined exchange") {
+    // The no-reuse gate checks subquery plans too (collectWithSubqueries). Probing every
+    // SQL route to a reused PIPELINED exchange showed each is closed by a different layer,
+    // and this test pins the observed facts so a change in any layer surfaces here:
+    //   1. Same-tree reuse: the gate skips the plan (also covered by the join/q68 shapes).
+    //   2. Main-vs-subquery reuse: never fires -- each subquery runs its own preparation
+    //      pass (PlanSubqueries -> prepareExecutedPlan, which includes
+    //      EnablePipelinedShuffle), so its exchanges are already pipelined=true when the
+    //      outer ReuseExchangeAndSubquery compares canonical forms against the outer
+    //      not-yet-pipelined exchange: no match.
+    //   3. Subquery-vs-subquery duplication: collapsed into ONE subquery by
+    //      MergeScalarSubqueries / subquery reuse before exchange reuse is considered.
+    withPipelinedSession { spark =>
+      import spark.implicits._
+      spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 7)).createOrReplaceTempView("t")
+
+      // Main plan and subquery share an identical inner groupBy (route 2).
+      val df = spark.sql("""
+        SELECT k, COUNT(*) AS c FROM t GROUP BY k
+        HAVING COUNT(*) > (SELECT AVG(c2) FROM (SELECT COUNT(*) AS c2 FROM t GROUP BY k) s)
+      """)
+      // Two DIFFERENT subqueries share an identical inner groupBy (routes 2 + 3).
+      val df2 = spark.sql("""
+        SELECT k, COUNT(*) AS c FROM t GROUP BY k
+        HAVING COUNT(*) > (SELECT AVG(c2) FROM (SELECT COUNT(*) AS c2 FROM t GROUP BY k) a)
+           AND COUNT(*) <= (SELECT MAX(c3) FROM (SELECT COUNT(*) AS c3 FROM t GROUP BY k) b)
+      """)
+
+      Seq(df, df2).foreach { d =>
+        val plan = d.queryExecution.executedPlan
+        // No reused exchange materializes anywhere (main tree or subqueries)...
+        assert(plan.collectWithSubqueries { case r: ReusedExchangeExec => r }.isEmpty,
+          s"unexpected reused exchange; plan:\n$plan")
+        // ... so the gate does not fire and the plan (and its independently-prepared
+        // subqueries) pipeline.
+        assert(collect(plan) { case s: ShuffleExchangeExec if s.pipelined => s }.nonEmpty,
+          s"main plan should be pipelined; plan:\n$plan")
+        assert(plan.collectWithSubqueries {
+            case s: ShuffleExchangeExec if s.pipelined => s
+          }.size > collect(plan) { case s: ShuffleExchangeExec => s }.size,
+          s"subquery exchanges should be pipelined by their own preparation; plan:\n$plan")
+      }
+
+      // Both execute correctly: 1000 = 7*142 + 6, so keys 0..5 have 143 rows (> avg
+      // 142.86) and key 6 has 142.
+      assert(df.collect().length === 6)
+      assert(df2.collect().length === 6)
+    }
+  }
 }

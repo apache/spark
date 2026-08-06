@@ -51,8 +51,16 @@ case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
     if (shuffles.isEmpty) return plan
 
     // A reused exchange has more than one consumer; a pipelined producer cannot fan out, so
-    // leave the whole plan regular rather than produce a rejected job.
-    if (plan.exists(_.isInstanceOf[ReusedExchangeExec])) {
+    // leave the whole plan regular rather than produce a rejected job. Check subquery plans
+    // too (plan.exists walks the operator tree only): today no SQL shape can place a reused
+    // PIPELINED exchange there -- same-tree reuse is caught here, main-vs-subquery reuse
+    // never fires because the subquery's own preparation pass (PlanSubqueries ->
+    // prepareExecutedPlan, which includes this rule) flips its exchanges pipelined BEFORE
+    // the outer ReuseExchangeAndSubquery compares canonical forms, and subquery-vs-subquery
+    // duplication is collapsed by MergeScalarSubqueries / subquery reuse first -- but the
+    // second mechanism is an accident of rule ordering and the third is optimizer behavior,
+    // so this gate does not rely on either.
+    if (plan.collectWithSubqueries { case r: ReusedExchangeExec => r }.nonEmpty) {
       logWarning("EnablePipelinedShuffle: plan has a reused exchange; leaving it regular to " +
         "avoid a fan-out pipelined job.")
       return plan
