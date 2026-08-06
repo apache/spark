@@ -320,11 +320,12 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("leaves an identical nondeterministic input passed in two positions inline") {
+  test("shares an identical nondeterministic input passed in two positions") {
     transpileOn {
-      // f(rand(1), rand(1)): the spliced copies are structurally identical, so there is no way
-      // to tell which parameter an occurrence came from. Sharing one definition between the two
-      // positions would collapse two independent draws into one, so leave them alone.
+      // f(rand(1), rand(1)): the two spliced copies are not independent draws -- each seeds its
+      // generator identically, so they agree row by row, which is what the interpreted UDF sees.
+      // One definition serves both parameters, and sharing is what keeps a copy in an untaken
+      // branch from drifting away from the others.
       val arg = Rand(Literal(1L))
       val option = Subtract(arg, arg)
       val tpudf = TranspiledPythonUDF(
@@ -333,7 +334,13 @@ class ConvertToCatalystSuite extends PlanTest {
           PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
         List(option))
       val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
-      assert(result == option, s"Expected the option unchanged, got: $result")
+      result match {
+        case With(child, Seq(exprDef)) =>
+          assert(exprDef.child == arg, s"Expected the argument as the definition, got: $exprDef")
+          assert(child.collect { case r: CommonExpressionRef => r }.size == 2,
+            s"Expected both uses of the argument to be references, got: $child")
+        case other => fail(s"Expected a With expression, got: $other")
+      }
     }
   }
 

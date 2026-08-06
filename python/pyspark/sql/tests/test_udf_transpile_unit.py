@@ -1450,6 +1450,27 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertIn("_common_expr", self._optimized_plan(mod_df))
             self.assertEqual(expected, [r[0] for r in mod_df.collect()])
 
+    def test_udf_transpile_shares_identical_nondeterministic_inputs(self):
+        # SPARK-58626: two structurally equal copies of a nondeterministic argument are not
+        # independent draws -- each seeds its generator identically, so `rand(1) - rand(1)` is
+        # 0.0 on every row and the interpreted UDF sees both parameters holding the same value.
+        # One definition therefore serves both positions, which is also what keeps the copy in
+        # the untaken branch from drifting: `(a if a > 0.5 else 0.0) - b` with a == b can only
+        # land in [-0.5, 0.0].
+        from pyspark.sql.functions import rand
+
+        clamp_diff = lambda a, b: (a if a > 0.5 else 0.0) - b  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            udf = UserDefinedFunction(clamp_diff, DoubleType())
+            self.assertTrue(udf.transpiled)
+            df = self.spark.range(300).select(udf(rand(1), rand(1)).alias("v"))
+            self.assertEqual(1, self._optimized_plan(df).count("rand("))
+            vals = [r[0] for r in df.collect()]
+            self.assertTrue(all(-0.5 <= v <= 0.0 for v in vals), [v for v in vals if v > 0.0][:5])
+            # Both branches have to be exercised for the check above to mean anything.
+            self.assertTrue(any(v == 0.0 for v in vals), vals[:5])
+            self.assertTrue(any(v < 0.0 for v in vals), vals[:5])
+
     def test_udf_transpile_does_not_share_distinct_inputs(self):
         # SPARK-58626: sharing is per argument. Two independent draws passed to two
         # parameters must stay independent, so `a - b` over different seeds is not

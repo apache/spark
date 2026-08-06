@@ -1116,11 +1116,12 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    *
    * A transpiled option is the option's body with every `_udf_param_N` placeholder replaced by
    * the bound argument expression, so an argument referenced N times in the body is spliced in
-   * N times. Python evaluates each argument exactly once before calling the function, so the
-   * duplication is both wasted work and, for a nondeterministic argument, wrong: the copies are
-   * independent expression instances, and any copy sitting in a conditional branch that is not
-   * taken falls out of step with the others (e.g. `udf(lambda x: x if x > 0.5 else 0.0)(rand())`
-   * can return a value below 0.5).
+   * N times. Python evaluates each argument exactly once before calling the function -- as does
+   * the Python eval operator, which computes each argument column once per row -- so the
+   * duplication is both wasted work and, for a nondeterministic argument, wrong: a copy sitting
+   * in a conditional branch that is not taken stops advancing and falls out of step with the
+   * copies that are always evaluated (e.g. `udf(lambda x: x if x > 0.5 else 0.0)(rand())` can
+   * return a value below 0.5).
    *
    * Rewrites the duplicated arguments to [[CommonExpressionRef]]s of a single
    * [[CommonExpressionDef]] each and wraps the result in a [[With]]. `RewriteWithExpression`,
@@ -1131,11 +1132,19 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
    * The `With` must wrap the whole option rather than each duplicated subtree: a `With` nested
    * inside a conditional branch is inlined by `RewriteWithExpression` (a common expression can't
    * be hoisted into an always-evaluated `Project` from a branch that may not run).
+   *
+   * Known gap, unchanged by this rewrite: when the UDF call itself sits in a conditional branch
+   * (`when(c, udf(rand()))`), the `With` lands inside that branch and is inlined for the same
+   * reason, so a nondeterministic argument still drifts there. See the nondeterminism TODO in
+   * `RewriteWithExpression`.
    */
   private def shareUDFInputs(option: Expression, args: Seq[Expression]): Expression = {
     // `With` does not allow an AggregateExpression in its child to reference a common expression
     // defined in the same scope (it would leave a dangling ref behind after the rewrite), so
-    // leave an aggregating option -- a transpiled grouped-agg UDF -- alone.
+    // leave an aggregating option -- a transpiled grouped-agg UDF -- alone. This is deliberately
+    // broader than that restriction, which only bites when a shared argument sits *under* the
+    // aggregate: identical aggregates are deduplicated by `PhysicalAggregation` anyway, so the
+    // narrower check would buy nothing but subtlety.
     if (option.exists(_.isInstanceOf[AggregateExpression])) {
       return option
     }
@@ -1144,14 +1153,14 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
       // `CommonExpressionRef` needs the definition's type, which an unresolved argument
       // cannot supply.
       !arg.foldable && arg.resolved &&
-        // Nondeterministic arguments passed in more than one position (e.g. `f(rand(1),
-        // rand(1))`) are ambiguous: their spliced copies are structurally identical, so there
-        // is no way to tell which parameter an occurrence came from, and sharing one definition
-        // between them would collapse two independent draws into one. Leave those inline.
-        (arg.deterministic || args.count(_ == arg) == 1) &&
         // Nothing to share unless the option really does use the argument more than once. Note
         // that this counts structurally equal subtrees, which is exactly what substitution
-        // produced.
+        // produced. Two structurally equal copies of a nondeterministic argument -- including
+        // ones bound to different parameters, as in `f(rand(1), rand(1))` -- are not independent
+        // draws: each seeds its own generator identically (`Rand` from `seed + partitionIndex`),
+        // so they advance in lockstep and agree row by row, which is exactly what the
+        // interpreted UDF sees. Sharing one definition between them therefore preserves
+        // semantics, and it is what stops a copy in an untaken branch from drifting.
         option.collect { case e if e == arg => e }.size > 1
     }.distinct
     if (shareable.isEmpty) {
