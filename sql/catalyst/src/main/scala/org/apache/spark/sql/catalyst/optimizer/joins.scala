@@ -416,8 +416,8 @@ trait JoinSelectionHelper extends Logging {
   }
 
   /**
-   * The build side a broadcast hash join would use, or `None` when `JoinSelection` could not plan
-   * one at all.
+   * The build side a broadcast hash join would use, or `None` when one is ruled out by the join
+   * shape or by a hint.
    *
    * `Some` does not promise the planner picks a broadcast hash join: a `SHUFFLE_MERGE` or
    * `SHUFFLE_REPLICATE_NL` hint is tried before the sizes are consulted, join keys no hash join

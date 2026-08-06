@@ -109,12 +109,13 @@ case class PushDownJoinThroughUnion(override val conf: SQLConf)
    * right side as a plain probe input, which is not reused, so the right side is read once per such
    * branch instead of once in total.
    *
-   * `getBroadcastHashJoinBuildSide` returning `None` also covers the joins where no broadcast hash
-   * join can be planned at all, so this one check subsumes the equi-key and hash-joinable-key
-   * requirements. A `SHUFFLE_MERGE` or `SHUFFLE_REPLICATE_NL` hint is handled here rather than
-   * there: the planner tries those between a hinted broadcast and a size-based one, and falls back
-   * to the sizes only when the hinted strategy does not apply, so declining to rewrite errs on the
-   * safe side.
+   * `getBroadcastHashJoinBuildSide` returns `None` when the join has no equi-join keys, so this one
+   * check also carries the requirement the removed `canPlanAsBroadcastHashJoin` conjunct used to.
+   * It is not a statement about what the planner ends up choosing: with keys no hash join supports
+   * it still answers from the sizes, while `JoinSelection` falls through to a sort merge join. A
+   * `SHUFFLE_MERGE` or `SHUFFLE_REPLICATE_NL` hint is handled here rather than there: the planner
+   * tries those between a hinted broadcast and a size-based one, and falls back to the sizes only
+   * when the hinted strategy does not apply, so declining to rewrite errs on the safe side.
    *
    * The result predicts rather than guarantees the final build side, because later rules and AQE
    * re-estimate the sizes it reads. It is also all or nothing: one branch small enough to be the
