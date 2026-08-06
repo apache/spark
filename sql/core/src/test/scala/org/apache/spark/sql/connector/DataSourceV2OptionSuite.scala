@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
@@ -27,6 +28,7 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
   AsOfVersion,
+  NoSuchTableException,
   RelationCache,
   RelationResolution,
   UnresolvedRelation,
@@ -34,16 +36,20 @@ import org.apache.spark.sql.catalyst.analysis.{
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{
+  DelegatingTable,
   Identifier,
   InMemoryBaseTable,
   InMemoryCatalog,
   InMemoryRelationCatalog,
   InMemoryRowLevelOperationTableCatalog,
+  InMemoryTable,
   InMemoryTableCatalog,
+  Relation,
   StagedTable,
   StagingTableCatalog,
   Table,
   TableChange,
+  TableContext,
   TableInfo,
   TableWritePrivilege,
   TimeTravel}
@@ -95,6 +101,55 @@ class NullReturningStagingInMemoryCatalog extends InMemoryCatalog with StagingTa
     }
     createTable(ident, tableInfo)
     null
+  }
+}
+
+class V2InMemoryRelationCatalog extends InMemoryRelationCatalog {
+  private val v2Tables = mutable.HashMap.empty[Identifier, InMemoryTable]
+
+  override def loadRelation(ident: Identifier): Relation = {
+    super.loadRelation(ident) match {
+      case table: DelegatingTable =>
+        v2Tables.getOrElseUpdate(
+          ident,
+          new InMemoryTable(
+            table.name(),
+            table.columns(),
+            table.partitioning(),
+            table.properties(),
+            table.constraints()))
+      case relation => relation
+    }
+  }
+
+  override def dropTable(ident: Identifier): Boolean = {
+    v2Tables.remove(ident)
+    super.dropTable(ident)
+  }
+}
+
+class DispatchTrackingRelationCatalog extends InMemoryRelationCatalog {
+  private var _loadedVersion: Option[String] = None
+  private var _loadedWritePrivileges: Option[util.Set[TableWritePrivilege]] = None
+
+  def loadedVersion: Option[String] = _loadedVersion
+  def loadedWritePrivileges: Option[util.Set[TableWritePrivilege]] = _loadedWritePrivileges
+
+  def resetDispatchCalls(): Unit = {
+    _loadedVersion = None
+    _loadedWritePrivileges = None
+  }
+
+  override def loadTable(ident: Identifier, version: String): Table = {
+    _loadedVersion = Some(version)
+    loadTable(ident)
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    _loadedWritePrivileges = Some(writePrivileges)
+    loadTable(ident)
   }
 }
 
@@ -227,23 +282,6 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         sql(s"SELECT * FROM $t1 WITH (`split-size`)"))
       assert(noValues.message.contains(
         "Operation not allowed: Values must be specified for key(s): [split-size]"))
-    }
-  }
-
-  test("Propagate options to RelationCatalog.loadRelation on read") {
-    registerCatalog("testrelcat", classOf[InMemoryRelationCatalog])
-    val t1 = "testrelcat.ns1.ns2.table"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
-
-      val relCatalog = catalog("testrelcat").asInstanceOf[InMemoryRelationCatalog]
-      assert(relCatalog.lastLoadRelationOptions.isEmpty)
-
-      spark.read.option("customOption", "customValue").table(t1)
-        .queryExecution.analyzed
-      val recorded = relCatalog.lastLoadRelationOptions
-      assert(recorded.isDefined)
-      assert(recorded.get.get("customOption") == "customValue")
     }
   }
 
@@ -804,6 +842,95 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         .collect()
 
       assertOnlySnapshotOptions(stateCatalog, "s1")
+    }
+  }
+
+  test("SPARK-58392: options are forwarded to loadRelation - DataFrame API") {
+    registerCatalog("testrelcat", classOf[InMemoryRelationCatalog])
+    val t1 = "testrelcat.ns1.ns2.table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+
+      val relCatalog = catalog("testrelcat").asInstanceOf[InMemoryRelationCatalog]
+      relCatalog.resetLoadRelationCalls()
+      spark.read.option("customOption", "customValue").table(t1)
+        .queryExecution.analyzed
+
+      val loadedOptions = relCatalog.loadRelationCalls.map(_.get("customOption"))
+      assert(loadedOptions === Seq("customValue"))
+    }
+  }
+
+  test("SPARK-58392: options are forwarded to loadRelation for views") {
+    registerCatalog("testrelcat", classOf[InMemoryRelationCatalog])
+    val v1 = "testrelcat.ns1.ns2.view"
+    withView(v1) {
+      sql(s"CREATE VIEW $v1 AS SELECT 1 AS x")
+
+      val relCatalog = catalog("testrelcat").asInstanceOf[InMemoryRelationCatalog]
+      relCatalog.resetLoadRelationCalls()
+      spark.read.option("customOption", "customValue").table(v1)
+        .queryExecution.analyzed
+
+      val loadedOptions = relCatalog.loadRelationCalls.map(_.get("customOption"))
+      assert(loadedOptions === Seq("customValue"))
+    }
+  }
+
+  test("SPARK-58392: execution refresh forwards options on a plain table read") {
+    registerCatalog("loadcountingrel", classOf[V2InMemoryRelationCatalog])
+    val relCatalog = catalog("loadcountingrel").asInstanceOf[V2InMemoryRelationCatalog]
+    val t1 = "loadcountingrel.ns1.ns2.table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+      relCatalog.resetLoadRelationCalls()
+
+      spark.read.option("split-size", "5").table(t1).collect()
+
+      val optionAwareLoads = relCatalog.loadRelationCalls.map(_.get("split-size"))
+      assert(optionAwareLoads === Seq("5", "5"),
+        s"expected analysis and refresh to forward split-size=5, got: $optionAwareLoads")
+    }
+  }
+
+  test("SPARK-58392: RelationCatalog loadTable preserves table-only context") {
+    registerCatalog("dispatchtrackingrel", classOf[DispatchTrackingRelationCatalog])
+    val relCatalog =
+      catalog("dispatchtrackingrel").asInstanceOf[DispatchTrackingRelationCatalog]
+    val ident = Identifier.of(Array("ns1", "ns2"), "table")
+    val t1 = "dispatchtrackingrel.ns1.ns2.table"
+    val v1 = "dispatchtrackingrel.ns1.ns2.view"
+    val options = new CaseInsensitiveStringMap(
+      util.Map.of("customOption", "customValue"))
+
+    withTable(t1) {
+      withView(v1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+        sql(s"CREATE VIEW $v1 AS SELECT 1 AS x")
+        relCatalog.resetLoadRelationCalls()
+        relCatalog.resetDispatchCalls()
+
+        relCatalog.loadTable(
+          ident,
+          new TableContext(new TimeTravel.AsOfVersion("v1"), util.Set.of()),
+          options)
+        assert(relCatalog.loadedVersion === Some("v1"))
+        assert(relCatalog.loadRelationCalls.isEmpty)
+
+        relCatalog.resetDispatchCalls()
+        relCatalog.loadTable(
+          ident,
+          new TableContext(null, util.Set.of(TableWritePrivilege.INSERT)),
+          options)
+        assert(relCatalog.loadedWritePrivileges === Some(util.Set.of(TableWritePrivilege.INSERT)))
+        assert(relCatalog.loadRelationCalls.isEmpty)
+
+        val viewIdent = Identifier.of(Array("ns1", "ns2"), "view")
+        intercept[NoSuchTableException] {
+          relCatalog.loadTable(viewIdent, new TableContext(null, util.Set.of()), options)
+        }
+        assert(relCatalog.loadRelationCalls.map(_.get("customOption")) === Seq("customValue"))
+      }
     }
   }
 

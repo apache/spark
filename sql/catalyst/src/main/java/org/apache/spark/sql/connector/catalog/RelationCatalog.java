@@ -106,10 +106,13 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * questions in two round trips each. {@code RelationCatalog} adds dedicated methods so a
  * catalog can answer both in one round trip:
  * <ul>
- *   <li>{@link #loadRelation(Identifier)} -- the resolver's per-identifier read path. Returns a
- *       {@link Table} for a table or a {@link View} for a view; callers discriminate via
- *       {@code instanceof}. Saves the {@code loadTable} -> {@code loadView} fallback on a cold
- *       cache.</li>
+ *   <li>{@link #loadRelation(Identifier)} -- returns a {@link Table} for a table or a
+ *       {@link View} for a view; callers discriminate via {@code instanceof}. Saves the
+ *       {@code loadTable} -> {@code loadView} fallback on a cold cache. Used for lookups that
+ *       carry no read options (DDL and miscellaneous commands), and as the base that the
+ *       {@code loadTable} / {@code loadView} defaults derive from.</li>
+ *   <li>{@link #loadRelation(Identifier, CaseInsensitiveStringMap)} -- the resolver's
+ *       per-identifier read path: same contract, plus the user's read options.</li>
  *   <li>{@link #listRelationSummaries(String[])} -- a unified listing of tables and views
  *       with the kind preserved on each {@link TableSummary}. Default impl performs both
  *       {@link TableCatalog#listTableSummaries} and {@link ViewCatalog#listViews}; override to
@@ -143,6 +146,10 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
    * read. The default implementation ignores {@code options} and delegates to
    * {@link #loadRelation(Identifier)}; catalogs that want to receive the user options while
    * reading a relation must override this method.
+   * <p>
+   * Spark calls this for a plain read only -- no time travel and no write privileges, both of
+   * which apply to tables only and route through
+   * {@link TableCatalog#loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} instead.
    *
    * @param ident the identifier
    * @param options all options passed to the read
@@ -194,6 +201,28 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   @Override
   default Table loadTable(Identifier ident) throws NoSuchTableException {
     if (loadRelation(ident) instanceof Table t) {
+      return t;
+    }
+    throw new NoSuchTableException(ident);
+  }
+
+  /**
+   * {@inheritDoc}
+   * <p>
+   * The default implementation derives from {@link #loadRelation(Identifier,
+   * CaseInsensitiveStringMap)} for a plain read, so the user options reach the relation-level
+   * entry point. Time-travel and write-privilege loads keep {@link TableCatalog}'s dispatch --
+   * both apply to tables only.
+   */
+  @Override
+  default Table loadTable(
+      Identifier ident,
+      TableContext context,
+      CaseInsensitiveStringMap options) throws NoSuchTableException {
+    if (context.timeTravel().isPresent() || !context.writePrivileges().isEmpty()) {
+      return TableCatalog.super.loadTable(ident, context, options);
+    }
+    if (loadRelation(ident, options) instanceof Table t) {
       return t;
     }
     throw new NoSuchTableException(ident);
