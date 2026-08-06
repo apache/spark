@@ -930,6 +930,28 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
     }
   }
 
+  test("ALTER VIEW <metric_view> SET TBLPROPERTIES preserves the dependency list") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+
+      sql(s"ALTER VIEW $fullMetricViewName SET TBLPROPERTIES ('k' = 'v')")
+
+      val info = capturedViewInfo()
+      assert(info.properties().get("k") === "v")
+      val deps = info.viewDependencies()
+      assert(deps != null)
+      assert(deps.dependencies().length === 1)
+      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
+      assert(tableDep.nameParts().toSeq ===
+        Seq(testCatalogName, testNamespace, sourceTableName))
+    }
+  }
+
   test("SHOW TABLES on a v2 RelationCatalog lists both tables and metric views") {
     withTestCatalogTables {
       val mv = MetricView(
