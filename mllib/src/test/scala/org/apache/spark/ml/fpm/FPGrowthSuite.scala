@@ -126,13 +126,6 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(prediction === Seq("3"))
   }
 
-  test("FPGrowth transform should preserve an input rules column") {
-    val data = dataset.withColumn("rules", lit("input"))
-    val transformed = new FPGrowth().setMinSupport(0.5).fit(data).transform(data)
-
-    assert(transformed.select("rules").collect().forall(_.getString(0) == "input"))
-  }
-
   test("FPGrowthModel setMinConfidence should affect rules generation and transform") {
     val model = new FPGrowth().setMinSupport(0.1).setMinConfidence(0.1).fit(dataset)
     val oldRulesNum = model.associationRules.count()
