@@ -40,9 +40,12 @@ object PipelinedShuffleBenchmark {
 
   private val cores = Runtime.getRuntime.availableProcessors()
 
-  private def newSession(pipelined: Boolean, shufflePartitions: Int): SparkSession = {
+  private def newSession(
+      pipelined: Boolean,
+      shufflePartitions: Int,
+      master: String): SparkSession = {
     val b = SparkSession.builder()
-      .master(s"local[$cores]")
+      .master(master)
       .appName("pipelined-shuffle-benchmark")
       .config("spark.sql.adaptive.enabled", "false")
       .config("spark.speculation", "false")
@@ -66,8 +69,9 @@ object PipelinedShuffleBenchmark {
   private def bestMs(
       pipelined: Boolean,
       shufflePartitions: Int,
+      master: String,
       workload: SparkSession => Unit): Long = {
-    val spark = newSession(pipelined, shufflePartitions)
+    val spark = newSession(pipelined, shufflePartitions, master)
     try {
       workload(spark) // warm up (JIT, caches, codegen)
       var best = Long.MaxValue
@@ -88,9 +92,10 @@ object PipelinedShuffleBenchmark {
 
   private def compare(
       name: String,
-      shufflePartitions: Int = 8)(workload: SparkSession => Unit): Unit = {
-    val regular = bestMs(pipelined = false, shufflePartitions, workload)
-    val pipe = bestMs(pipelined = true, shufflePartitions, workload)
+      shufflePartitions: Int = 8,
+      master: String = s"local[$cores]")(workload: SparkSession => Unit): Unit = {
+    val regular = bestMs(pipelined = false, shufflePartitions, master, workload)
+    val pipe = bestMs(pipelined = true, shufflePartitions, master, workload)
     val speedup = regular.toDouble / pipe
     // scalastyle:off println
     println(f"[bench] $name%-40s  regular=${regular}%5dms  pipelined=${pipe}%5dms  " +
@@ -136,6 +141,39 @@ object PipelinedShuffleBenchmark {
       import spark.implicits._
       spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
         .groupBy($"k").count().orderBy($"k").collect()
+    })
+
+    // v1's "prototype workload" (LocalRepartitionBenchmark), the case where v1 measured
+    // its largest win (4.1-4.5x over regular shuffle, AQE off, on local[32]): 1M rows,
+    // UNIQUE key per row, uncached. ColumnPruning removes the wide repeat(...) column, so
+    // this is pure per-row transport overhead with no batching benefit from key
+    // collisions -- small data, so the regular shuffle's fixed write/read cost dominates.
+    // Demand here: 6 (input) + 8 (repartition) + 1 (final agg) = 15 <= 16.
+    compare("prototype: repartition(id)+count, 1M uniq")({ spark =>
+      import org.apache.spark.sql.functions.{col, lit, repeat, sum}
+      spark.range(0L, 100000000L, 100L, inputParts)
+        .select(
+          col("id"),
+          col("id").cast("string").as("id2"),
+          (col("id") + 1).as("id3"),
+          repeat((col("id") + 1).cast("string"), 100000).as("id4"))
+        .repartition(col("id")).agg(sum(lit(1L))).collect()
+    })
+
+    // Same prototype with the HISTORICAL 32 map tasks (the config where v1 recorded
+    // 4.1-4.5x: many tiny map tasks multiply the regular shuffle's per-task/per-segment
+    // fixed cost). v2's gang demand is 32 + 8 + 1 = 41, far past the 16 honest slots, so
+    // this REQUIRES oversubscription (local[48]); the regular baseline's 32-wide map
+    // stage also exceeds the 16 cores there, so both sides oversubscribe symmetrically.
+    compare("prototype 32 maps (local[48], oversub)", master = "local[48]")({ spark =>
+      import org.apache.spark.sql.functions.{col, lit, repeat, sum}
+      spark.range(0L, 100000000L, 100L, 32)
+        .select(
+          col("id"),
+          col("id").cast("string").as("id2"),
+          (col("id") + 1).as("id3"),
+          repeat((col("id") + 1).cast("string"), 100000).as("id4"))
+        .repartition(col("id")).agg(sum(lit(1L))).collect()
     })
   }
 }
