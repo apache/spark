@@ -273,8 +273,9 @@ class FPGrowthModel private[ml] (
    * from all the applicable rules as prediction. The prediction column has the same data type as
    * the input column(Array[T]) and will not contain existing items in the input column. The null
    * values in the itemsCol columns are treated as empty sets.
-   * WARNING: internally it collects association rules to the driver and uses broadcast for
-   * efficiency. This may bring pressure to driver memory for large set of association rules.
+   * For batch datasets, transform keeps association rules as a DataFrame and joins them with the
+   * input dataset. For streaming datasets, transform collects association rules and uses broadcast
+   * for efficiency. This may bring pressure to driver memory for large sets of association rules.
    */
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -283,6 +284,35 @@ class FPGrowthModel private[ml] (
   }
 
   private def genericTransform(dataset: Dataset[_]): DataFrame = {
+    if (dataset.isStreaming) {
+      genericTransformWithUDF(dataset)
+    } else {
+      genericTransformWithJoin(dataset)
+    }
+  }
+
+  private def genericTransformWithJoin(dataset: Dataset[_]): DataFrame = {
+    val inputIdCol = s"${uid}_input_id"
+    val input = dataset.withColumn(inputIdCol, monotonically_increasing_id())
+    val rules = associationRules.select("antecedent", "consequent")
+    val matchedRules = input.join(
+      rules,
+      size(array_except(rules("antecedent"), input($(itemsCol)))) === 0)
+    val predictions = matchedRules
+      .groupBy(input(inputIdCol))
+      .agg(flatten(collect_list(rules("consequent"))).as($(predictionCol)))
+    val emptyArray = array().cast(dataset.schema($(itemsCol)).dataType)
+
+    input.join(predictions, Seq(inputIdCol), "left_outer")
+      .withColumn(
+        $(predictionCol),
+        coalesce(
+          array_except(col($(predictionCol)), input($(itemsCol))),
+          emptyArray))
+      .drop(inputIdCol)
+  }
+
+  private def genericTransformWithUDF(dataset: Dataset[_]): DataFrame = {
     val rules: Array[(Seq[Any], Seq[Any])] = associationRules.select("antecedent", "consequent")
       .rdd.map(r => (r.getSeq(0), r.getSeq(1)))
       .collect().asInstanceOf[Array[(Seq[Any], Seq[Any])]]
