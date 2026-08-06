@@ -989,7 +989,7 @@ case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with Im
       > SELECT _FUNC_('ﬁ', 'NFKC');
        fi
   """,
-  since = "4.3.0",
+  since = "4.4.0",
   group = "string_funcs")
 // scalastyle:on
 case class Normalize(input: Expression, form: Expression)

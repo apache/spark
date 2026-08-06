@@ -15902,7 +15902,7 @@ def normalize(str: "ColumnOrName", form: Optional["ColumnOrName"] = None) -> Col
     """
     Returns the Unicode normalization of ``str`` using the given normalization ``form``.
 
-    .. versionadded:: 4.3.0
+    .. versionadded:: 4.4.0
 
     Parameters
     ----------

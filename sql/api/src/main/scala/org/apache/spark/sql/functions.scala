@@ -7471,7 +7471,7 @@ object functions {
    * @param form
    *   the normalization form: 'NFC', 'NFD', 'NFKC', or 'NFKD'.
    * @group string_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    */
   def normalize(str: Column, form: Column): Column =
     Column.fn("normalize", str, form)
@@ -7483,7 +7483,7 @@ object functions {
    * @param str
    *   the input string to normalize.
    * @group string_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    */
   def normalize(str: Column): Column =
     Column.fn("normalize", str)
