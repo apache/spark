@@ -759,13 +759,33 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
   private def rewriteQualifiedName(token: String, classLoader: ClassLoader): String = {
     loadLongestPrefix(token, classLoader) match {
       case Some((cls, rest)) =>
-        val sourceName = sourceNameOf(nameableSupertype(cls))
+        val sourceName = narrowedSourceName(cls)
         val resolved = if (rest.isEmpty) sourceName else s"$sourceName.$rest"
         // `split('.')` drops a trailing empty segment, so a token that ends in `.`
         // (member access wrapped onto the next line) must get its dot restored.
         if (token.endsWith(".")) resolved + "." else resolved
       case None =>
         InnerClassRefPattern.replaceAllIn(token, ".")
+    }
+  }
+
+  /**
+   * The source name to emit for `cls`: the name of the nearest class Java can name, in the
+   * form javac accepts.
+   *
+   * Both steps read reflection metadata that a partial or shaded jar can leave
+   * unresolvable, and `NonFatal` does not cover the resulting `LinkageError`, so the pair is
+   * guarded together. Before this was split out of `resolveSourceName` the load, the climb
+   * and the name derivation shared one such guard; keeping them under one here restores that
+   * and degrades to the binary name, matching what an unresolvable prefix yields in
+   * [[loadLongestPrefix]].
+   */
+  private def narrowedSourceName(cls: Class[_]): String = {
+    try {
+      sourceNameOf(nameableSupertype(cls))
+    } catch {
+      case _: LinkageError => cls.getName
+      case NonFatal(_) => cls.getName
     }
   }
 
@@ -908,9 +928,7 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
         while (i < n && isNamePart(body.charAt(i))) i += 1
         val token = body.substring(start, i)
         if (containsDollarDigit(token) && checked.add(token) &&
-            loadLongestPrefix(token, classLoader).exists {
-              case (cls, _) => !canNarrowSafely(cls)
-            }) {
+            routesOnToken(token, classLoader)) {
           return true
         }
       } else {
@@ -918,6 +936,26 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
       }
     }
     false
+  }
+
+  /**
+   * True when `token` resolves to a class whose reference has to go to Janino.
+   *
+   * Reflection over a class that loaded from a partial or shaded jar can raise a
+   * `LinkageError` - `getCanonicalName` and `getEnclosingClass` both throw when an
+   * enclosing class is absent. That means the token cannot be evaluated, not that
+   * narrowing it is unsafe, so it does not route the unit: an unevaluable token is no
+   * evidence either way, and routing on it would turn a classpath problem into a
+   * permanent Janino arm. The rewrite degrades to the binary name for such a token, and
+   * javac reports an ordinary compile error if that name turns out to be unusable.
+   */
+  private def routesOnToken(token: String, classLoader: ClassLoader): Boolean = {
+    try {
+      loadLongestPrefix(token, classLoader).exists { case (cls, _) => !canNarrowSafely(cls) }
+    } catch {
+      case _: LinkageError => false
+      case NonFatal(_) => false
+    }
   }
 
   /** True iff `s` holds a `$` immediately followed by an ASCII digit. */
@@ -967,16 +1005,17 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
    * two of them the bridge cannot forward to both, so at least one becomes unreachable
    * after narrowing.
    *
-   * Reflection over the concrete class can raise a `LinkageError` when a member signature
-   * names a class the loader cannot find (a partial or shaded jar). `NonFatal` does not
-   * cover that, and an escaping `Error` would bypass the codegen fallbacks, so it is
-   * caught here and reported as "cannot narrow" - Janino compiles what javac cannot.
+   * Reflection over either class can raise a `LinkageError` when a signature or an
+   * enclosing class names something the loader cannot find (a partial or shaded jar).
+   * `NonFatal` does not cover that, so the whole body is guarded and an unevaluable class
+   * is reported as narrowable: the caller treats "cannot tell" as no evidence rather than
+   * as grounds to route the unit (see [[routesOnToken]]).
    */
   private def canNarrowSafely(cls: Class[_]): Boolean = {
-    val target = nameableSupertype(cls)
-    if (cls eq target) return true
-    if (!isPubliclyNameable(target)) return false
     try {
+      val target = nameableSupertype(cls)
+      if (cls eq target) return true
+      if (!isPubliclyNameable(target)) return false
       val reachable: Seq[Class[_]] = Seq(target, classOf[Object])
       val targetSignatures = reachable.flatMap(_.getMethods).map(erasedSignature).toSet
       val targetFields = reachable.flatMap(_.getFields).map(_.getName).toSet
@@ -994,8 +1033,8 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
         targetSignatures.contains(erasedSignature(m)) || coveredByBridge(m)
       } && cls.getFields.forall(f => targetFields.contains(f.getName))
     } catch {
-      case _: LinkageError => false
-      case NonFatal(_) => false
+      case _: LinkageError => true
+      case NonFatal(_) => true
     }
   }
 

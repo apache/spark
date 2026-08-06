@@ -428,6 +428,70 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
 
   // Compile `dyn.DynHelper` into a fresh temp dir using the system Java compiler, so
   // the class exists only under that dir (never on java.class.path).
+  test("reflection that raises a LinkageError does not route the unit or escape") {
+    // A partial or shaded jar can leave a class loadable while its enclosing class is not.
+    // `getCanonicalName` and `getEnclosingClass` both throw NoClassDefFoundError then, and
+    // `NonFatal` does not cover a LinkageError, so an escaping Error would bypass the
+    // codegen fallbacks. The token cannot be evaluated, which is no evidence that narrowing
+    // it is unsafe, so the unit must stay on the configured backend rather than gain a
+    // permanent Janino arm.
+    val dir = compileLinkageFixture()
+    // Drop the enclosing class, keeping the anonymous one that references it.
+    assert(new File(dir, "lnk/Holder$Mid.class").delete(), "fixture setup: enclosing class")
+    val loader = new DirClassLoader(dir, getClass.getClassLoader)
+    val anon = loader.loadClass("lnk.Holder$Mid$1")
+    // Precondition: the reflective calls the predicate makes really do throw here.
+    intercept[LinkageError](anon.getCanonicalName)
+    intercept[LinkageError](anon.getEnclosingClass)
+
+    val body = s"${anon.getName} v = (${anon.getName}) references[0];"
+    val prev = Thread.currentThread().getContextClassLoader
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      assert(!JdkCodeCompiler.referencesUnnarrowableClass(body),
+        "an unevaluable token must not route the unit to Janino")
+      withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+        assert(CodeCompiler.active(newCodeAndComment(body)) eq JdkCodeCompiler)
+      }
+      // The rewrite degrades to the binary name instead of propagating the Error.
+      assert(JdkCodeCompiler.rewriteInnerClassRefs(body, loader) === body)
+    } finally {
+      Thread.currentThread().setContextClassLoader(prev)
+    }
+  }
+
+  /**
+   * Compile `lnk.Holder`, whose nested `Mid` holds an anonymous `Runnable`. Deleting
+   * `Holder$Mid.class` afterwards leaves `Holder$Mid$1` loadable but makes reflection over
+   * its enclosing class throw, which is the partial-jar shape the guards have to survive.
+   */
+  private def compileLinkageFixture(): File = {
+    val dir = Utils.createTempDir()
+    val src =
+      """package lnk;
+        |public class Holder {
+        |  public static class Mid {
+        |    public static Object make() { return new Runnable() { public void run() {} }; }
+        |  }
+        |}
+        |""".stripMargin
+    val compiler = ToolProvider.getSystemJavaCompiler
+    val fm = compiler.getStandardFileManager(null, null, null)
+    try {
+      fm.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singletonList(dir))
+      val srcFile = new SimpleJavaFileObject(
+          URI.create("string:///lnk/Holder.java"), JavaFileObject.Kind.SOURCE) {
+        override def getCharContent(ignoreEncodingErrors: Boolean): CharSequence = src
+      }
+      assert(
+        compiler.getTask(null, fm, null, null, null, Collections.singletonList(srcFile)).call(),
+        "failed to compile lnk.Holder fixture")
+    } finally {
+      fm.close()
+    }
+    dir
+  }
+
   private def compileDynHelper(): File = {
     val dir = Utils.createTempDir()
     val src =
