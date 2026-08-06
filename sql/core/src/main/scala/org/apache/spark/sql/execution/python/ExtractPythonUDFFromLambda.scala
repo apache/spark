@@ -86,10 +86,11 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  * Shapes that genuinely cannot be rewritten are left untouched here and continue to be rejected by
  * `CheckAnalysis`:
  *
- *  - a UDF reading `aggregate`'s accumulator. The fold is sequential and, unlike every other shape,
- *    the values the UDF sees are not elements of any collection but outputs of earlier steps -
- *    folding `[1,2,3]` with `acc*2 + x` calls the UDF on 0, 1, 4 - so there is no input set to
- *    precompute over, not even the cross product that makes a pairwise comparator work;
+ *  - a UDF reading `aggregate`'s accumulator. The fold is sequential, so the values the UDF sees
+ *    are outputs of earlier steps rather than elements of a collection, and computing `acc_n`
+ *    alternates Python and JVM work n times, which no single UDF call can do. That is a limit of
+ *    expression rewriting rather than of Spark: restating the fold as an iteration over the whole
+ *    column with `UnionLoop` would work, but that is an operator-level restructuring;
  *  - a pandas UDF: it receives a `Series` rather than one value per call, so the element-wise
  *    rewrite would change its meaning.
  */

@@ -97,15 +97,25 @@ object PythonUDF {
     // one structural assumption that rewrite makes.
     allUDFsRewritable && isRewritableShape(hof) && (hof match {
       case ArrayAggregate(_, _, merge, _) =>
-        // A UDF on the element, or in `finish`, is rewritable. One reading the *accumulator* is
-        // not, and this is the single remaining exclusion. Every other shape precomputes over
-        // values that are elements of some collection; here they are not. Folding [1,2,3] with
-        // `acc*2 + x` calls the UDF on 0, 1, 4 - outputs of earlier steps, which do not exist
-        // until the fold runs. So there is no input set to precompute over, not even the cross
-        // product that makes a pairwise `array_sort` comparator work. Supporting it would need
-        // either a physical operator that calls Python from inside higher-order function
-        // evaluation, which the extraction architecture disallows, or unrolling the fold, which
-        // needs a static bound on array length.
+        // A UDF on the element, or in `finish`, is rewritable. One reading the *accumulator* is not
+        // rewritable *as an expression*, which is the single remaining exclusion.
+        //
+        // The fold is sequential: `acc_k = merge(udf(acc_{k-1}), x_k)`, so the values the UDF sees
+        // are outputs of earlier steps rather than elements of any collection. Folding [1,2,3] with
+        // `acc*2 + x` calls the UDF on 0, 1, 4. No precomputation reaches them - not even the cross
+        // product that makes a pairwise `array_sort` comparator work - because computing `acc_n`
+        // means alternating Python (`udf`) and JVM (`merge`) n times, and a single UDF call cannot
+        // interleave JVM work.
+        //
+        // This is a limit of expression rewriting, not of Spark. The fold can be restated as an
+        // iteration over the whole *column*: carry `(row, step, acc)` and advance every row one
+        // step per iteration, so each iteration is one UDF call over all rows and the number of
+        // Python round trips is the longest array, not the row count. `UnionLoop` (recursive CTE)
+        // already provides the dynamic looping that needs. It is not done here because it is an
+        // operator-level restructuring rather than an expression rewrite: the aggregate has to be
+        // lifted out of whatever expression contains it, rows need identities to rejoin the loop
+        // result, and one long array stalls every other row. Worth its own change if users ask for
+        // it; see SPARK-27052.
         !mergeReadsAccumulator(merge)
 
       case _ => true

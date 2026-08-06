@@ -530,9 +530,11 @@ class UDFInHigherOrderFunctionTestsMixin:
             self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
     def test_udf_on_aggregate_accumulator_still_fails(self):
-        # The fold is sequential and, unlike every other shape, the values the UDF sees are not
-        # elements of any collection but outputs of earlier steps - folding [1,2,3] with
-        # `acc*2 + x` calls the UDF on 0, 1, 4. There is nothing to precompute over at any cost.
+        # The fold is sequential: the values the UDF sees are outputs of earlier steps rather than
+        # elements of a collection (folding [1,2,3] with `acc*2 + x` calls it on 0, 1, 4), and
+        # computing the final accumulator alternates Python and JVM work once per element, which no
+        # single UDF call can do. Restating the fold as an iteration over the whole column would
+        # work but is an operator-level change, so for now this must fail rather than mislead.
         df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
         plus_one = udf(lambda x: x + 1, IntegerType())
 
