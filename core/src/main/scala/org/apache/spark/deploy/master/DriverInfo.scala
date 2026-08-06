@@ -66,15 +66,4 @@ private[deploy] class DriverInfo(
     copy.withResources(_resources)
     copy
   }
-
-  @transient private var _conf: SparkConf = _
-
-  private[deploy] def withConf(conf: SparkConf): this.type = {
-    _conf = conf
-    this
-  }
-
-  private def writeReplace(): AnyRef = {
-    if (_conf == null) this else redactedCopy(_conf)
-  }
 }

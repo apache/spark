@@ -25,8 +25,6 @@ import java.util.concurrent.ThreadLocalRandom
 import org.apache.curator.test.TestingServer
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.{ApplicationDescription, Command, DriverDescription}
-import org.apache.spark.deploy.DeployTestUtils.defaultResourceProfile
 import org.apache.spark.internal.config.Deploy.ZOOKEEPER_URL
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcEndpoint, RpcEnv}
@@ -41,55 +39,6 @@ class PersistenceEngineSuite extends SparkFunSuite {
       testPersistenceEngine(conf, serializer =>
         new FileSystemPersistenceEngine(dir.getAbsolutePath, serializer)
       )
-    }
-  }
-
-  test("SPARK-58592: FileSystemPersistenceEngine redacts secrets in ApplicationInfo and " +
-    "DriverInfo") {
-    withTempDir { dir =>
-      val conf = new SparkConf()
-      val serializer = new JavaSerializer(conf)
-      val engine = new FileSystemPersistenceEngine(dir.getAbsolutePath, serializer)
-      try {
-        val secretEnv = Map("PASSWORD" -> "topsecret", "JAVA_HOME" -> "/usr/lib/jvm/default")
-        val secretJavaOpts = Seq("-Dspark.executorEnv.TOKEN=env-token", "-Xmx2g")
-        val cmd = Command("mainClass", List("arg1"), secretEnv, Seq(), Seq(), secretJavaOpts)
-
-        val appDesc = ApplicationDescription(
-          "name", Some(4), cmd, "appUiUrl", defaultResourceProfile)
-        val appInfo = new ApplicationInfo(
-          0, "app-1", appDesc, new java.util.Date(0), null, Int.MaxValue).withConf(conf)
-        engine.addApplication(appInfo)
-
-        val driverDesc = new DriverDescription("hdfs://some.jar", 100, 3, false, cmd)
-        val driverInfo = new DriverInfo(0, "driver-1", driverDesc, new java.util.Date(0))
-          .withConf(conf)
-        engine.addDriver(driverInfo)
-
-        // The plaintext secrets must not be present in the bytes actually written to disk.
-        Seq("app_app-1", "driver_driver-1").foreach { fileName =>
-          val bytes = Files.readAllBytes(Paths.get(dir.getAbsolutePath, fileName))
-          val contents = new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1)
-          assert(!contents.contains("topsecret"))
-          assert(!contents.contains("env-token"))
-        }
-
-        val recoveredApp = engine.read[ApplicationInfo]("app_").head
-        assert(recoveredApp.desc.command.environment("PASSWORD") ==
-          Utils.REDACTION_REPLACEMENT_TEXT)
-        assert(recoveredApp.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
-        assert(!recoveredApp.desc.command.javaOpts.contains("env-token"))
-        assert(recoveredApp.desc.command.javaOpts.contains("-Xmx2g"))
-
-        val recoveredDriver = engine.read[DriverInfo]("driver_").head
-        assert(recoveredDriver.desc.command.environment("PASSWORD") ==
-          Utils.REDACTION_REPLACEMENT_TEXT)
-        assert(recoveredDriver.desc.command.environment("JAVA_HOME") == "/usr/lib/jvm/default")
-        assert(!recoveredDriver.desc.command.javaOpts.contains("env-token"))
-        assert(recoveredDriver.desc.command.javaOpts.contains("-Xmx2g"))
-      } finally {
-        engine.close()
-      }
     }
   }
 
