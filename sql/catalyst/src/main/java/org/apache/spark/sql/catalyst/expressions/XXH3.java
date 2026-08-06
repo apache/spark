@@ -459,33 +459,54 @@ public final class XXH3 {
     writeHex64(hex, 16, xxh3Avalanche(h2lo));
   }
 
+  // Scalar-returning siblings of mix32B's two lanes, used so the Into variants below thread the
+  // accumulator through local variables instead of a long[2] array.
+  private static long mixLowLane(long acc0, byte[] input, int in1, int in2, int secOff, long seed) {
+    acc0 += mix16B(input, in1, secOff, seed);
+    acc0 ^= readLE64(input, in2) + readLE64(input, in2 + 8);
+    return acc0;
+  }
+
+  private static long mixHighLane(
+      long acc1, byte[] input, int in1, int in2, int secOff, long seed) {
+    acc1 += mix16B(input, in2, secOff + 16, seed);
+    acc1 ^= readLE64(input, in1) + readLE64(input, in1 + 8);
+    return acc1;
+  }
+
   private static void len17to128128Into(byte[] input, int len, long seed, byte[] hex) {
-    long[] acc = {(long) len * PRIME64_1, 0L};
+    long acc0 = (long) len * PRIME64_1;
+    long acc1 = 0L;
     int i = (len - 1) / 32;
     do {
-      mix32B(acc, input, 16 * i, len - 16 * (i + 1), 32 * i, seed);
+      acc0 = mixLowLane(acc0, input, 16 * i, len - 16 * (i + 1), 32 * i, seed);
+      acc1 = mixHighLane(acc1, input, 16 * i, len - 16 * (i + 1), 32 * i, seed);
     } while (i-- != 0);
-    finalize128Into(acc, len, seed, hex);
+    finalize128Into(acc0, acc1, len, seed, hex);
   }
 
   private static void len129to240128Into(byte[] input, int len, long seed, byte[] hex) {
-    long[] acc = {(long) len * PRIME64_1, 0L};
+    long acc0 = (long) len * PRIME64_1;
+    long acc1 = 0L;
     for (int i = 0; i < 4; i++) {
-      mix32B(acc, input, 32 * i, 32 * i + 16, 32 * i, seed);
+      acc0 = mixLowLane(acc0, input, 32 * i, 32 * i + 16, 32 * i, seed);
+      acc1 = mixHighLane(acc1, input, 32 * i, 32 * i + 16, 32 * i, seed);
     }
-    acc[0] = xxh3Avalanche(acc[0]);
-    acc[1] = xxh3Avalanche(acc[1]);
+    acc0 = xxh3Avalanche(acc0);
+    acc1 = xxh3Avalanche(acc1);
     for (int i = 4; i < (len >> 5); i++) {
-      mix32B(acc, input, 32 * i, 32 * i + 16, (i - 4) * 32 + 3, seed);
+      acc0 = mixLowLane(acc0, input, 32 * i, 32 * i + 16, (i - 4) * 32 + 3, seed);
+      acc1 = mixHighLane(acc1, input, 32 * i, 32 * i + 16, (i - 4) * 32 + 3, seed);
     }
-    mix32B(acc, input, len - 16, len - 32, 103, -seed);
-    finalize128Into(acc, len, seed, hex);
+    acc0 = mixLowLane(acc0, input, len - 16, len - 32, 103, -seed);
+    acc1 = mixHighLane(acc1, input, len - 16, len - 32, 103, -seed);
+    finalize128Into(acc0, acc1, len, seed, hex);
   }
 
-  private static void finalize128Into(long[] acc, int len, long seed, byte[] hex) {
-    long low = xxh3Avalanche(acc[0] + acc[1]);
+  private static void finalize128Into(long acc0, long acc1, int len, long seed, byte[] hex) {
+    long low = xxh3Avalanche(acc0 + acc1);
     long high = -xxh3Avalanche(
-        acc[0] * PRIME64_1 + acc[1] * PRIME64_4 + ((long) len - seed) * PRIME64_2);
+        acc0 * PRIME64_1 + acc1 * PRIME64_4 + ((long) len - seed) * PRIME64_2);
     writeHex64(hex, 0, high);
     writeHex64(hex, 16, low);
   }
