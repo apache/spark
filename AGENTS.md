@@ -241,6 +241,13 @@ When exploring or working in any directory, always check for nested `AGENTS.md` 
 directory and its ancestors. Read and follow every applicable file; instructions in a more specific
 directory take precedence for that directory's scope.
 
+A directory may carry these instructions as `CLAUDE.md` rather than `AGENTS.md`, so check **both**
+names — a directory with only a `CLAUDE.md` has project instructions you must read too. Where both
+exist, `AGENTS.md` is the real file and `CLAUDE.md` is a symlink to it, as at the repository root,
+so reading either one is enough. When adding instructions to a directory that has neither, name the
+new file `AGENTS.md` and add a `CLAUDE.md` symlink beside it (`ln -s AGENTS.md CLAUDE.md`) to keep
+one source of truth readable under both names.
+
 ## Versioning and Branch Policy
 
 When a change needs a version — `@since` annotations, config `.version("...")` (`SQLConf` / `*Conf`), new `MimaExcludes` sections, etc. — use the version of the branch it first ships in, with `-SNAPSHOT` stripped. Determine that branch:
