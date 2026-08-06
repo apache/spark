@@ -81,10 +81,13 @@ object XSDToSchema extends Logging{
    * @param maxPrecision the maximum precision a widened decimal may reach; must not exceed
    *                     [[DecimalType.MAX_PRECISION]]
    * @return a copy of the schema with decimal precisions widened
+   * @throws IllegalArgumentException if `maxPrecision` is not in [1, [[DecimalType.MAX_PRECISION]]]
    */
   def extendDecimalPrecision(
       schema: StructType,
       maxPrecision: Int = DecimalType.MAX_PRECISION): StructType = {
+    require(maxPrecision > 0 && maxPrecision <= DecimalType.MAX_PRECISION,
+      s"maxPrecision must be in [1, ${DecimalType.MAX_PRECISION}], got $maxPrecision")
     StructType(schema.map { field =>
       field.copy(dataType = extendDecimalType(field.dataType, maxPrecision))
     })
