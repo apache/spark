@@ -117,11 +117,12 @@ binary_np_spark_mappings = {
     .cast("double"),
     "fmin": lambda c1, c2: F.least(c1, c2).cast("double"),
     "fmod": lambda c1, c2: F.when(
-        c1.isNotNull()
-        & (c2 == 0)
-        & ~(F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double")),
-        F.lit(0.0),
-    ).otherwise((c1 % c2).cast("double")),
+        c1.isNotNull() & (c2 == 0),
+        F.when(
+            F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+            F.lit(float("nan")),
+        ).otherwise(F.lit(0.0)),
+    ).otherwise(F.try_mod(c1, c2).cast("double")),
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "heaviside": lambda c1, c2: F.when(
         c1.isNull() | F.isnan(c1.cast("double")),
