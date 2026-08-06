@@ -265,9 +265,8 @@ class TaskContext:
 
     def cpus(self) -> int:
         """
-        CPUs allocated to the task, rounded up to a whole number when the exact
-        allocation is fractional. Use :meth:`TaskContext.cpuAmount` to get the exact,
-        possibly fractional, amount.
+        CPUs allocated to the task, rounded up to a whole number when the allocation is
+        fractional. Use :meth:`TaskContext.cpuAmount` to get the possibly fractional amount.
 
         Returns
         -------
@@ -278,7 +277,7 @@ class TaskContext:
 
     def cpuAmount(self) -> float:
         """
-        The exact amount of CPUs allocated to the task. This can be fractional when
+        The amount of CPUs allocated to the task. This can be fractional when
         ``spark.task.cpus`` or the task resource profile requests a fractional amount
         (e.g. 0.5).
 
@@ -287,7 +286,7 @@ class TaskContext:
         Returns
         -------
         float
-            the exact, possibly fractional, amount of CPUs.
+            the possibly fractional amount of CPUs.
 
         See Also
         --------

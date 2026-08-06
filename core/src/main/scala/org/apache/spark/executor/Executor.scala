@@ -1602,7 +1602,7 @@ private[spark] object Executor extends Logging {
    * minus executorRunTime -- would misreport the un-consumed share of the core as scheduler
    * delay. Relative comparisons for speculation are unaffected because all tasks of a stage
    * share the same cpu amount. Trailing zeros are stripped from the scale-9 cpus so the
-   * product stays in BigDecimal's compact (long-backed) form  instead of inflating a long
+   * product stays in BigDecimal's compact (long-backed) form instead of inflating a long
    * duration into a BigInteger.
    */
   private[spark] def cpuWeightedNanos(intervalNs: Long, cpus: BigDecimal): Long = {
