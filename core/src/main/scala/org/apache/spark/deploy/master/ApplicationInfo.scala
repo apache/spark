@@ -207,10 +207,7 @@ private[spark] class ApplicationInfo(
   }
 
   private[deploy] def redactedCopy(conf: SparkConf): ApplicationInfo = {
-    val redactedCommand = desc.command.copy(
-      environment = Utils.redact(conf, desc.command.environment.toSeq).toMap,
-      javaOpts = Utils.redactCommandLineArgs(conf, desc.command.javaOpts))
-    val redactedDesc = desc.copy(command = redactedCommand)
+    val redactedDesc = desc.copy(command = desc.command.redactedCopy(conf))
     new ApplicationInfo(startTime, id, redactedDesc, submitDate, driver, defaultCores)
   }
 }
