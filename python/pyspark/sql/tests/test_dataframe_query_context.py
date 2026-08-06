@@ -550,6 +550,27 @@ class DataFrameQueryContextTestsMixin:
         # filtered out of the call site, so the innermost reported frame is its caller.
         self.assertRegex(call_site, r"\.py:[0-9]+$")
 
+    def test_dataframe_query_context_stack_traces_conf(self):
+        # `spark.sql.stackTracesInDataFrameContext` is a runtime configuration, so a change
+        # must take effect on the next captured call site rather than being cached.
+        def call_site_frames():
+            def level3():
+                return sf.element_at(sf.array(sf.lit(1)), 5)
+
+            def level2():
+                return level3()
+
+            try:
+                self.spark.range(1).select(level2()).collect()
+                self.fail("Expected the query to fail")
+            except ArrayIndexOutOfBoundsException as e:
+                return len(e.getQueryContext()[0].callSite().splitlines())
+
+        self.assertEqual(call_site_frames(), 1)
+        with self.sql_conf({"spark.sql.stackTracesInDataFrameContext": 3}):
+            self.assertEqual(call_site_frames(), 3)
+        self.assertEqual(call_site_frames(), 1)
+
     def test_dataframe_query_context_functions_coverage(self):
         # Public functions are decorated, while the ones taking a user defined callable or a
         # raw expression string are deliberately left alone.

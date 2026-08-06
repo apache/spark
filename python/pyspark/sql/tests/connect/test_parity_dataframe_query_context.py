@@ -16,12 +16,19 @@
 #
 
 
+import unittest
+
 from pyspark.sql.tests.test_dataframe_query_context import DataFrameQueryContextTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataFrameQueryContextParityTests(DataFrameQueryContextTestsMixin, ReusedConnectTestCase):
-    pass
+    @unittest.skip(
+        "Spark Connect does not read spark.sql.stackTracesInDataFrameContext, since that "
+        "requires an RPC, and captures a single frame instead."
+    )
+    def test_dataframe_query_context_stack_traces_conf(self):
+        super().test_dataframe_query_context_stack_traces_conf()
 
 
 if __name__ == "__main__":

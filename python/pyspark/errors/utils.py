@@ -49,9 +49,10 @@ _current_origin = threading.local()
 # Default is True.
 _enable_debugging_cache = None
 
-# `spark.sql.stackTracesInDataFrameContext` cached as a (session, value) pair, so that it is
-# not read from the JVM on every decorated API call.
-_stack_traces_in_context_cache: Optional[Any] = None
+# The active session and the JVM `PySparkCurrentOrigin`, cached as a
+# (SparkContext, (session, origin)) pair, so that they are not resolved through the JVM on
+# every decorated API call.
+_origin_context_cache: Optional[Any] = None
 
 
 def is_debugging_enabled() -> bool:
@@ -75,22 +76,43 @@ def is_debugging_enabled() -> bool:
     return _enable_debugging_cache
 
 
-def _get_stack_traces_in_context(spark: Any) -> int:
+def _get_origin_context() -> Optional[Any]:
     """
-    Return `spark.sql.stackTracesInDataFrameContext`, cached per session.
+    Return the active session and the JVM `PySparkCurrentOrigin`, or None when there is no
+    active session.
 
-    Reading it is a JVM call (an RPC with Spark Connect), and it is read on every decorated
-    API call, so the value is cached against the session it was read from.
+    Resolving the JVM object costs several JVM round trips through
+    `SparkSession.getActiveSession`, and it is needed on every decorated API call, so it is
+    cached against the active `SparkContext`, which is a plain attribute lookup. The class is
+    a JVM singleton, so it stays valid for the lifetime of the context.
+
+    Note that `spark.sql.stackTracesInDataFrameContext` is deliberately not cached here: it
+    is a runtime configuration and can be changed at any point with `spark.conf.set`.
     """
-    global _stack_traces_in_context_cache
+    global _origin_context_cache
 
-    cached = _stack_traces_in_context_cache
-    if cached is not None and cached[0] is spark:
+    from pyspark import SparkContext
+
+    sc = SparkContext._active_spark_context
+    if sc is None:
+        return None
+
+    cached = _origin_context_cache
+    if cached is not None and cached[0] is sc:
         return cached[1]
 
-    depth = int(spark.conf.get("spark.sql.stackTracesInDataFrameContext"))
-    _stack_traces_in_context_cache = (spark, depth)
-    return depth
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.getActiveSession()
+    if spark is None:
+        return None
+    assert spark._jvm is not None
+    context = (
+        spark,
+        getattr(spark._jvm, "org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin"),
+    )
+    _origin_context_cache = (sc, context)
+    return context
 
 
 def current_origin() -> threading.local:
@@ -352,7 +374,6 @@ def _with_origin(func: FuncT) -> FuncT:
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        from pyspark.sql import SparkSession
         from pyspark.sql.utils import is_remote
 
         if hasattr(func, "__name__") and is_debugging_enabled():
@@ -370,14 +391,13 @@ def _with_origin(func: FuncT) -> FuncT:
                 finally:
                     set_current_origin(None, None)
             else:
-                spark = SparkSession.getActiveSession()
-                if spark is None:
+                context = _get_origin_context()
+                if context is None:
                     return func(*args, **kwargs)
-                assert spark._jvm is not None
-                jvm_pyspark_origin = getattr(
-                    spark._jvm, "org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin"
-                )
-                call_site = _capture_call_site(_get_stack_traces_in_context(spark))
+                spark, jvm_pyspark_origin = context
+                # Read every time: this is a runtime configuration.
+                depth = int(spark.conf.get("spark.sql.stackTracesInDataFrameContext"))
+                call_site = _capture_call_site(depth)
                 # Update call site when the function is called. The call site is also kept
                 # on the Python side so that nested calls can detect the outermost one.
                 set_current_origin(func.__name__, call_site)
