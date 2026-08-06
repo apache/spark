@@ -862,12 +862,14 @@ public class TaskMemoryManagerSuite {
   }
 
   @Test
-  public void memoryConsumptionBreakdownIsEmptyWhenNoConsumerHoldsMemory() {
+  public void memoryConsumptionBreakdownIsEmptyWhenThereIsNoMemoryToReport() {
     final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
     memoryManager.limit(100);
     final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+    // The breakdown is empty only when the task holds neither attributed nor unattributed memory.
     // A consumer that has never acquired memory must not appear in the breakdown.
     new TestMemoryConsumer(manager);
+    Assertions.assertEquals(0, memoryManager.getExecutionMemoryUsageForTask(0));
     Assertions.assertEquals("", manager.getMemoryConsumptionBreakdown());
   }
 
