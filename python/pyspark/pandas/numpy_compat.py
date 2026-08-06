@@ -101,21 +101,15 @@ unary_np_spark_mappings = {
 
 
 def _fmod_func(c1, c2):
-    has_floating_input = F.typeof(c1).isin("float", "double") | F.typeof(c2).isin(
-        "float", "double"
-    )
-    is_c1_missing = c1.isNull() | F.isnan(c1.cast("double"))
-    is_c2_missing = c2.isNull() | F.isnan(c2.cast("double"))
-
     return F.when(
-        has_floating_input,
-        F.when(is_c1_missing, c1)
-        .when(is_c2_missing, c2)
+        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+        F.when(c1.isNull() | F.isnan(c1), c1)
+        .when(c2.isNull() | F.isnan(c2), c2)
         .when(c2 == 0, F.lit(float("nan")))
         .otherwise(F.try_mod(c1, c2)),
     ).otherwise(
-        F.when(is_c1_missing, c1)
-        .when(is_c2_missing, c2)
+        F.when(c1.isNull() | F.isnan(c1), c1)
+        .when(c2.isNull() | F.isnan(c2), c2)
         .when(c2 == 0, F.lit(0.0))
         .otherwise(F.try_mod(c1, c2))
     )
