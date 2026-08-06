@@ -298,8 +298,10 @@ object MultiLineJsonDataSource extends JsonDataSource {
     // An archive entry's stream is only valid until the shared cursor advances, so each document
     // must be consumed before the next is pulled; `JsonInferSchema.infer` does.
     val docs: RDD[InputStream] = baseRdd.mapPartitions { streams =>
-      // Compile once per partition and reuse for every archive it holds.
-      val archivePathFilter = archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
+      // Compile at most once per partition: lazy so a partition of only loose files never
+      // compiles, while a partition with archives reuses one matcher across all of them.
+      lazy val archivePathFilter =
+        archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
       streams.flatMap { stream =>
         val path = new Path(stream.getPath())
         skipInputOnError(stream.getPath(), ignoreMissingFiles, ignoreCorruptFiles) {

@@ -380,8 +380,10 @@ object MultiLineXmlDataSource extends XmlDataSource {
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
 
     val tokenRDD: RDD[String] = baseRdd.mapPartitions { streams =>
-      // Compile once per partition and reuse for every archive it holds.
-      val archivePathFilter = archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
+      // Compile at most once per partition: lazy so a partition of only loose files never
+      // compiles, while a partition with archives reuses one matcher across all of them.
+      lazy val archivePathFilter =
+        archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
       streams.flatMap { stream =>
         val path = new Path(stream.getPath())
         skipInputOnError(ignoreMissingFiles, ignoreCorruptFiles) {

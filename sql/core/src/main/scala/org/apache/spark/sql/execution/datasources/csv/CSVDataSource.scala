@@ -176,8 +176,10 @@ abstract class CSVDataSource extends Serializable with Logging with SupportsArch
     // compiles it once when the archive branch is taken.
     val archivePathFilterGlob = parsedOptions.archivePathFilter
     def tokens(dropHeader: Boolean): RDD[Array[String]] = baseRdd.mapPartitions { streams =>
-      // Compile once per partition and reuse for every archive it holds.
-      val archivePathFilter = archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
+      // Compile at most once per partition: lazy so a partition of only loose files never
+      // compiles, while a partition with archives reuses one matcher across all of them.
+      lazy val archivePathFilter =
+        archivePathFilterGlob.map(FileSourceOptions.compileArchivePathFilter)
       streams.flatMap { stream =>
         val path = new Path(stream.getPath())
         try {

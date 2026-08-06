@@ -84,7 +84,7 @@ class FileSourceOptions(
   }
 
   /**
-   * The effective [[archivePathFilter]] compiled once per instance of this class, so the archive
+   * The effective [[archivePathFilter]] is compiled once per instance of this class, so the archive
    * reads sharing one options object reuse a single matcher rather than re-compiling per archive.
    * `transient` because Hadoop's `GlobPattern` is not serializable, so an executor recompiles from
    * [[archivePathFilter]] on first use. Paths that cannot reach this value -- the schema-inference
