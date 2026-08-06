@@ -861,19 +861,27 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58392: options are forwarded to loadRelation for views") {
-    registerCatalog("testrelcat", classOf[InMemoryRelationCatalog])
+  test("SPARK-58392: options are forwarded for a view over a V2 table") {
+    registerCatalog("testrelcat", classOf[V2InMemoryRelationCatalog])
+    val t1 = "testrelcat.ns1.ns2.table"
     val v1 = "testrelcat.ns1.ns2.view"
-    withView(v1) {
-      sql(s"CREATE VIEW $v1 AS SELECT 1 AS x")
+    withTable(t1) {
+      withView(v1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING parquet")
+        sql(s"CREATE VIEW $v1 AS SELECT * FROM $t1 WITH (`split-size` = 5)")
 
-      val relCatalog = catalog("testrelcat").asInstanceOf[InMemoryRelationCatalog]
-      relCatalog.resetLoadRelationCalls()
-      spark.read.option("customOption", "customValue").table(v1)
-        .queryExecution.analyzed
+        val relCatalog = catalog("testrelcat").asInstanceOf[V2InMemoryRelationCatalog]
+        relCatalog.resetLoadRelationCalls()
+        spark.read.option("customOption", "customValue").table(v1).collect()
 
-      val loadedOptions = relCatalog.loadRelationCalls.map(_.get("customOption"))
-      assert(loadedOptions === Seq("customValue"))
+        val loadCalls = relCatalog.loadRelationCalls
+        val viewOptions = loadCalls.map(_.get("customOption")).filter(_ != null)
+        val tableOptions = loadCalls.map(_.get("split-size")).filter(_ != null)
+        assert(viewOptions === Seq("customValue"))
+        assert(tableOptions === Seq("5", "5"))
+        assert(loadCalls.size === 3,
+          s"expected one view load and two V2 table loads, got: $loadCalls")
+      }
     }
   }
 
