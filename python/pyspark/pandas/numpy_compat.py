@@ -127,8 +127,14 @@ def _floor_divide_func(c1, c2):
         F.when(c1.isNull() | F.isnan(c1), c1_double)
         .when(c2.isNull() | F.isnan(c2), c2_double)
         .when(
-            c1_double.isin(float("-inf"), float("inf")) & (c2_double != 0),
-            F.lit(float("nan")),
+            c1_double.isin(float("-inf"), float("inf")),
+            F.when(
+                c2_double == 0,
+                F.when(
+                    (c1_double < 0) != (c2_double.cast("string") == "-0.0"),
+                    F.lit(float("-inf")),
+                ).otherwise(F.lit(float("inf"))),
+            ).otherwise(F.lit(float("nan"))),
         )
         .when(
             c2_double.isin(float("-inf"), float("inf")),
