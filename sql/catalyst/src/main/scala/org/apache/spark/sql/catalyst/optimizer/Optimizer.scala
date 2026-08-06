@@ -1111,23 +1111,10 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
   }
 
   /**
-   * Makes each of the UDF's non-literal arguments evaluate once, no matter how many times the
-   * transpiled option references it.
-   *
-   * A transpiled option is the option's body with every `_udf_param_N` placeholder replaced by
-   * the bound argument expression, so an argument referenced N times in the body is spliced in
-   * N times. Python evaluates each argument exactly once before calling the function -- as does
-   * the Python eval operator, which computes each argument column once per row -- so the
-   * duplication is both wasted work and, for a nondeterministic argument, wrong: a copy sitting
-   * in a conditional branch that is not taken stops advancing and falls out of step with the
-   * copies that are always evaluated (e.g. `udf(lambda x: x if x > 0.5 else 0.0)(rand())` can
-   * return a value below 0.5).
+   * Makes each of the UDF's non-literal arguments evaluate once.
    *
    * Rewrites the duplicated arguments to [[CommonExpressionRef]]s of a single
-   * [[CommonExpressionDef]] each and wraps the result in a [[With]]. `RewriteWithExpression`,
-   * which runs a couple of batches later, pre-evaluates those definitions in a `Project` below
-   * this operator and projects the extra columns away again -- and inlines the ones that are
-   * cheap or referenced only once, so the plan is unchanged when there is nothing to save.
+   * [[CommonExpressionDef]] each and wraps the result in a [[With]].
    *
    * The `With` must wrap the whole option rather than each duplicated subtree: a `With` nested
    * inside a conditional branch is inlined by `RewriteWithExpression` (a common expression can't
