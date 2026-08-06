@@ -476,10 +476,18 @@ def with_origin_to_functions(module_name: str) -> None:
     import sys
 
     module = sys.modules[module_name]
+    decorated: Dict[str, Any] = {}
     for name, func in list(vars(module).items()):
         if name.startswith("_") or name in _ORIGIN_IGNORED_FUNCTIONS:
             continue
         # Only functions defined in this module; leave imported helpers and classes alone.
         if not isinstance(func, types.FunctionType) or func.__module__ != module_name:
             continue
-        setattr(module, name, _with_origin(func))
+        # Aliases such as `negate = negative` must reuse the wrapper of the function they
+        # alias, so that both names keep pointing at the same object and the fragment stays
+        # the aliased name.
+        wrapper = decorated.get(func.__name__)
+        if wrapper is None:
+            wrapper = _with_origin(func)
+            decorated[func.__name__] = wrapper
+        setattr(module, name, wrapper)

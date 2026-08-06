@@ -564,6 +564,15 @@ class DataFrameQueryContextTestsMixin:
             if func is not None:
                 self.assertFalse(_is_origin_wrapped(func), name)
 
+        # Aliases stay identical to what they alias, rather than becoming a separate wrapper.
+        for alias, aliased in [
+            ("negate", "negative"),
+            ("column", "col"),
+            ("power", "pow"),
+            ("random", "rand"),
+        ]:
+            self.assertIs(getattr(sf, alias), getattr(sf, aliased), alias)
+
 
 class DataFrameQueryContextTests(DataFrameQueryContextTestsMixin, ReusedSQLTestCase):
     pass
