@@ -424,7 +424,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamBatchSupported = false,
     expectedMsg = "FullOuter join")
 
-  // Left outer, left semi, left anti join: *-stream not allowed
+  // Left outer, left semi, left anti join: batch-stream not allowed, and stream-stream join is
+  // allowed 'conditionally' - see the watermark checks below
   Seq((LeftOuter, "LeftOuter join"), (LeftSemi, "LeftSemi join"), (LeftAnti, "LeftAnti join"))
     .foreach { case (joinType, name) =>
       testBinaryOperationInStreamingPlan(
@@ -443,8 +444,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamStreamSupported = false,
     expectedMsg = "RightOuter join")
 
-  // Left outer, right outer, full outer joins: Update mode not allowed
-  Seq(LeftOuter, RightOuter, FullOuter).foreach { joinType =>
+  // Left outer, right outer, full outer, left anti joins: Update mode not allowed. Left anti is
+  // included because its unmatched rows are only emitted at watermark-based eviction, so
+  // early-firing could emit a row which a later batch would invalidate.
+  Seq(LeftOuter, RightOuter, FullOuter, LeftAnti).foreach { joinType =>
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and update mode",
       streamRelation.join(streamRelation, joinType = joinType,
@@ -467,7 +470,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     (LeftSemi, "only in Append and Update output modes"),
     (LeftOuter, "only in Append output mode"),
     (RightOuter, "only in Append output mode"),
-    (FullOuter, "only in Append output mode")
+    (FullOuter, "only in Append output mode"),
+    (LeftAnti, "only in Append output mode")
   ).foreach { case (joinType, allowedModesMsg) =>
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and complete mode",
@@ -477,8 +481,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       Seq("is not supported in Complete output mode", allowedModesMsg))
   }
 
-  // Left outer, right outer, full outer, left semi joins
-  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
+  // Left outer, right outer, full outer, left semi, left anti joins
+  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi, LeftAnti).foreach { joinType =>
     // Stream-stream allowed with join on watermark attribute
     // Note that the attribute need not be watermarked on both sides.
     assertSupportedInStreamingPlan(

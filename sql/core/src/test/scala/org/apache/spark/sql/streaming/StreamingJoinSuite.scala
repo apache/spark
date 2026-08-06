@@ -157,7 +157,7 @@ abstract class StreamingJoinSuite
     val windowed2 = df2
       .select($"key", window($"rightTime", "10 second"), $"rightValue")
     val joined = windowed1.join(windowed2, Seq("key", "window"), joinType)
-    val select = if (joinType == "left_semi") {
+    val select = if (joinType == "left_semi" || joinType == "left_anti") {
       joined.select($"key", $"window.end".cast("long"), $"leftValue")
     } else {
       joined.select($"key", $"window.end".cast("long"), $"leftValue",
@@ -185,7 +185,7 @@ abstract class StreamingJoinSuite
         && $"leftValue" > 4,
       joinType)
 
-    val select = if (joinType == "left_semi") {
+    val select = if (joinType == "left_semi" || joinType == "left_anti") {
       joined.select(left("key"), left("window.end").cast("long"), $"leftValue")
     } else if (joinType == "left_outer") {
       joined.select(left("key"), left("window.end").cast("long"), $"leftValue",
@@ -219,7 +219,7 @@ abstract class StreamingJoinSuite
         && $"rightValue".cast("int") > 7,
       joinType)
 
-    val select = if (joinType == "left_semi") {
+    val select = if (joinType == "left_semi" || joinType == "left_anti") {
       joined.select(left("key"), left("window.end").cast("long"), $"leftValue")
     } else if (joinType == "left_outer") {
       joined.select(left("key"), left("window.end").cast("long"), $"leftValue",
@@ -2632,6 +2632,167 @@ class StreamingFullOuterJoinWithoutVCFSuite extends StreamingFullOuterJoinSuite 
   override protected def testMode = Mode.WithoutVCF
 }
 
+abstract class StreamingLeftAntiJoinSuite extends StreamingJoinSuite {
+
+  test("windowed left anti join") {
+    withTempDir { checkpointDir =>
+      val (leftInput, rightInput, joined) = setupWindowedJoin("left_anti")
+
+      testStream(joined, OutputMode.Append())(
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
+        // Nothing is emitted yet: left 1 and 2 are unmatched, but the watermark cannot yet rule
+        // out a future match for them. Left 3, 4, 5 matched and are suppressed forever.
+        CheckNewAnswer(),
+        // states
+        // left: 1, 2, 3, 4, 5 (all buffered; 3, 4, 5 carry matched = true)
+        // right: 3, 4, 5, 6, 7
+        assertNumStateRows(
+          total = Seq(10), updated = Seq(10),
+          droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+        MultiAddData(leftInput, 21)(rightInput, 22),
+        // Watermark = 11, so window=[0,10] is evicted from the left side: the unmatched left rows
+        // 1 and 2 are emitted now, while the matched 3, 4, 5 are dropped without output.
+        CheckNewAnswer(Row(1, 10, 2), Row(2, 10, 4)),
+        // states
+        // left: 21
+        // right: 22
+        //
+        // states evicted
+        // left: 1, 2, 3, 4, 5 (below watermark)
+        // right: 3, 4, 5, 6, 7 (below watermark)
+        //
+        // Only the 5 right side rows are reported as removed: the left side rows are evicted
+        // through removeAndReturnOldState while generating the anti output, which does not feed
+        // numRemovedStateRows. Left outer join reports removals the same way.
+        assertNumStateRows(
+          total = Seq(2), updated = Seq(2),
+          droppedByWatermark = Seq(0), removed = Some(Seq(5))),
+        StopStream,
+        // Restart the join query from the same checkpoint
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(leftInput, 22),
+        // Left 22 matches right 22, so it is buffered with matched = true and never emitted.
+        CheckNewAnswer(),
+        // states
+        // left: 21, 22
+        // right: 22
+        assertNumStateRows(
+          total = Seq(3), updated = Seq(1),
+          droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+        StopStream,
+        // Restart the query from the same checkpoint
+        StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+        AddData(leftInput, 1),
+        // Row not added as 1 < state key watermark = 12.
+        CheckNewAnswer(),
+        // states
+        // left: 21, 22
+        // right: 22
+        assertNumStateRows(
+          total = Seq(3), updated = Seq(0),
+          droppedByWatermark = Seq(1), removed = Some(Seq(0)))
+      )
+    }
+  }
+
+  test("left anti join emits an unmatched left row only once the watermark passes it") {
+    val (leftInput, rightInput, joined) = setupWindowedJoin("left_anti")
+
+    testStream(joined, OutputMode.Append())(
+      AddData(leftInput, 3),
+      // Unmatched so far, but not yet provably unmatched.
+      CheckNewAnswer(),
+      // A matching right row arrives in a later batch, so left 3 must never be emitted.
+      AddData(rightInput, 3),
+      CheckNewAnswer(),
+      // Advance the watermark past window=[0,10].
+      MultiAddData(leftInput, 21)(rightInput, 21),
+      CheckNewAnswer(),
+      // Left 21 matched right 21, and left 3 was matched before eviction, so still nothing.
+      MultiAddData(leftInput, 31)(rightInput, 31),
+      CheckNewAnswer()
+    )
+  }
+
+  test("left anti early state exclusion on left") {
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("left_anti")
+
+    testStream(joined, OutputMode.Append())(
+      MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
+      // The left rows with leftValue <= 4 (i.e. left 1 and 2) fail the pre-join filter, so they can
+      // never match and are emitted immediately without being added to the state.
+      CheckNewAnswer(Row(1, 10, 2), Row(2, 10, 4)),
+      // states
+      // left: 3 (matched right 3 in the same batch, buffered with matched = true)
+      // right: 3, 4, 5
+      assertNumStateRows(
+        total = Seq(4), updated = Seq(4),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      // Left 3 matched, so advancing the watermark must not produce an anti row for it.
+      MultiAddData(leftInput, 20)(rightInput, 21),
+      CheckNewAnswer(),
+      // states
+      // left: 20
+      // right: 21
+      //
+      // states evicted
+      // left: 3 (below watermark, matched so no output)
+      // right: 3, 4, 5 (below watermark)
+      //
+      // Only the 3 right side rows are counted as removed - see the note in
+      // "windowed left anti join" about left side eviction not feeding numRemovedStateRows.
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(3)))
+    )
+  }
+
+  test("left anti early state exclusion on right") {
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithRightCondition("left_anti")
+
+    testStream(joined, OutputMode.Append())(
+      MultiAddData(leftInput, 3, 4, 5)(rightInput, 1, 2, 3),
+      // The right rows with rightValue <= 7 (i.e. right 1 and 2) fail the pre-join filter, so they
+      // are not added to the state and cannot suppress any left row.
+      CheckNewAnswer(),
+      // states
+      // left: 3, 4, 5 (3 matched right 3, so carries matched = true)
+      // right: 3
+      assertNumStateRows(
+        total = Seq(4), updated = Seq(4),
+        droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+      // Advance the watermark: left 4 and 5 were never matched, so they are emitted now.
+      MultiAddData(leftInput, 20)(rightInput, 21),
+      CheckNewAnswer(Row(4, 10, 8), Row(5, 10, 10)),
+      // states
+      // left: 20
+      // right: 21
+      //
+      // states evicted
+      // left: 3, 4, 5 (below watermark)
+      // right: 3 (below watermark)
+      //
+      // Only the single right side row is counted as removed - see the note in
+      // "windowed left anti join" about left side eviction not feeding numRemovedStateRows.
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(2),
+        droppedByWatermark = Seq(0), removed = Some(Seq(1)))
+    )
+  }
+
+  test("left anti join is not supported in Update output mode") {
+    val (_, _, joined) = setupWindowedJoin("left_anti")
+
+    val e = intercept[AnalysisException] {
+      joined.writeStream.format("memory").queryName("leftAntiUpdate")
+        .outputMode(OutputMode.Update()).start()
+    }
+    assert(e.getMessage.contains("LeftAnti join between two streaming DataFrames/Datasets " +
+      "is not supported in Update output mode, only in Append output mode"))
+  }
+}
+
 @SlowSQLTest
 class StreamingLeftSemiJoinWithVCFSuite extends StreamingLeftSemiJoinSuite {
   override protected def testMode = Mode.WithVCF
@@ -2639,5 +2800,15 @@ class StreamingLeftSemiJoinWithVCFSuite extends StreamingLeftSemiJoinSuite {
 
 @SlowSQLTest
 class StreamingLeftSemiJoinWithoutVCFSuite extends StreamingLeftSemiJoinSuite {
+  override protected def testMode = Mode.WithoutVCF
+}
+
+@SlowSQLTest
+class StreamingLeftAntiJoinWithVCFSuite extends StreamingLeftAntiJoinSuite {
+  override protected def testMode = Mode.WithVCF
+}
+
+@SlowSQLTest
+class StreamingLeftAntiJoinWithoutVCFSuite extends StreamingLeftAntiJoinSuite {
   override protected def testMode = Mode.WithoutVCF
 }

@@ -1322,6 +1322,22 @@ side in future.
 Semi joins have the same guarantees as [inner joins](#semantic-guarantees-of-stream-stream-inner-joins-with-watermarking)
 regarding watermark delays and whether data will be dropped or not.
 
+##### Anti Joins with Watermarking
+An anti join returns values from the left side of the relation that has no match with the right.
+It is also referred to as a left anti join. As with semi joins, watermark + event-time constraints
+must be specified for an anti join: since a row is emitted precisely because it has *no* match, the
+engine has to wait until the watermark guarantees that no matching row can arrive on the right side
+in future before it can emit the row.
+
+Note that anti join is only supported in Append output mode. Update mode would have to emit rows
+early, before the watermark can rule out a future match, and such a row could be invalidated by a
+later batch.
+
+###### Semantic Guarantees of Stream-stream Anti Joins with Watermarking
+Anti joins have the same guarantees regarding watermark delays and whether data will be dropped as
+[outer joins](#outer-joins-with-watermarking), because unmatched rows are likewise only emitted once
+the watermark has passed them.
+
 ##### Support matrix for joins in streaming queries
 
 <table>
@@ -1343,8 +1359,8 @@ regarding watermark delays and whether data will be dropped or not.
       </td>
   </tr>
   <tr>
-    <td rowspan="5" style="vertical-align: middle;">Stream</td>
-    <td rowspan="5" style="vertical-align: middle;">Static</td>
+    <td rowspan="6" style="vertical-align: middle;">Stream</td>
+    <td rowspan="6" style="vertical-align: middle;">Static</td>
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">Supported, not stateful</td>
   </tr>
@@ -1365,8 +1381,12 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">Supported, not stateful</td>
   </tr>
   <tr>
-    <td rowspan="5" style="vertical-align: middle;">Static</td>
-    <td rowspan="5" style="vertical-align: middle;">Stream</td>
+    <td style="vertical-align: middle;">Left Anti</td>
+    <td style="vertical-align: middle;">Supported, not stateful</td>
+  </tr>
+  <tr>
+    <td rowspan="6" style="vertical-align: middle;">Static</td>
+    <td rowspan="6" style="vertical-align: middle;">Stream</td>
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">Supported, not stateful</td>
   </tr>
@@ -1387,8 +1407,12 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">Not supported</td>
   </tr>
   <tr>
-    <td rowspan="5" style="vertical-align: middle;">Stream</td>
-    <td rowspan="5" style="vertical-align: middle;">Stream</td>
+    <td style="vertical-align: middle;">Left Anti</td>
+    <td style="vertical-align: middle;">Not supported</td>
+  </tr>
+  <tr>
+    <td rowspan="6" style="vertical-align: middle;">Stream</td>
+    <td rowspan="6" style="vertical-align: middle;">Stream</td>
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">
       Supported, optionally specify watermark on both sides +
@@ -1421,6 +1445,13 @@ regarding watermark delays and whether data will be dropped or not.
     <td style="vertical-align: middle;">
       Conditionally supported, must specify watermark on right + time constraints for correct
       results, optionally specify watermark on left for all state cleanup
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align: middle;">Left Anti</td>
+    <td style="vertical-align: middle;">
+      Conditionally supported, must specify watermark on right + time constraints for correct
+      results, optionally specify watermark on left for all state cleanup. Append output mode only
     </td>
   </tr>
   <tr>
