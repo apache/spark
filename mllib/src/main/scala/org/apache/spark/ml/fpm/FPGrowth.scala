@@ -279,21 +279,20 @@ class FPGrowthModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val inputIdCol = s"${uid}_input_id"
-    val input = dataset.withColumn(inputIdCol, monotonically_increasing_id())
-    val rules = associationRules.select("antecedent", "consequent")
-    val matchedRules = input.join(
-      rules,
-      size(array_except(rules("antecedent"), input($(itemsCol)))) === 0)
-    val predictions = matchedRules
-      .groupBy(input(inputIdCol))
-      .agg(flatten(collect_list(rules("consequent"))).as($(predictionCol)))
+    val predictions = dataset.withColumn(inputIdCol, monotonically_increasing_id())
+      .join(
+        associationRules.select("antecedent", "consequent"),
+        size(array_except(col("antecedent"), col($(itemsCol)))) === 0)
+      .groupBy(col(inputIdCol))
+      .agg(flatten(collect_list(col("consequent"))).as($(predictionCol)))
     val emptyArray = array().cast(dataset.schema($(itemsCol)).dataType)
 
-    input.join(predictions, Seq(inputIdCol), "left_outer")
+    dataset.withColumn(inputIdCol, monotonically_increasing_id())
+      .join(predictions, Seq(inputIdCol), "left_outer")
       .withColumn(
         $(predictionCol),
         coalesce(
-          array_except(col($(predictionCol)), input($(itemsCol))),
+          array_except(col($(predictionCol)), col($(itemsCol))),
           emptyArray))
       .drop(inputIdCol)
   }
