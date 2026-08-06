@@ -214,21 +214,20 @@ skipped entirely -- so a query that only becomes ineffective later in its input 
     <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minRows</code></td>
     <td>100000</td>
     <td>
-      The number of rows to process before the compaction ratio is evaluated, so a decision is never
-      made on too few rows. The ratio is re-evaluated every time this many further rows have been
-      processed. Setting this to <code>0</code> disables the periodic evaluation entirely, leaving
-      only the check made when the aggregation map is about to spill.
+      The number of rows between periodic compaction-ratio evaluations. Setting this to
+      <code>0</code> disables the periodic evaluation. The ratio may still be evaluated when the
+      aggregation map is about to spill.
     </td>
     <td>4.4.0</td>
   </tr>
   <tr>
     <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minCompaction</code></td>
-    <td>1.1</td>
+    <td>1.05</td>
     <td>
       The minimum compaction ratio required to keep the partial aggregation. A ratio of 10 means the
-      partial aggregation collapses ten rows into one key; when the observed ratio is below this
-      value the partial aggregation is bypassed for the rest of the input. A larger value bypasses
-      more aggressively.
+      partial aggregation collapses ten rows into one key; when an evaluation finds the ratio below
+      this value the partial aggregation is bypassed for the rest of the input. A larger value
+      bypasses more aggressively.
     </td>
     <td>4.4.0</td>
   </tr>

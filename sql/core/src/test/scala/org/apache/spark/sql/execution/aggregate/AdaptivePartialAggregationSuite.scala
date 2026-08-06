@@ -682,7 +682,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     forEachCodegenAndMap() { clue =>
       // With the fast map on it holds 4 keys, so `k < 4` is served there and `k >= 4` falls
       // through. 400 hot-key rows against 4 hot keys plus 20 tail keys is a ratio of about 17.5,
-      // far above the default 1.1, so nothing may bypass.
+      // far above the default, so nothing may bypass.
       val df = () => spark.range(0, 420, 1, 1)
         .select(when($"id" < 400, $"id" % 4).otherwise($"id" - 396) as "k", $"id" as "v")
         .groupBy($"k")

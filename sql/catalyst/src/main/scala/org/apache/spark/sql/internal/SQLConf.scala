@@ -4171,12 +4171,10 @@ object SQLConf {
 
   val ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS =
     buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.minRows")
-      .doc("The number of rows to process before adaptive partial aggregation (see " +
-        s"'${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}') evaluates the compaction ratio. The " +
-        "ratio is evaluated once this many rows have been processed since the previous " +
-        "evaluation, so a decision is never made on too few rows. A value of 0 disables the " +
-        "periodic evaluation entirely, leaving only the check made when the aggregation map is " +
-        "about to spill.")
+      .doc("The number of rows between periodic compaction-ratio evaluations by adaptive partial " +
+        s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). Setting this to 0 " +
+        "disables the periodic evaluation. The ratio may still be evaluated when the aggregation " +
+        "map is about to spill.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .longConf
@@ -4188,16 +4186,15 @@ object SQLConf {
       .doc("The minimum compaction ratio required to keep the pre-shuffle partial aggregation " +
         s"(see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The compaction ratio is the " +
         "number of processed rows divided by the number of keys held in the aggregation maps, " +
-        "so a ratio of 10 means the partial aggregation collapses ten rows into one. When the " +
-        s"ratio is below this value after '${ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key}' rows, " +
-        "or when the aggregation map is about to spill, the partial aggregation is bypassed for " +
+        "so a ratio of 10 means the partial aggregation collapses ten rows into one. When an " +
+        "evaluation finds the ratio below this value, the partial aggregation is bypassed for " +
         "the rest of the input. A larger value bypasses more aggressively.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doubleConf
       .checkValue(v => v >= 1.0 && v.isFinite,
         "The minimum compaction ratio must be a finite value of at least 1.0.")
-      .createWithDefault(1.1)
+      .createWithDefault(1.05)
 
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")

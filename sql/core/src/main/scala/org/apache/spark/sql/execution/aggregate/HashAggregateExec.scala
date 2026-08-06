@@ -154,8 +154,9 @@ case class HashAggregateExec(
    * single-row partial buffers (see [[SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED]]). It only
    * applies to a pre-shuffle partial aggregation with grouping keys:
    *   - `Partial` mode only: the downstream `Final` aggregation merges the passed-through
-   *     single-row buffers, so the output contract is unchanged.
-   *     `Final`/`Complete`/`PartialMerge` have no such downstream to fall back on.
+   *     single-row buffers, so the output contract is unchanged. `Final`/`Complete` produce the
+   *     result themselves and have no such downstream. `PartialMerge` does have one and could be
+   *     supported by passing its incoming buffer through unchanged, but that is left for later.
    *   - grouping keys present: a global aggregation produces a single output row, so partial
    *     aggregation achieves the maximum reduction and must never be bypassed.
    *   - DISTINCT aggregate functions are allowed: the intermediate `PartialMerge` phase of the
