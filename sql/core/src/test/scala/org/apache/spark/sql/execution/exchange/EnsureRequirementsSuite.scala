@@ -35,7 +35,6 @@ import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoin
 import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -862,28 +861,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         assert(right.expressions === Seq(bucket(4, exprA), years(exprC)))
       case other => fail(other.toString)
     }
-
-    // by default spark.sql.requireAllClusterKeysForCoPartition is true, so when there isn't
-    // exact match on all partition keys, Spark will fallback to shuffle.
-    plan1 = new DummySparkPlanWithBatchScanChild(
-      outputPartitioning = KeyedPartitioning(bucket(4, exprA) :: bucket(4, exprB) :: Nil, Seq.empty)
-    )
-    plan2 = new DummySparkPlanWithBatchScanChild(
-      outputPartitioning = KeyedPartitioning(bucket(4, exprA) :: bucket(4, exprC) :: Nil, Seq.empty)
-    )
-    smjExec = SortMergeJoinExec(
-      exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
-    EnsureRequirements.apply(smjExec) match {
-      case SortMergeJoinExec(_, _, _, _,
-        SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
-        SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
-        assert(left.expressions === Seq(exprA, exprB, exprB))
-        assert(right.expressions === Seq(exprA, exprC, exprC))
-      case other => fail(other.toString)
-    }
   }
 
-  test(s"KeyedPartitioning with ${REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} = false") {
+  test("KeyedPartitioning with subset of join keys") {
     var plan1 = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyedPartitioning(bucket(4, exprB) :: years(exprC) :: Nil, Seq.empty)
     )
@@ -891,9 +871,14 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       outputPartitioning = KeyedPartitioning(bucket(4, exprC) :: years(exprB) :: Nil, Seq.empty)
     )
 
-    // simple case
+    // simple case: join key exprA is not covered by either side's partition keys, so by default
+    // the coverage check of requireAllClusterKeysForCoPartition falls back to shuffle to avoid
+    // joining on a partitioning coarser than the join keys
     var smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
+    assert(EnsureRequirements.apply(smjExec)
+      .collect { case s: ShuffleExchangeLike => s }.length == 2)
+    // with requireAllClusterKeysForCoPartition=false, SPJ is allowed
     applyEnsureRequirementsWithSubsetKeys(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
       SortExec(_, _, DummySparkPlan(_, _, left: KeyedPartitioning, _, _), _),
@@ -912,7 +897,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     )
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
-    applyEnsureRequirementsWithSubsetKeys(smjExec) match {
+    EnsureRequirements.apply(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
       SortExec(_, _, DummySparkPlan(_, _, left: KeyedPartitioning, _, _), _),
       SortExec(_, _, DummySparkPlan(_, _, right: KeyedPartitioning, _, _), _), _) =>
@@ -930,7 +915,20 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         KeyedPartitioning(years(exprA) :: bucket(4, exprC) :: days(exprA) :: Nil, Seq.empty))
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
-    applyEnsureRequirementsWithSubsetKeys(smjExec) match {
+    EnsureRequirements.apply(smjExec) match {
+      case SortMergeJoinExec(_, _, _, _,
+      SortExec(_, _, DummySparkPlan(_, _, left: KeyedPartitioning, _, _), _),
+      SortExec(_, _, DummySparkPlan(_, _, right: KeyedPartitioning, _, _), _), _) =>
+        assert(left.expressions === Seq(years(exprA), bucket(4, exprB), days(exprA)))
+        assert(right.expressions === Seq(years(exprA), bucket(4, exprC), days(exprA)))
+      case other => fail(other.toString)
+    }
+
+    // a column partitioned by more than one transform: partition expressions outnumber the
+    // join keys, but every join key is covered, so SPJ is allowed with default configs
+    smjExec = SortMergeJoinExec(
+      exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
+    EnsureRequirements.apply(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
       SortExec(_, _, DummySparkPlan(_, _, left: KeyedPartitioning, _, _), _),
       SortExec(_, _, DummySparkPlan(_, _, right: KeyedPartitioning, _, _), _), _) =>
@@ -967,7 +965,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     )
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
-    applyEnsureRequirementsWithSubsetKeys(smjExec) match {
+    EnsureRequirements.apply(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
       SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
       SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
@@ -985,7 +983,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     )
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
-    applyEnsureRequirementsWithSubsetKeys(smjExec) match {
+    EnsureRequirements.apply(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
       SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
       SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
@@ -1006,13 +1004,41 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     )
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
-    applyEnsureRequirementsWithSubsetKeys(smjExec) match {
+    EnsureRequirements.apply(smjExec) match {
       case SortMergeJoinExec(_, _, _, _,
       SortExec(_, _, ShuffleExchangeExec(left: HashPartitioning, _, _, _, _), _),
       SortExec(_, _, ShuffleExchangeExec(right: HashPartitioning, _, _, _, _), _), _) =>
         assert(left.expressions === Seq(exprA, exprB, exprB))
         assert(right.expressions === Seq(exprA, exprC, exprC))
       case other => fail(other.toString)
+    }
+  }
+
+  test("KeyedPartitioning: duplicated join keys in hand-built plans do not block SPJ") {
+    // Queries produce this key list only in unusual configurations: BooleanSimplification
+    // normally dedups the conjunction, but it is an excludable rule
+    // (spark.sql.optimizer.excludedRules), and EnsureRequirements must also stay robust
+    // for hand-built or rewritten plans. The coverage check treats duplicated cluster
+    // keys as covered, so SPJ is allowed with either config value.
+    val plan1 = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning =
+        KeyedPartitioning(bucket(4, exprA) :: bucket(4, exprB) :: Nil, Seq.empty))
+    val plan2 = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning =
+        KeyedPartitioning(bucket(4, exprA) :: bucket(4, exprC) :: Nil, Seq.empty))
+    val smjExec = SortMergeJoinExec(
+      exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
+    Seq("true", "false").foreach { requireAllKeys =>
+      withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> requireAllKeys) {
+        EnsureRequirements.apply(smjExec) match {
+          case SortMergeJoinExec(_, _, _, _,
+            SortExec(_, _, DummySparkPlan(_, _, left: KeyedPartitioning, _, _), _),
+            SortExec(_, _, DummySparkPlan(_, _, right: KeyedPartitioning, _, _), _), _) =>
+            assert(left.expressions === Seq(bucket(4, exprA), bucket(4, exprB)))
+            assert(right.expressions === Seq(bucket(4, exprA), bucket(4, exprC)))
+          case other => fail(s"Expected no shuffle, but got: $other")
+        }
+      }
     }
   }
 

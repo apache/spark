@@ -1105,7 +1105,11 @@ object SQLConf {
       .doc("When true, the planner requires all the clustering keys as the hash partition keys " +
         "of the children, to eliminate the shuffles for the operator that needs its children to " +
         "be co-partitioned, such as JOIN node. This is to avoid data skews which can lead to " +
-        "significant performance regression if shuffles are eliminated.")
+        "significant performance regression if shuffles are eliminated. For storage-partitioned " +
+        "join, every clustering key must be covered by some partition key, rather than matching " +
+        "the partition keys positionally, so a column partitioned by more than one transform " +
+        "does not prevent shuffle elimination; hash partitioning deliberately keeps the " +
+        "positional match.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
