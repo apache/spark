@@ -464,16 +464,23 @@ abstract class StreamExecution(
   }
 
   /**
-   * Applies the configuration defaults a Real-Time Mode query wants but that are not the
-   * engine-wide defaults, because they are only the right choice for a low-latency, long-running
-   * batch.
+   * Applies the configuration a Real-Time Mode query needs but that is not the engine-wide default,
+   * because it is only the right choice for a low-latency, long-running batch. Runs once at query
+   * start, before the logical plan is forced, so a config read during planning sees the final
+   * value.
    *
-   * Each is applied ONLY IF THE USER HAS NOT SET IT (the `conf.contains` guard), so an explicit
-   * choice always wins. That differs deliberately from the `sortBeforeRepartition` override in
-   * [[MicroBatchExecution]], which forces its value because honouring `true` makes the query
-   * produce no rows at all; everything here is a sensible default rather than a correctness
-   * requirement, so a user who sets one is assumed to mean it. Each change is logged so a run's
-   * effective configuration is recoverable from the driver log.
+   * There are two kinds of setting here, and the difference is deliberate:
+   *
+   *  - SOFT DEFAULTS, applied only when the user has not set the key (`conf.contains` guard), so an
+   *    explicit choice always wins. These are performance choices, not correctness requirements,
+   *    so a user who sets one is assumed to mean it. `changelogCheckpointing` is one.
+   *  - HARD OVERRIDES, applied unconditionally because honouring the user's value would break the
+   *    query outright. `sortBeforeRepartition` is one: leaving it `true` makes a Real-Time Mode
+   *    query
+   *    with a round-robin repartition produce no rows at all. An override logs a warning so the
+   *    operator can see their config is not the one in force.
+   *
+   * Every change is logged, so a run's effective configuration is recoverable from the driver log.
    *
    * Deliberately NOT set here, though Databricks Runtime does default them for Real-Time Mode:
    *  - `spark.sql.streaming.stateStore.checkpointFormatVersion=2` and the RocksDB state-store
@@ -490,10 +497,11 @@ abstract class StreamExecution(
   private def setDefaultConfsForRealTimeMode(): Unit = {
     val conf = sparkSessionForStream.conf
 
-    // Changelog checkpointing writes a changelog rather than a full snapshot on each commit, which
-    // shortens the state-commit step at a batch boundary. That step is on the critical path between
-    // batches in Real-Time Mode, so this is a latency optimization. Only meaningful with RocksDB,
-    // hence the check against the provider actually in force.
+    // SOFT DEFAULT. Changelog checkpointing writes a changelog rather than a full snapshot on each
+    // commit, which shortens the state-commit step at a batch boundary. That step is on the
+    // critical path between batches in Real-Time Mode, so this is a latency optimization. Only
+    // meaningful
+    // with RocksDB, hence the check against the provider actually in force.
     val changelogKey = s"${RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX}.changelogCheckpointing.enabled"
     val usingRocksDb =
       conf.get(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
@@ -503,6 +511,31 @@ abstract class StreamExecution(
       logInfo(log"Real-Time Mode: defaulting ${MDC(CONFIG, changelogKey)}=true")
       conf.set(changelogKey, "true")
     }
+
+    // HARD OVERRIDE. `repartition(n)` uses RoundRobinPartitioning, and by default (SPARK-23207)
+    // Spark inserts a local sort before a round-robin shuffle so the row-to-partition assignment is
+    // deterministic -- otherwise a retried task could emit rows in a different order and lose data.
+    // That sort is fully blocking: it drains its whole input before emitting a row. A Real-Time
+    // Mode
+    // task reads an unbounded stream, so the input never ends, the producer never emits, and the
+    // query makes no progress at all. Note this sort is not a SortExec node (it lives inside
+    // ShuffleExchangeExec's RDD), so the Real-Time Mode operator allowlist cannot catch it.
+    //
+    // Determinism is not needed here: Real-Time Mode does not retry tasks (TaskSetManager caps a
+    // pipelined task set at one attempt, and its group is aborted as a unit rather than
+    // recomputed), so the hazard the sort guards against does not arise.
+    //
+    // This overrides an explicit `true` as well. Honouring it would reintroduce the hang above, and
+    // a query that never produces a row is worse than silently ignoring a config that only guards
+    // against a retry that cannot happen here.
+    if (conf.contains(SQLConf.SORT_BEFORE_REPARTITION.key) &&
+      conf.get(SQLConf.SORT_BEFORE_REPARTITION)) {
+      logWarning(log"Ignoring ${MDC(CONFIG, SQLConf.SORT_BEFORE_REPARTITION.key)}=true " +
+        log"for this Real-Time Mode query: the local sort it inserts before a round-robin " +
+        log"repartition never completes on an unbounded stream. It is not needed because a " +
+        log"Real-Time Mode task is not retried.")
+    }
+    conf.set(SQLConf.SORT_BEFORE_REPARTITION.key, "false")
   }
 
   private def isInterruptedByStop(e: Throwable, sc: SparkContext): Boolean = {
