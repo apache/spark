@@ -23526,7 +23526,7 @@ def json_typeof(col: "ColumnOrName") -> Column:
     'string', 'number', 'boolean', or 'null'. Returns null if the input is not a valid JSON
     string or is an empty string.
 
-    .. versionadded:: 4.3.0
+    .. versionadded:: 4.4.0
 
     Parameters
     ----------

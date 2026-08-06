@@ -14713,7 +14713,7 @@ object functions {
    * @param e
    *   the JSON string column. A column that evaluates to a string.
    * @group json_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    * @return
    *   Returns a column that evaluates to a string.
    */
