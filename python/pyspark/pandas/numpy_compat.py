@@ -99,6 +99,22 @@ unary_np_spark_mappings = {
     ),
 }
 
+
+def _fmod_func(c1, c2):
+    has_floating_input = F.typeof(c1).isin("float", "double") | F.typeof(c2).isin(
+        "float", "double"
+    )
+
+    return F.when(
+        has_floating_input,
+        F.when(c1.isNotNull() & (c2 == 0), F.lit(float("nan"))).otherwise(
+            F.try_mod(c1, c2)
+        ),
+    ).otherwise(
+        F.when(c1.isNotNull() & (c2 == 0), F.lit(0.0)).otherwise(F.try_mod(c1, c2))
+    ).cast("double")
+
+
 binary_np_spark_mappings = {
     "arctan2": F.atan2,
     "bitwise_and": lambda c1, c2: c1.bitwiseAND(c2),
@@ -116,12 +132,7 @@ binary_np_spark_mappings = {
     .otherwise(F.greatest(c1, c2))
     .cast("double"),
     "fmin": lambda c1, c2: F.least(c1, c2).cast("double"),
-    "fmod": lambda c1, c2: F.when(
-        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
-        F.when(c1.isNotNull() & (c2 == 0), F.lit(float("nan"))).otherwise(F.try_mod(c1, c2)),
-    ).otherwise(
-        F.when(c1.isNotNull() & (c2 == 0), F.lit(0.0)).otherwise(F.try_mod(c1, c2))
-    ).cast("double"),
+    "fmod": _fmod_func,
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "heaviside": lambda c1, c2: F.when(
         c1.isNull() | F.isnan(c1.cast("double")),
