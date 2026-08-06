@@ -144,16 +144,19 @@ binary_np_spark_mappings = {
             )
             .otherwise(F.lit(float("inf"))),
         )
-        .when(c1.cast("double").isin(float("-inf"), float("inf")), F.lit(float("nan")))
         .when(
-            c2.cast("double").isin(float("-inf"), float("inf")),
+            (c1.cast("double") == float("-inf")) | (c1.cast("double") == float("inf")),
+            F.lit(float("nan")),
+        )
+        .when(
+            (c2.cast("double") == float("-inf")) | (c2.cast("double") == float("inf")),
             F.when(c1 == 0, (c1 / c2).cast("double"))
             .when((c1 < 0) != (c2 < 0), F.lit(-1.0))
             .otherwise(F.lit(0.0)),
         )
         .when(c1 == 0, (c1 / c2).cast("double"))
-        .otherwise(F.floor(c1 / c2).cast("double")),
-    ).otherwise(F.when(c2 == 0, F.lit(0.0)).otherwise(F.floor(c1 / c2).cast("double"))),
+        .otherwise((c1 / c2) - F.pmod(c1 / c2, F.lit(1.0))),
+    ).otherwise(F.when(c2 == 0, F.lit(0.0)).otherwise((c1 / c2) - F.pmod(c1 / c2, F.lit(1.0)))),
     "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
     .when(F.isnan(c2.cast("double")), c1)
     .otherwise(F.greatest(c1, c2))
