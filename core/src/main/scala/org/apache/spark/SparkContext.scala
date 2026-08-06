@@ -2778,6 +2778,20 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Cancel all jobs that have been scheduled or are running.
+   *
+   * @param reason reason for cancellation. It is surfaced in the error of every cancelled job, so
+   *               that a job aborted as collateral of a context-wide cancellation can be told
+   *               apart from one that failed on its own.
+   *
+   * @since 4.4.0
+   */
+  def cancelAllJobs(reason: String): Unit = {
+    assertNotStopped()
+    dagScheduler.cancelAllJobs(Option(reason))
+  }
+
+  /**
    * Cancel a given job if it's scheduled or running.
    *
    * @param jobId the job ID to cancel
