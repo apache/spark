@@ -624,8 +624,13 @@ case class HashAggregateExec(
     // After the child input is consumed, finish the build: with adaptive partial aggregation mark
     // that the child is fully consumed (to support re-entry; the map iterators are set up inside
     // the map-output function), otherwise set up the map iterators for the output below.
+    // A child may leave its produce loop early rather than exhausting its input: `UnionExec` runs
+    // each child inside its own helper, so a streamed row that fills the output buffer returns
+    // only as far as here. Reaching the end of `produce` therefore does not by itself mean the
+    // input is consumed -- pending output says the child parked instead, and the build resumes on
+    // re-entry. Without this the rest of that partition is silently dropped.
     val postChildProduce = if (adaptivePartialAggEnabled) {
-      s"$adaptiveChildrenConsumedTerm = true;"
+      s"if (!shouldStop()) { $adaptiveChildrenConsumedTerm = true; }"
     } else {
       finishHashMap
     }

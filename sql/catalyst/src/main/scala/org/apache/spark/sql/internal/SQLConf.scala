@@ -4195,7 +4195,8 @@ object SQLConf {
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doubleConf
-      .checkValue(_ >= 1.0, "The minimum compaction ratio must be at least 1.0.")
+      .checkValue(v => v >= 1.0 && v.isFinite,
+        "The minimum compaction ratio must be a finite value of at least 1.0.")
       .createWithDefault(1.1)
 
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =

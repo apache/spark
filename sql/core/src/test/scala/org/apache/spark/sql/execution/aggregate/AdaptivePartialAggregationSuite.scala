@@ -531,6 +531,27 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("results unchanged under a fused Union (child yields from a nested helper)") {
+    // `UnionExec` wraps each child's produce in its own helper, so a streamed row that fills the
+    // output buffer returns only as far as the aggregate's build loop. Reaching the end of the
+    // child's produce therefore does not mean the input is exhausted, and treating it as such
+    // drops the rest of the partition.
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 100, 1, 2).union(spark.range(100, 200, 1, 2)).groupBy("id").count()
+    }
+  }
+
+  test("results unchanged below a generator that cannot yield mid-fan-out") {
+    // `GenerateExec` expands a collection without checking `shouldStop()`, so the aggregate cannot
+    // rely on the child to bound the output buffer -- each streamed row has to be able to leave
+    // the build loop on its own.
+    checkAdaptiveMatchesReference { () =>
+      spark.range(0, 1, 1, 1)
+        .select(explode(sequence(lit(1), lit(500))) as "k")
+        .groupBy($"k").count()
+    }
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Part 2: Triggering -- the bypass fires when, and only when, it should.
   /////////////////////////////////////////////////////////////////////////////
@@ -868,6 +889,19 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           "the spill check must replace the sort fallback, not trigger it")
       }
     }
+  }
+
+  test("minCompaction rejects values that cannot be generated as a Java literal") {
+    // The threshold is interpolated straight into the generated source, where a non-finite double
+    // renders as `InfinityD` -- not a valid Java literal. Reject it at configuration time rather
+    // than failing to compile the stage (or silently deoptimizing when codegen falls back).
+    Seq("Infinity", "-Infinity", "NaN", "1e309").foreach { v =>
+      val e = intercept[IllegalArgumentException] {
+        spark.conf.set(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key, v)
+      }
+      assert(e.getMessage.contains("finite"), s"expected a finiteness error for '$v': $e")
+    }
+    spark.conf.unset(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key)
   }
 
   test("larger sample defers the decision so a small high-cardinality input is not bypassed") {
