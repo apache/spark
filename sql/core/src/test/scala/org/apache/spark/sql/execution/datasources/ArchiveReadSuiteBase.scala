@@ -215,6 +215,33 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     spark.read.options(readOptions ++ inferenceOptions ++ extraOptions)
       .format(format).load(paths: _*).schema
 
+  /** Bytes of an archive (of `extension`) containing `entries`, produced via [[writeArchive]]. */
+  protected def archiveBytes(
+      entries: Seq[(String, Array[Byte])],
+      extension: String = archiveExtensions.head): Array[Byte] =
+    withArchiveFile(extension) { inner =>
+      writeArchive(inner, entries)
+      Files.readAllBytes(inner.toPath)
+    }
+
+  /** Bytes of a corrupt archive of [[corruptArchiveExtension]], via [[writeCorruptArchive]]. */
+  protected def corruptArchiveBytes(): Array[Byte] =
+    withArchiveFile(corruptArchiveExtension) { inner =>
+      writeCorruptArchive(inner)
+      Files.readAllBytes(inner.toPath)
+    }
+
+  /**
+   * Writes an outer archive at `dest` whose single entry (`nested.<ext>`) is itself an archive of
+   * `entries`, so a correct read must recurse into it. Nesting uses the same container as the outer
+   * archive (this base mixes in one container); cross-container nesting is covered by the
+   * unit-level [[SupportsArchiveFormatSuite]].
+   */
+  protected def writeNestedArchive(dest: File, entries: Seq[(String, Array[Byte])]): Unit = {
+    val ext = archiveExtensions.head
+    writeArchive(dest, Seq(s"nested.$ext" -> archiveBytes(entries, ext)))
+  }
+
   /**
    * Writes `entries` both into an archive and as loose files in a directory, then asserts the
    * archive read produces exactly the same rows as the directory read.
@@ -353,6 +380,99 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
       // archive is skipped in its entirety while the good archive's rows are still returned.
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         checkAnswer(read(dir.getCanonicalPath), good)
+      }
+    }
+  }
+
+  // ----- nested-archive tests ------------------------------------------------
+
+  test("a nested archive is recursed into and reads like a directory of its entries") {
+    val parts = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol")))
+    val entries = parts.zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) }
+    withArchiveFile() { archive =>
+      writeNestedArchive(archive, entries)
+      checkAnswer(read(archive.getCanonicalPath), parts.reduce(_ union _))
+    }
+  }
+
+  test("a nested archive alongside plain entries contributes both") {
+    val nested = sampleDf((1, "Alice"), (2, "Bob"))
+    val plain = sampleDf((3, "Carol"))
+    val ext = archiveExtensions.head
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(
+        entryName(0) -> encodeFile(plain),
+        s"nested.$ext" -> archiveBytes(Seq(entryName(1) -> encodeFile(nested)), ext)))
+      checkAnswer(read(archive.getCanonicalPath), plain.union(nested))
+    }
+  }
+
+  test("three levels of nested archives are recursed into") {
+    val data = sampleDf((1, "Alice"), (2, "Bob"))
+    val ext = archiveExtensions.head
+    // archive -> level2.<ext> -> level3.<ext> -> the data file.
+    val level3 = archiveBytes(Seq(entryName(0) -> encodeFile(data)), ext)
+    val level2 = archiveBytes(Seq(s"level3.$ext" -> level3), ext)
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(s"level2.$ext" -> level2))
+      checkAnswer(read(archive.getCanonicalPath), data)
+    }
+  }
+
+  test("an empty nested archive contributes no rows") {
+    withArchiveFile() { archive =>
+      writeNestedArchive(archive, Seq.empty)
+      checkAnswer(read(archive.getCanonicalPath), Seq.empty[Row])
+    }
+  }
+
+  test("hidden entries inside a nested archive are skipped") {
+    val kept = sampleDf((1, "Alice"), (2, "Bob"))
+    val ext = archiveExtensions.head
+    val innerBytes = archiveBytes(
+      Seq("_SUCCESS" -> "marker".getBytes, entryName(0) -> encodeFile(kept)), ext)
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(s"nested.$ext" -> innerBytes))
+      checkAnswer(read(archive.getCanonicalPath), kept)
+    }
+  }
+
+  test("the depth limit bounds how deeply nested archives are read") {
+    val data = sampleDf((1, "Alice"), (2, "Bob"))
+    val ext = archiveExtensions.head
+    // Three archive levels: the top archive plus two nested ones.
+    val level3 = archiveBytes(Seq(entryName(0) -> encodeFile(data)), ext)
+    val level2 = archiveBytes(Seq(s"level3.$ext" -> level3), ext)
+    withArchiveFile() { archive =>
+      writeArchive(archive, Seq(s"level2.$ext" -> level2))
+      // 3 admits exactly these three levels.
+      withSQLConf(SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH.key -> "3") {
+        checkAnswer(read(archive.getCanonicalPath), data)
+      }
+      // 2 stops before the innermost archive is opened.
+      withSQLConf(SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH.key -> "2") {
+        intercept[SparkException](read(archive.getCanonicalPath).collect())
+      }
+      // 1 admits only the top archive, so even the first nested archive is too deep.
+      withSQLConf(SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH.key -> "1") {
+        intercept[SparkException](read(archive.getCanonicalPath).collect())
+      }
+    }
+  }
+
+  Seq(true, false).foreach { ignoreCorrupt =>
+    test(s"ignoreCorruptFiles=$ignoreCorrupt controls skipping a corrupt nested archive") {
+      // The nested entry is a corrupt archive of corruptArchiveExtension, so recursing into it
+      // fails; the whole top archive is skipped or errors, matching the top-level contract.
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq(s"nested.$corruptArchiveExtension" -> corruptArchiveBytes()))
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+          if (ignoreCorrupt) {
+            checkAnswer(read(archive.getCanonicalPath), Seq.empty[Row])
+          } else {
+            intercept[SparkException](read(archive.getCanonicalPath).collect())
+          }
+        }
       }
     }
   }

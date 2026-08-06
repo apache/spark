@@ -32,14 +32,17 @@ import org.apache.commons.compress.archivers.zip.{ZipArchiveEntry, ZipArchiveOut
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException, TaskContext, TaskContextImpl}
+import org.apache.spark.{SparkRuntimeException, TaskContext, TaskContextImpl}
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Unit tests for the streaming [[SupportsArchiveFormat]] engine: `isArchivePath` dispatch and
  * `readArchiveEntries` (entry ordering, gzip handling, dir/dotfile skipping, lazy advance, the
  * non-closing entry stream, and cleanup). Nothing here touches local disk -- entries are streams.
  */
-class SupportsArchiveFormatSuite extends SparkFunSuite {
+class SupportsArchiveFormatSuite extends QueryTest with SharedSparkSession {
 
   private case class Entry(name: String, data: Array[Byte], isDir: Boolean = false)
 
@@ -194,6 +197,17 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
   private def textEntry(name: String, body: String): Entry =
     Entry(name, body.getBytes(StandardCharsets.UTF_8))
 
+  /** Bytes of a `writer`-produced archive of `entries`, for embedding as a nested-archive entry. */
+  private def archiveBytes(
+      dir: File,
+      name: String,
+      writer: (File, Seq[Entry]) => Unit,
+      entries: Seq[Entry]): Array[Byte] = {
+    val f = new File(dir, name)
+    writer(f, entries)
+    Files.readAllBytes(f.toPath)
+  }
+
   private def readAll(in: InputStream): Array[Byte] = {
     val out = new ByteArrayOutputStream()
     val buf = new Array[Byte](4096)
@@ -229,6 +243,17 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
     Seq("foo.csv", "foo.gz", "foo", "dir/", "foo.tarball",
         "foo.tar.bz2", "foo.targz", "foo.zipx", "foo.gzip").foreach { p =>
       assert(!SupportsArchiveFormat.isArchivePath(new Path(p)), s"expected non-match for $p")
+    }
+  }
+
+  test("isArchiveFileName: matches names Path cannot parse") {
+    // An entry name is an arbitrary string, so it may hold characters Path reads as URI syntax --
+    // a colon most notably, which Path takes for a scheme.
+    Seq("data:2026.tar", "dir/data:2026.zip", "a:b:c.7z", "100%.tgz", "a b.tar.gz").foreach { n =>
+      assert(SupportsArchiveFormat.isArchiveFileName(n), s"expected archive match for $n")
+    }
+    Seq("data:2026.csv", "a:b.txt").foreach { n =>
+      assert(!SupportsArchiveFormat.isArchiveFileName(n), s"expected non-match for $n")
     }
   }
 
@@ -605,6 +630,57 @@ class SupportsArchiveFormatSuite extends SparkFunSuite {
         textEntry("real.csv", "kept"),
         textEntry("nested/._sidecar", "junk2")))   // dotfile in a subdir
       assert(collect(sevenZ) == Seq("real.csv" -> "kept"))
+    }
+  }
+
+  // ----- nested archives ----------------------------------------------------
+  // Per-container nested reads are covered by the ArchiveReadSuiteBase suites; these cases cover
+  // what only the engine sees: mixing container types across levels, and the depth limit.
+
+  test("readArchiveEntries: recursion nests tar, zip, and 7z inside each other") {
+    withTempDir { dir =>
+      val level4 = archiveBytes(dir, "l4.tgz", writeTarGz, Seq(textEntry("leaf.csv", "deep")))
+      val level3 = archiveBytes(dir, "l3.7z", writeSevenZ, Seq(Entry("l4.tgz", level4)))
+      val level2 = archiveBytes(dir, "l2.tar", writeTar, Seq(Entry("l3.7z", level3)))
+      val outer = new File(dir, "outer.zip")
+      writeZip(outer, Seq(textEntry("top.csv", "top"), Entry("l2.tar", level2)))
+      assert(collect(outer) ==
+        Seq("top.csv" -> "top", "l2.tar!/l3.7z!/l4.tgz!/leaf.csv" -> "deep"))
+    }
+  }
+
+  test("readArchiveEntries: a nested archive whose name holds a colon is recursed into") {
+    withTempDir { dir =>
+      // A colon in the entry name would read as a URI scheme if the name were parsed as a Path.
+      val inner = archiveBytes(dir, "inner.tar", writeTar, Seq(textEntry("a:1.csv", "a")))
+      val outer = new File(dir, "outer.tar")
+      writeTar(outer, Seq(Entry("data:2026.tar", inner)))
+      assert(collect(outer) == Seq("data:2026.tar!/a:1.csv" -> "a"))
+    }
+  }
+
+  test("readArchiveEntries: recursion past the depth limit throws a clear error") {
+    withTempDir { dir =>
+      val level3 = archiveBytes(dir, "l3.tar", writeTar, Seq(textEntry("leaf.csv", "deep")))
+      val level2 = archiveBytes(dir, "l2.tar", writeTar, Seq(Entry("l3.tar", level3)))
+      val outer = new File(dir, "outer.tar")
+      writeTar(outer, Seq(Entry("l2.tar", level2)))
+
+      def collectWithMaxDepth(maxDepth: Int): Seq[(String, String)] =
+        withSQLConf(SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH.key -> maxDepth.toString) {
+          collect(outer)
+        }
+
+      // Three levels are readable at the limit, and the innermost is refused one below it.
+      assert(collectWithMaxDepth(3) == Seq("l2.tar!/l3.tar!/leaf.csv" -> "deep"))
+      checkError(
+        exception = intercept[SparkRuntimeException](collectWithMaxDepth(2)),
+        condition = "MAX_ARCHIVE_DEPTH_EXCEEDED",
+        parameters = Map("entry" -> "l2.tar!/l3.tar", "maxDepth" -> "2"))
+      checkError(
+        exception = intercept[SparkRuntimeException](collectWithMaxDepth(1)),
+        condition = "MAX_ARCHIVE_DEPTH_EXCEEDED",
+        parameters = Map("entry" -> "l2.tar", "maxDepth" -> "1"))
     }
   }
 }

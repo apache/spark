@@ -43,6 +43,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{HadoopFSUtils, Utils}
 
 /**
@@ -199,10 +200,20 @@ object SupportsArchiveFormat {
   /**
    * Whether the file path is a supported archive format.
    */
-  def isArchivePath(path: Path): Boolean = {
-    val name = path.getName.toLowerCase(Locale.ROOT)
-    name.endsWith(".tar") || name.endsWith(".tar.gz") || name.endsWith(".tgz") ||
-      name.endsWith(".zip") || name.endsWith(".7z")
+  def isArchivePath(path: Path): Boolean = isArchiveFileName(path.getName)
+
+  /**
+   * Whether a file name is a supported archive format. Takes the name rather than a [[Path]] so it
+   * can be called on an archive entry's name, which is an arbitrary string that [[Path]] would
+   * misparse (e.g. a colon reads as a URI scheme).
+   *
+   * @param name the file name to test, with or without leading directories
+   * @return true if the name ends in a supported archive extension
+   */
+  def isArchiveFileName(name: String): Boolean = {
+    val lower = name.toLowerCase(Locale.ROOT)
+    lower.endsWith(".tar") || lower.endsWith(".tar.gz") || lower.endsWith(".tgz") ||
+      lower.endsWith(".zip") || lower.endsWith(".7z")
   }
 
   /** An archive's entries as lazy `(entry, stream)` pairs; closing releases the container. */
@@ -254,6 +265,47 @@ object SupportsArchiveFormat {
       override def next(): (ArchiveEntry, InputStream) = entries.next()
       override def close(): Unit = closeFn()
     }
+
+  /**
+   * Opens an archive nested inside an already-open entry, reading from that entry's stream.
+   *
+   * @param name the entry's name, which selects the container by extension
+   * @param in   the entry's byte stream, positioned at the entry start
+   * @param conf Hadoop configuration used to open a spilled container
+   * @return the nested archive's entries; closing it releases the container and any spilled file
+   */
+  private def openNestedArchiveStream(
+      name: String,
+      in: InputStream,
+      conf: Configuration): ArchiveEntries = {
+    val n = name.toLowerCase(Locale.ROOT)
+    if (n.endsWith(".tar") || n.endsWith(".tar.gz") || n.endsWith(".tgz")) {
+      val gzipped = n.endsWith(".gz") || n.endsWith(".tgz")
+      val tar = new TarArchiveInputStream(if (gzipped) new GZIPInputStream(in) else in)
+      val entries = Iterator.continually(tar.getNextEntry).takeWhile(_ != null)
+        .map((_, tar: InputStream))
+      closeable(entries, () => tar.close())
+    } else {
+      // Unlike tar, zip and 7z read their index by seeking, which an entry stream cannot do, so the
+      // entry is spilled to a local file and opened from there.
+      val localDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), "nested-archive")
+      try {
+        val local = copyEntryToLocalFile(in, localDir, name)
+        val nested = openArchiveStream(new Path(local.toURI), conf)
+        closeable(nested, () => {
+          try {
+            nested.close()
+          } finally {
+            Utils.deleteRecursively(localDir)
+          }
+        })
+      } catch {
+        case NonFatal(e) =>
+          Utils.deleteRecursively(localDir)
+          throw e
+      }
+    }
+  }
 
   /** Opens a `.7z` archive by seeking. */
   private def openSevenZStream(path: Path, conf: Configuration): ArchiveEntries = {
@@ -367,7 +419,28 @@ object SupportsArchiveFormat {
       conf: Configuration,
       ignoredPathSegmentRegex: Pattern = HadoopFSUtils.defaultIgnoredPathSegmentRegexPattern)(
       parseEntry: (ArchiveEntry, InputStream) => Iterator[T]): Iterator[T] = {
-    val archive = openArchiveStream(path, conf)
+    val maxDepth = SQLConf.get.getConf(SQLConf.ARCHIVE_READER_MAX_NESTING_DEPTH)
+    streamEntries(
+      openArchiveStream(path, conf), conf, "", 1, maxDepth, ignoredPathSegmentRegex)(parseEntry)
+  }
+
+  /**
+   * Streams one open `archive`, applying `parseEntry` to each non-skipped entry. An entry that is
+   * itself an archive recurses instead, bounded by `maxDepth`.
+   *
+   * @param namePrefix nested-entry name prefix ("" at the top, `inner!/` under a nested archive),
+   *                   composing the full `outer!/inner!/leaf` name each entry reports
+   * @param depth      1 for the top-level archive, incremented on each recursion
+   * @param maxDepth   recursion ceiling; exceeding it fails the read (zip-bomb / cycle guard)
+   */
+  private def streamEntries[T](
+      archive: ArchiveEntries,
+      conf: Configuration,
+      namePrefix: String,
+      depth: Int,
+      maxDepth: Int,
+      ignoredPathSegmentRegex: Pattern)(
+      parseEntry: (ArchiveEntry, InputStream) => Iterator[T]): Iterator[T] = {
     var closed = false
 
     def cleanup(): Unit = {
@@ -401,8 +474,20 @@ object SupportsArchiveFormat {
             done = true
             cleanup()
           } else {
+            val entry = new PrefixedArchiveEntry(next._1, namePrefix)
             // Parse the entry stream; any unread remainder is skipped when the archive advances.
-            currentIter = parseEntry(next._1, CloseShieldInputStream.wrap(next._2))
+            val stream = CloseShieldInputStream.wrap(next._2)
+            currentIter = if (isArchiveFileName(next._1.getName)) {
+              if (depth >= maxDepth) {
+                throw QueryExecutionErrors.maxArchiveDepthExceeded(entry.getName, maxDepth)
+              }
+              streamEntries(
+                openNestedArchiveStream(next._1.getName, stream, conf),
+                conf, s"${entry.getName}!/", depth + 1, maxDepth,
+                ignoredPathSegmentRegex)(parseEntry)
+            } else {
+              parseEntry(entry, stream)
+            }
           }
         }
       }
@@ -479,6 +564,19 @@ object SupportsArchiveFormat {
       }
     }
 
+}
+
+/**
+ * An entry reported under a nested archive, whose name carries the full `outer!/inner!/leaf` path.
+ *
+ * @param entry  the underlying entry, delegated to for everything but the name
+ * @param prefix the composed prefix of the archives this entry is nested inside
+ */
+private class PrefixedArchiveEntry(entry: ArchiveEntry, prefix: String) extends ArchiveEntry {
+  override def getName: String = prefix + entry.getName
+  override def getSize: Long = entry.getSize
+  override def isDirectory: Boolean = entry.isDirectory
+  override def getLastModifiedDate: java.util.Date = entry.getLastModifiedDate
 }
 
 /**

@@ -3052,6 +3052,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ARCHIVE_READER_MAX_NESTING_DEPTH =
+    buildConf("spark.sql.files.archive.reader.maxNestingDepth")
+      .doc("Maximum number of archive levels an archive reader opens. The top-level archive is " +
+        "depth 1, so 1 reads no nested archives and 2 reads one level of nesting. Recursing past " +
+        "this limit fails the read, guarding against zip bombs and cyclic archives.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ >= 1, "The max archive nesting depth must be at least 1.")
+      .createWithDefault(10)
+
   val FILES_OPEN_COST_IN_BYTES = buildConf("spark.sql.files.openCostInBytes")
     .internal()
     .doc("The estimated cost to open a file, measured by the number of bytes could be scanned in" +
