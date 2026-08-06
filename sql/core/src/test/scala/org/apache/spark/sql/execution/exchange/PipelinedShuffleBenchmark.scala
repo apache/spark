@@ -40,13 +40,13 @@ object PipelinedShuffleBenchmark {
 
   private val cores = Runtime.getRuntime.availableProcessors()
 
-  private def newSession(pipelined: Boolean): SparkSession = {
+  private def newSession(pipelined: Boolean, shufflePartitions: Int): SparkSession = {
     val b = SparkSession.builder()
       .master(s"local[$cores]")
       .appName("pipelined-shuffle-benchmark")
       .config("spark.sql.adaptive.enabled", "false")
       .config("spark.speculation", "false")
-      .config("spark.sql.shuffle.partitions", "8")
+      .config("spark.sql.shuffle.partitions", shufflePartitions.toString)
       .config("spark.ui.enabled", "false")
     if (pipelined) {
       b.config("spark.shuffle.manager.incremental",
@@ -63,8 +63,11 @@ object PipelinedShuffleBenchmark {
   // Time a workload under a fresh session (created/stopped OUTSIDE the timed region so session
   // startup and manager init are not counted). One warm-up run, then `iters` timed runs; report
   // the best (min) wall-clock ms.
-  private def bestMs(pipelined: Boolean, workload: SparkSession => Unit): Long = {
-    val spark = newSession(pipelined)
+  private def bestMs(
+      pipelined: Boolean,
+      shufflePartitions: Int,
+      workload: SparkSession => Unit): Long = {
+    val spark = newSession(pipelined, shufflePartitions)
     try {
       workload(spark) // warm up (JIT, caches, codegen)
       var best = Long.MaxValue
@@ -83,9 +86,11 @@ object PipelinedShuffleBenchmark {
     }
   }
 
-  private def compare(name: String, workload: SparkSession => Unit): Unit = {
-    val regular = bestMs(pipelined = false, workload)
-    val pipe = bestMs(pipelined = true, workload)
+  private def compare(
+      name: String,
+      shufflePartitions: Int = 8)(workload: SparkSession => Unit): Unit = {
+    val regular = bestMs(pipelined = false, shufflePartitions, workload)
+    val pipe = bestMs(pipelined = true, shufflePartitions, workload)
     val speedup = regular.toDouble / pipe
     // scalastyle:off println
     println(f"[bench] $name%-40s  regular=${regular}%5dms  pipelined=${pipe}%5dms  " +
@@ -98,16 +103,39 @@ object PipelinedShuffleBenchmark {
     println(s"[bench] local[$cores], $numRows rows, best of $iters iters")
     // scalastyle:on println
 
-    compare("repartition(k) + count", { spark =>
+    compare("repartition(k) + count")({ spark =>
       import spark.implicits._
       spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
         .repartition($"k").count()
     })
 
-    compare("groupBy(k).count", { spark =>
+    compare("groupBy(k).count")({ spark =>
       import spark.implicits._
       spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
         .groupBy($"k").count().count()
+    })
+
+    // Range over a plain scan (control): RangePartitioner's sample job runs the scan once,
+    // then the main job runs it again -- for BOTH modes (there is no shuffle below the range
+    // exchange, so regular has nothing materialized to reuse either). Expect no differential
+    // penalty. Demand: 6 (scan) + 8 (range) + 1 (final count) = 15 <= 16.
+    compare("repartitionByRange(k) + count")({ spark =>
+      import spark.implicits._
+      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
+        .repartitionByRange($"k").count()
+    })
+
+    // Range ABOVE a shuffle (the differential case): the range exchange's child contains the
+    // groupBy's hash shuffle. The sample job executes that child; the main job then needs it
+    // again. Regular reuses the hash shuffle's materialized map output (map stage skipped on
+    // the second run); pipelined channels are single-shot and completed-job stages are
+    // cleaned up, so the whole scan + partial agg + hash map side re-runs. Expect pipelined
+    // to pay roughly one extra scan+map pass. shufflePartitions = 4 keeps whole-group demand
+    // 6 + 4 + 4 = 14 <= 16 (sample job's own group is 6 + 4 = 10).
+    compare("groupBy(k).count + orderBy(k)", shufflePartitions = 4)({ spark =>
+      import spark.implicits._
+      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
+        .groupBy($"k").count().orderBy($"k").collect()
     })
   }
 }
