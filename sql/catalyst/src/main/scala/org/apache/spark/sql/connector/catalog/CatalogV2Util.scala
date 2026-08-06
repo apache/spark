@@ -577,6 +577,7 @@ private[sql] object CatalogV2Util {
       .withQueryColumnNames(existing.queryColumnNames)
     Option(existing.currentCatalog).foreach(builder.withCurrentCatalog)
     Option(existing.schemaMode).foreach(builder.withSchemaMode)
+    Option(existing.viewDependencies).foreach(builder.withViewDependencies)
     builder
   }
 
