@@ -371,31 +371,6 @@ class MicroBatchExecution(
             messageParameters = Map("className" -> s.getClass.getName)
           )
       }
-
-      // `repartition(n)` uses RoundRobinPartitioning, and by default (SPARK-23207) Spark inserts a
-      // local sort before a round-robin shuffle so the row-to-partition assignment is deterministic
-      // -- otherwise a retried task could emit rows in a different order and lose data. That sort
-      // is fully blocking: it drains its whole input before emitting a row. A Real-Time Mode task
-      // reads an unbounded stream, so the input never ends, the producer never emits, and the query
-      // makes no progress at all. Note this sort is not a SortExec node (it lives inside
-      // ShuffleExchangeExec's RDD), so the Real-Time Mode operator allowlist cannot catch it.
-      //
-      // Determinism is not needed here: Real-Time Mode does not retry tasks (TaskSetManager caps a
-      // pipelined task set at one attempt, and its group is aborted as a unit rather than
-      // recomputed), so the hazard the sort guards against does not arise.
-      //
-      // This overrides an explicit `true` as well. Honouring it would reintroduce the hang above,
-      // and a query that never produces a row is worse than silently ignoring a config that only
-      // guards against a retry that cannot happen here. Log at warning level when overriding an
-      // explicit setting so the operator can see their config is not the one in force.
-      if (sparkSessionForStream.conf.contains(SQLConf.SORT_BEFORE_REPARTITION.key) &&
-        sparkSessionForStream.conf.get(SQLConf.SORT_BEFORE_REPARTITION)) {
-        logWarning(log"Ignoring ${MDC(LogKeys.CONFIG, SQLConf.SORT_BEFORE_REPARTITION.key)}=true " +
-          log"for this Real-Time Mode query: the local sort it inserts before a round-robin " +
-          log"repartition never completes on an unbounded stream. It is not needed because a " +
-          log"Real-Time Mode task is not retried.")
-      }
-      sparkSessionForStream.conf.set(SQLConf.SORT_BEFORE_REPARTITION.key, "false")
     }
 
     // Initializing TriggerExecutor relies on `sources`, hence calling this after initializing
