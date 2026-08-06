@@ -81,11 +81,19 @@ object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
   def main(args: Array[String]): Unit = {
     require(args.length >= 4, "args: <verify|bench> <datDir> <parquetDir> <query> [query...]")
     val mode = args(0)
-    require(mode == "verify" || mode == "bench", s"unknown mode $mode")
+    require(mode == "verify" || mode == "bench" || mode == "benchwide",
+      s"unknown mode $mode")
     val (datDir, parquetDir, queries) = (args(1), args(2), args.drop(3).toSeq)
-    val master =
-      if (mode == "bench") s"local[${Runtime.getRuntime.availableProcessors()}]"
-      else "local[128]"
+    // bench: gang fits the physical cores (squeezed scans, no oversubscription).
+    // benchwide: near-natural scan parallelism; local[2*cores] admits the gang and the
+    // pipelined group oversubscribes the cores instead (the regular baseline is unaffected:
+    // its per-stage width still fits the physical cores). Which cost is smaller --
+    // squeezed scans or thread contention -- is an empirical question; run both.
+    val master = mode match {
+      case "bench" => s"local[${Runtime.getRuntime.availableProcessors()}]"
+      case "benchwide" => s"local[${2 * Runtime.getRuntime.availableProcessors()}]"
+      case _ => "local[128]"
+    }
 
     val spark = SparkSession.builder()
       .master(master)
@@ -111,8 +119,11 @@ object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
       // itself the honest cost of the slot ceiling on a single box. (64m over the ~24
       // small store_sales files packs to ~5 scan partitions once per-file open cost is
       // counted; 32m still left 13, and 13 + 4 = 17 > 16 rejected everything.)
-      .config("spark.sql.files.maxPartitionBytes",
-        if (mode == "bench") "64m" else "512m")
+      .config("spark.sql.files.maxPartitionBytes", mode match {
+        case "bench" => "64m"      // ~5 store_sales scan partitions: gang fits 16 slots
+        case "benchwide" => "32m"  // ~13 scan partitions: near the box's natural 16
+        case _ => "512m"
+      })
       .config("spark.sql.files.minPartitionNum", "1")
       .getOrCreate()
     try {
