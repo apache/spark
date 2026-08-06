@@ -262,6 +262,14 @@ class NumPyCompatTestsMixin:
                 expected = np_func(pdf.x1, pdf.x2)
                 self.assert_eq(result, expected, almost=True)
 
+        pdf = pd.DataFrame({"x1": [-0.0, 0.0], "x2": [0.0, -0.0]})
+        psdf = ps.from_pandas(pdf)
+        for np_func in (np.fmax, np.fmin):
+            self.assert_eq(
+                np.signbit(np_func(psdf.x1, psdf.x2).to_pandas()),
+                np.signbit(np_func(pdf.x1, pdf.x2)),
+            )
+
     def test_np_heaviside(self):
         for pdf in (
             pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [-2, -1, 0, 1, 2]}),
