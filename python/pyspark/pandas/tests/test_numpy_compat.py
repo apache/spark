@@ -154,6 +154,79 @@ class NumPyCompatTestsMixin:
                     np_func(psdf.value, psdf.bits), np_func(pdf.value, pdf.bits), almost=True
                 )
 
+    def test_np_float_power(self):
+        for pdf in (
+            pd.DataFrame({"base": [-64, -2, -1, 0, 1, 2, 64], "exponent": [-2, -1, 0, 1, 2, 3, 2]}),
+            pd.DataFrame(
+                {
+                    "base": [-np.inf, -64.0, -2.0, -0.0, 0.0, 2.0, 64.0, np.inf, np.nan],
+                    "exponent": [2.0, 3.0, -2.0, -3.0, -3.0, 0.5, -2.0, 2.0, 2.0],
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(
+                np.float_power(psdf.base, psdf.exponent),
+                np.float_power(pdf.base, pdf.exponent),
+                almost=True,
+            )
+
+    def test_np_ldexp(self):
+        pdf = pd.DataFrame(
+            {
+                "x": [
+                    -np.inf,
+                    -64.0,
+                    -2.0,
+                    -0.0,
+                    0.0,
+                    1.0,
+                    2.0,
+                    64.0,
+                    np.inf,
+                    np.nan,
+                    1.0,
+                    1.0,
+                    1.0,
+                ],
+                "exp": [2, 3, -2, -3, -3, 0, -2, 2, 2, 2, -1074, -1075, 1024],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(np.ldexp(psdf.x, psdf.exp), np.ldexp(pdf.x, pdf.exp), almost=True)
+
+    def test_np_fmax_fmin(self):
+        for pdf in (
+            pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [2, 1, 0, -1, -2]}),
+            pd.DataFrame(
+                {
+                    "x1": [np.nan, 2.0, np.nan, -np.inf, -2.0, -0.0, 0.0, 2.0, np.inf],
+                    "x2": [2.0, np.nan, np.nan, np.inf, -np.inf, 0.0, -0.0, np.inf, -np.inf],
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            for np_func in (np.fmax, np.fmin):
+                result = np_func(psdf.x1, psdf.x2)
+                expected = np_func(pdf.x1, pdf.x2)
+                self.assert_eq(result, expected, almost=True)
+
+    def test_np_heaviside(self):
+        for pdf in (
+            pd.DataFrame({"x1": [-2, -1, 0, 1, 2], "x2": [-2, -1, 0, 1, 2]}),
+            pd.DataFrame(
+                {
+                    "x1": [-np.inf, -2.0, -0.0, 0.0, 0.0, 2.0, np.inf, np.nan],
+                    "x2": [2.0, -2.0, -0.0, 0.5, np.nan, np.nan, -0.0, 2.0],
+                }
+            ),
+        ):
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(
+                np.heaviside(psdf.x1, psdf.x2), np.heaviside(pdf.x1, pdf.x2), almost=True
+            )
+
     def test_np_spark_compat_series(self):
         from pyspark.pandas.numpy_compat import unary_np_spark_mappings, binary_np_spark_mappings
 

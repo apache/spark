@@ -118,6 +118,16 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
+
+    override def visitCast(expr: String, exprDataType: DataType, dataType: DataType): String = {
+      dataType match {
+        case DoubleType =>
+          // The common JDBC mapping is DOUBLE PRECISION, which is not a portable CAST target for
+          // MySQL-compatible databases. In particular, MariaDB rejects it with a syntax error.
+          throw new UnsupportedOperationException("Cannot cast to double type")
+        case _ => super.visitCast(expr, exprDataType, dataType)
+      }
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {

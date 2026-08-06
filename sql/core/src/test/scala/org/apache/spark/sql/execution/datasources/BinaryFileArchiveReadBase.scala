@@ -50,14 +50,6 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
   /** Extension of the archive [[writeCorruptArchive]] produces (corruption is format-specific). */
   protected def corruptArchiveExtension: String
 
-  /**
-   * Whether the container reports each entry's size up front. Streaming zip
-   * (`ZipArchiveInputStream`) does not -- an entry sized only by a trailing data descriptor reads
-   * back as `-1` -- so the per-entry `length` tests are skipped for zip until it moves to
-   * `ZipFile`. tar and 7z report real sizes.
-   */
-  protected def entrySizeKnown: Boolean = true
-
   override def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.ARCHIVE_FORMAT_READER_ENABLED.key, "true")
 
@@ -98,7 +90,6 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
   }
 
   test("wholeFile=false sources path and length from each entry, modtime from the parent") {
-    assume(entrySizeKnown)
     withArchiveFile() { archive =>
       writeArchive(archive, Seq("a.bin" -> bytes("aaa"), "b.bin" -> bytes("bbbb")))
       val rows = read(archive.getCanonicalPath, Map("wholeFile" -> "false"))
@@ -136,7 +127,6 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
   }
 
   test("wholeFile=false enforces SOURCES_BINARY_FILE_MAX_LENGTH per entry") {
-    assume(entrySizeKnown)
     withArchiveFile() { archive =>
       writeArchive(archive, Seq("big.bin" -> bytes("0123456789")))
       withSQLConf(SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH.key -> "4") {
@@ -149,7 +139,6 @@ trait BinaryFileArchiveReadBase extends QueryTest with SharedSparkSession {
   }
 
   test("wholeFile=false honors length filter pushdown against each entry") {
-    assume(entrySizeKnown)
     withArchiveFile() { archive =>
       writeArchive(archive, Seq("a.bin" -> bytes("aaa"), "b.bin" -> bytes("bbbb")))
       // Entry lengths are 3 and 4; the filter selects per entry, not against the archive size.
@@ -220,11 +209,6 @@ class BinaryFileTarArchiveReadSuite extends BinaryFileArchiveReadBase with TarAr
 class BinaryFileZipArchiveReadSuite extends BinaryFileArchiveReadBase with ZipArchiveTestUtils {
 
   override protected def corruptArchiveExtension: String = "zip"
-
-  // Streaming `ZipArchiveInputStream` cannot report an entry's size before reading it, so the
-  // per-entry `length` tests are skipped for zip. Remove this override once zip reads move to
-  // `ZipFile`, which exposes entry sizes from the central directory.
-  override protected def entrySizeKnown: Boolean = false
 }
 
 class BinaryFileSevenZArchiveReadSuite

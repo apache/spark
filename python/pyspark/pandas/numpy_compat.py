@@ -107,24 +107,27 @@ binary_np_spark_mappings = {
     "copysign": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.copysign(s1, s2), DoubleType()
     ),
-    "float_power": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.float_power(s1, s2), DoubleType()
-    ),
+    "float_power": lambda c1, c2: F.pow(c1.cast("double"), c2.cast("double")),
     "floor_divide": pandas_udf(  # type: ignore[call-overload]
         lambda s1, s2: np.floor_divide(s1, s2), DoubleType()
     ),
-    "fmax": pandas_udf(lambda s1, s2: np.fmax(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "fmin": pandas_udf(lambda s1, s2: np.fmin(s1, s2), DoubleType()),  # type: ignore[call-overload]
+    "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
+    .when(F.isnan(c2.cast("double")), c1)
+    .otherwise(F.greatest(c1, c2))
+    .cast("double"),
+    "fmin": lambda c1, c2: F.least(c1, c2).cast("double"),
     "fmod": pandas_udf(lambda s1, s2: np.fmod(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "heaviside": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.heaviside(s1, s2), DoubleType()
-    ),
+    "heaviside": lambda c1, c2: F.when(
+        c1.isNull() | F.isnan(c1.cast("double")),
+        c1.cast("double"),
+    )
+    .when(c1 < 0, F.lit(0.0))
+    .when(c1 == 0, c2.cast("double"))
+    .otherwise(F.lit(1.0)),
     "hypot": F.hypot,
     "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),  # type: ignore[call-overload]
-    "ldexp": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.ldexp(s1, s2), DoubleType()
-    ),
+    "ldexp": lambda c1, c2: c1.cast("double") * F.pow(F.lit(2.0), c2),
     # F.shiftleft accepts literal counts only; call_function also accepts a column.
     # NumPy returns zero for counts outside an int64's bit width, unlike JVM shifts.
     "left_shift": lambda c1, c2: F.when((c2 < 0) | (c2 >= 64), F.lit(0)).otherwise(

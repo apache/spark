@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.ResolverRunner
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, DelegateExpression, ImplicitCastInput, Literal, MultiGetJsonObject, TypeCheckInput}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.execution.{LowerDelegateExpression, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -74,6 +75,22 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
           Seq(Row("w0"), Row("w1"), Row("w2")))
       }
     }
+  }
+
+  test("right() extracts a window input only once") {
+    val df = spark.sql(
+      """SELECT right(
+        |  listagg(CAST(id AS STRING), chr(44))
+        |    OVER (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+        |  1)
+        |FROM range(5)""".stripMargin)
+
+    val windowExpressions = df.queryExecution.executedPlan.collect {
+      case window: WindowExec => window.windowExpression
+    }.flatten
+    assert(windowExpressions.size == 1,
+      s"right() should produce one window aggregate, got:\n${df.queryExecution.executedPlan}")
+    checkAnswer(df, (0 until 5).map(i => Row(i.toString)))
   }
 
   test("optimizer-inserted MultiGetJsonObject is a delegate in the optimized plan, lowered " +

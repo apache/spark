@@ -170,6 +170,11 @@ object PushDownUtils extends Logging {
    * Note: Do not call multiple times for the same `scan` instance;
    * [[SupportsRuntimeV2Filtering.filter]] is mutating.
    *
+   * Note: `runtimeFilters` must not contain non-deterministic filters. A runtime filter is also
+   * evaluated by the `FilterExec` above the scan, so pushing a non-deterministic one would
+   * evaluate it twice with different results. `DataSourceV2Strategy` enforces this where
+   * `runtimeFilters` is built (SPARK-58207).
+   *
    * @return true if any filters were pushed to the data source
    */
   def pushRuntimeFilters(

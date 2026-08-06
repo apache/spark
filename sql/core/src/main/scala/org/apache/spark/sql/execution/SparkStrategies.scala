@@ -802,25 +802,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object WindowGroupLimit extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child) =>
-        // When the partial window group limit is bypassed, skip the pre-shuffle partial
-        // WindowGroupLimit and run only a single WindowGroupLimit after the shuffle. This can
-        // improve performance when the pre-shuffle reduction ratio is low.
-        //
-        // The bypass is only gated on a non-empty partitionSpec. With an empty partitionSpec the
-        // final WindowGroupLimit requires AllTuples, so for a multi-partition input the shuffle
-        // funnels everything into a single reducer; the partial pass we would drop bounds each
-        // input partition to `limit` rank groups before that shuffle, so keeping it is a sensible
-        // default (an already-single-partition child needs no shuffle, so the partial cannot reduce
-        // the shuffle input there and only adds another pass). This mirrors the grouping-keys
-        // carve-out in bypassPartialAggregation (see AggUtils.planAggregateWithoutDistinct).
-        val finalChild = if (conf.bypassPartialWindowGroupLimit && partitionSpec.nonEmpty) {
-          planLater(child)
-        } else {
-          execution.window.WindowGroupLimitExec(partitionSpec,
-            orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
-        }
+        val partialWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec,
+          orderSpec, rankLikeFunction, limit, execution.window.Partial, planLater(child))
         val finalWindowGroupLimit = execution.window.WindowGroupLimitExec(partitionSpec, orderSpec,
-          rankLikeFunction, limit, execution.window.Final, finalChild)
+          rankLikeFunction, limit, execution.window.Final, partialWindowGroupLimit)
         finalWindowGroupLimit :: Nil
       case _ => Nil
     }

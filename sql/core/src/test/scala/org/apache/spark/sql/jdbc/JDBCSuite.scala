@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
@@ -1452,6 +1452,13 @@ class JDBCSuite extends SharedSparkSession {
   test("SPARK-35446: MySQLDialect type mapping of float") {
     val mySqlDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     assert(mySqlDialect.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT")
+  }
+
+  test("MySQL blocks casts to double") {
+    val dialect = MySQLDialect()
+    val cast = new V2Cast(FieldReference("value"), IntegerType, DoubleType)
+
+    assert(dialect.compileExpression(cast).isEmpty)
   }
 
   test("PostgresDialect type mapping") {
