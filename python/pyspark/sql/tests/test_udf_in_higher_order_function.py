@@ -248,17 +248,29 @@ class UDFInHigherOrderFunctionTestsMixin:
             [([3, 2, 1],), ([],), (None,)],
         )
 
-    def test_array_sort_pairwise_comparator_still_fails(self):
-        # A single UDF call receiving both elements has no per-element key. Precomputing the whole
-        # n x n matrix of pairs would be O(n^2) Python calls where sorting needs only O(n log n)
-        # comparisons, so this stays rejected and the user is directed at the supported form:
-        # return a sort key per element (see test_array_sort_with_udf_key).
-        df = self.spark.createDataFrame([([3, 1, 2],)], "values array<int>")
+    def test_array_sort_pairwise_comparator(self):
+        # One UDF call receiving both elements has no per-element key, so the UDF is precomputed
+        # over every ordered pair and the comparator indexes that matrix. Assert an actual
+        # reordering, not merely that the query runs.
+        df = self.spark.createDataFrame(
+            [([3, 1, 2],), ([],), (None,), ([5],), ([2, 2, 1],)], "values array<int>"
+        )
         cmp_udf = udf(lambda a, b: (a > b) - (a < b), IntegerType())
 
-        with self.assertRaises(AnalysisException) as ctx:
-            df.select(sf.array_sort("values", lambda a, b: cmp_udf(a, b))).collect()
-        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+        assertDataFrameEqual(
+            df.select(sf.array_sort("values", lambda a, b: cmp_udf(a, b)).alias("r")),
+            [([1, 2, 3],), ([],), (None,), ([5],), ([1, 2, 2],)],
+        )
+
+    def test_array_sort_pairwise_comparator_descending(self):
+        # Reversing the comparator must reverse the order, which a no-op rewrite would not do.
+        df = self.spark.createDataFrame([([3, 1, 2],)], "values array<int>")
+        cmp_desc = udf(lambda a, b: (b > a) - (b < a), IntegerType())
+
+        assertDataFrameEqual(
+            df.select(sf.array_sort("values", lambda a, b: cmp_desc(a, b)).alias("r")),
+            [([3, 2, 1],)],
+        )
 
     def test_transform_keys_and_values(self):
         df = self.spark.createDataFrame([({"a": 1, "b": 2},),], "m map<string,int>")

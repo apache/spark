@@ -71,7 +71,9 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  *  - `zip_with` zips both arrays into one carrier, which collapses it to the single-array form;
  *  - `aggregate` / `reduce` precompute over `merge`'s element, and a UDF in `finish` is applied to
  *    the fold's result, guarded so a fold over a null array stays null;
- *  - `array_sort` precomputes the UDF per element as a sort key that the JVM comparator compares;
+ *  - `array_sort` precomputes the UDF per element as a sort key for the JVM comparator to compare;
+ *    when one call takes both elements it is precomputed over the cross product of pairs instead,
+ *    which the comparator then indexes by position;
  *  - `transform_keys`, `transform_values`, `map_filter` and `map_zip_with` are desugared into the
  *    array case over `map_keys` / `map_values` and rebuilt with `map_from_arrays`.
  *
@@ -84,11 +86,10 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  * Shapes that genuinely cannot be rewritten are left untouched here and continue to be rejected by
  * `CheckAnalysis`:
  *
- *  - a UDF reading `aggregate`'s accumulator: the fold is sequential (step n depends on step n-1),
- *    so there is no array to precompute over;
- *  - a UDF in an `array_sort` comparator that receives *both* elements in one call: there are
- *    O(n log n) pairwise comparisons and no array to precompute them over. Returning a per-element
- *    sort key instead is the supported form;
+ *  - a UDF reading `aggregate`'s accumulator. The fold is sequential and, unlike every other shape,
+ *    the values the UDF sees are not elements of any collection but outputs of earlier steps -
+ *    folding `[1,2,3]` with `acc*2 + x` calls the UDF on 0, 1, 4 - so there is no input set to
+ *    precompute over, not even the cross product that makes a pairwise comparator work;
  *  - a pandas UDF: it receives a `Series` rather than one value per call, so the element-wise
  *    rewrite would change its meaning.
  */
@@ -248,9 +249,93 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   private val rewrite: PartialFunction[Expression, Expression] = {
     case agg: ArrayAggregate if liftableFold(agg) => rewriteFold(agg)
 
+    // A comparator whose UDF receives both elements in one call has no per-element key, so it takes
+    // the cross product rather than the ordinary element-wise rewrite.
+    case sort @ ArraySort(_, function, _)
+        if liftableHof(sort) && PythonUDF.comparatorTakesBothElements(function) =>
+      rewritePairwiseComparator(sort)
+
     case hof: HigherOrderFunction if resultShapeOf(hof).isDefined && liftableHof(hof) =>
       rewriteMapping(hof, resultShapeOf(hof).get)
   }
+
+  /**
+   * Rewrites `array_sort(arr, (a, b) -> udf(a, b))`, where one UDF call receives both elements.
+   *
+   * There is no per-element key here, so nothing can be precomputed per element. What can be
+   * precomputed is the UDF over every ordered pair: an n x n matrix whose (i, j) entry is
+   * `udf(arr[i], arr[j])`. The comparator then reads its answer out of that matrix by the two
+   * elements' positions, so no Python call happens while sorting.
+   *
+   * The pairs are laid out as two flat arrays of n*n elements - each element repeated n times
+   * against the whole array repeated n times - and the UDF is applied to them **directly**, not
+   * inside a `zip_with`. That matters: wrapping it in another higher-order function would put the
+   * UDF back inside a lambda, which is exactly what this rule exists to undo.
+   *
+   * This costs O(n^2) Python calls where sorting needs only O(n log n) comparisons, and O(n^2)
+   * memory for the matrix. Returning a per-element sort key instead stays on the O(n) path.
+   */
+  private def rewritePairwiseComparator(sort: ArraySort): Expression = {
+    val ArraySort(argument, function, allowNull) = sort
+    val LambdaFunction(body, Seq(leftVar: NamedLambdaVariable, rightVar: NamedLambdaVariable), _) =
+      function
+    val arrayType = argument.dataType.asInstanceOf[ArrayType]
+    val elementType = arrayType.elementType
+    val containsNull = arrayType.containsNull
+    val n = Size(argument)
+
+    // The two sides of the cross product. `array_repeat` avoids introducing a lambda that could
+    // capture the UDF; the one lambda here holds only the repeat, never the UDF.
+    val repeatVar = NamedLambdaVariable("a", elementType, containsNull)
+    val lefts = Flatten(
+      ArrayTransform(argument, LambdaFunction(ArrayRepeat(repeatVar, n), Seq(repeatVar))))
+    val rights = Flatten(ArrayRepeat(argument, n))
+
+    // The UDF over all n*n pairs, applied outside every lambda. Any part of the comparator body
+    // around the UDF call is ordinary JVM work over the same flat arrays, so the body is rewritten
+    // with each element variable bound to its flat array. This is exactly the element-wise rewrite
+    // with the pair arrays standing in for the iterated arguments, so `buildCarrier` does the work:
+    // it lifts each UDF over the pairs and rewrites the body to read the results from a carrier.
+    // A `transform` over that carrier then evaluates whatever the comparator wrapped around the
+    // call - a cast, a `when`, arithmetic - once per pair, in the JVM.
+    val pairLambda = LambdaFunction(body, Seq(leftVar, rightVar))
+    val pairCarrier = buildCarrier(Seq(lefts, rights), pairLambda, Seq(leftVar, rightVar), None)
+    val flatCells = ArrayTransform(
+      pairCarrier.carrier, LambdaFunction(pairCarrier.body, Seq(pairCarrier.boundVar)))
+
+    // Carry each element's position so the comparator can index the matrix, sort by
+    // `matrix[a.idx][b.idx]`, then drop the positions again. `element_at` is 1-based.
+    val posElem = NamedLambdaVariable("x", elementType, containsNull)
+    val posIdx = NamedLambdaVariable("i", IntegerType, nullable = false)
+    val indexed = ArraysZip(
+      Seq(argument, ArrayTransform(argument, LambdaFunction(posIdx, Seq(posElem, posIdx)))),
+      Seq(Literal(s"${CarrierElementPrefix}0"), Literal(CarrierIndexField)))
+    val indexedElement = indexed.dataType.asInstanceOf[ArrayType].elementType
+
+    // The matrix, as n rows of n taken from the flat results.
+    val rowElem = NamedLambdaVariable("x", elementType, containsNull)
+    val rowIdx = NamedLambdaVariable("i", IntegerType, nullable = false)
+    val matrix = ArrayTransform(
+      argument,
+      LambdaFunction(
+        Slice(flatCells, Add(Multiply(rowIdx, n), Literal(1)), n),
+        Seq(rowElem, rowIdx)))
+
+    val cmpLeft = NamedLambdaVariable("a", indexedElement, nullable = false)
+    val cmpRight = NamedLambdaVariable("b", indexedElement, nullable = false)
+    def indexOf(v: NamedLambdaVariable): Expression =
+      Add(GetStructField(v, 1, Some(CarrierIndexField)), Literal(1))
+    val comparison = ElementAt(
+      ElementAt(matrix, indexOf(cmpLeft), None, failOnError = false),
+      indexOf(cmpRight),
+      None,
+      failOnError = false)
+
+    unwrapCarrier(
+      ArraySort(indexed, LambdaFunction(comparison, Seq(cmpLeft, cmpRight)), allowNull), 0)
+  }
+
+
 
   /**
    * The generic rewrite for a mapping higher-order function.

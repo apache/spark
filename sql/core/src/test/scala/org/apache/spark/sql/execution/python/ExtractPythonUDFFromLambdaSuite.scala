@@ -186,12 +186,16 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("a pairwise array_sort comparator is rejected") {
-    // One UDF call receiving both elements has no per-element key to precompute.
-    val e = intercept[AnalysisException] {
-      arrayDF.select(array_sort(col("values"), (a, b) => pythonUDF2(a, b).cast("int"))).collect()
-    }
-    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
+  test("a pairwise array_sort comparator is lifted over the cross product") {
+    // One UDF call receiving both elements has no per-element key, so the UDF is precomputed over
+    // every ordered pair instead. The call must end up outside every lambda like any other.
+    val df = arrayDF.select(
+      array_sort(col("values"), (a, b) => pythonUDF2(a, b).cast("int")).as("r"))
+    assert(udfsInsideLambda(df).isEmpty)
+    val lifted = liftedUDFs(df)
+    assert(lifted.size == 1)
+    // Both sides of the pair are flattened once, since each is a flat array of all n*n pairs.
+    assert(lifted.head.elementwiseDepths == Seq(1, 1))
   }
 
   test("a pandas UDF inside a lambda still fails analysis") {

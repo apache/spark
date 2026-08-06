@@ -71,12 +71,12 @@ object PythonUDF {
    * Whether every Python UDF inside `hof`'s lambdas can be lifted out by
    * `ExtractPythonUDFFromLambda`. Used by `CheckAnalysis` to decide whether to reject the plan.
    *
-   * A shape is rewritable when the UDF is applied per element of something the higher-order
-   * function iterates, so that the UDF can instead be applied once to the whole array. All twelve
-   * lambda-taking functions qualify; what does not is:
-   *   - a UDF reading `aggregate`'s accumulator, which is sequential (step n depends on n-1);
-   *   - a UDF in `array_sort`'s comparator that receives *both* elements in one call, for which no
-   *     per-element sort key exists;
+   * A shape is rewritable when the UDF's inputs are values the higher-order function iterates, so
+   * that the UDF can be applied to all of them at once outside the lambda. All twelve lambda-taking
+   * functions qualify, including a pairwise `array_sort` comparator (precomputed over the cross
+   * product of pairs). Only two placements do not:
+   *   - a UDF reading `aggregate`'s accumulator, whose inputs are outputs of earlier fold steps
+   *     rather than elements of anything;
    *   - a pandas UDF, which receives a `Series` rather than one value per call.
    *
    * Note this is deliberately not concerned with whether the iterated collection is itself a
@@ -96,14 +96,16 @@ object PythonUDF {
     // function generically from the `HigherOrderFunction` API, and `isRewritableShape` guards the
     // one structural assumption that rewrite makes.
     allUDFsRewritable && isRewritableShape(hof) && (hof match {
-      case ArraySort(_, function, _) =>
-        // A per-element sort key is rewritable; a UDF that compares the two elements in one call
-        // is not, because precomputing every pair would be O(n^2) calls rather than O(n log n).
-        !comparatorTakesBothElements(function)
-
       case ArrayAggregate(_, _, merge, _) =>
-        // A UDF on the element, or in `finish`, is rewritable. One reading the accumulator is not:
-        // the fold is sequential, so there is no array to precompute over.
+        // A UDF on the element, or in `finish`, is rewritable. One reading the *accumulator* is
+        // not, and this is the single remaining exclusion. Every other shape precomputes over
+        // values that are elements of some collection; here they are not. Folding [1,2,3] with
+        // `acc*2 + x` calls the UDF on 0, 1, 4 - outputs of earlier steps, which do not exist
+        // until the fold runs. So there is no input set to precompute over, not even the cross
+        // product that makes a pairwise `array_sort` comparator work. Supporting it would need
+        // either a physical operator that calls Python from inside higher-order function
+        // evaluation, which the extraction architecture disallows, or unrolling the fold, which
+        // needs a static bound on array length.
         !mergeReadsAccumulator(merge)
 
       case _ => true
