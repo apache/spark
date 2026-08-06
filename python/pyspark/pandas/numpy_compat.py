@@ -132,10 +132,10 @@ binary_np_spark_mappings = {
     ),
     "fmax": lambda c1, c2: F.when(F.isnan(c1.cast("double")), c2)
     .when(F.isnan(c2.cast("double")), c1)
-    .when(c1 == c2, c1)
+    .when(c1 == c2, c2)
     .otherwise(F.greatest(c1, c2))
     .cast("double"),
-    "fmin": lambda c1, c2: F.when(c1 == c2, c1).otherwise(F.least(c1, c2)).cast("double"),
+    "fmin": lambda c1, c2: F.when(c1 == c2, c2).otherwise(F.least(c1, c2)).cast("double"),
     "fmod": _fmod_func,
     "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
     "heaviside": lambda c1, c2: F.when(
