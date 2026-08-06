@@ -101,17 +101,20 @@ unary_np_spark_mappings = {
 
 
 def _fmod_func(c1, c2):
+    c1_double = c1.cast("double")
+    c2_double = c2.cast("double")
+
     return F.when(
         F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
-        F.when(c1.isNull() | F.isnan(c1), c1)
-        .when(c2.isNull() | F.isnan(c2), c2)
-        .when(c2 == 0, F.lit(float("nan")))
-        .otherwise(F.try_mod(c1, c2)),
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(c2_double == 0, F.lit(float("nan")))
+        .otherwise(F.try_mod(c1_double, c2_double)),
     ).otherwise(
-        F.when(c1.isNull() | F.isnan(c1), c1)
-        .when(c2.isNull() | F.isnan(c2), c2)
-        .when(c2 == 0, F.lit(0.0))
-        .otherwise(F.try_mod(c1, c2))
+        F.when(c1.isNull() | F.isnan(c1), c1_double)
+        .when(c2.isNull() | F.isnan(c2), c2_double)
+        .when(c2_double == 0, F.lit(0.0))
+        .otherwise(F.try_mod(c1_double, c2_double))
     )
 
 
