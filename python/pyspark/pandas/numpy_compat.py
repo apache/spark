@@ -112,7 +112,7 @@ def _fmod_func(c1, c2):
         ),
     ).otherwise(
         F.when(c1.isNotNull() & (c2 == 0), F.lit(0.0)).otherwise(F.try_mod(c1, c2))
-    ).cast("double")
+    )
 
 
 binary_np_spark_mappings = {
