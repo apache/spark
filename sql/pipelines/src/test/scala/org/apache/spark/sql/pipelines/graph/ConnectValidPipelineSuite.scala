@@ -504,7 +504,7 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
       registerFlow("sink_a", "sink_flow", query = readStreamFlowFunc("a"))
     }
     val g = P.resolveToDataflowGraph()
-    g.validate()
+    g.validate(spark.sessionState.conf.caseSensitiveAnalysis)
     assert(g.resolved)
     assert(g.sink(TableIdentifier("sink_a")).isInstanceOf[Sink])
     val sink = g.sink(TableIdentifier("sink_a"))
@@ -751,7 +751,7 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
       }.resolveToDataflowGraph()
       assert(!unresolved.resolved, "case-sensitive consumer flow should fail to resolve")
       val ex = intercept[UnresolvedPipelineException] {
-        unresolved.validate()
+        unresolved.validate(spark.sessionState.conf.caseSensitiveAnalysis)
       }
       assertAnalysisException(
         ex.directFailures(fullyQualifiedIdentifier("consumer")),
