@@ -249,9 +249,10 @@ class UDFInHigherOrderFunctionTestsMixin:
         )
 
     def test_array_sort_pairwise_comparator_still_fails(self):
-        # A single UDF call receiving both elements has no per-element key: precomputing every
-        # pair would be O(n^2) calls instead of O(n log n), so this stays rejected and the user is
-        # directed at the supported form, returning a sort key per element.
+        # A single UDF call receiving both elements has no per-element key. Precomputing the whole
+        # n x n matrix of pairs would be O(n^2) Python calls where sorting needs only O(n log n)
+        # comparisons, so this stays rejected and the user is directed at the supported form:
+        # return a sort key per element (see test_array_sort_with_udf_key).
         df = self.spark.createDataFrame([([3, 1, 2],)], "values array<int>")
         cmp_udf = udf(lambda a, b: (a > b) - (a < b), IntegerType())
 
@@ -516,23 +517,17 @@ class UDFInHigherOrderFunctionTestsMixin:
                 df.select(sf.transform("values", lambda x: plus_one(x))).collect()
             self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
-    def test_unsupported_shapes_still_fail(self):
+    def test_udf_on_aggregate_accumulator_still_fails(self):
+        # The fold is sequential and, unlike every other shape, the values the UDF sees are not
+        # elements of any collection but outputs of earlier steps - folding [1,2,3] with
+        # `acc*2 + x` calls the UDF on 0, 1, 4. There is nothing to precompute over at any cost.
         df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
         plus_one = udf(lambda x: x + 1, IntegerType())
 
-        # A UDF on `aggregate`'s accumulator is sequential: there is no array to precompute
-        # over, so it must keep failing rather than return a wrong answer.
         with self.assertRaises(AnalysisException) as ctx:
             df.select(
                 sf.aggregate("values", sf.lit(0), lambda acc, x: plus_one(acc) + x)
             ).collect()
-        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
-
-        # A UDF in an `array_sort` comparator that receives both elements in one call has no
-        # per-element key, so it must keep failing too.
-        cmp_udf = udf(lambda a, b: (a > b) - (a < b), IntegerType())
-        with self.assertRaises(AnalysisException) as ctx:
-            df.select(sf.array_sort("values", lambda a, b: cmp_udf(a, b))).collect()
         self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
     def test_pandas_udf_in_lambda_still_fails(self):
