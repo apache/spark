@@ -18,9 +18,13 @@ package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.JobArtifactSet
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connector.distributions.Distribution
+import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, _}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
+import org.apache.spark.sql.internal.SQLConf
 
 
 class PythonWrite(
@@ -28,7 +32,7 @@ class PythonWrite(
     shortName: String,
     info: LogicalWriteInfo,
     isTruncate: Boolean
-  ) extends Write {
+  ) extends Write with RequiresDistributionAndOrdering {
 
   override def toString: String = shortName
 
@@ -41,6 +45,42 @@ class PythonWrite(
 
   override def supportedCustomMetrics(): Array[CustomMetric] =
     ds.source.createPythonMetrics()
+
+  /**
+   * The distribution and ordering the Python writer asks for, fetched from Python once per write.
+   *
+   * `V2Writes` calls each `RequiresDistributionAndOrdering` method separately, so the result is
+   * cached to keep this to a single Python worker invocation. When the feature is disabled, or
+   * for a streaming write, we skip the worker and report the API defaults, leaving planning
+   * unchanged.
+   */
+  private lazy val requirements: PythonWriteRequirements = {
+    if (SQLConf.get.pythonWriteDistributionAndOrdering && !isStreamingWrite) {
+      ds.source.writeDistributionAndOrderingInPython(info.schema(), info.options(), isTruncate)
+    } else {
+      PythonWriteRequirements.none
+    }
+  }
+
+  /**
+   * Whether this write belongs to a streaming query. The requirements come from the batch
+   * `DataSourceWriter`, which a streaming sink need not implement. A streaming query builds its
+   * write with its own id, which the stream execution thread also sets as a local property; a
+   * batch write, even one inside `foreachBatch`, gets a fresh id.
+   */
+  private def isStreamingWrite: Boolean =
+    Option(SparkSession.active.sparkContext.getLocalProperty(StreamExecution.QUERY_ID_KEY))
+      .contains(info.queryId())
+
+  override def requiredDistribution(): Distribution = requirements.distribution
+
+  override def distributionStrictlyRequired(): Boolean = requirements.distributionStrictlyRequired
+
+  override def requiredNumPartitions(): Int = requirements.requiredNumPartitions
+
+  override def advisoryPartitionSizeInBytes(): Long = requirements.advisoryPartitionSizeInBytes
+
+  override def requiredOrdering(): Array[SortOrder] = requirements.ordering
 }
 
 /**

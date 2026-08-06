@@ -7660,6 +7660,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED =
+    buildConf("spark.sql.python.writeDistributionAndOrdering.enabled")
+      .internal()
+      .doc("When true, honor the distribution and ordering required by a Python datasource " +
+        "writer, at the cost of running the Python worker one additional time during planning. " +
+        "Applies to batch writes only.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val NATIVE_DATA_SOURCE_PATHS = buildConf("spark.sql.dataSource.native.paths")
     .doc("Comma-separated list of native data source packages (.sparkpkg files), and of " +
       "directories that contain them, on the local file system of the driver. Spark adds a " +
@@ -10746,6 +10757,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonFilterPushDown: Boolean = getConf(PYTHON_FILTER_PUSHDOWN_ENABLED)
 
   def pythonLimitPushDown: Boolean = getConf(PYTHON_LIMIT_PUSHDOWN_ENABLED)
+
+  def pythonWriteDistributionAndOrdering: Boolean =
+    getConf(PYTHON_WRITE_DISTRIBUTION_AND_ORDERING_ENABLED)
 
   def nativeDataSourceFilterPushdownEnabled: Boolean =
     getConf(NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED)
