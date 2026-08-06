@@ -405,6 +405,127 @@ public final class XXH3 {
       '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
   };
 
+  // Hex-writing siblings of the length-branch methods above: same arithmetic, but they encode
+  // the two lanes directly into the caller's hex buffer instead of returning a long[], so the
+  // hot hash128Hex path below allocates only that buffer. hash128 above is kept array-returning
+  // for callers that need the raw pair.
+  private static void len1to3128Into(byte[] input, int len, long seed, byte[] hex) {
+    int c1 = input[0] & 0xFF;
+    int c2 = input[len >> 1] & 0xFF;
+    int c3 = input[len - 1] & 0xFF;
+    int combinedl = (c1 << 16) | (c2 << 24) | c3 | (len << 8);
+    int combinedh = Integer.rotateLeft(Integer.reverseBytes(combinedl), 13);
+    long bitflipl = (readLE32(SECRET, 0) ^ readLE32(SECRET, 4)) + seed;
+    long bitfliph = (readLE32(SECRET, 8) ^ readLE32(SECRET, 12)) - seed;
+    long low = xxh64Avalanche((combinedl & 0xFFFFFFFFL) ^ bitflipl);
+    long high = xxh64Avalanche((combinedh & 0xFFFFFFFFL) ^ bitfliph);
+    writeHex64(hex, 0, high);
+    writeHex64(hex, 16, low);
+  }
+
+  private static void len4to8128Into(byte[] input, int len, long seed, byte[] hex) {
+    seed ^= ((long) Integer.reverseBytes((int) seed) & 0xFFFFFFFFL) << 32;
+    long inputLo = readLE32(input, 0);
+    long inputHi = readLE32(input, len - 4);
+    long input64 = inputLo | (inputHi << 32);
+    long keyed = input64 ^ ((readLE64(SECRET, 16) ^ readLE64(SECRET, 24)) + seed);
+    long mul = PRIME64_1 + ((long) len << 2);
+    long lo = keyed * mul;
+    long hi = unsignedMultiplyHigh(keyed, mul);
+    hi += lo << 1;
+    lo ^= hi >>> 3;
+    lo ^= lo >>> 35;
+    lo *= PRIME_MX2;
+    lo ^= lo >>> 28;
+    writeHex64(hex, 0, xxh3Avalanche(hi));
+    writeHex64(hex, 16, lo);
+  }
+
+  private static void len9to16128Into(byte[] input, int len, long seed, byte[] hex) {
+    long bitflipl = (readLE64(SECRET, 32) ^ readLE64(SECRET, 40)) - seed;
+    long bitfliph = (readLE64(SECRET, 48) ^ readLE64(SECRET, 56)) + seed;
+    long inputLo = readLE64(input, 0);
+    long inputHi = readLE64(input, len - 8);
+    long m0 = inputLo ^ inputHi ^ bitflipl;
+    long lo = m0 * PRIME64_1;
+    long hi = unsignedMultiplyHigh(m0, PRIME64_1);
+    lo += (long) (len - 1) << 54;
+    inputHi ^= bitfliph;
+    hi += inputHi + mult32to64(inputHi, PRIME32_2 - 1);
+    lo ^= Long.reverseBytes(hi);
+    long h2lo = lo * PRIME64_2;
+    long h2hi = unsignedMultiplyHigh(lo, PRIME64_2) + hi * PRIME64_2;
+    writeHex64(hex, 0, xxh3Avalanche(h2hi));
+    writeHex64(hex, 16, xxh3Avalanche(h2lo));
+  }
+
+  private static void len17to128128Into(byte[] input, int len, long seed, byte[] hex) {
+    long[] acc = {(long) len * PRIME64_1, 0L};
+    int i = (len - 1) / 32;
+    do {
+      mix32B(acc, input, 16 * i, len - 16 * (i + 1), 32 * i, seed);
+    } while (i-- != 0);
+    finalize128Into(acc, len, seed, hex);
+  }
+
+  private static void len129to240128Into(byte[] input, int len, long seed, byte[] hex) {
+    long[] acc = {(long) len * PRIME64_1, 0L};
+    for (int i = 0; i < 4; i++) {
+      mix32B(acc, input, 32 * i, 32 * i + 16, 32 * i, seed);
+    }
+    acc[0] = xxh3Avalanche(acc[0]);
+    acc[1] = xxh3Avalanche(acc[1]);
+    for (int i = 4; i < (len >> 5); i++) {
+      mix32B(acc, input, 32 * i, 32 * i + 16, (i - 4) * 32 + 3, seed);
+    }
+    mix32B(acc, input, len - 16, len - 32, 103, -seed);
+    finalize128Into(acc, len, seed, hex);
+  }
+
+  private static void finalize128Into(long[] acc, int len, long seed, byte[] hex) {
+    long low = xxh3Avalanche(acc[0] + acc[1]);
+    long high = -xxh3Avalanche(
+        acc[0] * PRIME64_1 + acc[1] * PRIME64_4 + ((long) len - seed) * PRIME64_2);
+    writeHex64(hex, 0, high);
+    writeHex64(hex, 16, low);
+  }
+
+  private static void hashLong128Into(byte[] input, int len, long seed, byte[] hex) {
+    byte[] secret = customSecret(seed);
+    long[] acc = hashLongAccumulate(input, len, secret);
+    long low = mergeAccs(acc, secret, SECRET_MERGEACCS_START, (long) len * PRIME64_1);
+    long high = mergeAccs(acc, secret, SECRET_SIZE - STRIPE_LEN - SECRET_MERGEACCS_START,
+        ~((long) len * PRIME64_2));
+    writeHex64(hex, 0, high);
+    writeHex64(hex, 16, low);
+  }
+
+  private static void hashHex128(byte[] input, long seed, byte[] hex) {
+    int len = input.length;
+    if (len <= 16) {
+      if (len > 8) {
+        len9to16128Into(input, len, seed, hex);
+        return;
+      } else if (len >= 4) {
+        len4to8128Into(input, len, seed, hex);
+        return;
+      } else if (len > 0) {
+        len1to3128Into(input, len, seed, hex);
+        return;
+      }
+      long low = xxh64Avalanche(seed ^ readLE64(SECRET, 64) ^ readLE64(SECRET, 72));
+      long high = xxh64Avalanche(seed ^ readLE64(SECRET, 80) ^ readLE64(SECRET, 88));
+      writeHex64(hex, 0, high);
+      writeHex64(hex, 16, low);
+    } else if (len <= 128) {
+      len17to128128Into(input, len, seed, hex);
+    } else if (len <= 240) {
+      len129to240128Into(input, len, seed, hex);
+    } else {
+      hashLong128Into(input, len, seed, hex);
+    }
+  }
+
   /** Returns the XXH3 128-bit hash as a 32-character lowercase hex string (default seed 0). */
   public static UTF8String hash128Hex(byte[] input) {
     return hash128Hex(input, 0L);
@@ -414,10 +535,8 @@ public final class XXH3 {
    * Returns the XXH3 128-bit hash as a 32-character lowercase hex string (canonical big-endian).
    */
   public static UTF8String hash128Hex(byte[] input, long seed) {
-    long[] h = hash128(input, seed);
     byte[] hex = new byte[32];
-    writeHex64(hex, 0, h[1]);
-    writeHex64(hex, 16, h[0]);
+    hashHex128(input, seed, hex);
     return UTF8String.fromBytes(hex);
   }
 
