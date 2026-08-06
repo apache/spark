@@ -111,7 +111,16 @@ private[spark] class HadoopDelegationTokenManager(
   def renewalEnabled: Boolean = {
     hasKerberosCredentials ||
       (sparkConf.get(DIRECT_CREDENTIAL_PROVIDERS_ENABLED) &&
-        delegationTokenProviders.values.exists(_.delegationTokensRequired(sparkConf, hadoopConf)))
+        delegationTokenProviders.values.exists { provider =>
+          try {
+            provider.delegationTokensRequired(sparkConf, hadoopConf)
+          } catch {
+            case e: Exception =>
+              logWarning(log"Failed to determine whether credentials are required from " +
+                log"${MDC(LogKeys.SERVICE_NAME, provider.serviceName)}.", e)
+              false
+          }
+        })
   }
 
   /**
@@ -198,24 +207,30 @@ private[spark] class HadoopDelegationTokenManager(
     val creds = new Credentials()
     var failureCount = 0
     val nextRenewal = delegationTokenProviders.values.flatMap { provider =>
-      if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
-        if (isolateFailures) {
-          try {
+      if (isolateFailures) {
+        try {
+          if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
             provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
-          } catch {
-            case e: Exception =>
-              logWarning(log"Failed to obtain credentials from " +
-                log"${MDC(LogKeys.SERVICE_NAME, provider.serviceName)}.", e)
-              failureCount += 1
-              None
+          } else {
+            logDebug(s"Service ${provider.serviceName} does not require a token." +
+              s" Check your configuration to see if security is disabled or not.")
+            None
           }
-        } else {
-          provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
+        } catch {
+          case e: Exception =>
+            logWarning(log"Failed to obtain credentials from " +
+              log"${MDC(LogKeys.SERVICE_NAME, provider.serviceName)}.", e)
+            failureCount += 1
+            None
         }
       } else {
-        logDebug(s"Service ${provider.serviceName} does not require a token." +
-          s" Check your configuration to see if security is disabled or not.")
-        None
+        if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
+          provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
+        } else {
+          logDebug(s"Service ${provider.serviceName} does not require a token." +
+            s" Check your configuration to see if security is disabled or not.")
+          None
+        }
       }
     }.foldLeft(Long.MaxValue)(math.min)
     (creds, nextRenewal, failureCount)
