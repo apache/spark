@@ -20,5 +20,5 @@ package org.apache.spark.sql.connect
 import org.apache.spark.sql
 
 class SessionQueryTestBeforeAfterHooksSuite
-  extends sql.SessionQueryTestBeforeAfterHooksSuite
-  with SessionQueryTest
+    extends sql.SessionQueryTestBeforeAfterHooksSuite
+    with SessionQueryTest
