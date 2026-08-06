@@ -199,6 +199,153 @@ class UDFInHigherOrderFunctionTestsMixin:
             ),
         )
 
+    def test_zip_with(self):
+        # Two arrays at once. `arrays_zip` pads the shorter side with nulls, which is what
+        # `zip_with` does itself, so differing lengths must agree with the native version.
+        df = self.spark.createDataFrame(
+            [([1, 2], [10, 20]), ([1, 2, 3], [10]), ([], []), (None, [1]), ([1], None)],
+            "l array<int>, r array<int>",
+        )
+        add = udf(lambda a, b: (0 if a is None else a) + (0 if b is None else b), IntegerType())
+
+        # Compare against the equivalent native expression with the same null handling.
+        assertDataFrameEqual(
+            df.select(sf.zip_with("l", "r", lambda a, b: add(a, b)).alias("r")),
+            df.select(
+                sf.zip_with(
+                    "l",
+                    "r",
+                    lambda a, b: sf.coalesce(a, sf.lit(0)) + sf.coalesce(b, sf.lit(0)),
+                ).alias("r")
+            ),
+        )
+
+    def test_zip_with_udf_on_one_side_only(self):
+        df = self.spark.createDataFrame([([1, 2], [10, 20])], "l array<int>, r array<int>")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+
+        assertDataFrameEqual(
+            df.select(sf.zip_with("l", "r", lambda a, b: plus_one(a) + b).alias("r")),
+            [([12, 23],)],
+        )
+
+    def test_array_sort_with_udf_key(self):
+        # A comparator cannot be evaluated pairwise, but the UDF applied per element is a sort key
+        # the JVM comparator compares. This must actually reorder, not be a no-op.
+        df = self.spark.createDataFrame([([3, 1, 2],), ([],), (None,)], "values array<int>")
+        negate = udf(lambda x: -x, IntegerType())
+
+        # Sorting by -x gives descending order.
+        assertDataFrameEqual(
+            df.select(
+                sf.array_sort(
+                    "values",
+                    lambda a, b: sf.when(negate(a) < negate(b), sf.lit(-1))
+                    .when(negate(a) > negate(b), sf.lit(1))
+                    .otherwise(sf.lit(0)),
+                ).alias("r")
+            ),
+            [([3, 2, 1],), ([],), (None,)],
+        )
+
+    def test_array_sort_pairwise_comparator_still_fails(self):
+        # One UDF call receiving both elements has no per-element key, so it must keep failing.
+        df = self.spark.createDataFrame([([3, 1, 2],)], "values array<int>")
+        cmp_udf = udf(lambda a, b: (a > b) - (a < b), IntegerType())
+
+        with self.assertRaises(AnalysisException) as ctx:
+            df.select(sf.array_sort("values", lambda a, b: cmp_udf(a, b))).collect()
+        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+
+    def test_transform_keys_and_values(self):
+        df = self.spark.createDataFrame([({"a": 1, "b": 2},),], "m map<string,int>")
+        upper = udf(lambda s: s.upper(), StringType())
+        plus_one = udf(lambda v: v + 1, IntegerType())
+
+        assertDataFrameEqual(
+            df.select(sf.transform_keys("m", lambda k, v: upper(k)).alias("r")),
+            [({"A": 1, "B": 2},)],
+        )
+        assertDataFrameEqual(
+            df.select(sf.transform_values("m", lambda k, v: plus_one(v)).alias("r")),
+            [({"a": 2, "b": 3},)],
+        )
+        # The lambda may read both the key and the value.
+        assertDataFrameEqual(
+            df.select(
+                sf.transform_values("m", lambda k, v: plus_one(v) + sf.length(k)).alias("r")
+            ),
+            [({"a": 3, "b": 4},)],
+        )
+
+    def test_map_filter(self):
+        df = self.spark.createDataFrame([({"a": 1, "b": 2, "c": 3},)], "m map<string,int>")
+        is_odd = udf(lambda v: v % 2 == 1, "boolean")
+
+        assertDataFrameEqual(
+            df.select(sf.map_filter("m", lambda k, v: is_odd(v)).alias("r")),
+            [({"a": 1, "c": 3},)],
+        )
+
+    def test_map_zip_with(self):
+        # The visited key set is the union of both maps' keys; a key missing from one side gives
+        # null on that side, matching map_zip_with's own semantics.
+        df = self.spark.createDataFrame(
+            [({"a": 1, "b": 2}, {"b": 20, "c": 30},)], "l map<string,int>, r map<string,int>"
+        )
+        combine = udf(
+            lambda a, b: (0 if a is None else a) * 100 + (0 if b is None else b), IntegerType()
+        )
+
+        assertDataFrameEqual(
+            df.select(sf.map_zip_with("l", "r", lambda k, v1, v2: combine(v1, v2)).alias("r")),
+            [({"a": 100, "b": 220, "c": 30},)],
+        )
+
+    def test_aggregate_udf_in_finish(self):
+        # `finish` runs once on the final accumulator. Critically, a fold over a null array is
+        # null and Spark does not evaluate `finish` for it, so the UDF must not see that null.
+        df = self.spark.createDataFrame(
+            [([1, 2, 3],), ([],), (None,)], "values array<int>"
+        )
+        # Deliberately null-unaware: it would raise if called on a null accumulator.
+        double_it = udf(lambda acc: acc * 2, IntegerType())
+
+        assertDataFrameEqual(
+            df.select(
+                sf.aggregate(
+                    "values", sf.lit(0), lambda acc, x: acc + x, lambda acc: double_it(acc)
+                ).alias("r")
+            ),
+            [(12,), (0,), (None,)],
+        )
+
+    def test_aggregate_udf_in_both_merge_and_finish(self):
+        df = self.spark.createDataFrame([([1, 2, 3],), (None,)], "values array<int>")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+        double_it = udf(lambda acc: acc * 2, IntegerType())
+
+        # (1+1)+(2+1)+(3+1) = 9, doubled = 18
+        assertDataFrameEqual(
+            df.select(
+                sf.aggregate(
+                    "values",
+                    sf.lit(0),
+                    lambda acc, x: acc + plus_one(x),
+                    lambda acc: double_it(acc),
+                ).alias("r")
+            ),
+            [(18,), (None,)],
+        )
+
+    def test_reduce_alias(self):
+        df = self.spark.createDataFrame([([1, 2, 3],)], "values array<int>")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+        assertDataFrameEqual(
+            df.select(sf.reduce("values", sf.lit(0), lambda acc, x: acc + plus_one(x)).alias("r")),
+            [(9,)],
+        )
+
     def test_element_and_return_types(self):
         df = self.spark.createDataFrame([(["a", "bb"],)], "values array<string>")
         upper_len = udf(lambda s: len(s), IntegerType())
@@ -251,20 +398,56 @@ class UDFInHigherOrderFunctionTestsMixin:
             df.select(sf.transform("values", lambda x: plus_one(x)).alias("r")).count(), 0
         )
 
-    def test_nested_higher_order_function_still_fails(self):
-        # The inner array only exists while the outer `transform` iterates, so a UDF lifted onto
-        # it would still sit inside the outer lambda and could not be extracted. This must fail
-        # with a clear error rather than produce a plan that cannot be evaluated.
-        df = self.spark.createDataFrame([([[1, 2], [3]],)], "values array<array<int>>")
+    def test_nested_higher_order_functions(self):
+        # The inner array is the outer lambda's variable, so the UDF cannot be lifted in one pass.
+        # The rule rewrites innermost-first and repeats to a fixed point, which resolves it.
+        df = self.spark.createDataFrame(
+            [([[1, 2], [3]],), ([],), (None,), ([None, []],)], "values array<array<int>>"
+        )
         plus_one = udf(lambda x: x + 1, IntegerType())
 
-        with self.assertRaises(AnalysisException) as ctx:
+        assertDataFrameEqual(
             df.select(
                 sf.transform(
                     "values", lambda inner: sf.transform(inner, lambda x: plus_one(x))
+                ).alias("r")
+            ),
+            df.select(
+                sf.transform("values", lambda inner: sf.transform(inner, lambda x: x + 1)).alias(
+                    "r"
                 )
-            ).collect()
-        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+            ),
+        )
+
+    def test_nested_higher_order_functions_three_deep(self):
+        df = self.spark.createDataFrame(
+            [([[[1, 2], [3]], [[4]]],)], "values array<array<array<int>>>"
+        )
+        plus_one = udf(lambda x: x + 1, IntegerType())
+
+        assertDataFrameEqual(
+            df.select(
+                sf.transform(
+                    "values",
+                    lambda a: sf.transform(a, lambda b: sf.transform(b, lambda x: plus_one(x))),
+                ).alias("r")
+            ),
+            [([[[2, 3], [4]], [[5]]],)],
+        )
+
+    def test_nested_higher_order_function_mixed_kinds(self):
+        # A `filter` inside a `transform`, with the UDF in the inner predicate.
+        df = self.spark.createDataFrame([([[1, 2, 3], [4, 5]],)], "values array<array<int>>")
+        is_even = udf(lambda x: x % 2 == 0, "boolean")
+
+        assertDataFrameEqual(
+            df.select(
+                sf.transform(
+                    "values", lambda inner: sf.filter(inner, lambda x: is_even(x))
+                ).alias("r")
+            ),
+            [([[2], [4]],)],
+        )
 
     def test_udf_outside_inner_higher_order_function(self):
         # The UDF applies to the outer array's element (itself an array), which *is* a real

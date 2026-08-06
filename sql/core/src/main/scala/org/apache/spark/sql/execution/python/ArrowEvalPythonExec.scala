@@ -188,6 +188,15 @@ class ArrowEvalPythonEvaluatorFactory(
       argMetas: Array[Array[ArgumentMetadata]],
       iter: Iterator[InternalRow],
       schema: StructType,
+      context: TaskContext): Iterator[InternalRow] =
+    evaluate(funcs, argMetas, iter, schema, Nil, context)
+
+  override def evaluate(
+      funcs: Seq[(ChainedPythonFunctions, Long)],
+      argMetas: Array[Array[ArgumentMetadata]],
+      iter: Iterator[InternalRow],
+      schema: StructType,
+      flattenDepths: Seq[Int],
       context: TaskContext): Iterator[InternalRow] = {
 
     val outputTypes = output.drop(childOutput.length).map(_.dataType.transformRecursively {
@@ -206,7 +215,8 @@ class ArrowEvalPythonEvaluatorFactory(
       pythonRunnerConf,
       pythonMetrics,
       jobArtifactUUID,
-      sessionUUID) with BatchedPythonArrowInput
+      sessionUUID,
+      flattenDepths) with BatchedPythonArrowInput
     val columnarBatchIter = pyRunner.compute(batchIter, context.partitionId(), context)
 
     columnarBatchIter.flatMap { batch =>

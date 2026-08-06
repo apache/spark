@@ -225,6 +225,18 @@ class EvalConf(Conf):
         return _parse_datatype_json_string(input_type)
 
     @property
+    def elementwise_depths(self) -> list[int]:
+        """How many levels each element-wise UDF argument must be flattened by.
+
+        One entry per input column. 0 means the argument is a per-row value to broadcast rather
+        than an array to flatten. See ``ExtractPythonUDFFromLambda``.
+        """
+        depths = self.get("elementwise_depths", None)
+        if depths is None:
+            return []
+        return [int(d) for d in depths.split(",") if d != ""]
+
+    @property
     def table_arg_offsets(self) -> Optional[list[int]]:
         offsets = self.get("table_arg_offsets", None)
         if offsets is None:
@@ -3039,17 +3051,53 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         col_names = [f"_{i}" for i in range(len(udfs))]
 
         # --- Input preparation ---
-        # An array<T> argument is flattened before it reaches the UDF, so its values must be
-        # converted with the *element* type. A non-array argument is a per-row value that is
-        # broadcast to the row's elements, so it is converted with its own type.
+        # An argument is flattened once per level of nesting the rewrite asked for, so its values
+        # must be converted with the type found at that depth. `elementwise_depths` gives the depth
+        # per argument; 0 marks a per-row value that is broadcast to the row's leaf elements
+        # rather than flattened.
+        depths = eval_conf.elementwise_depths
+        input_fields = list(eval_conf.input_type)
+        assert len(depths) == len(input_fields), (depths, input_fields)
+
+        def type_at_depth(dt, depth):
+            for _ in range(depth):
+                assert isinstance(dt, ArrayType), (dt, depth)
+                dt = dt.elementType
+            return dt
+
+        arrow_to_py_depths = list(depths)
         arrow_to_py_converters = [
             ArrowTableToRowsConversion._create_converter(
-                f.dataType.elementType if isinstance(f.dataType, ArrayType) else f.dataType,
+                type_at_depth(f.dataType, d),
                 none_on_identity=True,
                 binary_as_bytes=runner_conf.binary_as_bytes,
             )
-            for f in eval_conf.input_type
+            for f, d in zip(input_fields, depths)
         ]
+
+        def leaf_counts_per_row(shape_stack):
+            """How many leaf elements each top-level row contributes.
+
+            With one level of nesting this is just the list lengths. With more, the counts of each
+            level must be summed over the ranges the level above delimits. A null list at any level
+            contributes nothing, matching ``flatten()``.
+            """
+            counts = [
+                0 if n is None else n
+                for n in pc.list_value_length(shape_stack[-1]).to_pylist()
+            ]
+            for shape in reversed(shape_stack[:-1]):
+                lengths = pc.list_value_length(shape).to_pylist()
+                rolled = []
+                pos = 0
+                for n in lengths:
+                    if n is None:
+                        rolled.append(0)
+                    else:
+                        rolled.append(sum(counts[pos:pos + n]))
+                        pos += n
+                counts = rolled
+            return counts
 
         @fail_on_stopiteration
         def _evaluate_elementwise_udf(udf_func, rows):
@@ -3065,68 +3113,88 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 num_rows = input_batch.num_rows
 
                 # --- Input: Arrow list columns -> flattened Python element lists ---
-                # ``flatten()`` drops the elements of null rows and honours slice offsets, so
-                # it is the authority on both the element values and their count. The shape
-                # used to re-nest results is taken from the same array.
+                # ``flatten()`` drops the elements of null rows and honours slice offsets, so it
+                # is the authority on both the element values and their count.
+                #
+                # An argument is flattened ``depth`` times. Depth is 1 for a UDF in a plain
+                # lambda; it is deeper when the UDF sits in a nested higher-order function, e.g.
+                # ``transform(arr, i -> transform(i, x -> f(x)))``, where ``arr`` is
+                # ``array<array<T>>`` but ``f`` still takes a scalar. Every level's shape is kept
+                # so the result can be re-nested in reverse.
                 columns = []
-                shapes = []
-                for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters):
-                    if pa.types.is_list(col.type) or pa.types.is_large_list(col.type):
-                        # ``flatten()`` and ``list_value_length()`` are both slice-aware and
-                        # agree with each other, so no offset normalization is needed here.
-                        values = ArrowTableToRowsConversion._to_pylist(col.flatten())
+                shape_stacks = []
+                for col, conv, depth in zip(
+                    input_batch.itercolumns(), arrow_to_py_converters, arrow_to_py_depths
+                ):
+                    if depth > 0:
+                        stack = []
+                        flat = col
+                        for _ in range(depth):
+                            stack.append(flat)
+                            flat = flat.flatten()
+                        values = ArrowTableToRowsConversion._to_pylist(flat)
                         if conv is not None:
                             values = [conv(v) for v in values]
                         columns.append(values)
-                        shapes.append(col)
+                        shape_stacks.append(stack)
                     else:
                         # A non-array argument is constant across the elements of a row (e.g.
                         # a UDF argument that does not depend on the lambda variable). It is
                         # broadcast per element below, once the element count is known.
                         scalar_values = ArrowTableToRowsConversion._to_pylist(col)
+                        if conv is not None:
+                            scalar_values = [conv(v) for v in scalar_values]
                         columns.append(scalar_values)
-                        shapes.append(None)
+                        shape_stacks.append(None)
 
                 # The shape to re-nest by: every array argument is guaranteed by the rewrite to
                 # have the same shape, so the first array column defines it. The rewrite always
                 # passes at least one array argument, hence the assertion.
-                shape = next((s for s in shapes if s is not None), None)
-                assert shape is not None, "an element-wise UDF requires an array argument"
-                # ``list_value_length`` yields null for a null row and honours slice offsets.
-                lengths = pc.list_value_length(shape).to_pylist()
+                shape_stack = next((s for s in shape_stacks if s is not None), None)
+                assert shape_stack is not None, "an element-wise UDF requires an array argument"
 
-                # Dense offsets plus an explicit validity mask re-nest a flat result list into
-                # one array per row. Null rows stay null: their elements were never evaluated,
-                # so they consume no offsets. (Encoding a null row as a null *offset* would be
-                # ambiguous, since one null offset also truncates the preceding row.)
-                total_elements = sum(n for n in lengths if n is not None)
-                offsets = []
-                running = 0
-                for n in lengths:
+                def renest_spec(shape):
+                    """Dense offsets plus a validity mask that re-nest a flat list by ``shape``.
+
+                    Null rows stay null: their elements were never evaluated, so they consume no
+                    offsets. (Encoding a null row as a null *offset* would be ambiguous, since one
+                    null offset also truncates the preceding row.) ``ListArray`` uses int32
+                    offsets and ``LargeListArray`` int64, so the input's list width is preserved.
+                    """
+                    lengths = pc.list_value_length(shape).to_pylist()
+                    offsets = []
+                    running = 0
+                    for n in lengths:
+                        offsets.append(running)
+                        if n is not None:
+                            running += n
                     offsets.append(running)
-                    if n is not None:
-                        running += n
-                offsets.append(running)
-                # ``ListArray`` uses int32 offsets, ``LargeListArray`` int64; build whichever
-                # matches the input so the result keeps the input's list width.
-                is_large = pa.types.is_large_list(shape.type)
-                list_array_cls = pa.LargeListArray if is_large else pa.ListArray
-                offsets_arr = pa.array(offsets, type=pa.int64() if is_large else pa.int32())
-                null_mask = pa.array([n is None for n in lengths], type=pa.bool_())
+                    is_large = pa.types.is_large_list(shape.type)
+                    return (
+                        pa.LargeListArray if is_large else pa.ListArray,
+                        pa.array(offsets, type=pa.int64() if is_large else pa.int32()),
+                        pa.array([n is None for n in lengths], type=pa.bool_()),
+                    )
 
-                # Broadcast non-array arguments so every element of a row sees its row's value.
+                # Innermost level first, so the result is re-nested from the leaves outwards.
+                renest_specs = [renest_spec(s) for s in reversed(shape_stack)]
+                # The leaf element count, i.e. how many values the UDF is called with.
+                innermost = shape_stack[-1]
+                total_elements = sum(
+                    n for n in pc.list_value_length(innermost).to_pylist() if n is not None
+                )
+                # Row-level lengths, used to broadcast non-array arguments across leaf elements.
+                lengths = leaf_counts_per_row(shape_stack)
+
+                # Broadcast non-array arguments so every leaf element of a row sees its row's
+                # value.
                 broadcast_columns = []
-                for values, s in zip(columns, shapes):
+                for values, s in zip(columns, shape_stacks):
                     if s is not None:
                         broadcast_columns.append(values)
                     else:
                         broadcast_columns.append(
-                            [
-                                values[i]
-                                for i, n in enumerate(lengths)
-                                if n is not None
-                                for _ in range(n)
-                            ]
+                            [values[i] for i, n in enumerate(lengths) for _ in range(n)]
                         )
 
                 # --- Process: one pass over all elements of the batch ---
@@ -3150,9 +3218,11 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         flat_arr = pa.array(converted).cast(
                             target_type=arrow_element_type, safe=runner_conf.safecheck
                         )
-                    output_arrays.append(
-                        list_array_cls.from_arrays(offsets_arr, flat_arr, mask=null_mask)
-                    )
+                    # Re-nest from the leaves outwards, one level per flatten that was applied.
+                    nested = flat_arr
+                    for list_cls, offsets_arr, null_mask in renest_specs:
+                        nested = list_cls.from_arrays(offsets_arr, nested, mask=null_mask)
+                    output_arrays.append(nested)
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 

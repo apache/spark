@@ -71,13 +71,18 @@ object PythonUDF {
    * Whether every Python UDF inside `hof`'s lambdas can be lifted out by
    * `ExtractPythonUDFFromLambda`. Used by `CheckAnalysis` to decide whether to reject the plan.
    *
-   * A shape is rewritable when the UDF is applied per element of an array the higher-order
-   * function iterates, so that the UDF can instead be applied once to the whole array. That rules
-   * out:
+   * A shape is rewritable when the UDF is applied per element of something the higher-order
+   * function iterates, so that the UDF can instead be applied once to the whole array. All twelve
+   * lambda-taking functions qualify; what does not is:
    *   - a UDF reading `aggregate`'s accumulator, which is sequential (step n depends on n-1);
-   *   - a UDF in `array_sort`'s comparator that receives both elements at once, for which no
-   *     per-element key exists;
-   *   - higher-order functions this rule does not handle yet (the map family, `zip_with`).
+   *   - a UDF in `array_sort`'s comparator that receives *both* elements in one call, for which no
+   *     per-element sort key exists;
+   *   - a pandas UDF, which receives a `Series` rather than one value per call.
+   *
+   * Note this is deliberately not concerned with whether the iterated collection is itself a
+   * lambda variable (a nested higher-order function). The optimizer rule rewrites innermost-first
+   * and repeats to a fixed point, so the inner rewrite makes the outer one rewritable in a later
+   * pass; rejecting it here would forbid a shape that does in fact work.
    */
   def canRewritePythonUDFInLambda(hof: HigherOrderFunction): Boolean = {
     // Every Python UDF in the lambdas must itself be of a rewritable eval type. A pandas UDF,
@@ -85,28 +90,42 @@ object PythonUDF {
     val allUDFsRewritable = hof.functions.forall { f =>
       f.collect { case udf: PythonUDF => udf }.forall(isElementwiseRewritableUDF)
     }
-    // The rewrite lifts the UDF onto the array the lambda iterates, so that array must be
-    // computable outside every lambda. It is not when it references a lambda variable bound
-    // further out, as in the nested `transform(arr, inner -> transform(inner, x -> udf(x)))`:
-    // there the inner array only exists while the outer function iterates, so the lifted UDF
-    // would still be trapped inside the outer lambda and could not be extracted.
-    //
-    // A lambda variable that the argument itself binds (e.g. an argument that is another
-    // higher-order function over a real column) is fine, so only *free* references disqualify.
-    val argumentsAreFree = !hof.arguments.exists(hasFreeLambdaVariable)
-    allUDFsRewritable && argumentsAreFree && (hof match {
-      case _: ArrayTransform | _: ArrayFilter | _: ArrayExists | _: ArrayForAll =>
+    allUDFsRewritable && (hof match {
+      case _: ArrayTransform | _: ArrayFilter | _: ArrayExists | _: ArrayForAll | _: ZipWith |
+           _: TransformKeys | _: TransformValues | _: MapFilter | _: MapZipWith =>
         // The UDF is applied to each element, which is exactly the rewritable shape.
         true
 
-      case ArrayAggregate(_, _, merge, finish) =>
-        // A UDF on the element is rewritable; one reading the accumulator is not. A UDF in
-        // `finish` is not handled here: `finish` runs once on the final accumulator, and moving
-        // the UDF outside the fold would call it on the null a fold over a null array produces.
-        !finish.exists(_.isInstanceOf[PythonUDF]) && !mergeReadsAccumulator(merge)
+      case ArraySort(_, function, _) =>
+        // A per-element sort key is rewritable; a UDF that compares the two elements in one call
+        // is not, because there is no array to precompute O(n log n) pairwise results over.
+        !comparatorTakesBothElements(function)
+
+      case ArrayAggregate(_, _, merge, _) =>
+        // A UDF on the element, or in `finish`, is rewritable. One reading the accumulator is not.
+        !mergeReadsAccumulator(merge)
 
       case _ => false
     })
+  }
+
+  /**
+   * Whether any Python UDF in an `array_sort` comparator receives both of the comparator's
+   * parameters in a single call, e.g. `(a, b) -> my_compare(a, b)`. Such a call cannot be reduced
+   * to a per-element key.
+   */
+  def comparatorTakesBothElements(function: Expression): Boolean = function match {
+    case LambdaFunction(body, Seq(left: NamedLambdaVariable, right: NamedLambdaVariable), _) =>
+      body.exists {
+        case udf: PythonUDF if isElementwiseRewritableUDF(udf) =>
+          def reads(id: ExprId) = udf.exists {
+            case v: NamedLambdaVariable => v.exprId == id
+            case _ => false
+          }
+          reads(left.exprId) && reads(right.exprId)
+        case _ => false
+      }
+    case _ => false
   }
 
   /**
@@ -226,7 +245,13 @@ case class PythonUDF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
-    resultId: ExprId = NamedExpression.newExprId)
+    resultId: ExprId = NamedExpression.newExprId,
+    // For SQL_ARROW_ELEMENTWISE_UDF only: how many array levels each child must be flattened by
+    // before its values reach the user's (scalar) function. One entry per child; 0 marks a
+    // per-row argument that is broadcast across the row's leaf elements instead. Depth is greater
+    // than 1 when the UDF came from a nested higher-order function. Empty for every other eval
+    // type. See `ExtractPythonUDFFromLambda`.
+    elementwiseDepths: Seq[Int] = Nil)
   extends Expression with PythonFuncExpression with Unevaluable {
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
