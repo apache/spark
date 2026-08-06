@@ -124,16 +124,7 @@ def _floor_divide_func(c1, c2):
         F.when(c1.isNull() | F.isnan(c1), c1)
         .when(c2.isNull() | F.isnan(c2), c2)
         .when(
-            c2 == 0,
-            F.when(c1 == 0, F.lit(float("nan")))
-            .when(
-                (c1 < 0) != (c2.cast("string") == "-0.0"),
-                F.lit(float("-inf")),
-            )
-            .otherwise(F.lit(float("inf"))),
-        )
-        .when(
-            c1.cast("double").isin(float("-inf"), float("inf")),
+            c1.cast("double").isin(float("-inf"), float("inf")) & (c2 != 0),
             F.lit(float("nan")),
         )
         .when(
@@ -141,6 +132,15 @@ def _floor_divide_func(c1, c2):
             F.when(c1 == 0, (c1 / c2).cast("double"))
             .when((c1 < 0) != (c2 < 0), F.lit(-1.0))
             .otherwise(F.lit(0.0)),
+        )
+        .when(
+            c2 == 0,
+            F.when(c1 == 0, F.lit(float("nan")))
+            .when(
+                (c1 < 0) != (c2.cast("string") == "-0.0"),
+                F.lit(float("-inf")),
+            )
+            .otherwise(F.lit(float("inf"))),
         )
         .when(c1 == 0, (c1 / c2).cast("double"))
         .otherwise((c1 / c2) - F.pmod(c1 / c2, F.lit(1.0))),

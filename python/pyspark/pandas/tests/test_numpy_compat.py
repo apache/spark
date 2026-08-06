@@ -256,8 +256,48 @@ class NumPyCompatTestsMixin:
             ),
             pd.DataFrame(
                 {
-                    "x1": [-np.inf, -64.0, -2.0, -0.0, 0.0, 2.0, 64.0, np.inf, np.nan, 1.0, -1.0],
-                    "x2": [2.0, 3.0, -2.0, -3.0, -3.0, 0.0, -np.inf, np.inf, 2.0, 0.0, 0.0],
+                    "x1": [
+                        -np.inf,
+                        -64.0,
+                        -2.0,
+                        -0.0,
+                        0.0,
+                        2.0,
+                        64.0,
+                        np.inf,
+                        np.nan,
+                        1.0,
+                        -1.0,
+                        np.inf,
+                        -np.inf,
+                        np.inf,
+                        -np.inf,
+                        1.0,
+                    ],
+                    "x2": [
+                        2.0,
+                        3.0,
+                        -2.0,
+                        -3.0,
+                        -3.0,
+                        0.0,
+                        -np.inf,
+                        np.inf,
+                        2.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        -0.0,
+                        -0.0,
+                        np.nan,
+                    ],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "x1": pd.array([1, None, None], dtype="Int64"),
+                    "x2": pd.array([None, 2, 0], dtype="Int64"),
                 }
             ),
         ):
