@@ -214,6 +214,11 @@ case class HashAggregateExec(
   // `minRows` after every check, and the count is reset after a spill so the new in-memory map
   // epoch is judged on its own rows.
   private var adaptiveNextCheckRowTerm: String = _
+  // The fast map's key count as of the last spill. The fast map never spills and is never cleared,
+  // so its keys outlive the epoch the processed-row count is reset for; subtracting this baseline
+  // keeps both sides of the ratio on the same epoch. Once the fast map fills it stops accepting
+  // keys, so the difference settles at zero and the ratio is the regular map's alone.
+  private var adaptiveFastKeysAtSpillTerm: String = _
   // The name of the generated output function, promoted to a field so `doConsumeWithKeys` can emit
   // pass-through rows directly from within the build loop.
   private var outputFunc: String = _
@@ -513,6 +518,8 @@ case class HashAggregateExec(
         ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "adaptiveMapOutputDone")
       adaptiveMapSetupDoneTerm =
         ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "adaptiveMapSetupDone")
+      adaptiveFastKeysAtSpillTerm =
+        ctx.addMutableState(CodeGenerator.JAVA_INT, "adaptiveFastKeysAtSpill")
     }
     if (conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap()
@@ -864,22 +871,12 @@ case class HashAggregateExec(
     // never matches and only the spill check remains.
     val adaptiveIneffective = if (adaptivePartialAggEnabled) {
       val totalKeys = if (isFastHashMapEnabled) {
-        s"($fastHashMapTerm.getNumKeys() + $hashMapTerm.getNumKeys())"
+        s"($fastHashMapTerm.getNumKeys() - $adaptiveFastKeysAtSpillTerm + " +
+          s"$hashMapTerm.getNumKeys())"
       } else {
         s"$hashMapTerm.getNumKeys()"
       }
       s"$processedRowsTerm < (double) $totalKeys * ${adaptiveMinCompaction}D"
-    } else {
-      ""
-    }
-
-    // After a spill the map starts a new in-memory epoch, so the counters restart and the ratio of
-    // that epoch alone decides whether the remaining rows are passed through.
-    val adaptiveResetEpoch = if (adaptivePartialAggEnabled) {
-      s"""
-         |$processedRowsTerm = 0L;
-         |$adaptiveNextCheckRowTerm = ${adaptiveMinRows}L;
-       """.stripMargin
     } else {
       ""
     }
@@ -919,6 +916,23 @@ case class HashAggregateExec(
          """.stripMargin
 
       if (adaptivePartialAggEnabled) {
+        // Spilling starts a new in-memory epoch, so the counters restart and the ratio of that
+        // epoch alone decides the remaining rows. The fast map neither spills nor clears, so its
+        // keys outlive the epoch; snapshotting them here keeps both sides of the ratio on the
+        // same rows. Once the fast map fills it stops accepting keys and the difference settles
+        // at zero, leaving the regular map's keys alone.
+        val snapshotFastKeys = if (isFastHashMapEnabled) {
+          s"$adaptiveFastKeysAtSpillTerm = $fastHashMapTerm.getNumKeys();"
+        } else {
+          ""
+        }
+        val spillAndRestartEpoch =
+          s"""
+             |$spillMap
+             |$processedRowsTerm = 0L;
+             |$adaptiveNextCheckRowTerm = ${adaptiveMinRows}L;
+             |$snapshotFastKeys
+           """.stripMargin
         s"""
            |// generate grouping key
            |${unsafeRowKeyCode.code}
@@ -928,8 +942,7 @@ case class HashAggregateExec(
            |    if ($processedRowsTerm > 0 && $adaptiveIneffective) {
            |      $adaptivePassThroughTerm = true;
            |    } else {
-           |      $spillMap
-           |      $adaptiveResetEpoch
+           |      $spillAndRestartEpoch
            |    }
            |  }
            |}
