@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.planmerging
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.FakeV2ProviderWithCustomSchema
 import org.apache.spark.sql.connector.catalog.{InMemoryScanMergingPartitionFilterCatalog, InMemoryScanMergingReportingCatalog}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -176,7 +177,12 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
   test("SPARK-58549: a scan merge preserves the sources' reported key-grouped partitioning") {
     val t = "scanmergereport.t2"
     withTable(t) {
-      withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+      // V2_BUCKETING_ENABLED is what makes the preserved report reach the physical plan (only
+      // DataSourceV2ScanExecBase.outputPartitioning reads it), which the last assertion checks; AQE
+      // is off so that `executedPlan` is the plan those assertions can walk.
+      withSQLConf(
+          SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         sql(s"CREATE TABLE $t (c1 int, c2 int) USING $v2Source PARTITIONED BY (c1)")
         sql(s"INSERT INTO $t VALUES (1, 10), (2, 20), (3, 30)")
 
@@ -204,6 +210,23 @@ class DSv2PlanMergingSuite extends QueryTest with SharedSparkSession
         assert(scan.keyGroupedPartitioning.get.flatMap(_.references).exists(_.name == "c1"),
           s"the preserved partitioning should be on c1; got ${scan.keyGroupedPartitioning}")
         assertNoPlaceholderRelation(df)
+
+        // The preserved report is not just carried on the logical node: the merged scan still
+        // reports it as its physical output partitioning, which is what lets a storage-partitioned
+        // join above it skip the shuffle.
+        val batchScans = df.queryExecution.executedPlan.collectWithSubqueries {
+          case b: BatchScanExec => b
+        }
+        assert(batchScans.nonEmpty, s"expected a BatchScanExec:\n${df.queryExecution.executedPlan}")
+        batchScans.foreach { b =>
+          b.outputPartitioning match {
+            case k: KeyedPartitioning =>
+              assert(k.expressions.flatMap(_.references).exists(_.name == "c1"),
+                s"the merged scan should be key-grouped on c1; got ${k.expressions}")
+            case other =>
+              fail(s"expected a KeyedPartitioning on the merged scan, got $other")
+          }
+        }
       }
     }
   }

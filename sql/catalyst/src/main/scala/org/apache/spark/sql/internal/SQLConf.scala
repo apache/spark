@@ -7294,11 +7294,13 @@ object SQLConf {
     .createWithDefault(false)
 
   val MERGE_SUBPLANS_DSV2_ALLOW_KEY_GROUPED_PARTITIONING_DEGRADATION = buildConf(
-    "spark.sql.optimizer.mergeSubplans.dsv2ScanMerge.allowKeyGroupedPartitioningDegradation")
+    "spark.sql.optimizer.mergeSubplans.dsv2ScanMerge.keyGroupedPartitioningDegradation.enabled")
     .doc("When false, a DataSource V2 scan merge is declined if the rebuilt merged scan would " +
       "report weaker key-grouped partitioning than an input reported (no longer clustering by " +
-      "the same expressions), which can force a shuffle the original plan avoided. When true, " +
-      "the merge proceeds anyway, trading the partitioning for a single scan. Reported " +
+      "the same expressions), which can force a shuffle the original plan avoided. The merge is " +
+      "also declined, before any rebuild, when the two input scans report different clustering " +
+      "expressions, since no single merged scan could preserve both. When true, the merge " +
+      "proceeds anyway in both cases, trading the partitioning for a single scan. Reported " +
       "partitioning is re-derived on the merged scan, so a merge that does not weaken it is " +
       "always allowed. Only affects sources that declare the SCAN_MERGING table capability.")
     .version("4.4.0")
@@ -7307,13 +7309,15 @@ object SQLConf {
     .createWithDefault(false)
 
   val MERGE_SUBPLANS_DSV2_ALLOW_ORDERING_DEGRADATION = buildConf(
-    "spark.sql.optimizer.mergeSubplans.dsv2ScanMerge.allowOrderingDegradation")
+    "spark.sql.optimizer.mergeSubplans.dsv2ScanMerge.orderingDegradation.enabled")
     .doc("When false, a DataSource V2 scan merge is declined if the rebuilt merged scan would " +
       "report a weaker output ordering than an input reported (an input ordering is no longer a " +
-      "prefix of the merged scan's), which can force a sort the original plan avoided. When " +
-      "true, the merge proceeds anyway, trading the ordering for a single scan. Reported " +
-      "ordering is re-derived on the merged scan, so a merge that does not weaken it is always " +
-      "allowed. Only affects sources that declare the SCAN_MERGING table capability.")
+      "prefix of the merged scan's), which can force a sort the original plan avoided. The merge " +
+      "is also declined, before any rebuild, when neither input's reported ordering satisfies " +
+      "the other, since no single merged scan could preserve both. When true, the merge proceeds " +
+      "anyway in both cases, trading the ordering for a single scan. Reported ordering is " +
+      "re-derived on the merged scan, so a merge that does not weaken it is always allowed. Only " +
+      "affects sources that declare the SCAN_MERGING table capability.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf

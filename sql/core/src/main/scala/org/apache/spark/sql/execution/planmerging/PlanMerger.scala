@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.planmerging
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeSet, Expression, ExpressionSet, If, Literal, NamedExpression, Or, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeMap, AttributeSet, Expression, ExpressionSet, If, Literal, NamedExpression, Or, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project}
@@ -258,9 +258,9 @@ class PlanMerger(
    * @param requiredKeyGroupedPartitioning The key-grouped partitioning the merged scan must
    *        reproduce to keep both inputs not-worse (the inputs' combined report, in the merged
    *        relation's attribute space); empty means no requirement. Enforced unless
-   *        `allowKeyGroupedPartitioningDegradation` is set.
+   *        `dsv2AllowKeyGroupedPartitioningDegradation` is set.
    * @param requiredOrdering The output ordering the merged scan must satisfy likewise; empty means
-   *        no requirement. Enforced unless `allowOrderingDegradation` is set.
+   *        no requirement. Enforced unless `dsv2AllowOrderingDegradation` is set.
    */
   case class DSv2DeferredScan(
       unionAttrs: Seq[Attribute],
@@ -290,8 +290,10 @@ class PlanMerger(
    * - The `merge()` pattern requiring `dsv2DeferredScan = None` is the fail-safe backstop: if a
    *   deferred scan somehow reached `merge()` unbuilt, it declines the merge rather than emitting a
    *   plan with a placeholder relation.
-   * - Eligibility gating stays at the leaf (read-only, inspects only the two input scans). Only the
-   *   build moves up.
+   * - Eligibility gating stays at the leaf (read-only, inspects only the two input scans) with one
+   *   exception: whether the rebuilt merged scan degrades a partitioning/ordering an input reported
+   *   can only be decided once that scan exists, so on the deferred path that one check runs at the
+   *   Filter, next to the build (see `tryBuildFilterDSv2ScanChild`).
    */
   case class MergeContext(filterPropagationSupported: Boolean, filterAboveScan: Boolean = false)
 
@@ -419,9 +421,11 @@ class PlanMerger(
               if (mappedNPCondition.canonicalized == cp.condition.canonicalized) {
                 // Identical conditions: the filter node adds no new discrimination between the two
                 // sides, so keep it unchanged. If it sits above a deferred merged DSv2 scan, build
-                // that scan once here with this condition as a best-effort filter. If the build
-                // cannot re-enforce the strict filters, decline the whole merge (the leaf's
-                // strict-only build would have failed identically).
+                // that scan once here with this condition as a best-effort filter. If it cannot be
+                // built to spec -- the strict filters do not come back re-enforced, or the rebuilt
+                // scan's re-derived partitioning/ordering would degrade what the inputs reported --
+                // decline the whole merge (the leaf's strict-only build would have failed
+                // identically).
                 tryBuildFilterDSv2ScanChild(mergedChild, deferred, Some(cp.condition))
                   .map { prunedChild =>
                     val mergedPlan = Filter(cp.condition, prunedChild)
@@ -629,8 +633,10 @@ class PlanMerger(
    * columns. The connector opts in via
    * `TableCapability.SCAN_MERGING`; Spark runs the real DSv2 pushdown
    * ([[V2ScanRelationPushDown]]) on a synthetic `Filter` over the relation, extracts the merged
-   * scan, and verifies the (equal) strict filters remain fully enforced. Eligibility gating
-   * (`mergeable`) is read-only, inspecting only the two input scans.
+   * scan, and verifies the (equal) strict filters remain fully enforced. The `mergeable` gate is
+   * read-only, inspecting only the two input scans; two further checks can decline the merge -- the
+   * inputs' reported partitioning/ordering must combine into a single report (checked here, before
+   * any rebuild), and the rebuilt scan must not degrade that report (checked once it is built).
    *
    * When this scan sits under a [[Filter]] (`context.filterAboveScan`), the build is DEFERRED: the
    * merged scan is not built here but carried up as a [[DSv2DeferredScan]] and built exactly once
@@ -680,7 +686,7 @@ class PlanMerger(
         // Reported partitioning/ordering is not reconstructed by the rebuilt scan
         // (V2ScanPartitioningAndOrdering is a separate early rule that rebuildScan does not run).
         // Rather than decline here, the merged scan re-derives its own when built (see
-        // tryBuildMergedDSv2Scan), and a not-worse check there declines the merge if that would
+        // tryBuildMergedDSv2Scan), and mergeDegradesReporting declines the merge if that would
         // degrade what an input reported (unless a dsv2ScanMerge config allows it).
         // The table opts in to Spark-side merging (a table capability, so a V1-fallback source
         // whose scan Spark wraps can still opt in). Both relations are the same table (canonically
@@ -696,7 +702,8 @@ class PlanMerger(
         ExpressionSet(np.pushedFilters.map(mapAttributes(_, npRelationMapping))) ==
           ExpressionSet(cp.pushedFilters)
 
-    // Eligibility is settled above (a read-only gate); everything below constructs the merge.
+    // The read-only gate above is settled. The report combine below can still decline (and so can
+    // the degradation check once the scan is built); everything else below constructs the merge.
     if (!mergeable) {
       return None
     }
@@ -709,12 +716,14 @@ class PlanMerger(
 
     // The reported key-grouped partitioning / ordering the merged scan must preserve so BOTH inputs
     // stay not-worse. Each input reports its own, remapped into cp's relation space (cp's already
-    // is; np's via npRelationMapping). The two usually agree (same table) but need not -- differing
-    // best-effort filters can prune different files, and a source may report per file set. Combine
-    // them into the single report the merge must keep (kGP: they must be equal; ordering: the
-    // stronger, which satisfies both). None from combine* means the inputs are INCOMPATIBLE -- no
-    // rebuilt scan could keep both not-worse -- so decline HERE, before rebuilding, unless the
-    // matching config accepts degrading that dimension.
+    // is; np's via npRelationMapping). The two normally agree -- the clustering expressions come
+    // from the table, and for partitioning, pruning only ever drops a report wholesale (an empty
+    // side, which never constrains) -- but a source is free to report per scan, e.g. an ordering
+    // that holds only for the file set the filters pushed into that scan left behind. Combine them
+    // into the single report the merge must keep (kGP: equal; ordering: the stronger, which
+    // satisfies both). None from combine* means the inputs are INCOMPATIBLE -- no rebuilt scan
+    // could keep both not-worse -- so decline HERE, before rebuilding, unless the matching config
+    // accepts degrading that dimension.
     val combinedKeyGroupedPartitioning = combineRequiredKeyGroupedPartitioning(
       np.keyGroupedPartitioning.map(_.map(mapAttributes(_, npRelationMapping))).getOrElse(Nil),
       cp.keyGroupedPartitioning.getOrElse(Nil))
@@ -741,8 +750,8 @@ class PlanMerger(
     } else {
       // No enclosing Filter: build the merged scan here enforcing the (equal) strict filters over
       // the union of columns, with no best-effort filter (no post-scan Filter to prune on).
-      tryBuildMergedDSv2Scan(cp.relation, unionAttrs, cp.pushedFilters, None,
-        expectedKeyGroupedPartitioning, expectedOrdering)
+      tryBuildMergedDSv2Scan(cp.relation, unionAttrs, cp.pushedFilters, bestEffortFilter = None)
+        .filterNot(mergeDegradesReporting(_, expectedKeyGroupedPartitioning, expectedOrdering))
         .map(TryMergeResult(_, npMapping, dsv2Merged = true))
     }
   }
@@ -760,14 +769,16 @@ class PlanMerger(
    * non-deterministic predicate the source prunes on would drop rows the enclosing Filter cannot
    * recover) and references only the relation's own columns (propagated boolean filter attributes
    * are not columns of the relation).
+   *
+   * The rebuilt scan's reported partitioning/ordering is re-derived here, but NOT checked against
+   * what the inputs reported -- callers do that via [[mergeDegradesReporting]], so a degradation
+   * stays distinguishable from a filter-enforcement failure.
    */
   private def tryBuildMergedDSv2Scan(
       relation: DataSourceV2Relation,
       unionAttrs: Seq[Attribute],
       strictFilters: Seq[Expression],
-      bestEffortFilter: Option[Expression],
-      requiredKeyGroupedPartitioning: Seq[Expression],
-      requiredOrdering: Seq[SortOrder]): Option[DataSourceV2ScanRelation] = {
+      bestEffortFilter: Option[Expression]): Option[DataSourceV2ScanRelation] = {
     val relationOut = relation.outputSet
     // Defensive: strict filters come from `pushedFilters`, which reference only relation columns,
     // so this holds today. If a future caller offers a filter over non-relation attributes, decline
@@ -800,10 +811,6 @@ class PlanMerger(
       // re-derive them on this single node. Safe on one node: the partitioning pass is idempotent
       // and the ordering pass is applied once to a fresh node.
       V2ScanPartitioningAndOrdering(scan).asInstanceOf[DataSourceV2ScanRelation]
-    }.filterNot { merged =>
-      // Decline if the merged scan degrades a partitioning/ordering an input reported -- that can
-      // force a shuffle/sort the original plan avoided -- unless the matching config opts in.
-      mergeDegradesReporting(merged, requiredKeyGroupedPartitioning, requiredOrdering)
     }
   }
 
@@ -812,10 +819,13 @@ class PlanMerger(
    * [[DSv2DeferredScan]], build the scan once here -- at the enclosing Filter, with the strict
    * filters plus the Filter's `bestEffortFilter` -- and splice it in place of the placeholder
    * relation. Tries strict + best-effort first, then strict-only (the best-effort filter is
-   * droppable); returns `None` only if the strict filters cannot be re-enforced at all, in which
-   * case the caller must decline the merge (the leaf's strict-only build would have failed
-   * identically). If there is no deferred scan (a non-DSv2 child, or a scan not under a Filter),
-   * there is nothing to build and the child is returned unchanged.
+   * droppable); a build returns `None` only if the strict filters cannot be re-enforced at all (the
+   * leaf's strict-only build would have failed identically). Each built scan is also checked
+   * against the required report the leaf computed, and rejected if it would degrade that -- per
+   * attempt, so a source whose report depends on which filters were pushed can still satisfy it
+   * strict-only. Either way the caller must decline the merge. If there is no deferred scan (a
+   * non-DSv2 child, or a scan not under a Filter), there is nothing to build and the child is
+   * returned unchanged.
    */
   private def tryBuildFilterDSv2ScanChild(
       child: LogicalPlan,
@@ -828,25 +838,64 @@ class PlanMerger(
       // turned every other relation into a DataSourceV2ScanRelation), so recover it by type here
       // rather than carrying it on DSv2DeferredScan.
       child.collectFirst { case r: DataSourceV2Relation => r }.flatMap { relation =>
-        tryBuildMergedDSv2Scan(relation, d.unionAttrs, d.strictFilters, bestEffortFilter,
-            d.requiredKeyGroupedPartitioning, d.requiredOrdering)
-          .orElse(tryBuildMergedDSv2Scan(relation, d.unionAttrs, d.strictFilters, None,
-            d.requiredKeyGroupedPartitioning, d.requiredOrdering))
+        // Check the report per attempt, and at the caller rather than inside the build: the strict
+        // filters and the report are independent reasons to reject a build, so a source whose
+        // report depends on what got pushed still gets its second chance from the strict-only
+        // attempt, and `tryBuildMergedDSv2Scan`'s `None` keeps its single meaning.
+        def build(offeredBestEffortFilter: Option[Expression]) =
+          tryBuildMergedDSv2Scan(
+            relation, d.unionAttrs, d.strictFilters, offeredBestEffortFilter)
+            .filterNot(
+              mergeDegradesReporting(_, d.requiredKeyGroupedPartitioning, d.requiredOrdering))
+
+        build(bestEffortFilter)
+          .orElse(build(None))
           .map { built =>
             child.transformUp { case r: DataSourceV2Relation if r eq relation => built }
           }
       }
   }
 
-  // The key-grouped partitioning the merged scan must reproduce to keep both inputs not-worse: they
-  // must be equal (bucketing is a table property), so a differing non-empty pair is INCOMPATIBLE
-  // (None); an empty side imposes no constraint. Compared canonically in cp's relation space (np's
-  // report was remapped into it by the caller).
+  // Compares two reported partitioning expression lists. A TransformExpression must be compared by
+  // transform semantics -- `isSameFunction`, i.e. the connector's `canonicalName` and bucket count
+  // -- and NOT by the BoundFunction instance it holds: V2ExpressionUtils binds the function afresh
+  // on every derivation and a connector is free to return a new BoundFunction each time, so
+  // `canonicalized ==` would call two identical `bucket(4, id)` reports different, and no
+  // transform-partitioned source would ever pass the checks below. `isSameFunction` is the same
+  // notion a storage-partitioned join uses to compare its two sides, but only that part of it is
+  // borrowed: `KeyedShuffleSpec.isExpressionCompatible` matches any two leaves (it recovers the
+  // positions separately), ignores transform children and honours
+  // `v2BucketingAllowCompatibleTransforms`, none of which is sound here -- preserving a report
+  // means reproducing it exactly, so leaves and children must match too.
+  private def sameReportedExpressions(a: Seq[Expression], b: Seq[Expression]): Boolean = {
+    a.length == b.length && a.zip(b).forall {
+      case (l: TransformExpression, r: TransformExpression) =>
+        // Recurse, so a nested transform's children are compared by transform semantics too,
+        // rather than falling back to the instance-sensitive equality this method exists to avoid.
+        l.isSameFunction(r) && sameReportedExpressions(l.children, r.children)
+      case (l, r) => l semanticEquals r
+    }
+  }
+
+  // [[SortOrder.orderingSatisfies]] with the sort keys compared by `sameReportedExpressions` (see
+  // above) rather than semanticEquals. `sameOrderExpressions` needs no handling here: a reported
+  // ordering comes from V2ExpressionUtils.toCatalystOrdering, which always leaves it empty.
+  private def reportedOrderingSatisfies(o1: Seq[SortOrder], o2: Seq[SortOrder]): Boolean = {
+    o2.length <= o1.length && o2.zip(o1).forall { case (required, provided) =>
+      provided.direction == required.direction && provided.nullOrdering == required.nullOrdering &&
+        sameReportedExpressions(Seq(provided.child), Seq(required.child))
+    }
+  }
+
+  // The key-grouped partitioning the merged scan must reproduce to keep both inputs not-worse: the
+  // two must be equal, so a differing non-empty pair is INCOMPATIBLE (None); an empty side imposes
+  // no constraint. Compared in cp's relation space (np's report was remapped into it by the
+  // caller).
   private def combineRequiredKeyGroupedPartitioning(
       a: Seq[Expression], b: Seq[Expression]): Option[Seq[Expression]] = {
     if (a.isEmpty) Some(b)
     else if (b.isEmpty) Some(a)
-    else if (a.map(_.canonicalized) == b.map(_.canonicalized)) Some(a)
+    else if (sameReportedExpressions(a, b)) Some(a)
     else None
   }
 
@@ -855,15 +904,26 @@ class PlanMerger(
   // neither satisfies the other they are INCOMPATIBLE (None). An empty ordering never constrains.
   private def combineRequiredOrdering(
       a: Seq[SortOrder], b: Seq[SortOrder]): Option[Seq[SortOrder]] = {
-    if (SortOrder.orderingSatisfies(a, b)) Some(a)
-    else if (SortOrder.orderingSatisfies(b, a)) Some(b)
+    if (reportedOrderingSatisfies(a, b)) Some(a)
+    else if (reportedOrderingSatisfies(b, a)) Some(b)
     else None
   }
 
   // True when the rebuilt merged scan does not reproduce the required key-grouped partitioning, or
   // does not satisfy the required ordering (the combined report the merge must preserve, computed
-  // at the leaf). Gated per dimension by the dsv2ScanMerge degradation configs; an empty required
-  // report imposes no constraint. Compared in cp's relation space.
+  // at the leaf) -- that can force a shuffle/sort the original plan avoided. Gated per dimension by
+  // the dsv2ScanMerge degradation configs; an empty required report imposes no constraint. Compared
+  // in cp's relation space.
+  //
+  // Only the reported EXPRESSIONS are compared, which is all a DataSourceV2ScanRelation carries;
+  // the merged scan's split count and partition values can still differ from an input's, since it
+  // may push a different best-effort filter and so prune differently. And a report the merged scan
+  // GAINS is not a degradation either. For partitioning that is because an input dropped its own
+  // only where a pruned column left the expressions inexpressible over that scan's output
+  // (V2ScanPartitioningAndOrdering's partitioning pass is reference-subset guarded), not because
+  // the source stopped reporting; the ordering pass has no such guard, so an ordering report is
+  // never dropped by pruning and a gained one can only come from the source. Either way, keeping it
+  // is exactly the win this merge is after.
   private def mergeDegradesReporting(
       merged: DataSourceV2ScanRelation,
       requiredKeyGroupedPartitioning: Seq[Expression],
@@ -871,10 +931,10 @@ class PlanMerger(
     val kgpDegraded = !dsv2AllowKeyGroupedPartitioningDegradation &&
       requiredKeyGroupedPartitioning.nonEmpty &&
       !merged.keyGroupedPartitioning.exists(
-        _.map(_.canonicalized) == requiredKeyGroupedPartitioning.map(_.canonicalized))
+        sameReportedExpressions(_, requiredKeyGroupedPartitioning))
     val orderingDegraded = !dsv2AllowOrderingDegradation &&
       requiredOrdering.nonEmpty &&
-      !SortOrder.orderingSatisfies(merged.ordering.getOrElse(Nil), requiredOrdering)
+      !reportedOrderingSatisfies(merged.ordering.getOrElse(Nil), requiredOrdering)
     kgpDegraded || orderingDegraded
   }
 
