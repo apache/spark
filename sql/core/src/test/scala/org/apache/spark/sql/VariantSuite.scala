@@ -702,6 +702,11 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
         "\"e\": {\"f\": null, \"g\": 2}}')))"),
       rows("""{"a":[3,{"c":[1]}],"e":{"g":2}}"""))
 
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json(" +
+        "'{\"a\": 100000, \"b\": null, \"c\": 10000000000, \"d\": \"hello world\"}')))"),
+      rows("""{"a":100000,"c":10000000000,"d":"hello world"}"""))
+
     // include_arrays = false keeps array null elements but still strips null fields of objects.
     checkAnswer(
       sql("SELECT to_json(variant_strip_nulls(" +
