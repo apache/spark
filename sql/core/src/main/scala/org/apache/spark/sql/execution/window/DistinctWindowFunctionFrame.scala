@@ -32,12 +32,14 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
  *
  * Such a frame never removes rows: it either covers the entire partition or only grows as output
  * advances. For each qualifying input row this frame finds the first output row whose upper bound
- * contains it. A bounded BytesToBytesMap removes duplicates up to the hash fallback threshold. If
- * another new key arrives, the frame permanently falls back to an external sorter for the rest of
- * the window partition. For a growing frame, that sorter finds the earliest event for every key,
- * then a second external sorter orders those events by index. The frame feeds each unique,
- * normalized DISTINCT input to the aggregate processor when its event becomes visible. A frame
- * covering the entire partition consumes unique inputs directly because their order is undefined.
+ * contains it. A BytesToBytesMap removes duplicates while it remains below configurable key-count
+ * and memory-size soft limits. When another new key arrives after either limit has been reached, or
+ * an append fails, the frame permanently falls back to an external sorter for the rest of the
+ * window partition. For a growing frame, that sorter finds the earliest event for every key, then
+ * a second external sorter orders those events by (firstVisibleIndex, inputIndex). The frame feeds
+ * each unique, normalized DISTINCT input to the aggregate processor when its event becomes visible.
+ * A frame covering the entire partition consumes unique inputs directly because their order is
+ * undefined.
  */
 private[window] abstract class DistinctWindowFunctionFrame(
     target: InternalRow,
@@ -56,9 +58,6 @@ private[window] abstract class DistinctWindowFunctionFrame(
   }
   private val distinctKeySchema = StructType(distinctFields)
   private val distinctTypes = distinctKeySchema.map(_.dataType)
-  private val eventValueSchema = StructType(distinctFields.map { field =>
-    field.copy(name = s"value${field.name.stripPrefix("key")}")
-  })
   private val positionSchema = StructType(Seq(
     StructField("firstVisibleIndex", IntegerType, nullable = false),
     StructField("inputIndex", IntegerType, nullable = false)))
@@ -119,11 +118,6 @@ private[window] abstract class DistinctWindowFunctionFrame(
     }
   }
 
-  protected final def updateProcessorWithDistinctRows(
-      firstVisibleRows: FirstVisibleRowsBuilder): Unit = {
-    firstVisibleRows.foreachDistinctRow((key, _) => processor.update(key))
-  }
-
   protected final def addCandidate(
       row: InternalRow,
       firstVisibleIndex: Int,
@@ -143,9 +137,10 @@ private[window] abstract class DistinctWindowFunctionFrame(
    * in non-decreasing (firstVisibleIndex, inputIndex) order.
    *
    * BytesToBytesMap compares raw UnsafeRow bytes, so binary-unstable keys use the sorter directly.
-   * Once the map is at the hash fallback threshold and another new key arrives, or it cannot append
-   * a record, all map entries are transferred to one external sorter. The rest of this window
-   * partition goes directly to that sorter and never returns to hash-based deduplication.
+   * Once the map reaches either its key-count or memory-size soft limit and another new key
+   * arrives, or it cannot append a record, all map entries are transferred to one external sorter.
+   * The rest of this window partition goes directly to that sorter and never returns to hash-based
+   * deduplication.
    */
   protected final class FirstVisibleRowsBuilder extends AutoCloseable {
     private val map = if (canUseHashDedup) {
@@ -194,10 +189,10 @@ private[window] abstract class DistinctWindowFunctionFrame(
           // Make the map spillable before allocating the event sorter. The destructive iterator
           // releases the hash array immediately and lets memory pressure spill remaining pages.
           val iterator = destructiveMapIterator()
-          events = newSorter(positionSchema, eventValueSchema)
+          events = newSorter(positionSchema, distinctKeySchema)
           drainMap(iterator, (key, position) => emitEvent(events, position, key))
         } else {
-          events = newSorter(positionSchema, eventValueSchema)
+          events = newSorter(positionSchema, distinctKeySchema)
           if (sorter != null) {
             consumeDistinctRows(
               sorter, (key, position) => emitEvent(events, position, key))
@@ -221,6 +216,12 @@ private[window] abstract class DistinctWindowFunctionFrame(
       }
     }
 
+    /**
+     * Returns bytes spilled by the first, distinct-key sorter. The frame accounts for the second,
+     * event-order sorter separately when closing its event resources. Spill files created while a
+     * destructive BytesToBytesMap iterator releases the map's data pages are not included in the
+     * window spill metric.
+     */
     def getSpillSize: Long = if (sorter == null) 0L else sorter.getSpillSize
 
     private def insertIntoSorter(key: UnsafeRow, value: UnsafeRow): Unit = {
@@ -359,14 +360,6 @@ private[window] abstract class DistinctWindowFunctionFrame(
     }
   }
 
-  protected final def evaluateEntirePartition(): Unit = {
-    try {
-      updateProcessor(0)
-    } finally {
-      closeEventResources()
-    }
-  }
-
   override final def currentLowerBound(): Int = 0
 
   private def closeEventResources(): Unit = {
@@ -427,12 +420,12 @@ private[window] final class UnboundedDistinctWindowFunctionFrame(
 
   override protected def processDistinctRows(
       firstVisibleRows: FirstVisibleRowsBuilder): Unit = {
-    updateProcessorWithDistinctRows(firstVisibleRows)
+    firstVisibleRows.foreachDistinctRow((key, _) => processor.update(key))
   }
 
   override protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     partitionSize = rows.length
-    evaluateEntirePartition()
+    processor.evaluate(target)
   }
 
   override def write(index: Int, current: InternalRow): Unit = {}
