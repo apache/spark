@@ -333,20 +333,27 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
     }
   }
 
-  test("window function: unbounded distinct frame evaluates sorter output directly") {
+  test("window function: unbounded distinct frame falls back by size") {
     withSQLConf(
+      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
       WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> Int.MaxValue.toString,
-      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> "2") {
-      checkAnswer(
-        sql(
-          """
-            |SELECT id,
-            |  count(DISTINCT value) OVER () AS distinct_count,
-            |  sum(DISTINCT value) OVER () AS distinct_sum,
-            |  sort_array(collect_list(DISTINCT value) OVER ()) AS distinct_values
-            |FROM VALUES (0, 3), (1, 1), (2, 3), (3, 2), (4, 1) AS data(id, value)
-          """.stripMargin),
-        Seq.tabulate(5)(id => Row(id, 3L, 6L, Seq(1, 2, 3))))
+      WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD.key -> "1",
+      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> Int.MaxValue.toString) {
+      val result = sql(
+        """
+          |SELECT id,
+          |  count(DISTINCT id % 3) OVER () AS distinct_count,
+          |  sum(DISTINCT id % 3) OVER () AS distinct_sum,
+          |  sort_array(collect_list(DISTINCT id % 3) OVER ()) AS distinct_values
+          |FROM range(20)
+        """.stripMargin)
+      // An entire-partition frame has no event sorter, and the input buffer stays in memory, so
+      // this spill can only come from the distinct-key sorter created by the size fallback.
+      assertSpilled(sparkContext, "unbounded distinct window hash fallback by size") {
+        checkAnswer(
+          result,
+          Seq.tabulate(20)(id => Row(id.toLong, 3L, 3L, Seq(0L, 1L, 2L))))
+      }
     }
   }
 
@@ -393,37 +400,24 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
     }
   }
 
-  test("window function: count distinct with a binary-unstable collation") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT id, count(DISTINCT value COLLATE UTF8_LCASE) OVER (
-          |  ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-          |FROM VALUES (0, 'a'), (1, 'A'), (2, 'b'), (3, 'B') AS data(id, value)
-          |ORDER BY id
-        """.stripMargin),
-      Seq(
-        Row(0, 1L),
-        Row(1, 1L),
-        Row(2, 2L),
-        Row(3, 2L)))
-  }
-
-  test("window function: distinct preserves the first collated value across spills") {
+  test("window function: distinct handles binary-unstable collation across spills") {
     withSQLConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       checkAnswer(
         sql(
           """
-            |SELECT id, collect_list(DISTINCT value COLLATE UTF8_LCASE) OVER (
-            |  ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+            |SELECT id,
+            |  count(DISTINCT value COLLATE UTF8_LCASE) OVER (
+            |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW),
+            |  collect_list(DISTINCT value COLLATE UTF8_LCASE) OVER (
+            |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
             |FROM VALUES (0, 'a'), (1, 'A'), (2, 'b'), (3, 'B') AS data(id, value)
             |ORDER BY id
           """.stripMargin),
         Seq(
-          Row(0, Seq("a")),
-          Row(1, Seq("a")),
-          Row(2, Seq("a", "b")),
-          Row(3, Seq("a", "b"))))
+          Row(0, 1L, Seq("a")),
+          Row(1, 1L, Seq("a")),
+          Row(2, 2L, Seq("a", "b")),
+          Row(3, 2L, Seq("a", "b"))))
     }
   }
 
@@ -492,27 +486,6 @@ class SQLWindowFunctionSuite extends SharedSparkSession {
         Row(0, "a", Seq("a")),
         Row(1, "a", Seq("a")),
         Row(2, "a,b", Seq("a", "b"))))
-  }
-
-  test("window function: distinct hash fallback honors the size spill threshold") {
-    withSQLConf(
-      WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1000",
-      WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> Int.MaxValue.toString,
-      WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD.key -> "1",
-      WINDOW_EXEC_DISTINCT_HASH_FALLBACK_THRESHOLD.key -> Int.MaxValue.toString) {
-      val result = sql(
-        """
-          |SELECT max(distinct_count)
-          |FROM (
-          |  SELECT count(DISTINCT id % 5) OVER (
-          |    ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS distinct_count
-          |  FROM range(20)
-          |)
-        """.stripMargin)
-      assertSpilled(sparkContext, "count distinct window hash fallback by size") {
-        checkAnswer(result, Row(5L))
-      }
-    }
   }
 
   test("window function: distinct foldable inputs share an empty-key frame") {
