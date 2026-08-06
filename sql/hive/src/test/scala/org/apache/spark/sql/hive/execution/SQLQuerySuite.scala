@@ -603,7 +603,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with TestHiveSingleton {
           sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION '$tempLocation/ctas1'")
           sql("INSERT INTO TABLE ctas1 SELECT 'A' ")
           // The target table does not exist in the catalog, so IF NOT EXISTS must not skip the
-          // non-empty location check and overwrite the location of table ctas1.
+          // non-empty location check and overwrite the data of table ctas1.
           val m = intercept[AnalysisException] {
             sql(s"""CREATE TABLE IF NOT EXISTS ctas_with_existing_location stored as rcfile
                  |LOCATION '$tempLocation'
