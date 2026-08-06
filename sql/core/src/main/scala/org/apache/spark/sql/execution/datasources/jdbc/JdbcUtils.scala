@@ -262,7 +262,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       try {
         statement.setQueryTimeout(options.queryTimeout)
         Some(getSchema(conn, statement.executeQuery(), dialect,
-          isTimestampNTZ = options.preferTimestampNTZ))
+          isTimestampNTZ = options.preferTimestampNTZ,
+          oracleNumberDefaultScale = options.oracleNumberDefaultScale))
       } catch {
         case _: SQLException => None
       } finally {
@@ -286,7 +287,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       resultSet: ResultSet,
       dialect: JdbcDialect,
       alwaysNullable: Boolean = false,
-      isTimestampNTZ: Boolean = false): StructType = {
+      isTimestampNTZ: Boolean = false,
+      oracleNumberDefaultScale: Option[Int] = None): StructType = {
     val rsmd = resultSet.getMetaData
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
@@ -328,6 +330,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
       metadata.putLong("scale", fieldScale)
       metadata.putString("jdbcClientType", typeName)
+      oracleNumberDefaultScale.foreach(s => metadata.putLong("numberDefaultScale", s))
       dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
 
       val columnType =
