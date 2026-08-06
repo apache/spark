@@ -8320,7 +8320,7 @@ def truncate(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) ->
     Unlike :func:`round`, the result is always rounded toward zero, and unlike :func:`floor`
     negative values are not rounded toward negative infinity.
 
-    .. versionadded:: 4.3.0
+    .. versionadded:: 4.4.0
 
     Parameters
     ----------

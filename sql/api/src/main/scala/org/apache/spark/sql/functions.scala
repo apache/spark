@@ -6077,7 +6077,7 @@ object functions {
    * @return
    *   Returns a column of the same type as the input.
    * @group math_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    */
   def truncate(e: Column): Column = truncate(e, 0)
 
@@ -6093,7 +6093,7 @@ object functions {
    * @return
    *   Returns a column of the same type as the input.
    * @group math_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    */
   def truncate(e: Column, scale: Int): Column = Column.fn("truncate", e, lit(scale))
 
@@ -6109,7 +6109,7 @@ object functions {
    * @return
    *   Returns a column of the same type as the input.
    * @group math_funcs
-   * @since 4.3.0
+   * @since 4.4.0
    */
   def truncate(e: Column, scale: Column): Column = Column.fn("truncate", e, scale)
 

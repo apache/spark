@@ -1993,7 +1993,7 @@ case class BRound(
       > SELECT _FUNC_(-1234.5678, 2);
        -1234.56
   """,
-  since = "4.3.0",
+  since = "4.4.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Truncate(
