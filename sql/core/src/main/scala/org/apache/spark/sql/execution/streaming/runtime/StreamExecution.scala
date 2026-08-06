@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.runtime
 
 import java.io.{InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
-import java.util.UUID
+import java.util.{Locale, UUID}
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
@@ -507,7 +507,15 @@ abstract class StreamExecution(
       conf.get(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
         SQLConf.STATE_STORE_PROVIDER_CLASS.defaultValueString) ==
         classOf[RocksDBStateStoreProvider].getName
-    if (usingRocksDb && !conf.contains(changelogKey)) {
+    // RocksDB resolves its own configs through a CaseInsensitiveMap (see RocksDBConf.apply), so a
+    // user can set this key in any casing and RocksDB will honour it. `conf.contains` is
+    // case-SENSITIVE, so comparing only the canonical spelling would miss such a setting and
+    // silently override it. Match the way RocksDB reads the key instead.
+    val changelogAlreadySet = {
+      val canonical = changelogKey.toLowerCase(Locale.ROOT)
+      conf.getAll.keys.exists(_.toLowerCase(Locale.ROOT) == canonical)
+    }
+    if (usingRocksDb && !changelogAlreadySet) {
       logInfo(log"Real-Time Mode: defaulting ${MDC(CONFIG, changelogKey)}=true")
       conf.set(changelogKey, "true")
     }
