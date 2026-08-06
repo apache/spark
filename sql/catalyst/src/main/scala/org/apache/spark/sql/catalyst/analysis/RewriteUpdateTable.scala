@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, EqualNullSafe, Expression, If, Literal, MetadataAttribute, Not, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, Expand, Filter, LogicalPlan, Project, ReplaceData, Union, UpdateTable, WriteDelta}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UPDATE_TABLE
@@ -80,15 +80,19 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val connectorDataAttrs = if (supportsColumnUpdate) {
       resolveConnectorDataAttrs(relation, operationTable.operation)
     } else Nil
+    val scanOnlyDataAttrs = if (supportsColumnUpdate) {
+      resolveScanOnlyDataAttrs(relation, operationTable.operation)
+    } else Nil
 
     if (supportsColumnUpdate) {
       validateUpdatedColumnsSubset(operationTable.operation, assignments, connectorDataAttrs)
+      validateNoOverlap(operationTable.operation, connectorDataAttrs, scanOnlyDataAttrs)
     }
 
     // construct a read relation and include all required metadata columns
     val readRelation = if (supportsColumnUpdate) {
       val narrowDataAttrs =
-        computeNarrowReadAttrs(relation, connectorDataAttrs, assignments, cond)
+        computeNarrowReadAttrs(relation, connectorDataAttrs, scanOnlyDataAttrs, assignments, cond)
       buildNarrowRelationWithAttrs(relation, operationTable, narrowDataAttrs, metadataAttrs)
     } else {
       buildRelationWithAttrs(relation, operationTable, metadataAttrs)
@@ -123,9 +127,13 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val connectorDataAttrs = if (supportsColumnUpdate) {
       resolveConnectorDataAttrs(relation, operationTable.operation)
     } else Nil
+    val scanOnlyDataAttrs = if (supportsColumnUpdate) {
+      resolveScanOnlyDataAttrs(relation, operationTable.operation)
+    } else Nil
 
     if (supportsColumnUpdate) {
       validateUpdatedColumnsSubset(operationTable.operation, assignments, connectorDataAttrs)
+      validateNoOverlap(operationTable.operation, connectorDataAttrs, scanOnlyDataAttrs)
     }
 
     // construct a read relation and include all required metadata columns
@@ -133,7 +141,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // the analyzer will take care of duplicated attr IDs
     val readRelation = if (supportsColumnUpdate) {
       val narrowDataAttrs =
-        computeNarrowReadAttrs(relation, connectorDataAttrs, assignments, cond)
+        computeNarrowReadAttrs(relation, connectorDataAttrs, scanOnlyDataAttrs, assignments, cond)
       buildNarrowRelationWithAttrs(relation, operationTable, narrowDataAttrs, metadataAttrs)
     } else {
       buildRelationWithAttrs(relation, operationTable, metadataAttrs)
@@ -251,9 +259,13 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val connectorDataAttrs = if (supportsColumnUpdate) {
       resolveConnectorDataAttrs(relation, operation)
     } else Nil
+    val scanOnlyDataAttrs = if (supportsColumnUpdate) {
+      resolveScanOnlyDataAttrs(relation, operation)
+    } else Nil
 
     if (supportsColumnUpdate) {
       validateUpdatedColumnsSubset(operation, assignments, connectorDataAttrs)
+      validateNoOverlap(operation, connectorDataAttrs, scanOnlyDataAttrs)
     }
 
 
@@ -265,7 +277,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     }
 
     val narrowDataAttrs = if (supportsColumnUpdate) {
-      computeNarrowReadAttrs(relation, connectorDataAttrs, assignments, cond)
+      computeNarrowReadAttrs(relation, connectorDataAttrs, scanOnlyDataAttrs, assignments, cond)
     } else {
       relation.output
     }
@@ -284,7 +296,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
         buildNarrowDeletesAndInserts(matchedRowsPlan, assignments, rowIdAttrs)
       } else {
         buildColumnUpdateProjection(
-          matchedRowsPlan, assignments, rowIdAttrs, metadataAttrs, connectorDataAttrs)
+          matchedRowsPlan, assignments, rowIdAttrs, metadataAttrs, connectorDataAttrs,
+          scanOnlyDataAttrs)
       }
     } else {
       if (operation.representUpdateAsDeleteAndInsert) {
@@ -310,7 +323,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       assignments: Seq[Assignment],
       rowIdAttrs: Seq[Attribute],
       metadataAttrs: Seq[Attribute],
-      connectorDataAttrs: Seq[AttributeReference]): LogicalPlan = {
+      connectorDataAttrs: Seq[AttributeReference],
+      scanOnlyDataAttrs: Seq[AttributeReference]): LogicalPlan = {
 
     val assignedValues = assignments.collect {
       case Assignment(key: Attribute, value) if !isIdentityAssignment(key, value) =>
@@ -318,13 +332,22 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     }
 
     // Connector-required columns whose value isn't being changed by the UPDATE: pass through the
-    // current value so the connector receives a complete write row.
+    // current value so the connector receives a complete write row. Row-ID columns are excluded
+    // here even when also connector-required (e.g. a primary key used for both row lookup and
+    // write payload) they are emitted once, below, via rowIdValues.
     val assignedKeyIds = assignments.collect {
       case Assignment(key: AttributeReference, value) if !isIdentityAssignment(key, value) =>
         key.exprId
     }.toSet
-    val connectorPassThroughValues = connectorDataAttrs.filterNot(a => assignedKeyIds.contains(
-      a.exprId))
+    val rowIdAttrSet = AttributeSet(rowIdAttrs)
+    val connectorPassThroughValues = connectorDataAttrs.filterNot(a =>
+      assignedKeyIds.contains(a.exprId) || rowIdAttrSet.contains(a))
+
+    // scanOnlyDataAttrs are never assigned carry them through the write query so
+    // scan-side / write-side planning (e.g. RequiresDistributionAndOrdering clustering keys)
+    // can resolve them, but they are intentionally excluded from the write payload.
+    val scanOnlyPassThroughValues = scanOnlyDataAttrs.filterNot(a =>
+      assignedKeyIds.contains(a.exprId) || rowIdAttrSet.contains(a))
 
     val metadataAttrSet = AttributeSet(metadataAttrs)
     val metadataValues = plan.output.filter(metadataAttrSet.contains).map { attr =>
@@ -335,7 +358,6 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       }
     }
 
-    val rowIdAttrSet = AttributeSet(rowIdAttrs)
     val rowIdValues = plan.output.filter(rowIdAttrSet.contains)
 
     val originalRowIdValues = buildOriginalRowIdValues(rowIdAttrs, assignments)
@@ -343,7 +365,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     Project(
       Seq(operationType) ++ assignedValues ++ connectorPassThroughValues ++
-        metadataValues ++ rowIdValues ++ originalRowIdValues,
+        scanOnlyPassThroughValues ++ metadataValues ++ rowIdValues ++ originalRowIdValues,
       plan)
   }
 
@@ -440,16 +462,28 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   }
 
   /**
+   * Resolves the connector's `scanOnlyDataAttributes()` if the operation opts into column
+   * updates. Returns `Nil` otherwise.
+   */
+  private def resolveScanOnlyDataAttrs(
+      relation: DataSourceV2Relation,
+      operation: RowLevelOperation): Seq[AttributeReference] = operation match {
+    case scu: SupportsColumnUpdates =>
+      V2ExpressionUtils.resolveRefs[AttributeReference](
+        scu.scanOnlyDataAttributes.toImmutableArraySeq, relation)
+    case _ => Nil
+  }
+
+  /**
    * Computes the narrow set of data columns that must be present in the scan for a column-update
-   * write: connector-declared attrs, unioned with any table columns referenced by non-identity
-   * assignment RHS expressions, the operation condition, and the table's partition expressions.
-   * Partition-column refs are always kept so downstream rules (V2ScanPartitioningAndOrdering,
-   * GroupBasedRowLevelOperationScanPlanning) can resolve the table's partitioning expressions
-   * against the scan output.
+   * write: connector-declared attrs (both `requiredDataAttributes()` and
+   * `scanOnlyDataAttributes()`), unioned with any table columns referenced by non-identity
+   * assignment RHS expressions and the operation condition.
    */
   private def computeNarrowReadAttrs(
       relation: DataSourceV2Relation,
       connectorDataAttrs: Seq[AttributeReference],
+      scanOnlyDataAttrs: Seq[AttributeReference],
       assignments: Seq[Assignment],
       cond: Expression): Seq[AttributeReference] = {
     val relationSet = relation.outputSet
@@ -461,13 +495,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val extraRefs = (cond.references.toSeq ++ nonIdentityRhsRefs)
       .collect { case a: AttributeReference => a }
       .filter(relationSet.contains)
-    val partitionRefNames = relation.table.partitioning().toImmutableArraySeq
-      .flatMap(_.references.toImmutableArraySeq)
-      .map(_.fieldNames.head)
-      .toSet
-    val partitionAttrs = relation.output
-      .filter(a => partitionRefNames.exists(name => conf.resolver(name, a.name)))
-    dedupAttrs(connectorDataAttrs ++ partitionAttrs ++ extraRefs)
+    dedupAttrs(connectorDataAttrs ++ scanOnlyDataAttrs ++ extraRefs)
   }
 
   /**
@@ -487,6 +515,23 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     if (missing.nonEmpty) {
       throw QueryCompilationErrors.requiredDataAttributesMissingUpdatedColumnsError(
         operation.getClass.getName, missing)
+    }
+  }
+
+  /**
+   * Enforces that `requiredDataAttributes()` and `scanOnlyDataAttributes()` are disjoint.
+   */
+  private def validateNoOverlap(
+      operation: RowLevelOperation,
+      connectorDataAttrs: Seq[AttributeReference],
+      scanOnlyDataAttrs: Seq[AttributeReference]): Unit = {
+    val requiredIds = connectorDataAttrs.map(_.exprId).toSet
+    val overlapping = scanOnlyDataAttrs.collect {
+      case attr if requiredIds.contains(attr.exprId) => attr.name
+    }.distinct
+    if (overlapping.nonEmpty) {
+      throw QueryCompilationErrors.requiredDataAttributesOverlapScanOnlyAttributesError(
+        operation.getClass.getName, overlapping)
     }
   }
 
