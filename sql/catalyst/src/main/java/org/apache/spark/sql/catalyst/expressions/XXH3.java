@@ -413,21 +413,17 @@ public final class XXH3 {
    */
   public static UTF8String hash128Hex(byte[] input, long seed) {
     long[] h = hash128(input, seed);
-    byte[] out = new byte[16];
-    writeBE64(out, 0, h[1]);
-    writeBE64(out, 8, h[0]);
     byte[] hex = new byte[32];
-    for (int i = 0; i < 16; i++) {
-      int b = out[i] & 0xFF;
-      hex[i * 2] = HEX_DIGITS[b >>> 4];
-      hex[i * 2 + 1] = HEX_DIGITS[b & 0x0F];
-    }
+    writeHex64(hex, 0, h[1]);
+    writeHex64(hex, 16, h[0]);
     return UTF8String.fromBytes(hex);
   }
 
-  private static void writeBE64(byte[] out, int offset, long value) {
+  private static void writeHex64(byte[] hex, int offset, long value) {
     for (int i = 0; i < 8; i++) {
-      out[offset + i] = (byte) (value >>> (56 - 8 * i));
+      int b = (int) (value >>> (56 - 8 * i)) & 0xFF;
+      hex[offset + i * 2] = HEX_DIGITS[b >>> 4];
+      hex[offset + i * 2 + 1] = HEX_DIGITS[b & 0x0F];
     }
   }
 }
