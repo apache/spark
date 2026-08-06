@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
@@ -41,9 +42,9 @@ import org.apache.spark.internal.config.{EXECUTOR_MEMORY, PLUGINS}
 import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded, SparkListenerExecutorRemoved, TaskDescription}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{KillTask, LaunchTask}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{EXECUTOR_DRIVER_INSTANCE_TOKEN, KillTask, LaunchTask, RegisterExecutor}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{SerializableBuffer, SslTestUtils, ThreadUtils, Utils}
 
@@ -612,6 +613,71 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       }
     } finally {
       sc.removeSparkListener(listener)
+    }
+  }
+
+  test("SPARK-58322: CoarseGrainedExecutorBackend sends token in RegisterExecutor") {
+    val testToken = "driver-instance-token-test"
+
+    val driverRpcEnv = RpcEnv.create(
+      "test-driver", "localhost", 0, new SparkConf(),
+      new SecurityManager(new SparkConf()), clientMode = false)
+
+    val capturedRegister = new AtomicReference[RegisterExecutor]()
+    val oldToken = System.getProperty(EXECUTOR_DRIVER_INSTANCE_TOKEN)
+    try {
+      driverRpcEnv.setupEndpoint("CoarseGrainedScheduler", new RpcEndpoint {
+        override val rpcEnv: RpcEnv = driverRpcEnv
+        override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+          case msg: RegisterExecutor =>
+            capturedRegister.set(msg)
+            context.sendFailure(new RuntimeException("test: captured RegisterExecutor"))
+        }
+      })
+
+      System.setProperty(EXECUTOR_DRIVER_INSTANCE_TOKEN, testToken)
+      val executorConf = new SparkConf()
+        .set(EXECUTOR_MEMORY.key, "512m")
+      val executorRpcEnv = RpcEnv.create(
+        "test-executor", "localhost", 0, executorConf,
+        new SecurityManager(executorConf), clientMode = true)
+      val serializer = new JavaSerializer(executorConf)
+      val env = createMockEnv(executorConf, serializer, Some(executorRpcEnv))
+      val resourceProfile = ResourceProfile.getOrCreateDefaultProfile(executorConf)
+
+      val backend = new CoarseGrainedExecutorBackend(
+        executorRpcEnv,
+        s"spark://CoarseGrainedScheduler@localhost:${driverRpcEnv.address.port}",
+        "1", "localhost", "localhost", 1, env, None, resourceProfile) {
+        override protected def exitExecutor(code: Int, reason: String,
+            throwable: Throwable = null, notifyDriver: Boolean = true): Unit = {
+          throw new RuntimeException(s"Test exit prevented: $reason")
+        }
+      }
+      executorRpcEnv.setupEndpoint("Executor", backend)
+
+      try {
+        eventually(timeout(30.seconds)) {
+          val msg = capturedRegister.get()
+          assert(msg != null, "RegisterExecutor was not received by the driver")
+          assert(msg.attributes.contains(EXECUTOR_DRIVER_INSTANCE_TOKEN),
+            s"RegisterExecutor attributes should contain " +
+              s"$EXECUTOR_DRIVER_INSTANCE_TOKEN: ${msg.attributes}")
+          assert(msg.attributes(EXECUTOR_DRIVER_INSTANCE_TOKEN) == testToken,
+            s"Expected $EXECUTOR_DRIVER_INSTANCE_TOKEN=$testToken, " +
+              s"got ${msg.attributes(EXECUTOR_DRIVER_INSTANCE_TOKEN)}")
+        }
+      } finally {
+        executorRpcEnv.shutdown()
+      }
+    } finally {
+      driverRpcEnv.shutdown()
+      SparkEnv.set(null)
+      if (oldToken == null) {
+        System.clearProperty(EXECUTOR_DRIVER_INSTANCE_TOKEN)
+      } else {
+        System.setProperty(EXECUTOR_DRIVER_INSTANCE_TOKEN, oldToken)
+      }
     }
   }
 

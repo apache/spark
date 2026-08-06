@@ -29,7 +29,22 @@ private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
 private[spark] object CoarseGrainedClusterMessages {
 
+  /**
+   * Name of the driver instance token. Used as both the environment variable
+   * name for propagating the token to executor processes (set via
+   * [[org.apache.spark.SparkConf.setExecutorEnv]]) and the attribute key in
+   * [[RegisterExecutor]]. The driver validates this token to prevent an
+   * executor from connecting to the wrong driver after a port-reuse /
+   * driver-swap scenario.
+   */
+  val EXECUTOR_DRIVER_INSTANCE_TOKEN = "SPARK_EXECUTOR_DRIVER_INSTANCE_TOKEN"
+
   case class RetrieveSparkAppConfig(resourceProfileId: Int) extends CoarseGrainedClusterMessage
+
+  case class RetrieveSparkAppConfigWithIdentity(
+      resourceProfileId: Int,
+      driverInstanceToken: String)
+    extends CoarseGrainedClusterMessage
 
   case class SparkAppConfig(
       sparkProperties: Seq[(String, String)],

@@ -34,7 +34,7 @@ import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointAddress}
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{EXECUTOR_DRIVER_INSTANCE_TOKEN, RemoveExecutor}
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -113,7 +113,8 @@ private[spark] class StandaloneSchedulerBackend(
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
-      args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
+      args, sc.executorEnvs.toMap + (EXECUTOR_DRIVER_INSTANCE_TOKEN -> driverInstanceToken),
+      classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val webUrl = sc.ui.map(_.webUrl).getOrElse("")
     val coresPerExecutor = conf.getOption(config.EXECUTOR_CORES.key).map(_.toInt)
     // If we're using dynamic allocation, set our initial executor limit to 0 for now.

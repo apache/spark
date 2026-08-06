@@ -18,6 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
 
@@ -31,14 +32,14 @@ import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito.{atLeastOnce, mock, never, spy, verify, when}
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, LiveListenerBus, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor, StopDriver}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{EXECUTOR_DRIVER_INSTANCE_TOKEN, RegisterExecutor, RemoveExecutor, RetrieveSparkAppConfigWithIdentity, SparkAppConfig, StopDriver}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
 
@@ -349,5 +350,67 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     val id2 = backendWithoutAppId.applicationId()
     assert(id1 === id2, "applicationId() must return the same value on repeated calls")
     assert(id1.startsWith("spark-"), "generated app ID should have the spark- prefix")
+  }
+
+  test("SPARK-58322: Kubernetes executor backend carries driver instance token in " +
+    "RetrieveSparkAppConfigWithIdentity") {
+    val testAppId = "app-k8s-production-test"
+    val testToken = "driver-instance-token-k8s-test"
+
+    val driverRpcEnv = RpcEnv.create("test-k8s-driver", "localhost", 0, new SparkConf(),
+      new SecurityManager(new SparkConf()), clientMode = false)
+    val capturedMsg = new AtomicReference[RetrieveSparkAppConfigWithIdentity]()
+    try {
+      driverRpcEnv.setupEndpoint("CoarseGrainedScheduler", new RpcEndpoint {
+        override val rpcEnv: RpcEnv = driverRpcEnv
+        override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+          case msg: RetrieveSparkAppConfigWithIdentity =>
+            capturedMsg.set(msg)
+            context.reply(SparkAppConfig(
+              Seq("spark.app.id" -> testAppId),
+              None, None, ResourceProfile.getOrCreateDefaultProfile(new SparkConf()), None))
+        }
+      })
+
+      val args = KubernetesExecutorBackend.Arguments(
+        driverUrl = s"spark://CoarseGrainedScheduler@localhost:${driverRpcEnv.address.port}",
+        executorId = "1",
+        bindAddress = "localhost",
+        hostname = "localhost",
+        cores = 1,
+        appId = testAppId,
+        workerUrl = None,
+        resourcesFileOpt = None,
+        resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+        podName = "test-pod")
+
+      val prevEnv = SparkEnv.get
+      val oldToken = System.getProperty(EXECUTOR_DRIVER_INSTANCE_TOKEN)
+      try {
+        System.setProperty(EXECUTOR_DRIVER_INSTANCE_TOKEN, testToken)
+        intercept[Exception] {
+          KubernetesExecutorBackend.run(args,
+            (_, _, _, _, _) => throw new RuntimeException("expected"))
+        }
+      } finally {
+        if (oldToken == null) {
+          System.clearProperty(EXECUTOR_DRIVER_INSTANCE_TOKEN)
+        } else {
+          System.setProperty(EXECUTOR_DRIVER_INSTANCE_TOKEN, oldToken)
+        }
+        val currentEnv = SparkEnv.get
+        if (currentEnv != null && (currentEnv ne prevEnv)) {
+          currentEnv.stop()
+        }
+        SparkEnv.set(prevEnv)
+      }
+
+      val msg = capturedMsg.get()
+      assert(msg != null, "RetrieveSparkAppConfigWithIdentity was not received by the driver")
+      assert(msg.driverInstanceToken == testToken,
+        s"Expected driverInstanceToken=$testToken, got ${msg.driverInstanceToken}")
+    } finally {
+      driverRpcEnv.shutdown()
+    }
   }
 }

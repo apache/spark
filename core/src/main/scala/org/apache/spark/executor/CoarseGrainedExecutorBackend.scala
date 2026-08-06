@@ -104,7 +104,8 @@ private[spark] class CoarseGrainedExecutorBackend(
       driver = Some(ref)
       env.executorBackend = Option(this)
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
-        extractAttributes, _resources, resourceProfile.id))
+        extractAttributes ++ Map(EXECUTOR_DRIVER_INSTANCE_TOKEN -> getDriverInstanceToken),
+        _resources, resourceProfile.id))
     }(ThreadUtils.sameThread).onComplete {
       case Success(_) =>
         self.send(RegisteredExecutor)
@@ -396,6 +397,19 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
   // registration request.
   case object RegisteredExecutor
 
+  /**
+   * Read the driver instance token from the environment. In production the
+   * cluster manager sets it as an environment variable via
+   * `spark.executorEnv.SPARK_EXECUTOR_DRIVER_INSTANCE_TOKEN`. The system
+   * property fallback exists for unit tests, which run in-process and cannot
+   * set environment variables.
+   */
+  private[spark] def getDriverInstanceToken: String = {
+    Option(System.getenv(EXECUTOR_DRIVER_INSTANCE_TOKEN))
+      .orElse(Option(System.getProperty(EXECUTOR_DRIVER_INSTANCE_TOKEN)))
+      .getOrElse(throw new SparkException("Driver instance token is not set."))
+  }
+
   case class Arguments(
       driverUrl: String,
       executorId: String,
@@ -454,7 +468,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         }
       }
 
-      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig(arguments.resourceProfileId))
+      val cfg = driver.askSync[SparkAppConfig](
+        RetrieveSparkAppConfigWithIdentity(arguments.resourceProfileId, getDriverInstanceToken))
       val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
       fetcher.shutdown()
 

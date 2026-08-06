@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.util.UUID
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
@@ -26,7 +27,7 @@ import scala.concurrent.Future
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState}
+import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
@@ -62,6 +63,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Total number of executors that are currently registered
   protected val totalRegisteredExecutors = new AtomicInteger(0)
   protected val conf = scheduler.sc.conf
+  private[spark] val driverInstanceToken = UUID.randomUUID().toString
+  // Propagate the token as an environment variable to executor processes (YARN, Kubernetes).
+  // Standalone mode adds it to Command.environment directly in StandaloneSchedulerBackend.
+  conf.setExecutorEnv(EXECUTOR_DRIVER_INSTANCE_TOKEN, driverInstanceToken)
   private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
   private val defaultAskTimeout = RpcUtils.askRpcTimeout(conf)
   // Submit tasks only after (registered resources / total expected resources)
@@ -149,7 +154,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Spark configuration sent to executors. This is a lazy val so that subclasses of the
     // scheduler can modify the SparkConf object before this view is created.
     private lazy val sparkProperties = scheduler.sc.conf.getAll
-      .filter { case (k, _) => k.startsWith("spark.") }
+      .filter { case (k, _) =>
+        k.startsWith("spark.") && k != s"spark.executorEnv.$EXECUTOR_DRIVER_INSTANCE_TOKEN"
+      }
       .toImmutableArraySeq
 
     private val logUrlHandler: ExecutorLogUrlHandler = new ExecutorLogUrlHandler(
@@ -244,11 +251,21 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         logError(log"Received unexpected message. ${MDC(ERROR, e)}")
     }
 
+    private def verifyDriverInstanceToken(token: Option[String]): Boolean = {
+      token.filter(_.nonEmpty).contains(driverInstanceToken)
+    }
+
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
 
       case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls,
           attributes, resources, resourceProfileId) =>
-        if (executorDataMap.contains(executorId)) {
+        if (!verifyDriverInstanceToken(attributes.get(EXECUTOR_DRIVER_INSTANCE_TOKEN))) {
+          val msg = "Executor did not supply a matching driver instance token. " +
+            "This likely means the executor connected to the wrong driver."
+          logWarning(log"Rejecting executor ${MDC(LogKeys.EXECUTOR_ID, executorId)}: " +
+            log"${MDC(ERROR, msg)}")
+          context.sendFailure(new SparkException(msg))
+        } else if (executorDataMap.contains(executorId)) {
           context.sendFailure(new IllegalStateException(s"Duplicate executor ID: $executorId"))
         } else if (scheduler.excludedNodes().contains(hostname) ||
             isExecutorExcluded(executorId, hostname)) {
@@ -276,6 +293,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           val resourcesInfo = resources.map { case (rName, info) =>
             (info.name, new ExecutorResourceInfo(info.name, info.addresses.toIndexedSeq))
           }
+          // Strip the driver instance token from attributes before storing or publishing.
+          // The token is only needed for verification; downstream listeners (event logging,
+          // REST API, status store) would otherwise expose it verbatim.
+          val redactedAttributes = attributes.removed(EXECUTOR_DRIVER_INSTANCE_TOKEN)
           // If we've requested the executor figure out when we did.
           val reqTs: Option[Long] = CoarseGrainedSchedulerBackend.this.synchronized {
             execRequestTimes.get(resourceProfileId).flatMap {
@@ -294,7 +315,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
 
           val data = new ExecutorData(executorRef, executorAddress, hostname,
-            0, cores, logUrlHandler.applyPattern(logUrls, attributes), attributes,
+            0, cores, logUrlHandler.applyPattern(logUrls, redactedAttributes), redactedAttributes,
             resourcesInfo, resourceProfileId, registrationTs = System.currentTimeMillis(),
             requestTs = reqTs)
           // This must be synchronized because variables mutated
@@ -353,14 +374,28 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             triggeredByExecutor = true))
 
       case RetrieveSparkAppConfig(resourceProfileId) =>
-        val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
-        val reply = SparkAppConfig(
-          sparkProperties,
-          SparkEnv.get.securityManager.getIOEncryptionKey(),
-          Option(delegationTokens.get()),
-          rp,
-          currentLogLevel)
-        context.reply(reply)
+        val msg = "Legacy RetrieveSparkAppConfig request rejected: it does not carry a " +
+          "driver instance token, so driver identity cannot be verified. " +
+          "Use RetrieveSparkAppConfigWithIdentity instead."
+        logWarning(msg)
+        context.sendFailure(new SparkException(msg))
+
+      case RetrieveSparkAppConfigWithIdentity(resourceProfileId, token) =>
+        if (!verifyDriverInstanceToken(Option(token))) {
+          val msg = "RetrieveSparkAppConfigWithIdentity rejected: executor did not supply " +
+            "a matching driver instance token."
+          logWarning(log"${MDC(ERROR, msg)}")
+          context.sendFailure(new SparkException(msg))
+        } else {
+          val rp = scheduler.sc.resourceProfileManager.resourceProfileFromId(resourceProfileId)
+          val reply = SparkAppConfig(
+            sparkProperties,
+            SparkEnv.get.securityManager.getIOEncryptionKey(),
+            Option(delegationTokens.get()),
+            rp,
+            currentLogLevel)
+          context.reply(reply)
+        }
 
       case IsExecutorAlive(executorId) => context.reply(isExecutorActive(executorId))
 
