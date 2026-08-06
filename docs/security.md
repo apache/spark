@@ -502,7 +502,8 @@ Configuration for SSL is organized hierarchically. The user can configure the de
 which will be used for all the supported communication protocols unless they are overwritten by
 protocol-specific settings. This way the user can easily provide the common settings for all the
 protocols without disabling the ability to configure each one individually. Note that all settings 
-are inherited this way, *except* for `spark.ssl.rpc.enabled` which must be explicitly set.
+are inherited this way, *except* for `spark.ssl.rpc.enabled` and `spark.ssl.connect.enabled` which
+must be explicitly set.
 
 The following table describes the SSL configuration namespaces:
 
@@ -536,6 +537,25 @@ The following table describes the SSL configuration namespaces:
     <td><code>spark.ssl.rpc</code></td>
     <td>Spark RPC communication</td>
   </tr>
+  <tr>
+    <td><code>spark.ssl.connect</code></td>
+    <td>
+      Spark Connect gRPC server. Server key material is PEM
+      (<code>certChain</code>, <code>privateKey</code>, <code>privateKeyPassword</code>);
+      JKS server key material and protocol/cipher overrides are not yet supported.
+      <code>spark.ssl.connect.openSslEnabled=true</code> is rejected at startup with a
+      <code>SparkException</code> (rather than silently falling back to the JDK provider),
+      so operators do not think they are running on OpenSSL when they are not; native OpenSSL
+      support is a follow-up. Client-certificate authentication (mutual TLS) is supported: set
+      <code>spark.ssl.connect.needClientAuth=true</code> and provide a JKS trust store via
+      <code>spark.ssl.connect.trustStore</code> + <code>spark.ssl.connect.trustStorePassword</code>.
+      <code>spark.ssl.connect.trustStoreReloadingEnabled</code> is accepted but not yet honored
+      (server logs a warning and loads the trust store once at startup); reloading is a
+      follow-up. Client-side mTLS (Spark Connect clients presenting a client certificate) is a
+      separate follow-up. The <code>spark.ssl.connect.port</code> setting is ignored: the Connect
+      server binds a single port (<code>spark.connect.grpc.binding.port</code>) regardless of TLS.
+    </td>
+  </tr>
 </table>
 
 The full breakdown of available SSL options can be found below. The `${ns}` placeholder should be
@@ -547,7 +567,7 @@ replaced with one of the above namespaces.
     <td><code>${ns}.enabled</code></td>
     <td>false</td>
     <td>Enables SSL. When enabled, <code>${ns}.ssl.protocol</code> is required.</td>
-    <td>ui,standalone,historyServer,rpc</td>
+    <td>ui,standalone,historyServer,rpc,connect</td>
   </tr>
   <tr>
     <td><code>${ns}.port</code></td>
@@ -626,7 +646,7 @@ replaced with one of the above namespaces.
     <td>
       Whether to require client authentication.
     </td>
-    <td>ui,standalone,historyServer</td>
+    <td>ui,standalone,historyServer,connect</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStore</code></td>
@@ -635,19 +655,19 @@ replaced with one of the above namespaces.
       Path to the trust store file. The path can be absolute or relative to the directory in which
       the process is started.
     </td>
-    <td>ui,standalone,historyServer,rpc</td>
+    <td>ui,standalone,historyServer,rpc,connect</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStorePassword</code></td>
     <td>None</td>
     <td>Password for the trust store.</td>
-    <td>ui,standalone,historyServer,rpc</td>
+    <td>ui,standalone,historyServer,rpc,connect</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStoreType</code></td>
     <td>JKS</td>
     <td>The type of the trust store.</td>
-    <td>ui,standalone,historyServer</td>
+    <td>ui,standalone,historyServer,connect</td>
   </tr>
   <tr>
     <td><code>${ns}.openSSLEnabled</code></td>
@@ -668,7 +688,7 @@ replaced with one of the above namespaces.
       directory in which the process is started. 
       This setting is required when using the OpenSSL implementation.
     </td>
-    <td>rpc</td>
+    <td>rpc,connect</td>
   </tr>
   <tr>
     <td><code>${ns}.privateKeyPassword</code></td>
@@ -676,7 +696,7 @@ replaced with one of the above namespaces.
     <td>
       The password to the above private key file in PEM format.
     </td>
-    <td>rpc</td>
+    <td>rpc,connect</td>
   </tr>
   <tr>
     <td><code>${ns}.certChain</code></td>
@@ -686,7 +706,7 @@ replaced with one of the above namespaces.
       directory in which the process is started. 
       This setting is required when using the OpenSSL implementation.
     </td>
-    <td>rpc</td>
+    <td>rpc,connect</td>
   </tr>
   <tr>
     <td><code>${ns}.trustStoreReloadingEnabled</code></td>
