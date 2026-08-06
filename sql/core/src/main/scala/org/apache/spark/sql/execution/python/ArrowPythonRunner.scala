@@ -138,7 +138,8 @@ class ArrowPythonWithNamedArgumentRunner(
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override protected def evalConf: Map[String, String] = {
-    if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
+    if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF ||
+        evalType == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF) {
       super.evalConf ++ Map(
         "input_type" -> schema.json
       )

@@ -36,6 +36,10 @@ object PythonUDF {
   private[this] val SCALAR_TYPES = Set(
     PythonEvalType.SQL_BATCHED_UDF,
     PythonEvalType.SQL_ARROW_BATCHED_UDF,
+    // Element-wise UDFs are row-shaped from the plan's point of view: one array column in, one
+    // array column out per row. They are extracted by `ExtractPythonUDFs` like any other scalar
+    // UDF; only the Python worker treats them element-wise.
+    PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
     PythonEvalType.SQL_SCALAR_ARROW_UDF,
@@ -44,6 +48,92 @@ object PythonUDF {
 
   def isScalarPythonUDF(e: Expression): Boolean = {
     e.isInstanceOf[PythonUDF] && SCALAR_TYPES.contains(e.asInstanceOf[PythonUDF].evalType)
+  }
+
+  /**
+   * Whether `e` is a Python UDF that can be lifted out of a higher-order function's lambda by
+   * `ExtractPythonUDFFromLambda`, which applies it to the whole array outside the lambda.
+   *
+   * Only the row-at-a-time eval types qualify. A pandas UDF receives a `Series` rather than one
+   * value per call, so the element-wise rewrite would change its meaning.
+   *
+   * This is shared with `CheckAnalysis` so that the shapes analysis accepts are exactly those the
+   * optimizer rule can rewrite.
+   */
+  def isElementwiseRewritableUDF(e: Expression): Boolean = e match {
+    case udf: PythonUDF =>
+      udf.evalType == PythonEvalType.SQL_BATCHED_UDF ||
+        udf.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF
+    case _ => false
+  }
+
+  /**
+   * Whether every Python UDF inside `hof`'s lambdas can be lifted out by
+   * `ExtractPythonUDFFromLambda`. Used by `CheckAnalysis` to decide whether to reject the plan.
+   *
+   * A shape is rewritable when the UDF is applied per element of an array the higher-order
+   * function iterates, so that the UDF can instead be applied once to the whole array. That rules
+   * out:
+   *   - a UDF reading `aggregate`'s accumulator, which is sequential (step n depends on n-1);
+   *   - a UDF in `array_sort`'s comparator that receives both elements at once, for which no
+   *     per-element key exists;
+   *   - higher-order functions this rule does not handle yet (the map family, `zip_with`).
+   */
+  def canRewritePythonUDFInLambda(hof: HigherOrderFunction): Boolean = {
+    // Every Python UDF in the lambdas must itself be of a rewritable eval type. A pandas UDF,
+    // for instance, is never rewritable regardless of the enclosing function.
+    val allUDFsRewritable = hof.functions.forall { f =>
+      f.collect { case udf: PythonUDF => udf }.forall(isElementwiseRewritableUDF)
+    }
+    // The rewrite lifts the UDF onto the array the lambda iterates, so that array must be
+    // computable outside every lambda. It is not when it references a lambda variable bound
+    // further out, as in the nested `transform(arr, inner -> transform(inner, x -> udf(x)))`:
+    // there the inner array only exists while the outer function iterates, so the lifted UDF
+    // would still be trapped inside the outer lambda and could not be extracted.
+    //
+    // A lambda variable that the argument itself binds (e.g. an argument that is another
+    // higher-order function over a real column) is fine, so only *free* references disqualify.
+    val argumentsAreFree = !hof.arguments.exists(hasFreeLambdaVariable)
+    allUDFsRewritable && argumentsAreFree && (hof match {
+      case _: ArrayTransform | _: ArrayFilter | _: ArrayExists | _: ArrayForAll =>
+        // The UDF is applied to each element, which is exactly the rewritable shape.
+        true
+
+      case ArrayAggregate(_, _, merge, finish) =>
+        // A UDF on the element is rewritable; one reading the accumulator is not. A UDF in
+        // `finish` is not handled here: `finish` runs once on the final accumulator, and moving
+        // the UDF outside the fold would call it on the null a fold over a null array produces.
+        !finish.exists(_.isInstanceOf[PythonUDF]) && !mergeReadsAccumulator(merge)
+
+      case _ => false
+    })
+  }
+
+  /**
+   * Whether `e` references a [[NamedLambdaVariable]] that it does not itself bind, i.e. one bound
+   * by an enclosing lambda. Such an expression cannot be evaluated outside that lambda.
+   */
+  def hasFreeLambdaVariable(e: Expression): Boolean = {
+    def check(expr: Expression, bound: Set[ExprId]): Boolean = expr match {
+      case LambdaFunction(function, arguments, _) =>
+        check(function, bound ++ arguments.map(_.exprId))
+      case v: NamedLambdaVariable => !bound.contains(v.exprId)
+      case other => other.children.exists(check(_, bound))
+    }
+    check(e, Set.empty)
+  }
+
+  private def mergeReadsAccumulator(merge: Expression): Boolean = merge match {
+    case LambdaFunction(body, Seq(accVar: NamedLambdaVariable, _), _) =>
+      body.exists {
+        case udf: PythonUDF if isElementwiseRewritableUDF(udf) =>
+          udf.exists {
+            case v: NamedLambdaVariable => v.exprId == accVar.exprId
+            case _ => false
+          }
+        case _ => false
+      }
+    case _ => true
   }
 
   def isWindowPandasUDF(e: PythonFuncExpression): Boolean = {

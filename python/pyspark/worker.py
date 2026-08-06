@@ -623,6 +623,7 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     # Scalar, aggregation and window UDFs: (func, args_offsets, kwargs_offsets, return_type).
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
@@ -1821,6 +1822,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
 def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -2985,6 +2987,174 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     assign_cols_by_name=runner_conf.assign_cols_by_name,
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF:
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        # Element-wise UDFs back Python UDFs used inside higher-order function lambdas (e.g.
+        # ``transform(arr, x -> plus_one(x))``). ExtractPythonUDFFromLambda rewrites such a
+        # lambda so the UDF is applied to the *whole array* outside the lambda; each argument
+        # therefore arrives as an ``array<T>`` column and each result must be an ``array<R>``
+        # of exactly the same shape (same length per row, same null rows) so that the
+        # higher-order function can zip results positionally beside the input elements.
+        #
+        # Rather than looping over rows in Python, flatten the list columns and evaluate the
+        # UDF once over the concatenated elements of the entire batch, then re-nest the
+        # results using the input's offsets. That makes the number of Python-level calls
+        # proportional to the number of *elements* in the batch with a single crossing of the
+        # Arrow boundary, instead of one crossing per row.
+
+        # --- UDF preparation ---
+        udf_infos = []
+        for udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type in udfs:
+            wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
+                udf_func, udf_args_offsets, udf_kwargs_offsets
+            )
+            # The user's function is a scalar function: it returns one value per element, and its
+            # return type was pickled alongside it, so it arrives here unchanged. The plan-level
+            # type is `array<R>` (see ExtractPythonUDFFromLambda), but the conversion below is
+            # per element, so the element type is exactly this declared return type. An
+            # `array<R>`-returning UDF is not special-cased: it nests one level deeper.
+            element_return_type = udf_return_type
+            udf_infos.append(
+                (
+                    wrapped_func,
+                    args_kwargs_offsets,
+                    to_arrow_type(
+                        element_return_type,
+                        timezone="UTC",
+                        prefers_large_types=runner_conf.use_large_var_types,
+                    ),
+                    LocalDataToArrowConversion._create_converter(
+                        element_return_type,
+                        none_on_identity=True,
+                        int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                    ),
+                )
+            )
+        col_names = [f"_{i}" for i in range(len(udfs))]
+
+        # --- Input preparation ---
+        # An array<T> argument is flattened before it reaches the UDF, so its values must be
+        # converted with the *element* type. A non-array argument is a per-row value that is
+        # broadcast to the row's elements, so it is converted with its own type.
+        arrow_to_py_converters = [
+            ArrowTableToRowsConversion._create_converter(
+                f.dataType.elementType if isinstance(f.dataType, ArrayType) else f.dataType,
+                none_on_identity=True,
+                binary_as_bytes=runner_conf.binary_as_bytes,
+            )
+            for f in eval_conf.input_type
+        ]
+
+        @fail_on_stopiteration
+        def _evaluate_elementwise_udf(udf_func, rows):
+            if runner_conf.arrow_concurrency_level <= 0:
+                return [udf_func(*row) for row in rows]
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
+                return list(pool.map(lambda row: udf_func(*row), rows))
+
+        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            for input_batch in data:
+                num_rows = input_batch.num_rows
+
+                # --- Input: Arrow list columns -> flattened Python element lists ---
+                # ``flatten()`` drops the elements of null rows and honours slice offsets, so
+                # it is the authority on both the element values and their count. The shape
+                # used to re-nest results is taken from the same array.
+                columns = []
+                shapes = []
+                for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters):
+                    if pa.types.is_list(col.type) or pa.types.is_large_list(col.type):
+                        # ``flatten()`` and ``list_value_length()`` are both slice-aware and
+                        # agree with each other, so no offset normalization is needed here.
+                        values = ArrowTableToRowsConversion._to_pylist(col.flatten())
+                        if conv is not None:
+                            values = [conv(v) for v in values]
+                        columns.append(values)
+                        shapes.append(col)
+                    else:
+                        # A non-array argument is constant across the elements of a row (e.g.
+                        # a UDF argument that does not depend on the lambda variable). It is
+                        # broadcast per element below, once the element count is known.
+                        scalar_values = ArrowTableToRowsConversion._to_pylist(col)
+                        columns.append(scalar_values)
+                        shapes.append(None)
+
+                # The shape to re-nest by: every array argument is guaranteed by the rewrite to
+                # have the same shape, so the first array column defines it. The rewrite always
+                # passes at least one array argument, hence the assertion.
+                shape = next((s for s in shapes if s is not None), None)
+                assert shape is not None, "an element-wise UDF requires an array argument"
+                # ``list_value_length`` yields null for a null row and honours slice offsets.
+                lengths = pc.list_value_length(shape).to_pylist()
+
+                # Dense offsets plus an explicit validity mask re-nest a flat result list into
+                # one array per row. Null rows stay null: their elements were never evaluated,
+                # so they consume no offsets. (Encoding a null row as a null *offset* would be
+                # ambiguous, since one null offset also truncates the preceding row.)
+                total_elements = sum(n for n in lengths if n is not None)
+                offsets = []
+                running = 0
+                for n in lengths:
+                    offsets.append(running)
+                    if n is not None:
+                        running += n
+                offsets.append(running)
+                # ``ListArray`` uses int32 offsets, ``LargeListArray`` int64; build whichever
+                # matches the input so the result keeps the input's list width.
+                is_large = pa.types.is_large_list(shape.type)
+                list_array_cls = pa.LargeListArray if is_large else pa.ListArray
+                offsets_arr = pa.array(offsets, type=pa.int64() if is_large else pa.int32())
+                null_mask = pa.array([n is None for n in lengths], type=pa.bool_())
+
+                # Broadcast non-array arguments so every element of a row sees its row's value.
+                broadcast_columns = []
+                for values, s in zip(columns, shapes):
+                    if s is not None:
+                        broadcast_columns.append(values)
+                    else:
+                        broadcast_columns.append(
+                            [
+                                values[i]
+                                for i, n in enumerate(lengths)
+                                if n is not None
+                                for _ in range(n)
+                            ]
+                        )
+
+                # --- Process: one pass over all elements of the batch ---
+                output_arrays = []
+                for wrapped_func, offsets_meta, arrow_element_type, result_conv in udf_infos:
+                    rows = (
+                        [() for _ in range(total_elements)]
+                        if not offsets_meta
+                        else list(zip(*[broadcast_columns[o] for o in offsets_meta]))
+                    )
+                    results = _evaluate_elementwise_udf(wrapped_func, rows)
+                    verify_result_row_count(len(results), total_elements)
+
+                    # --- Output: Python -> Arrow, then re-nest to array<R> ---
+                    converted = (
+                        [result_conv(r) for r in results] if result_conv is not None else results
+                    )
+                    try:
+                        flat_arr = pa.array(converted, type=arrow_element_type)
+                    except (pa.lib.ArrowInvalid, pa.lib.ArrowTypeError):
+                        flat_arr = pa.array(converted).cast(
+                            target_type=arrow_element_type, safe=runner_conf.safecheck
+                        )
+                    output_arrays.append(
+                        list_array_cls.from_arrays(offsets_arr, flat_arr, mask=null_mask)
+                    )
+
+                yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 
         # profiling is not supported for UDF
         return func, None, ser, ser

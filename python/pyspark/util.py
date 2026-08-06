@@ -662,6 +662,7 @@ class PythonEvalType:
 
     SQL_BATCHED_UDF: "SQLBatchedUDFType" = 100
     SQL_ARROW_BATCHED_UDF: "SQLArrowBatchedUDFType" = 101
+    SQL_ARROW_ELEMENTWISE_UDF: "SQLArrowElementwiseUDFType" = 102
 
     SQL_SCALAR_PANDAS_UDF: "PandasScalarUDFType" = 200
     SQL_GROUPED_MAP_PANDAS_UDF: "PandasGroupedMapUDFType" = 201

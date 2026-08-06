@@ -342,6 +342,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with Logging {
             case PythonEvalType.SQL_SCALAR_PANDAS_UDF
                  | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
                  | PythonEvalType.SQL_ARROW_BATCHED_UDF
+                 | PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_UDF
                  | PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)

@@ -5333,6 +5333,17 @@ object SQLConf {
           " must be more than one.")
       .createOptional
 
+  val PYTHON_UDF_IN_HIGHER_ORDER_FUNCTION_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.inHigherOrderFunction.enabled")
+      .doc("When true, a scalar Python UDF may be used inside the lambda of a higher-order " +
+        "function such as `transform` or `filter`. The UDF is not evaluated inside the lambda; " +
+        "it is applied to the whole array outside the lambda and the lambda reads the " +
+        "precomputed result. When false, such queries fail with " +
+        "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF as before.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PYTHON_UDF_ARROW_FALLBACK_ON_UDT =
     buildConf("spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT")
       .internal()
@@ -9218,6 +9229,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
 
   def pythonUDFArrowFallbackOnUDT: Boolean = getConf(PYTHON_UDF_ARROW_FALLBACK_ON_UDT)
+
+  def pythonUDFInHigherOrderFunctionEnabled: Boolean =
+    getConf(PYTHON_UDF_IN_HIGHER_ORDER_FUNCTION_ENABLED)
 
   def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
 
