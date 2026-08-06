@@ -119,18 +119,10 @@ def _fmod_func(c1: Column, c2: Column) -> Column:
 
 
 def _floor_divide_func(c1, c2):
-    c1_double = c1.cast("double")
-    c2_double = c2.cast("double")
-    has_floating_input = F.typeof(c1).isin("float", "double") | F.typeof(c2).isin(
-        "float", "double"
-    )
-
     return F.when(
-        has_floating_input,
-        F.when(
-            F.isnan(c1_double) | F.isnan(c2_double),
-            F.lit(float("nan")),
-        )
+        F.typeof(c1).isin("float", "double") | F.typeof(c2).isin("float", "double"),
+        F.when(c1.isNull() | F.isnan(c1), c1)
+        .when(c2.isNull() | F.isnan(c2), c2)
         .when(
             c2 == 0,
             F.when(c1 == 0, F.lit(float("nan")))
@@ -141,11 +133,11 @@ def _floor_divide_func(c1, c2):
             .otherwise(F.lit(float("inf"))),
         )
         .when(
-            (c1_double == float("-inf")) | (c1_double == float("inf")),
+            c1.cast("double").isin(float("-inf"), float("inf")),
             F.lit(float("nan")),
         )
         .when(
-            (c2_double == float("-inf")) | (c2_double == float("inf")),
+            c2.cast("double").isin(float("-inf"), float("inf")),
             F.when(c1 == 0, (c1 / c2).cast("double"))
             .when((c1 < 0) != (c2 < 0), F.lit(-1.0))
             .otherwise(F.lit(0.0)),
@@ -153,8 +145,11 @@ def _floor_divide_func(c1, c2):
         .when(c1 == 0, (c1 / c2).cast("double"))
         .otherwise((c1 / c2) - F.pmod(c1 / c2, F.lit(1.0))),
     ).otherwise(
-        F.when(c2 == 0, F.lit(0.0)).otherwise((c1 / c2) - F.pmod(c1 / c2, F.lit(1.0)))
-    ).cast("double")
+        F.when(c1.isNull() | F.isnan(c1), c1)
+        .when(c2.isNull() | F.isnan(c2), c2)
+        .when(c2 == 0, F.lit(0.0))
+        .otherwise((c1 / c2) - F.pmod(c1 / c2, F.lit(1.0)))
+    )
 
 
 binary_np_spark_mappings = {
