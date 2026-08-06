@@ -482,6 +482,70 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       s"expected SPLIT_UPDATE_ROW_ID_REASSIGNMENT but got: ${ex.getCondition}")
   }
 
+  private def createAndInitTableScanOnly(schemaString: String, jsonData: String): Unit = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("column-update-scan-only", "true")
+    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
+    val transforms = Array[Transform](identity(reference(Seq("dep"))))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(columns)
+      .withPartitions(transforms)
+      .withProperties(props)
+      .build()
+    catalog.createTable(ident, tableInfo)
+    append(schemaString, jsonData)
+  }
+
+  test("column-update: scanOnlyDataAttributes resolves write-side clustering on a data " +
+    "column without leaking it into the write payload") {
+    createAndInitTableScanOnly("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
+
+    // `dep` must not appear in the narrow write payload -- it was declared scan-only, not
+    // required -- even though it drove write clustering.
+    checkLastWriteInfo(
+      expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
+      expectedUpdateSchema = Some(StructType(Seq(
+        PK_FIELD,
+        StructField("id", IntegerType, nullable = false)
+      ))))
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+  }
+
+  test("column-update: requiredDataAttributes and scanOnlyDataAttributes overlap is rejected") {
+    createAndInitTableOverlap("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }""".stripMargin)
+
+    val ex = intercept[org.apache.spark.sql.AnalysisException] {
+      sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
+    }
+    assert(ex.getCondition == "REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES",
+      s"expected REQUIRED_DATA_ATTRIBUTES_OVERLAP_SCAN_ONLY_ATTRIBUTES but got: ${ex.getCondition}")
+  }
+
+  private def createAndInitTableOverlap(schemaString: String, jsonData: String): Unit = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("column-update-overlap", "true")
+    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
+    val transforms = Array[Transform](identity(reference(Seq("dep"))))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(columns)
+      .withPartitions(transforms)
+      .withProperties(props)
+      .build()
+    catalog.createTable(ident, tableInfo)
+    append(schemaString, jsonData)
+  }
+
   // ---------------------------------------------------------------------------
   // Scan-narrowing tests: verify that when the connector opts into column updates,
   // the physical scan reads only the columns actually needed by the operation.
@@ -493,16 +557,18 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
   // ---------------------------------------------------------------------------
 
   test("column-update: scan excludes columns outside connector-declared + cond + RHS refs") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |{ "pk": 2, "id": 2, "dep": "software" }
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING, extra STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr", "extra": "x" }
+        |{ "pk": 2, "id": 2, "dep": "software", "extra": "y" }
         |""".stripMargin)
 
     // requiredDataAttributes = [pk, id]; cond refs [pk] only; RHS is a literal.
-    // `dep` is neither declared nor referenced -- it must not appear in the scan.
+    // `dep` is scan-only declared (needed for scan-side partitioning resolution) so it must
+    // appear; `extra` is neither declared, scan-only, nor referenced, so it must not.
     sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
 
-    checkLastScanExcludes("dep")
+    checkLastScanIncludes("dep")
+    checkLastScanExcludes("extra")
   }
 
   test("column-update: scan transparently widens for cond-referenced columns") {
@@ -519,21 +585,23 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
   }
 
   test("column-update: scan transparently widens for assignment RHS references") {
-    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
-        |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "hr" }
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING, extra STRING",
+      """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr", "extra": "x" }
+        |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "hr", "extra": "y" }
         |""".stripMargin)
 
     // requiredDataAttributes = [pk, salary]; RHS `salary + bonus` references `bonus`.
-    // `bonus` must appear in the scan even though it's not declared as required.
+    // `bonus` must appear in the scan even though it's not declared as required. `dep` is
+    // scan-only declared (needed for scan-side partitioning resolution) so it also appears;
+    // `extra` is neither declared, scan-only, nor referenced, so it must not.
     sql(s"UPDATE $tableNameAsString SET salary = salary + bonus WHERE pk = 1")
 
-    checkLastScanIncludes("bonus", "salary")
-    checkLastScanExcludes("dep")
+    checkLastScanIncludes("bonus", "salary", "dep")
+    checkLastScanExcludes("extra")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
-      Row(1, 110, 10, "hr") :: Row(2, 200, 20, "hr") :: Nil)
+      Row(1, 110, 10, "hr", "x") :: Row(2, 200, 20, "hr", "y") :: Nil)
   }
 
   test("column-update: analysis fails when assignment key is outside requiredDataAttributes") {
