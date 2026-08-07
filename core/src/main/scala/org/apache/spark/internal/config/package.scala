@@ -1625,6 +1625,7 @@ package object config {
         "concurrent download causes network saturation and timeouts. " +
         "Wildcard '*' is denoted to not downloading archives for any the schemes.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .toSequence
       .createWithDefault(Nil)
