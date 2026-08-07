@@ -488,21 +488,23 @@ abstract class StreamExecution(
   private def setSparkSessionConfigsForRealTimeMode(sparkSessionForStream: SparkSession): Unit = {
     val conf = sparkSessionForStream.conf
 
-    // SOFT DEFAULT. Real-Time Mode benefits from state store checkpoint format v2: it gives each
+    // SOFT DEFAULTS. Real-Time Mode benefits from state store checkpoint format v2: it gives each
     // batch its own state store checkpoint ids, which matters because a failed batch is rerun from
-    // committed offsets. v2 requires RocksDB -- HDFSBackedStateStoreProvider throws on
-    // checkpointFormatVersion > 1 -- so the two move together and are only defaulted when the user
-    // has pinned NEITHER. The commit log format follows this config for a fresh checkpoint, while
-    // an existing checkpoint keeps the version it was created with (see
-    // CheckpointVersionManager.resolveCommitLogVersion), so raising the default cannot start
-    // writing a format an existing checkpoint was not created with.
+    // committed offsets. v2 requires the RocksDB state store provider. These are defaulted with two
+    // INDEPENDENT guards, matching the Databricks runtime: each key is set only if the user has not
+    // set that key. If the user pins the provider to a non-RocksDB store but leaves the version
+    // unset, the version is still raised to 2 and the incompatible combination throws later
+    // (HDFSBackedStateStoreProvider rejects checkpointFormatVersion > 1) rather than silently
+    // running at v1 -- the runtime makes the same choice deliberately.
     val checkpointVersionKey = SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key
-    val providerKey = SQLConf.STATE_STORE_PROVIDER_CLASS.key
-    if (!conf.contains(checkpointVersionKey) && !conf.contains(providerKey)) {
+    if (!conf.contains(checkpointVersionKey)) {
       logInfo(log"Real-Time Mode: defaulting ${MDC(CONFIG, checkpointVersionKey)}=2")
+      conf.set(checkpointVersionKey, CommitLog.VERSION_2.toString)
+    }
+    val providerKey = SQLConf.STATE_STORE_PROVIDER_CLASS.key
+    if (!conf.contains(providerKey)) {
       logInfo(log"Real-Time Mode: defaulting " +
         log"${MDC(CONFIG, providerKey)}=RocksDBStateStoreProvider")
-      conf.set(checkpointVersionKey, CommitLog.VERSION_2.toString)
       conf.set(providerKey, classOf[RocksDBStateStoreProvider].getName)
     }
 

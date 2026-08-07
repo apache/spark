@@ -75,10 +75,10 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
         observed(SQLConf.STATE_STORE_PROVIDER_CLASS.key))
   }
 
-  test("pinning the state-store provider suppresses the checkpoint-format default") {
-    // The two move together: checkpoint format v2 is incompatible with
-    // HDFSBackedStateStoreProvider, which throws on checkpointFormatVersion > 1. Defaulting the
-    // version for a user who pinned the HDFS provider would break a query that works today.
+  test("the checkpoint-format and provider defaults are applied independently") {
+    // The two are defaulted by independent guards (matching the runtime): pinning the provider does
+    // NOT suppress the version default. A user who pins the HDFS provider still gets version 2, and
+    // the incompatible combination is caught downstream rather than silently running at v1.
     withSQLConf(
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[HDFSBackedStateStoreProvider].getName) {
       val observed = runRealTimeQueryAndReadConfs(
@@ -88,19 +88,41 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
           .contains(classOf[HDFSBackedStateStoreProvider].getName),
         "a pinned state-store provider must be left alone, got " +
           observed(SQLConf.STATE_STORE_PROVIDER_CLASS.key))
-      assert(!observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).contains("2"),
-        "pinning the provider must also suppress the checkpoint-format default, got " +
+      assert(observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).contains("2"),
+        "the version default is independent of the provider, so it must still be 2, got " +
           observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
     }
   }
 
   test("an explicit checkpoint format version is not overridden by Real-Time Mode") {
-    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
+    // The defaulting guard respects an explicit version rather than forcing 2. v2 is used here
+    // (not v1) because a resolved commit log below v2 is rejected for a Real-Time Mode query, so v1
+    // could not run to completion -- that rejection is covered separately below.
+    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
       val observed = runRealTimeQueryAndReadConfs(
         Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
-      assert(observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).contains("1"),
+      assert(observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).contains("2"),
         "an explicitly configured checkpoint format version must be left alone, got " +
           observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
+    }
+  }
+
+  test("a fresh Real-Time Mode query with an explicit v1 checkpoint format is rejected") {
+    // The rejection is unconditional on the resolved commit log version, so even a fresh checkpoint
+    // is rejected when the user explicitly pins version 1 -- there is no way to honour it safely.
+    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
+      val inputData = LowLatencyMemoryStream[Int]
+      testStream(inputData.toDS(), OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        AddData(inputData, 1),
+        StartStream(),
+        ExpectFailure[SparkIllegalArgumentException] { e =>
+          checkError(
+            e.asInstanceOf[SparkThrowable],
+            condition = "STREAMING_REAL_TIME_MODE.CHECKPOINT_FORMAT_V1_NOT_SUPPORTED",
+            parameters = Map(
+              "config" -> SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1.key))
+        }
+      )
     }
   }
 
@@ -160,12 +182,12 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
     // A Real-Time Mode query reruns a failed batch from committed offsets, which relies on the
     // per-batch state store checkpoint ids that only commit log v2 and above persist. Resolution
     // keeps an existing checkpoint at the version it was created with, so rather than silently
-    // running at v1 (and risking data loss on a rerun) the query is rejected at start.
+    // running at v1 (and risking data loss on a rerun) the query is rejected at start. The
+    // rejection is unconditional -- a plain (stateless) query is rejected too.
     withTempDir { checkpointDir =>
       val inputData = LowLatencyMemoryStream[Int]
-      // Stateful on purpose: the rejection only applies to a query with state to lose on a rerun.
-      val stateful = inputData.toDS().dropDuplicates()
-      testStream(stateful, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+      val mapped = inputData.toDS().map(_ + 1)
+      testStream(mapped, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
         AddData(inputData, 1),
         // Phase 1: a microbatch trigger, which writes a v1 commit log.
         StartStream(
@@ -192,8 +214,8 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
       SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1.key -> "true") {
       withTempDir { checkpointDir =>
         val inputData = LowLatencyMemoryStream[Int]
-        val stateful = inputData.toDS().dropDuplicates()
-        testStream(stateful, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        val mapped = inputData.toDS().map(_ + 1)
+        testStream(mapped, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
           AddData(inputData, 1),
           StartStream(
             trigger = Trigger.ProcessingTime("1 second"),
@@ -203,7 +225,7 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
           AddData(inputData, 2),
           StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
           // The sink accumulates across both phases, so batch 1's row is still present.
-          CheckAnswerWithTimeout(60000, 1, 2),
+          CheckAnswerWithTimeout(60000, 2, 3),
           StopStream
         )
       }
@@ -211,8 +233,9 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
   }
 
   test("a fresh Real-Time Mode checkpoint is not rejected") {
-    // The rejection is scoped to an EXISTING checkpoint: a fresh one takes v2 from the Real-Time
-    // Mode defaults and must start cleanly.
+    // A fresh checkpoint takes v2 from the Real-Time Mode defaults, so its resolved commit log is
+    // v2 and the rejection does not apply. Only a v1 commit log -- an existing v1 checkpoint, or an
+    // explicit v1 config -- is rejected.
     withTempDir { checkpointDir =>
       val inputData = LowLatencyMemoryStream[Int]
       testStream(inputData.toDS(), OutputMode.Update, Map.empty, new ContinuousMemorySink())(
@@ -224,47 +247,4 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
     }
   }
 
-  test("a stateless Real-Time Mode query restarts on its own v1 checkpoint") {
-    // Regression guard: a stateless query never writes stateUniqueIds, so its commit log stays at
-    // VERSION_1 regardless of the state store config. It has no state to lose on a rerun, so the
-    // v1 rejection must not apply -- gating only on the version would break every stateless
-    // Real-Time Mode restart.
-    withTempDir { checkpointDir =>
-      val inputData = LowLatencyMemoryStream[Int]
-      testStream(inputData.toDS().map(_ + 1), OutputMode.Update, Map.empty,
-        new ContinuousMemorySink())(
-        AddData(inputData, 1),
-        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        CheckAnswerWithTimeout(60000, 2),
-        // Commit the batch, so the restart below actually sees a committed batch in the commit log.
-        // Without this the commit log is empty, resolution falls back to the session config, and
-        // the restart never reaches the v1 check at all.
-        ProcessAllAvailable(),
-        StopStream,
-        AddData(inputData, 2),
-        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
-        CheckAnswerWithTimeout(60000, 2, 3),
-        StopStream
-      )
-    }
-  }
-
-  test("a fresh stateful Real-Time Mode query honours an explicitly pinned v1") {
-    // The rejection is for an EXISTING checkpoint the user cannot have anticipated. On a fresh
-    // checkpoint, v1 can only be their explicit choice, and this PR's own soft-default contract
-    // says an explicit choice wins. Rejecting here would turn a config they set deliberately into
-    // a startup failure, so the guard is scoped to a checkpoint that already has a committed batch.
-    withSQLConf(
-      SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1",
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
-      val inputData = LowLatencyMemoryStream[Int]
-      testStream(inputData.toDS().dropDuplicates(), OutputMode.Update, Map.empty,
-        new ContinuousMemorySink())(
-        AddData(inputData, 1),
-        StartStream(),
-        CheckAnswerWithTimeout(60000, 1),
-        StopStream
-      )
-    }
-  }
 }
