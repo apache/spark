@@ -25,30 +25,59 @@ on:
     - '**'
 
 jobs:
-  count-commits:
-    name: Count commits
+  check-commit-count:
+    name: Check commit count
     runs-on: ubuntu-slim
     permissions:
       contents: read
     outputs:
-      commit-count: ${{ steps.count.outputs.commit-count }}
+      should-run: ${{ steps.count.outputs.should-run }}
     steps:
       - name: Check out the full branch history
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Count commits on the pushed branch
+      - name: Check whether this is every tenth commit
         id: count
-        run: echo "commit-count=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          count=$(git rev-list --count HEAD)
+          remainder=$((count % 10))
+
+          if ((remainder == 0)); then
+            should_run=true
+            icon=":white_check_mark:"
+            title="Commit count matched"
+            details="Commit count $count is divisible by 10."
+          else
+            should_run=false
+            icon=":pause_button:"
+            title="Commit count not matched"
+            details="Commit count $count is not divisible by 10."
+          fi
+
+          echo "should-run=$should_run" >> "$GITHUB_OUTPUT"
+          echo "Branch: $GITHUB_REF_NAME"
+          echo "Commit: $GITHUB_SHA"
+          echo "Commit count: $count"
+          echo "Remainder: $remainder"
+          echo "Should run: $should_run"
+          echo "Details: $details"
+          echo "::notice title=$title::$details"
+          echo "### $icon Commit count check" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit count: $count" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Remainder: $remainder" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Should run: $should_run" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Details: $details" >> "$GITHUB_STEP_SUMMARY"
 
   call-build-and-test:
     permissions:
       packages: write
     name: Run
-    needs: count-commits
-    # GitHub Actions expressions do not support modulo. A non-negative decimal
-    # count is divisible by ten when it ends in 0.
+    needs: check-commit-count
     if: >-
       github.repository != 'apache/spark'
-      || endsWith(needs.count-commits.outputs.commit-count, '0')
+      || needs.check-commit-count.outputs.should-run == 'true'
     uses: ./.github/workflows/build_and_test.yml
