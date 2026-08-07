@@ -59,7 +59,6 @@ case class ListStringCaseClass(l: Seq[String])
 @SlowHiveTest
 class HiveUDFSuite extends QueryTest with TestHiveSingleton {
   import spark.implicits._
-  import testImplicits.castToImpl
 
   import spark.udf
 
