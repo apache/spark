@@ -71,8 +71,11 @@ object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
   }
 
   private def exchangeSummary(plan: SparkPlan): (Int, Int, Boolean, String) = {
-    val exchanges = plan.collect { case s: ShuffleExchangeExec => s }
-    val reused = plan.exists(_.isInstanceOf[ReusedExchangeExec])
+    // Use AdaptiveSparkPlanHelper's collect (not TreeNode's plan.collect): an
+    // AdaptiveSparkPlanExec is a leaf to the TreeNode traversal, which would report an
+    // AQE plan as having no exchanges at all.
+    val exchanges = collect(plan) { case s: ShuffleExchangeExec => s }
+    val reused = collect(plan) { case r: ReusedExchangeExec => r }.nonEmpty
     val kinds = exchanges.map(_.outputPartitioning.getClass.getSimpleName
       .stripSuffix("$")).mkString(",")
     (exchanges.length, exchanges.count(_.pipelined), reused, kinds)
@@ -81,7 +84,7 @@ object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
   def main(args: Array[String]): Unit = {
     require(args.length >= 4, "args: <verify|bench> <datDir> <parquetDir> <query> [query...]")
     val mode = args(0)
-    require(mode == "verify" || mode == "bench" || mode == "benchwide",
+    require(mode == "verify" || mode == "bench" || mode == "benchwide" || mode == "benchaqe",
       s"unknown mode $mode")
     val (datDir, parquetDir, queries) = (args(1), args(2), args.drop(3).toSeq)
     // bench: gang fits the physical cores (squeezed scans, no oversubscription).
@@ -90,7 +93,7 @@ object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
     // its per-stage width still fits the physical cores). Which cost is smaller --
     // squeezed scans or thread contention -- is an empirical question; run both.
     val master = mode match {
-      case "bench" => s"local[${Runtime.getRuntime.availableProcessors()}]"
+      case "bench" | "benchaqe" => s"local[${Runtime.getRuntime.availableProcessors()}]"
       case "benchwide" => s"local[${2 * Runtime.getRuntime.availableProcessors()}]"
       case _ => "local[128]"
     }
@@ -100,7 +103,7 @@ object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
       .appName("tpcds-pipelined-correctness")
       .config("spark.shuffle.manager.incremental",
         "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager")
-      .config("spark.sql.adaptive.enabled", "false")
+      .config("spark.sql.adaptive.enabled", (mode == "benchaqe").toString)
       .config("spark.speculation", "false")
       .config("spark.sql.shuffle.partitions", "4")
       .config("spark.ui.enabled", "false")
@@ -120,7 +123,7 @@ object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
       // small store_sales files packs to ~5 scan partitions once per-file open cost is
       // counted; 32m still left 13, and 13 + 4 = 17 > 16 rejected everything.)
       .config("spark.sql.files.maxPartitionBytes", mode match {
-        case "bench" => "64m"      // ~5 store_sales scan partitions: gang fits 16 slots
+        case "bench" | "benchaqe" => "64m" // ~5 store_sales scan partitions: gang fits 16 slots
         case "benchwide" => "32m"  // ~13 scan partitions: near the box's natural 16
         case _ => "512m"
       })
@@ -194,8 +197,12 @@ object TPCDSPipelinedRunner extends TPCDSSchema with AdaptiveSparkPlanHelper {
       val regular = bestMs(spark, sql)
 
       spark.conf.set("spark.sql.pipelinedShuffle.enabled", "true")
-      val (_, nPipe, _, kinds) = exchangeSummary(
-        spark.sql(sql).queryExecution.executedPlan)
+      // Probe with one real execution and summarize the EXECUTED plan: under AQE an
+      // unexecuted plan is the initial one (isFinalPlan=false) and does not reflect what
+      // actually ran.
+      val probe = spark.sql(sql)
+      probe.collect()
+      val (_, nPipe, _, kinds) = exchangeSummary(probe.queryExecution.executedPlan)
       if (nPipe == 0) {
         println(f"[tpcds] $q%-5s regular=${regular}%5dms  pipelined=  skip (rule left plan " +
           s"regular, kinds=$kinds)")
