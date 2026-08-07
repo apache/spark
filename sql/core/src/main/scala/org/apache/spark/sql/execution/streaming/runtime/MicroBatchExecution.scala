@@ -1501,8 +1501,7 @@ class MicroBatchExecution(
           nextBatchWatermarkMs = watermarkTracker.currentWatermark,
           stateUniqueIds = stateStoreCkptId,
           commitLogFormatVersion = execCtx.commitLogFormatVersionOpt.getOrElse(
-            sparkSessionForStream.sessionState.conf
-              .getConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION)))
+            sparkSessionForStream.sessionState.conf.streamingCommitLogFormatVersion))
       }
       if (!commitLog.add(execCtx.batchId, metadata)) {
         throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)

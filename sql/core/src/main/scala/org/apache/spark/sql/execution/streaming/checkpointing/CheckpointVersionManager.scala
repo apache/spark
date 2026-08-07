@@ -115,13 +115,27 @@ object CheckpointVersionManager extends Logging {
   }
 
   /**
-   * The commit log format version requested by the session config. The state store checkpoint
-   * format and the commit log format move together: format v2 makes each batch write
-   * `stateUniqueIds`, which only a commit log at [[CommitLog.VERSION_2]] or above can persist.
+   * The commit log format version requested by the session config.
+   *
+   * Two configs feed this, and the answer is the max of them:
+   *  - [[SQLConf.STREAMING_COMMIT_LOG_FORMAT_VERSION]], which names a commit log version directly;
+   *  - [[SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION]], which implies a minimum, because a state
+   *    store checkpoint format above 1 makes each batch write `stateUniqueIds` and only a commit
+   *    log at [[CommitLog.VERSION_2]] or above can persist those.
+   *
+   * Taking the max means neither config can silently produce an unwritable combination: asking for
+   * state store v2 raises the commit log to v2 even when the commit log config says 1, and asking
+   * for commit log v3 (sink metadata) is not dragged back down by a state store still on v1.
    */
   private def getCommitLogVersion(sparkSessionForStream: SparkSession): Int = {
-    sparkSessionForStream.sessionState.conf
-      .getConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION)
+    val conf = sparkSessionForStream.sessionState.conf
+    val configuredVersion = conf.streamingCommitLogFormatVersion
+    val minRequiredVersion = if (conf.stateStoreCheckpointFormatVersion >= 2) {
+      CommitLog.VERSION_2
+    } else {
+      CommitLog.VERSION_1
+    }
+    math.max(configuredVersion, minRequiredVersion)
   }
 
   /**
@@ -195,5 +209,7 @@ object CheckpointVersionManager extends Logging {
     val stateStoreVersion = if (commitLogFormatVersion >= CommitLog.VERSION_2) 2 else 1
     sparkSessionForStream.conf
       .set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, stateStoreVersion.toString)
+    sparkSessionForStream.conf
+      .set(SQLConf.STREAMING_COMMIT_LOG_FORMAT_VERSION.key, commitLogFormatVersion.toString)
   }
 }
