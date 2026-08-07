@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.io.{ByteArrayInputStream, FileInputStream, FileOutputStream}
 import java.nio.file.Path
 
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata, CommitMetadataBase, CommitMetadataV2, CommitMetadataV3, OffsetSeqLog, SinkMetadataInfo}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointVersionManager, CommitLog, CommitLogType, CommitMetadata, CommitMetadataBase, CommitMetadataV2, CommitMetadataV3, OffsetSeqLog, SinkMetadataInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -250,4 +250,72 @@ class CommitLogSuite extends SharedSparkSession {
         commitLogFormatVersion = CommitLog.VERSION_1).version === CommitLog.VERSION_1)
     }
   }
+
+  /** The commit log version the session config asks for, via the public resolution entry point. */
+  private def sessionCommitLogVersion(): Int = {
+    CheckpointVersionManager.resolveCommitLogVersion(spark, latestCommittedBatch = None)
+  }
+
+  test("commit log version is the max of its own config and the state store minimum") {
+    // Neither set: both default to 1.
+    assert(sessionCommitLogVersion() === CommitLog.VERSION_1)
+
+    // Only the commit log config: taken as-is, including V3, which has no state store counterpart.
+    Seq(1, 2, 3).foreach { v =>
+      withSQLConf(SQLConf.STREAMING_COMMIT_LOG_FORMAT_VERSION.key -> v.toString) {
+        assert(sessionCommitLogVersion() === v,
+          s"an explicit commit log version $v should be used as-is")
+      }
+    }
+
+    // Only the state store config at 2: implies a commit log minimum of 2, because state store v2
+    // writes stateUniqueIds and VERSION_1 cannot persist them.
+    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+      assert(sessionCommitLogVersion() === CommitLog.VERSION_2,
+        "state store v2 must raise the commit log to v2")
+    }
+
+    // Both set and disagreeing: the max wins, in both directions.
+    withSQLConf(
+      SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2",
+      SQLConf.STREAMING_COMMIT_LOG_FORMAT_VERSION.key -> "1") {
+      assert(sessionCommitLogVersion() === CommitLog.VERSION_2,
+        "the state store minimum must win over a lower commit log config")
+    }
+    withSQLConf(
+      SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1",
+      SQLConf.STREAMING_COMMIT_LOG_FORMAT_VERSION.key -> "3") {
+      assert(sessionCommitLogVersion() === CommitLog.VERSION_3,
+        "a higher commit log config must not be dragged down by a state store on v1")
+    }
+  }
+
+  test("an existing checkpoint's commit log version wins over the session config") {
+    // The whole point of resolution: a commit log created at one version keeps being written at
+    // that version, so raising a config cannot start writing a format the checkpoint lacks.
+    withSQLConf(SQLConf.STREAMING_COMMIT_LOG_FORMAT_VERSION.key -> "3") {
+      val existing: CommitMetadataBase = CommitMetadata(nextBatchWatermarkMs = 0)
+      assert(existing.version === CommitLog.VERSION_1)
+      val resolved =
+        CheckpointVersionManager.resolveCommitLogVersion(spark, Some((7L, existing)))
+      assert(resolved === CommitLog.VERSION_1,
+        s"an existing V1 commit log must stay V1 even with the config at 3, got $resolved")
+    }
+  }
+
+  test("recording a commit log version keeps the two configs consistent") {
+    // A V3 commit log has no state store counterpart, so the state store config is clamped to 2
+    // rather than set to 3.
+    val session = spark.cloneSession()
+    CheckpointVersionManager.setFormatVersion(session, CommitLogType, CommitLog.VERSION_3)
+    assert(session.conf.get(SQLConf.STREAMING_COMMIT_LOG_FORMAT_VERSION.key) === "3")
+    assert(session.conf.get(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key) === "2",
+      "the state store format must be clamped to 2 for a V3 commit log")
+
+    val v1Session = spark.cloneSession()
+    CheckpointVersionManager.setFormatVersion(v1Session, CommitLogType, CommitLog.VERSION_1)
+    assert(v1Session.conf.get(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key) === "1",
+      "a V1 commit log cannot carry state store checkpoint ids, so the state store must be v1")
+  }
+
 }
