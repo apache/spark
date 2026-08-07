@@ -20,11 +20,14 @@ package org.apache.spark.sql.connect.service
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.connect.{SparkConnectServerTest, SparkSession}
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SparkConnectService
 
 class SparkConnectAuthSuite extends SparkConnectServerTest {
   override protected def sparkConf = {
-    super.sparkConf.set("spark.connect.authenticate.token", "deadbeef")
+    super.sparkConf
+      .set("spark.connect.authenticate.token", "deadbeef")
+      .set("spark.connect.test.marker", "server-side-only")
   }
 
   test("Test local authentication") {
@@ -42,5 +45,30 @@ class SparkConnectAuthSuite extends SparkConnectServerTest {
       invalidSession.range(5).collect()
     }
     assert(exception.getMessage.contains("Invalid authentication token"))
+  }
+
+  test("The authentication token is not readable through the Config RPC") {
+    val session = SparkSession
+      .builder()
+      .remote(s"sc://localhost:${SparkConnectService.localPort}/;token=deadbeef")
+      .create()
+    val tokenKey = Connect.CONNECT_AUTHENTICATE_TOKEN.key
+
+    // Every read path reports the key the way an unset key is reported.
+    assert(session.conf.getOption(tokenKey).isEmpty)
+    assert(session.conf.get(tokenKey, "fallback") === "fallback")
+    intercept[NoSuchElementException] {
+      session.conf.get(tokenKey)
+    }
+    val all = session.conf.getAll
+    assert(!all.contains(tokenKey))
+    // Nothing else carries the value either.
+    assert(!all.exists { case (_, value) => value == "deadbeef" })
+
+    // A control key proves the Config RPC is otherwise working and really
+    // is reading server-side configuration: it is set in `sparkConf` below,
+    // never sent by the client.
+    assert(session.conf.get("spark.connect.test.marker") === "server-side-only")
+    assert(all.get("spark.connect.test.marker").contains("server-side-only"))
   }
 }

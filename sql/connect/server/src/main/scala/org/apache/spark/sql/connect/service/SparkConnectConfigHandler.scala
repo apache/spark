@@ -24,6 +24,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.RuntimeConfig
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigResponse])
@@ -97,7 +98,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       conf: RuntimeConfig): proto.ConfigResponse.Builder = {
     val builder = proto.ConfigResponse.newBuilder()
     operation.getKeysList.asScala.iterator.foreach { key =>
-      val value = conf.get(key)
+      val value = if (SparkConnectConfigHandler.isUndisclosed(key)) null else conf.get(key)
       builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, Option(value)))
       getWarning(key).foreach(builder.addWarnings)
     }
@@ -110,7 +111,13 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     val builder = proto.ConfigResponse.newBuilder()
     operation.getPairsList.asScala.iterator.foreach { pair =>
       val (key, default) = SparkConnectConfigHandler.toKeyValue(pair)
-      val value = conf.get(key, default.orNull)
+      // An undisclosed key falls back to the caller's default, which is
+      // what an unset key would do.
+      val value = if (SparkConnectConfigHandler.isUndisclosed(key)) {
+        default.orNull
+      } else {
+        conf.get(key, default.orNull)
+      }
       builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, Option(value)))
       getWarning(key).foreach(builder.addWarnings)
     }
@@ -122,7 +129,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       conf: RuntimeConfig): proto.ConfigResponse.Builder = {
     val builder = proto.ConfigResponse.newBuilder()
     operation.getKeysList.asScala.iterator.foreach { key =>
-      val value = conf.getOption(key)
+      val value = if (SparkConnectConfigHandler.isUndisclosed(key)) None else conf.getOption(key)
       builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, value))
       getWarning(key).foreach(builder.addWarnings)
     }
@@ -133,13 +140,18 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       operation: proto.ConfigRequest.GetAll,
       conf: RuntimeConfig): proto.ConfigResponse.Builder = {
     val builder = proto.ConfigResponse.newBuilder()
+    // Filtering happens on the full key, before the prefix is stripped
+    // off below.
+    val disclosed = conf.getAll.iterator.filterNot { case (key, _) =>
+      SparkConnectConfigHandler.isUndisclosed(key)
+    }
     val results = if (operation.hasPrefix) {
       val prefix = operation.getPrefix
-      conf.getAll.iterator
+      disclosed
         .filter { case (key, _) => key.startsWith(prefix) }
         .map { case (key, value) => (key.substring(prefix.length), value) }
     } else {
-      conf.getAll.iterator
+      disclosed
     }
     results.foreach { case (key, value) =>
       builder.addPairs(SparkConnectConfigHandler.toProtoKeyValue(key, Option(value)))
@@ -184,6 +196,27 @@ object SparkConnectConfigHandler {
 
   private[connect] val unsupportedConfigurations =
     Set("spark.sql.execution.arrow.enabled", "spark.sql.execution.arrow.pyspark.fallback.enabled")
+
+  /**
+   * Configurations the server holds but never hands back to a client. Reads
+   * report them as unset: `Get` and `GetOption` return no value,
+   * `GetWithDefault` returns the caller's default, and `GetAll` omits them.
+   *
+   * `SQLConf.mergeSparkConf` copies every `SparkConf` entry into the session
+   * config, static ones included, so without this the pre-shared
+   * authentication token is readable through the Config RPC. That discloses
+   * nothing to a client of a standalone server, which had to present the
+   * token to connect at all. It does matter to deployments that place a
+   * proxy in front of Spark Connect and treat the token as a secret shared
+   * between the proxy and the servers, with end users authenticating by
+   * other means: there, any client the proxy admits could read the token and
+   * then reach a server directly. Not disclosing a server-side credential is
+   * the right default either way.
+   */
+  private[connect] val undisclosedConfigurations = Set(Connect.CONNECT_AUTHENTICATE_TOKEN.key)
+
+  private[connect] def isUndisclosed(key: String): Boolean =
+    undisclosedConfigurations.contains(key)
 
   def toKeyValue(pair: proto.KeyValue): (String, Option[String]) = {
     val key = pair.getKey
