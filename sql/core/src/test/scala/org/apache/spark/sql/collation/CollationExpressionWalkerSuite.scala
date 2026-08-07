@@ -34,8 +34,7 @@ import org.apache.spark.util.Utils
  *  This suite is introduced in order to test a bulk of expressions and functionalities related to
  *  collations
  */
-class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSession {
-  import testImplicits._
+class CollationExpressionWalkerSuite extends SharedSparkSession {
 
   // Trait to distinguish different cases for generation
   sealed trait CollationType
