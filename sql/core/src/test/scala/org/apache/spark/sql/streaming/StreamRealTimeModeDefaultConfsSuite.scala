@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBConf,
   RocksDBStateStoreProvider}
@@ -152,6 +153,118 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
       assert(observed(changelogKey).isEmpty,
         "the canonical key must not be set alongside the user's lower-cased one, got " +
           observed(changelogKey))
+    }
+  }
+
+  test("switching an existing v1 checkpoint to Real-Time Mode fails fast") {
+    // A Real-Time Mode query reruns a failed batch from committed offsets, which relies on the
+    // per-batch state store checkpoint ids that only commit log v2 and above persist. Resolution
+    // keeps an existing checkpoint at the version it was created with, so rather than silently
+    // running at v1 (and risking data loss on a rerun) the query is rejected at start.
+    withTempDir { checkpointDir =>
+      val inputData = LowLatencyMemoryStream[Int]
+      // Stateful on purpose: the rejection only applies to a query with state to lose on a rerun.
+      val stateful = inputData.toDS().dropDuplicates()
+      testStream(stateful, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        AddData(inputData, 1),
+        // Phase 1: a microbatch trigger, which writes a v1 commit log.
+        StartStream(
+          trigger = Trigger.ProcessingTime("1 second"),
+          checkpointLocation = checkpointDir.getAbsolutePath),
+        WaitUntilCurrentBatchProcessed,
+        StopStream,
+        AddData(inputData, 2),
+        // Phase 2: the same checkpoint under the Real-Time trigger must be rejected.
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        ExpectFailure[SparkIllegalArgumentException] { e =>
+          checkError(
+            e.asInstanceOf[SparkThrowable],
+            condition = "STREAMING_REAL_TIME_MODE.CHECKPOINT_FORMAT_V1_NOT_SUPPORTED",
+            parameters = Map(
+              "config" -> SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1.key))
+        }
+      )
+    }
+  }
+
+  test("the escape hatch allows Real-Time Mode on an existing v1 checkpoint") {
+    withSQLConf(
+      SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1.key -> "true") {
+      withTempDir { checkpointDir =>
+        val inputData = LowLatencyMemoryStream[Int]
+        val stateful = inputData.toDS().dropDuplicates()
+        testStream(stateful, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+          AddData(inputData, 1),
+          StartStream(
+            trigger = Trigger.ProcessingTime("1 second"),
+            checkpointLocation = checkpointDir.getAbsolutePath),
+          WaitUntilCurrentBatchProcessed,
+          StopStream,
+          AddData(inputData, 2),
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+          // The sink accumulates across both phases, so batch 1's row is still present.
+          CheckAnswerWithTimeout(60000, 1, 2),
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("a fresh Real-Time Mode checkpoint is not rejected") {
+    // The rejection is scoped to an EXISTING checkpoint: a fresh one takes v2 from the Real-Time
+    // Mode defaults and must start cleanly.
+    withTempDir { checkpointDir =>
+      val inputData = LowLatencyMemoryStream[Int]
+      testStream(inputData.toDS(), OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        AddData(inputData, 1, 2),
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        CheckAnswerWithTimeout(60000, 1, 2),
+        StopStream
+      )
+    }
+  }
+
+  test("a stateless Real-Time Mode query restarts on its own v1 checkpoint") {
+    // Regression guard: a stateless query never writes stateUniqueIds, so its commit log stays at
+    // VERSION_1 regardless of the state store config. It has no state to lose on a rerun, so the
+    // v1 rejection must not apply -- gating only on the version would break every stateless
+    // Real-Time Mode restart.
+    withTempDir { checkpointDir =>
+      val inputData = LowLatencyMemoryStream[Int]
+      testStream(inputData.toDS().map(_ + 1), OutputMode.Update, Map.empty,
+        new ContinuousMemorySink())(
+        AddData(inputData, 1),
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        CheckAnswerWithTimeout(60000, 2),
+        // Commit the batch, so the restart below actually sees a committed batch in the commit log.
+        // Without this the commit log is empty, resolution falls back to the session config, and
+        // the restart never reaches the v1 check at all.
+        ProcessAllAvailable(),
+        StopStream,
+        AddData(inputData, 2),
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        CheckAnswerWithTimeout(60000, 2, 3),
+        StopStream
+      )
+    }
+  }
+
+  test("a fresh stateful Real-Time Mode query honours an explicitly pinned v1") {
+    // The rejection is for an EXISTING checkpoint the user cannot have anticipated. On a fresh
+    // checkpoint, v1 can only be their explicit choice, and this PR's own soft-default contract
+    // says an explicit choice wins. Rejecting here would turn a config they set deliberately into
+    // a startup failure, so the guard is scoped to a checkpoint that already has a committed batch.
+    withSQLConf(
+      SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName) {
+      val inputData = LowLatencyMemoryStream[Int]
+      testStream(inputData.toDS().dropDuplicates(), OutputMode.Update, Map.empty,
+        new ContinuousMemorySink())(
+        AddData(inputData, 1),
+        StartStream(),
+        CheckAnswerWithTimeout(60000, 1),
+        StopStream
+      )
     }
   }
 }

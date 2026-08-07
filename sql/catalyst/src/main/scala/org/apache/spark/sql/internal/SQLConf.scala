@@ -3609,6 +3609,18 @@ object SQLConf {
       .checkValue(v => Set(1, 2, 3).contains(v), "Valid versions are 1, 2 and 3")
       .createWithDefault(1)
 
+  val STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1 =
+    buildConf("spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled")
+      .internal()
+      .doc("Whether to allow a Real-Time Mode query to start on a checkpoint whose commit log " +
+        "is at version 1. Real-Time Mode reruns a failed batch from committed offsets, which " +
+        "relies on the per-batch state store checkpoint ids that only commit log version 2 and " +
+        "above persist, so starting on a version 1 checkpoint exposes the query to data loss " +
+        "on failure. Escape hatch only; prefer a fresh checkpoint location.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val STREAMING_MAX_NUM_STATE_SCHEMA_FILES =
     buildConf("spark.sql.streaming.stateStore.maxNumStateSchemaFiles")
       .internal()

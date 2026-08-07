@@ -563,6 +563,35 @@ class MicroBatchExecution(
     CheckpointVersionManager.setFormatVersion(
       sparkSessionForStream, CommitLogType, commitLogFormatVersion)
 
+    // Real-Time Mode reruns a failed batch from committed offsets, which relies on the per-batch
+    // state store checkpoint ids that only commit log v2 and above persist; on a v1 commit log the
+    // rerun can silently lose data. Resolution above keeps an EXISTING checkpoint at the version it
+    // was created with, so switching an existing microbatch query to Real-Time Mode would otherwise
+    // run at v1 unnoticed. Reject that, with an escape hatch.
+    //
+    // Scoped twice, and both scopes matter:
+    //  - to an EXISTING checkpoint, because a fresh one takes its version from the session config
+    //    where v1 can only be the user's explicit choice (StreamRealTimeModeDefaultConfsSuite pins
+    //    exactly that), whereas an existing v1 checkpoint is a hazard they cannot anticipate;
+    //  - to a STATEFUL query, because the hazard is losing state on a rerun. A stateless query has
+    //    no stateUniqueIds to persist, so its commit log stays at VERSION_1 whatever the config
+    //    says, and rejecting its restart would break a query with nothing at risk.
+    if (trigger.isInstanceOf[RealTimeTrigger] && latestCommittedBatch.isDefined &&
+        commitLogFormatVersion < CommitLog.VERSION_2 &&
+        containsStatefulOperator(analyzedPlan)) {
+      if (!sparkSessionForStream.sessionState.conf
+          .getConf(SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1)) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "STREAMING_REAL_TIME_MODE.CHECKPOINT_FORMAT_V1_NOT_SUPPORTED",
+          messageParameters = Map(
+            "config" -> SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1.key))
+      }
+      logWarning(log"Starting a Real-Time Mode query on a commit log at version " +
+        log"${MDC(LogKeys.FILE_VERSION, commitLogFormatVersion)} because " +
+        log"${MDC(LogKeys.CONFIG, SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1
+          .key)} is set. A failed batch may lose data on rerun.")
+    }
+
     val execCtx = new MicroBatchExecutionContext(id, runId, name, triggerClock, sources, sink,
       progressReporter, -1, sparkSession,
       offsetLogFormatVersionOpt = Some(offsetLogFormatVersion),
@@ -601,24 +630,28 @@ class MicroBatchExecution(
     }
   }
 
+  /**
+   * Whether the query has a streaming stateful operator, and so keeps state across batches that a
+   * rerun of a failed batch has to restore. Used to decide whether the commit log format matters.
+   */
+  private def containsStatefulOperator(p: LogicalPlan): Boolean = {
+    p.exists {
+      case node: Aggregate if node.isStreaming => true
+      case node: Deduplicate if node.isStreaming => true
+      case node: DeduplicateWithinWatermark if node.isStreaming => true
+      case node: Distinct if node.isStreaming => true
+      case node: Join if node.left.isStreaming && node.right.isStreaming => true
+      case node: FlatMapGroupsWithState if node.isStreaming => true
+      case node: FlatMapGroupsInPandasWithState if node.isStreaming => true
+      case node: TransformWithState if node.isStreaming => true
+      case node: TransformWithStateInPySpark if node.isStreaming => true
+      case node: GlobalLimit if node.isStreaming => true
+      case _ => false
+    }
+  }
+
   private def disableAQESupportInStatelessIfUnappropriated(
       sparkSessionToRunBatches: SparkSession): Unit = {
-    def containsStatefulOperator(p: LogicalPlan): Boolean = {
-      p.exists {
-        case node: Aggregate if node.isStreaming => true
-        case node: Deduplicate if node.isStreaming => true
-        case node: DeduplicateWithinWatermark if node.isStreaming => true
-        case node: Distinct if node.isStreaming => true
-        case node: Join if node.left.isStreaming && node.right.isStreaming => true
-        case node: FlatMapGroupsWithState if node.isStreaming => true
-        case node: FlatMapGroupsInPandasWithState if node.isStreaming => true
-        case node: TransformWithState if node.isStreaming => true
-        case node: TransformWithStateInPySpark if node.isStreaming => true
-        case node: GlobalLimit if node.isStreaming => true
-        case _ => false
-      }
-    }
-
     if (trigger.isInstanceOf[RealTimeTrigger]) {
       logWarning(log"Disabling AQE since AQE is not supported for Real-time Mode.")
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
