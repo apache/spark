@@ -1257,7 +1257,6 @@ object SQLConf {
     .createWithDefault(true)
 
   val PIPELINED_SHUFFLE_ENABLED = buildConf("spark.sql.pipelinedShuffle.enabled")
-    .internal()
     .doc("When true and the application runs on a single executor (local mode), eligible " +
       "shuffle exchanges are marked pipelined: the concurrent-stage scheduler runs their map " +
       "and reduce stages together, and the shuffle is served by the pipelined shuffle manager " +

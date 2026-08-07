@@ -1852,6 +1852,18 @@ package object config {
       .stringConf
       .createWithDefault("streaming")
 
+  private[spark] val SHUFFLE_PIPELINED_CHANNEL_BATCH_SIZE =
+    ConfigBuilder("spark.shuffle.pipelined.channel.batchSize")
+      .doc("Number of records the in-process pipelined channel shuffle accumulates per output " +
+        "partition before handing a batch across its queue in one operation. Larger batches " +
+        "amortize the queue's per-operation lock cost at the price of higher hand-off latency " +
+        "and per-partition buffering. Only used when spark.shuffle.manager.incremental is the " +
+        "in-process channel manager.")
+      .version("4.3.0")
+      .intConf
+      .checkValue(_ > 0, "batch size must be positive")
+      .createWithDefault(1024)
+
   private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
     ConfigBuilder("spark.shuffle.reduceLocality.enabled")
       .doc("Whether to compute locality preferences for reduce tasks")

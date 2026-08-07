@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle.local.pipelined
 
 import org.apache.spark.{ShuffleDependency, SparkConf, TaskContext}
+import org.apache.spark.internal.config
 import org.apache.spark.shuffle.{BaseShuffleHandle, PipelinedShuffleManager, ShuffleHandle, ShuffleReader, ShuffleReadMetricsReporter, ShuffleWriteMetricsReporter, ShuffleWriter}
 
 /**
@@ -64,8 +65,7 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   // Rows accumulated per output partition before a batch is handed across the channel in one
   // queue operation. Batching amortizes the queue's per-operation lock cost; per-row hand-off
   // measured ~19x slower than a regular shuffle on a 20M-row repartition.
-  private val batchSize =
-    conf.getInt("spark.shuffle.pipelined.channel.batchSize", 1024)
+  private val batchSize = conf.get(config.SHUFFLE_PIPELINED_CHANNEL_BATCH_SIZE)
 
   override def usesStreamingShuffleOutputTracker: Boolean = false
 
