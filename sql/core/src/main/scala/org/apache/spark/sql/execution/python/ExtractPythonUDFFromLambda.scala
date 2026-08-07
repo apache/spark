@@ -84,15 +84,6 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   }
 
   /**
-   * Whether the result is built from the input elements (so the carrier must be unwrapped) rather
-   * than from the lambda's value. Read straight off the Catalyst result-type traits:
-   * `filter` / `array_sort` / `map_filter` keep the input's type ([[ResultTypeFromArgument]]);
-   * `transform` and friends follow the lambda ([[ResultTypeFromFunction]]).
-   */
-  private def resultFromElements(hof: HigherOrderFunction): Boolean =
-    hof.isInstanceOf[ResultTypeFromArgument]
-
-  /**
    * Whether one UDF call in an `array_sort` comparator takes both elements, e.g.
    * `(a, b) -> udf(a, b)`. Such a call has no per-element key, so it is precomputed over the cross
    * product of pairs rather than per element.
@@ -203,7 +194,9 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
    */
   private def rewriteMapping(hof: HigherOrderFunction): Expression = {
     val lambda = hof.functions.head.asInstanceOf[LambdaFunction]
-    val fromElements = resultFromElements(hof)
+    // The result is the input elements (so the carrier is unwrapped afterwards) rather than the
+    // lambda's value: `filter` / `array_sort` / `map_filter` keep the input's type.
+    val fromElements = hof.isInstanceOf[ResultTypeFromArgument]
 
     // Desugar maps into arrays. `map_zip_with` visits the union of both key sets and looks each map
     // up per key, which yields null for a key missing from one side - exactly its own semantics.
