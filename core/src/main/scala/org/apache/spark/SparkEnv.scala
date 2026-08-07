@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.File
 import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.concurrent
 import scala.collection.mutable
@@ -267,6 +268,19 @@ class SparkEnv (
   private[spark] var driverTmpDir: Option[String] = None
 
   private[spark] var executorBackend: Option[ExecutorBackend] = None
+
+  /**
+   * Versioned credential store for OIDC-based user credentials on both driver and executors.
+   * Updated via `UpdateUserCredentials` RPC and `TaskDescription` credential delivery.
+   * Read by connector-specific credential providers (e.g., SparkOidcAwsCredentialsProvider).
+   * Contains serialized `UserCredentials` (no raw identity token).
+   *
+   * The version field is a monotonically increasing counter assigned by `UserCredentialManager`
+   * on each credential renewal. It is used to guard against stale credentials from delayed
+   * `TaskDescription` delivery overwriting fresher credentials delivered via RPC broadcast.
+   */
+  private[spark] val userCredentials: AtomicReference[VersionedCredentials] =
+    new AtomicReference[VersionedCredentials]()
 
   private[spark] def stop(): Unit = {
 
@@ -823,5 +837,35 @@ object SparkEnv extends Logging {
       "System Properties" -> otherProperties,
       "Classpath Entries" -> classPaths,
       "Metrics Properties" -> metricsProperties.toSeq.sorted)
+  }
+}
+
+/**
+ * Container for versioned OIDC user credentials.
+ *
+ * @param version Monotonically increasing counter assigned by `UserCredentialManager` on each
+ *                credential renewal. Used to prevent stale credentials from overwriting fresher
+ *                ones on executors.
+ * @param bytes   Serialized `UserCredentials` payload (no raw identity token).
+ */
+private[spark] case class VersionedCredentials(version: Long, bytes: Array[Byte])
+
+private[spark] object VersionedCredentials {
+  /**
+   * Atomically update a credential store only if the given version is strictly newer
+   * than what is currently stored. This prevents stale credentials (e.g., from a delayed
+   * `TaskDescription`) from overwriting fresher credentials delivered via RPC broadcast.
+   *
+   * Uses `AtomicReference.updateAndGet` to ensure the check-and-set is atomic even
+   * when called concurrently from multiple task threads and the RPC dispatcher thread.
+   */
+  def updateIfNewer(
+      store: AtomicReference[VersionedCredentials],
+      version: Long,
+      bytes: Array[Byte]): Unit = {
+    val newValue = VersionedCredentials(version, bytes)
+    store.updateAndGet { current =>
+      if (current == null || version > current.version) newValue else current
+    }
   }
 }

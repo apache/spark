@@ -365,6 +365,13 @@
     ],
     "sqlState" : "42613"
   },
+  "AVRO_CANNOT_READ_NULL_FIELD" : {
+    "message" : [
+      "Cannot read null value for <name> into a non-nullable SQL type.",
+      "To allow null values, declare the corresponding type as nullable in the read schema."
+    ],
+    "sqlState" : "22004"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
@@ -1239,6 +1246,14 @@
       "Please use a different name for the partition column."
     ],
     "sqlState" : "KD009"
+  },
+  "CONFLICTING_PIPELINE_FLOW_CASE_SENSITIVITY" : {
+    "message" : [
+      "The flows writing to table <tableName> do not agree on '<configKey>': <flowConfigurations>.",
+      "The effective value determines whether column names that differ only in case identify the same column, so the table's schema would depend on the order the flows are evaluated in.",
+      "Set '<configKey>' to the same value for every flow writing to this table."
+    ],
+    "sqlState" : "42KD9"
   },
   "CONNECT" : {
     "message" : [
@@ -2271,6 +2286,12 @@
   "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION" : {
     "message" : [
       "Decimal precision <precision> exceeds max precision <maxPrecision>."
+    ],
+    "sqlState" : "22003"
+  },
+  "DECIMAL_SCALE_EXCEEDS_PRECISION" : {
+    "message" : [
+      "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
     ],
     "sqlState" : "22003"
   },
@@ -10278,11 +10299,6 @@
   "_LEGACY_ERROR_TEMP_1226" : {
     "message" : [
       "The SQL config '<configName>' was removed in the version <version>. <comment>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1228" : {
-    "message" : [
-      "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1232" : {

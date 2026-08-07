@@ -22,7 +22,7 @@ import org.jtransforms.dct._
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.BooleanParam
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.types._
@@ -71,10 +71,11 @@ class DCT @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
   override protected def validateInputType(inputType: DataType): Unit = {
     require(inputType.isInstanceOf[VectorUDT],
-      s"Input type must be ${(new VectorUDT).catalogString} but got ${inputType.catalogString}.")
+      s"Input type must be ${SQLDataTypes.VectorType.catalogString} " +
+        s"but got ${inputType.catalogString}.")
   }
 
-  override protected def outputDataType: DataType = new VectorUDT
+  override protected def outputDataType: DataType = SQLDataTypes.VectorType
 
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)

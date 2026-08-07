@@ -176,7 +176,10 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         trackHistorySelection = trackHistorySelection
       )
     )
-    new AutoCdcMergeFlow(flow, successfulFuncResult(sourceDf))
+    new AutoCdcMergeFlow(
+      flow,
+      successfulFuncResult(sourceDf),
+      spark.sessionState.conf.caseSensitiveAnalysis)
   }
 
   /** A stable 3-column source streaming dataframe used across most schema tests. */

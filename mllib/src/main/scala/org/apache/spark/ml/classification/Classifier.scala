@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util._
@@ -39,7 +39,7 @@ private[spark] trait ClassifierParams
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
     val parentSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    SchemaUtils.appendColumn(parentSchema, $(rawPredictionCol), new VectorUDT)
+    SchemaUtils.appendColumn(parentSchema, $(rawPredictionCol), SQLDataTypes.VectorType)
   }
 }
 

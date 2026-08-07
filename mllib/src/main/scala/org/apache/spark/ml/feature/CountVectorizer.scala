@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
-import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
@@ -99,7 +99,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val typeCandidates = List(new ArrayType(StringType, true), new ArrayType(StringType, false))
     SchemaUtils.checkColumnTypes(schema, $(inputCol), typeCandidates)
-    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), SQLDataTypes.VectorType)
   }
 
   /**
