@@ -45,8 +45,11 @@ class SparkConnectClientSuite extends ConnectFunSuite {
   private var service: DummySparkConnectService = _
   private var server: Server = _
 
-  private def startDummyServer(port: Int, interceptors: Seq[ServerInterceptor] = Seq()): Unit = {
-    service = new DummySparkConnectService
+  private def startDummyServer(
+      port: Int,
+      interceptors: Seq[ServerInterceptor] = Seq(),
+      dummyService: DummySparkConnectService = new DummySparkConnectService): Unit = {
+    service = dummyService
     val serverBuilder = NettyServerBuilder
       .forPort(port)
       .addService(service)
@@ -80,7 +83,7 @@ class SparkConnectClientSuite extends ConnectFunSuite {
 
   Seq(false, true).foreach { reattachable =>
     test(s"client generates an operation ID for ExecutePlan requests ($reattachable)") {
-      var operationIdHeader: Option[String] = None
+      val operationIdHeaders = mutable.Map.empty[String, Option[String]]
       val interceptor = new ServerInterceptor {
         override def interceptCall[ReqT, RespT](
             call: ServerCall[ReqT, RespT],
@@ -89,11 +92,46 @@ class SparkConnectClientSuite extends ConnectFunSuite {
           val key = Metadata.Key.of(
             SparkConnectClient.OPERATION_ID_HEADER,
             Metadata.ASCII_STRING_MARSHALLER)
-          operationIdHeader = Option(headers.get(key))
+          operationIdHeaders.synchronized {
+            operationIdHeaders(call.getMethodDescriptor.getBareMethodName) =
+              Option(headers.get(key))
+          }
           next.startCall(call, headers)
         }
       }
-      startDummyServer(0, Seq(interceptor))
+      val dummyService = if (reattachable) {
+        new DummySparkConnectService {
+          override def executePlan(
+              request: ExecutePlanRequest,
+              responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+            responseObserver.onNext(
+              ExecutePlanResponse
+                .newBuilder()
+                .setSessionId(request.getSessionId)
+                .setOperationId(request.getOperationId)
+                .setResponseId("initial-response")
+                .build())
+            responseObserver.onCompleted()
+          }
+
+          override def reattachExecute(
+              request: proto.ReattachExecuteRequest,
+              responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+            responseObserver.onNext(
+              ExecutePlanResponse
+                .newBuilder()
+                .setSessionId(request.getSessionId)
+                .setOperationId(request.getOperationId)
+                .setResponseId("result-complete")
+                .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
+                .build())
+            responseObserver.onCompleted()
+          }
+        }
+      } else {
+        new DummySparkConnectService
+      }
+      startDummyServer(0, Seq(interceptor), dummyService)
       val builder = SparkConnectClient
         .builder()
         .connectionString(s"sc://localhost:${server.getPort}")
@@ -107,7 +145,19 @@ class SparkConnectClientSuite extends ConnectFunSuite {
 
       UUID.fromString(operationId)
       assert(responses.forall(_.getOperationId == operationId))
-      assert(operationIdHeader.contains(operationId))
+      assert(operationIdHeaders.synchronized {
+        operationIdHeaders("ExecutePlan").contains(operationId)
+      })
+      if (reattachable) {
+        assert(operationIdHeaders.synchronized {
+          operationIdHeaders("ReattachExecute").contains(operationId)
+        })
+        Eventually.eventually(timeout(5.seconds)) {
+          assert(operationIdHeaders.synchronized {
+            operationIdHeaders("ReleaseExecute").contains(operationId)
+          })
+        }
+      }
     }
   }
 

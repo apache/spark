@@ -56,6 +56,14 @@ private[sql] class SparkConnectClient(
   private val userContext: UserContext = configuration.userContext
 
   private[this] val stubState = new SparkConnectStubState(channel, configuration)
+
+  if (configuration.metadata.keys.exists(
+      _.equalsIgnoreCase(SparkConnectClient.OPERATION_ID_HEADER))) {
+    logWarning(
+      s"Connection option ${SparkConnectClient.OPERATION_ID_HEADER} is ignored because " +
+        "Spark Connect sets it for each ExecutePlan request.")
+  }
+
   private[this] val bstub =
     new CustomSparkConnectBlockingStub(channel, stubState)
   private[this] val stub =

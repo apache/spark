@@ -888,6 +888,12 @@ class SparkConnectClient(object):
             if isinstance(connection, ChannelBuilder)
             else DefaultChannelBuilder(connection, channel_options)
         )
+        if any(key.lower() == _OPERATION_ID_METADATA_KEY for key, _ in self._builder.metadata()):
+            logger.warning(
+                "Connection option %s is ignored because Spark Connect sets it for each "
+                "ExecutePlan request.",
+                _OPERATION_ID_METADATA_KEY,
+            )
         self._user_id = None
         self._retry_policies: List[RetryPolicy] = []
 
@@ -1933,9 +1939,7 @@ class SparkConnectClient(object):
                 for attempt in self._retrying():
                     with attempt:
                         with disable_gc():
-                            it = iter(
-                                self._stub.ExecutePlan(req, metadata=metadata)
-                            )
+                            it = iter(self._stub.ExecutePlan(req, metadata=metadata))
                         while True:
                             try:
                                 with disable_gc():
