@@ -1005,6 +1005,14 @@ NULL
 
 
 -- !query
+select json_typeof('123 true')
+-- !query schema
+struct<json_typeof(123 true):string>
+-- !query output
+NULL
+
+
+-- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query schema
 struct<>

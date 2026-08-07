@@ -127,6 +127,7 @@ select json_typeof('false');
 select json_typeof('null');
 select json_typeof('bad');
 select json_typeof('{"key": 45, "random_string"}');
+select json_typeof('123 true');
 
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;

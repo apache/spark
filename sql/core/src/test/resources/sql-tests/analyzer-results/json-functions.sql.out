@@ -902,6 +902,13 @@ Project [json_typeof({"key": 45, "random_string"}) AS json_typeof({"key": 45, "r
 
 
 -- !query
+select json_typeof('123 true')
+-- !query analysis
+Project [json_typeof(123 true) AS json_typeof(123 true)#x]
++- OneRowRelation
+
+
+-- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query analysis
 DropTempViewCommand jsonTable, true

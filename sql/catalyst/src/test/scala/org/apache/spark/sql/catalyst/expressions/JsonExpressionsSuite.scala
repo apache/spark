@@ -915,6 +915,8 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("", null),
       ("bad", null),
       ("""{"key": 45, "random_string"}""", null),
+      // Trailing content after a valid value is not a single well-formed JSON document.
+      ("123 true", null),
       // Valid JSON values return the type of the outermost value.
       ("{}", "object"),
       ("""{"key": 1, "arr": [1, 2]}""", "object"),
