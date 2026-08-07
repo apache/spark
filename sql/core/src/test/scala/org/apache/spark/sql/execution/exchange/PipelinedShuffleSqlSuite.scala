@@ -234,6 +234,30 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
     }
   }
 
+  test("an exchange wider than the task-concurrency limit fails loudly at admission") {
+    // Deliberate design decision (viirya): the rule does NOT cap flipped exchanges at the
+    // local concurrency limit. The user opted in explicitly, so an over-wide plan surfaces
+    // the scheduler's CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT error -- actionable and
+    // explicit -- rather than silently degrading to a regular run.
+    withPipelinedSession { spark =>
+      import spark.implicits._
+      spark.conf.set("spark.sql.shuffle.partitions", "64")
+      try {
+        val ex = intercept[Exception] {
+          spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 7))
+            .groupBy($"k").count().collect()
+        }
+        val messages = Iterator.iterate(ex: Throwable)(_.getCause).takeWhile(_ != null)
+          .map(t => Option(t.getMessage).getOrElse("")).mkString(" | ")
+        assert(messages.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT") ||
+          messages.contains("concurrent task slots"),
+          s"expected the explicit slot-admission error, got: $messages")
+      } finally {
+        spark.conf.set("spark.sql.shuffle.partitions", "4")
+      }
+    }
+  }
+
   test("cross-subquery exchange reuse cannot create a shared pipelined exchange") {
     // The no-reuse gate checks subquery plans too (collectWithSubqueries). Probing every
     // SQL route to a reused PIPELINED exchange showed each is closed by a different layer,
