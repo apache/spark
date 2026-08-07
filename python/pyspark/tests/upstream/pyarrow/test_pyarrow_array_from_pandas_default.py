@@ -114,6 +114,16 @@ class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
             return f"{values}@chunked<{arrow_type}>"
         return rendered
 
+    def _from_pandas_cell(self, series, **from_pandas_kwargs) -> str:
+        """
+        Convert ``series`` via ``from_pandas(**from_pandas_kwargs)`` and format the result
+        as a golden-file cell, returning ``ERR@<ExceptionClass>`` if the conversion raises.
+        """
+        try:
+            return self.repr_from_pandas_result(pa.Array.from_pandas(series, **from_pandas_kwargs))
+        except Exception as e:
+            return f"ERR@{type(e).__name__}"
+
     def _numpy_backed_sources(self):
         """
         Series whose storage is numpy, so ``hasattr(series.array, "__arrow_array__")`` is
@@ -399,10 +409,7 @@ class PyArrowArrayFromPandasDefaultTests(_PyArrowFromPandasTestBase):
             if col_name == "pandas series":
                 return self.repr_value(series, max_len=0)
             else:
-                try:
-                    return self.repr_from_pandas_result(pa.Array.from_pandas(series))
-                except Exception as e:
-                    return f"ERR@{type(e).__name__}"
+                return self._from_pandas_cell(series)
 
         self.compare_or_generate_golden_matrix(
             row_names=row_names,

@@ -538,6 +538,7 @@ pyspark_core = Module(
         # unittests for upstream projects
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_cast",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_default",
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_from_pandas_non_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_default",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_arrow_to_pandas_non_default",
