@@ -7721,7 +7721,7 @@
       },
       "CHECKPOINT_FORMAT_V1_NOT_SUPPORTED" : {
         "message" : [
-          "Real-time mode does not support state store checkpoint format v1. If you encountered this while switching an existing query to real-time mode, use a fresh checkpoint location.",
+          "Real-time mode does not support state store checkpoint format v1, because a re-executed batch can reuse the state file names of a partially-written failed batch and lose data. If you encountered this while switching an existing query to real-time mode, use a fresh checkpoint location.",
           "If you must continue with your existing checkpoint and accept that doing so exposes you to the possibility of data loss on failure, set <config> to true."
         ]
       },

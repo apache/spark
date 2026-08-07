@@ -3641,10 +3641,12 @@ object SQLConf {
     buildConf("spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled")
       .internal()
       .doc("Whether to allow a Real-Time Mode query to start on a checkpoint whose commit log " +
-        "is at version 1. Real-Time Mode reruns a failed batch from committed offsets, which " +
-        "relies on the per-batch state store checkpoint ids that only commit log version 2 and " +
-        "above persist, so starting on a version 1 checkpoint exposes the query to data loss " +
-        "on failure. Escape hatch only; prefer a fresh checkpoint location.")
+        "is at version 1. Real-Time Mode re-executes a failed batch, and with checkpoint format " +
+        "version 1 the re-execution can reuse the state file names of the partially-written " +
+        "failed batch, so starting on a version 1 checkpoint exposes the query to data loss on " +
+        "failure. Format version 2 avoids this with per-batch state store checkpoint ids, which " +
+        "only a commit log at version 2 or above can persist. Escape hatch only; prefer a fresh " +
+        "checkpoint location.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -8813,7 +8815,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def streamingOffsetLogFormatVersion: Int = getConf(STREAMING_OFFSET_LOG_FORMAT_VERSION)
 
-  def streamingCommitLogFormatVersion: Int = getConf(STREAMING_COMMIT_LOG_FORMAT_VERSION)
+  def streamingCommitLogFormatVersion: Int =
+    getConf(STREAMING_COMMIT_LOG_FORMAT_VERSION).max(getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION))
 
   def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
 

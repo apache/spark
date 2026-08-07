@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.runtime
 
 import java.io.{InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
-import java.util.{Locale, UUID}
+import java.util.UUID
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
@@ -489,13 +489,15 @@ abstract class StreamExecution(
     val conf = sparkSessionForStream.conf
 
     // SOFT DEFAULTS. Real-Time Mode benefits from state store checkpoint format v2: it gives each
-    // batch its own state store checkpoint ids, which matters because a failed batch is rerun from
-    // committed offsets. v2 requires the RocksDB state store provider. These are defaulted with two
-    // INDEPENDENT guards, matching the Databricks runtime: each key is set only if the user has not
-    // set that key. If the user pins the provider to a non-RocksDB store but leaves the version
-    // unset, the version is still raised to 2 and the incompatible combination throws later
-    // (HDFSBackedStateStoreProvider rejects checkpointFormatVersion > 1) rather than silently
-    // running at v1 -- the runtime makes the same choice deliberately.
+    // batch run its own state store checkpoint ids, which prevents a re-executed batch from reusing
+    // the state file names of a partially-written failed batch (see the v1 hazard described at the
+    // fail-fast in MicroBatchExecution.initializeExecution). v2 requires the RocksDB state store
+    // provider. These are defaulted with two INDEPENDENT guards, matching the Databricks runtime:
+    // each key is set only if the user has not set that key. If the user pins the provider to a
+    // non-RocksDB store but leaves the version unset, the version is still raised to 2 and the
+    // incompatible combination throws later (HDFSBackedStateStoreProvider rejects
+    // checkpointFormatVersion > 1) rather than silently running at v1 -- the runtime makes the same
+    // choice deliberately.
     val checkpointVersionKey = SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key
     if (!conf.contains(checkpointVersionKey)) {
       logInfo(log"Real-Time Mode: defaulting ${MDC(CONFIG, checkpointVersionKey)}=2")
@@ -517,15 +519,7 @@ abstract class StreamExecution(
       conf.get(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
         SQLConf.STATE_STORE_PROVIDER_CLASS.defaultValueString) ==
         classOf[RocksDBStateStoreProvider].getName
-    // RocksDB resolves its own configs through a CaseInsensitiveMap (see RocksDBConf.apply), so a
-    // user can set this key in any casing and RocksDB will honour it. `conf.contains` is
-    // case-SENSITIVE, so comparing only the canonical spelling would miss such a setting and
-    // silently override it. Match the way RocksDB reads the key instead.
-    val changelogAlreadySet = {
-      val canonical = changelogKey.toLowerCase(Locale.ROOT)
-      conf.getAll.keys.exists(_.toLowerCase(Locale.ROOT) == canonical)
-    }
-    if (usingRocksDb && !changelogAlreadySet) {
+    if (usingRocksDb && !conf.contains(changelogKey)) {
       logInfo(log"Real-Time Mode: defaulting ${MDC(CONFIG, changelogKey)}=true")
       conf.set(changelogKey, "true")
     }
