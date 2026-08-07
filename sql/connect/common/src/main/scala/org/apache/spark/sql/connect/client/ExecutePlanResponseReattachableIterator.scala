@@ -84,7 +84,9 @@ class ExecutePlanResponseReattachableIterator(
   private val operationIdInterceptor = new SparkConnectClient.MetadataHeaderClientInterceptor(
     Map(SparkConnectClient.OPERATION_ID_HEADER -> operationId))
   private val rawBlockingStub =
-    proto.SparkConnectServiceGrpc.newBlockingStub(channel).withInterceptors(operationIdInterceptor)
+    proto.SparkConnectServiceGrpc
+      .newBlockingStub(channel)
+      .withInterceptors(operationIdInterceptor)
   private val rawAsyncStub =
     proto.SparkConnectServiceGrpc.newStub(channel).withInterceptors(operationIdInterceptor)
 

@@ -48,8 +48,9 @@ private[connect] class CustomSparkConnectBlockingStub(
   private def executePlanStub(operationId: String) =
     SparkConnectServiceGrpc
       .newBlockingStub(channel)
-      .withInterceptors(new SparkConnectClient.MetadataHeaderClientInterceptor(
-        Map(SparkConnectClient.OPERATION_ID_HEADER -> operationId)))
+      .withInterceptors(
+        new SparkConnectClient.MetadataHeaderClientInterceptor(
+          Map(SparkConnectClient.OPERATION_ID_HEADER -> operationId)))
 
   // Non-reattachable executePlan intentionally has no deadline: a timeout here would kill the
   // server-side execution with no way to recover (there is no ReattachExecute for this path).
