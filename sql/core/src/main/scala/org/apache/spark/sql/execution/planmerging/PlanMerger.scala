@@ -841,7 +841,9 @@ class PlanMerger(
         // Check the report per attempt, and at the caller rather than inside the build: the strict
         // filters and the report are independent reasons to reject a build, so a source whose
         // report depends on what got pushed still gets its second chance from the strict-only
-        // attempt, and `tryBuildMergedDSv2Scan`'s `None` keeps its single meaning.
+        // attempt, and `tryBuildMergedDSv2Scan`'s `None` keeps its single meaning. The strict-only
+        // attempt is what the leaf builds when no Filter is above the scan, so checking only the
+        // first attempt would leave the deferred path weaker than the leaf path.
         def build(offeredBestEffortFilter: Option[Expression]) =
           tryBuildMergedDSv2Scan(
             relation, d.unionAttrs, d.strictFilters, offeredBestEffortFilter)

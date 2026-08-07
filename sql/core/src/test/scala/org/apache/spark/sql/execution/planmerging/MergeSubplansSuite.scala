@@ -2004,6 +2004,15 @@ class MergeSubplansSuite extends PlanTest {
     StructField("a", IntegerType), StructField("b", IntegerType), StructField("c", StringType))),
     reportedBucketPartition = Some((4, "a")))
 
+  /**
+   * Same shape as [[v2Table]], but its scans report `a ASC` ONLY when no filter was pushed into
+   * them, so the deferred build's two attempts (strict + best-effort, then strict-only) re-derive
+   * different reports.
+   */
+  private val v2TablePushSensitiveReport = new TestV2Table(StructType(Seq(
+    StructField("a", IntegerType), StructField("b", IntegerType), StructField("c", StringType))),
+    reportedOrderingCols = Seq("a"), reportOnlyWhenNothingPushed = true)
+
   /** A `DataSourceV2ScanRelation` over `table` projecting only the given columns. */
   private def v2ScanReadingOn(table: TestV2Table, cols: Seq[String]): DataSourceV2ScanRelation = {
     val fullOutput = toAttributes(table.schema())
@@ -2843,6 +2852,34 @@ class MergeSubplansSuite extends PlanTest {
       SQLConf.MERGE_SUBPLANS_DSV2_ALLOW_ORDERING_DEGRADATION.key)
   }
 
+  test("SPARK-58549: the deferred build checks the required report per attempt") {
+    // The deferred build tries strict + best-effort first, then strict-only. The report is checked
+    // on EACH attempt, not once on whichever came back, so the deferred path stays no weaker than
+    // the leaf path: the strict-only attempt is exactly what the leaf builds when no Filter sits
+    // above the scan, so a merge it can satisfy must not be lost just because the first attempt
+    // could not. Here both inputs report `a ASC` and neither has a strict pushed filter, and the
+    // source reports only when nothing was pushed: attempt 1 (offered the Filter's condition)
+    // re-derives no ordering and is rejected, attempt 2 re-derives `a ASC` and the merge lands.
+    val withOrdering = (s: DataSourceV2ScanRelation) =>
+      s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending))))
+    val q = testRelation.select(
+      ScalarSubquery(withOrdering(v2ScanReadingOn(v2TablePushSensitiveReport, Seq("a", "b")))
+        .where($"a" > 1).groupBy()(sum($"b").as("sum_b"))),
+      ScalarSubquery(withOrdering(v2ScanReadingOn(v2TablePushSensitiveReport, Seq("a", "c")))
+        .where($"a" > 1).groupBy()(sum($"c").as("sum_c"))))
+    val optimized = Optimize.execute(q.analyze)
+
+    val scans = v2Scans(optimized)
+    assert(scans.length == 1, s"the two scans should be fused into one:\n$optimized")
+    assert(scans.head.ordering.exists(_.map(_.child).collect {
+      case a: Attribute => a.name
+    } == Seq("a")),
+      s"the strict-only attempt should have satisfied the required ordering; " +
+        s"got ${scans.head.ordering}")
+    assert(scans.head.scan.asInstanceOf[TestV2ReportingScan].inner.pushed.isEmpty,
+      "the surviving build should be the strict-only one, with nothing pushed")
+  }
+
   test("SPARK-40259: merge DSv2 scans that report empty key-grouped partitioning or ordering") {
     // A source implementing SupportsReportPartitioning/SupportsReportOrdering but reporting nothing
     // yields Some(Nil), not None (V2ScanPartitioningAndOrdering sets the field unconditionally). An
@@ -3012,7 +3049,8 @@ private class TestV2Table(
     strictColumns: Set[String] = Set.empty,
     supportsScanMerging: Boolean = true,
     reportedOrderingCols: Seq[String] = Nil,
-    reportedBucketPartition: Option[(Int, String)] = None)
+    reportedBucketPartition: Option[(Int, String)] = None,
+    reportOnlyWhenNothingPushed: Boolean = false)
   extends Table with SupportsRead {
   override def name(): String = "test_v2_table"
   override def schema(): StructType = tableSchema
@@ -3022,8 +3060,8 @@ private class TestV2Table(
     caps
   }
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-    new TestV2ScanBuilder(
-      tableSchema, acceptsFilters, strictColumns, reportedOrderingCols, reportedBucketPartition)
+    new TestV2ScanBuilder(tableSchema, acceptsFilters, strictColumns, reportedOrderingCols,
+      reportedBucketPartition, reportOnlyWhenNothingPushed)
 }
 
 private class TestV2ScanBuilder(
@@ -3031,7 +3069,8 @@ private class TestV2ScanBuilder(
     acceptsFilters: Boolean,
     strictColumns: Set[String],
     reportedOrderingCols: Seq[String] = Nil,
-    reportedBucketPartition: Option[(Int, String)] = None)
+    reportedBucketPartition: Option[(Int, String)] = None,
+    reportOnlyWhenNothingPushed: Boolean = false)
   extends ScanBuilder with SupportsPushDownRequiredColumns with SupportsPushDownV2Filters
     with SupportsPushDownLimit with SupportsPushDownOffset with SupportsPushDownTopN
     with SupportsPushDownTableSample {
@@ -3073,7 +3112,8 @@ private class TestV2ScanBuilder(
     if (reportedOrderingCols.isEmpty && reportedBucketPartition.isEmpty) {
       scan
     } else {
-      TestV2ReportingScan(scan, reportedOrderingCols, reportedBucketPartition)
+      TestV2ReportingScan(scan, reportedOrderingCols, reportedBucketPartition,
+        reportOnlyWhenNothingPushed)
     }
   }
 }
@@ -3093,14 +3133,24 @@ private case class TestV2Scan(schema: StructType, pushed: Seq[String] = Seq.empt
 private case class TestV2ReportingScan(
     inner: TestV2Scan,
     orderingCols: Seq[String] = Nil,
-    bucketPartition: Option[(Int, String)] = None)
+    bucketPartition: Option[(Int, String)] = None,
+    onlyWhenNothingPushed: Boolean = false)
   extends Scan with SupportsReportOrdering with SupportsReportPartitioning {
   override def readSchema(): StructType = inner.readSchema()
 
-  override def outputOrdering(): Array[V2SortOrder] = orderingCols
-    .map(c => Expressions.sort(FieldReference(c), V2SortDirection.ASCENDING)).toArray
+  // A source may report per scan: `outputOrdering`/`outputPartitioning` are answered by the Scan
+  // the connector built AFTER seeing what it accepted, so an ordering that only holds over the
+  // unpruned file set can legitimately disappear once a filter is pushed. `onlyWhenNothingPushed`
+  // models that, so a build offered a best-effort filter and one without it report differently.
+  private def reports: Boolean = !onlyWhenNothingPushed || inner.pushed.isEmpty
 
-  override def outputPartitioning(): V2Partitioning = bucketPartition match {
+  override def outputOrdering(): Array[V2SortOrder] = if (reports) {
+    orderingCols.map(c => Expressions.sort(FieldReference(c), V2SortDirection.ASCENDING)).toArray
+  } else {
+    Array.empty
+  }
+
+  override def outputPartitioning(): V2Partitioning = bucketPartition.filter(_ => reports) match {
     case Some((numBuckets, col)) =>
       new V2KeyGroupedPartitioning(Array(Expressions.bucket(numBuckets, col)), 0)
     case None => new V2UnknownPartitioning(0)
