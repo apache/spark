@@ -169,7 +169,9 @@ case class BroadcastNearestByJoinExec(
               })
               if (shouldRetain) {
                 val rankingValue = if (rankingNeedsCopy) {
-                  rankingRow.copy().get(0, rankExpr.dataType)
+                  // Deep-copy variable-width values (UTF8String, BinaryView, structs,
+                  // arrays, maps) without allocating the enclosing one-column UnsafeRow.
+                  InternalRow.copyValue(rawValue)
                 } else {
                   rawValue
                 }
