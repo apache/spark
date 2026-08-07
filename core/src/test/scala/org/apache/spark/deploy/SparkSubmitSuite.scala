@@ -613,6 +613,7 @@ class SparkSubmitSuite
     withTempDir { tmpDir =>
       val notToDownloadArchive = File.createTempFile("NotToDownloadArchive", ".zip", tmpDir)
       val remoteArchiveFile = s"s3a://${notToDownloadArchive.getAbsolutePath}"
+      val tmpJar = File.createTempFile("TestUDTF", ".jar", tmpDir)
 
       val clArgs = Seq(
         "--deploy-mode", "client",
@@ -626,7 +627,7 @@ class SparkSubmitSuite
         "--files", "src/test/resources/test_metrics_config.properties",
         "--py-files", "src/test/resources/test_metrics_system.properties",
         "--archives", s"src/test/resources/log4j2.properties,$remoteArchiveFile",
-        "--jars", "src/test/resources/TestUDTF.jar",
+        "--jars", tmpJar.getAbsolutePath,
         "/home/jarToIgnore.jar",
         "arg1")
       val appArgs = new SparkSubmitArguments(clArgs)
@@ -638,12 +639,12 @@ class SparkSubmitSuite
       Files.exists(Paths.get("test_metrics_config.properties")) should be(true)
       Files.exists(Paths.get("test_metrics_system.properties")) should be(true)
       Files.exists(Paths.get("log4j2.properties")) should be(true)
-      Files.exists(Paths.get("TestUDTF.jar")) should be(true)
+      Files.exists(Paths.get(tmpJar.getName)) should be(true)
       Files.exists(Paths.get(notToDownloadArchive.getName)) should be(false)
       Files.delete(Paths.get("test_metrics_config.properties"))
       Files.delete(Paths.get("test_metrics_system.properties"))
       Files.delete(Paths.get("log4j2.properties"))
-      Files.delete(Paths.get("TestUDTF.jar"))
+      Files.delete(Paths.get(tmpJar.getName))
     }
   }
 
