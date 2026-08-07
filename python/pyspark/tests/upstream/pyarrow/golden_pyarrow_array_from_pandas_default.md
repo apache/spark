@@ -1,0 +1,100 @@
+| test case                       | pandas series                                                                        | arrow array                                                     |
+|---------------------------------|--------------------------------------------------------------------------------------|-----------------------------------------------------------------|
+| int8:standard                   | [0, 1, -1, 127, -128]@Series[int8]                                                   | [0, 1, -1, 127, -128]@int8                                      |
+| int8:empty                      | []@Series[int8]                                                                      | []@int8                                                         |
+| int16:standard                  | [0, 1, -1, 32767, -32768]@Series[int16]                                              | [0, 1, -1, 32767, -32768]@int16                                 |
+| int16:empty                     | []@Series[int16]                                                                     | []@int16                                                        |
+| int32:standard                  | [0, 1, -1, 2147483647, -2147483648]@Series[int32]                                    | [0, 1, -1, 2147483647, -2147483648]@int32                       |
+| int32:empty                     | []@Series[int32]                                                                     | []@int32                                                        |
+| int64:standard                  | [0, 1, -1, 9223372036854775807, -9223372036854775808]@Series[int64]                  | [0, 1, -1, 9223372036854775807, -9223372036854775808]@int64     |
+| int64:empty                     | []@Series[int64]                                                                     | []@int64                                                        |
+| int64:nullable                  | [0.0, 1.0, nan]@Series[float64]                                                      | [0.0, 1.0, None]@float64                                        |
+| uint8:standard                  | [0, 1, 255]@Series[uint8]                                                            | [0, 1, 255]@uint8                                               |
+| uint16:standard                 | [0, 1, 65535]@Series[uint16]                                                         | [0, 1, 65535]@uint16                                            |
+| uint32:standard                 | [0, 1, 4294967295]@Series[uint32]                                                    | [0, 1, 4294967295]@uint32                                       |
+| uint64:standard                 | [0, 1, 18446744073709551615]@Series[uint64]                                          | [0, 1, 18446744073709551615]@uint64                             |
+| float32:standard                | [0.0, 1.5, -1.5]@Series[float32]                                                     | [0.0, 1.5, -1.5]@float32                                        |
+| float32:nullable                | [0.0, nan, 1.5]@Series[float32]                                                      | [0.0, None, 1.5]@float32                                        |
+| float32:empty                   | []@Series[float32]                                                                   | []@float32                                                      |
+| float64:standard                | [0.0, 1.5, -1.5]@Series[float64]                                                     | [0.0, 1.5, -1.5]@float64                                        |
+| float64:nullable                | [0.0, nan, 1.5]@Series[float64]                                                      | [0.0, None, 1.5]@float64                                        |
+| float64:empty                   | []@Series[float64]                                                                   | []@float64                                                      |
+| bool:standard                   | [True, False, True]@Series[bool]                                                     | [True, False, True]@bool                                        |
+| bool:empty                      | []@Series[bool]                                                                      | []@bool                                                         |
+| object:string                   | ['hello', 'world', '']@Series[object]                                                | [hello, world, ]@string                                         |
+| object:string-nullable          | ['hello', None, 'world']@Series[object]                                              | [hello, None, world]@string                                     |
+| string:inferred                 | ['hello', 'world']@Series[object]                                                    | [hello, world]@string                                           |
+| object:bytes                    | [b'hello', b'world']@Series[object]                                                  | [b'hello', b'world']@binary                                     |
+| object:empty                    | []@Series[object]                                                                    | []@null                                                         |
+| object:all-null                 | [None, None]@Series[object]                                                          | [None, None]@null                                               |
+| object:decimal                  | [Decimal('1.50'), Decimal('-2.25')]@Series[object]                                   | [1.50, -2.25]@decimal128(3, 2)                                  |
+| list<int64>:standard            | [[1, 2], [3]]@Series[object]                                                         | [[1, 2], [3]]@list<item: int64>                                 |
+| list<int64>:nullable            | [[1, 2], None]@Series[object]                                                        | [[1, 2], None]@list<item: int64>                                |
+| list<int64>:null-element        | [[1, None], [3]]@Series[object]                                                      | [[1, None], [3]]@list<item: int64>                              |
+| list<string>:standard           | [['a', 'b'], ['c']]@Series[object]                                                   | [['a', 'b'], ['c']]@list<item: string>                          |
+| list<list<int64>>:standard      | [[[1, 2], [3]], [[4]]]@Series[object]                                                | [[[1, 2], [3]], [[4]]]@list<item: list<item: int64>>            |
+| list<struct>:standard           | [[{'a': 1}], [{'a': 2}]]@Series[object]                                              | [[{'a': 1}], [{'a': 2}]]@list<item: struct<a: int64>>           |
+| struct:standard                 | [{'a': 1, 'b': 'x'}]@Series[object]                                                  | [[('a', 1), ('b', 'x')]]@struct<a: int64, b: string>            |
+| struct:nullable                 | [{'a': 1, 'b': 'x'}, None]@Series[object]                                            | [[('a', 1), ('b', 'x')], None]@struct<a: int64, b: string>      |
+| struct<struct>:standard         | [{'a': {'b': 1}}]@Series[object]                                                     | [[('a', {'b': 1})]]@struct<a: struct<b: int64>>                 |
+| struct<list<int64>>:standard    | [{'a': [1, 2]}]@Series[object]                                                       | [[('a', [1, 2])]]@struct<a: list<item: int64>>                  |
+| datetime64[ns]:standard         | [Timestamp('2024-06-15 18:30:00')]@Series[datetime64[ns]]                            | [2024-06-15 18:30:00]@timestamp[ns]                             |
+| datetime64[ns]:nullable         | [Timestamp('2024-06-15 18:30:00'), NaT]@Series[datetime64[ns]]                       | [2024-06-15 18:30:00, None]@timestamp[ns]                       |
+| datetime64[ns]:empty            | []@Series[datetime64[ns]]                                                            | []@timestamp[ns]                                                |
+| datetime64[ns,tz]:standard      | [Timestamp('2024-06-15 18:30:00+0000', tz='UTC')]@Series[datetime64[ns, UTC]]        | [2024-06-15 18:30:00+00:00]@timestamp[ns, tz=UTC]               |
+| datetime64[ns,tz]:nullable      | [Timestamp('2024-06-15 18:30:00+0000', tz='UTC'), NaT]@Series[datetime64[ns, UTC]]   | [2024-06-15 18:30:00+00:00, None]@timestamp[ns, tz=UTC]         |
+| timedelta64[ns]:standard        | [Timedelta('1 days 00:00:00'), Timedelta('0 days 02:00:00')]@Series[timedelta64[ns]] | [1 days 00:00:00, 0 days 02:00:00]@duration[ns]                 |
+| timedelta64[ns]:nullable        | [Timedelta('1 days 00:00:00'), NaT]@Series[timedelta64[ns]]                          | [1 days 00:00:00, None]@duration[ns]                            |
+| datetime64[us]:standard         | [Timestamp('2024-06-15 18:30:00')]@Series[datetime64[us]]                            | [2024-06-15 18:30:00]@timestamp[us]                             |
+| datetime64[us]:nullable         | [Timestamp('2024-06-15 18:30:00'), NaT]@Series[datetime64[us]]                       | [2024-06-15 18:30:00, None]@timestamp[us]                       |
+| datetime64[us]:empty            | []@Series[datetime64[us]]                                                            | []@timestamp[us]                                                |
+| datetime64[us,tz]:standard      | [Timestamp('2024-06-15 18:30:00+0000', tz='UTC')]@Series[datetime64[us, UTC]]        | [2024-06-15 18:30:00+00:00]@timestamp[us, tz=UTC]               |
+| datetime64[us,tz]:nullable      | [Timestamp('2024-06-15 18:30:00+0000', tz='UTC'), NaT]@Series[datetime64[us, UTC]]   | [2024-06-15 18:30:00+00:00, None]@timestamp[us, tz=UTC]         |
+| timedelta64[us]:standard        | [Timedelta('1 days 00:00:00'), Timedelta('0 days 02:00:00')]@Series[timedelta64[us]] | [1 day, 0:00:00, 2:00:00]@duration[us]                          |
+| timedelta64[us]:nullable        | [Timedelta('1 days 00:00:00'), NaT]@Series[timedelta64[us]]                          | [1 day, 0:00:00, None]@duration[us]                             |
+| datetime64:inferred             | [Timestamp('2024-06-15 18:30:00')]@Series[datetime64[ns]]                            | [2024-06-15 18:30:00]@timestamp[ns]                             |
+| timedelta64:inferred            | [Timedelta('1 days 00:00:00'), Timedelta('0 days 02:00:00')]@Series[timedelta64[ns]] | [1 days 00:00:00, 0 days 02:00:00]@duration[ns]                 |
+| datetime64[us]:out-of-ns-range  | [Timestamp('1500-01-01 00:00:00')]@Series[datetime64[us]]                            | [1500-01-01 00:00:00]@timestamp[us]                             |
+| date:standard                   | [datetime.date(2024, 6, 15)]@Series[object]                                          | [2024-06-15]@date32[day]                                        |
+| time:standard                   | [datetime.time(18, 30, 45)]@Series[object]                                           | [18:30:45]@time64[us]                                           |
+| object:datetime                 | [datetime.datetime(2024, 6, 15, 18, 30)]@Series[object]                              | [2024-06-15 18:30:00]@timestamp[us]                             |
+| object:datetime-sub-us          | [Timestamp('2024-01-01 00:00:00.000000123')]@Series[object]                          | [2024-01-01 00:00:00]@timestamp[us]                             |
+| object:timedelta                | [datetime.timedelta(days=1, seconds=7200)]@Series[object]                            | [1 day, 2:00:00]@duration[us]                                   |
+| category:standard               | ['a', 'b', 'a']@Series[category]                                                     | [a, b, a]@dictionary<values=string, indices=int8, ordered=0>    |
+| category:nullable               | ['a', nan, 'b']@Series[category]                                                     | [a, None, b]@dictionary<values=string, indices=int8, ordered=0> |
+| Int8:standard                   | [0, 1, 127, -128]@Series[Int8]                                                       | [0, 1, 127, -128]@int8                                          |
+| Int8:nullable                   | [0, 1, <NA>]@Series[Int8]                                                            | [0, 1, None]@int8                                               |
+| Int16:standard                  | [0, 1, 32767, -32768]@Series[Int16]                                                  | [0, 1, 32767, -32768]@int16                                     |
+| Int16:nullable                  | [0, 1, <NA>]@Series[Int16]                                                           | [0, 1, None]@int16                                              |
+| Int32:standard                  | [0, 1, 2147483647, -2147483648]@Series[Int32]                                        | [0, 1, 2147483647, -2147483648]@int32                           |
+| Int32:nullable                  | [0, 1, <NA>]@Series[Int32]                                                           | [0, 1, None]@int32                                              |
+| Int64:standard                  | [0, 1, 9223372036854775807, -9223372036854775808]@Series[Int64]                      | [0, 1, 9223372036854775807, -9223372036854775808]@int64         |
+| Int64:nullable                  | [0, 1, <NA>]@Series[Int64]                                                           | [0, 1, None]@int64                                              |
+| UInt64:standard                 | [0, 1, 18446744073709551615]@Series[UInt64]                                          | [0, 1, 18446744073709551615]@uint64                             |
+| Int64:empty                     | []@Series[Int64]                                                                     | []@int64                                                        |
+| Int64:all-null                  | [<NA>, <NA>]@Series[Int64]                                                           | [None, None]@int64                                              |
+| Float64:standard                | [0.0, 1.5]@Series[Float64]                                                           | [0.0, 1.5]@float64                                              |
+| Float64:nullable                | [0.0, <NA>]@Series[Float64]                                                          | [0.0, None]@float64                                             |
+| boolean:standard                | [True, False]@Series[boolean]                                                        | [True, False]@bool                                              |
+| boolean:nullable                | [True, <NA>]@Series[boolean]                                                         | [True, None]@bool                                               |
+| string[python]:standard         | ['hello', 'world']@Series[string]                                                    | [hello, world]@string                                           |
+| string[python]:nullable         | ['hello', <NA>]@Series[string]                                                       | [hello, None]@string                                            |
+| string[python]:empty            | []@Series[string]                                                                    | []@string                                                       |
+| int64[pyarrow]:standard         | [0, 1, -1]@Series[int64[pyarrow]]                                                    | [0, 1, -1]@int64                                                |
+| int64[pyarrow]:nullable         | [0, 1, <NA>]@Series[int64[pyarrow]]                                                  | [0, 1, None]@int64                                              |
+| int64[pyarrow]:empty            | []@Series[int64[pyarrow]]                                                            | []@int64                                                        |
+| double[pyarrow]:nullable        | [0.0, <NA>]@Series[double[pyarrow]]                                                  | [0.0, None]@float64                                             |
+| bool[pyarrow]:nullable          | [True, <NA>]@Series[bool[pyarrow]]                                                   | [True, None]@bool                                               |
+| string[pyarrow]:standard        | ['hello', 'world']@Series[string]                                                    | [hello, world]@large_string                                     |
+| string[pyarrow]:nullable        | ['hello', <NA>]@Series[string]                                                       | [hello, None]@large_string                                      |
+| string[pyarrow]:empty           | []@Series[string]                                                                    | []@large_string                                                 |
+| timestamp[us][pyarrow]:standard | [Timestamp('2024-01-01 12:00:00')]@Series[timestamp[us][pyarrow]]                    | [2024-01-01 12:00:00]@timestamp[us]                             |
+| int64[pyarrow]:single-chunk     | [1, 2]@Series[int64[pyarrow]]                                                        | [1, 2]@int64                                                    |
+| int64[pyarrow]:multi-chunk      | [1, 2, 3]@Series[int64[pyarrow]]                                                     | [1, 2, 3]@chunked<int64>                                        |
+| int64:overflow                  | [300, 1]@Series[int64]                                                               | [300, 1]@int64                                                  |
+| float64:fractional              | [1.5, 2.5]@Series[float64]                                                           | [1.5, 2.5]@float64                                              |
+| float64:infinity                | [inf, 1.0]@Series[float64]                                                           | [inf, 1.0]@float64                                              |
+| float64:precision               | [1.1234567890123]@Series[float64]                                                    | [1.1234567890123]@float64                                       |
+| datetime64[ns]:sub-us           | [Timestamp('2024-01-01 00:00:00.000000123')]@Series[datetime64[ns]]                  | [2024-01-01 00:00:00.000000123]@timestamp[ns]                   |
+| object:date-then-datetime       | [datetime.date(2024, 1, 1), datetime.datetime(2024, 1, 1, 5, 30)]@Series[object]     | [2024-01-01, 2024-01-01]@date32[day]                            |
+| object:datetime-then-date       | [datetime.datetime(2024, 1, 1, 5, 30), datetime.date(2024, 1, 1)]@Series[object]     | ERR@ArrowTypeError                                              |
