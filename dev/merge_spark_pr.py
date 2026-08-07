@@ -48,6 +48,11 @@ from urllib.request import urlopen
 from urllib.request import Request
 from urllib.error import HTTPError
 
+# Shared with dev/pr_merge_status.py so the two committer tools agree on where a PR landed.
+# Importable because Python puts this script's own directory first on sys.path.
+from spark_merge_footer import branches_with_merge_footer as _branches_with_merge_footer
+from spark_merge_footer import has_merge_footer
+
 try:
     import jira.client
 
@@ -415,6 +420,55 @@ def get_json(url):
         sys.exit(-1)
 
 
+def merge_commit_candidates(pr_events):
+    """Split `pr_events` into (closed_commits, referenced_commits), each oldest-first.
+
+    Ordered by time so that a PR reopened and merged again yields its latest merge last.
+
+    >>> merge_commit_candidates([{"event": "closed", "commit_id": "a", "created_at": "t2"},
+    ...                          {"event": "referenced", "commit_id": "b", "created_at": "t1"}])
+    (['a'], ['b'])
+    >>> merge_commit_candidates([{"event": "closed", "commit_id": None, "created_at": "t1"}])
+    ([], [])
+    >>> merge_commit_candidates([{"event": "referenced", "commit_id": "c", "created_at": "t2"},
+    ...                          {"event": "referenced", "commit_id": "b", "created_at": "t1"}])
+    ([], ['b', 'c'])
+    """
+
+    def commits_of(event_name):
+        matched = [e for e in pr_events if e["event"] == event_name and e["commit_id"] is not None]
+        return [e["commit_id"] for e in sorted(matched, key=lambda x: x["created_at"])]
+
+    return commits_of("closed"), commits_of("referenced")
+
+
+def find_merge_commit(pr_num, pr_events):
+    """Return (hash, message) of the commit that merged `pr_num`, or (None, None).
+
+    GitHub attributes the merge commit to the `closed` event only when that commit lands
+    on the default branch (master), because the "Closes #N" keyword in the commit message
+    is what closes the PR and the keyword is honored only there. A PR merged into any
+    other branch -- e.g. one opened against a rolling branch-M.x -- is instead closed by
+    this script through the API, and that `closed` event carries no commit, so the merge
+    survives only as a `referenced` event. Prefer the `closed` commit, which GitHub itself
+    linked; otherwise fall back to `referenced` events, which are also raised by any commit
+    merely mentioning the PR, so confirm each against the merge footer `merge_pr` generates.
+    """
+
+    def message_of(commit_hash):
+        return get_json("%s/commits/%s" % (GITHUB_API_BASE, commit_hash))["commit"]["message"]
+
+    closed_commits, referenced_commits = merge_commit_candidates(pr_events)
+    if closed_commits:
+        return closed_commits[-1], message_of(closed_commits[-1])
+
+    for commit_hash in reversed(referenced_commits):
+        message = message_of(commit_hash)
+        if has_merge_footer(message, pr_num):
+            return commit_hash, message
+    return None, None
+
+
 def close_pr(pr_num):
     url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
     data = json.dumps({"state": "closed"}).encode("utf-8")
@@ -613,6 +667,45 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
     print("Pick hash: %s" % pick_hash)
     return pick_ref, pick_hash
+
+
+def branches_with_merge_footer(pr_num, branch_names):
+    """Release branches from `branch_names` that already carry `pr_num`'s merge footer.
+
+    Thin wrapper over the shared reader in `spark_merge_footer`, adding this script's own
+    policy: a git failure here must not abort a merge that may already have pushed, so it
+    warns and reports nothing rather than exiting. Per that module's refresh policy no fetch
+    is issued, so a backport not yet fetched into PUSH_REMOTE_NAME's tracking refs is simply
+    not reported -- the committer is still prompted and can type any branch.
+    """
+    try:
+        landed = _branches_with_merge_footer(
+            pr_num, PUSH_REMOTE_NAME, lambda args: run_cmd(["git"] + args)
+        )
+    except Exception as e:
+        print_error("Could not scan for existing backports of #%s (%s)." % (pr_num, e))
+        return []
+    # Keep branch_names' newest-first order, and drop anything not a known release branch.
+    return [b for b in branch_names if b in landed]
+
+
+def default_pick_branch(branch_names, already_picked):
+    """Highest-ranked release branch that has not already received the change, or None.
+
+    `branch_names` is ordered newest-first (see `semver_branch_rank`) and `already_picked`
+    holds the branches the change is known to be on, so the prompt never defaults to a
+    branch where the cherry-pick would come up empty. Returns None when every known branch
+    already has it, so callers can say so instead of offering an empty pick.
+
+    >>> default_pick_branch(["branch-4.x", "branch-4.3", "branch-4.2"], ("branch-4.x",))
+    'branch-4.3'
+    >>> default_pick_branch(["branch-4.x", "branch-4.3"], ())
+    'branch-4.x'
+    >>> default_pick_branch(["branch-4.x"], ("branch-4.x",)) is None
+    True
+    """
+    remaining = [b for b in branch_names if b not in already_picked]
+    return remaining[0] if remaining else None
 
 
 def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
@@ -1663,17 +1756,15 @@ def main():
 
     # Merged pull requests don't appear as merged in the GitHub API;
     # Instead, they're closed by committers.
-    merge_commits = [e for e in pr_events if e["event"] == "closed" and e["commit_id"] is not None]
+    # A PR might have multiple merge commits, if it's reopened and merged again. We shall
+    # cherry-pick PRs in closed state with the latest merge hash.
+    # If the PR is still open (reopened), we shall not cherry-pick it but perform the normal
+    # merge as it could have been reverted earlier.
+    merge_hash, message = (None, None)
+    if pr["state"] == "closed":
+        merge_hash, message = find_merge_commit(pr_num, pr_events)
 
-    if merge_commits and pr["state"] == "closed":
-        # A PR might have multiple merge commits, if it's reopened and merged again. We shall
-        # cherry-pick PRs in closed state with the latest merge hash.
-        # If the PR is still open(reopened), we shall not cherry-pick it but perform the normal
-        # merge as it could have been reverted earlier.
-        merge_commits = sorted(merge_commits, key=lambda x: x["created_at"])
-        merge_hash = merge_commits[-1]["commit_id"]
-        message = get_json("%s/commits/%s" % (GITHUB_API_BASE, merge_hash))["commit"]["message"]
-
+    if merge_hash is not None:
         print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
         commit_is_downloaded = (
             run_cmd(["git", "rev-parse", "--quiet", "--verify", "%s^{commit}" % merge_hash]).strip()
@@ -1683,11 +1774,41 @@ def main():
             fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
         print("Found commit %s:\n%s" % (merge_hash, message))
-        default = branch_names[0]
-        picked = cherry_pick(
-            pr_num, merge_hash, default, branch_names, target_ref, already_picked=()
-        )
-        post_merge_comment(pr_num, picked)
+        # The change is already on target_ref and on any branch a previous run backported it
+        # to, so exclude all of them: defaulting to one would cherry-pick an empty commit.
+        picked_refs = [target_ref] + [
+            b for b in branches_with_merge_footer(pr_num, branch_names) if b != target_ref
+        ]
+        if len(picked_refs) > 1:
+            print("Already backported to: %s" % ", ".join(picked_refs[1:]))
+        # Loop so one invocation can reach several maintenance branches, as the merge path does.
+        picked_commits = []
+        try:
+            while True:
+                default = default_pick_branch(branch_names, tuple(picked_refs))
+                if default is None:
+                    print(
+                        "Every known release branch already contains #%s; nothing to pick." % pr_num
+                    )
+                    break
+                picked = cherry_pick(
+                    pr_num,
+                    merge_hash,
+                    default,
+                    branch_names,
+                    target_ref,
+                    already_picked=tuple(picked_refs),
+                )
+                picked_refs = picked_refs + [ref for ref, _ in picked]
+                picked_commits = picked_commits + picked
+                prompt = "Would you like to pick %s into another branch?" % merge_hash
+                if get_input(f"\n{prompt} (y/N): ", ["y", "n", ""]) != "y":
+                    break
+        finally:
+            # Report whatever was pushed even if a later pick is aborted, since the earlier
+            # pushes have already landed.
+            if picked_commits:
+                post_merge_comment(pr_num, picked_commits)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -1765,19 +1886,20 @@ def main():
     # then each cherry-pick target as it is picked.
     merged_commits = [(target_ref, merge_hash)]
 
-    # Walk a mutable remaining-branches list so the next default correctly skips any
-    # branches already picked, including branches consumed by the Upstream-First two-branch
-    # path inside cherry_pick (e.g. picking branch-M.x + branch-M.N in a single prompt).
-    # merged_refs doubles as the already_picked set passed to cherry_pick: it starts with
-    # target_ref (the merge sink, never to be re-picked) and grows with every cherry-pick.
-    remaining_branches = [b for b in branch_names if b != target_ref]
+    # merged_refs drives both the next prompt default and the already_picked set passed to
+    # cherry_pick, so each grows with every cherry-pick -- including branches consumed by the
+    # Upstream-First two-branch path inside cherry_pick (e.g. picking branch-M.x + branch-M.N
+    # in a single prompt). It starts with target_ref, the merge sink, never to be re-picked.
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     # Always record the merge summary for what actually landed, even if a later
     # cherry-pick is aborted or cancelled: the merge into the target branch has
     # already been pushed, so cancelling a backport must not drop that line.
     try:
         while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
-            default = remaining_branches[0] if remaining_branches else branch_names[0]
+            default = default_pick_branch(branch_names, tuple(merged_refs))
+            if default is None:
+                print("Every known release branch already contains #%s; nothing to pick." % pr_num)
+                break
             picked = cherry_pick(
                 pr_num,
                 merge_hash,
@@ -1786,12 +1908,8 @@ def main():
                 target_ref,
                 already_picked=tuple(merged_refs),
             )
-            picked_refs = [ref for ref, _ in picked]
-            merged_refs = merged_refs + picked_refs
+            merged_refs = merged_refs + [ref for ref, _ in picked]
             merged_commits = merged_commits + picked
-            for b in picked_refs:
-                if b in remaining_branches:
-                    remaining_branches.remove(b)
     finally:
         if merged_commits:
             # The "Closes #N" keyword in the commit message only auto-closes the PR when the

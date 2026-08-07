@@ -1761,6 +1761,7 @@ dev_tools = Module(
         "dev/merge_spark_pr.py",
         "dev/requirements.txt",
         "dev/pr_merge_status.py",
+        "dev/spark_merge_footer.py",
         "dev/create_spark_jira.py",
         "dev/create-release/",
     ],
