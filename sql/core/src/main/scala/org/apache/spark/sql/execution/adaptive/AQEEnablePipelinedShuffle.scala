@@ -63,6 +63,9 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (conf.getConfString(confKey, "false").toBoolean != true) return plan
+    // Single-executor only, like v1's AQE rule: the validated transport (the in-process
+    // channel manager) requires producer and consumer in one JVM.
+    if (plan.session == null || !plan.session.sparkContext.isLocal) return plan
 
     val shared = if (conf.exchangeReuseEnabled) duplicatedShuffleForms(plan) else Set.empty[Any]
     val toFlip = mutable.HashSet.empty[ShuffleExchangeExec]

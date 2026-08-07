@@ -53,6 +53,14 @@ import org.apache.spark.shuffle.{BaseShuffleHandle, PipelinedShuffleManager, Shu
 private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
   extends PipelinedShuffleManager {
 
+  // The in-process rendezvous is JVM-local: on a multi-executor deployment each executor would
+  // get its own empty queue map, and every reader would block forever on data written in some
+  // other JVM -- a silent hang. Refuse to construct anywhere but local mode, so a
+  // misconfiguration fails loudly at startup instead.
+  require(org.apache.spark.util.Utils.isLocalMaster(conf),
+    "PipelinedChannelShuffleManager is an in-process (single-JVM) transport and requires " +
+      s"local mode; got master '${conf.get("spark.master", "")}'")
+
   // Rows accumulated per output partition before a batch is handed across the channel in one
   // queue operation. Batching amortizes the queue's per-operation lock cost; per-row hand-off
   // measured ~19x slower than a regular shuffle on a 20M-row repartition.

@@ -153,6 +153,18 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
+  test("the channel manager refuses to construct outside local mode") {
+    // The rendezvous is JVM-local; on a multi-executor master every reader would hang on
+    // data written in another JVM. A cluster misconfiguration must fail loudly at startup.
+    val conf = new SparkConf().set("spark.master", "spark://example.invalid:7077")
+    val ex = intercept[IllegalArgumentException] {
+      new PipelinedChannelShuffleManager(conf)
+    }
+    assert(ex.getMessage.contains("requires local mode"), ex.getMessage)
+    // And constructs fine for local masters.
+    new PipelinedChannelShuffleManager(new SparkConf().set("spark.master", "local[4]"))
+  }
+
   test("materialized regular prefix + pipelined suffix runs end-to-end") {
     // The materialized-prefix mixed shape: a regular shuffle materialized by an earlier job,
     // then a pipelined shuffle over its output in a second job. Previously rejected as a
