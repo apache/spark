@@ -2992,6 +2992,12 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         return func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF:
+        # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
+        # clear message rather than a bare ImportError from `import pyarrow` below.
+        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+        require_minimum_pyarrow_version()
+
         import pyarrow as pa
         import pyarrow.compute as pc
 

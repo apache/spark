@@ -38,6 +38,7 @@ R/cran-check.out
 R/pkg/vignettes/sparkr-vignettes.html
 R/pkg/tests/fulltests/Rplots.pdf
 build/*.jar
+build/*.jar.part
 build/apache-maven*
 build/scala*
 cache
