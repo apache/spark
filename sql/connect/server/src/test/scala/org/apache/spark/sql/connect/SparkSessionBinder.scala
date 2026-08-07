@@ -42,7 +42,8 @@ trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
   private def classicSpark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
 
   override protected def beforeAll(): Unit = {
-    super.beforeAll()
+    initializeSession()
+
     // Other suites using mocks leave a mess in the global executionManager,
     // shut it down so that it's cleared before starting server.
     SparkConnectService.executionManager.shutdown()
@@ -64,14 +65,18 @@ trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
       .builder()
       .client(client)
       .create()
+    super.beforeAll()
   }
 
   override def afterAll(): Unit = {
-    if (_connectSpark != null) {
-      _connectSpark.close()
-      _connectSpark = null
+    try {
+      super.afterAll()
+    } finally {
+      if (_connectSpark != null) {
+        _connectSpark.close()
+        _connectSpark = null
+      }
+      SparkConnectService.stop()
     }
-    SparkConnectService.stop()
-    super.afterAll()
   }
 }
