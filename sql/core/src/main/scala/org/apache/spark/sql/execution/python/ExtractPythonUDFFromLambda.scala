@@ -156,7 +156,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     val posIdx = NamedLambdaVariable("i", IntegerType, nullable = false)
     val indexed = ArraysZip(
       Seq(argument, ArrayTransform(argument, LambdaFunction(posIdx, Seq(posElem, posIdx)))),
-      Seq(Literal(s"${CarrierElementPrefix}0"), Literal(CarrierIndexField)))
+      Seq(Literal(s"${carrierElementPrefix}0"), Literal(carrierIndexField)))
     val indexedElement = indexed.dataType.asInstanceOf[ArrayType].elementType
 
     // The matrix, as n rows of n taken from the flat results.
@@ -171,7 +171,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     val cmpLeft = NamedLambdaVariable("a", indexedElement, nullable = false)
     val cmpRight = NamedLambdaVariable("b", indexedElement, nullable = false)
     def indexOf(v: NamedLambdaVariable): Expression =
-      Add(GetStructField(v, 1, Some(CarrierIndexField)), Literal(1))
+      Add(GetStructField(v, 1, Some(carrierIndexField)), Literal(1))
     val comparison = ElementAt(
       ElementAt(matrix, indexOf(cmpLeft), None, failOnError = false),
       indexOf(cmpRight),
@@ -232,9 +232,9 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       }
 
     // Match lambda parameters to the arrays they iterate: leading ones map to the arrays, a
-    // trailing extra one is the element index. An `array_sort` comparator is the exception - its
-    // two parameters are two elements of the *same* array, indistinguishable from an indexed lambda
-    // by types alone (both `(T, Int)`), so it is recognized by class.
+    // trailing extra one is the element index. `array_sort` is the one exception - its lambda is a
+    // comparator whose two parameters are two elements of the *same* array, indistinguishable from
+    // an indexed lambda by types alone (both `(T, Int)`), so it is special-cased by class here.
     val params = lambda.arguments.map(_.asInstanceOf[NamedLambdaVariable])
     val (elementVars, indexVar, alsoBind) =
       if (hof.isInstanceOf[ArraySort]) {
@@ -327,7 +327,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     // requires.
     val alignedArguments =
       if (arguments.length > 1) {
-        val names = arguments.indices.map(i => s"$CarrierElementPrefix$i")
+        val names = arguments.indices.map(i => s"$carrierElementPrefix$i")
         val zipped = ArraysZip(arguments, names.map(Literal(_)))
         arguments.indices.map(i => unwrapCarrier(zipped, i))
       } else {
@@ -375,9 +375,9 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     // The carrier: the original arrays first, then one field per lifted UDF, then the index.
     val carrierFields = alignedArguments ++ liftedArrays ++ indexArray.toSeq
     val carrierNames =
-      arguments.indices.map(i => s"$CarrierElementPrefix$i") ++
-        liftedArrays.indices.map(i => s"$CarrierUDFFieldPrefix$i") ++
-        indexArray.map(_ => CarrierIndexField).toSeq
+      arguments.indices.map(i => s"$carrierElementPrefix$i") ++
+        liftedArrays.indices.map(i => s"$carrierUDFFieldPrefix$i") ++
+        indexArray.map(_ => carrierIndexField).toSeq
     val carrier = ArraysZip(carrierFields, carrierNames.map(Literal(_)))
 
     val structType = carrier.dataType.asInstanceOf[ArrayType].elementType
@@ -402,7 +402,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       val base = extraVarOf.getOrElse(v.exprId, boundVar)
       udfOrdinal match {
         case Some(u) =>
-          GetStructField(base, arguments.length + u, Some(s"$CarrierUDFFieldPrefix$u"))
+          GetStructField(base, arguments.length + u, Some(s"$carrierUDFFieldPrefix$u"))
         case None =>
           val ordinal = fieldOfVar(v.exprId)
           GetStructField(base, ordinal, Some(carrierNames(ordinal)))
@@ -421,7 +421,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
           case Some(v) => readerFor(v, Some(ordinal))
           case None =>
             GetStructField(boundVar, arguments.length + ordinal,
-              Some(s"$CarrierUDFFieldPrefix$ordinal"))
+              Some(s"$carrierUDFFieldPrefix$ordinal"))
         }
       case v: NamedLambdaVariable if fieldOfVar.contains(v.exprId) => readerFor(v, None)
       case v: NamedLambdaVariable if extraVarOf.contains(v.exprId) =>
@@ -514,7 +514,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         ArrayTransform(arr, LambdaFunction(substituted, Seq(v)))
       } else {
         // Zip every array the expression may read, then project the fields it needs.
-        val names = arrays.indices.map(i => s"$CarrierElementPrefix$i")
+        val names = arrays.indices.map(i => s"$carrierElementPrefix$i")
         val zipped = ArraysZip(arrays, names.map(Literal(_)))
         val structType = zipped.dataType.asInstanceOf[ArrayType].elementType
         val v = NamedLambdaVariable("z", structType, nullable = false)
@@ -538,10 +538,10 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     ArrayTransform(
       carrierArray,
       LambdaFunction(
-        GetStructField(v, ordinal, Some(s"$CarrierElementPrefix$ordinal")), Seq(v)))
+        GetStructField(v, ordinal, Some(s"$carrierElementPrefix$ordinal")), Seq(v)))
   }
 
-  private val CarrierElementPrefix = "c"
-  private val CarrierUDFFieldPrefix = "u"
-  private val CarrierIndexField = "idx"
+  private val carrierElementPrefix = "c"
+  private val carrierUDFFieldPrefix = "u"
+  private val carrierIndexField = "idx"
 }
