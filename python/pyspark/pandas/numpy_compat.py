@@ -101,22 +101,17 @@ unary_np_spark_mappings = {
 
 
 def _copysign_func(c1: Column, c2: Column) -> Column:
-    c1_double = c1.cast("double")
     # Sign of y is taken from its IEEE-754 sign bit, so -0.0 counts as negative.
     # c2 < 0 misses -0.0, so detect it via the string cast, the same way the
     # 'reciprocal' mapping distinguishes -0.0 from 0.0. NaN's sign bit is positive
     # and c2 < 0 is already false for NaN, so it correctly falls through to +1.0.
-    signed = F.abs(c1_double) * F.when(
-        (c2 < 0) | (c2.cast("string") == "-0.0"), F.lit(-1.0)
-    ).otherwise(F.lit(1.0))
-
-    # A float/double y column carries missing values as NaN, which pandas-on-Spark
-    # stores as a Spark NULL; numpy's copysign(x, NaN) returns |x|, so such a NULL
-    # must not propagate. An integer y column has no NaN, so its NULL is a genuine
-    # missing value and copysign(x, NULL) is NULL.
-    return F.when(F.typeof(c2).isin("float", "double"), signed).otherwise(
-        F.when(c2.isNull(), F.lit(None).cast("double")).otherwise(signed)
-    )
+    sign = F.when((c2 < 0) | (c2.cast("string") == "-0.0"), F.lit(-1.0)).otherwise(F.lit(1.0))
+    # An integer y column's NULL is a genuine missing value and propagates. A
+    # float/double column instead stores its missing value as NaN (surfaced as a
+    # Spark NULL by pandas-on-Spark), for which copysign(x, NaN) returns |x|.
+    return F.when(
+        c2.isNull() & ~F.typeof(c2).isin("float", "double"), F.lit(None).cast("double")
+    ).otherwise(F.abs(c1.cast("double")) * sign)
 
 
 def _fmod_func(c1: Column, c2: Column) -> Column:
