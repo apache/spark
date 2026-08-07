@@ -24,6 +24,7 @@ import java.util.ServiceLoader
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
@@ -115,7 +116,7 @@ private[spark] class HadoopDelegationTokenManager(
           try {
             provider.delegationTokensRequired(sparkConf, hadoopConf)
           } catch {
-            case e: Exception =>
+            case NonFatal(e) =>
               logWarning(log"Failed to determine whether credentials are required from " +
                 log"${MDC(LogKeys.SERVICE_NAME, provider.serviceName)}.", e)
               false
@@ -207,23 +208,7 @@ private[spark] class HadoopDelegationTokenManager(
     val creds = new Credentials()
     var failureCount = 0
     val nextRenewal = delegationTokenProviders.values.flatMap { provider =>
-      if (isolateFailures) {
-        try {
-          if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
-            provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
-          } else {
-            logDebug(s"Service ${provider.serviceName} does not require a token." +
-              s" Check your configuration to see if security is disabled or not.")
-            None
-          }
-        } catch {
-          case e: Exception =>
-            logWarning(log"Failed to obtain credentials from " +
-              log"${MDC(LogKeys.SERVICE_NAME, provider.serviceName)}.", e)
-            failureCount += 1
-            None
-        }
-      } else {
+      try {
         if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
           provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
         } else {
@@ -231,6 +216,12 @@ private[spark] class HadoopDelegationTokenManager(
             s" Check your configuration to see if security is disabled or not.")
           None
         }
+      } catch {
+        case NonFatal(e) if isolateFailures =>
+          logWarning(log"Failed to obtain credentials from " +
+            log"${MDC(LogKeys.SERVICE_NAME, provider.serviceName)}.", e)
+          failureCount += 1
+          None
       }
     }.foldLeft(Long.MaxValue)(math.min)
     (creds, nextRenewal, failureCount)
