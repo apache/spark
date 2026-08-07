@@ -81,6 +81,27 @@ class SparkSessionJobTaggingAndCancellationSuite
     assert(session.getTags() == Set("one"))
   }
 
+  test("SPARK-58358: addTag and removeTag reject invalid tags") {
+    val session = classic.SparkSession.builder().master("local").getOrCreate()
+
+    // A tag cannot be empty or contain the ',' separator. Both addTag and removeTag must
+    // reject such tags (removeTag previously skipped this validation).
+    Seq("", "a,b", ",").foreach { invalidTag =>
+      intercept[IllegalArgumentException] {
+        session.addTag(invalidTag)
+      }
+      intercept[IllegalArgumentException] {
+        session.removeTag(invalidTag)
+      }
+    }
+    // A rejected tag must not leak into the tag set.
+    assert(session.getTags() == Set())
+
+    // Removing a valid, absent tag stays a no-op.
+    session.removeTag("absent")
+    assert(session.getTags() == Set())
+  }
+
   test("Tags set from session are prefixed with session UUID") {
     sc = new SparkContext("local[2]", "test")
     val session = classic.SparkSession.builder().sparkContext(sc).getOrCreate()
