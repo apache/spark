@@ -262,7 +262,12 @@ class NumPyCompatTestsMixin:
                 result = np_func(psdf.x1, psdf.x2)
                 expected = np_func(pdf.x1, pdf.x2)
                 self.assert_eq(result, expected, almost=True)
-                self.assert_eq(np.signbit(result.to_pandas()), np.signbit(expected))
+                # NumPy's vectorized implementation may select either zero operand, whereas
+                # its scalar implementation consistently selects the first one.
+                expected_signbit = pd.Series(
+                    [np.signbit(np_func(x1, x2)) for x1, x2 in zip(pdf.x1, pdf.x2)]
+                )
+                self.assert_eq(np.signbit(result.to_pandas()), expected_signbit)
 
     def test_np_heaviside(self):
         for pdf in (
