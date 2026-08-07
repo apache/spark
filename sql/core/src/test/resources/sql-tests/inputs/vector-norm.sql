@@ -178,7 +178,7 @@ SELECT vector_normalize(array(1.0e-23F, 0.0F), 2.0F);
 
 SELECT vector_normalize(array(1.0e-23F, 1.0e-23F), 2.0F);
 
--- SPARK-58544: elements that are already infinite still produce an infinite norm, the wider
+-- SPARK-58544: elements that are already infinite still produce an infinite norm; the wider
 -- accumulators do not change that
 
 -- vector_norm: an infinite element makes the L2 norm infinite

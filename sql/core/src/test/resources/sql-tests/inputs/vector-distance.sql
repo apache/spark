@@ -154,7 +154,7 @@ SELECT vector_cosine_similarity(array(1.0e-23F, 0.0F), array(1.0e-23F, 0.0F));
 -- vector_cosine_similarity of orthogonal tiny vectors is 0.0, not NULL
 SELECT vector_cosine_similarity(array(1.0e-23F, 1.0e-23F), array(1.0e-23F, -1.0e-23F));
 
--- SPARK-58544: elements that are already infinite still propagate to NaN or Infinity, the wider
+-- SPARK-58544: elements that are already infinite still propagate to NaN or Infinity; the wider
 -- accumulators do not change that
 
 -- vector_cosine_similarity: the norm is infinite, so the similarity is NaN
