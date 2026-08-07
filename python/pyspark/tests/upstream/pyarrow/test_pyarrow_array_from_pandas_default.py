@@ -410,4 +410,4 @@ class PyArrowArrayFromPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase)
 if __name__ == "__main__":
     from pyspark.testing import main
 
-    main(globals()["__file__"])
+    main()
