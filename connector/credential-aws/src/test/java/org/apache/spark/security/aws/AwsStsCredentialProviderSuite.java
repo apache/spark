@@ -307,6 +307,40 @@ public class AwsStsCredentialProviderSuite {
     assertEquals(URI.create("http://localhost:9000"), cfg.endpointOverride);
   }
 
+  @Test
+  public void testInitTrimsRoleSessionName() throws CredentialResolutionException {
+    Instant expiration = Instant.now().plusSeconds(3600);
+    StsClient mockSts = createMockStsClient("AK", "SK", "ST", expiration);
+
+    // Use init() with a padded sessionName to exercise the trim path
+    Map<String, String> conf = new HashMap<>();
+    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "  my-session  ");
+    conf.put(AwsStsCredentialProvider.CONF_STS_ENDPOINT, "http://localhost:9000");
+
+    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    provider.init(conf);
+
+    // Verify the stored config has the trimmed value
+    assertEquals("my-session", provider.resolvedConfig().roleSessionName);
+
+    // Now resolve() with a separate provider that uses the test constructor
+    // so we can capture the STS request via mock
+    AwsStsCredentialProvider resolveProvider = new AwsStsCredentialProvider(
+        mockSts, TEST_ROLE_ARN, provider.resolvedConfig().roleSessionName, null);
+
+    UserContext user = new UserContext(TEST_PRINCIPAL, TEST_ISSUER, TEST_TOKEN,
+        Instant.now(), Instant.now().plusSeconds(300));
+    resolveProvider.resolve(user, TEST_TARGET);
+
+    ArgumentCaptor<AssumeRoleWithWebIdentityRequest> captor =
+        ArgumentCaptor.forClass(AssumeRoleWithWebIdentityRequest.class);
+    verify(mockSts).assumeRoleWithWebIdentity(captor.capture());
+
+    // The session name in the request must be trimmed, not "  my-session  "
+    assertEquals("my-session", captor.getValue().roleSessionName());
+  }
+
   // ========== resolve() ==========
 
   @Test
