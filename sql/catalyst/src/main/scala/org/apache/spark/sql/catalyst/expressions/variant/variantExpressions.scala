@@ -1700,8 +1700,7 @@ case class VariantStripNulls(child: Expression, includeArrays: Expression)
   arguments = """
     Arguments:
       * v - A variant value to mutate.
-      * include_arrays - An optional boolean (default true). An expression that evaluates to a
-          boolean. Must be a constant.
+      * include_arrays - An optional boolean (default true). Must be a constant.
   """,
   examples = """
     Examples:
