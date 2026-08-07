@@ -65,13 +65,6 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  */
 object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 
-  /**
-   * A scalar Python UDF that this rule knows how to lift out of a lambda. Shared with
-   * `CheckAnalysis` so that the shapes analysis lets through are exactly those rewritten here.
-   */
-  private def isRewritableUDF(e: Expression): Boolean =
-    PythonUDF.isElementwiseRewritableUDF(e)
-
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.pythonUDFInHigherOrderFunctionEnabled) {
       plan
@@ -107,7 +100,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   private def comparatorTakesBothElements(function: Expression): Boolean = function match {
     case LambdaFunction(body, Seq(left: NamedLambdaVariable, right: NamedLambdaVariable), _) =>
       body.exists {
-        case udf: PythonUDF if isRewritableUDF(udf) =>
+        case udf: PythonUDF if PythonUDF.isElementwiseRewritableUDF(udf) =>
           def reads(id: ExprId) = udf.exists {
             case v: NamedLambdaVariable => v.exprId == id
             case _ => false
@@ -298,7 +291,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
    * onto `arr`.
    */
   private def hasDirectRewritableUDF(body: Expression): Boolean = body match {
-    case e if isRewritableUDF(e) => true
+    case e if PythonUDF.isElementwiseRewritableUDF(e) => true
     case hof: HigherOrderFunction => hof.arguments.exists(hasDirectRewritableUDF)
     case e => e.children.exists(hasDirectRewritableUDF)
   }
@@ -466,7 +459,9 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       // Children first, so nested calls come out innermost-first.
       children.foreach(visit)
       e match {
-        case udf: PythonUDF if isRewritableUDF(udf) && readsLambdaVariable(udf, lambdaExprIds) =>
+        case udf: PythonUDF
+            if PythonUDF.isElementwiseRewritableUDF(udf) &&
+              readsLambdaVariable(udf, lambdaExprIds) =>
           collected += udf
         case _ =>
       }

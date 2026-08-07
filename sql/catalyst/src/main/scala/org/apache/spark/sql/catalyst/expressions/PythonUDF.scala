@@ -106,7 +106,7 @@ object PythonUDF {
    * Whether `e` references a [[NamedLambdaVariable]] that it does not itself bind, i.e. one bound
    * by an enclosing lambda. Such an expression cannot be evaluated outside that lambda.
    */
-  def hasFreeLambdaVariable(e: Expression): Boolean = {
+  private def hasFreeLambdaVariable(e: Expression): Boolean = {
     def check(expr: Expression, bound: Set[ExprId]): Boolean = expr match {
       case LambdaFunction(function, arguments, _) =>
         check(function, bound ++ arguments.map(_.exprId))
