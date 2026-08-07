@@ -27,6 +27,10 @@ arguments (no types_mapper, no self_destruct, etc.), tracking:
 - How null values are handled (NaN, None, NaT, etc.)
 - Whether values are preserved correctly after conversion
 
+The shared ``_PyArrowToPandasTestBase`` holds the conversion helper and the source-array
+inventory, split into type-family group methods that these and the non-default tests
+reuse whole or by group.
+
 ## Golden File Cell Format
 
 Each cell uses the value@type format:
@@ -71,23 +75,28 @@ if have_pyarrow:
     import pyarrow as pa
 
 
-@unittest.skipIf(
-    not have_pyarrow or not have_pandas or not have_numpy,
-    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
-)
-class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
+class _PyArrowToPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
     """
-    Tests pa.Array.to_pandas() with default arguments via golden file comparison.
+    Shared machinery for pa.Array.to_pandas() golden file tests.
 
-    Covers all major Arrow types: integers, floats, bool, string, binary,
-    decimal, date, timestamp, duration, time, null, and nested types.
-    Each type is tested both without and with null values.
+    Holds the conversion helper and the source-array inventory, split into type-family
+    group methods reusable whole (via ``_build_source_arrays``) or one at a time.
+    Defines no ``test_*`` of its own.
     """
 
-    def _build_source_arrays(self):
-        """Build an ordered dict of named source PyArrow arrays for testing."""
-        import pyarrow as pa
+    def _to_pandas_cell(self, arr, **to_pandas_kwargs) -> str:
+        """
+        Convert ``arr`` via ``to_pandas(**to_pandas_kwargs)`` and format the
+        result as a golden-file cell, returning ``ERR@<ExceptionClass>`` if the
+        conversion raises.
+        """
+        try:
+            return self.repr_value(arr.to_pandas(**to_pandas_kwargs), max_len=0)
+        except Exception as e:
+            return f"ERR@{type(e).__name__}"
 
+    def _numeric_sources(self):
+        """Integer, float, and boolean arrays."""
         sources = {}
 
         # =====================================================================
@@ -136,6 +145,12 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         sources["bool:nullable"] = pa.array([True, False, None], pa.bool_())
         sources["bool:empty"] = pa.array([], pa.bool_())
 
+        return sources
+
+    def _string_binary_sources(self):
+        """String, binary, and decimal arrays."""
+        sources = {}
+
         # =====================================================================
         # String types
         # =====================================================================
@@ -167,6 +182,12 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             [Decimal("1.23"), None, Decimal("4.56")], pa.decimal128(5, 2)
         )
         sources["decimal128:empty"] = pa.array([], pa.decimal128(5, 2))
+
+        return sources
+
+    def _temporal_sources(self):
+        """Date, timestamp, duration, and time arrays."""
+        sources = {}
 
         # =====================================================================
         # Date types
@@ -225,6 +246,12 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         sources["time64[ns]:standard"] = pa.array([t1, t2], pa.time64("ns"))
         sources["time64[ns]:nullable"] = pa.array([t1, None], pa.time64("ns"))
         sources["time64[ns]:empty"] = pa.array([], pa.time64("ns"))
+
+        return sources
+
+    def _nested_sources(self):
+        """Null, list, struct, map, and their nested combinations."""
+        sources = {}
 
         # =====================================================================
         # Null type
@@ -307,6 +334,12 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             pa.map_(pa.string(), pa.map_(pa.string(), pa.int64())),
         )
 
+        return sources
+
+    def _dictionary_sources(self):
+        """Dictionary-encoded arrays."""
+        sources = {}
+
         # =====================================================================
         # Dictionary type
         # =====================================================================
@@ -324,6 +357,33 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         )
 
         return sources
+
+    def _build_source_arrays(self):
+        """Build an ordered dict of named source PyArrow arrays for testing."""
+        sources = {}
+        for group in [
+            self._numeric_sources(),
+            self._string_binary_sources(),
+            self._temporal_sources(),
+            self._nested_sources(),
+            self._dictionary_sources(),
+        ]:
+            sources.update(group)
+        return sources
+
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas or not have_numpy,
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
+)
+class PyArrowArrayToPandasDefaultTests(_PyArrowToPandasTestBase):
+    """
+    Tests pa.Array.to_pandas() with default arguments via golden file comparison.
+
+    Covers all major Arrow types: integers, floats, bool, string, binary,
+    decimal, date, timestamp, duration, time, null, and nested types.
+    Each type is tested both without and with null values.
+    """
 
     def test_to_pandas_default(self):
         """Test pa.Array.to_pandas() with default arguments against golden file."""
@@ -356,11 +416,7 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
             if col_name == "pyarrow array":
                 return self.repr_value(arr, max_len=0)
             else:
-                try:
-                    result = arr.to_pandas()
-                    return self.repr_value(result, max_len=0)
-                except Exception as e:
-                    return f"ERR@{type(e).__name__}"
+                return self._to_pandas_cell(arr)
 
         self.compare_or_generate_golden_matrix(
             row_names=row_names,
