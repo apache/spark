@@ -43,11 +43,12 @@ object PipelinedShuffleBenchmark {
   private def newSession(
       pipelined: Boolean,
       shufflePartitions: Int,
-      master: String): SparkSession = {
+      master: String,
+      aqe: Boolean): SparkSession = {
     val b = SparkSession.builder()
       .master(master)
       .appName("pipelined-shuffle-benchmark")
-      .config("spark.sql.adaptive.enabled", "false")
+      .config("spark.sql.adaptive.enabled", aqe.toString)
       .config("spark.speculation", "false")
       .config("spark.sql.shuffle.partitions", shufflePartitions.toString)
       .config("spark.ui.enabled", "false")
@@ -70,8 +71,9 @@ object PipelinedShuffleBenchmark {
       pipelined: Boolean,
       shufflePartitions: Int,
       master: String,
+      aqe: Boolean,
       workload: SparkSession => Unit): Long = {
-    val spark = newSession(pipelined, shufflePartitions, master)
+    val spark = newSession(pipelined, shufflePartitions, master, aqe)
     try {
       workload(spark) // warm up (JIT, caches, codegen)
       var best = Long.MaxValue
@@ -93,9 +95,10 @@ object PipelinedShuffleBenchmark {
   private def compare(
       name: String,
       shufflePartitions: Int = 8,
-      master: String = s"local[$cores]")(workload: SparkSession => Unit): Unit = {
-    val regular = bestMs(pipelined = false, shufflePartitions, master, workload)
-    val pipe = bestMs(pipelined = true, shufflePartitions, master, workload)
+      master: String = s"local[$cores]",
+      aqe: Boolean = false)(workload: SparkSession => Unit): Unit = {
+    val regular = bestMs(pipelined = false, shufflePartitions, master, aqe, workload)
+    val pipe = bestMs(pipelined = true, shufflePartitions, master, aqe, workload)
     val speedup = regular.toDouble / pipe
     // scalastyle:off println
     println(f"[bench] $name%-40s  regular=${regular}%5dms  pipelined=${pipe}%5dms  " +
@@ -150,6 +153,35 @@ object PipelinedShuffleBenchmark {
     // collisions -- small data, so the regular shuffle's fixed write/read cost dominates.
     // Demand here: 6 (input) + 8 (repartition) + 1 (final agg) = 15 <= 16.
     compare("prototype: repartition(id)+count, 1M uniq")({ spark =>
+      import org.apache.spark.sql.functions.{col, lit, repeat, sum}
+      spark.range(0L, 100000000L, 100L, inputParts)
+        .select(
+          col("id"),
+          col("id").cast("string").as("id2"),
+          (col("id") + 1).as("id3"),
+          repeat((col("id") + 1).cast("string"), 100000).as("id4"))
+        .repartition(col("id")).agg(sum(lit(1L))).collect()
+    })
+
+    // AQE-on rows: both sides run with adaptive execution enabled. For v2 the AQE placement
+    // rule flips only the topmost free exchange; exchanges below it materialize as regular
+    // coalesced stages, so expect much more modest deltas than AQE-off.
+    compare("repartition(k) + count (AQE)", aqe = true)({ spark =>
+      import spark.implicits._
+      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
+        .repartition($"k").count()
+    })
+    compare("groupBy(k).count (AQE)", aqe = true)({ spark =>
+      import spark.implicits._
+      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
+        .groupBy($"k").count().count()
+    })
+    compare("groupBy.count + orderBy(k) (AQE)", shufflePartitions = 4, aqe = true)({ spark =>
+      import spark.implicits._
+      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
+        .groupBy($"k").count().orderBy($"k").collect()
+    })
+    compare("prototype 1M uniq (AQE)", aqe = true)({ spark =>
       import org.apache.spark.sql.functions.{col, lit, repeat, sum}
       spark.range(0L, 100000000L, 100L, inputParts)
         .select(

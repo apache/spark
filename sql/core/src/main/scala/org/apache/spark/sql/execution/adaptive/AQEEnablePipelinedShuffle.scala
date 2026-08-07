@@ -69,7 +69,14 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
     collectCandidates(plan, blocked = false, shared, toFlip)
     if (toFlip.isEmpty) return plan
 
-    plan.transformUp {
+    // transformDown, NOT transformUp: candidates can be nested (a SinglePartition candidate
+    // above a hash candidate). transformUp rebuilds children first, so by the time it
+    // reaches the upper candidate that node is a NEW instance whose (already flipped) child
+    // no longer matches the collected original structurally, and the upper flip is silently
+    // dropped -- leaving a regular exchange above a pipelined one, which the scheduler then
+    // rejects. transformDown hands each candidate to the pattern before its subtree is
+    // rebuilt, so both nested flips apply.
+    plan.transformDown {
       case s: ShuffleExchangeExec if toFlip.contains(s) => s.copy(pipelined = true)
     }
   }
@@ -87,13 +94,23 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
       shared: Set[Any],
       out: mutable.HashSet[ShuffleExchangeExec]): Unit = plan match {
     case s: ShuffleExchangeExec =>
-      if (!blocked && isCandidate(s, shared)) {
+      val flipped = !blocked && isCandidate(s, shared)
+      if (flipped) {
         out += s
       }
-      // Whether flipped or not, exchanges below this one are not free: they either
-      // materialize as the prefix (below a flipped candidate) or feed a regular exchange
-      // whose stats AQE uses. Stop descending in both cases -- anything underneath keeps
-      // full AQE treatment.
+      // A flipped SinglePartition exchange keeps the walk going: AQE makes no decision at
+      // it (it cannot be coalesced or skew-split), so free candidates BELOW it flip too,
+      // forming a pipelined chain -- v1's "transparent SinglePartition" lesson (its AQE-on
+      // prototype numbers went from baseline-equal to 2.4-2.7x on exactly this), adapted
+      // to v2's all-pipelined constraint: where v1 could leave the single exchange regular
+      // and replace only the hash below, v2 must flip the whole chain. Below any OTHER
+      // exchange (flipped or not) the walk stops: what is underneath either materializes
+      // as the prefix or feeds a regular exchange whose stats AQE uses, and keeps full AQE
+      // treatment either way.
+      if (flipped &&
+          s.outputPartitioning == org.apache.spark.sql.catalyst.plans.physical.SinglePartition) {
+        collectCandidates(s.child, blocked = false, shared, out)
+      }
 
     case _: QueryStageExec => // already materialized; a leaf here
 
