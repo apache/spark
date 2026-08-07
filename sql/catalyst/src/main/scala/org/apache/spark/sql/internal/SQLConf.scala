@@ -5341,6 +5341,7 @@ object SQLConf {
         "precomputed result. When false, such queries fail with " +
         "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF as before.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 

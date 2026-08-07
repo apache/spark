@@ -503,12 +503,6 @@ class UDFInHigherOrderFunctionTests(UDFInHigherOrderFunctionTestsMixin, ReusedSQ
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_udf_in_higher_order_function import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()
