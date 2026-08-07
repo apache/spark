@@ -89,16 +89,15 @@ if have_numpy:
     import numpy as np
 
 
-@unittest.skipIf(
-    not have_pyarrow or not have_pandas or not have_numpy,
-    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
-)
-class PyArrowArrayFromPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
+class _PyArrowFromPandasTestBase(GoldenFileTestMixin, unittest.TestCase):
     """
-    Tests pa.Array.from_pandas() with default arguments via golden file comparison.
+    Shared machinery for pa.Array.from_pandas() golden file tests.
 
-    Three group methods build the source Series so the non-default tests can reuse the whole
-    inventory or one group.  Groups are disjoint and their order fixes the row order.
+    Owns the source Series inventory: three disjoint group methods unioned by
+    ``_build_source_arrays``, whose order fixes the row order.  The default test below and
+    the non-default tests in ``test_pyarrow_array_from_pandas_non_default.py`` subclass this
+    to reuse the whole inventory or one group, along with ``repr_from_pandas_result``.  This
+    base defines no ``test_*`` methods, so it contributes no tests itself.
     """
 
     @staticmethod
@@ -351,6 +350,14 @@ class PyArrowArrayFromPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase)
         ]:
             sources.update(group)
         return sources
+
+
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas or not have_numpy,
+    pyarrow_requirement_message or pandas_requirement_message or numpy_requirement_message,
+)
+class PyArrowArrayFromPandasDefaultTests(_PyArrowFromPandasTestBase):
+    """Tests pa.Array.from_pandas() with default arguments via golden file comparison."""
 
     def test_from_pandas_default(self):
         """Test pa.Array.from_pandas() with default arguments against golden file."""
