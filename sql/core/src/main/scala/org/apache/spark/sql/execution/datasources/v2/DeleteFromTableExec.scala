@@ -24,11 +24,13 @@ import org.apache.spark.sql.connector.catalog.SupportsDeleteV2
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class DeleteFromTableExec(
     table: SupportsDeleteV2,
     condition: Array[Predicate],
     refreshCache: () => Unit,
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     transaction: Option[Transaction] = None)
   extends LeafV2CommandExec
   with TransactionalExec
@@ -42,7 +44,7 @@ case class DeleteFromTableExec(
 
   override protected def run(): Seq[InternalRow] = {
     try {
-      table.deleteWhere(condition)
+      table.deleteWhere(condition, options)
     } finally {
       postDriverMetrics(table.reportDriverMetrics())
     }

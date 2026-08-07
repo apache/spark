@@ -100,19 +100,17 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
         case _ => super.visitSQLFunction(funcName, inputs)
       }
 
-    private def isBinaryComparison(e: Expression): Boolean = e match {
-      case p: Predicate => isBinaryComparisonOperator(p.name())
-      case _ => false
-    }
-
-    // MsSqlServer has no boolean type: a comparison expression cannot appear as a value.
-    // IS NULL / IS NOT NULL over a comparison is rejected so Spark evaluates it locally.
+    // MsSqlServer has no boolean type: a predicate (comparison, IN, AND/OR/NOT, LIKE-family, ...)
+    // cannot appear as a value. IS NULL / IS NOT NULL over any predicate operand is rejected so
+    // Spark evaluates it locally. Rewriting the operand to a bit value (predicateToIntSQL) is not
+    // an option because IIF(p, 1, 0) is never NULL, which would change the result. Non-predicate
+    // operands such as arithmetic are still pushed down.
     // Binary comparisons themselves are pushed down via inputToSQLNoBool, which rewrites any
     // boolean sub-expressions into bit-typed equivalents.
     override def build(expr: Expression): String = {
       expr match {
         case e: Predicate => e.name() match {
-          case "IS_NULL" | "IS_NOT_NULL" if isBinaryComparison(e.children().head) =>
+          case "IS_NULL" | "IS_NOT_NULL" if e.children().head.isInstanceOf[Predicate] =>
             visitUnexpectedExpr(expr)
           case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
             val Array(l, r) = e.children().map(inputToSQLNoBool)

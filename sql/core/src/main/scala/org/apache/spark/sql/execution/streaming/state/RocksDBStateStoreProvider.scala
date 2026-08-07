@@ -201,6 +201,20 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
+    // Read-only registration: sets up the virtual column-family id and the key/value encoders
+    // needed to decode this family. Purely in-memory -- it does not write to the checkpoint and
+    // carries no write intent (no forced snapshot). Safe to call on a read-only store.
+    override def registerColFamily(
+        colFamilyName: String,
+        keySchema: StructType,
+        valueSchema: StructType,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
+        useMultipleValuesPerKey: Boolean = false,
+        isInternal: Boolean = false): Unit = {
+      registerColFamilyInternal(colFamilyName, keySchema, valueSchema, keyStateEncoderSpec,
+        useMultipleValuesPerKey, isInternal)
+    }
+
     override def createColFamilyIfAbsent(
         colFamilyName: String,
         keySchema: StructType,
@@ -208,9 +222,20 @@ private[sql] class RocksDBStateStoreProvider
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
+      registerColFamilyInternal(colFamilyName, keySchema, valueSchema, keyStateEncoderSpec,
+        useMultipleValuesPerKey, isInternal)
+    }
+
+    private def registerColFamilyInternal(
+        colFamilyName: String,
+        keySchema: StructType,
+        valueSchema: StructType,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
+        useMultipleValuesPerKey: Boolean,
+        isInternal: Boolean): Unit = {
       validateAndTransitionState(UPDATE)
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
-      val cfId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
+      val cfId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal, readOnly)
       val dataEncoderCacheKey = StateRowEncoderCacheKey(
         queryRunId = StateStoreProvider.getRunId(hadoopConf),
         operatorId = stateStoreId.operatorId,
@@ -1047,15 +1072,32 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def doMaintenance(): Unit = {
+    doSnapshotMaintenance()
+    doCleanupMaintenance()
+  }
+
+  /** Run only the snapshot upload portion of maintenance. */
+  override def doSnapshotMaintenance(): Unit = {
+    doMaintenanceOp(rocksDB.doSnapshotMaintenance(), "snapshot maintenance")
+  }
+
+  /** Run only the cleanup portion of maintenance. */
+  override def doCleanupMaintenance(): Unit = {
+    doMaintenanceOp(rocksDB.doCleanupMaintenance(), "cleanup maintenance")
+  }
+
+  /**
+   * Common wrapper for maintenance operations: verifies the state machine and swallows non-fatal
+   * exceptions (SPARK-46547) to avoid deadlock between the maintenance thread and the streaming
+   * aggregation operator.
+   */
+  private def doMaintenanceOp(op: => Unit, opName: String): Unit = {
     stateMachine.verifyForMaintenance()
     try {
-      rocksDB.doMaintenance()
+      op
     } catch {
-      // SPARK-46547 - Swallow non-fatal exception in maintenance task to avoid deadlock between
-      // maintenance thread and streaming aggregation operator
       case NonFatal(ex) =>
-        logWarning(s"Ignoring error while performing maintenance operations with exception=",
-          ex)
+        logWarning(s"Ignoring error while performing $opName with exception=", ex)
     }
   }
 

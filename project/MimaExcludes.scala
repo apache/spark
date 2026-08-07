@@ -33,11 +33,27 @@ import com.typesafe.tools.mima.core.*
  */
 object MimaExcludes {
 
-  // Exclude rules for 5.0.x from 4.3.0 (add 5.0-specific filters below as needed).
-  lazy val v50excludes: Seq[Problem => Boolean] = v43excludes
+  // Exclude rules for 5.0.x from 4.4.0 (add 5.0-specific filters below as needed).
+  lazy val v50excludes: Seq[Problem => Boolean] = v44excludes
+
+  // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
+  lazy val v44excludes: Seq[Problem => Boolean] = v43excludes
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
   lazy val v43excludes: Seq[Problem => Boolean] = v42excludes ++ Seq(
+    // [SPARK-54879] Add exitCode field to ApplicationAttemptInfo
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.tupled"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.curried"),
+    // [SPARK-58192][CORE] Support fractional spark.task.cpus. The existing TaskContext.cpus(): Int
+    // and TaskResourceRequests.cpus(Int) are retained (cpus() deprecated in favor of the new
+    // TaskContext.cpuAmount(): BigDecimal), but the internal StatusUpdate message's taskCpus field
+    // is now a BigDecimal.
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.cpuAmount"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#StatusUpdate.taskCpus"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#StatusUpdate.copy$default$5"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#StatusUpdate.copy"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#StatusUpdate.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#StatusUpdate.apply"),
     // [SPARK-57910] ALS reuses the shared HasIntermediateStorageLevel param; the param and its
     // getter are declared final in the shared trait (same name, type, default and validation).
     ProblemFilters.exclude[FinalMethodProblem](
@@ -52,9 +68,6 @@ object MimaExcludes {
 
   // Exclude rules for 4.2.x from 4.1.0
   lazy val v42excludes = v41excludes ++ Seq(
-    // [SPARK-54879] Add exitCode field to ApplicationAttemptInfo
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.tupled"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.curried"),
     // [SQL] SafeJsonSerializer.safeMapToJValue: second parameter widened from Function1 to
     // Function2 so the key is passed to the value serializer (progress.scala). Binary-incompatible
     // vs spark-sql-api 4.0.0; not part of the public supported API (private[streaming] package).
@@ -188,6 +201,7 @@ object MimaExcludes {
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
     case v if v.startsWith("5.0") => v50excludes
+    case v if v.startsWith("4.4") => v44excludes
     case v if v.startsWith("4.3") => v43excludes
     case v if v.startsWith("4.2") => v42excludes
     case v if v.startsWith("4.1") => v41excludes

@@ -131,11 +131,8 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   test("CSV: the DSv2 path refuses to infer a schema for an archive (UNABLE_TO_INFER_SCHEMA)") {
-    // Archive scanning is wired into the V1 file source only, so the DSv2 reader cannot read
-    // archives. On the V2 path inference must keep returning None for an archive input -- raising
-    // UNABLE_TO_INFER_SCHEMA -- rather than inferring a schema and letting the V2 scan parse the
-    // raw archive bytes as CSV. Forcing csv off the V1 source list routes the read through
-    // CSVTable.
+    // Forcing csv off the V1 source list routes the archive read through the DSv2 CSVTable, which
+    // cannot read archives and must fail with UNABLE_TO_INFER_SCHEMA, not parse raw bytes.
     withArchiveFile() { archive =>
       writeArchive(archive, Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
@@ -150,3 +147,92 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 }
+
+/**
+ * [[CSVArchiveReadBase]] reading CSV files that carry a header row, plus header-specific archive
+ * tests (mismatched headers, and delimiter/multiline cases whose first row is a header).
+ */
+trait CSVHeaderArchiveReadBase extends CSVArchiveReadBase {
+
+  import testImplicits._
+
+  override protected def header: Boolean = true
+
+  test("CSV: entries with mismatched headers behave like standalone files") {
+    assertArchiveMatchesDir(
+      Seq(
+        entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob"))),
+        // A different second-column header: the schema's "name" column is absent from this entry.
+        entryName(1) -> encodeFile(Seq((3, "Carol")).toDF("id", "nickname"))))
+  }
+
+  test("CSV: custom delimiter matches a directory read") {
+    assertArchiveMatchesDir(
+      Seq("a.csv" -> csvBytes("id;name\n1;Alice\n2;Bob\n")),
+      extraOptions = Map("delimiter" -> ";"))
+  }
+
+  test("CSV: multiline quoted fields with embedded newlines match a directory read") {
+    assertArchiveMatchesDir(
+      Seq(
+        "a.csv" -> csvBytes("id,note\n1,\"line1\nline2\"\n2,\"plain\"\n"),
+        "b.csv" -> csvBytes("id,note\n3,\"a\nb\nc\"\n")),
+      extraOptions = Map("multiLine" -> "true"),
+      schema = "id INT, note STRING")
+  }
+}
+
+/**
+ * [[CSVArchiveReadBase]] reading headerless CSV files (columns are positional), plus headerless
+ * delimiter/multiline archive tests. The shared archive tests from [[ArchiveReadSuiteBase]] cover
+ * the common headerless read paths.
+ */
+trait CSVHeaderlessArchiveReadBase extends CSVArchiveReadBase {
+
+  override protected def header: Boolean = false
+
+  test("CSV: headerless custom delimiter matches a directory read") {
+    assertArchiveMatchesDir(
+      Seq("a.csv" -> csvBytes("1;Alice\n2;Bob\n"), "b.csv" -> csvBytes("3;Carol\n")),
+      extraOptions = Map("delimiter" -> ";"))
+  }
+
+  test("CSV: headerless multiline quoted fields with embedded newlines match a directory read") {
+    assertArchiveMatchesDir(
+      Seq(
+        "a.csv" -> csvBytes("1,\"line1\nline2\"\n2,\"plain\"\n"),
+        "b.csv" -> csvBytes("3,\"a\nb\nc\"\n")),
+      extraOptions = Map("multiLine" -> "true"),
+      schema = "id INT, note STRING")
+  }
+}
+
+class CSVHeaderTarArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderArchiveReadBase
+  with TarArchiveReadBase
+
+class CSVHeaderZipArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderArchiveReadBase
+  with ZipArchiveReadBase
+
+class CSVHeaderSevenZArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderArchiveReadBase
+  with SevenZArchiveReadBase
+
+class CSVHeaderlessTarArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderlessArchiveReadBase
+  with TarArchiveReadBase
+
+class CSVHeaderlessZipArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderlessArchiveReadBase
+  with ZipArchiveReadBase
+
+class CSVHeaderlessSevenZArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with CSVHeaderlessArchiveReadBase
+  with SevenZArchiveReadBase

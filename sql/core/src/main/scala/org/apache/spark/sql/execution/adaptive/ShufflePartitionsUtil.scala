@@ -159,8 +159,11 @@ object ShufflePartitionsUtil extends Logging {
     }
 
     // The indices may look like [0, 1, 2, 2, 2, 3, 4, 4, 5], and the repeated `2` and `4` mean
-    // skewed partitions.
-    val partitionIndices = partitionIndicesSeq.head
+    // skewed partitions. Materialize into an `Array` for O(1) indexed access: the loop below
+    // indexes into this sequence repeatedly, which degrades to O(n^2) when it is backed by a
+    // `List` (the default here) since `List.apply(i)` is O(i). With a large number of shuffle
+    // partitions this quadratic behavior can hang the driver.
+    val partitionIndices = partitionIndicesSeq.head.toArray
     // The fist index must be 0.
     assert(partitionIndices.head == 0)
     val newPartitionSpecsSeq = Seq.fill(mapOutputStatistics.length)(

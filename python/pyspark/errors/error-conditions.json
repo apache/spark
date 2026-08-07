@@ -72,7 +72,7 @@
   },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
     "message": [
-      "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
+      "Cannot convert column into bool (offending column: <column>): please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
     ]
   },
   "CANNOT_CONVERT_TYPE": {
@@ -546,6 +546,16 @@
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "LOCAL_CONNECT_RUNTIME_DIR_UNAVAILABLE": {
+    "message": [
+      "Cannot claim the per-user runtime directory <path> (was it created by another user?); remove it or point SPARK_LOCAL_CONNECT_DISCOVERY at a path you own."
+    ]
+  },
+  "LOCAL_CONNECT_SERVER_START_FAILED": {
+    "message": [
+      "Failed to start a persistent local Spark Connect server: <reason>."
+    ]
+  },
   "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED": {
     "message": [
       "Local relation size (<actualSize> bytes) exceeds the limit (<sizeLimit> bytes)."
@@ -851,11 +861,7 @@
       "An Observation can be used with a DataFrame only once."
     ]
   },
-  "SCHEMA_MISMATCH_FOR_PANDAS_UDF": {
-    "message": [
-      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
-    ]
-  },
+
   "SESSION_ALREADY_EXIST": {
     "message": [
       "Cannot start a remote Spark session because there is a regular Spark session already running."
@@ -1083,11 +1089,6 @@
       "Unexpected tuple <tuple> with StructType."
     ]
   },
-  "UNKNOWN_EXPLAIN_MODE": {
-    "message": [
-      "Unknown explain mode: '<explain_mode>'. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
-    ]
-  },
   "UNKNOWN_INTERRUPT_TYPE": {
     "message": [
       "Unknown interrupt type: '<interrupt_type>'. Accepted interrupt types are 'all'."
@@ -1198,11 +1199,6 @@
       "Value for `<arg_name>` has to be amongst the following values: <allowed_values>."
     ]
   },
-  "VALUE_NOT_ANY_OR_ALL": {
-    "message": [
-      "Value for `<arg_name>` must be 'any' or 'all', got '<arg_value>'."
-    ]
-  },
   "VALUE_NOT_BETWEEN": {
     "message": [
       "Value for `<arg_name>` must be between <min> and <max>."
@@ -1213,11 +1209,6 @@
       "Value for `<arg_name>` must be a non-empty string, got '<arg_value>'."
     ]
   },
-  "VALUE_NOT_PEARSON": {
-    "message": [
-      "Value for `<arg_name>` only supports 'pearson', got '<arg_value>'."
-    ]
-  },
   "VALUE_NOT_PLAIN_COLUMN_REFERENCE": {
     "message": [
       "Value `<val>` in `<field_name>` should be a plain column reference such as `df.col` or `col('column')`."
@@ -1226,11 +1217,6 @@
   "VALUE_NOT_POSITIVE": {
     "message": [
       "Value for `<arg_name>` must be positive, got '<arg_value>'."
-    ]
-  },
-  "VALUE_NOT_TRUE": {
-    "message": [
-      "Value for `<arg_name>` must be True, got '<arg_value>'."
     ]
   },
   "VALUE_OUT_OF_BOUNDS": {

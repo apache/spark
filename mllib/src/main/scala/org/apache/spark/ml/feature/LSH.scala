@@ -18,7 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector}
 import org.apache.spark.ml.param.{IntParam, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
@@ -53,7 +53,8 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
    * @return A derived schema with [[outputCol]] added.
    */
   protected[this] final def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.appendColumn(schema, $(outputCol), DataTypes.createArrayType(new VectorUDT))
+    SchemaUtils.appendColumn(schema, $(outputCol),
+      DataTypes.createArrayType(SQLDataTypes.VectorType))
   }
 }
 

@@ -16,6 +16,7 @@
 #
 
 import dataclasses
+from decimal import Decimal
 import json
 import sys
 from typing import Optional, TypeAlias, Union, IO, Any
@@ -43,6 +44,7 @@ class TaskContextInfo:
     attempt_number: int
     task_attempt_id: int
     cpus: int
+    cpu_amount: Decimal
     resources: dict[str, ResourceInfo]
     local_properties: dict[str, str]
 
@@ -58,6 +60,7 @@ class TaskContextInfo:
             attempt_number=task_context_json["attemptNumber"],
             task_attempt_id=task_context_json["taskAttemptId"],
             cpus=task_context_json["cpus"],
+            cpu_amount=Decimal(task_context_json["cpuAmount"]),
             resources={
                 k: cls.ResourceInfo(name=v["name"], addresses=v["addresses"])
                 for k, v in task_context_json["resources"].items()
@@ -75,6 +78,7 @@ class TaskContextInfo:
                 attemptNumber=self.attempt_number,
                 taskAttemptId=self.task_attempt_id,
                 cpus=self.cpus,
+                cpuAmount=self.cpu_amount,
                 resources={
                     k: ResourceInformation(v.name, v.addresses) for k, v in self.resources.items()
                 },
@@ -87,6 +91,7 @@ class TaskContextInfo:
                 attemptNumber=self.attempt_number,
                 taskAttemptId=self.task_attempt_id,
                 cpus=self.cpus,
+                cpuAmount=self.cpu_amount,
                 resources={
                     k: ResourceInformation(v.name, v.addresses) for k, v in self.resources.items()
                 },

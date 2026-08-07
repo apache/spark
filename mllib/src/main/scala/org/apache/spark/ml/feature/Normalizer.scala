@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
@@ -62,10 +62,11 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   override protected def validateInputType(inputType: DataType): Unit = {
     require(inputType.isInstanceOf[VectorUDT],
-      s"Input type must be ${(new VectorUDT).catalogString} but got ${inputType.catalogString}.")
+      s"Input type must be ${SQLDataTypes.VectorType.catalogString} " +
+        s"but got ${inputType.catalogString}.")
   }
 
-  override protected def outputDataType: DataType = new VectorUDT()
+  override protected def outputDataType: DataType = SQLDataTypes.VectorType
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {

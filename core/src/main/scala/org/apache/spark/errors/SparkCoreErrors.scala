@@ -29,7 +29,7 @@ import org.apache.spark.internal.config.IO_COMPRESSION_CODEC
 import org.apache.spark.io.CompressionCodec.FALLBACK_COMPRESSION_CODEC
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
-import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockResolver}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
 
 /**
@@ -248,15 +248,12 @@ private[spark] object SparkCoreErrors {
   }
 
   def accessNonExistentAccumulatorError(id: Long): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3024", messageParameters = Map("id" -> s"$id"), cause = null
-    )
+    SparkException.internalError(s"Attempted to access non-existent accumulator $id.")
   }
 
   def sendResubmittedTaskStatusForShuffleMapStagesOnlyError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3025", messageParameters = Map.empty, cause = null
-    )
+    SparkException.internalError(
+      "TaskSetManagers should only send Resubmitted task statuses for tasks in ShuffleMapStages.")
   }
 
   def nonEmptyEventQueueAfterTimeoutError(timeoutMillis: Long): Throwable = {
@@ -292,22 +289,13 @@ private[spark] object SparkCoreErrors {
   }
 
   def taskHasNotLockedBlockError(currentTaskAttemptId: Long, blockId: BlockId): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3030",
-      messageParameters = Map(
-        "currentTaskAttemptId" -> s"$currentTaskAttemptId",
-        "blockId" -> s"$blockId"
-      ),
-      cause = null
-    )
+    SparkException.internalError(
+      s"Task $currentTaskAttemptId has not locked block $blockId for writing.",
+      category = "STORAGE")
   }
 
   def blockDoesNotExistError(blockId: BlockId): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3031",
-      messageParameters = Map("blockId" -> s"$blockId"),
-      cause = null
-    )
+    SparkException.internalError(s"Block $blockId does not exist.", category = "STORAGE")
   }
 
   def cannotSaveBlockOnDecommissionedExecutorError(blockId: BlockId): Throwable = {
@@ -315,9 +303,7 @@ private[spark] object SparkCoreErrors {
   }
 
   def waitingForReplicationToFinishError(e: Throwable): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3032", messageParameters = Map.empty, cause = e
-    )
+    SparkException.internalError("Error occurred while waiting for replication to finish.", e)
   }
 
   def unableToRegisterWithExternalShuffleServerError(e: Throwable): Throwable = {
@@ -329,19 +315,17 @@ private[spark] object SparkCoreErrors {
   }
 
   def waitingForAsyncReregistrationError(e: Throwable): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3034", messageParameters = Map.empty, cause = e
-    )
+    SparkException.internalError("Error occurred while waiting for async. reregistration.", e)
   }
 
   def unexpectedShuffleBlockWithUnsupportedResolverError(
-      shuffleManager: ShuffleManager,
+      shuffleBlockResolver: ShuffleBlockResolver,
       blockId: BlockId): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_3035",
       messageParameters = Map(
         "blockId" -> s"$blockId",
-        "shuffleBlockResolver" -> s"${shuffleManager.shuffleBlockResolver}"
+        "shuffleBlockResolver" -> s"$shuffleBlockResolver"
       ),
       cause = null
     )
@@ -371,13 +355,8 @@ private[spark] object SparkCoreErrors {
   }
 
   def failToGetBlockWithLockError(blockId: BlockId): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3038",
-      messageParameters = Map(
-        "blockId" -> s"$blockId"
-      ),
-      cause = null
-    )
+    SparkException.internalError(
+      s"get() failed for block $blockId even though we held a lock.", category = "STORAGE")
   }
 
   def blockNotFoundError(blockId: BlockId): Throwable = {
@@ -389,26 +368,19 @@ private[spark] object SparkCoreErrors {
   }
 
   def blockStatusQueryReturnedNullError(blockId: BlockId): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3039",
-      messageParameters = Map("blockId" -> s"$blockId"),
-      cause = null
-    )
+    SparkException.internalError(
+      s"BlockManager returned null for BlockStatus query: $blockId.", category = "STORAGE")
   }
 
-  def unexpectedBlockManagerMasterEndpointResultError(): Throwable = {
-    new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3040", messageParameters = Map.empty, cause = null
-    )
+  def unexpectedBlockManagerMasterEndpointResultError(message: Any): Throwable = {
+    SparkException.internalError(
+      s"BlockManagerMasterEndpoint returned false for message $message, expected true.",
+      category = "STORAGE")
   }
 
   def failToCreateDirectoryError(path: String, maxAttempts: Int): Throwable = {
     new IOException(
       s"Failed to create directory ${path} with permission 770 after $maxAttempts attempts!")
-  }
-
-  def unsupportedOperationError(): Throwable = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3041")
   }
 
   def noSuchElementError(): Throwable = {
@@ -428,10 +400,10 @@ private[spark] object SparkCoreErrors {
 
   def failToGetNonShuffleBlockError(blockId: BlockId, e: Throwable): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_3042",
-      messageParameters = Map("blockId" -> s"$blockId"),
-      cause = e
-    )
+      errorClass = "INTERNAL_ERROR_STORAGE",
+      messageParameters = Map(
+        "message" -> s"Failed to get block $blockId, which is not a shuffle block."),
+      cause = e)
   }
 
   def graphiteSinkInvalidProtocolError(invalidProtocol: String): Throwable = {

@@ -152,9 +152,9 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     }
     checkError(
       exception = exception,
-      condition = "CONNECT_INVALID_PLAN.UDT_JVM_CLASS_NOT_UDT",
-      parameters = Map("jvmClass" -> "java.lang.String"))
-    assert(exception.getSqlState == "56K00")
+      condition = "UDT_CLASS_NOT_USER_DEFINED_TYPE",
+      parameters = Map("udtClass" -> "java.lang.String"))
+    assert(exception.getSqlState == "2203G")
   }
 
   test("noHandlerFoundForExtension") {

@@ -1611,7 +1611,7 @@ class SparkSubmitSuite
       "",
       null,
       Seq.empty,
-      Seq("org.apache.spark.shuffle.ShuffleManager"),
+      Seq("org.apache.spark.shuffle.BlockingShuffleManager"),
       shuffleManagerBody)
 
     val jarUrl = TestUtils.createJar(

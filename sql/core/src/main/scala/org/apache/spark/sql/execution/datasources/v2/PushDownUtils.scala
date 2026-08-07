@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, SampleMethod => SampleMethodV2, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsRuntimeV2Filtering}
-import org.apache.spark.sql.execution.{ScalarSubquery => ExecScalarSubquery}
+import org.apache.spark.sql.execution.{InSubqueryExec, ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters}
@@ -93,6 +93,13 @@ object PushDownUtils extends Logging {
           (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownV2Filters =>
+        // Non-deterministic filters should not be pushed down: a data source may evaluate a pushed
+        // predicate a different number of times or at a different point than Spark, and a partial
+        // push (a predicate used for pruning yet also returned for post-scan re-evaluation, e.g. a
+        // parquet row group filter) would evaluate a non-deterministic predicate twice with
+        // different results. Keep them as post-scan filters, matching the
+        // SupportsPushDownCatalystFilters branch below.
+        val (deterministicFilters, nonDeterministicFilters) = filters.partition(_.deterministic)
         // Divide the filters into those translatable and untranslatable to data source filters.
         // For the translated filters, we will try to push them down to the data source,
         // and the data source will return the filters that it cannot guarantee to be true
@@ -101,7 +108,7 @@ object PushDownUtils extends Logging {
         val translatedFilters = mutable.ArrayBuffer.empty[Predicate]
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
-        for (filterExpr <- filters) {
+        for (filterExpr <- deterministicFilters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
               filterExpr, Some(translatedFilterToExpr))
@@ -131,10 +138,11 @@ object PushDownUtils extends Logging {
           }
 
         val orderedPostScanFilters = prioritizeFilters(finalPostScanFilters,
-          ExpressionSet(untranslatableExprs))
+          ExpressionSet(untranslatableExprs)) ++ nonDeterministicFilters
         (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
-        val postScanFilters = r.pushFilters(filters)
+        val (deterministicFilters, nonDeterministicFilters) = filters.partition(_.deterministic)
+        val postScanFilters = r.pushFilters(deterministicFilters) ++ nonDeterministicFilters
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
     }
@@ -161,6 +169,11 @@ object PushDownUtils extends Logging {
    *
    * Note: Do not call multiple times for the same `scan` instance;
    * [[SupportsRuntimeV2Filtering.filter]] is mutating.
+   *
+   * Note: `runtimeFilters` must not contain non-deterministic filters. A runtime filter is also
+   * evaluated by the `FilterExec` above the scan, so pushing a non-deterministic one would
+   * evaluate it twice with different results. `DataSourceV2Strategy` enforces this where
+   * `runtimeFilters` is built (SPARK-58207).
    *
    * @return true if any filters were pushed to the data source
    */
@@ -426,6 +439,8 @@ object PushDownUtils extends Logging {
       runtimeFilters: Seq[Expression],
       partitionFields: Seq[PartitionPredicateField]): Seq[PartitionPredicateImpl] = {
     val catalystExprs = runtimeFilters.flatMap {
+      case DynamicPruningExpression(in: InSubqueryExec) if in.isResultUnavailable =>
+        None
       case DynamicPruningExpression(e) => Some(e)
       case _: DynamicPruning => None
       case f => Some(f.transform { case s: ExecScalarSubquery => s.toLiteral })

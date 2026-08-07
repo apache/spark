@@ -30,4 +30,4 @@ The Python packaging for Spark is not intended to replace all of the other use c
 ## Python Requirements
 
 At its core PySpark depends on Py4J, but some additional sub-packages have their own extra requirements for some features (including numpy, pandas, and pyarrow).
-See also [Dependencies](https://spark.apache.org/docs/latest/api/python/getting_started/install.html#dependencies) for production, and [dev/requirements.txt](https://github.com/apache/spark/blob/master/dev/requirements.txt) for development.
+See also [Dependencies](https://spark.apache.org/docs/latest/api/python/getting_started/install.html#dependencies) for production, and [pyproject.toml](https://github.com/apache/spark/blob/master/pyproject.toml) for development.

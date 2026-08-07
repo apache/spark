@@ -27,6 +27,7 @@ import scala.collection.mutable.{HashMap, Map}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState}
+import org.apache.spark.resource.CpuAmount
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
@@ -55,11 +56,21 @@ private[spark] class TaskDescription(
     val partitionId: Int,
     val artifacts: JobArtifactSet,
     val properties: Properties,
-    val cpus: Int,
+    val cpus: BigDecimal,
     // resources is the total resources assigned to the task
     // Eg, Map("gpu" -> Map("0" -> ResourceAmountUtils.toInternalResource(0.7))):
     // assign 0.7 of the gpu address "0" to this task
     val resources: immutable.Map[String, immutable.Map[String, Long]],
+    // OIDC credentials with version for stale-update prevention.
+    // The version is a monotonic counter from UserCredentialManager; executors only apply
+    // credentials if the version is newer than what they already have. This prevents a
+    // delayed TaskDescription from overwriting fresher credentials delivered via RPC.
+    // Trade-off: every TaskDescription carries the full serialized UserCredentials (a few KB).
+    // This is acceptable because OIDC credentials are short-lived (minutes) unlike Hadoop
+    // delegation tokens (hours/days), making the race between RPC broadcast and task dispatch
+    // a practical concern. For short-task-heavy workloads, the overhead is bounded by
+    // credential size x tasks-in-flight (not total task count).
+    val userCredentials: Option[(Long, Array[Byte])],
     val serializedTask: ByteBuffer) {
 
   assert(cpus > 0, "CPUs per task should be > 0")
@@ -113,11 +124,23 @@ private[spark] object TaskDescription {
       dataOut.write(bytes)
     }
 
-    // Write cpus.
-    dataOut.writeInt(taskDescription.cpus)
+    // Write cpus in its minimal (trailing-zero-trimmed) decimal string form; it is re-normalized
+    // to the fixed CPU scale on read, so fractional values round-trip exactly.
+    dataOut.writeUTF(CpuAmount.toDisplayString(taskDescription.cpus))
 
     // Write resources.
     serializeResources(taskDescription.resources, dataOut)
+
+    // Write user credentials (OIDC).
+    taskDescription.userCredentials match {
+      case Some((version, creds)) =>
+        dataOut.writeBoolean(true)
+        dataOut.writeLong(version)
+        dataOut.writeInt(creds.length)
+        dataOut.write(creds)
+      case None =>
+        dataOut.writeBoolean(false)
+    }
 
     // Write the task. The task is already serialized, so write it directly to the byte buffer.
     Utils.writeByteBuffer(taskDescription.serializedTask, bytesOut)
@@ -220,16 +243,27 @@ private[spark] object TaskDescription {
       properties.setProperty(key, new String(valueBytes, StandardCharsets.UTF_8))
     }
 
-    // Read cpus.
-    val cpus = dataIn.readInt()
+    // Read cpus and normalize to the fixed CPU accounting scale.
+    val cpus = CpuAmount.normalize(BigDecimal(dataIn.readUTF()))
 
     // Read resources.
     val resources = deserializeResources(dataIn)
+
+    // Read user credentials (OIDC).
+    val userCredentials = if (dataIn.readBoolean()) {
+      val version = dataIn.readLong()
+      val length = dataIn.readInt()
+      val creds = new Array[Byte](length)
+      dataIn.readFully(creds)
+      Some((version, creds))
+    } else {
+      None
+    }
 
     // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
     val serializedTask = byteBuffer.slice()
 
     new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, artifacts,
-      properties, cpus, resources, serializedTask)
+      properties, cpus, resources, userCredentials, serializedTask)
   }
 }

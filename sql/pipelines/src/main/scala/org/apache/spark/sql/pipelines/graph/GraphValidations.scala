@@ -252,14 +252,20 @@ trait GraphValidations extends Logging {
       }
   }
 
-  protected def validateUserSpecifiedSchemas(): Unit = {
-    flows.flatMap(f => table.get(f.identifier)).foreach { t: TableElement =>
+  protected def validateUserSpecifiedSchemas(sessionCaseSensitive: Boolean): Unit = {
+    // Look up tables by their destination identifier, not by the flow's own identifier. The two
+    // coincide only for an implicit/default flow (whose identifier equals its destination
+    // table's); for a named flow (e.g. `CREATE FLOW <name> AS AUTO CDC INTO <target>`) they
+    // differ, and keying on the flow identifier would silently skip validation.
+    flowsTo.keys.flatMap(table.get).foreach { t: TableElement =>
       // The output inferred schema of a table is the declared schema merged with the
       // schema of all incoming flows. This must be equivalent to the declared schema.
       val inferredSchema = SchemaInferenceUtils
         .inferSchemaFromFlows(
+          tableIdentifier = t.identifier,
           flowsTo(t.identifier).map(f => resolvedFlow(f.identifier)),
-          userSpecifiedSchema = t.specifiedSchema
+          userSpecifiedSchema = t.specifiedSchema,
+          sessionCaseSensitive = sessionCaseSensitive
         )
 
       t.specifiedSchema.foreach { ss =>

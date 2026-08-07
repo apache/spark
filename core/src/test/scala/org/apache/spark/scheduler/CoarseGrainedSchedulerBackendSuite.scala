@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -81,7 +81,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
   test("compute max number of concurrent tasks can be launched when spark.task.cpus > 1") {
     val conf = new SparkConf()
-      .set(CPUS_PER_TASK, 2)
+      .set(CPUS_PER_TASK, BigDecimal(2))
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = new SparkContext(conf)
@@ -95,7 +95,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
   test("compute max number of concurrent tasks can be launched when some executors are busy") {
     val conf = new SparkConf()
-      .set(CPUS_PER_TASK, 2)
+      .set(CPUS_PER_TASK, BigDecimal(2))
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = new SparkContext(conf)
@@ -143,7 +143,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       val discoveryScript = createTempScriptWithExpectedOutput(
         dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0", "1", "2", "3"]}""")
       val conf = new SparkConf()
-        .set(CPUS_PER_TASK, 1)
+        .set(CPUS_PER_TASK, BigDecimal(1))
         .setMaster("local-cluster[1, 20, 1024]")
         .setAppName("test")
         .set(WORKER_GPU_ID.amountConf, "4")
@@ -199,7 +199,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         val discoveryScript = createTempScriptWithExpectedOutput(
           dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0", "1", "2", "3"]}""")
         val conf = new SparkConf()
-          .set(CPUS_PER_TASK, taskCpus)
+          .set(CPUS_PER_TASK, BigDecimal(taskCpus))
           .setMaster("local-cluster[1, 4, 1024]")
           .setAppName("test")
           .set(WORKER_GPU_ID.amountConf, "4")
@@ -216,7 +216,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         val numPartitions = Seq(4 / taskCpus, 4 / taskGpus).min
         val ret = sc.parallelize(1 to 20, numPartitions).mapPartitions { _ =>
           val tc = TaskContext.get()
-          assert(tc.cpus() == taskCpus)
+          assert(tc.cpuAmount() == taskCpus)
           val gpus = tc.resources()("gpu").addresses
           Iterator.single(gpus)
         }.collect()
@@ -348,7 +348,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, taskResources, bytebuffer)))
+      taskCpus, taskResources, None, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -455,7 +455,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskCpus = 1
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, taskResources, bytebuffer)))
+      taskCpus, taskResources, None, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
@@ -548,7 +548,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val taskCpus = 2
     val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
       "t1", 0, 1, JobArtifactSet.emptyJobArtifactSet, new Properties(),
-      taskCpus, Map.empty, bytebuffer)))
+      taskCpus, Map.empty, None, bytebuffer)))
     when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
     backend.driverEndpoint.send(ReviveOffers)
@@ -604,6 +604,143 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
     sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
     assert(mockEndpointRef.decommissionReceived)
+  }
+
+  test("UpdateUserCredentials is broadcast to all registered executors") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    // Register two mock executors
+    val mockEndpointRef1 = new MockExecutorRpcEndpointRef(conf)
+    val mockEndpointRef2 = new MockExecutorRpcEndpointRef(conf)
+    val mockAddress = mock[RpcAddress]
+
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("1", mockEndpointRef1, mockAddress.host, 1, Map(), Map(),
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    backend.driverEndpoint.askSync[Boolean](
+      RegisterExecutor("2", mockEndpointRef2, mockAddress.host, 1, Map(), Map(),
+        Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    sc.listenerBus.waitUntilEmpty(executorUpTimeout.toMillis)
+
+    // Neither executor should have received credentials yet
+    assert(mockEndpointRef1.receivedUserCredentials.isEmpty)
+    assert(mockEndpointRef2.receivedUserCredentials.isEmpty)
+
+    // Send UpdateUserCredentials via DriverEndpoint
+    val testCredentials = Array[Byte](1, 2, 3, 4, 5)
+    backend.driverEndpoint.send(UpdateUserCredentials(1L, testCredentials))
+
+    // Wait for the message to be processed
+    eventually(timeout(5 seconds)) {
+      assert(mockEndpointRef1.receivedUserCredentials.isDefined)
+      assert(mockEndpointRef2.receivedUserCredentials.isDefined)
+    }
+
+    assert(mockEndpointRef1.receivedUserCredentials.get._2 === testCredentials)
+    assert(mockEndpointRef2.receivedUserCredentials.get._2 === testCredentials)
+
+    // Verify SparkEnv credential store is also updated
+    assert(SparkEnv.get.userCredentials.get().bytes === testCredentials)
+  }
+
+  test("SparkAppConfig includes current user credentials for late-registering executors") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    // Simulate credential acquisition by setting credentials before any executor registers
+    val testCredentials = Array[Byte](10, 20, 30, 40, 50)
+    backend.driverEndpoint.send(UpdateUserCredentials(1L, testCredentials))
+
+    // Wait for the message to be processed
+    eventually(timeout(5 seconds)) {
+      assert(SparkEnv.get.userCredentials.get() != null)
+    }
+
+    // Now retrieve SparkAppConfig as a late-registering executor would
+    val appConfig = backend.driverEndpoint.askSync[SparkAppConfig](
+      RetrieveSparkAppConfig(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    // Verify that userCredentials is present in the response
+    assert(appConfig.userCredentials.isDefined,
+      "SparkAppConfig should include user credentials for late-registering executors")
+    assert(appConfig.userCredentials.get._2 === testCredentials)
+  }
+
+  test("version guard prevents stale credentials from overwriting newer ones") {
+    val conf = new SparkConf()
+      .setMaster("local-cluster[0, 3, 1024]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+
+    // Send version 3 credentials first
+    val credsV3 = Array[Byte](30, 30, 30)
+    backend.driverEndpoint.send(UpdateUserCredentials(3L, credsV3))
+
+    eventually(timeout(5 seconds)) {
+      assert(SparkEnv.get.userCredentials.get() != null)
+      assert(SparkEnv.get.userCredentials.get().version === 3L)
+    }
+
+    // Now send version 1 (stale) -- should be rejected
+    val credsV1 = Array[Byte](10, 10, 10)
+    backend.driverEndpoint.send(UpdateUserCredentials(1L, credsV1))
+
+    // Flush the DriverEndpoint mailbox by sending a synchronous request.
+    // Since DriverEndpoint is single-threaded, when this returns, v1 has been processed.
+    backend.driverEndpoint.askSync[SparkAppConfig](
+      RetrieveSparkAppConfig(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+
+    // Store should still hold v3 (stale v1 was rejected by version guard)
+    assert(SparkEnv.get.userCredentials.get().version === 3L,
+      "Stale version 1 should not overwrite newer version 3")
+
+    // Send version 5 (newer) -- should be accepted
+    val credsV5 = Array[Byte](50, 50, 50)
+    backend.driverEndpoint.send(UpdateUserCredentials(5L, credsV5))
+
+    eventually(timeout(5 seconds)) {
+      assert(SparkEnv.get.userCredentials.get().version === 5L)
+    }
+
+    // Verify version 5 credentials are in the store (not v1 or v3)
+    assert(SparkEnv.get.userCredentials.get().bytes === credsV5)
+  }
+
+  test("executor-side credential store version guard rejects stale and accepts newer") {
+    // This tests VersionedCredentials.updateIfNewer -- the same method used in
+    // CoarseGrainedExecutorBackend.receive and Executor.TaskRunner.
+    val store = new AtomicReference[VersionedCredentials]()
+
+    // Initial write to null store should succeed
+    VersionedCredentials.updateIfNewer(store, 2L, Array[Byte](20, 20))
+    assert(store.get().version === 2L)
+    assert(store.get().bytes === Array[Byte](20, 20))
+
+    // Stale version (1) should be rejected
+    VersionedCredentials.updateIfNewer(store, 1L, Array[Byte](10, 10))
+    assert(store.get().version === 2L, "Stale version should not overwrite newer")
+
+    // Same version (2) should also be rejected (strict >)
+    VersionedCredentials.updateIfNewer(store, 2L, Array[Byte](22, 22))
+    assert(store.get().version === 2L)
+    assert(store.get().bytes === Array[Byte](20, 20), "Same version should not overwrite")
+
+    // Newer version (5) should be accepted
+    VersionedCredentials.updateIfNewer(store, 5L, Array[Byte](50, 50))
+    assert(store.get().version === 5L)
+    assert(store.get().bytes === Array[Byte](50, 50))
   }
 
   private def testSubmitJob(sc: SparkContext, rdd: RDD[Int]): Unit = {
@@ -667,12 +804,15 @@ private[spark] class MockExecutorRpcEndpointRef(conf: SparkConf) extends RpcEndp
   // scalastyle:on executioncontextglobal
 
   var decommissionReceived = false
+  var receivedUserCredentials: Option[(Long, Array[Byte])] = None
 
   override def address: RpcAddress = null
   override def name: String = "executor"
   override def send(message: Any): Unit =
     message match {
       case DecommissionExecutor => decommissionReceived = true
+      case UpdateUserCredentials(version, creds) => receivedUserCredentials = Some((version, creds))
+      case _ =>
     }
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
     Future{true.asInstanceOf[T]}

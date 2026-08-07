@@ -111,14 +111,14 @@ private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
   protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(featuresCol), SQLDataTypes.VectorType)
     if (fitting) {
       SchemaUtils.checkNumericType(schema, $(censorCol))
       SchemaUtils.checkNumericType(schema, $(labelCol))
     }
 
     val schemaWithQuantilesCol = if (hasQuantilesCol) {
-      SchemaUtils.appendColumn(schema, $(quantilesCol), new VectorUDT)
+      SchemaUtils.appendColumn(schema, $(quantilesCol), SQLDataTypes.VectorType)
     } else schema
 
     SchemaUtils.appendColumn(schemaWithQuantilesCol, $(predictionCol), DoubleType)

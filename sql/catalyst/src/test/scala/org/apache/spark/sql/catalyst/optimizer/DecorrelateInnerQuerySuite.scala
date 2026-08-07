@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class DecorrelateInnerQuerySuite extends PlanTest {
@@ -735,5 +736,82 @@ class DecorrelateInnerQuerySuite extends PlanTest {
           Filter(GreaterThan(a, x),
             DomainJoin(Seq(a), testRelation2))))))
     check(outputPlan, joinCond, correctAnswer, Seq(a <=> a))
+  }
+
+  test("SPARK-58411: order by is preserved for limit with correlation only on outer table") {
+    // The correlated predicate references only outer columns (a, b), so no domain join is
+    // needed and the limit is computed directly over the inner query (partitionFields.isEmpty
+    // branch). The ORDER BY must be preserved so ORDER BY ... LIMIT stays deterministic.
+    val outerPlan = testRelation
+    val innerPlan =
+      Project(Seq(x),
+        Limit(1, Sort(Seq(SortOrder(x, Ascending)), true,
+          Filter(OuterReference(a) < OuterReference(b),
+            testRelation2))))
+    val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan.select())
+
+    val correctAnswer =
+      Project(Seq(x),
+        Limit(1, Sort(Seq(SortOrder(x, Ascending)), global = true,
+          testRelation2)))
+    check(outputPlan, joinCond, correctAnswer, Seq(a < b))
+  }
+
+  test("SPARK-58411: explicit ORDER BY ASC NULLS LAST is preserved for limit with correlation " +
+    "only on outer table") {
+    // An explicitly specified null ordering (NULLS LAST, the opposite of ASC's NULLS FIRST
+    // default) must be carried through decorrelation unchanged.
+    val outerPlan = testRelation
+    val nullsLast = SortOrder(x, Ascending, NullsLast, Seq.empty)
+    val innerPlan =
+      Project(Seq(x),
+        Limit(1, Sort(Seq(nullsLast), true,
+          Filter(OuterReference(a) < OuterReference(b),
+            testRelation2))))
+    val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan.select())
+
+    val correctAnswer =
+      Project(Seq(x),
+        Limit(1, Sort(Seq(nullsLast), global = true,
+          testRelation2)))
+    check(outputPlan, joinCond, correctAnswer, Seq(a < b))
+  }
+
+  test("SPARK-58411: order by is preserved for limit with offset and correlation only on " +
+    "outer table") {
+    // Same as above but with an OFFSET between the LIMIT and the ORDER BY. The ordering must
+    // be preserved for the LIMIT ... OFFSET case as well.
+    val outerPlan = testRelation
+    val innerPlan =
+      Project(Seq(x),
+        Limit(1, Offset(2, Sort(Seq(SortOrder(x, Ascending)), true,
+          Filter(OuterReference(a) < OuterReference(b),
+            testRelation2)))))
+    val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan.select())
+
+    val correctAnswer =
+      Project(Seq(x),
+        Limit(1, Offset(2, Sort(Seq(SortOrder(x, Ascending)), global = true,
+          testRelation2))))
+    check(outputPlan, joinCond, correctAnswer, Seq(a < b))
+  }
+
+  test("SPARK-58411: legacy flag restores the incorrect dropped-order behavior") {
+    withSQLConf(
+      SQLConf.DECORRELATE_LIMIT_OFFSET_LEGACY_INCORRECT_ORDER_HANDLING_ENABLED.key -> "true") {
+      val outerPlan = testRelation
+      val innerPlan =
+        Project(Seq(x),
+          Limit(1, Sort(Seq(SortOrder(x, Ascending)), true,
+            Filter(OuterReference(a) < OuterReference(b),
+              testRelation2))))
+      val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan.select())
+
+      // Legacy behavior: the Sort is dropped, leaving an arbitrary (non-deterministic) limit.
+      val correctAnswer =
+        Project(Seq(x),
+          Limit(1, testRelation2))
+      check(outputPlan, joinCond, correctAnswer, Seq(a < b))
+    }
   }
 }

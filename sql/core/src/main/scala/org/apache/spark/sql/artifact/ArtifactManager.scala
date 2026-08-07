@@ -36,7 +36,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.storage.{BlockManager, CacheId, StorageLevel}
 import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
@@ -504,10 +504,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     val localPath = serverLocalStagingPath
     val fs = destFSPath.getFileSystem(hadoopConf)
     if (fs.isInstanceOf[LocalFileSystem]) {
-      val allowDestLocalConf =
-        session.sessionState.conf.getConf(SQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
-          .getOrElse(
-            session.conf.get("spark.connect.copyFromLocalToFs.allowDestLocal").contains("true"))
+      val allowDestLocalConf = session.sessionState.conf.getConf(
+        StaticSQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
 
       if (!allowDestLocalConf) {
         // To avoid security issue, by default,
@@ -517,7 +515,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
         // We can temporarily allow the behavior by setting spark config
         // `spark.sql.artifact.copyFromLocalToFs.allowDestLocal`
         // to `true` when starting spark driver, we should only enable it for testing
-        // purpose.
+        // purpose. It is a static conf, so it cannot be set from a session.
         throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3161")
       }
     }

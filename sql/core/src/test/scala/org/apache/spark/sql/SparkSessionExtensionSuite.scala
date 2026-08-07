@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, Max, Partial}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface, SqlStatementSplitResult}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Project, Range, Sort, SortHint, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
@@ -720,6 +720,9 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
   override def parseRoutineParam(sqlText: String): StructType = {
     delegate.parseRoutineParam(sqlText)
   }
+
+  override def splitStatements(sqlText: String): SqlStatementSplitResult =
+    delegate.splitStatements(sqlText)
 }
 
 object MyExtensions {

@@ -84,6 +84,9 @@ object ConstantFolding extends Rule[LogicalPlan] {
     // object and running eval unnecessarily.
     case l: Literal => l
 
+    // This foldable expression carries planning identity that must survive later optimizer batches.
+    case p: PercentileFusionArray => p
+
     case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
       Literal(c.children.length)
     case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
@@ -1217,7 +1220,8 @@ object SimplifyDateTimeConversions extends Rule[LogicalPlan] {
           timeZoneId3)
           if pattern.semanticEquals(pattern2) && pattern.semanticEquals(pattern3)
             && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3
-            && !child.dataType.isInstanceOf[TimeType] =>
+            && !child.dataType.isInstanceOf[TimeType]
+            && !child.dataType.isInstanceOf[AnyTimestampNanoType] =>
         e
 
       // Remove a timestamp to string conversion followed by a string to timestamp conversions if

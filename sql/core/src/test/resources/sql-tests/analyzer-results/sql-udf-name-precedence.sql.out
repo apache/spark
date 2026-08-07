@@ -151,7 +151,7 @@ SELECT outer_vs_param(42)
 -- !query analysis
 Project [outer_vs_param(x#x) AS outer_vs_param(42)#x]
 :  +- Project [scalar-subquery#x [x#x] AS scalarsubquery(x)#x]
-:     :  +- Project [outer(x#x)]
+:     :  +- Project [outer(x#x) AS x#x]
 :     :     +- OneRowRelation
 :     +- SubqueryAlias v1
 :        +- View (`v1`, [x#x])
@@ -173,7 +173,7 @@ CreateSQLFunctionCommand outer_param_pure, x INT, INT, (SELECT (SELECT x)), fals
 SELECT outer_param_pure(42)
 -- !query analysis
 Project [outer_param_pure(x#x) AS outer_param_pure(42)#x]
-:  +- Project [outer(x#x)]
+:  +- Project [outer(x#x) AS x#x]
 :     +- OneRowRelation
 +- Project [cast(42 as int) AS x#x]
    +- OneRowRelation

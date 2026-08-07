@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Resolv
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
-import org.apache.spark.sql.connector.catalog.CatalogPlugin
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
@@ -419,9 +419,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     try {
       EliminateSubqueryAliases(plan) match {
         case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
-          val table = catalog.loadTable(ident)
+          val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
           if (r.table.id == table.id) {
-            Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident)))
+            Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), r.options))
           } else {
             None
           }

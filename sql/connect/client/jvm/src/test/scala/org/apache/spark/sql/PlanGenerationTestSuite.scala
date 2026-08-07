@@ -1855,6 +1855,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.unbase64(fn.col("g"))
   }
 
+  functionTest("to_base32") {
+    fn.to_base32(fn.col("g").cast("binary"))
+  }
+
+  functionTest("from_base32") {
+    fn.from_base32(fn.col("g"))
+  }
+
   functionTest("rpad") {
     fn.rpad(fn.col("g"), 10, "-")
   }
@@ -2765,6 +2773,34 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("variant_insert") {
     fn.variant_insert(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("try_variant_insert") {
+    fn.try_variant_insert(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("variant_set") {
+    fn.variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("variant_set with create_if_missing") {
+    fn.variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1), false)
+  }
+
+  functionTest("try_variant_set") {
+    fn.try_variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("try_variant_set with create_if_missing") {
+    fn.try_variant_set(fn.parse_json(fn.col("g")), "$.a", fn.lit(1), false)
+  }
+
+  functionTest("variant_array_append") {
+    fn.variant_array_append(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
+  functionTest("try_variant_array_append") {
+    fn.try_variant_array_append(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
   }
 
   functionTest("variant_get") {

@@ -211,7 +211,7 @@ public class V2ExpressionSQLBuilder {
     return joinListToString(list, ", ", v + " IN (", ")");
   }
 
-  // The binary comparison operators, kept in one place so build, visitIsNullOperand and
+  // The binary comparison operators, kept in one place so build, isNullOperandNeedsParens and
   // dialect overrides stay in sync.
   protected boolean isBinaryComparisonOperator(String name) {
     return switch (name) {
@@ -220,10 +220,25 @@ public class V2ExpressionSQLBuilder {
     };
   }
 
-  // Parenthesize a binary comparison operand so `col = 'x' IS NULL` renders as
-  // `(col = 'x') IS NULL`. Dialects such as Snowflake bind IS NULL tighter than =.
+  // Operators whose rendered SQL is NOT a self-delimiting primary and therefore must be
+  // parenthesized before a trailing IS [NOT] NULL: binary comparisons (per SPARK-57243) plus IN,
+  // the boolean connectives, LIKE-family, and arithmetic. Function calls, CASE and CAST already
+  // render self-delimited (`f(...)`, `CASE ... END`, `CAST(...)`), so they are intentionally left
+  // unwrapped to avoid needlessly changing the generated SQL for cases that were already valid.
+  protected boolean isNullOperandNeedsParens(String name) {
+    return isBinaryComparisonOperator(name) || switch (name) {
+      case "IN", "NOT", "AND", "OR", "STARTS_WITH", "ENDS_WITH", "CONTAINS",
+           "+", "-", "*", "/", "%", "&", "|", "^", "~" -> true;
+      default -> false;
+    };
+  }
+
+  // Parenthesize an operand of IS [NOT] NULL whose rendered SQL is not self-delimiting, so
+  // `col = 'x' IS NULL` renders as `(col = 'x') IS NULL` and `a IN (1, 2) IS NULL` renders as
+  // `(a IN (1, 2)) IS NULL`. This keeps the output valid and preserves the intended precedence
+  // across dialects, some of which (e.g. Snowflake) bind IS NULL tighter than comparison operators.
   protected String visitIsNullOperand(Expression operand) {
-    if (operand instanceof GeneralScalarExpression e && isBinaryComparisonOperator(e.name())) {
+    if (operand instanceof GeneralScalarExpression e && isNullOperandNeedsParens(e.name())) {
       return "(" + build(operand) + ")";
     }
     return build(operand);

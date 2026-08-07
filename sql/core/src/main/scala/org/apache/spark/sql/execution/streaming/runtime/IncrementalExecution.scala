@@ -36,8 +36,9 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CommandExecutionMode, LocalLimitExec, QueryExecution, SerializeFromObjectExec, SparkPlan, SparkPlanner, SparkStrategy => Strategy, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
+import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
+import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
 import org.apache.spark.sql.execution.streaming.{StreamingErrors, StreamingQueryPlanTraverseHelper}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata, OffsetSeqMetadataBase}
@@ -663,7 +664,95 @@ class IncrementalExecution(
     }
   }
 
-  override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
+  /**
+   * For a Real-Time Mode batch, mark the shuffle exchanges as pipelined so the DAGScheduler
+   * co-schedules a stateful query's producer (source scan) and consumer (stateful operator) stages
+   * as one pipelined group -- records stream through a transient shuffle instead of the consumer
+   * waiting for the producer to fully materialize. The exchange carries the decision as a field
+   * (see ShuffleExchangeExec.pipelined); the PipelinedShuffleDependency it then builds is the whole
+   * opt-in -- routing to the streaming shuffle manager and pipelined-group scheduling both follow
+   * from that dependency type.
+   *
+   * Real-Time Mode is detected structurally by a RealTimeStreamScanExec leaf (there is no
+   * RTM-specific plan flag). Inert for a non-RTM batch, so the ordinary microbatch path is
+   * unchanged.
+   *
+   * Marks every eligible shuffle exchange on the streaming path, so a plan with several pipelined
+   * shuffles in a chain (e.g. two repartitions, or a repartition feeding a keyed stateful operator)
+   * is handled: each becomes a PipelinedShuffleDependency and the whole all-pipelined job is
+   * co-scheduled as one pipelined group (the DAGScheduler treats an all-pipelined job's stage graph
+   * as a single group). There is no shuffle-count restriction. An exchange whose subtree does not
+   * reach the real-time scan is skipped -- the static side of a broadcast stream-static join must
+   * materialize, because it runs to completion rather than streaming. A partitioning the pipelined
+   * path cannot serve, such as range partitioning, is rejected up front by RealTimeModeAllowlist
+   * rather than being handled here.
+   *
+   * The walk does not descend into a ReusedExchangeExec (a leaf whose wrapped exchange is a field,
+   * not a tree child), so a REUSED shuffle exchange would keep pipelined=false while its standalone
+   * twin flips to true. That divergence is not reachable: a reused shuffle requires
+   * referencing the same streaming source more than once (self-join / self-union / CTE read twice),
+   * which Real-Time Mode rejects when the query starts (MicroBatchExecution,
+   * IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED) before this rule runs. The only ReusedExchangeExec
+   * that reaches an RTM plan wraps a BROADCAST exchange (multiple broadcast joins on the same
+   * static table, SC-209926), which this rule does not match.
+   *
+   * Fan-out -- one shuffle read by more than one consumer -- is a limitation that marking a shuffle
+   * here introduces, not one that was already there. A regular materialized shuffle serves any
+   * number of consumers; a pipelined one is transient and read once, so the DAGScheduler rejects
+   * fan-out for a PipelinedShuffleDependency specifically (checkPipelinedGroupsSupportedInRDDGraph,
+   * inert for a regular ShuffleDependency). So a fan-out query that runs fine unmarked is rejected
+   * once this rule marks it. The check runs in handleJobSubmitted, so it rejects the batch's job
+   * rather than the query: such a query fails the same way on every batch instead of failing once
+   * when it is planned. A plan-time guard here would improve only where the failure is reported,
+   * not whether the query can run.
+   */
+  object MarkPipelinedShuffleForRealTimeMode extends Rule[SparkPlan] {
+    override def apply(plan: SparkPlan): SparkPlan = {
+      val isRealTimeMode = plan.exists(_.isInstanceOf[RealTimeStreamScanExec])
+      if (!isRealTimeMode) {
+        plan
+      } else {
+        markStreamingPath(plan)._1
+      }
+    }
+
+    /**
+     * Marks the shuffles that are on the streaming path -- those whose subtree reaches a
+     * [[RealTimeStreamScanExec]] -- and returns the rewritten plan along with whether this
+     * subtree reaches one.
+     *
+     * A plan can hold a static subtree alongside the streaming one: the static side of a
+     * broadcast stream-static join is planned in the same physical plan and may contain its own
+     * shuffle. That shuffle materializes normally and is not part of the pipelined group -- and
+     * cannot be, since a static side runs to completion rather than streaming. Marking it
+     * pipelined would pull it into the group and demand slots for stages that must instead
+     * finish, which fails admission (CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT). This mirrors the
+     * streaming-path detection the operator allowlist uses (RealTimeModeAllowlist), which only
+     * inspects nodes whose subtree reaches the real-time scan; marking a wider set than the
+     * allowlist checks would flip shuffles it never validated.
+     */
+    private def markStreamingPath(plan: SparkPlan): (SparkPlan, Boolean) = plan match {
+      case rts: RealTimeStreamScanExec => (rts, true)
+      case p if p.children.isEmpty => (p, false)
+      case p =>
+        val results = p.children.map(markStreamingPath)
+        val onStreamingPath = results.exists(_._2)
+        val newPlan = p.withNewChildren(results.map(_._1))
+        newPlan match {
+          case s: ShuffleExchangeExec if onStreamingPath && !s.pipelined =>
+            // A bare case-class copy does not carry the node's tags, which is where the logical
+            // link lives, so copy them over the way the tree transforms do.
+            val marked = s.copy(pipelined = true)
+            marked.copyTagsFrom(s)
+            (marked, true)
+          case other => (other, onStreamingPath)
+        }
+    }
+
+  }
+
+  override def preparations: Seq[Rule[SparkPlan]] =
+    state +: (super.preparations :+ MarkPipelinedShuffleForRealTimeMode)
 
   /** no need to try-catch again as this is already done once */
   override def assertAnalyzed(): Unit = analyzed

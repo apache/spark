@@ -121,13 +121,13 @@ class NettyBlockRpcServer(
           new StreamHandle(streamId, numBlockIds).toByteBuffer)
 
       case uploadBlock: UploadBlock =>
-        // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.
-        val (level, classTag) = deserializeMetadata(uploadBlock.metadata)
+        val meta = deserializeMetadata(uploadBlock.metadata)
         val data = new NioManagedBuffer(ByteBuffer.wrap(uploadBlock.blockData))
         val blockId = BlockId(uploadBlock.blockId)
-        logDebug(s"Receiving replicated block $blockId with level ${level} " +
+        logDebug(s"Receiving replicated block $blockId with level ${meta.level} " +
           s"from ${client.getSocketAddress}")
-        val blockStored = blockManager.putBlockData(blockId, data, level, classTag)
+        val blockStored = blockManager.putBlockData(
+          blockId, data, meta.level, meta.classTag, meta.checksum, meta.verifySealedChecksum)
         if (blockStored) {
           responseContext.onSuccess(ByteBuffer.allocate(0))
         } else {
@@ -175,21 +175,33 @@ class NettyBlockRpcServer(
       responseContext: RpcResponseCallback): StreamCallbackWithID = {
     val message =
       BlockTransferMessage.Decoder.fromByteBuffer(messageHeader).asInstanceOf[UploadBlockStream]
-    val (level, classTag) = deserializeMetadata(message.metadata)
+    val meta = deserializeMetadata(message.metadata)
     val blockId = BlockId(message.blockId)
-    logDebug(s"Receiving replicated block $blockId with level ${level} as stream " +
+    logDebug(s"Receiving replicated block $blockId with level ${meta.level} as stream " +
       s"from ${client.getSocketAddress}")
     // This will return immediately, but will setup a callback on streamData which will still
     // do all the processing in the netty thread.
-    blockManager.putBlockDataAsStream(blockId, level, classTag)
+    blockManager.putBlockDataAsStream(
+      blockId, meta.level, meta.classTag, meta.checksum, meta.verifySealedChecksum)
   }
 
-  private def deserializeMetadata[T](metadata: Array[Byte]): (StorageLevel, ClassTag[T]) = {
+  private def deserializeMetadata(metadata: Array[Byte]): BlockReplicationMetadata = {
     serializer
       .newInstance()
       .deserialize(ByteBuffer.wrap(metadata))
-      .asInstanceOf[(StorageLevel, ClassTag[T])]
+      .asInstanceOf[BlockReplicationMetadata]
   }
 
   override def getStreamManager(): StreamManager = streamManager
 }
+
+/**
+ * Metadata in the (Java-serialized) `metadata` field of an `UploadBlock`/`UploadBlockStream`.
+ * `checksum` and `verifySealedChecksum` carry a source replica's RDD-block content checksum and its
+ * local-checkpoint seal-path mark (separate fields so the checksum is usable without sealing).
+ */
+private[spark] case class BlockReplicationMetadata(
+    level: StorageLevel,
+    classTag: ClassTag[_],
+    checksum: Option[Long] = None,
+    verifySealedChecksum: Boolean = false)

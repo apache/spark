@@ -30,6 +30,11 @@ import org.apache.spark.sql.types._
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.",
+  arguments = """
+    Arguments:
+      * expr - The expression to average over the group.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
@@ -145,6 +150,11 @@ case class Average(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the mean calculated from values of a group and the result is null on overflow.",
+  arguments = """
+    Arguments:
+      * expr - The expression to average over the group.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
