@@ -45,14 +45,16 @@ jobs:
 
           if ((remainder == 0)); then
             should_run=true
+            icon=":white_check_mark:"
             title="Commit count matched"
             details="Commit count $count is divisible by 10."
             next_count=$count
           else
             should_run=false
+            icon=":pause_button:"
             next_count=$(( (count / 10 + 1) * 10 ))
             title="Commit count not matched"
-            details="Commit count $count is not divisible by 10. Next match: $next_count."
+            details="Commit count $count is not divisible by 10."
           fi
 
           echo "should-run=$should_run" >> "$GITHUB_OUTPUT"
@@ -64,7 +66,7 @@ jobs:
           echo "Next matching count: $next_count"
           echo "Details: $details"
           echo "::notice title=$title::$details"
-          echo "### Commit count check" >> "$GITHUB_STEP_SUMMARY"
+          echo "### $icon Commit count check" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- Branch: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
@@ -73,9 +75,6 @@ jobs:
           echo "- Should run: $should_run" >> "$GITHUB_STEP_SUMMARY"
           echo "- Next matching count: $next_count" >> "$GITHUB_STEP_SUMMARY"
           echo "- Details: $details" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Build runs for forks or when should-run is true." \
-            >> "$GITHUB_STEP_SUMMARY"
 
   call-build-and-test:
     permissions:
