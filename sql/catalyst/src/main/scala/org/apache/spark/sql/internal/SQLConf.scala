@@ -3605,6 +3605,7 @@ object SQLConf {
         "state store checkpoint format above 1 writes state store checkpoint ids that only a " +
         "commit log at version 2 or above can persist.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(v => Set(1, 2, 3).contains(v), "Valid versions are 1, 2 and 3")
       .createWithDefault(1)
@@ -3618,6 +3619,7 @@ object SQLConf {
         "above persist, so starting on a version 1 checkpoint exposes the query to data loss " +
         "on failure. Escape hatch only; prefer a fresh checkpoint location.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
