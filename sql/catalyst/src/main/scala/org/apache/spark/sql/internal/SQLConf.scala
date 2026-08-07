@@ -3769,6 +3769,7 @@ object SQLConf {
         "this config; this flag exists only so the operator can be exercised under an ordinary " +
         "microbatch trigger in tests, and changes an aggregation's output timing when set.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -3783,6 +3784,7 @@ object SQLConf {
         "that evict (e.g. Append/Update); has no effect in Complete mode, which never evicts. " +
         "Currently read only by the streamline aggregation operator.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
       .checkValue(_ >= 0, "The incremental cleanup factor must not be negative.")
       .createWithDefault(0L)
