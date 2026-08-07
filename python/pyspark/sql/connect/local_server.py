@@ -79,7 +79,7 @@ def _is_local_connect_server(pid: int) -> bool:
     """Whether ``pid`` is still the managed Connect server recorded in discovery."""
     try:
         result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="],
+            ["ps", "-ww", "-p", str(pid), "-o", "command="],
             capture_output=True,
             text=True,
             timeout=5,
