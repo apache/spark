@@ -25,6 +25,8 @@ import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import software.amazon.awssdk.regions.Region;
@@ -54,6 +56,29 @@ import static org.mockito.Mockito.when;
  * Tests for {@link AwsStsCredentialProvider}.
  */
 public class AwsStsCredentialProviderSuite {
+
+  private static String previousAwsRegion;
+
+  /**
+   * Set the aws.region system property so that the AWS SDK's
+   * DefaultAwsRegionProviderChain can resolve a region on any environment
+   * (including CI runners with no AWS configuration). This does NOT affect
+   * AwsStsCredentialProvider.resolveRegion() which reads only from the conf Map.
+   */
+  @BeforeAll
+  static void setUpClass() {
+    previousAwsRegion = System.getProperty("aws.region");
+    System.setProperty("aws.region", "us-east-1");
+  }
+
+  @AfterAll
+  static void tearDownClass() {
+    if (previousAwsRegion == null) {
+      System.clearProperty("aws.region");
+    } else {
+      System.setProperty("aws.region", previousAwsRegion);
+    }
+  }
 
   private static final String TEST_ROLE_ARN = "arn:aws:iam::123456789012:role/test-role";
   private static final String TEST_TOKEN = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.test-payload";
