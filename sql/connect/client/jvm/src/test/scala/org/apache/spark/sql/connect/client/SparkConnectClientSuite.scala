@@ -78,19 +78,37 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     assert(client.userId == System.getProperty("user.name"))
   }
 
-  test("client generates an operation ID for ExecutePlan requests") {
-    startDummyServer(0)
-    client = SparkConnectClient
-      .builder()
-      .connectionString(s"sc://localhost:${server.getPort}")
-      .disableReattachableExecute()
-      .build()
+  Seq(false, true).foreach { reattachable =>
+    test(s"client generates an operation ID for ExecutePlan requests ($reattachable)") {
+      var operationIdHeader: Option[String] = None
+      val interceptor = new ServerInterceptor {
+        override def interceptCall[ReqT, RespT](
+            call: ServerCall[ReqT, RespT],
+            headers: Metadata,
+            next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
+          val key = Metadata.Key.of(
+            SparkConnectClient.OPERATION_ID_HEADER,
+            Metadata.ASCII_STRING_MARSHALLER)
+          operationIdHeader = Option(headers.get(key))
+          next.startCall(call, headers)
+        }
+      }
+      startDummyServer(0, Seq(interceptor))
+      val builder = SparkConnectClient
+        .builder()
+        .connectionString(s"sc://localhost:${server.getPort}")
+        .option(SparkConnectClient.OPERATION_ID_HEADER, "ignored")
+      if (reattachable) builder.enableReattachableExecute()
+      else builder.disableReattachableExecute()
+      client = builder.build()
 
-    val responses = client.execute(buildPlan("select 1")).toSeq
-    val operationId = responses.head.getOperationId
+      val responses = client.execute(buildPlan("select 1")).toSeq
+      val operationId = responses.head.getOperationId
 
-    UUID.fromString(operationId)
-    assert(responses.forall(_.getOperationId == operationId))
+      UUID.fromString(operationId)
+      assert(responses.forall(_.getOperationId == operationId))
+      assert(operationIdHeader.contains(operationId))
+    }
   }
 
   test("ExecutePlan exceptions expose the client-generated operation ID") {

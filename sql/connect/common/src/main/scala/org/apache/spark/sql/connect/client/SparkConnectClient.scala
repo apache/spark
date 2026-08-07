@@ -703,6 +703,8 @@ private final class SparkConnectOperationIdException(val operationId: String)
 
 object SparkConnectClient {
 
+  private[connect] val OPERATION_ID_HEADER = "spark-connect-operation-id"
+
   /**
    * Returns the ExecutePlan operation ID attached to a Spark Connect failure, when available.
    *
@@ -1178,9 +1180,11 @@ object SparkConnectClient {
 
       // Workaround LocalChannelCredentials are added in
       // https://github.com/grpc/grpc-java/issues/9900
-      var metadataWithOptionalToken = metadata
+      var metadataWithOptionalToken = metadata.filterNot { case (key, _) =>
+        key.equalsIgnoreCase(OPERATION_ID_HEADER)
+      }
       if (!isSslEnabled.contains(true) && isLocal && token.isDefined) {
-        metadataWithOptionalToken = metadata + (("Authorization", s"Bearer ${token.get}"))
+        metadataWithOptionalToken += (("Authorization", s"Bearer ${token.get}"))
       }
 
       if (metadataWithOptionalToken.nonEmpty) {
