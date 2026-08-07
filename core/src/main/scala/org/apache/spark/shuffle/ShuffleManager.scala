@@ -139,6 +139,16 @@ private[spark] trait PipelinedShuffleManager extends ShuffleManager {
    * streaming manager is unaffected.
    */
   def usesStreamingShuffleOutputTracker: Boolean = true
+
+  /**
+   * Whether this manager's writer hands record OBJECTS to a concurrently-running consumer, so
+   * each record must be detached from any producer-reused buffer before `write` sees it (for a
+   * SQL row: `InternalRow.copy()`, done by the SQL layer's write processor). A transport that
+   * serializes records promptly -- the RPC streaming manager -- detaches by serializing and
+   * must NOT pay an extra per-row copy on its hot path; that is the default. The in-process
+   * channel transport shares object references across threads and overrides this to true.
+   */
+  def requiresDetachedRecords: Boolean = false
 }
 
 /**

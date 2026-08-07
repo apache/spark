@@ -570,7 +570,12 @@ object ShuffleExchangeExec {
           rddWithPartitionIds,
           new PartitionIdPassthrough(part.numPartitions),
           serializer,
-          shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics, copyRows = true),
+          // Copy rows only for a transport that hands object references to a concurrent
+          // consumer (the in-process channel). The RPC streaming transport detaches rows by
+          // serializing them promptly and must not pay an extra per-row copy on its path.
+          shuffleWriterProcessor = createShuffleWriteProcessor(
+            writeMetrics,
+            copyRows = SparkEnv.get.pipelinedShuffleManager.requiresDetachedRecords),
           rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize))
       } else {
         new ShuffleDependency[Int, InternalRow, InternalRow](

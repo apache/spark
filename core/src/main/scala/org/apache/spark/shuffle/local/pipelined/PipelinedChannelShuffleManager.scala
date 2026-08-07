@@ -61,6 +61,10 @@ private[spark] class PipelinedChannelShuffleManager(conf: SparkConf)
 
   override def usesStreamingShuffleOutputTracker: Boolean = false
 
+  // Records cross the channel as object references read by a concurrent consumer thread; the
+  // SQL layer must detach each row from the producer's reused buffer before the writer sees it.
+  override def requiresDetachedRecords: Boolean = true
+
   override def registerShuffle[K, V, C](
       shuffleId: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle =
