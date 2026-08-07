@@ -25,58 +25,64 @@ on:
     - '**'
 
 jobs:
-  check-build:
-    name: Check Build decision
+  check-commit-count:
+    name: Check commit count
     runs-on: ubuntu-slim
     permissions:
       contents: read
     outputs:
-      should-build: ${{ steps.decision.outputs.should-build }}
+      is-tenth-commit: ${{ steps.count.outputs.is-tenth-commit }}
     steps:
       - name: Check out the full branch history
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Determine whether Build should run
-        id: decision
+      - name: Check whether this is every tenth commit
+        id: count
         run: |
           count=$(git rev-list --count HEAD)
+          remainder=$((count % 10))
 
-          if [[ "$GITHUB_REPOSITORY" != "apache/spark" ]]; then
-            should_build=true
-            title="Build scheduled"
-            details="Fork pushes always run Build. Commit count: $count."
-          elif ((count % 10 == 0)); then
-            should_build=true
-            title="Build scheduled"
+          if ((remainder == 0)); then
+            is_tenth_commit=true
+            title="Commit count matched"
             details="Commit count $count is divisible by 10."
+            next_count=$count
           else
-            should_build=false
+            is_tenth_commit=false
             next_count=$(( (count / 10 + 1) * 10 ))
-            title="Build skipped"
-            details="Commit count $count is not divisible by 10. Next Build: $next_count."
+            title="Commit count not matched"
+            details="Commit count $count is not divisible by 10. Next match: $next_count."
           fi
 
-          echo "should-build=$should_build" >> "$GITHUB_OUTPUT"
-          echo "Repository: $GITHUB_REPOSITORY"
+          echo "is-tenth-commit=$is_tenth_commit" >> "$GITHUB_OUTPUT"
           echo "Branch: $GITHUB_REF_NAME"
           echo "Commit: $GITHUB_SHA"
           echo "Commit count: $count"
-          echo "Decision: $title"
+          echo "Remainder: $remainder"
+          echo "Every tenth commit: $is_tenth_commit"
+          echo "Next matching count: $next_count"
           echo "Details: $details"
           echo "::notice title=$title::$details"
-          echo "### $title" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Commit count check" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Repository: $GITHUB_REPOSITORY" >> "$GITHUB_STEP_SUMMARY"
           echo "- Branch: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit count: $count" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Remainder: $remainder" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Every tenth commit: $is_tenth_commit" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Next matching count: $next_count" >> "$GITHUB_STEP_SUMMARY"
           echo "- Details: $details" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Build runs for forks or when every tenth commit is true." \
+            >> "$GITHUB_STEP_SUMMARY"
 
   call-build-and-test:
     permissions:
       packages: write
     name: Run
-    needs: check-build
-    if: needs.check-build.outputs.should-build == 'true'
+    needs: check-commit-count
+    if: >-
+      github.repository != 'apache/spark'
+      || needs.check-commit-count.outputs.is-tenth-commit == 'true'
     uses: ./.github/workflows/build_and_test.yml
