@@ -128,14 +128,21 @@ object CheckpointVersionManager extends Logging {
    * for commit log v3 (sink metadata) is not dragged back down by a state store still on v1.
    */
   private def getCommitLogVersion(sparkSessionForStream: SparkSession): Int = {
-    val conf = sparkSessionForStream.sessionState.conf
-    val configuredVersion = conf.streamingCommitLogFormatVersion
-    val minRequiredVersion = if (conf.stateStoreCheckpointFormatVersion >= 2) {
+    val currentDefaultVersion = CommitLog.VERSION_1
+    val minRequiredVersion = getMinRequiredCommitLogVersion(sparkSessionForStream)
+    val configuredVersion = sparkSessionForStream.sessionState.conf.streamingCommitLogFormatVersion
+    val result = List[Int](currentDefaultVersion, minRequiredVersion, configuredVersion).max
+    logInfo(s"Retrieved commit log writer version=$result")
+    result
+  }
+
+  private def getMinRequiredCommitLogVersion(sparkSessionForStream: SparkSession): Int = {
+    if (sparkSessionForStream.sessionState.conf.stateStoreCheckpointFormatVersion >=
+        CommitLog.VERSION_2) {
       CommitLog.VERSION_2
     } else {
       CommitLog.VERSION_1
     }
-    math.max(configuredVersion, minRequiredVersion)
   }
 
   /**
