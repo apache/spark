@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.datasources.{MarkSingleTaskExecution, Prun
 import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
-import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFFromLambda, ExtractPythonUDFs, ExtractPythonUDTFs}
+import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
 
 class SparkOptimizer(
     catalogManager: CatalogManager,
@@ -89,9 +89,8 @@ class SparkOptimizer(
       ExtractPythonUDFFromAggregate,
       // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
       ExtractGroupingPythonUDFFromAggregate,
-      // Lifts Python UDFs out of higher-order function lambdas. Must run before
-      // `ExtractPythonUDFs`, which then extracts the lifted UDF as an ordinary top-level UDF.
-      ExtractPythonUDFFromLambda,
+      // `ExtractPythonUDFs` first lifts Python UDFs out of higher-order function lambdas
+      // (via `ExtractPythonUDFFromLambda`) and then extracts them as ordinary top-level UDFs.
       ExtractPythonUDFs,
       ExtractPythonUDTFs,
       // The eval-python node may be between Project/Filter and the scan node, which breaks
@@ -118,9 +117,8 @@ class SparkOptimizer(
       ExtractPythonUDFFromJoinCondition.ruleName,
       ExtractPythonUDFFromAggregate.ruleName,
       ExtractGroupingPythonUDFFromAggregate.ruleName,
-      // A plan that only works because of this rewrite must not be silently broken by
-      // spark.sql.optimizer.excludedRules.
-      ExtractPythonUDFFromLambda.ruleName,
+      // Non-excludable: a plan with a Python UDF in a higher-order function lambda only works
+      // because `ExtractPythonUDFs` lifts it out (via `ExtractPythonUDFFromLambda`).
       ExtractPythonUDFs.ruleName,
       GroupBasedRowLevelOperationScanPlanning.ruleName,
       V2ScanRelationPushDown.ruleName,

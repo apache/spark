@@ -5338,7 +5338,8 @@ object SQLConf {
       .doc("When true, a scalar Python UDF may be used inside the lambda of a higher-order " +
         "function such as `transform` or `filter`. The UDF is not evaluated inside the lambda; " +
         "it is applied to the whole array outside the lambda and the lambda reads the " +
-        "precomputed result. When false, such queries fail with " +
+        "precomputed result. This uses an Arrow-based execution path, so PyArrow is required " +
+        "even for a UDF created with useArrow=False. When false, such queries fail with " +
         "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF as before.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)

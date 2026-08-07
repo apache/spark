@@ -104,9 +104,11 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 
   /**
    * Rewrites one higher-order function whose lambda holds a rewritable Python UDF. The generic path
-   * never names a concrete class: it reads arguments, lambdas and parameter roles off the
-   * [[HigherOrderFunction]] API and rebuilds with `withNewChildren` (children are `arguments` then
-   * `functions`). Only a pairwise `array_sort` comparator needs a separate path.
+   * reads arguments, lambdas and parameter roles off the [[HigherOrderFunction]] API and rebuilds
+   * with `withNewChildren` (children are `arguments` then `functions`), naming a concrete class
+   * only where a shape cannot be inferred otherwise (`ArraySort`'s comparator, and the result-type
+   * traits telling `ArrayFilter` from `ArrayTransform`). A pairwise `array_sort` comparator, whose
+   * single call takes both elements, needs its own path.
    */
   private val rewrite: PartialFunction[Expression, Expression] = {
     case sort @ ArraySort(_, function, _)
@@ -150,8 +152,8 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     val flatCells = ArrayTransform(
       pairCarrier.carrier, LambdaFunction(pairCarrier.body, Seq(pairCarrier.boundVar)))
 
-    // Carry each element's position so the comparator can index the matrix, sort by
-    // `matrix[a.idx][b.idx]`, then drop the positions again. `element_at` is 1-based.
+    // Carry each element's position so the comparator can read its pair's precomputed cell, sort,
+    // then drop the positions again.
     val posElem = NamedLambdaVariable("x", elementType, containsNull)
     val posIdx = NamedLambdaVariable("i", IntegerType, nullable = false)
     val indexed = ArraysZip(
@@ -159,22 +161,16 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       Seq(Literal(s"${carrierElementPrefix}0"), Literal(carrierIndexField)))
     val indexedElement = indexed.dataType.asInstanceOf[ArrayType].elementType
 
-    // The matrix, as n rows of n taken from the flat results.
-    val rowElem = NamedLambdaVariable("x", elementType, containsNull)
-    val rowIdx = NamedLambdaVariable("i", IntegerType, nullable = false)
-    val matrix = ArrayTransform(
-      argument,
-      LambdaFunction(
-        Slice(flatCells, Add(Multiply(rowIdx, n), Literal(1)), n),
-        Seq(rowElem, rowIdx)))
-
+    // Index the flat n*n results directly: cell (i, j) is at `i * n + j`. `flatCells`'s Python UDF
+    // reads no comparator variable, so `ExtractPythonUDFs` hoists it to a computed-once column;
+    // indexing it here is O(1) per comparison. Building an n-row matrix inside the comparator
+    // instead would rebuild and slice it on every comparison. `element_at` is 1-based.
     val cmpLeft = NamedLambdaVariable("a", indexedElement, nullable = false)
     val cmpRight = NamedLambdaVariable("b", indexedElement, nullable = false)
-    def indexOf(v: NamedLambdaVariable): Expression =
-      Add(GetStructField(v, 1, Some(carrierIndexField)), Literal(1))
+    def idxOf(v: NamedLambdaVariable): Expression = GetStructField(v, 1, Some(carrierIndexField))
     val comparison = ElementAt(
-      ElementAt(matrix, indexOf(cmpLeft), None, failOnError = false),
-      indexOf(cmpRight),
+      flatCells,
+      Add(Add(Multiply(idxOf(cmpLeft), n), idxOf(cmpRight)), Literal(1)),
       None,
       failOnError = false)
 
@@ -208,16 +204,16 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         val map = hof.arguments.head
         val keys = MapKeys(map)
         val values = MapValues(map)
-        // `map_filter` keeps whichever pairs survive; `transform_keys` replaces the keys and
-        // `transform_values` the values, told apart by whether the result key type is the lambda's.
-        val rebuild: Expression => Expression =
-          if (isFromElements) { (kept: Expression) =>
+        // Rebuild by the concrete function, not the result type: `transform_keys` replaces the
+        // keys, `transform_values` the values, `map_filter` keeps whichever pairs survive. Keying
+        // off the type would be wrong for e.g. `transform_values` on `map<string, string>`, whose
+        // lambda result type equals the key type.
+        val rebuild: Expression => Expression = hof match {
+          case _: TransformKeys => (newKeys: Expression) => MapFromArrays(newKeys, values)
+          case _: TransformValues => (newValues: Expression) => MapFromArrays(keys, newValues)
+          case _: MapFilter => (kept: Expression) =>
             MapFromArrays(unwrapCarrier(kept, 0), unwrapCarrier(kept, 1))
-          } else if (hof.dataType.asInstanceOf[MapType].keyType == lambda.dataType) {
-            (newKeys: Expression) => MapFromArrays(newKeys, values)
-          } else {
-            (newValues: Expression) => MapFromArrays(keys, newValues)
-          }
+        }
         (Seq(keys, values), rebuild)
       } else {
         val Seq(left, right) = hof.arguments
@@ -368,7 +364,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         arrayArgs,
         PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
         udf.udfDeterministic)
-      arrayResults += (udf.canonicalized -> lifted)
+      arrayResults += (liftKey(udf) -> lifted)
       lifted
     }
 
@@ -392,7 +388,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         indexVar.map(_.exprId -> (carrierFields.length - 1)).toMap
     val extraVarOf: Map[ExprId, NamedLambdaVariable] =
       alsoBind.map(_.exprId).zip(extraBoundVars).toMap
-    val udfFieldByCanonical = liftableUDFs.map(_.canonicalized).zipWithIndex.toMap
+    val udfFieldByKey = liftableUDFs.map(liftKey).zipWithIndex.toMap
 
     // Rewrite the body. This must be top-down: a UDF call is matched by its canonicalized form,
     // and rewriting its arguments first (a variable becoming a struct field read) would change
@@ -410,8 +406,8 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     }
 
     val rewrittenBody = body.transformDown {
-      case udf: PythonUDF if udfFieldByCanonical.contains(udf.canonicalized) =>
-        val ordinal = udfFieldByCanonical(udf.canonicalized)
+      case udf: PythonUDF if udfFieldByKey.contains(liftKey(udf)) =>
+        val ordinal = udfFieldByKey(liftKey(udf))
         // A UDF over a comparator's right-hand element must read that element's key, so the
         // struct field is read through whichever bound variable the call's own arguments used.
         val side = udf.collectFirst {
@@ -433,10 +429,14 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   }
 
   /**
-   * Collects the Python UDF calls in `body` that must be lifted, innermost first.
+   * Collects the Python UDF calls directly in `body` that must be lifted, innermost first.
    *
-   * Only calls that actually read the lambda's variables need lifting; a UDF over constants or
-   * outer columns is already valid outside the lambda and is left to [[ExtractPythonUDFs]].
+   * Every rewritable UDF directly in the lambda body is lifted, even one whose arguments do not
+   * read the lambda variable (`transform(arr, _ -> f(lit(10)))`). It cannot stay inside the lambda,
+   * and lifting it - `overArray` repeats a constant/outer-column argument into an aligned array -
+   * gives it the lambda's own call domain: once per element, and zero times for a null or empty
+   * array. Leaving it to [[ExtractPythonUDFs]] would instead call it once per row, including rows
+   * whose array is null or empty where the lambda never runs.
    */
   private def collectLiftableUDFs(
       body: Expression,
@@ -452,17 +452,16 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       // Children first, so nested calls come out innermost-first.
       children.foreach(visit)
       e match {
-        case udf: PythonUDF
-            if PythonUDF.isElementwiseRewritableUDF(udf) &&
-              readsLambdaVariable(udf, lambdaExprIds) =>
+        case udf: PythonUDF if PythonUDF.isElementwiseRewritableUDF(udf) =>
           collected += udf
         case _ =>
       }
     }
     visit(body)
-    // Deduplicate identical calls so the same UDF is evaluated once per array.
+    // Deduplicate identical calls so the same UDF is evaluated once per array. Nondeterministic
+    // calls are kept distinct (see `liftKey`).
     val seen = scala.collection.mutable.LinkedHashMap.empty[Expression, PythonUDF]
-    collected.result().foreach(udf => seen.getOrElseUpdate(udf.canonicalized, udf))
+    collected.result().foreach(udf => seen.getOrElseUpdate(liftKey(udf), udf))
     seen.values.toSeq
   }
 
@@ -471,6 +470,16 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       case v: NamedLambdaVariable => lambdaExprIds.contains(v.exprId)
       case _ => false
     }
+
+  /**
+   * The key that decides whether two UDF calls are "the same call" for lifting. A deterministic
+   * call is deduplicated by canonical form, so an identical call is evaluated once. A
+   * nondeterministic call must stay distinct - `transform(arr, x -> f(x) + f(x))` calls `f` twice
+   * and each call may return a different value - so it is keyed by its own `resultId`-bearing node
+   * (`canonicalized` erases `resultId`, which would collapse the two calls into one).
+   */
+  private def liftKey(udf: PythonUDF): Expression =
+    if (udf.udfDeterministic) udf.canonicalized else udf
 
   /**
    * Turns a UDF argument expression, written in terms of single elements, into the equivalent
@@ -490,8 +499,8 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       lambdaExprIds: Set[ExprId],
       arrayResults: Map[Expression, Expression]): Expression = child match {
     case v: NamedLambdaVariable if arrayOfVar.contains(v.exprId) => arrayOfVar(v.exprId)
-    case udf: PythonUDF if arrayResults.contains(udf.canonicalized) =>
-      arrayResults(udf.canonicalized)
+    case udf: PythonUDF if arrayResults.contains(liftKey(udf)) =>
+      arrayResults(liftKey(udf))
     case e if !readsLambdaVariable(e, lambdaExprIds) =>
       // Independent of the element (an outer column or constant): repeat it into an array aligned
       // with the iterated array, so every UDF argument is a single-level array the worker flattens

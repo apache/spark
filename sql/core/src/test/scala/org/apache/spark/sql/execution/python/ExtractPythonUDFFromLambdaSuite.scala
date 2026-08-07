@@ -25,7 +25,7 @@ import org.apache.spark.sql.functions.{array_sort, col, forall, lit, map_filter,
   transform, transform_keys, transform_values, when, zip_with}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, IntegerType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StringType}
 
 /**
  * Plan-shape tests for [[ExtractPythonUDFFromLambda]].
@@ -42,6 +42,7 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
   private val scalarPandasUDF = new MyDummyScalarPandasUDF
   // Used where a UDF call must receive two arguments, e.g. a pairwise comparator.
   private val pythonUDF2 = new MyDummyPythonUDF
+  private val nondeterministicUDF = new MyDummyNondeterministicPythonUDF
 
   private def arrayDF = Seq(Seq(1, 2, 3)).toDF("values")
 
@@ -117,11 +118,31 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     // Two distinct calls, so two lifted array UDFs.
     assert(liftedUDFs(several).size == 2)
 
-    // The same call twice must be evaluated once.
+    // The same deterministic call twice must be evaluated once.
     val duplicated = arrayDF.select(
       transform(col("values"), x => pythonUDF(x) || pythonUDF(x)).as("r"))
     assert(udfsInsideLambda(duplicated).isEmpty)
     assert(liftedUDFs(duplicated).size == 1)
+  }
+
+  test("identical nondeterministic calls are lifted distinctly, not deduplicated") {
+    // Deduplicating `f(x)` with `f(x)` would collapse two independent draws into one; a
+    // nondeterministic UDF must keep each call, so both are lifted.
+    val df = arrayDF.select(
+      transform(col("values"), x => nondeterministicUDF(x) || nondeterministicUDF(x)).as("r"))
+    assert(udfsInsideLambda(df).isEmpty)
+    assert(liftedUDFs(df).size == 2)
+  }
+
+  test("transform_values whose result type equals the key type replaces values, not keys") {
+    // SPARK-27052: dispatch is by concrete function, not result type. For map<string, string>,
+    // transform_values' lambda also returns string, which must not be treated as new keys.
+    val maps = Seq(Map("a" -> "x")).toDF("m")
+    val df = maps.select(transform_values(col("m"), (k, v) => pythonUDF(v).cast("string")).as("r"))
+    assert(udfsInsideLambda(df).isEmpty)
+    // Keys are preserved: the map still has the original key type and no new-key projection.
+    val mapType = df.queryExecution.analyzed.schema.head.dataType.asInstanceOf[MapType]
+    assert(mapType.keyType == StringType)
   }
 
   test("a UDF inside a nested higher-order function's lambda is rejected") {
@@ -213,10 +234,13 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("the rule is not excludable") {
-    // A plan that only works because of this rewrite must not be broken by excludedRules.
+  test("the rewrite cannot be disabled via excludedRules") {
+    // The lambda rewrite is driven by `ExtractPythonUDFs` (not a standalone batch rule), and that
+    // rule is non-excludable, so a plan that only works because of the rewrite cannot be broken by
+    // excludedRules. Excluding either name must leave the UDF lifted out of the lambda.
     withSQLConf(
-      SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ExtractPythonUDFFromLambda.ruleName) {
+      SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        Seq(ExtractPythonUDFFromLambda.ruleName, ExtractPythonUDFs.ruleName).mkString(",")) {
       val df = arrayDF.select(transform(col("values"), x => pythonUDF(x)).as("r"))
       assert(udfsInsideLambda(df).isEmpty)
     }

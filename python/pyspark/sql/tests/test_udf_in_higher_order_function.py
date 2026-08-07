@@ -150,14 +150,15 @@ class UDFInHigherOrderFunctionTestsMixin:
         )
 
     def test_udf_with_constant_argument_only(self):
-        # SPARK-27052: `transform(arr, x -> udf(lit(10)))` must still yield one result per
-        # element rather than a single value.
-        df = self.spark.createDataFrame([([1, 2, 3],), ([],)], "values array<int>")
+        # SPARK-27052: `transform(arr, x -> udf(lit(10)))` does not read the element, but the UDF
+        # must still take the lambda's call domain: once per element, and zero times for an empty
+        # or null array (where the lambda never runs), rather than once per row.
+        df = self.spark.createDataFrame([([1, 2, 3],), ([],), (None,)], "values array<int>")
         const = udf(lambda v: v * 2, IntegerType())
 
         assertDataFrameEqual(
             df.select(sf.transform("values", lambda x: const(sf.lit(10))).alias("r")),
-            [([20, 20, 20],), ([],)],
+            [([20, 20, 20],), ([],), (None,)],
         )
 
     def test_filter(self):
@@ -216,8 +217,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         )
 
     def test_array_sort_with_udf_key(self):
-        # A comparator cannot be evaluated pairwise, but the UDF applied per element is a sort key
-        # the JVM comparator compares. This must actually reorder, not be a no-op.
+        # When the UDF applies per element, it is precomputed as a sort key that the JVM comparator
+        # compares (a UDF taking both elements is instead precomputed over the pairs; see the
+        # pairwise test). This must actually reorder, not be a no-op.
         df = self.spark.createDataFrame([([3, 1, 2],), ([],), (None,)], "values array<int>")
         negate = udf(lambda x: -x, IntegerType())
 
@@ -301,6 +303,49 @@ class UDFInHigherOrderFunctionTestsMixin:
         assertDataFrameEqual(
             df.select(sf.map_zip_with("l", "r", lambda k, v1, v2: combine(v1, v2)).alias("r")),
             [({"a": 100, "b": 220, "c": 30},)],
+        )
+
+    def test_transform_values_result_type_equals_key_type(self):
+        # SPARK-27052: transform_values on map<string,string> whose lambda also returns string.
+        # The rewrite must replace the values, not the keys (dispatch is by function, not type).
+        df = self.spark.createDataFrame([({"a": "x", "b": "y"},)], "m map<string,string>")
+        tag = udf(lambda v: v + "!", StringType())
+        assertDataFrameEqual(
+            df.select(sf.transform_values("m", lambda k, v: tag(v)).alias("r")),
+            [({"a": "x!", "b": "y!"},)],
+        )
+
+    def test_nondeterministic_udf_calls_are_distinct(self):
+        # SPARK-27052: two calls to a nondeterministic UDF in one lambda must stay distinct, not be
+        # collapsed into one shared value. `rand_add` returns x plus a per-call random draw, so
+        # f(x) + f(x) equals 2x only if the two calls were (wrongly) deduplicated.
+        import random
+
+        df = self.spark.createDataFrame([([10, 20, 30],)], "values array<int>")
+        rand_add = udf(
+            lambda x: x + random.randint(1, 1_000_000), IntegerType()
+        ).asNondeterministic()
+        row = df.select(
+            sf.transform("values", lambda x: rand_add(x) - rand_add(x)).alias("r")
+        ).collect()[0]
+        # If the two calls were deduplicated, every element would be exactly 0.
+        self.assertTrue(any(v != 0 for v in row["r"]), row["r"])
+
+    def test_fused_transforms_with_different_lengths(self):
+        # SPARK-27052: two transforms over arrays of different per-row lengths and null layouts get
+        # fused by ExtractPythonUDFs into one element-wise batch. Each UDF must be re-nested by its
+        # own array's shape, not a shared one.
+        df = self.spark.createDataFrame(
+            [([1, 2, 3], [10]), ([], None), (None, [7, 8])],
+            "a array<int>, b array<int>",
+        )
+        f = udf(lambda v: v + 1, IntegerType())
+        assertDataFrameEqual(
+            df.select(
+                sf.transform("a", lambda x: f(x)).alias("ra"),
+                sf.transform("b", lambda x: f(x)).alias("rb"),
+            ),
+            [([2, 3, 4], [11]), ([], None), (None, [8, 9])],
         )
 
     def test_element_and_return_types(self):

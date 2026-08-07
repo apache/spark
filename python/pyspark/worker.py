@@ -3054,9 +3054,30 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
                 return list(pool.map(lambda row: udf_func(*row), rows))
 
+        def renest_spec(shape):
+            """Offsets, list class and null mask that re-nest a flat result list by ``shape``.
+
+            Null rows stay null and consume no offsets. ``ListArray`` uses int32 offsets and
+            ``LargeListArray`` int64, so the input's list width is preserved.
+            """
+            lengths = pc.list_value_length(shape).to_pylist()
+            offsets = []
+            running = 0
+            for n in lengths:
+                offsets.append(running)
+                if n is not None:
+                    running += n
+            offsets.append(running)
+            is_large = pa.types.is_large_list(shape.type)
+            list_cls = pa.LargeListArray if is_large else pa.ListArray
+            offsets_arr = pa.array(offsets, type=pa.int64() if is_large else pa.int32())
+            null_mask = pa.array([n is None for n in lengths], type=pa.bool_())
+            total_elements = running
+            return list_cls, offsets_arr, null_mask, total_elements
+
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             for input_batch in data:
-                # Flatten all array columns to element lists and convert to Python.
+                # Flatten each list column once to its element list, converting to Python.
                 columns = []
                 for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters):
                     values = ArrowTableToRowsConversion._to_pylist(col.flatten())
@@ -3064,37 +3085,21 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         values = [conv(v) for v in values]
                     columns.append(values)
 
-                # Extract shape (lengths per row, null mask) from first column.
-                shape = input_batch.column(0)
-                lengths = pc.list_value_length(shape).to_pylist()
-                total_elements = sum(n for n in lengths if n is not None)
-
-                # Build offsets to re-nest flat list back to array<R> with input shape.
-                # Null rows stay null; they consume no offsets. Preserve int32/int64 width.
-                offsets = []
-                running = 0
-                for n in lengths:
-                    offsets.append(running)
-                    if n is not None:
-                        running += n
-                offsets.append(running)
-                is_large = pa.types.is_large_list(shape.type)
-                list_cls = pa.LargeListArray if is_large else pa.ListArray
-                offsets_arr = pa.array(offsets, type=pa.int64() if is_large else pa.int32())
-                null_mask = pa.array([n is None for n in lengths], type=pa.bool_())
-
-                # Evaluate all UDFs once over the flattened batch.
+                # Each UDF is re-nested by *its own* first argument's shape. ExtractPythonUDFs can
+                # fuse UDFs over differently shaped arrays into one batch, so a single shared shape
+                # would misalign every UDF but the first. The rewrite always passes at least one
+                # array argument, so `offsets_meta` is non-empty.
                 output_arrays = []
                 for wrapped_func, offsets_meta, arrow_element_type, result_conv in udf_infos:
-                    rows = (
-                        [() for _ in range(total_elements)]
-                        if not offsets_meta
-                        else list(zip(*[columns[o] for o in offsets_meta]))
+                    list_cls, offsets_arr, null_mask, total_elements = renest_spec(
+                        input_batch.column(offsets_meta[0])
                     )
+                    # Stream the argument tuples rather than materializing a batch-sized list.
+                    rows = zip(*[columns[o] for o in offsets_meta])
                     results = _evaluate_elementwise_udf(wrapped_func, rows)
                     verify_result_row_count(len(results), total_elements)
 
-                    # Convert results and re-nest to array<R> using input offsets.
+                    # Convert results and re-nest to array<R> using that UDF's offsets.
                     converted = (
                         [result_conv(r) for r in results] if result_conv is not None else results
                     )
