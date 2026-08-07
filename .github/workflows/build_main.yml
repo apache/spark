@@ -31,7 +31,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      is-tenth-commit: ${{ steps.count.outputs.is-tenth-commit }}
+      should-run: ${{ steps.count.outputs.should-run }}
     steps:
       - name: Check out the full branch history
         uses: actions/checkout@v6
@@ -44,23 +44,23 @@ jobs:
           remainder=$((count % 10))
 
           if ((remainder == 0)); then
-            is_tenth_commit=true
+            should_run=true
             title="Commit count matched"
             details="Commit count $count is divisible by 10."
             next_count=$count
           else
-            is_tenth_commit=false
+            should_run=false
             next_count=$(( (count / 10 + 1) * 10 ))
             title="Commit count not matched"
             details="Commit count $count is not divisible by 10. Next match: $next_count."
           fi
 
-          echo "is-tenth-commit=$is_tenth_commit" >> "$GITHUB_OUTPUT"
+          echo "should-run=$should_run" >> "$GITHUB_OUTPUT"
           echo "Branch: $GITHUB_REF_NAME"
           echo "Commit: $GITHUB_SHA"
           echo "Commit count: $count"
           echo "Remainder: $remainder"
-          echo "Every tenth commit: $is_tenth_commit"
+          echo "Should run: $should_run"
           echo "Next matching count: $next_count"
           echo "Details: $details"
           echo "::notice title=$title::$details"
@@ -70,11 +70,11 @@ jobs:
           echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit count: $count" >> "$GITHUB_STEP_SUMMARY"
           echo "- Remainder: $remainder" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Every tenth commit: $is_tenth_commit" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Should run: $should_run" >> "$GITHUB_STEP_SUMMARY"
           echo "- Next matching count: $next_count" >> "$GITHUB_STEP_SUMMARY"
           echo "- Details: $details" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Build runs for forks or when every tenth commit is true." \
+          echo "Build runs for forks or when should-run is true." \
             >> "$GITHUB_STEP_SUMMARY"
 
   call-build-and-test:
@@ -84,5 +84,5 @@ jobs:
     needs: check-commit-count
     if: >-
       github.repository != 'apache/spark'
-      || needs.check-commit-count.outputs.is-tenth-commit == 'true'
+      || needs.check-commit-count.outputs.should-run == 'true'
     uses: ./.github/workflows/build_and_test.yml
