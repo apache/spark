@@ -1387,11 +1387,10 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         return df._jdf.queryExecution().optimizedPlan().toString()
 
     def test_udf_transpile_evaluates_inputs_once(self):
-        # SPARK-58626: a transpiled option references a parameter once per use in the
-        # function body, but the UDF it replaces evaluates each argument exactly once.
-        # The optimizer shares the argument through a single pre-evaluated column, which
-        # a nondeterministic argument makes observable: the copies used to drift apart
-        # whenever one of them sat in a branch that was not taken.
+        # SPARK-58626: an option uses a parameter once per use in the body, but the UDF it
+        # replaces evaluates each argument once. A nondeterministic argument makes the
+        # difference observable: the copies used to drift apart whenever one of them sat in
+        # a branch that was not taken.
         from pyspark.sql.functions import lit, rand
 
         eq_self = lambda x: x == x  # noqa: E731
@@ -1403,15 +1402,14 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(eq_udf.transpiled and clamp_udf.transpiled)
             rows = self.spark.range(100)
 
-            # rand() is one draw per row, so it equals itself. Once the draw is shared
-            # Catalyst can even prove that, folding the call to `true` and dropping the
-            # rand from the plan; with a copy per use site it cannot.
+            # rand() is one draw per row, so it equals itself. Sharing lets Catalyst prove
+            # that and fold the call to `true`; with a copy per use site it cannot.
             eq_df = rows.select(eq_udf(rand()).alias("v"))
             self.assertTrue(all(r[0] for r in eq_df.collect()))
             self.assertEqual(0, self._optimized_plan(eq_df).count("rand("))
 
-            # `x if x > 0.5 else 0.0`: every output is either the untouched 0.0 branch or
-            # the very value the condition tested.
+            # `x if x > 0.5 else 0.0`: every output is either the 0.0 branch or the very
+            # value the condition tested.
             clamped = rows.select(clamp_udf(rand()).alias("v"))
             self.assertEqual(1, self._optimized_plan(clamped).count("rand("))
             vals = [r[0] for r in clamped.collect()]
@@ -1420,23 +1418,23 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(any(v == 0.0 for v in vals), vals)
             self.assertTrue(any(v > 0.5 for v in vals), vals)
 
-            # A literal argument is folded in at each use site rather than shared.
+            # A literal is folded in at each use site rather than shared.
             square = UserDefinedFunction(square_fn, LongType())
             self.assertTrue(square.transpiled)
             lit_df = rows.select(square(lit(3)).alias("v"))
             self.assertNotIn("_common_expr", self._optimized_plan(lit_df))
             self.assertEqual([9] * 100, [r[0] for r in lit_df.collect()])
 
-            # Nor is a plain column shared: reading it twice is as cheap as reading a
-            # shared copy, so the plan must not grow an extra projection for it.
+            # Nor is a plain column: reading it twice is as cheap as reading a shared copy,
+            # so the plan must not grow an extra projection.
             col_df = self.spark.range(3).select(square("id").alias("v"))
             self.assertNotIn("_common_expr", self._optimized_plan(col_df))
             self.assertEqual([0, 1, 4], [r[0] for r in col_df.collect()])
 
     def test_udf_transpile_shares_duplicated_argument(self):
-        # SPARK-58626: lowering Python's `%` sign rules references the divisor several times,
-        # so the divisor is computed once into a column the option reads back, and the result
-        # still matches interpreted Python.
+        # SPARK-58626: lowering Python's `%` sign rules uses the divisor several times, so it
+        # is computed once into a column the option reads back, and the result still matches
+        # interpreted Python.
         from pyspark.sql.functions import col
 
         modulo = lambda a, b: a % b  # noqa: E731
@@ -1450,31 +1448,65 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertIn("_common_expr", self._optimized_plan(mod_df))
             self.assertEqual(expected, [r[0] for r in mod_df.collect()])
 
-    def test_udf_transpile_shares_identical_nondeterministic_inputs(self):
-        # SPARK-58626: two structurally equal copies of a nondeterministic argument are not
-        # independent draws -- each seeds its generator identically, so `rand(1) - rand(1)` is
-        # 0.0 on every row and the interpreted UDF sees both parameters holding the same value.
-        # One definition therefore serves both positions, which is also what keeps the copy in
-        # the untaken branch from drifting: `(a if a > 0.5 else 0.0) - b` with a == b can only
-        # land in [-0.5, 0.0].
+    def test_udf_transpile_shares_per_parameter_for_identical_arguments(self):
+        # SPARK-58626: two parameters are two columns to Python, so f(rand(1), rand(1)) owes the
+        # body two draws even though the spliced copies are indistinguishable. Sharing is decided
+        # from the `_udf_param_N` sentinel, not from the copies, so it never crosses a parameter.
         from pyspark.sql.functions import rand
 
+        diff = lambda a, b: a - b  # noqa: E731
         clamp_diff = lambda a, b: (a if a > 0.5 else 0.0) - b  # noqa: E731
         with self.sql_conf(_TRANSPILE_ON):
-            udf = UserDefinedFunction(clamp_diff, DoubleType())
-            self.assertTrue(udf.transpiled)
-            df = self.spark.range(300).select(udf(rand(1), rand(1)).alias("v"))
-            self.assertEqual(1, self._optimized_plan(df).count("rand("))
-            vals = [r[0] for r in df.collect()]
+            diff_udf = UserDefinedFunction(diff, DoubleType())
+            clamp_udf = UserDefinedFunction(clamp_diff, DoubleType())
+            self.assertTrue(diff_udf.transpiled and clamp_udf.transpiled)
+
+            # Each parameter used once: nothing to share, two draws stay two draws. Equal seeds
+            # advance in lockstep, so the two columns agree row by row and the difference is 0.
+            both_once = self.spark.range(300).select(diff_udf(rand(1), rand(1)).alias("v"))
+            plan = self._optimized_plan(both_once)
+            self.assertEqual(2, plan.count("rand("))
+            self.assertNotIn("_common_expr", plan)
+            self.assertEqual(0, self._eval_python_count(both_once))
+            self.assertTrue(all(r[0] == 0.0 for r in both_once.collect()))
+
+            # Parameter `a` used twice, `b` once: `a` gets one definition so its copies can't
+            # drift, `b` keeps its own draw. Two rand( remain -- one in the pre-evaluating
+            # Project, one inline for b -- and with a == b the result lands in [-0.5, 0.0].
+            repeated = self.spark.range(300).select(clamp_udf(rand(1), rand(1)).alias("v"))
+            plan = self._optimized_plan(repeated)
+            self.assertEqual(2, plan.count("rand("))
+            self.assertIn("_common_expr", plan)
+            self.assertEqual(0, self._eval_python_count(repeated))
+            vals = [r[0] for r in repeated.collect()]
             self.assertTrue(all(-0.5 <= v <= 0.0 for v in vals), [v for v in vals if v > 0.0][:5])
             # Both branches have to be exercised for the check above to mean anything.
             self.assertTrue(any(v == 0.0 for v in vals), vals[:5])
             self.assertTrue(any(v < 0.0 for v in vals), vals[:5])
 
+    def test_udf_transpile_shares_per_parameter(self):
+        # SPARK-58626: sharing never crosses parameters. `a * b` over f(a + 1, a + 1) keeps a copy
+        # per parameter, matching the two columns Python would evaluate, and a nested argument is
+        # evaluated again as part of the outer one rather than folded into its neighbour's column.
+        from pyspark.sql.functions import col
+
+        product = lambda a, b: a * b  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            prod_udf = UserDefinedFunction(product, LongType())
+            self.assertTrue(prod_udf.transpiled)
+            df = self.spark.createDataFrame([(2,), (5,)], "a long")
+
+            same = df.select(prod_udf(col("a") + 1, col("a") + 1).alias("v"))
+            self.assertNotIn("_common_expr", self._optimized_plan(same))
+            self.assertEqual([9, 36], [r[0] for r in same.collect()])
+
+            nested = df.select(prod_udf(col("a") + 1, (col("a") + 1) + 2).alias("v"))
+            self.assertNotIn("_common_expr", self._optimized_plan(nested))
+            self.assertEqual([15, 48], [r[0] for r in nested.collect()])
+
     def test_udf_transpile_does_not_share_distinct_inputs(self):
-        # SPARK-58626: sharing is per argument. Two independent draws passed to two
-        # parameters must stay independent, so `a - b` over different seeds is not
-        # collapsed into a self-subtraction that is always 0.
+        # SPARK-58626: sharing is per argument, so two independent draws stay independent --
+        # `a - b` over different seeds is not collapsed into an always-0 self-subtraction.
         from pyspark.sql.functions import rand
 
         diff = lambda a, b: a - b  # noqa: E731
@@ -1484,6 +1516,19 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             df = self.spark.range(100).select(diff_udf(rand(1), rand(2)).alias("v"))
             self.assertEqual(2, self._optimized_plan(df).count("rand("))
             self.assertTrue(any(r[0] != 0.0 for r in df.collect()))
+
+    def test_udf_transpile_drops_unused_argument(self):
+        # SPARK-58626: an argument the body never uses is not evaluated at all, where the
+        # Python path computes every argument column. Accepted difference, pinned here.
+        from pyspark.sql.functions import rand
+
+        first = lambda a, b: a  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            first_udf = UserDefinedFunction(first, LongType())
+            self.assertTrue(first_udf.transpiled)
+            df = self.spark.range(5).select(first_udf("id", rand(1)).alias("v"))
+            self.assertEqual(0, self._optimized_plan(df).count("rand("))
+            self.assertEqual([0, 1, 2, 3, 4], [r[0] for r in df.collect()])
 
     def test_udf_transpile_lowers_operators(self):
         # Operators lower to Catalyst and match Python: modulo sign-parity,

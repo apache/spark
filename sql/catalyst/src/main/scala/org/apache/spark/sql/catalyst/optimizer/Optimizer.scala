@@ -1072,15 +1072,14 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           // option's dataType already matches; a custom transpiler MUST do the
           // same (or insert its own Cast), or it will silently change the output
           // schema.
-          val firstEvaluable = s.transpiledOptions.headOption
-          firstEvaluable match {
+          s.transpiledOptions.headOption match {
             case None =>
               s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
             case Some(catalystExpr) =>
-              // A transpiled option can reference the same parameter many times (null guards,
-              // sign handling, both branches of a conditional, ...) while the Python UDF it
-              // replaces evaluates each argument exactly once, so share the inputs first.
-              val shared = shareUDFInputs(catalystExpr, udfArguments(s.pythonUDFExpr))
+              // A parameter used many times in the body (null guards, sign handling, both branches
+              // of a conditional, ...) was spliced in once per use, but the UDF this replaces
+              // evaluates each argument once, so give it a single evaluation first.
+              val shared = TranspiledUDFParameter.shareTaggedParameters(catalystExpr)
               // Recursively apply to the children first because we may use them as inputs in parent
               shared.mapChildren(applyExpr(_, parentIsUdf = false))
           }
@@ -1096,72 +1095,6 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // transpiled wrapping one that could).
         expression.mapChildren(
           applyExpr(_, parentIsUdf = isScalarPythonUDF(expression)))
-    }
-  }
-
-  /**
-   * The call site's argument expressions, i.e. the ones `_udf_param_N` placeholders were
-   * substituted with when the [[TranspiledPythonUDF]] node was built. A grouped-agg UDF is
-   * wrapped in an [[AggregateExpression]] by `UserDefinedPythonFunction.fromUDFExpr`, so unwrap
-   * that to reach the arguments.
-   */
-  private def udfArguments(udfExpr: Expression): Seq[Expression] = udfExpr match {
-    case agg: AggregateExpression => agg.aggregateFunction.children
-    case other => other.children
-  }
-
-  /**
-   * Makes each of the UDF's non-literal arguments evaluate once.
-   *
-   * Rewrites the duplicated arguments to [[CommonExpressionRef]]s of a single
-   * [[CommonExpressionDef]] each and wraps the result in a [[With]].
-   *
-   * The `With` must wrap the whole option rather than each duplicated subtree: a `With` nested
-   * inside a conditional branch is inlined by `RewriteWithExpression` (a common expression can't
-   * be hoisted into an always-evaluated `Project` from a branch that may not run).
-   *
-   * Known gap, unchanged by this rewrite: when the UDF call itself sits in a conditional branch
-   * (`when(c, udf(rand()))`), the `With` lands inside that branch and is inlined for the same
-   * reason, so a nondeterministic argument still drifts there. See the nondeterminism TODO in
-   * `RewriteWithExpression`.
-   */
-  private def shareUDFInputs(option: Expression, args: Seq[Expression]): Expression = {
-    // `With` does not allow an AggregateExpression in its child to reference a common expression
-    // defined in the same scope (it would leave a dangling ref behind after the rewrite), so
-    // leave an aggregating option -- a transpiled grouped-agg UDF -- alone. This is deliberately
-    // broader than that restriction, which only bites when a shared argument sits *under* the
-    // aggregate: identical aggregates are deduplicated by `PhysicalAggregation` anyway, so the
-    // narrower check would buy nothing but subtlety.
-    if (option.exists(_.isInstanceOf[AggregateExpression])) {
-      return option
-    }
-    val shareable = args.filter { arg =>
-      // Folding a literal into every use site beats reading it from a shared column, and
-      // `CommonExpressionRef` needs the definition's type, which an unresolved argument
-      // cannot supply.
-      !arg.foldable && arg.resolved &&
-        // Nothing to share unless the option really does use the argument more than once. Note
-        // that this counts structurally equal subtrees, which is exactly what substitution
-        // produced. Two structurally equal copies of a nondeterministic argument -- including
-        // ones bound to different parameters, as in `f(rand(1), rand(1))` -- are not independent
-        // draws: each seeds its own generator identically (`Rand` from `seed + partitionIndex`),
-        // so they advance in lockstep and agree row by row, which is exactly what the
-        // interpreted UDF sees. Sharing one definition between them therefore preserves
-        // semantics, and it is what stops a copy in an untaken branch from drifting.
-        option.collect { case e if e == arg => e }.size > 1
-    }.distinct
-    if (shareable.isEmpty) {
-      option
-    } else {
-      val exprDefs = shareable.map(CommonExpressionDef(_))
-      val refs = exprDefs.map(exprDef => new CommonExpressionRef(exprDef))
-      val substitutions = shareable.zip(refs).toMap
-      // transformDown so an argument that contains another argument as a subtree is replaced as
-      // a whole; the inner argument keeps its own definition for the occurrences outside it.
-      val replaced = option.transformDown {
-        case e if substitutions.contains(e) => substitutions(e)
-      }
-      With(replaced, exprDefs)
     }
   }
 }

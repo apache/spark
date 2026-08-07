@@ -21,7 +21,7 @@ import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TRANSPILED_PYTHON_UDF,
   TreePattern}
@@ -232,6 +232,94 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
   override def nullable: Boolean = true
+}
+
+
+/**
+ * Marks a subtree of a transpiled option as the argument spliced in for the UDF's `index`th
+ * parameter.
+ *
+ * `UserDefinedPythonFunction`'s builder resolves the `_udf_param_N` placeholders at
+ * call-construction time, which erases which copy came from which parameter -- and two parameters
+ * can be bound to structurally equal arguments, so counting copies cannot recover it. Giving each
+ * parameter a single evaluation needs that identity, so the builder tags the copies of any
+ * parameter it splices in more than once and `ConvertToCatalyst` unwraps them all.
+ *
+ * A [[TaggingExpression]], so it is transparent: it evaluates as its child and a stray one is
+ * harmless.
+ */
+case class TranspiledUDFParameter(child: Expression, index: Int) extends TaggingExpression {
+  override protected def withNewChildInternal(newChild: Expression): TranspiledUDFParameter =
+    copy(child = newChild)
+}
+
+
+object TranspiledUDFParameter {
+  /**
+   * Gives each tagged parameter of a transpiled option a single evaluation, like the Python UDF the
+   * option replaces, whose eval operator computes one column per argument. Called by
+   * `ConvertToCatalyst` once the option is resolved -- a [[CommonExpressionRef]] needs its
+   * definition's type, so this cannot run at call-construction time where the tags are added.
+   *
+   * Most of it needs no work: a parameter used once was spliced in once, an unused one never made
+   * it in at all (so its argument is never evaluated, unlike the Python path -- a deliberate
+   * difference), and a foldable one folds in at each use site. What is left is the parameters the
+   * builder tagged because it spliced them in more than once: the copies that belong together are
+   * the tags sharing an index, so each index becomes one [[CommonExpressionDef]] and
+   * `RewriteWithExpression` pre-evaluates it in a Project below the operator, re-inlining the cheap
+   * ones so plain column arguments leave the plan unchanged.
+   *
+   * Sharing never crosses parameters: two parameters are two columns to Python, so
+   * `f(rand(1), rand(1))` owes the body two draws however identical the copies look, and an
+   * argument nested inside another is evaluated again as part of the outer one.
+   *
+   * The [[With]] wraps the whole option rather than each shared subtree, since one nested in a
+   * conditional branch just gets inlined again -- a common expression can't be hoisted into an
+   * always-evaluated Project from a branch that may not run. That is also the gap we don't close:
+   * `when(c, udf(rand()))` puts the `With` itself in a branch, so the copies still drift there.
+   * See the nondeterminism TODO in `RewriteWithExpression`.
+   */
+  def shareTaggedParameters(option: Expression): Expression = {
+    // Stop at a nested TranspiledPythonUDF: its options carry tags for their own call's parameters,
+    // which are handled when ConvertToCatalyst recurses into it, and whose indexes would otherwise
+    // collide with ours.
+    def tagsOf(e: Expression): Seq[TranspiledUDFParameter] = e match {
+      case p: TranspiledUDFParameter => Seq(p)
+      case _: TranspiledPythonUDF => Nil
+      case _ => e.children.flatMap(tagsOf)
+    }
+    val tags = tagsOf(option)
+    if (tags.isEmpty) {
+      return option
+    }
+    // `With` forbids an AggregateExpression in its child from referencing a common expression
+    // defined in the same scope, so an aggregating option -- a transpiled grouped-agg UDF -- keeps
+    // its inputs inline. Deliberately broader than the restriction needs, in two ways: only a
+    // shared argument *under* the aggregate trips it, and unlike the walks around it this looks
+    // inside a nested call too. Neither costs correctness, PhysicalAggregation dedupes identical
+    // aggregates anyway, and staying conservative here keeps us well clear of `With`'s assert.
+    val shared = if (option.exists(_.isInstanceOf[AggregateExpression])) {
+      Nil
+    } else {
+      tags.groupBy(_.index).toSeq.sortBy(_._1).collect {
+        // A ref needs its definition's type, so an unresolved argument stays inline, as does a
+        // parameter some earlier rewrite left with a single tag or with disagreeing copies.
+        case (index, ps) if ps.length > 1 && ps.map(_.child).distinct.length == 1 &&
+            ps.head.child.resolved =>
+          index -> CommonExpressionDef(ps.head.child)
+      }
+    }
+    val refs = shared.map { case (index, d) => index -> new CommonExpressionRef(d) }.toMap
+    // Unwrap every tag on the way out, shared or not -- the marker has no business surviving into
+    // execution. The definitions hold the raw arguments: RewriteWithExpression only resolves refs
+    // in the `With`'s child, so a ref inside a sibling definition would be left dangling.
+    def unwrap(e: Expression): Expression = e match {
+      case p: TranspiledUDFParameter => refs.getOrElse(p.index, p.child)
+      case t: TranspiledPythonUDF => t
+      case _ => e.mapChildren(unwrap)
+    }
+    if (shared.isEmpty) unwrap(option) else With(unwrap(option), shared.map(_._2))
+  }
 }
 
 
