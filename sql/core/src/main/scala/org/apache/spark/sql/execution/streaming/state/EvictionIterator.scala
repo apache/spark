@@ -23,10 +23,12 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.WatermarkSupp
  * An iterator over the evictable rows of a [[StateStore]], which removes each row it returns and
  * reports how far it has progressed.
  *
- * Only the rows that are actually evicted are returned, so every `next()` corresponds to one
- * removal. That lets a caller both emit the evicted rows -- streaming aggregation in append mode
- * outputs a grouping key once the watermark passes it -- and count real removals rather than state
- * rows scanned.
+ * Only the rows that are actually evicted are returned, so every row this iterator yields has been
+ * removed from the store. The removal happens in `hasNext` rather than `next` (see the note on
+ * `pending` below) precisely so that a caller which stops early still leaves the store consistent
+ * with what it observed. That lets a caller both emit the evicted rows -- streaming aggregation in
+ * append mode outputs a grouping key once the watermark passes it -- and count real removals rather
+ * than state rows scanned.
  */
 trait EvictionIterator extends Iterator[UnsafeRowPair] {
   /** Number of state rows examined so far, whether or not they were evicted. */

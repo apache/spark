@@ -3782,6 +3782,7 @@ object SQLConf {
         "the batch completes.")
       .version("4.3.0")
       .longConf
+      .checkValue(_ >= 0, "The incremental cleanup factor must not be negative.")
       .createWithDefault(0L)
 
   val STREAMING_STOP_ACTIVE_RUN_ON_RESTART =

@@ -134,8 +134,7 @@ class StreamRealTimeModeAllowlistSuite extends StreamRealTimeModeE2ESuiteBase {
   // The "stateful queries not allowed" test that used to live here asserted that a streaming
   // aggregation was rejected, because it planned into the micro-batch aggregation operators and
   // HashAggregateExec is not allowlisted. A Real-Time Mode aggregation is now planned as the
-  // streamline aggregate operator, which is allowlisted, so there is no rejection left to assert --
-  // including for a global aggregation with no grouping keys. StreamlineStreamingAggregation-
-  // RealTimeSuite covers the aggregation itself end to end, and the generic operator-allowlist test
-  // above still guards the operators that remain unsupported.
+  // streamline aggregate operator, which is allowlisted, so there is no rejection left to assert.
+  // StreamlineStreamingAggregationRealTimeSuite covers the aggregation itself end to end, and the
+  // generic operator-allowlist test above still guards the operators that remain unsupported.
 }

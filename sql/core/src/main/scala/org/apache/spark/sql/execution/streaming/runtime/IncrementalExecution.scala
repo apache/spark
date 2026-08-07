@@ -603,6 +603,22 @@ class IncrementalExecution(
       rulesToCompose.reduceLeft { (ruleA, ruleB) => ruleA orElse ruleB }
     }
 
+    /**
+     * Returns true if the metadata of oldOpName is convertible to newOpName in one direction.
+     *
+     * A streaming aggregation may move between the micro-batch operator ([[StateStoreSaveExec]],
+     * "stateStoreSave") and the streamline operator ([[StatefulStreamlineAggregateExec]]) in either
+     * direction: the two share [[StreamingAggregationStateManager]] and the same state format
+     * version, so the on-disk state written by one is readable by the other.
+     */
+    private def isOperatorMetadataConvertible(oldOpName: String, newOpName: String): Boolean = {
+      oldOpName == newOpName || ((oldOpName, newOpName) match {
+        case ("stateStoreSave", "StatefulStreamlineAggregate") => true
+        case ("StatefulStreamlineAggregate", "stateStoreSave") => true
+        case _ => false
+      })
+    }
+
     private def checkOperatorValidWithMetadata(
         planWithStateOpId: SparkPlan,
         batchId: Long): Unit = {
@@ -658,7 +674,7 @@ class IncrementalExecution(
         (opMapInMetadata.keySet ++ opMapInPhysicalPlan.keySet).foreach { opId =>
           val opInMetadata = opMapInMetadata.getOrElse(opId, "not found")
           val opInCurBatch = opMapInPhysicalPlan.getOrElse(opId, "not found")
-          if (opInMetadata != opInCurBatch) {
+          if (!isOperatorMetadataConvertible(opInMetadata, opInCurBatch)) {
             throw QueryExecutionErrors.statefulOperatorNotMatchInStateMetadataError(
               opMapInMetadata,
               opMapInPhysicalPlan)

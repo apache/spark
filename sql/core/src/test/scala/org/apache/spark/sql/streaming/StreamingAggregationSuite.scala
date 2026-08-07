@@ -1063,6 +1063,42 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
+  // The micro-batch aggregation operator (stateStoreSave) and the streamline operator share the
+  // same StreamingAggregationStateManager and state format, so a checkpoint written by one can be
+  // read by the other. The operator-name check in IncrementalExecution must therefore treat the
+  // switch as a supported transition rather than a changed stateful operator (which would abort the
+  // query on restart). Both directions are exercised.
+  test("switching between the micro-batch and streamline aggregation operators keeps state") {
+    Seq(false -> true, true -> false).foreach { case (firstStreamline, secondStreamline) =>
+      withTempDir { dir =>
+        val inputData = MemoryStream[Int]
+        val aggregated = inputData.toDF().groupBy($"value").agg(count("*")).as[(Int, Long)]
+        spark.conf.set(
+          SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR.key, firstStreamline.toString)
+        testStream(aggregated, Complete)(
+          StartStream(checkpointLocation = dir.getAbsolutePath),
+          AddData(inputData, 1, 1, 2),
+          CheckLastBatch((1, 2), (2, 1)),
+          StopStream,
+          Execute { _ =>
+            spark.conf.set(
+              SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR.key, secondStreamline.toString)
+          },
+          StartStream(checkpointLocation = dir.getAbsolutePath),
+          // State survives the operator switch: the counts continue rather than resetting.
+          AddData(inputData, 1, 2),
+          CheckLastBatch((1, 3), (2, 2)),
+          StopStream
+        )
+      }
+    }
+  }
+
+  // Note: Append aggregation without a watermark is rejected at analysis time by
+  // UnsupportedOperationChecker (STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION), so the operator's
+  // own Append watermark check is a defensive internal invariant that a normal query never
+  // reaches -- there is no query shape that exercises it end to end, hence no test for it here.
+
   @tailrec
   private def findStateSchemaNotCompatible(exc: Throwable):
     Option[SparkUnsupportedOperationException] = {

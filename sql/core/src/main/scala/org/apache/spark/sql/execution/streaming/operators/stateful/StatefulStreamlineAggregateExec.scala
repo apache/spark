@@ -18,6 +18,8 @@ package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import scala.util.control.NonFatal
+
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalNotification}
 import org.apache.hadoop.conf.Configuration
 
@@ -393,16 +395,32 @@ class StatefulStreamlineAggregationProcessor(
   // even though there is more available memory to cache more entries.
   protected val flushThresholdNumKeys: Int = if (useUnsafeBuffer) 1000 else 100
 
+  // Holds the first failure thrown while a removal listener writes an entry to the state store.
+  // Guava logs and SWALLOWS any exception a removal listener throws (see the
+  // CacheBuilder.removalListener scaladoc), so the put below cannot fail the task on its own --
+  // without this capture a failed write would be silently dropped and the batch would still commit,
+  // losing that key's update. flushDirtyWrites rethrows it so the task fails instead of committing
+  // partial state.
+  private var writeFailure: Option[Throwable] = None
+
   // The writes which did not go into state store yet. We also leverage this dirty writes to the
   // cache of state store.
   private val dirtyWrites: LoadingCache[UnsafeRow, UnsafeRowReference] = CacheBuilder.newBuilder()
     .maximumSize(flushThresholdNumKeys)
     .removalListener((notification: RemovalNotification[UnsafeRow, UnsafeRowReference]) => {
-      val value = notification.getValue
-      assert(value.getRow != null, "dirty writes should contain the valid row to update, " +
-        "but found null.")
-      stateManager.put(stateStore, value.getRow)
-      numUpdatedStateRows += 1
+      // Skip once a write has already failed: the task is going to fail anyway, and further puts
+      // into a broken store are pointless.
+      if (writeFailure.isEmpty) {
+        try {
+          val value = notification.getValue
+          assert(value.getRow != null, "dirty writes should contain the valid row to update, " +
+            "but found null.")
+          stateManager.put(stateStore, value.getRow)
+          numUpdatedStateRows += 1
+        } catch {
+          case NonFatal(e) => writeFailure = Some(e)
+        }
+      }
     })
     .build(new CacheLoader[UnsafeRow, UnsafeRowReference] {
       override def load(key: UnsafeRow): UnsafeRowReference = {
@@ -424,9 +442,16 @@ class StatefulStreamlineAggregationProcessor(
 
   /**
    * Flush the dirty writes to state store. This should be called at the end of each microbatch.
+   *
+   * Rethrows the first state-store write failure a removal listener captured, so that a failed put
+   * fails the task rather than committing state that is missing an update.
    */
   def flushDirtyWrites(): Unit = {
     dirtyWrites.invalidateAll()
+    writeFailure.foreach { e =>
+      throw new IllegalStateException(
+        "Failed to write an aggregation update to the state store", e)
+    }
   }
 
   def process(newInput: InternalRow): UnsafeRow = {
