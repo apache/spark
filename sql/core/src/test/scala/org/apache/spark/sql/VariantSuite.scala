@@ -702,6 +702,11 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
         "'{\"a\": 100000, \"b\": null, \"c\": 10000000000, \"d\": \"hello world\"}')))"),
       rows("""{"a":100000,"c":10000000000,"d":"hello world"}"""))
 
+    checkAnswer(
+      sql("SELECT to_json(variant_strip_nulls(parse_json('{\"a\": [1, null], \"b\": null}'), " +
+        "include_arrays => false))"),
+      rows("""{"a":[1,null]}"""))
+
     // include_arrays = false keeps array null elements but still strips null fields of objects.
     checkAnswer(
       sql("SELECT to_json(variant_strip_nulls(" +
@@ -725,6 +730,10 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     checkAnswer(
       sql("SELECT to_json(variant_strip_nulls(CAST(NULL AS VARIANT)))"),
       rows(null))
+
+    assert(intercept[AnalysisException] {
+      sql("SELECT variant_strip_nulls(parse_json('{\"a\": null}'), c) FROM VALUES (true) AS t(c)")
+    }.getCondition == "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT")
   }
 
   test("variant_strip_nulls with dynamic arguments") {
