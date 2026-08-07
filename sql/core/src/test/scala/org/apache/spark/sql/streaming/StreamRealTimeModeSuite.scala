@@ -22,6 +22,7 @@ import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
@@ -695,10 +696,11 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
     }
   }
 
-  test("pipelined shuffle: an explicit sortBeforeRepartition=true does not stall the query") {
+  test("pipelined shuffle: an explicit sortBeforeRepartition=true is rejected") {
     // The deterministic local sort before a round-robin repartition never drains an unbounded
-    // stream, so Real-Time Mode overrides this config even when it is set explicitly -- honouring
-    // it would hang the query forever. See MicroBatchExecution.
+    // stream, so honouring sortBeforeRepartition=true would hang a Real-Time Mode query forever.
+    // Rather than silently override it, the pre-flight in StreamingQueryManager rejects the
+    // explicit value up front. See StreamingQueryManager.throwIfConfsAreRealTimeModeIncompatible.
     withSQLConf(
       SQLConf.SHUFFLE_PARTITIONS.key -> "2",
       SQLConf.SORT_BEFORE_REPARTITION.key -> "true") {
@@ -707,12 +709,14 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
         .repartition(4)
         .dropDuplicates("key")
         .select($"key")
-      testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
-        AddData(inputData, ("a", 1), ("b", 1), ("c", 1), ("a", 2)),
-        StartStream(),
-        CheckAnswerWithTimeout(60000, "a", "b", "c"),
-        StopStream
-      )
+      val e = intercept[SparkIllegalArgumentException] {
+        testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+          AddData(inputData, ("a", 1), ("b", 1), ("c", 1), ("a", 2)),
+          StartStream()
+        )
+      }
+      checkError(e, condition = "STREAMING_REAL_TIME_MODE.CONFIGURATION_NOT_SUPPORTED",
+        parameters = e.getMessageParameters.asScala.toMap)
     }
   }
 

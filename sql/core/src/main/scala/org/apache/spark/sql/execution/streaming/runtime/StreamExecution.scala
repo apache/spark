@@ -524,7 +524,7 @@ abstract class StreamExecution(
       conf.set(changelogKey, "true")
     }
 
-    // HARD OVERRIDE. `repartition(n)` uses RoundRobinPartitioning, and by default (SPARK-23207)
+    // SOFT DEFAULT. `repartition(n)` uses RoundRobinPartitioning, and by default (SPARK-23207)
     // Spark inserts a local sort before a round-robin shuffle so the row-to-partition assignment is
     // deterministic -- otherwise a retried task could emit rows in a different order and lose data.
     // That sort is fully blocking: it drains its whole input before emitting a row. A Real-Time
@@ -536,17 +536,12 @@ abstract class StreamExecution(
     // pipelined task set at one attempt, and its group is aborted as a unit rather than
     // recomputed), so the hazard the sort guards against does not arise.
     //
-    // This overrides an explicit `true` as well. Honouring it would reintroduce the hang above, and
-    // a query that never produces a row is worse than silently ignoring a config that only guards
-    // against a retry that cannot happen here.
-    if (conf.contains(SQLConf.SORT_BEFORE_REPARTITION.key) &&
-      conf.get(SQLConf.SORT_BEFORE_REPARTITION)) {
-      logWarning(log"Ignoring ${MDC(CONFIG, SQLConf.SORT_BEFORE_REPARTITION.key)}=true " +
-        log"for this Real-Time Mode query: the local sort it inserts before a round-robin " +
-        log"repartition never completes on an unbounded stream. It is not needed because a " +
-        log"Real-Time Mode task is not retried.")
+    // This is a soft default rather than an override: an explicit `true` is rejected up front by
+    // the pre-flight in StreamingQueryManager (throwIfConfsAreRealTimeModeIncompatible), so by the
+    // time we get here an explicit value can only be `false`. Matches the Databricks runtime.
+    if (!conf.contains(SQLConf.SORT_BEFORE_REPARTITION.key)) {
+      conf.set(SQLConf.SORT_BEFORE_REPARTITION.key, "false")
     }
-    conf.set(SQLConf.SORT_BEFORE_REPARTITION.key, "false")
   }
 
   private def isInterruptedByStop(e: Throwable, sc: SparkContext): Boolean = {
