@@ -237,6 +237,26 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     assert(stats.maxConstPoolSize > 0)
   }
 
+  test("JDK backend compiles a complete Java source unit") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    val className = "test.InlineSource"
+    val source =
+      """
+        |package test;
+        |
+        |public final class InlineSource {
+        |  public static final class Helper {}
+        |}
+        |""".stripMargin
+    val classBytecodes = JdkCodeCompiler.compileJavaSource(
+      className,
+      source,
+      getClass.getClassLoader)
+
+    assert(classBytecodes.keySet == Set(className, className + "$Helper"))
+    assert(classBytecodes.values.forall(_.nonEmpty))
+  }
+
   test("Both backends produce class bytecodes the ByteCodeStats parser accepts") {
     assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
     val code = newCodeAndComment(sampleClassBody)

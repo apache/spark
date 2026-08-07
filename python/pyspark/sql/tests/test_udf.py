@@ -46,7 +46,7 @@ from pyspark.sql.types import (
     VariantType,
     VariantVal,
 )
-from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
+from pyspark.errors import AnalysisException, PythonException, PySparkTypeError, PySparkValueError
 from pyspark.logger import PySparkLogger
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import (
@@ -1727,6 +1727,40 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     def setUpClass(cls):
         super(BaseUDFTestsMixin, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
+
+    def test_register_jvm_function_from_source(self):
+        source = """
+            package test.pyspark.sql;
+
+            import org.apache.spark.sql.api.java.UDF1;
+
+            public final class InlinePlusOne implements UDF1<Long, Long> {
+              private static final class Helper {
+                private static Long plusOne(Long value) {
+                  return value == null ? null : value + 1;
+                }
+              }
+
+              @Override
+              public Long call(Long value) {
+                return Helper.plusOne(value);
+              }
+            }
+        """
+        with self.temp_func("inline_plus_one"):
+            self.spark.udf.registerJvmFunctionFromSource(
+                "inline_plus_one", "test.pyspark.sql.InlinePlusOne", source
+            )
+            rows = self.spark.range(3).selectExpr("inline_plus_one(id)").collect()
+            self.assertEqual([row[0] for row in rows], [1, 2, 3])
+
+        with self.assertRaises(PySparkValueError):
+            self.spark.udf.registerJvmFunctionFromSource(
+                "scala_udf",
+                "test.pyspark.sql.ScalaUDF",
+                "final class ScalaUDF",
+                language="scala",
+            )
 
     # We cannot check whether the batch size is effective or not. We just run the query with
     # various batch size and see whether the query runs successfully, and the output is

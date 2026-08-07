@@ -38,7 +38,7 @@ from pyspark.sql.udf import (
     UserDefinedFunction as PySparkUserDefinedFunction,
 )
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version, require_minimum_pandas_version
-from pyspark.errors import PySparkTypeError, PySparkRuntimeError
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -339,6 +339,24 @@ class UDFRegistration:
         self.sparkSession._client.register_java(name, javaClassName, returnType)
 
     registerJavaFunction.__doc__ = PySparkUDFRegistration.registerJavaFunction.__doc__
+
+    def registerJvmFunctionFromSource(
+        self,
+        name: str,
+        className: str,
+        source: str,
+        returnType: Optional["DataTypeOrString"] = None,
+        *,
+        language: str = "java",
+    ) -> None:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "registerJvmFunctionFromSource in Spark Connect"},
+        )
+
+    registerJvmFunctionFromSource.__doc__ = (
+        PySparkUDFRegistration.registerJvmFunctionFromSource.__doc__
+    )
 
     def registerJavaUDAF(self, name: str, javaClassName: str) -> None:
         self.sparkSession._client.register_java(name, javaClassName, aggregate=True)

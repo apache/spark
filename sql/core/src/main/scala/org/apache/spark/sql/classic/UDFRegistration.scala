@@ -19,14 +19,18 @@ package org.apache.spark.sql.classic
 
 import java.lang.reflect.ParameterizedType
 
+import scala.collection.mutable
+
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.JavaTypeInference
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.codegen.JdkCodeCompiler
 import org.apache.spark.sql.classic.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
@@ -47,6 +51,8 @@ import org.apache.spark.sql.types.DataType
 class UDFRegistration private[sql] (session: SparkSession, functionRegistry: FunctionRegistry)
   extends sql.UDFRegistration
   with Logging {
+  private val javaSourceHashes = mutable.HashMap.empty[String, String]
+
   protected[sql] def registerPython(name: String, udf: UserDefinedPythonFunction): Unit = {
     log.debug(
       s"""
@@ -133,6 +139,37 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
         throw QueryCompilationErrors.cannotLoadClassNotOnClassPathError(className)
       case _: InstantiationException | _: IllegalArgumentException =>
         throw QueryCompilationErrors.classWithoutPublicNonArgumentConstructorError(className)
+    }
+  }
+
+  /** Compile Java source, publish its class files as session artifacts, and register its UDF. */
+  private[sql] def registerJavaSource(
+      name: String,
+      className: String,
+      source: String,
+      returnDataType: DataType): Unit = javaSourceHashes.synchronized {
+    val sourceHash = JavaUtils.sha256Hex(source)
+    javaSourceHashes.get(className) match {
+      case Some(existingHash) if existingHash != sourceHash =>
+        throw new IllegalArgumentException(
+          s"Class '$className' is already registered from different Java source")
+      case Some(_) =>
+        registerJava(name, className, returnDataType)
+      case None =>
+        val classBytecodes = JdkCodeCompiler.compileJavaSource(
+          className,
+          source,
+          session.artifactManager.classloader)
+        if (!classBytecodes.contains(className)) {
+          throw new IllegalArgumentException(
+            s"Java source did not generate the declared class '$className'")
+        }
+        classBytecodes.toSeq.sortBy(_._1).foreach { case (binaryName, bytecode) =>
+          val target = binaryName.replace('.', '/') + ".class"
+          session.addArtifact(bytecode, target)
+        }
+        registerJava(name, className, returnDataType)
+        javaSourceHashes.put(className, sourceHash)
     }
   }
 

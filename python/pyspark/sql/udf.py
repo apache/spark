@@ -36,7 +36,12 @@ from pyspark.sql.types import (
 from pyspark.sql.utils import get_active_spark_context
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
-from pyspark.errors import PySparkTypeError, PySparkNotImplementedError, PySparkRuntimeError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkNotImplementedError,
+    PySparkRuntimeError,
+    PySparkValueError,
+)
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -923,6 +928,61 @@ class UDFRegistration:
                 returnType = _parse_datatype_string(returnType)
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
+
+    def registerJvmFunctionFromSource(
+        self,
+        name: str,
+        className: str,
+        source: str,
+        returnType: Optional["DataTypeOrString"] = None,
+        *,
+        language: str = "java",
+    ) -> None:
+        """Compile JVM source and register the resulting class as a SQL function.
+
+        This prototype supports Java source in Spark Classic. The source must declare
+        ``className`` and implement one of ``org.apache.spark.sql.api.java.UDF0`` through
+        ``UDF22``.
+
+        Parameters
+        ----------
+        name : str
+            name of the user-defined function
+        className : str
+            fully qualified name of the class declared by ``source``
+        source : str
+            complete Java source unit
+        returnType : :class:`pyspark.sql.types.DataType` or str, optional
+            return type of the registered function; inferred from the UDF interface when omitted
+        language : str, keyword-only
+            source language; the prototype currently accepts only ``"java"``
+
+        Examples
+        --------
+        >>> source = '''
+        ... package example;
+        ... import org.apache.spark.sql.api.java.UDF1;
+        ... public final class PlusOne implements UDF1<Long, Long> {
+        ...   public Long call(Long value) { return value == null ? null : value + 1; }
+        ... }
+        ... '''
+        >>> spark.udf.registerJvmFunctionFromSource(
+        ...     "plus_one", "example.PlusOne", source, "long")  # doctest: +SKIP
+        >>> spark.sql("SELECT plus_one(1L)").first()[0]  # doctest: +SKIP
+        2
+        """
+        if language != "java":
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "language", "allowed_values": "['java']"},
+            )
+
+        jdt = None
+        if returnType is not None:
+            if not isinstance(returnType, DataType):
+                returnType = _parse_datatype_string(returnType)
+            jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
+        self.sparkSession._jsparkSession.udf().registerJavaSource(name, className, source, jdt)
 
     def registerJavaUDAF(self, name: str, javaClassName: str) -> None:
         """Register a Java user-defined aggregate function as a SQL function.

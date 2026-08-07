@@ -29,4 +29,5 @@ UDF
     udf.UserDefinedFunction.returnType
     UDFRegistration.register
     UDFRegistration.registerJavaFunction
+    UDFRegistration.registerJvmFunctionFromSource
     UDFRegistration.registerJavaUDAF

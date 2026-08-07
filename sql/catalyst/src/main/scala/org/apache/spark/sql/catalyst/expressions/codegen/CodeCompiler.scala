@@ -904,6 +904,39 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
     }
   }
 
+  /**
+   * Compile a complete Java source unit and return every generated class file.
+   *
+   * This is intentionally an internal entry point. Unlike [[compile]], it does not wrap the
+   * source in Spark's generated-class contract or load the result. Callers are responsible for
+   * publishing the returned bytecode through the appropriate class loader.
+   */
+  private[sql] def compileJavaSource(
+      className: String,
+      source: String,
+      resolveLoader: ClassLoader): Map[String, Array[Byte]] = {
+    if (!isAvailable) {
+      throw new UnsupportedOperationException(
+        "javax.tools.JavaCompiler is not available on this runtime")
+    }
+
+    val future = compileExecutor.submit(new Callable[Map[String, Array[Byte]]] {
+      override def call(): Map[String, Array[Byte]] = {
+        compileToBytecode(
+          className,
+          source,
+          resolveLoader,
+          "Java source UDF",
+          () => ())
+      }
+    })
+    try {
+      Uninterruptibles.getUninterruptibly(future)
+    } catch {
+      case e: ExecutionException => throw Option(e.getCause).getOrElse(e)
+    }
+  }
+
   /** The actual compilation; always runs on [[compileExecutor]]. */
   private def doCompile(
       code: CodeAndComment,
@@ -911,7 +944,38 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
       resolveLoader: ClassLoader,
       parentLoader: ClassLoader,
       failureLogMaxLines: Int): (GeneratedClass, ByteCodeStats) = {
-    val fileObject = new InMemorySourceFile(CodeCompiler.GeneratedClassName, source)
+    // On failure, dump the full compilation unit rather than the raw class body: the
+    // line numbers in javac diagnostics refer to the wrapped unit (header + adapted
+    // body), so this keeps the dump's `/* NNN */` markers aligned with `line NNN`.
+    def logSourceOnFailure(): Unit = CodeCompiler.logGeneratedCodeOnFailure(
+      new CodeAndComment(source, code.comment), failureLogMaxLines)
+
+    val classBytecodes = compileToBytecode(
+      CodeCompiler.GeneratedClassName,
+      source,
+      resolveLoader,
+      "generated Java code",
+      () => logSourceOnFailure())
+    val codeStats = CodeCompiler.computeByteCodeStats(classBytecodes)
+    val loader = new InMemoryClassLoader(classBytecodes, parentLoader)
+
+    // `getConstructor` (public-only), matching the Janino path's instantiation.
+    val generated = loader.loadClass(CodeCompiler.GeneratedClassName)
+      .getConstructor()
+      .newInstance()
+      .asInstanceOf[GeneratedClass]
+
+    (generated, codeStats)
+  }
+
+  /** Compile one Java source unit. Must run on [[compileExecutor]]. */
+  private def compileToBytecode(
+      className: String,
+      source: String,
+      resolveLoader: ClassLoader,
+      description: String,
+      logSourceOnFailure: () => Unit): Map[String, Array[Byte]] = {
+    val fileObject = new InMemorySourceFile(className, source)
     val diagnostics = new DiagnosticCollector[JavaFileObject]()
     val fileManager = new ClassLoaderFileManager(sharedFileManager, resolveLoader, source)
     // Captures anything javac writes outside the diagnostics listener (internal
@@ -927,17 +991,11 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
       /* classes         = */ null,
       /* compilationUnits = */ java.util.Collections.singletonList(fileObject))
 
-    // On failure, dump the full compilation unit rather than the raw class body: the
-    // line numbers in javac diagnostics refer to the wrapped unit (header + adapted
-    // body), so this keeps the dump's `/* NNN */` markers aligned with `line NNN`.
-    def logSourceOnFailure(): Unit = CodeCompiler.logGeneratedCodeOnFailure(
-      new CodeAndComment(source, code.comment), failureLogMaxLines)
-
     val success = try {
       task.call().booleanValue()
     } catch {
       case NonFatal(e) =>
-        logError("Failed to compile the generated Java code.", e)
+        logError(s"Failed to compile $description.", e)
         logSourceOnFailure()
         throw QueryExecutionErrors.internalCompilerError(
           new InternalCompilerException(e.getMessage, e))
@@ -956,22 +1014,12 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
         case parts => parts.mkString("\n")
       }
       val ex = new CompileException(message, null)
-      logError("Failed to compile the generated Java code.", ex)
+      logError(s"Failed to compile $description.", ex)
       logSourceOnFailure()
       throw QueryExecutionErrors.compilerError(ex)
     }
 
-    val classBytecodes = fileManager.snapshot()
-    val codeStats = CodeCompiler.computeByteCodeStats(classBytecodes)
-    val loader = new InMemoryClassLoader(classBytecodes.toMap, parentLoader)
-
-    // `getConstructor` (public-only), matching the Janino path's instantiation.
-    val generated = loader.loadClass(CodeCompiler.GeneratedClassName)
-      .getConstructor()
-      .newInstance()
-      .asInstanceOf[GeneratedClass]
-
-    (generated, codeStats)
+    fileManager.snapshot().toMap
   }
 
   private def formatDiagnostic(d: Diagnostic[_ <: JavaFileObject]): String = {
