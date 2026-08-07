@@ -268,10 +268,11 @@ class KMeans private (
       case Some(kMeansCenters) =>
         kMeansCenters.clusterCenters.map(new VectorWithNorm(_))
       case None =>
+        val initializationData = data.filter(_.weight > 0)
         if (initializationMode == KMeans.RANDOM) {
-          initRandom(data)
+          initRandom(initializationData)
         } else {
-          initKMeansParallel(data, distanceMeasureInstance)
+          initKMeansParallel(initializationData, distanceMeasureInstance)
         }
     }
     val numFeatures = centers.head.vector.size
