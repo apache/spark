@@ -430,13 +430,9 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       (Vectors.dense(10.0, 0.0), 1.0),
       (Vectors.dense(10.1, 0.0), 1.0)
     ).toDF("features", "weightCol")
-    val zeroWeightOutlierData = Seq(
-      (Vectors.dense(0.0, 0.0), 1.0),
-      (Vectors.dense(0.1, 0.0), 1.0),
-      (Vectors.dense(10.0, 0.0), 1.0),
-      (Vectors.dense(10.1, 0.0), 1.0),
+    val zeroWeightOutlierData = positiveWeightData.union(Seq(
       (Vectors.dense(1000000.0, 1000000.0), 0.0)
-    ).toDF("features", "weightCol")
+    ).toDF("features", "weightCol"))
 
     Seq(KMeans.ROW, KMeans.BLOCK).foreach { solver =>
       Seq(MLlibKMeans.RANDOM, MLlibKMeans.K_MEANS_PARALLEL).foreach { initMode =>
