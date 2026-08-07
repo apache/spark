@@ -6409,9 +6409,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a job mixing a pipelined and a regular shuffle is rejected up front") {
-    // A job must be either all-regular or all-pipelined, not a mix. A consumer
-    // depending on BOTH a pipelined producer AND a regular producer is a mixed job and must be
-    // rejected up front (before any stage is submitted), leaving no scheduler state behind.
+    // A consumer depending on BOTH a pipelined producer AND an UNMATERIALIZED regular producer
+    // is an unsupported mix and must be rejected up front (before any stage is submitted),
+    // leaving no scheduler state behind. (A fully-MATERIALIZED regular prefix is the supported
+    // exception -- see the materialized-prefix test below.)
     val pipelinedProducerRdd = new MyRDD(sc, 2, Nil)
     val pipelinedDep = new PipelinedShuffleDependency(pipelinedProducerRdd, new HashPartitioner(2))
     val regularProducerRdd = new MyRDD(sc, 2, Nil)
@@ -6433,11 +6434,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("pipelined shuffle: a regular-shuffle prefix feeding a pipelined producer is rejected") {
-    // Also mixed: a regular shuffle in the PREFIX that feeds a pipelined producer
-    // (regularRoot --regular--> producer(pipelined) --pipelined--> consumer). Rather than treat
-    // the regular edge as an ordinary external input to the group and support a mid-DAG regular
-    // prefix, a pipelined job rejects ANY regular shuffle up front (the supported shape is
-    // scan-of-files --pipelined--> stateful, with no upstream shuffle).
+    // An UNMATERIALIZED regular shuffle in the PREFIX that feeds a pipelined producer
+    // (regularRoot --regular--> producer(pipelined) --pipelined--> consumer) is rejected: the
+    // prefix stage would have to run while gang-admitted producers hold slots blocked on
+    // transport backpressure, which admission does not account for. Once the prefix is
+    // MATERIALIZED the same shape is accepted (see the materialized-prefix test below).
     val regularRoot = new MyRDD(sc, 2, Nil)
     val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(2))
     val producerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
@@ -6454,6 +6455,45 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(failure.get().getMessage.contains("all-regular or all-pipelined"),
       s"expected a mixed-job rejection, got: ${failure.get().getMessage}")
     assert(taskSets.isEmpty, "no stage should be submitted for a rejected mixed job")
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a fully-materialized regular prefix below the suffix is accepted") {
+    // The materialized-prefix mixed shape (the one adaptive execution produces: prior jobs
+    // materialize the prefix stages, the final job runs the pipelined tail). First job
+    // materializes the regular shuffle; the second job's pipelined producer reads that
+    // materialized output, so the prefix stage is skipped and only the gang runs. The prefix's
+    // map side (2) and reduce side (3) are deliberately asymmetric: materialization
+    // completeness must be measured in MAP outputs, and a symmetric count would hide a check
+    // against the wrong side.
+    val regularRoot = new MyRDD(sc, 2, Nil)
+    val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(3))
+    val prefixReader = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
+    submit(prefixReader, Array(0, 1, 2))
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 3)
+    complete(taskSets(1), Seq((Success, 1), (Success, 2), (Success, 3)))
+    assert(results === Map(0 -> 1, 1 -> 2, 2 -> 3))
+    results.clear()
+    val taskSetsBefore = taskSets.size
+
+    // producer(reads materialized regular) --[pipelined]--> consumer (result stage).
+    val producerRdd = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+
+    // Not rejected; the prefix stage is available (not resubmitted); producer and consumer
+    // gang-run concurrently.
+    assert(taskSets.size === taskSetsBefore + 2,
+      s"expected producer and consumer submitted concurrently, got ${taskSets.size} task sets")
+    assert(scheduler.runningStages.exists(_.rdd eq producerRdd))
+    assert(scheduler.runningStages.exists(_.rdd eq consumerRdd))
+    assert(!scheduler.runningStages.exists(_.rdd eq regularRoot),
+      "the materialized prefix stage must not re-run")
+
+    completeShuffleMapStageSuccessfully(taskSets(taskSetsBefore).stageId, 0, 2)
+    complete(taskSets(taskSetsBefore + 1), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
   }
 

@@ -1118,32 +1118,71 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Classifies the shuffle boundaries in the RDD graph rooted at `finalRDD` by kind, walking the
-   * RDD dependency graph directly (before any stages are created). Returns whether the graph
-   * contains any [[PipelinedShuffleDependency]] and whether it contains any regular (non-pipelined)
-   * `ShuffleDependency`. Narrow dependencies are not boundaries and are ignored.
+   * Shape of the shuffle boundaries in the RDD graph rooted at a job's final RDD, computed by
+   * [[classifyJobShuffleShape]] before any stage is created (so an unsupported job is rejected
+   * fail-fast with no partial scheduler state).
    *
-   * A job must be either ALL-regular or ALL-pipelined: a job whose shuffle graph mixes a pipelined
-   * shuffle with a regular one is rejected fail-fast (see `handleJobSubmitted`). Restricting to a
-   * single kind makes the whole job one pipelined group when pipelined, so gang admission can be
-   * decided up front before any stage is submitted.
+   * The supported shapes are:
+   *  - all-regular (`hasPipelined` false, nothing pipelined anywhere);
+   *  - all-pipelined (`hasPipelined` true, no regular boundary anywhere);
+   *  - MATERIALIZED-PREFIX MIXED: pipelined shuffles in the region reachable from the final RDD
+   *    without crossing a regular shuffle, where every regular boundary at the edge of that
+   *    region is FULLY MATERIALIZED (all map outputs registered with the MapOutputTracker) and
+   *    no pipelined shuffle sits below any regular boundary. The materialized prefix never
+   *    re-runs, so the job executes exactly like an all-pipelined job whose leaves read
+   *    already-materialized shuffle data; gang admission demand (final stage + suffix producers)
+   *    is unchanged. This is the shape adaptive execution produces: prior map-stage jobs
+   *    materialize the prefix stages, and the final job runs the pipelined tail.
+   *
+   * An UNMATERIALIZED regular boundary in a pipelined job stays rejected: its stage would have to
+   * run while gang-admitted producers already hold slots (blocked on transport backpressure
+   * waiting for consumers), and admission does not account for the prefix's slots -- the prefix
+   * could be starved and deadlock the group. Sequencing the prefix before the gang is future
+   * work. A pipelined shuffle BELOW a regular boundary is also rejected: it is not part of the
+   * suffix group, and (if the boundary were unmaterialized) would have to run under a regime the
+   * group machinery does not cover.
    */
-  private def classifyJobShuffleKinds(finalRDD: RDD[_]): (Boolean, Boolean) = {
+  private case class JobShuffleShape(
+      hasPipelined: Boolean,
+      hasUnmaterializedRegularBoundary: Boolean,
+      hasPipelinedBelowRegular: Boolean) {
+    /** Mixed in a way the scheduler does not support (see class doc). */
+    def isUnsupportedMix: Boolean =
+      hasPipelinedBelowRegular || (hasPipelined && hasUnmaterializedRegularBoundary)
+  }
+
+  /** Classify `finalRDD`'s shuffle graph; see [[JobShuffleShape]] for the shape semantics. */
+  private def classifyJobShuffleShape(finalRDD: RDD[_]): JobShuffleShape = {
     var hasPipelined = false
-    var hasRegular = false
+    // Regular shuffle boundaries reachable from the final RDD without crossing another regular
+    // boundary, deduped by shuffle ID. The walk descends through pipelined and narrow edges but
+    // stops at regular ones: what lies below them is examined separately below.
+    val regularBoundaries = new HashMap[Int, ShuffleDependency[_, _, _]]
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
-      rdd.dependencies.foreach { dep =>
-        dep match {
-          case _: PipelinedShuffleDependency[_, _, _] => hasPipelined = true
-          case _: ShuffleDependency[_, _, _] => hasRegular = true
-          case _ => // narrow dependency: not a boundary
-        }
-        // Descend through every edge (shuffle and narrow) so a pipelined boundary behind a regular
-        // one -- or vice versa -- anywhere in the graph is still detected. traverseRDDGraph dedups.
-        enqueue(dep.rdd)
+      rdd.dependencies.foreach {
+        case pd: PipelinedShuffleDependency[_, _, _] =>
+          hasPipelined = true
+          enqueue(pd.rdd)
+        case sd: ShuffleDependency[_, _, _] =>
+          regularBoundaries.getOrElseUpdate(sd.shuffleId, sd)
+        case narrowDep =>
+          enqueue(narrowDep.rdd)
       }
     }
-    (hasPipelined, hasRegular)
+    var hasUnmaterialized = false
+    var pipelinedBelow = false
+    regularBoundaries.values.foreach { sd =>
+      // Materialized means every MAP partition has a registered output: the tracker counts map
+      // outputs, so compare against the producer RDD's partition count (matching how
+      // ShuffleMapStage.isAvailable derives completeness), not the reducer-side partitioner.
+      if (mapOutputTracker.getNumAvailableOutputs(sd.shuffleId) != sd.rdd.partitions.length) {
+        hasUnmaterialized = true
+      }
+      if (rddGraphHasPipelinedDependency(sd.rdd)) {
+        pipelinedBelow = true
+      }
+    }
+    JobShuffleShape(hasPipelined, hasUnmaterialized, pipelinedBelow)
   }
 
   /**
@@ -1766,14 +1805,15 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * The total concurrent-task demand of an all-pipelined job, computed from the RDD graph BEFORE
-   * any stage is created (so a rejection based on it leaves no partial scheduler state, exactly as
-   * the barrier slot check and the speculation/DA reject do). Because a job is either all-regular
-   * or all-pipelined, an all-pipelined job's whole stage graph is one pipelined group; its members
-   * are the final result stage plus every pipelined producer. Each member's task count is its RDD's
-   * partition count (`rdd.partitions.length`), matching how `createShuffleMapStage` derives
-   * `numTasks`. `finalNumPartitions` is the result stage's task count (the number of partitions the
-   * job runs, which may be a subset of `finalRDD.partitions`).
+   * The total concurrent-task demand of a pipelined job's group, computed from the RDD graph
+   * BEFORE any stage is created (so a rejection based on it leaves no partial scheduler state,
+   * exactly as the barrier slot check and the speculation/DA reject do). A pipelined job's group
+   * is the final result stage plus every pipelined producer; a materialized-prefix mixed job (see
+   * JobShuffleShape) contributes no additional members, since its regular prefix never re-runs
+   * and (by the shape check) has no pipelined shuffle below it. Each member's task count is its
+   * RDD's partition count (`rdd.partitions.length`), matching how `createShuffleMapStage` derives
+   * `numTasks`. `finalNumPartitions` is the result stage's task count (the number of partitions
+   * the job runs, which may be a subset of `finalRDD.partitions`).
    *
    * Count each producer once per SHUFFLE ID, matching what execution schedules: one stage is
    * created per shuffle ID (`getOrCreateShuffleMapStage`), not per dependency edge. A fan-out or
@@ -1791,7 +1831,8 @@ private[spark] class DAGScheduler(
           if (countedShuffleIds.add(pd.shuffleId)) {
             demand += pd.rdd.partitions.length
           }
-        case _ => // regular/narrow deps do not occur in an all-pipelined job's group
+        case _ => // narrow deps are not boundaries; a regular dep is a materialized prefix
+                  // boundary (JobShuffleShape), whose stages never run and are not members
       }
       rdd.dependencies.foreach(dep => enqueue(dep.rdd))
     }
@@ -1799,14 +1840,14 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Up-front gang admission for an all-pipelined job, checked BEFORE any stage exists. Because a
-   * job is either all-regular or all-pipelined (mixed jobs are already rejected), an all-pipelined
-   * job's whole stage graph is one pipelined group with no regular prefix, so its full demand is
-   * known up front and the group is ready to admit immediately. Checking here (rather than in
-   * `submitStage` once a producer is already running) is true all-or-nothing gang admission: the
-   * whole group is admitted, or the job is failed before any member runs, so a member is never left
-   * running while a sibling cannot get slots -- and, like the barrier slot check, a rejection
-   * leaves no partial scheduler state.
+   * Up-front gang admission for a pipelined job, checked BEFORE any stage exists. A pipelined
+   * job's runnable stage graph is one pipelined group (an unsupported mix is already rejected,
+   * and a materialized-prefix mixed job's regular stages never run -- see JobShuffleShape), so
+   * its full demand is known up front and the group is ready to admit immediately. Checking here
+   * (rather than in `submitStage` once a producer is already running) is true all-or-nothing gang
+   * admission: the whole group is admitted, or the job is failed before any member runs, so a
+   * member is never left running while a sibling cannot get slots -- and, like the barrier slot
+   * check, a rejection leaves no partial scheduler state.
    *
    * Free-slot accounting: demand vs. total capacity (`maxNumConcurrentTasks` for the default
    * profile -- a group is required to be single-profile) minus what OTHER work (other jobs) has
@@ -2061,26 +2102,30 @@ private[spark] class DAGScheduler(
       return
     }
 
-    // A job must be either ALL-regular or ALL-pipelined, not a mix: a job whose shuffle graph
-    // combines a pipelined shuffle with a regular one is rejected up front (before any stage is
-    // created). Restricting to a single kind makes an all-pipelined job's whole stage graph one
-    // pipelined group with no regular prefix, so gang admission is decided up front (see the slot
-    // check below) rather than mid-DAG once a producer is already running.
-    val (hasPipelined, hasRegular) = classifyJobShuffleKinds(finalRDD)
-    if (hasPipelined && hasRegular) {
+    // A job's shuffle graph must be all-regular, all-pipelined, or the materialized-prefix mixed
+    // shape (every regular boundary fully materialized and below the pipelined suffix -- see
+    // JobShuffleShape). Anything else is rejected up front (before any stage is created): an
+    // unmaterialized regular stage would have to run while gang-admitted producers hold slots
+    // blocked on transport backpressure, which admission does not account for and can deadlock.
+    val shape = classifyJobShuffleShape(finalRDD)
+    val hasPipelined = shape.hasPipelined
+    if (shape.isUnsupportedMix) {
       logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: a job mixing a pipelined shuffle with " +
-        log"a regular shuffle is not supported")
+        log"a regular shuffle is only supported when every regular shuffle is a materialized " +
+        log"prefix below the pipelined shuffles")
       listener.jobFailed(new SparkException(
         "A job that mixes a pipelined shuffle dependency with a regular shuffle dependency is " +
-          "not supported: a job must be either all-regular or all-pipelined."))
+          "only supported when every regular shuffle is a fully-materialized prefix below the " +
+          "pipelined shuffles; otherwise a job must be either all-regular or all-pipelined."))
       return
     }
 
-    // Gang admission for an all-pipelined job: the whole stage graph is one pipelined group, so
-    // check up front (before any stage is created) that the cluster can run the entire group
-    // concurrently. If it cannot fit, fail the job now -- no partial scheduler state, and no member
-    // ever left running while a sibling waits on slots (true all-or-nothing gang admission). Inert
-    // for a regular job (no pipelined dependency).
+    // Gang admission for a pipelined job: the runnable stage graph is one pipelined group (a
+    // materialized prefix's stages never run), so check up front (before any stage is created)
+    // that the cluster can run the entire group concurrently. If it cannot fit, fail the job now
+    // -- no partial scheduler state, and no member ever left running while a sibling waits on
+    // slots (true all-or-nothing gang admission). Inert for a regular job (no pipelined
+    // dependency).
     if (hasPipelined && rejectUnadmittablePipelinedGroup(jobId, finalRDD, partitions, listener)) {
       return
     }
