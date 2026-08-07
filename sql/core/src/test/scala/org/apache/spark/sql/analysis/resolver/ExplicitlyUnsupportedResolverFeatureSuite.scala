@@ -94,6 +94,29 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-57353: ORDER BY with grouping analytics in subquery does not reject outer sort") {
+    // Grouping analytics inside a scalar subquery must not leak hasGroupingAnalytics to the
+    // outer query. The outer ORDER BY is unrelated and should resolve successfully.
+    checkResolution(
+      """SELECT (SELECT SUM(x) FROM VALUES (1),(2) t(x)
+        |  GROUP BY GROUPING SETS (())) AS s ORDER BY s""".stripMargin,
+      shouldPass = true
+    )
+  }
+
+  test("SPARK-57353: HAVING with grouping analytics in subquery does not reject outer having") {
+    // Same boundary isolation for HAVING: grouping analytics confined to a subquery must not
+    // cause the outer HAVING to be rejected.
+    checkResolution(
+      """SELECT a, (SELECT SUM(x) FROM VALUES (1),(2) t(x)
+        |  GROUP BY GROUPING SETS (())) AS s
+        |FROM VALUES (1),(2),(3) v(a)
+        |GROUP BY a
+        |HAVING a > 1""".stripMargin,
+      shouldPass = true
+    )
+  }
+
   private def checkResolution(
       sqlText: String,
       shouldPass: Boolean = false,
