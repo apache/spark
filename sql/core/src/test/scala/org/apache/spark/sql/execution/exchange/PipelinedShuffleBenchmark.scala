@@ -106,10 +106,99 @@ object PipelinedShuffleBenchmark {
     // scalastyle:on println
   }
 
+  private val channelManagerClass =
+    "org.apache.spark.shuffle.local.pipelined.PipelinedChannelShuffleManager"
+
+  // Three-way TRANSPORT comparison: same scheduling (all-pipelined gang for the latter two),
+  // different byte paths -- regular materialized shuffle, RTM's RPC streaming transport
+  // (flag on, incremental manager left at its "streaming" default), and the in-process
+  // channel. Only shapes the streaming transport survives (no range sampling: the tracker
+  // accumulates writer registrations across the sample job's producer re-run and the reader
+  // dies on its writer-count assertion).
+  private def transportSession(mode: String, shufflePartitions: Int): SparkSession = {
+    val b = SparkSession.builder()
+      .master(s"local[$cores]")
+      .appName("pipelined-transport-benchmark")
+      .config("spark.sql.adaptive.enabled", "false")
+      .config("spark.speculation", "false")
+      .config("spark.sql.shuffle.partitions", shufflePartitions.toString)
+      .config("spark.ui.enabled", "false")
+    mode match {
+      case "regular" =>
+      case "streaming" =>
+        b.config("spark.sql.pipelinedShuffle.enabled", "true")
+      case "channel" =>
+        b.config("spark.sql.pipelinedShuffle.enabled", "true")
+          .config("spark.shuffle.manager.incremental", channelManagerClass)
+    }
+    b.getOrCreate()
+  }
+
+  private def transportBestMs(
+      mode: String, shufflePartitions: Int, workload: SparkSession => Unit): Long = {
+    val spark = transportSession(mode, shufflePartitions)
+    try {
+      workload(spark)
+      var best = Long.MaxValue
+      var i = 0
+      while (i < iters) {
+        val t0 = System.nanoTime()
+        workload(spark)
+        best = math.min(best, (System.nanoTime() - t0) / 1000000L)
+        i += 1
+      }
+      best
+    } finally {
+      spark.stop()
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+    }
+  }
+
+  private def compareTransports(
+      name: String, shufflePartitions: Int = 8)(workload: SparkSession => Unit): Unit = {
+    val regular = transportBestMs("regular", shufflePartitions, workload)
+    val streaming = transportBestMs("streaming", shufflePartitions, workload)
+    val channel = transportBestMs("channel", shufflePartitions, workload)
+    // scalastyle:off println
+    println(f"[bench3] $name%-32s regular=${regular}%5dms  " +
+      f"streaming=${streaming}%5dms (${regular.toDouble / streaming}%.2fx)  " +
+      f"channel=${channel}%5dms (${regular.toDouble / channel}%.2fx)")
+    // scalastyle:on println
+  }
+
   def main(args: Array[String]): Unit = {
     // scalastyle:off println
     println(s"[bench] local[$cores], $numRows rows, best of $iters iters")
     // scalastyle:on println
+
+    compareTransports("repartition(k) + count")({ spark =>
+      import spark.implicits._
+      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
+        .repartition($"k").count()
+    })
+    compareTransports("groupBy(k).count")({ spark =>
+      import spark.implicits._
+      spark.range(0, numRows, 1, inputParts).withColumn("k", $"id" % 1000)
+        .groupBy($"k").count().count()
+    })
+    compareTransports("join 10M x 10M on unique k + count")({ spark =>
+      import spark.implicits._
+      spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
+      val left = spark.range(0, 10000000L, 1, 2).select($"id".as("k"), $"id".as("lv"))
+      val right = spark.range(0, 10000000L, 1, 2).select($"id".as("k"), $"id".as("rv"))
+      left.join(right, "k").count()
+    })
+    compareTransports("prototype 1M uniq")({ spark =>
+      import org.apache.spark.sql.functions.{col, lit, repeat, sum}
+      spark.range(0L, 100000000L, 100L, inputParts)
+        .select(
+          col("id"),
+          col("id").cast("string").as("id2"),
+          (col("id") + 1).as("id3"),
+          repeat((col("id") + 1).cast("string"), 100000).as("id4"))
+        .repartition(col("id")).agg(sum(lit(1L))).collect()
+    })
 
     compare("repartition(k) + count")({ spark =>
       import spark.implicits._
