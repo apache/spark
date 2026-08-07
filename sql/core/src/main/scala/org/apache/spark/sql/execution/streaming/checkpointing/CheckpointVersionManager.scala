@@ -116,33 +116,17 @@ object CheckpointVersionManager extends Logging {
 
   /**
    * The commit log format version requested by the session config.
-   *
-   * Two configs feed this, and the answer is the max of them:
-   *  - [[SQLConf.STREAMING_COMMIT_LOG_FORMAT_VERSION]], which names a commit log version directly;
-   *  - [[SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION]], which implies a minimum, because a state
-   *    store checkpoint format above 1 makes each batch write `stateUniqueIds` and only a commit
-   *    log at [[CommitLog.VERSION_2]] or above can persist those.
-   *
-   * Taking the max means neither config can silently produce an unwritable combination: asking for
-   * state store v2 raises the commit log to v2 even when the commit log config says 1, and asking
-   * for commit log v3 (sink metadata) is not dragged back down by a state store still on v1.
+   * `streamingCommitLogFormatVersion` already takes the max of
+   * [[SQLConf.STREAMING_COMMIT_LOG_FORMAT_VERSION]] and
+   * [[SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION]], so a state store checkpoint format of v2
+   * (which makes each batch write `stateUniqueIds`, persistable only by a commit log at
+   * [[CommitLog.VERSION_2]] or above) raises the commit log version even when the commit log config
+   * is left at 1.
    */
   private def getCommitLogVersion(sparkSessionForStream: SparkSession): Int = {
-    val currentDefaultVersion = CommitLog.VERSION_1
-    val minRequiredVersion = getMinRequiredCommitLogVersion(sparkSessionForStream)
-    val configuredVersion = sparkSessionForStream.sessionState.conf.streamingCommitLogFormatVersion
-    val result = List[Int](currentDefaultVersion, minRequiredVersion, configuredVersion).max
+    val result = sparkSessionForStream.sessionState.conf.streamingCommitLogFormatVersion
     logInfo(s"Retrieved commit log writer version=$result")
     result
-  }
-
-  private def getMinRequiredCommitLogVersion(sparkSessionForStream: SparkSession): Int = {
-    if (sparkSessionForStream.sessionState.conf.stateStoreCheckpointFormatVersion >=
-        CommitLog.VERSION_2) {
-      CommitLog.VERSION_2
-    } else {
-      CommitLog.VERSION_1
-    }
   }
 
   /**

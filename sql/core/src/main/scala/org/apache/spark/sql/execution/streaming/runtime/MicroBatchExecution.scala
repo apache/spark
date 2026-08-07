@@ -563,13 +563,18 @@ class MicroBatchExecution(
     CheckpointVersionManager.setFormatVersion(
       sparkSessionForStream, CommitLogType, commitLogFormatVersion)
 
-    // Real-Time Mode requires commit log v2: it reruns a failed batch from committed offsets, which
-    // relies on the per-batch state store checkpoint ids that only commit log v2 and above persist,
-    // so on a v1 commit log the rerun can silently lose data. Resolution above keeps an existing
-    // checkpoint at the version it was created with, so a v1 checkpoint stays v1. Reject any
-    // Real-Time Mode query whose resolved commit log version is below v2, with an escape hatch.
-    // This is unconditional, matching the Databricks runtime -- a fresh checkpoint reaches v1 here
-    // only when the user explicitly pinned it, which is exactly the case worth rejecting.
+    // Real-Time Mode requires commit log v2. Real-Time Mode writes the offset log at batch end
+    // (markMicroBatchStart is a no-op for it), so a mid-batch failure can leave durable state at a
+    // version that was never logged; the re-execution then rewrites that same state version. With
+    // checkpoint format v1 the rewritten files reuse the same names as the orphaned ones, so a load
+    // can pick up a stale file (see the checksum hazard documented on
+    // StateStoreConf.skipChecksumOnFileMissingChecksum). Format v2 avoids this because each batch
+    // run generates unique state store checkpoint ids, and only a commit log at v2 or above can
+    // persist them. Resolution above keeps an existing checkpoint at the version it was created
+    // with, so a v1 checkpoint stays v1. Reject any Real-Time Mode query whose resolved commit log
+    // version is below v2, with an escape hatch. This is unconditional, matching the Databricks
+    // runtime -- a fresh checkpoint reaches v1 here only when the user explicitly pinned it, which
+    // is exactly the case worth rejecting.
     if (trigger.isInstanceOf[RealTimeTrigger] && commitLogFormatVersion < CommitLog.VERSION_2) {
       if (!sparkSessionForStream.sessionState.conf
           .getConf(SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1)) {

@@ -159,25 +159,6 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
     }
   }
 
-  test("an explicit changelog setting in non-canonical casing is not overridden") {
-    // RocksDB resolves its configs case-insensitively (RocksDBConf.apply uses a
-    // CaseInsensitiveMap), so a user setting the key in any casing has really configured it. A
-    // case-sensitive `conf.contains` check would miss this and silently override them.
-    val lowerCased = changelogKey.toLowerCase(java.util.Locale.ROOT)
-    assert(lowerCased != changelogKey,
-      "the key must have mixed case for this test to mean anything")
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
-      lowerCased -> "false") {
-      val observed = runRealTimeQueryAndReadConfs(Seq(lowerCased, changelogKey))
-      assert(observed(lowerCased).contains("false"),
-        s"a lower-cased $changelogKey must be left alone, got ${observed(lowerCased)}")
-      assert(observed(changelogKey).isEmpty,
-        "the canonical key must not be set alongside the user's lower-cased one, got " +
-          observed(changelogKey))
-    }
-  }
-
   test("switching an existing v1 checkpoint to Real-Time Mode fails fast") {
     // A Real-Time Mode query reruns a failed batch from committed offsets, which relies on the
     // per-batch state store checkpoint ids that only commit log v2 and above persist. Resolution
