@@ -48,11 +48,9 @@ jobs:
             icon=":white_check_mark:"
             title="Commit count matched"
             details="Commit count $count is divisible by 10."
-            next_count=$count
           else
             should_run=false
             icon=":pause_button:"
-            next_count=$(( (count / 10 + 1) * 10 ))
             title="Commit count not matched"
             details="Commit count $count is not divisible by 10."
           fi
@@ -63,7 +61,6 @@ jobs:
           echo "Commit count: $count"
           echo "Remainder: $remainder"
           echo "Should run: $should_run"
-          echo "Next matching count: $next_count"
           echo "Details: $details"
           echo "::notice title=$title::$details"
           echo "### $icon Commit count check" >> "$GITHUB_STEP_SUMMARY"
@@ -73,7 +70,6 @@ jobs:
           echo "- Commit count: $count" >> "$GITHUB_STEP_SUMMARY"
           echo "- Remainder: $remainder" >> "$GITHUB_STEP_SUMMARY"
           echo "- Should run: $should_run" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Next matching count: $next_count" >> "$GITHUB_STEP_SUMMARY"
           echo "- Details: $details" >> "$GITHUB_STEP_SUMMARY"
 
   call-build-and-test:
