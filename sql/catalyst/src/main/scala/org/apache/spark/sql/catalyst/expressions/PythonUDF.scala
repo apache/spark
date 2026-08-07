@@ -261,13 +261,13 @@ object TranspiledUDFParameter {
    * `ConvertToCatalyst` once the option is resolved -- a [[CommonExpressionRef]] needs its
    * definition's type, so this cannot run at call-construction time where the tags are added.
    *
-   * Most of it needs no work: a parameter used once was spliced in once, an unused one never made
-   * it in at all (so its argument is never evaluated, unlike the Python path -- a deliberate
-   * difference), and a foldable one folds in at each use site. What is left is the parameters the
-   * builder tagged because it spliced them in more than once: the copies that belong together are
-   * the tags sharing an index, so each index becomes one [[CommonExpressionDef]] and
-   * `RewriteWithExpression` pre-evaluates it in a Project below the operator, re-inlining the cheap
-   * ones so plain column arguments leave the plan unchanged.
+   * The parameters that need work are the ones the builder tagged because it spliced them in more
+   * than once: the copies that belong together are the tags sharing an index, so each index becomes
+   * one [[CommonExpressionDef]] and `RewriteWithExpression` pre-evaluates it in a Project below the
+   * operator, re-inlining the cheap ones so plain column arguments leave the plan unchanged. An
+   * unused parameter never made it into the option at all (so its argument is never evaluated,
+   * unlike the Python path -- a deliberate difference), and a foldable one folds in at each use
+   * site.
    *
    * Sharing never crosses parameters: two parameters are two columns to Python, so
    * `f(rand(1), rand(1))` owes the body two draws however identical the copies look, and an
@@ -275,8 +275,20 @@ object TranspiledUDFParameter {
    *
    * The [[With]] wraps the whole option rather than each shared subtree, since one nested in a
    * conditional branch just gets inlined again -- a common expression can't be hoisted into an
-   * always-evaluated Project from a branch that may not run. That is also the gap we don't close:
-   * `when(c, udf(rand()))` puts the `With` itself in a branch, so the copies still drift there.
+   * always-evaluated Project from a branch that may not run.
+   *
+   * That last point leaves two gaps, both of them a nondeterministic argument evaluated lazily
+   * instead of once per row. Neither is introduced here and neither is closed here:
+   *
+   *  - A parameter used exactly *once* stays inline, so when that use sits in a conditional branch
+   *    the argument is only evaluated on the rows taking the branch. `lambda a, b: a if b > 0.5
+   *    else 0.0` over `f(rand(1), rand(1))` then returns values the interpreted UDF cannot, since
+   *    `a`'s draw advances only on the rows where `b`'s test passed. A definition would not fix it:
+   *    `RewriteWithExpression` inlines any definition holding a single ref, so forcing this one to
+   *    pre-evaluate needs a mechanism other than `With`.
+   *  - When the UDF call itself sits in a conditional branch (`when(c, udf(rand()))`) the `With`
+   *    lands in that branch and is inlined for the same reason, so even shared copies drift.
+   *
    * See the nondeterminism TODO in `RewriteWithExpression`.
    */
   def shareTaggedParameters(option: Expression): Expression = {
@@ -296,8 +308,9 @@ object TranspiledUDFParameter {
     // defined in the same scope, so an aggregating option -- a transpiled grouped-agg UDF -- keeps
     // its inputs inline. Deliberately broader than the restriction needs, in two ways: only a
     // shared argument *under* the aggregate trips it, and unlike the walks around it this looks
-    // inside a nested call too. Neither costs correctness, PhysicalAggregation dedupes identical
-    // aggregates anyway, and staying conservative here keeps us well clear of `With`'s assert.
+    // inside a nested call too. The cost is that an aggregating option keeps the pre-existing drift
+    // for a repeated nondeterministic argument; the benefit is staying well clear of `With`'s
+    // assert, which would fail the query outright rather than skew a value.
     val shared = if (option.exists(_.isInstanceOf[AggregateExpression])) {
       Nil
     } else {

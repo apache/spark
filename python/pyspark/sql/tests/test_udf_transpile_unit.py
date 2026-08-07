@@ -1448,6 +1448,35 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertIn("_common_expr", self._optimized_plan(mod_df))
             self.assertEqual(expected, [r[0] for r in mod_df.collect()])
 
+    def test_udf_transpile_does_not_force_single_use_input_in_a_branch(self):
+        # SPARK-58626, KNOWN GAP -- not fixed by input sharing, and not introduced by it.
+        #
+        # Sharing only gives a definition to a parameter used more than once. A parameter used
+        # exactly once stays inline, so when that single use sits in a conditional branch the
+        # argument is evaluated only on the rows that take the branch. With `a if b > 0.5 else 0.0`
+        # over f(rand(1), rand(1)), `a`'s draw advances only on rows where `b`'s test passed, so
+        # the transpiled result includes non-zero values <= 0.5 that the interpreted UDF (which
+        # computes both argument columns every row, in lockstep) can never return.
+        #
+        # A definition would not close it: RewriteWithExpression inlines any definition holding a
+        # single ref, so forcing pre-evaluation needs a mechanism other than `With`. This test
+        # therefore pins the mechanism -- that `b` is shared and `a` is not -- rather than the
+        # divergent values, so it starts failing if someone thinks they have fixed this.
+        from pyspark.sql.functions import rand
+
+        pick = lambda a, b: a if b > 0.5 else 0.0  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(pick, DoubleType())
+            self.assertTrue(u.transpiled)
+            df = self.spark.range(400).select(u(rand(1), rand(1)).alias("v"))
+            plan = self._optimized_plan(df)
+            # Two draws, one per parameter, and only the repeated one is pre-evaluated.
+            self.assertEqual(2, plan.count("rand("))
+            self.assertIn("_common_expr", plan)
+            # `a` is still evaluated inside the branch, so its draw can disagree with `b`'s.
+            vals = [r[0] for r in df.collect()]
+            self.assertTrue(any(v != 0.0 for v in vals), vals[:5])
+
     def test_udf_transpile_lowers_a_nested_transpiled_call(self):
         # A transpiled call feeding another lowers all the way: no TranspiledPythonUDF survives the
         # optimizer (it is Unevaluable, and ConvertToCatalyst is the only rule that strips it) and
