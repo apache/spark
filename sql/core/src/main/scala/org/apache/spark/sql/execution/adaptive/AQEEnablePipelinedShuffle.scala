@@ -68,8 +68,14 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
     if (plan.session == null || !plan.session.sparkContext.isLocal) return plan
 
     val shared = if (conf.exchangeReuseEnabled) duplicatedShuffleForms(plan) else Set.empty[Any]
+    // v1's AQE output cap, adapted: never flip an exchange whose partition count exceeds the
+    // local task-concurrency limit -- the gang's demand would exceed the slots and admission
+    // would FAIL the query where the rule must simply not accelerate it. Per-candidate here
+    // (unlike the non-AQE all-or-nothing): a skipped candidate just materializes as a regular
+    // stage below or above the flipped tail, which the prefix shape supports.
+    val cap = plan.session.sparkContext.defaultParallelism
     val toFlip = mutable.HashSet.empty[ShuffleExchangeExec]
-    collectCandidates(plan, blocked = false, shared, toFlip)
+    collectCandidates(plan, blocked = false, shared, cap, toFlip)
     if (toFlip.isEmpty) return plan
 
     // transformDown, NOT transformUp: candidates can be nested (a SinglePartition candidate
@@ -84,8 +90,11 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
     }
   }
 
-  private def isCandidate(s: ShuffleExchangeExec, shared: Set[Any]): Boolean =
-    !s.pipelined && !shared.contains(s.canonicalized)
+  private def isCandidate(s: ShuffleExchangeExec, shared: Set[Any], cap: Int): Boolean =
+    !s.pipelined && !shared.contains(s.canonicalized) && {
+      val n = s.outputPartitioning.numPartitions
+      n > 0 && n <= cap
+    }
 
   /**
    * Top-down walk collecting exchanges to flip. `blocked` is true once the path from the
@@ -95,9 +104,10 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
       plan: SparkPlan,
       blocked: Boolean,
       shared: Set[Any],
+      cap: Int,
       out: mutable.HashSet[ShuffleExchangeExec]): Unit = plan match {
     case s: ShuffleExchangeExec =>
-      val flipped = !blocked && isCandidate(s, shared)
+      val flipped = !blocked && isCandidate(s, shared, cap)
       if (flipped) {
         out += s
       }
@@ -112,15 +122,15 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
       // treatment either way.
       if (flipped &&
           s.outputPartitioning == org.apache.spark.sql.catalyst.plans.physical.SinglePartition) {
-        collectCandidates(s.child, blocked = false, shared, out)
+        collectCandidates(s.child, blocked = false, shared, cap, out)
       }
 
     case _: QueryStageExec => // already materialized; a leaf here
 
     case j: ShuffledJoin if !blocked =>
       // Flip the join's immediate shuffle inputs only as a symmetric pair.
-      val leftCandidate = immediateShuffleInput(j.left, shared)
-      val rightCandidate = immediateShuffleInput(j.right, shared)
+      val leftCandidate = immediateShuffleInput(j.left, shared, cap)
+      val rightCandidate = immediateShuffleInput(j.right, shared, cap)
       (leftCandidate, rightCandidate) match {
         case (Some(l), Some(r)) =>
           out += l
@@ -130,10 +140,10 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
       // Anything deeper is below a join input; blocked either way.
 
     case p if isStatsSensitive(p) =>
-      p.children.foreach(collectCandidates(_, blocked = true, shared, out))
+      p.children.foreach(collectCandidates(_, blocked = true, shared, cap, out))
 
     case p =>
-      p.children.foreach(collectCandidates(_, blocked, shared, out))
+      p.children.foreach(collectCandidates(_, blocked, shared, cap, out))
   }
 
   /**
@@ -142,11 +152,12 @@ case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
    */
   private def immediateShuffleInput(
       plan: SparkPlan,
-      shared: Set[Any]): Option[ShuffleExchangeExec] = plan match {
-    case s: ShuffleExchangeExec => Some(s).filter(isCandidate(_, shared))
+      shared: Set[Any],
+      cap: Int): Option[ShuffleExchangeExec] = plan match {
+    case s: ShuffleExchangeExec => Some(s).filter(isCandidate(_, shared, cap))
     case _: QueryStageExec => None
     case p if isStatsSensitive(p) => None
-    case p if p.children.size == 1 => immediateShuffleInput(p.children.head, shared)
+    case p if p.children.size == 1 => immediateShuffleInput(p.children.head, shared, cap)
     case _ => None
   }
 

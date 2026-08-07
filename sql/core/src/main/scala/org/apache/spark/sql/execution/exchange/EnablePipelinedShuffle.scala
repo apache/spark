@@ -71,6 +71,18 @@ case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
       return plan
     }
 
+    // v1's deadlock-precondition cap, adapted: every flipped exchange's partition count must
+    // fit the local task-concurrency limit. Without this the gang's demand exceeds the slots
+    // and admission FAILS the query -- the rule must degrade to a regular run instead (v1
+    // skips replacement the same way). All-or-nothing like the reuse gate, since a partial
+    // flip would be a rejected mixed job.
+    val cap = plan.session.sparkContext.defaultParallelism
+    if (shuffles.exists(_.outputPartitioning.numPartitions > cap)) {
+      logWarning("EnablePipelinedShuffle: an exchange's partition count exceeds the local " +
+        "task-concurrency limit; leaving the plan regular.")
+      return plan
+    }
+
     plan.transformUp {
       case s: ShuffleExchangeExec if !s.pipelined => s.copy(pipelined = true)
     }

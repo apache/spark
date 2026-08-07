@@ -125,6 +125,27 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
     }
   }
 
+  test("an exchange wider than the task-concurrency limit is not flipped under AQE") {
+    // v1's AQE output cap adapted: with shuffle.partitions above local[16]'s limit the
+    // candidate is skipped (per-candidate, not all-or-nothing) and the query runs fully
+    // regular instead of failing gang admission.
+    withAqePipelinedSession { spark =>
+      import spark.implicits._
+      spark.conf.set("spark.sql.shuffle.partitions", "64")
+      try {
+        val ds = spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 7))
+          .groupBy($"k").count().as[(Long, Long)]
+        val counts = ds.collect().toMap
+        assert(pipelinedExchanges(ds.queryExecution.executedPlan).isEmpty,
+          "no exchange should be flipped over the concurrency cap")
+        val expected = (0L until 1000L).groupBy(_ % 7).map { case (k, vs) => (k, vs.size.toLong) }
+        assert(counts === expected)
+      } finally {
+        spark.conf.set("spark.sql.shuffle.partitions", "4")
+      }
+    }
+  }
+
   test("results match the regular AQE baseline on the prefix + tail shape") {
     withAqePipelinedSession { spark =>
       import spark.implicits._

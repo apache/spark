@@ -234,6 +234,29 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite with AdaptiveSparkPlanHelpe
     }
   }
 
+  test("an exchange wider than the task-concurrency limit degrades to a regular run") {
+    // v1's deadlock-precondition cap adapted: with shuffle.partitions above local[16]'s
+    // limit, flipping would make gang admission FAIL the query; the rule must skip instead
+    // and let it run as a regular shuffle (this is what a default shuffle.partitions=200
+    // environment hits on every query).
+    withPipelinedSession { spark =>
+      import spark.implicits._
+      spark.conf.set("spark.sql.shuffle.partitions", "64")
+      try {
+        val ds = spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 7))
+          .groupBy($"k").count().as[(Long, Long)]
+        val counts = ds.collect().toMap
+        assert(collect(ds.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec if s.pipelined => s
+        }.isEmpty, "no exchange should be flipped over the concurrency cap")
+        val expected = (0L until 1000L).groupBy(_ % 7).map { case (k, vs) => (k, vs.size.toLong) }
+        assert(counts === expected)
+      } finally {
+        spark.conf.set("spark.sql.shuffle.partitions", "4")
+      }
+    }
+  }
+
   test("cross-subquery exchange reuse cannot create a shared pipelined exchange") {
     // The no-reuse gate checks subquery plans too (collectWithSubqueries). Probing every
     // SQL route to a reused PIPELINED exchange showed each is closed by a different layer,
