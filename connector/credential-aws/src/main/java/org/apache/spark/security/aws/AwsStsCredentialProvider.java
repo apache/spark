@@ -163,6 +163,12 @@ public class AwsStsCredentialProvider implements CredentialProvider {
     }
 
     String roleSessionName = conf.get(CONF_SESSION_NAME);
+    if (roleSessionName != null) {
+      roleSessionName = roleSessionName.trim();
+    }
+    if (roleSessionName != null && roleSessionName.isBlank()) {
+      roleSessionName = null;
+    }
     String regionStr = conf.get(CONF_REGION);
     if (regionStr != null) {
       regionStr = regionStr.trim();
