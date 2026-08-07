@@ -259,7 +259,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(exception.getMessage.contains("increase executor memory"))
   }
 
-  test("SPARK-58513: executor does not validate driver heap") {
+  test("SPARK-58513: executor validates executor heap") {
     val systemMemory = 400L * 1024
     val reservedMemory = 300L * 1024
     val memoryFraction = 0.8
@@ -269,9 +269,10 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set(TEST_RESERVED_MEMORY, reservedMemory)
       .set(EXECUTOR_MEMORY.key, (500L * 1024).toString)
 
-    val mm = UnifiedMemoryManager(conf, numCores = 1, isDriver = Some(false))
-    val expectedMaxMemory = ((systemMemory - reservedMemory) * memoryFraction).toLong
-    assert(mm.maxHeapMemory === expectedMaxMemory)
+    val exception = intercept[IllegalArgumentException] {
+      UnifiedMemoryManager(conf, numCores = 1, isDriver = false)
+    }
+    assert(exception.getMessage.contains("increase executor memory"))
   }
 
   test("SPARK-58513: driver validates executor memory") {
@@ -285,7 +286,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set(EXECUTOR_MEMORY.key, (reservedMemory / 2).toString)
 
     val exception = intercept[IllegalArgumentException] {
-      UnifiedMemoryManager(conf, numCores = 1, isDriver = Some(true))
+      UnifiedMemoryManager(conf, numCores = 1, isDriver = true)
     }
     assert(exception.getMessage.contains("increase executor memory"))
   }
