@@ -196,7 +196,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     val lambda = hof.functions.head.asInstanceOf[LambdaFunction]
     // The result is the input elements (so the carrier is unwrapped afterwards) rather than the
     // lambda's value: `filter` / `array_sort` / `map_filter` keep the input's type.
-    val fromElements = hof.isInstanceOf[ResultTypeFromArgument]
+    val isFromElements = hof.isInstanceOf[ResultTypeFromArgument]
 
     // Desugar maps into arrays. `map_zip_with` visits the union of both key sets and looks each map
     // up per key, which yields null for a key missing from one side - exactly its own semantics.
@@ -211,7 +211,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         // `map_filter` keeps whichever pairs survive; `transform_keys` replaces the keys and
         // `transform_values` the values, told apart by whether the result key type is the lambda's.
         val rebuild: Expression => Expression =
-          if (fromElements) { (kept: Expression) =>
+          if (isFromElements) { (kept: Expression) =>
             MapFromArrays(unwrapCarrier(kept, 0), unwrapCarrier(kept, 1))
           } else if (hof.dataType.asInstanceOf[MapType].keyType == lambda.dataType) {
             (newKeys: Expression) => MapFromArrays(newKeys, values)
@@ -254,7 +254,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     val iterated =
       if (keepsOwnNode) {
         hof.withNewChildren(IndexedSeq(built.carrier, newLambda)).asInstanceOf[Expression]
-      } else if (fromElements) {
+      } else if (isFromElements) {
         ArrayFilter(built.carrier, newLambda)
       } else {
         ArrayTransform(built.carrier, newLambda)
@@ -262,7 +262,7 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 
     // A from-elements result (e.g. `filter`) is the input elements, so project them back out of the
     // carrier; for a map `rebuildResult` knows which of the key/value sides to keep.
-    if (!mapValued && fromElements) rebuildResult(unwrapCarrier(iterated, 0))
+    if (!mapValued && isFromElements) rebuildResult(unwrapCarrier(iterated, 0))
     else rebuildResult(iterated)
   }
 
