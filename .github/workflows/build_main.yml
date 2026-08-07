@@ -25,30 +25,58 @@ on:
     - '**'
 
 jobs:
-  count-commits:
-    name: Count commits
+  check-build:
+    name: Check Build decision
     runs-on: ubuntu-slim
     permissions:
       contents: read
     outputs:
-      commit-count: ${{ steps.count.outputs.commit-count }}
+      should-build: ${{ steps.decision.outputs.should-build }}
     steps:
       - name: Check out the full branch history
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Count commits on the pushed branch
-        id: count
-        run: echo "commit-count=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Determine whether Build should run
+        id: decision
+        run: |
+          count=$(git rev-list --count HEAD)
+
+          if [[ "$GITHUB_REPOSITORY" != "apache/spark" ]]; then
+            should_build=true
+            title="Build scheduled"
+            details="Fork pushes always run Build. Commit count: $count."
+          elif ((count % 10 == 0)); then
+            should_build=true
+            title="Build scheduled"
+            details="Commit count $count is divisible by 10."
+          else
+            should_build=false
+            next_count=$(( (count / 10 + 1) * 10 ))
+            title="Build skipped"
+            details="Commit count $count is not divisible by 10. Next Build: $next_count."
+          fi
+
+          echo "should-build=$should_build" >> "$GITHUB_OUTPUT"
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Branch: $GITHUB_REF_NAME"
+          echo "Commit: $GITHUB_SHA"
+          echo "Commit count: $count"
+          echo "Decision: $title"
+          echo "Details: $details"
+          echo "::notice title=$title::$details"
+          echo "### $title" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Repository: $GITHUB_REPOSITORY" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit count: $count" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Details: $details" >> "$GITHUB_STEP_SUMMARY"
 
   call-build-and-test:
     permissions:
       packages: write
     name: Run
-    needs: count-commits
-    # GitHub Actions expressions do not support modulo. A non-negative decimal
-    # count is divisible by ten when it ends in 0.
-    if: >-
-      github.repository != 'apache/spark'
-      || endsWith(needs.count-commits.outputs.commit-count, '0')
+    needs: check-build
+    if: needs.check-build.outputs.should-build == 'true'
     uses: ./.github/workflows/build_and_test.yml
