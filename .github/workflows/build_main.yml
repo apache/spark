@@ -29,7 +29,4 @@ jobs:
     permissions:
       packages: write
     name: Run
-    # Skip pushes on apache/spark: post-merge CI on this integration/staging
-    # branch is disabled to save resources.
-    if: github.repository != 'apache/spark'
     uses: ./.github/workflows/build_and_test.yml
