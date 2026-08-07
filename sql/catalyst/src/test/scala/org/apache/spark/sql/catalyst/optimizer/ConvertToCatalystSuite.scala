@@ -440,6 +440,25 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
+  test("converts a nested transpiled UDF sitting at the root of the option") {
+    transpileOn {
+      // An option whose root is a substituted argument (a body that is nothing but
+      // `_udf_param_0`), where that argument is itself a transpiled call. Recursing only into the
+      // children would walk past the root and leave a TranspiledPythonUDF behind -- Unevaluable,
+      // and this rule is the only one that strips them.
+      //
+      // The built-in transpiler casts every option to the UDF's return type
+      // (`transpile.py: converted.cast(returnType)`), so its option roots are always Casts and it
+      // cannot produce this shape; this guards the custom-transpiler path, whose only stated
+      // contract is that the option's dataType already matches.
+      val innerTPUDF = makeTPUDF(makePyUDF(attrA), Add(attrA, Literal(1L)))
+      val outerTPUDF = makeTPUDF(makePyUDF(innerTPUDF), innerTPUDF)
+      val result = ConvertToCatalyst.applyExpr(outerTPUDF, parentIsUdf = false)
+      assert(!result.exists(_.isInstanceOf[TranspiledPythonUDF]),
+        s"TranspiledPythonUDF survived at the option root: $result")
+    }
+  }
+
   test("RewriteWithExpression pre-evaluates the shared input in a Project") {
     // End to end: the argument is computed once in a Project below, the option reads it back as a
     // column, and no With survives. ConvertToLocalRelation is excluded so the projection stays.

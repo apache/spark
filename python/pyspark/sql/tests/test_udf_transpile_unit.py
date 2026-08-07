@@ -1448,6 +1448,28 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertIn("_common_expr", self._optimized_plan(mod_df))
             self.assertEqual(expected, [r[0] for r in mod_df.collect()])
 
+    def test_udf_transpile_lowers_a_nested_transpiled_call(self):
+        # A transpiled call feeding another lowers all the way: no TranspiledPythonUDF survives the
+        # optimizer (it is Unevaluable, and ConvertToCatalyst is the only rule that strips it) and
+        # no Python worker is involved.
+        #
+        # Note this does NOT cover the case where the option's root is the substituted argument --
+        # the transpiler casts every option to the UDF's return type, so even an identity body
+        # lowers to `cast(<arg> as bigint)` and the root is a Cast. That shape is only reachable
+        # from a custom transpiler and is covered in ConvertToCatalystSuite.
+        from pyspark.sql.functions import col
+
+        ident = lambda x: x  # noqa: E731
+        plus1 = lambda y: y + 1  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            i_udf = UserDefinedFunction(ident, LongType())
+            p_udf = UserDefinedFunction(plus1, LongType())
+            self.assertTrue(i_udf.transpiled and p_udf.transpiled)
+            df = self.spark.range(3).select(i_udf(p_udf(col("id"))).alias("v"))
+            self.assertEqual([1, 2, 3], [r[0] for r in df.collect()])
+            self.assertNotIn("transpiledpythonudf", self._optimized_plan(df).lower())
+            self.assertEqual(0, self._eval_python_count(df))
+
     def test_udf_transpile_shares_per_parameter_for_identical_arguments(self):
         # SPARK-58626: two parameters are two columns to Python, so f(rand(1), rand(1)) owes the
         # body two draws even though the spliced copies are indistinguishable. Sharing is decided

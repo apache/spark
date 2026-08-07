@@ -1080,8 +1080,16 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               // of a conditional, ...) was spliced in once per use, but the UDF this replaces
               // evaluates each argument once, so give it a single evaluation first.
               val shared = TranspiledUDFParameter.shareTaggedParameters(catalystExpr)
-              // Recursively apply to the children first because we may use them as inputs in parent
-              shared.mapChildren(applyExpr(_, parentIsUdf = false))
+              // Recurse on the option itself, not just its children: an option's root can be a
+              // substituted argument (a body that is nothing but `_udf_param_N`), and if that
+              // argument is a TranspiledPythonUDF then mapChildren walks straight past the node
+              // that needs converting and leaves an Unevaluable behind -- this rule is the only one
+              // that strips them. The built-in transpiler casts every option to the UDF's return
+              // type, so its roots are always Casts and it cannot hit this; a custom transpiler,
+              // whose contract is only that the option's dataType already matches, can. Recursing
+              // from the top also lets the option's root decide whether its children see a UDF
+              // parent, rather than assuming they don't, which preserves an inner UDF's pipeline.
+              applyExpr(shared, parentIsUdf = false)
           }
         } else {
           // We should avoid converting a UDF node where that could break pipelining.
