@@ -43,20 +43,6 @@ abstract class EvalPythonEvaluatorFactory(
       schema: StructType,
       context: TaskContext): Iterator[InternalRow]
 
-  /**
-   * Variant carrying the per-input flatten depths that an element-wise Python UDF needs, parallel
-   * to `schema`'s fields. Only the Arrow factory overrides this; every other implementation has no
-   * use for the depths and inherits the plain [[evaluate]].
-   */
-  protected def evaluate(
-      funcs: Seq[(ChainedPythonFunctions, Long)],
-      argMetas: Array[Array[ArgumentMetadata]],
-      iter: Iterator[InternalRow],
-      schema: StructType,
-      flattenDepths: Seq[Int],
-      context: TaskContext): Iterator[InternalRow] =
-    evaluate(funcs, argMetas, iter, schema, context)
-
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] =
     new EvalPythonPartitionEvaluator
 
@@ -100,16 +86,8 @@ abstract class EvalPythonEvaluatorFactory(
       // flatten all the arguments
       val allInputs = new ArrayBuffer[Expression]
       val dataTypes = new ArrayBuffer[DataType]
-      // Per entry of `allInputs`, how many array levels an element-wise UDF flattens it by. Kept
-      // parallel to `allInputs` because the Python worker sees that deduplicated list, not the
-      // per-UDF children. Zero for every other eval type, which the worker ignores.
-      val flattenDepths = new ArrayBuffer[Int]
-      val argMetas = udfs.zip(inputs).map { case (udf, input) =>
-        val depths = udf match {
-          case p: PythonUDF if p.elementwiseDepths.nonEmpty => p.elementwiseDepths
-          case _ => Seq.fill(input.length)(0)
-        }
-        input.zipAll(depths, null, 0).collect { case (e, depth) if e != null =>
+      val argMetas = inputs.map { input =>
+        input.map { e =>
           val (key, value) = e match {
             case NamedArgumentExpression(key, value) =>
               (Some(key), value)
@@ -121,7 +99,6 @@ abstract class EvalPythonEvaluatorFactory(
           } else {
             allInputs += value
             dataTypes += value.dataType
-            flattenDepths += depth
             ArgumentMetadata(allInputs.length - 1, key)
           }
         }.toArray
@@ -139,7 +116,7 @@ abstract class EvalPythonEvaluatorFactory(
       }
 
       val outputRowIterator =
-        evaluate(pyFuncs, argMetas, projectedRowIter, schema, flattenDepths.toSeq, context)
+        evaluate(pyFuncs, argMetas, projectedRowIter, schema, context)
 
       val joined = new JoinedRow
       val resultProj = UnsafeProjection.create(output, output)

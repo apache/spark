@@ -88,20 +88,26 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("aggregate: a UDF on the element is lifted, one on the accumulator is rejected") {
-    val onElement = arrayDF.select(
-      org.apache.spark.sql.functions.aggregate(
-        col("values"), lit(false), (acc, x) => acc || pythonUDF(x)).as("r"))
-    assert(udfsInsideLambda(onElement).isEmpty)
-
-    // A UDF reading the accumulator has no array to precompute over, so analysis must fail.
-    val e = intercept[AnalysisException] {
-      arrayDF.select(
+  test("aggregate: a UDF anywhere in the fold is rejected") {
+    // The fold is sequential, so no array can precompute the values the UDF sees. A UDF in `merge`
+    // or in `finish` therefore has no rewrite and analysis must fail.
+    val cases = Seq(
+      "merge on element" ->
         org.apache.spark.sql.functions.aggregate(
-          col("values"), lit(false), (acc, x) => pythonUDF(acc) || x.cast("boolean")).as("r"))
-        .collect()
+          col("values"), lit(false), (acc, x) => acc || pythonUDF(x)),
+      "merge on accumulator" ->
+        org.apache.spark.sql.functions.aggregate(
+          col("values"), lit(false), (acc, x) => pythonUDF(acc) || x.cast("boolean")),
+      "finish" ->
+        org.apache.spark.sql.functions.aggregate(
+          col("values"), lit(0), (acc, x) => acc + x, acc => pythonUDF(acc)))
+    cases.foreach { case (name, expr) =>
+      val e = intercept[AnalysisException] {
+        arrayDF.select(expr.as("r")).collect()
+      }
+      assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+        s"expected aggregate with a UDF in $name to be rejected")
     }
-    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
   }
 
   test("several UDFs and nested UDFs in one lambda are all lifted") {
@@ -118,24 +124,20 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(liftedUDFs(duplicated).size == 1)
   }
 
-  test("nested higher-order functions: the UDF is lifted onto the outer array") {
-    // The inner array is the outer lambda's variable, so one pass cannot lift the UDF out. The
-    // rewrite composes instead: the inner pass lifts it onto the inner array, and the outer pass
-    // lifts that result onto the outer array, incrementing the flatten depth.
+  test("a UDF inside a nested higher-order function's lambda is rejected") {
+    // The inner array is the outer lambda's variable, not a real column, so the UDF cannot be
+    // lifted onto an array outside the lambda. This must fail analysis rather than be rewritten.
     val df = Seq(Seq(Seq(1, 2), Seq(3))).toDF("values")
-      .select(transform(col("values"), inner =>
-        transform(inner, x => pythonUDF(x))).as("r"))
-    assert(udfsInsideLambda(df).isEmpty)
-
-    val lifted = liftedUDFs(df)
-    assert(lifted.size == 1)
-    // Two levels of nesting, so the worker must flatten the argument twice.
-    assert(lifted.head.elementwiseDepths == Seq(2))
+    val e = intercept[AnalysisException] {
+      df.select(transform(col("values"), inner =>
+        transform(inner, x => pythonUDF(x))).as("r")).collect()
+    }
+    assert(e.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF")
   }
 
   test("a UDF on the outer element of a nested array is lifted") {
-    // Here the UDF applies to the outer array's element, which is a real column, so the rewrite
-    // applies even though the element happens to be an array.
+    // Here the UDF applies to the outer array's element, which is a real column (the element just
+    // happens to be an array), so it is lifted onto that column like any other single-level array.
     val df = Seq(Seq(Seq(1, 2), Seq(3))).toDF("values")
       .select(transform(col("values"), inner => pythonUDF(inner)).as("r"))
     assert(udfsInsideLambda(df).isEmpty)
@@ -151,9 +153,10 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(analyzed.expressions.flatMap(_.collect { case u: PythonUDF => u }).isEmpty)
   }
 
-  test("every lambda-taking higher-order function is rewritten") {
+  test("every mapping higher-order function is rewritten") {
     // One assertion per function, so that a shape regressing to "UDF left inside a lambda" is
-    // caught here rather than only by the end-to-end Python suite.
+    // caught here rather than only by the end-to-end Python suite. `aggregate` / `reduce` are not
+    // here: they fold rather than map, so a UDF in them is rejected (see the aggregate test above).
     val arrays = Seq((Seq(1, 2), Seq(3, 4))).toDF("l", "r")
     val maps = Seq((Map("a" -> 1), Map("a" -> 2))).toDF("l", "r")
 
@@ -165,11 +168,7 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
       "forall" -> forall(col("l"), x => pythonUDF(x)),
       "zip_with" -> zip_with(col("l"), col("r"), (a, b) => pythonUDF(a) || pythonUDF(b)),
       "array_sort" -> array_sort(col("l"),
-        (a, b) => when(pythonUDF(a) === pythonUDF(b), lit(0)).otherwise(lit(1))),
-      "aggregate merge" -> org.apache.spark.sql.functions.aggregate(
-        col("l"), lit(false), (acc, x) => acc || pythonUDF(x)),
-      "aggregate finish" -> org.apache.spark.sql.functions.aggregate(
-        col("l"), lit(0), (acc, x) => acc + x, acc => pythonUDF(acc)))
+        (a, b) => when(pythonUDF(a) === pythonUDF(b), lit(0)).otherwise(lit(1))))
     arrayCases.foreach { case (name, expr) =>
       val df = arrays.select(expr.as("r"))
       assert(udfsInsideLambda(df).isEmpty, s"UDF left inside a lambda for $name")
@@ -194,8 +193,8 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(udfsInsideLambda(df).isEmpty)
     val lifted = liftedUDFs(df)
     assert(lifted.size == 1)
-    // Both sides of the pair are flattened once, since each is a flat array of all n*n pairs.
-    assert(lifted.head.elementwiseDepths == Seq(1, 1))
+    // The UDF takes both pair sides, each a flat array of all n*n pairs.
+    assert(lifted.head.children.size == 2)
   }
 
   test("a pandas UDF inside a lambda still fails analysis") {
@@ -239,14 +238,18 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(lifted.head.children.head.dataType.isInstanceOf[ArrayType])
   }
 
-  test("an outer column argument is passed through to the lifted UDF") {
+  test("an outer column argument is repeated into an aligned array for the lifted UDF") {
     val df = Seq((Seq(1, 2), 10)).toDF("values", "base")
       .select(transform(col("values"), x => pythonUDF(x, col("base"))).as("r"))
     assert(udfsInsideLambda(df).isEmpty)
     val lifted = liftedUDFs(df)
     assert(lifted.size == 1)
-    // The element argument became an array; the outer column stays a scalar to be broadcast.
-    assert(lifted.head.children.head.dataType.isInstanceOf[ArrayType])
-    assert(lifted.head.children.last.dataType == IntegerType)
+    // Both arguments are single-level arrays aligned with the iterated array: the element argument
+    // is the array itself, and the outer column is repeated into an aligned array so the worker
+    // flattens every argument uniformly.
+    lifted.head.children.foreach { c =>
+      assert(c.dataType.isInstanceOf[ArrayType])
+      assert(c.dataType.asInstanceOf[ArrayType].elementType == IntegerType)
+    }
   }
 }

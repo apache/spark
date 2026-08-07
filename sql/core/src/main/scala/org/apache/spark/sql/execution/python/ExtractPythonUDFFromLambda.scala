@@ -50,47 +50,51 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  *
  * `plus_one_over_array` is the same user function, re-typed as `array<T> => array<R>` and run with
  * [[PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF]]. The JVM cannot rewrap a pickled Python function,
- * so the array-at-a-time behaviour lives in the Python worker: it flattens the incoming list
- * column, calls the user function once over the concatenated elements of the whole batch, and
- * re-nests the results with the input's offsets. This keeps one row in and one row out (no
+ * so the array-at-a-time behaviour lives in the Python worker: it flattens each incoming list
+ * column one level, calls the user function once over the concatenated elements of the whole batch,
+ * and re-nests the results with the input's offsets. This keeps one row in and one row out (no
  * `explode`, no shuffle), and crosses the Python boundary once per batch rather than once per row.
  *
+ * Every argument the lifted UDF receives is therefore a single-level `array<T>` aligned with the
+ * iterated array - the same length per row and the same null rows - so the worker can flatten all
+ * of them uniformly. An argument that does not depend on the element (an outer column or a
+ * constant) is materialized into such an array with a native `transform` that repeats the value,
+ * rather than being passed through as a scalar; that removes any per-argument shape metadata.
+ *
  * Once the UDF result is an ordinary column, everything the lambda does around it is ordinary JVM
- * work, so arithmetic, `when`, casts, the element index, several UDFs in one lambda and nested
- * UDF calls all follow without special cases.
+ * work, so arithmetic, `when`, casts, the element index, several UDFs in one lambda and nested UDF
+ * *calls* (`f(g(x))`, lifted innermost-first within one carrier) all follow without special cases.
  *
  * This rule runs before [[ExtractPythonUDFs]], which then extracts the lifted UDF as a normal
  * top-level `PythonUDF` and needs no new physical operator.
  *
- * All twelve higher-order functions that take a lambda are handled:
+ * All ten mapping higher-order functions that take a single lambda are handled:
  *
  *  - `transform`, `exists`, `forall` return the lambda's own value, so the carrier replaces the
  *    argument directly;
  *  - `filter`'s lambda is a predicate, so the original elements are projected back out of the
  *    carrier afterwards;
  *  - `zip_with` zips both arrays into one carrier, which collapses it to the single-array form;
- *  - `aggregate` / `reduce` precompute over `merge`'s element, and a UDF in `finish` is applied to
- *    the fold's result, guarded so a fold over a null array stays null;
  *  - `array_sort` precomputes the UDF per element as a sort key for the JVM comparator to compare;
  *    when one call takes both elements it is precomputed over the cross product of pairs instead,
  *    which the comparator then indexes by position;
  *  - `transform_keys`, `transform_values`, `map_filter` and `map_zip_with` are desugared into the
  *    array case over `map_keys` / `map_values` and rebuilt with `map_from_arrays`.
  *
- * Nested higher-order functions work too. A UDF in `transform(arr, i -> transform(i, x -> f(x)))`
- * cannot be lifted in one pass, because the inner array is the outer lambda's variable and so does
- * not exist outside it. Rewriting innermost-first and repeating to a fixed point resolves this: the
- * inner rewrite turns the inner lambda's UDF into a `PythonUDF` over `i`, which the outer pass then
- * lifts onto `arr` as an array-of-arrays argument.
- *
  * Shapes that genuinely cannot be rewritten are left untouched here and continue to be rejected by
  * `CheckAnalysis`:
  *
- *  - a UDF reading `aggregate`'s accumulator. The fold is sequential, so the values the UDF sees
- *    are outputs of earlier steps rather than elements of a collection, and computing `acc_n`
- *    alternates Python and JVM work n times, which no single UDF call can do. That is a limit of
- *    expression rewriting rather than of Spark: restating the fold as an iteration over the whole
- *    column with `UnionLoop` would work, but that is an operator-level restructuring;
+ *  - a UDF inside a *nested* higher-order function's lambda, e.g.
+ *    `transform(arr, i -> transform(i, x -> f(x)))`. The inner array `i` is the outer lambda's
+ *    variable, so it does not exist as a column outside the lambda and the UDF cannot be lifted
+ *    onto a real array. (A UDF in a nested function's *argument*, `transform(arr, x ->
+ *    transform(udf(x), y -> y))`, is fine: `udf(x)` is lifted onto `arr` like any other.)
+ *  - a UDF anywhere in `aggregate` / `reduce`. The fold is sequential: `merge` runs on each element
+ *    with the running accumulator, so its values are outputs of earlier steps rather than elements
+ *    of a collection, and computing the final accumulator alternates Python and JVM work once per
+ *    element, which no single UDF call can do. That is a limit of expression rewriting rather than
+ *    of Spark: restating the fold as an iteration over the whole column with `UnionLoop` would
+ *    work, but that is an operator-level restructuring, so it is left for a follow-up;
  *  - a pandas UDF: it receives a `Series` rather than one value per call, so the element-wise
  *    rewrite would change its meaning.
  */
@@ -101,75 +105,25 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
    * `CheckAnalysis` so that the shapes analysis lets through are exactly those rewritten here.
    */
   private def isRewritableUDF(e: Expression): Boolean =
-    PythonUDF.isElementwiseRewritableUDF(e) || isAlreadyLifted(e)
-
-  /**
-   * An element-wise UDF this rule produced on an earlier pass.
-   *
-   * Such a UDF is lifted again when it turns out to sit inside a nested higher-order function: the
-   * inner pass lifts `f` onto the inner array `i`, and because `i` is the outer lambda's variable
-   * the result is still inside the outer lambda, so the outer pass lifts it onto `arr` as well.
-   * Lifting composes by simply incrementing the flatten depth - `f` still receives one scalar per
-   * call, it just sits one array deeper.
-   */
-  private def isAlreadyLifted(e: Expression): Boolean = e match {
-    case udf: PythonUDF => udf.evalType == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
-    case _ => false
-  }
+    PythonUDF.isElementwiseRewritableUDF(e)
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.pythonUDFInHigherOrderFunctionEnabled) {
       plan
     } else {
+      // A single bottom-up pass lifts every liftable UDF: `transformExpressionsUpWithPruning`
+      // visits the innermost higher-order function first, and each rewrite lifts all of that
+      // lambda's UDFs at once. A UDF inside a *nested* function's lambda is not liftable at all
+      // (its argument is the outer lambda's variable, which is not a real column) and is rejected
+      // by `CheckAnalysis`, so no repeated fixed-point pass is needed.
       plan.transformUpWithPruning(
         _.containsAllPatterns(PYTHON_UDF, HIGH_ORDER_FUNCTION)) {
         case p =>
-          // One pass lifts the UDF out of the innermost higher-order function. A nested one
-          // becomes rewritable only after that, because its argument stops referencing the inner
-          // lambda's variable, so the pass is repeated until nothing is left to rewrite.
-          //
-          // Progress is measured by whether any liftable UDF remains rather than by comparing
-          // plans: every pass mints fresh `NamedLambdaVariable` exprIds, so a plan comparison
-          // would never report equality and the loop would not terminate. Each pass strictly
-          // reduces the number of higher-order functions holding a liftable UDF, so this
-          // terminates; the bound is a safety net against an unforeseen non-shrinking rewrite.
-          var current = p
-          var remaining = countRewritable(current)
-          var iterations = 0
-          while (remaining > 0 && iterations < MaxRewritePasses) {
-            current = current.transformExpressionsUpWithPruning(
-              _.containsAllPatterns(PYTHON_UDF, HIGH_ORDER_FUNCTION))(rewrite)
-            val next = countRewritable(current)
-            // No progress: the remaining shapes are ones this rule cannot handle.
-            if (next >= remaining) remaining = 0 else remaining = next
-            iterations += 1
-          }
-          current
+          p.transformExpressionsUpWithPruning(
+            _.containsAllPatterns(PYTHON_UDF, HIGH_ORDER_FUNCTION))(rewrite)
       }
     }
   }
-
-  /**
-   * How many higher-order functions in `plan` still hold a Python UDF inside a lambda. Used to
-   * drive the rewrite loop: it must strictly decrease, and reaching zero means every UDF has been
-   * lifted out.
-   */
-  private def countRewritable(plan: LogicalPlan): Int =
-    plan.expressions.map { e =>
-      e.collect {
-        case hof: HigherOrderFunction if hof.functions.exists {
-          case LambdaFunction(body, _, _) => hasDirectRewritableUDF(body)
-          case _ => false
-        } => hof
-      }.size
-    }.sum
-
-  /**
-   * Upper bound on rewrite passes, as a safety net: nesting deeper than this is not realistic, and
-   * a bound guarantees the optimizer cannot loop even if a future rewrite fails to shrink the
-   * count.
-   */
-  private val MaxRewritePasses = 32
 
   /**
    * Where a higher-order function's result comes from, which is the one thing about its shape that
@@ -186,44 +140,19 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   private case object FromElements extends ResultShape
 
   /**
-   * The two facts per higher-order function that the generic machinery cannot infer. Adding support
-   * for a new lambda-taking function normally means adding one line here; everything else - how
-   * many arguments and lambdas it has, which parameters iterate which argument, whether a parameter
-   * is an index, and how to rebuild the node - is derived from the
-   * [[HigherOrderFunction]] API.
+   * Where a higher-order function's result comes from. This is read straight off the Catalyst
+   * classification traits ([[ResultTypeFromArgument]] / [[ResultTypeFromFunction]]), which every
+   * lambda-taking function carries: a function whose result type is its input's returns input
+   * elements (`filter`, `array_sort`, `map_filter`), and one whose result type follows its lambda
+   * returns the lambda's value. A boolean predicate (`exists`, `forall`) is neither, but the
+   * rewrite treats it as `FromLambda` since it iterates a carrier the same way; `None` here means a
+   * shape this rule does not handle.
    */
   private def resultShapeOf(hof: HigherOrderFunction): Option[ResultShape] = hof match {
-    // `aggregate` folds rather than maps, so it has its own rewrite rather than a result shape.
-    case _: ArrayAggregate => None
-
-    // The result is built from the input elements rather than from the lambda's value, so the
-    // carrier has to be unwrapped afterwards.
-    case _: ArrayFilter | _: ArraySort | _: MapFilter => Some(FromElements)
-
-    // Everything else returns the lambda's own value. Inferred rather than listed so that a new
-    // higher-order function needs no entry here: a function whose element type is preserved in its
-    // result is element-shaped, which is what `FromElements` means, and `FromLambda` otherwise.
-    case _ =>
-      val elementType = hof.arguments.collectFirst {
-        case a if a.dataType.isInstanceOf[ArrayType] =>
-          a.dataType.asInstanceOf[ArrayType].elementType
-      }
-      val resultElementType = hof.dataType match {
-        case ArrayType(et, _) => Some(et)
-        case _ => None
-      }
-      val lambdaType = hof.functions.head match {
-        case l: LambdaFunction => Some(l.dataType)
-        case _ => None
-      }
-      // If the result's element type matches the input's but *not* the lambda's, the function
-      // returns input elements (as `filter` does). Otherwise it returns the lambda's value.
-      if (resultElementType.isDefined && resultElementType == elementType &&
-          lambdaType != resultElementType) {
-        Some(FromElements)
-      } else {
-        Some(FromLambda)
-      }
+    case _: ResultTypeFromArgument => Some(FromElements)
+    case _: ResultTypeFromFunction => Some(FromLambda)
+    case _: Predicate => Some(FromLambda)
+    case _ => None
   }
 
   /**
@@ -241,15 +170,12 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   /**
    * Rewrites a single higher-order function whose lambda contains a rewritable Python UDF.
    *
-   * There is one generic path for every mapping function, plus a separate one for `aggregate`,
-   * whose `merge`/`finish` lambdas fold rather than iterate. The generic path never names a
-   * concrete class: it reads the arguments, lambdas and parameter roles off the
-   * [[HigherOrderFunction]] API and rebuilds the node with `withNewChildren`, relying on the fact
-   * that a higher-order function's children are always its `arguments` followed by its `functions`.
+   * There is one generic path for every mapping function. It never names a concrete class: it reads
+   * the arguments, lambdas and parameter roles off the [[HigherOrderFunction]] API and rebuilds the
+   * node with `withNewChildren`, relying on the fact that a higher-order function's children are
+   * always its `arguments` followed by its `functions`.
    */
   private val rewrite: PartialFunction[Expression, Expression] = {
-    case agg: ArrayAggregate if liftableFold(agg) => rewriteFold(agg)
-
     // A comparator whose UDF receives both elements in one call has no per-element key, so it takes
     // the cross product rather than the ordinary element-wise rewrite.
     case sort @ ArraySort(_, function, _)
@@ -427,11 +353,10 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   /**
    * True if `hof`'s lambda holds a UDF this rule can lift out.
    *
-   * The UDF must belong to *this* lambda, not to a nested higher-order function inside it. For
-   * `transform(arr, i -> transform(i, x -> udf(x)))` the outer lambda transitively contains the
-   * UDF, but lifting it onto `arr` is wrong: the UDF reads the inner lambda's variable, so it must
-   * be lifted onto `i` by the inner rewrite first. Rewriting the outer function at that point
-   * would build a carrier that precomputes nothing and leave the UDF where it was.
+   * The UDF must belong to *this* lambda, not to a nested higher-order function inside it. A UDF in
+   * a nested lambda, `transform(arr, i -> transform(i, x -> udf(x)))`, reads the inner lambda's
+   * variable, so it cannot be lifted onto an array outside the lambda at all; `CheckAnalysis`
+   * rejects that shape before this rule runs, so it is simply never matched here.
    */
   private def liftableHof(hof: HigherOrderFunction): Boolean =
     hof.functions.length == 1 && (hof.functions.head match {
@@ -444,11 +369,11 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
    * Whether `body` holds a rewritable UDF that belongs to *this* lambda rather than to a nested
    * higher-order function's lambda.
    *
-   * A nested function's own lambda is skipped: its UDF reads that lambda's variable and must be
-   * lifted by the inner rewrite first. Its *arguments* are not skipped, because they are evaluated
-   * outside the nested lambda and so are part of this lambda's body. That is exactly where an
-   * earlier pass leaves a lifted UDF - `transform(arrays_zip(i, f_over(i)), s -> s.u0)` - and
-   * finding it there is what lets the outer pass lift it one level further.
+   * A nested function's own lambda is skipped: a UDF there reads that lambda's variable, a shape
+   * `CheckAnalysis` rejects. Its *arguments* are not skipped, because they are evaluated outside
+   * the nested lambda and so are part of this lambda's body: `transform(arr, x -> transform(udf(x),
+   * y -> y))` has `udf(x)` in the inner function's argument, so it is lifted onto `arr` like any
+   * other.
    */
   private def hasDirectRewritableUDF(body: Expression): Boolean = body match {
     case e if isRewritableUDF(e) => true
@@ -456,144 +381,6 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     case e => e.children.exists(hasDirectRewritableUDF)
   }
 
-
-  /**
-   * `aggregate` is rewritable when the UDFs in `merge` read only the element (not the accumulator)
-   * and/or a UDF appears in `finish`.
-   */
-  private def liftableFold(agg: ArrayAggregate): Boolean = {
-    val mergeLiftable = (agg.merge match {
-      case LambdaFunction(body, _, _) => hasDirectRewritableUDF(body)
-      case _ => false
-    }) && !mergeReadsAccumulator(agg.merge)
-    val finishLiftable = agg.finish match {
-      case LambdaFunction(body, _, _) => hasDirectRewritableUDF(body)
-      case _ => false
-    }
-    mergeLiftable || finishLiftable
-  }
-
-  private def mergeReadsAccumulator(merge: Expression): Boolean = merge match {
-    case LambdaFunction(body, Seq(accVar: NamedLambdaVariable, _), _) =>
-      body.exists {
-        case udf: PythonUDF if isRewritableUDF(udf) =>
-          udf.exists {
-            case v: NamedLambdaVariable => v.exprId == accVar.exprId
-            case _ => false
-          }
-        case _ => false
-      }
-    case _ => true
-  }
-
-  /**
-   * Rewrites `aggregate` / `reduce`.
-   *
-   * A UDF on `merge`'s element is precomputed over the array, exactly as for `transform`. A UDF in
-   * `finish` needs no array at all: `finish` runs once on the final accumulator, which is an
-   * ordinary column by then, so the UDF is applied to the fold's result.
-   *
-   * The `finish` case has a subtlety. A fold over a `null` array is `null`, and Spark does not
-   * evaluate `finish` for it. Applying the UDF outside the fold *would* call it on that null, and
-   * a null-unaware Python function then raises where plain Spark returns null. Keeping `finish`
-   * as the identity and applying the UDF to the fold's result would change that, so the UDF stays
-   * inside a `finish` lambda whose accumulator is a real column: the fold itself, not a lambda
-   * variable. That keeps Spark's own null handling for the fold, and the UDF is only reached when
-   * the fold produced a value.
-   */
-  private def rewriteFold(agg: ArrayAggregate): Expression = {
-    val ArrayAggregate(argument, zero, merge, finish) = agg
-
-    // Step 1: precompute the element UDFs of `merge`, if any.
-    val withMergeRewritten =
-      if ((merge match {
-            case LambdaFunction(body, _, _) => hasDirectRewritableUDF(body)
-            case _ => false
-          }) && !mergeReadsAccumulator(merge)) {
-        val LambdaFunction(_, Seq(accVar: NamedLambdaVariable, elementVar), _) = merge
-        val built = buildCarrier(
-          Seq(argument), merge, Seq(elementVar.asInstanceOf[NamedLambdaVariable]), None)
-        ArrayAggregate(
-          built.carrier,
-          zero,
-          LambdaFunction(built.body, Seq(accVar, built.boundVar)),
-          finish)
-      } else {
-        agg
-      }
-
-    // Step 2: `finish` runs once on the final accumulator, which is an ordinary column by then -
-    // not an element of an array - so the UDF there is not element-wise at all. Turning the fold
-    // into a one-element array lets the same element-wise machinery apply it exactly once.
-    //
-    // The null handling is the subtle part. A fold over a null array is null, and Spark does not
-    // evaluate `finish` for it, so a null-unaware Python function must not be called on that
-    // null. `filter` on the single-element array drops it when the fold is null, leaving an empty
-    // array that `transform` never calls the UDF for; reading element 0 of an empty array then
-    // yields null, matching Spark. (Wrapping in `when(fold IS NOT NULL, udf(fold))` would *not*
-    // work: Spark evaluates both branches, so the UDF would still see the null.)
-    withMergeRewritten match {
-      case ArrayAggregate(arg, z, m, LambdaFunction(body, Seq(accVar: NamedLambdaVariable), _))
-          if body.exists(isRewritableUDF) =>
-        // A *resolved* identity lambda over the accumulator: `LambdaFunction.identity` holds an
-        // unresolved variable, so the fold's `dataType` could not be computed from it here.
-        val identityVar = NamedLambdaVariable(accVar.name, accVar.dataType, accVar.nullable)
-        val fold = ArrayAggregate(arg, z, m, LambdaFunction(identityVar, Seq(identityVar)))
-        // Wrap the fold in a one-element array, so the same element-wise machinery applies it
-        // exactly once - and, crucially, gets the null handling for free. When the fold is null
-        // the wrapper is a null *array*, and the worker skips null rows entirely, so Python is
-        // never called with that null; the re-nested result is a null row too, and reading its
-        // single element gives back null. That matches Spark, which does not evaluate `finish` for
-        // a fold over a null array. (`when(fold IS NOT NULL, udf(fold))` would not work: Spark
-        // evaluates both branches, so the UDF would still see the null.)
-        val single = If(IsNull(fold), Literal(null, ArrayType(accVar.dataType)),
-          CreateArray(Seq(fold)))
-        // Each UDF in `finish` reads the accumulator, so lifting it onto this one-element array is
-        // the ordinary element-wise rewrite with the fold standing in for the array. An argument
-        // that is an *expression* over the accumulator, e.g. `udf(acc + 1)`, is computed per
-        // element by a native `transform` over the same one-element array, so the UDF still
-        // receives one value and the null row is still skipped.
-        def readsAcc(e: Expression): Boolean = e.exists {
-          case v: NamedLambdaVariable => v.exprId == accVar.exprId
-          case _ => false
-        }
-        body.transformDown {
-          case udf: PythonUDF if isRewritableUDF(udf) && readsAcc(udf) =>
-            val args = udf.children.map {
-              case child if !readsAcc(child) => child
-              case v: NamedLambdaVariable if v.exprId == accVar.exprId => single
-              case child =>
-                val v = NamedLambdaVariable("acc", accVar.dataType, nullable = true)
-                ArrayTransform(
-                  single,
-                  LambdaFunction(
-                    child.transformUp {
-                      case old: NamedLambdaVariable if old.exprId == accVar.exprId => v
-                    },
-                    Seq(v)))
-            }
-            val depths = udf.children.zip(args).map { case (child, arg) =>
-              if (arg.fastEquals(child)) 0 else 1
-            }
-            GetArrayItem(
-              PythonUDF(
-                udf.name,
-                udf.func,
-                ArrayType(udf.dataType, containsNull = true),
-                args,
-                PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
-                udf.udfDeterministic,
-                elementwiseDepths = depths),
-              Literal(0),
-              failOnError = false)
-        }.transformUp {
-          // Any remaining plain reference to the accumulator, e.g. `udf(acc) + acc`, becomes the
-          // fold itself, which is the value `finish` was given.
-          case v: NamedLambdaVariable if v.exprId == accVar.exprId => fold
-        }
-      case other => other
-    }
-  }
 
   /**
    * Builds the carrier for `arguments` and hands the rewritten higher-order function to `rebuild`.
@@ -696,32 +483,24 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 
     var arrayResults = Map.empty[Expression, Expression]
     val liftedArrays = liftableUDFs.map { udf =>
+      // Every argument is turned into an `array<T>` aligned with the iterated array, so the worker
+      // flattens each one exactly once. `overArray` maps a lambda variable to its array, computes
+      // an expression over the elements with a native `transform`, and broadcasts an
+      // element-independent value into an aligned array too - so there is no per-argument shape to
+      // track.
       val arrayArgs = udf.children.map { child =>
         overArray(child, alignedArguments.head, arrayOfVar, lambdaExprIds, arrayResults)
-      }
-      // Each argument that became an array gains one flatten level; one that stayed a per-row
-      // value is broadcast instead, which depth 0 marks. Lifting an already-lifted UDF (a nested
-      // higher-order function) composes by incrementing its existing depths rather than resetting
-      // them, so the user's scalar function still gets one value per call.
-      val previousDepths =
-        if (udf.elementwiseDepths.nonEmpty) udf.elementwiseDepths
-        else Seq.fill(udf.children.length)(0)
-      val depths = udf.children.zip(arrayArgs).zip(previousDepths).map {
-        case ((child, arrayArg), previous) =>
-          if (arrayArg.fastEquals(child) && !readsLambdaVariable(child, lambdaExprIds)) previous
-          else previous + 1
       }
       val lifted = PythonUDF(
         udf.name,
         udf.func,
-        // The wrapper returns one element per input element, i.e. one array level on top of what
-        // this UDF already returned. Elements may be null (the UDF can return null), hence
+        // The wrapper returns one element per input element, i.e. one array level on top of the
+        // user function's scalar return. Elements may be null (the UDF can return null), hence
         // containsNull = true.
         ArrayType(udf.dataType, containsNull = true),
         arrayArgs,
         PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
-        udf.udfDeterministic,
-        elementwiseDepths = depths)
+        udf.udfDeterministic)
       arrayResults += (udf.canonicalized -> lifted)
       lifted
     }
@@ -826,11 +605,12 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 
   /**
    * Turns a UDF argument expression, written in terms of single elements, into the equivalent
-   * expression over whole arrays.
+   * `array<T>` aligned with the iterated array, so the worker can flatten every argument uniformly.
    *
    *  - a lambda variable becomes the array it stands for;
-   *  - an already-lifted nested UDF call becomes its array result;
-   *  - an expression independent of the lambda is passed through, to be broadcast per element;
+   *  - an already-lifted UDF call (a nested call `f(g(x))`) becomes its array result;
+   *  - an expression independent of the lambda is repeated into an aligned array with a native
+   *    `transform`, rather than passed through as a scalar to broadcast;
    *  - anything else is an expression over the elements, computed for every element by a native
    *    `transform` that stays inside the JVM.
    */
@@ -844,8 +624,12 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     case udf: PythonUDF if arrayResults.contains(udf.canonicalized) =>
       arrayResults(udf.canonicalized)
     case e if !readsLambdaVariable(e, lambdaExprIds) =>
-      // Independent of the element: pass through and let the worker broadcast it.
-      e
+      // Independent of the element (an outer column or constant): repeat it into an array aligned
+      // with the iterated array, so every UDF argument is a single-level array the worker flattens
+      // the same way. `transform(arr, _ -> e)` keeps the value constant while matching the shape.
+      val arrType = firstArgument.dataType.asInstanceOf[ArrayType]
+      val v = NamedLambdaVariable("x", arrType.elementType, arrType.containsNull)
+      ArrayTransform(firstArgument, LambdaFunction(e, Seq(v)))
     case e =>
       // An expression over the element, e.g. `udf(x * 2)`. Compute it for every element with a
       // native `transform`, which stays inside the JVM, and hand the resulting array over.

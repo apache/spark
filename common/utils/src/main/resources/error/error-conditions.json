@@ -8657,7 +8657,8 @@
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
         "message" : [
-          "Lambda function with Python UDF <funcName> in a higher order function."
+          "Cannot evaluate the Python UDF <funcName> inside the lambda of a higher-order function.",
+          "This placement is not supported: the UDF reads a value that only exists while the lambda iterates (a fold accumulator in `aggregate`/`reduce`, or an array bound by an enclosing lambda in a nested higher-order function), so it cannot be applied to the whole column at once. Rewrite the query so the UDF is applied outside the lambda."
         ]
       },
       "LAMBDA_FUNCTION_WITH_SQL_UDF" : {

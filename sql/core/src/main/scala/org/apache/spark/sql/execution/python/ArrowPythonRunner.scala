@@ -130,10 +130,7 @@ class ArrowPythonWithNamedArgumentRunner(
     pythonRunnerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
-    sessionUUID: Option[String],
-    // For SQL_ARROW_ELEMENTWISE_UDF: how many array levels to flatten each input column by,
-    // parallel to `schema`'s fields. Empty for every other eval type.
-    flattenDepths: Seq[Int] = Nil)
+    sessionUUID: Option[String])
   extends RowInputArrowPythonRunner(
     funcs, evalType, argMetas.map(_.map(_.offset)), schema, timeZoneId, largeVarTypes,
     pythonMetrics, jobArtifactUUID, sessionUUID) {
@@ -141,12 +138,10 @@ class ArrowPythonWithNamedArgumentRunner(
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override protected def evalConf: Map[String, String] = {
-    if (evalType == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF) {
-      super.evalConf ++ Map(
-        "input_type" -> schema.json,
-        "elementwise_depths" -> flattenDepths.mkString(",")
-      )
-    } else if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
+    // An element-wise UDF receives each argument as an `array<T>` column and flattens it, so like
+    // the Arrow batched UDF it needs the input schema to convert the incoming Arrow types.
+    if (evalType == PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF ||
+        evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
       super.evalConf ++ Map(
         "input_type" -> schema.json
       )
