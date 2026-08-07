@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.classic
 
+import java.io.ByteArrayOutputStream
 import java.lang.reflect.ParameterizedType
+import java.util.jar.{JarEntry, JarOutputStream}
 
 import scala.collection.mutable
 
@@ -142,7 +144,7 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
     }
   }
 
-  /** Compile Java source, publish its class files as session artifacts, and register its UDF. */
+  /** Compile Java source, publish its classes as a session JAR, and register its UDF. */
   private[sql] def registerJavaSource(
       name: String,
       className: String,
@@ -164,10 +166,20 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
           throw new IllegalArgumentException(
             s"Java source did not generate the declared class '$className'")
         }
-        classBytecodes.toSeq.sortBy(_._1).foreach { case (binaryName, bytecode) =>
-          val target = binaryName.replace('.', '/') + ".class"
-          session.addArtifact(bytecode, target)
+        val jarBytes = new ByteArrayOutputStream()
+        val jar = new JarOutputStream(jarBytes)
+        try {
+          classBytecodes.toSeq.sortBy(_._1).foreach { case (binaryName, bytecode) =>
+            val entry = new JarEntry(binaryName.replace('.', '/') + ".class")
+            entry.setTime(0L)
+            jar.putNextEntry(entry)
+            jar.write(bytecode)
+            jar.closeEntry()
+          }
+        } finally {
+          jar.close()
         }
+        session.addArtifact(jarBytes.toByteArray, s"inline-jvm-udf-$sourceHash.jar")
         registerJava(name, className, returnDataType)
         javaSourceHashes.put(className, sourceHash)
     }
