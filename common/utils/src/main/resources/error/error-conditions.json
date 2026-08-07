@@ -7660,6 +7660,11 @@
           "If you must continue with your existing checkpoint and accept that doing so exposes you to the possibility of data loss on failure, set <config> to true."
         ]
       },
+      "CONFIGURATION_NOT_SUPPORTED" : {
+        "message" : [
+          "The following session configuration(s) are incompatible with Real-Time Mode: <invalidReasons>. Update or remove them and restart the query."
+        ]
+      },
       "IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED" : {
         "message" : [
           "Real-time mode does not support union on two or more identical streaming data sources in a single query. This includes scenarios such as referencing the same source DataFrame more than once, or using two data sources with identical configurations for some sources. For Kafka, avoid reusing the same DataFrame and create different ones. Sources provided in the query: <sources>"

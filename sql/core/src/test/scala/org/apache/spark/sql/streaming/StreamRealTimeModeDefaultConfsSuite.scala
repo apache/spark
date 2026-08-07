@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBConf,
@@ -76,28 +78,26 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
   }
 
   test("the checkpoint-format and provider defaults are applied independently") {
-    // The two are defaulted by independent guards (matching the runtime): pinning the provider does
-    // NOT suppress the version default. A user who pins the HDFS provider still gets version 2, and
-    // the incompatible combination is caught downstream rather than silently running at v1.
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[HDFSBackedStateStoreProvider].getName) {
+    // The two are defaulted by independent guards (matching the runtime): pinning one does not
+    // suppress the other. Pin only the version (to a compatible v2, since an incompatible explicit
+    // config is rejected up front by the pre-flight) and confirm the provider is still defaulted.
+    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
       val observed = runRealTimeQueryAndReadConfs(
         Seq(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
           SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
-      assert(observed(SQLConf.STATE_STORE_PROVIDER_CLASS.key)
-          .contains(classOf[HDFSBackedStateStoreProvider].getName),
-        "a pinned state-store provider must be left alone, got " +
-          observed(SQLConf.STATE_STORE_PROVIDER_CLASS.key))
       assert(observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).contains("2"),
-        "the version default is independent of the provider, so it must still be 2, got " +
+        "the pinned version must be left alone, got " +
           observed(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
+      assert(observed(SQLConf.STATE_STORE_PROVIDER_CLASS.key)
+          .contains(classOf[RocksDBStateStoreProvider].getName),
+        "the provider default is independent of the version, so it must still be RocksDB, got " +
+          observed(SQLConf.STATE_STORE_PROVIDER_CLASS.key))
     }
   }
 
   test("an explicit checkpoint format version is not overridden by Real-Time Mode") {
     // The defaulting guard respects an explicit version rather than forcing 2. v2 is used here
-    // (not v1) because a resolved commit log below v2 is rejected for a Real-Time Mode query, so v1
-    // could not run to completion -- that rejection is covered separately below.
+    // (not v1) because an explicit v1 is rejected up front by the pre-flight (covered below).
     withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
       val observed = runRealTimeQueryAndReadConfs(
         Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))
@@ -107,21 +107,39 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
     }
   }
 
-  test("a fresh Real-Time Mode query with an explicit v1 checkpoint format is rejected") {
-    // The rejection is unconditional on the resolved commit log version, so even a fresh checkpoint
-    // is rejected when the user explicitly pins version 1 -- there is no way to honour it safely.
-    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
+  test("an explicit incompatible config is rejected up front for a Real-Time Mode query") {
+    // The pre-flight in StreamingQueryManager rejects explicit RTM-incompatible session configs
+    // before the query is built: checkpoint format below v2, a non-RocksDB provider, and
+    // sortBeforeRepartition=true. Each is reported in a single CONFIGURATION_NOT_SUPPORTED error.
+    def assertRejected(confs: (String, String)*): Unit = {
+      withSQLConf(confs: _*) {
+        val inputData = LowLatencyMemoryStream[Int]
+        val e = intercept[SparkIllegalArgumentException] {
+          testStream(inputData.toDS(), OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+            StartStream())
+        }
+        checkError(e, condition = "STREAMING_REAL_TIME_MODE.CONFIGURATION_NOT_SUPPORTED",
+          parameters = e.getMessageParameters.asScala.toMap)
+      }
+    }
+    assertRejected(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1")
+    assertRejected(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[HDFSBackedStateStoreProvider].getName)
+    assertRejected(SQLConf.SORT_BEFORE_REPARTITION.key -> "true")
+  }
+
+  test("the checkpoint-v1 escape hatch bypasses the pre-flight version check") {
+    // With the escape hatch on, an explicit v1 config is permitted through the pre-flight (the
+    // existing-v1-checkpoint fail-fast in initializeExecution is covered separately below).
+    withSQLConf(
+      SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1.key -> "true",
+      SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
       val inputData = LowLatencyMemoryStream[Int]
       testStream(inputData.toDS(), OutputMode.Update, Map.empty, new ContinuousMemorySink())(
         AddData(inputData, 1),
         StartStream(),
-        ExpectFailure[SparkIllegalArgumentException] { e =>
-          checkError(
-            e.asInstanceOf[SparkThrowable],
-            condition = "STREAMING_REAL_TIME_MODE.CHECKPOINT_FORMAT_V1_NOT_SUPPORTED",
-            parameters = Map(
-              "config" -> SQLConf.STREAMING_REAL_TIME_MODE_DANGEROUSLY_ALLOW_CHECKPOINT_V1.key))
-        }
+        CheckAnswerWithTimeout(60000, 1),
+        StopStream
       )
     }
   }
@@ -132,18 +150,6 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
       val observed = runRealTimeQueryAndReadConfs(Seq(changelogKey))
       assert(observed(changelogKey).contains("true"),
         s"Real-Time Mode should default $changelogKey to true, got ${observed(changelogKey)}")
-    }
-  }
-
-  test("changelog checkpointing is not defaulted when the state store is not RocksDB") {
-    // The config is RocksDB-specific, so setting it for the HDFS-backed provider would be
-    // meaningless noise in the effective configuration.
-    withSQLConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[HDFSBackedStateStoreProvider].getName) {
-      val observed = runRealTimeQueryAndReadConfs(Seq(changelogKey))
-      assert(observed(changelogKey).isEmpty,
-        s"$changelogKey should be left unset for a non-RocksDB provider, got " +
-          observed(changelogKey))
     }
   }
 
@@ -160,11 +166,12 @@ class StreamRealTimeModeDefaultConfsSuite extends StreamRealTimeModeSuiteBase {
   }
 
   test("switching an existing v1 checkpoint to Real-Time Mode fails fast") {
-    // A Real-Time Mode query reruns a failed batch from committed offsets, which relies on the
-    // per-batch state store checkpoint ids that only commit log v2 and above persist. Resolution
-    // keeps an existing checkpoint at the version it was created with, so rather than silently
-    // running at v1 (and risking data loss on a rerun) the query is rejected at start. The
-    // rejection is unconditional -- a plain (stateless) query is rejected too.
+    // An existing v1 checkpoint carries no explicit config, so the pre-flight cannot see it; the
+    // initializeExecution fail-fast catches it instead, from the resolved commit log version.
+    // Resolution keeps an existing checkpoint at the version it was created with, so rather than
+    // silently running at v1 (where a re-executed batch can reuse the failed batch's state file
+    // names and lose data) the query is rejected at start. The rejection is unconditional -- a
+    // plain (stateless) query is rejected too.
     withTempDir { checkpointDir =>
       val inputData = LowLatencyMemoryStream[Int]
       val mapped = inputData.toDS().map(_ + 1)
