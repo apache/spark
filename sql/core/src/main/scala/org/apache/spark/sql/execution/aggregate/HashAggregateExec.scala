@@ -204,8 +204,8 @@ case class HashAggregateExec(
   private var processedRowsTerm: String = _
   private var adaptiveChildrenConsumedTerm: String = _
   // Whether the map output has already been emitted (and the maps freed). Once pass-through is
-  // active the maps are frozen, so they are output as soon as pass-through fires to release their
-  // memory before the remaining input is streamed; this flag lets the final output skip them.
+  // active the maps are frozen, so the next re-entry outputs them -- releasing their memory before
+  // the rest of the input is streamed; this flag lets the final output skip them.
   private var adaptiveMapOutputDoneTerm: String = _
   // Whether the map iterators have been set up (`finishHashMap`). The map-output function may be
   // re-entered when its loops return via `shouldStop()` to drain the buffer, and `finishAggregate`

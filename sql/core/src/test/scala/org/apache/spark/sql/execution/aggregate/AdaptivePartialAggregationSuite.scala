@@ -85,7 +85,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
-          // Small sample so the no-spill (the periodic check) path triggers on modest inputs.
+          // Small `minRows` so the periodic check runs on modest inputs.
           SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "8") ++
           spillConf ++ fixedPlanConfs): _*) {
         val msg = s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap forceSpill=$forceSpill"
@@ -170,10 +170,10 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
 
   /**
    * Runs `body` once per (wholeStage, twoLevelMap) combination with the feature enabled and a small
-   * sample, threading a descriptive clue for failure messages.
+   * `minRows`, threading a descriptive clue for failure messages.
    *
-   * The fast (first-level) map is append-only and never spills; adaptive partial aggregation
-   * governs only the regular (second-level) map. With the default fast-map capacity (2^16) a small
+   * The fast (first-level) map is append-only and never spills, so only the regular (second-level)
+   * map can reach a spill boundary. With the default fast-map capacity (2^16) a small
    * high-cardinality input would be fully absorbed by the fast map and never reach the regular map,
    * so nothing could ever bypass. To make the triggering tests meaningful when the two-level map is
    * on, we shrink the fast map via the first field of `testFallbackStartsAt` so rows fall through
@@ -368,9 +368,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("results unchanged when a large frozen map is output before pass-through streaming") {
-    // A larger sample lets the map accumulate many keys before the periodic check bypasses, so the
-    // early map output (which also frees the map) spans several drain cycles and re-enters the
-    // map-output function; the results must still match the feature-off reference.
+    // A larger `minRows` lets the map accumulate many keys before the periodic check bypasses,
+    // so the early map output (which also frees the map) spans several drain cycles and re-enters
+    // the map-output function; the results must still match the feature-off reference.
     val query = () => spark.range(0, 400000, 1, 1)
       .select($"id" as "k", $"id" as "v")
       .groupBy($"k")
@@ -487,7 +487,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   // (ROLLUP / CUBE / GROUPING SETS / multi-distinct). PR apache/spark#28804 statically disabled its
   // skip-partial-aggregate optimization whenever an Expand was present, but that was a performance
   // heuristic guarding its *static* row sampling, not a correctness requirement. Our decision is
-  // made at runtime from the observed reduction ratio, so we deliberately do not port that
+  // made at runtime from the observed compaction ratio, so we deliberately do not port that
   // exclusion. These tests assert results stay correct with the exclusion absent.
 
   test("results unchanged for ROLLUP (Expand below partial aggregate)") {
@@ -614,7 +614,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // The static PR#28804 heuristic would have refused to skip whenever an Expand was present; our
     // runtime decision skips because the expanded rows genuinely do not reduce. GROUPING SETS over
     // two single-column, fully-distinct sets is used (rather than ROLLUP/CUBE) so there is no
-    // grand-total group dragging the reduction ratio below the threshold: every expanded row is a
+    // grand-total group lifting the compaction ratio above the threshold: every expanded row is a
     // fresh key, so all configurations bypass.
     forEachCodegenAndMap() { clue =>
       withTempView("t") {
@@ -695,9 +695,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("the periodic check fires when the sample shows no reduction, without spilling") {
+  test("the periodic check fires when the ratio shows no reduction, without spilling") {
     // No forced regular-map spill: only the periodic check can trigger the bypass. Fully
-    // distinct keys over a small sample cross `noSpillReductionRatioThreshold`, so rows bypass and
+    // distinct keys give a compaction ratio of 1.0, below `minCompaction`, so rows bypass and
     // the regular map never spills.
     forEachCodegenAndMap() { clue =>
       val df = () => spark.range(0, 200, 1, 1)
@@ -707,7 +707,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       withClue(clue) {
         val c = runAndReadCounters(df)
         assert(c.skipped > 0,
-          "the periodic check should bypass fully distinct input under the sample")
+          "the periodic check should bypass fully distinct input")
         assert(c.spillBytes == 0, "the periodic check must decide before any spill happens")
         assert(c.tasksFallBacked == 0,
           "the periodic check must not fall back to sort-based aggregation")
@@ -717,7 +717,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
 
   test("the spill check fires when the map would spill on high-cardinality input") {
     // Force the regular map to fall back quickly. High-cardinality input that reaches the fallback
-    // point should bypass via the spill check rather than spilling. Use a sample larger than the
+    // point should bypass via the spill check rather than spilling. Use a `minRows` larger than the
     // input so the periodic check cannot fire first and the spill check is the one exercised.
     forEachCodegenAndMap(minRows = 100000, regularFallback = 16) { clue =>
       val df = () => spark.range(0, 200, 1, 1)
@@ -904,9 +904,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     spark.conf.unset(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key)
   }
 
-  test("larger sample defers the decision so a small high-cardinality input is not bypassed") {
-    // With a sample larger than the whole input and no regular-map spill forced, the periodic check
-    // point is never reached, so nothing bypasses even though the keys are fully distinct.
+  test("a larger minRows defers the decision so a small high-cardinality input is not bypassed") {
+    // With `minRows` larger than the whole input and no regular-map spill forced, the periodic
+    // check point is never reached, so nothing bypasses even though the keys are fully distinct.
     forEachCodegenAndMap(minRows = 100000) { clue =>
       val df = () => spark.range(0, 200, 1, 1)
         .select($"id" as "k", $"id" as "v")
@@ -914,7 +914,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         .agg(sum($"v") as "s")
       withClue(clue) {
         assert(numBypassingRows(df) == 0,
-          "no bypass expected before the sample size is reached")
+          "no bypass expected before `minRows` rows have been processed")
       }
     }
   }

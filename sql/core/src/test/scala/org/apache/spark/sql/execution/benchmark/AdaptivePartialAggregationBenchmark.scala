@@ -35,8 +35,8 @@ import org.apache.spark.sql.internal.SQLConf
  *   - low-cardinality, no spill: nothing bypasses, which must not regress.
  *   - high-cardinality, forced regular-map spill: the spill check bypasses instead of spilling,
  *     which should win.
- *   - low-cardinality, forced regular-map spill: the ratio is too low for the spill check to
- *     bypass, so both runs spill identically (no regression).
+ *   - low-cardinality, forced regular-map spill: the compaction ratio is far above the threshold,
+ *     so the spill check keeps aggregating and both runs spill identically (no regression).
  *
  * To run this benchmark:
  * {{{
@@ -103,9 +103,9 @@ object AdaptivePartialAggregationBenchmark extends SqlBasedBenchmark {
     }
 
     // Force the regular map to spill quickly and disable the periodic check (huge minRows). With
-    // fully distinct keys the reduction ratio is 1.0, so at the spill boundary the on-spill
-    // spill check bypasses instead of spilling; the baseline spills repeatedly and falls back
-    // to sort-based aggregation.
+    // fully distinct keys the compaction ratio is 1.0, so at the spill boundary the spill check
+    // bypasses instead of spilling; the baseline spills repeatedly and falls back to sort-based
+    // aggregation.
     runBenchmark("high-cardinality input, pass-through at the spill check") {
       val N = 8L << 20
       val benchmark = new Benchmark("adaptive partial agg, high card, spill", N, output = output)
@@ -116,9 +116,10 @@ object AdaptivePartialAggregationBenchmark extends SqlBasedBenchmark {
       benchmark.run()
     }
 
-    // Force the regular map to spill quickly on low-cardinality input. The reduction ratio is tiny
-    // (1000 distinct keys), so even at the spill boundary the spill check correctly does not
-    // bypass: both runs spill and fall back to sort-based aggregation identically (no regression).
+    // Force the regular map to spill quickly on low-cardinality input. With only 1000 distinct
+    // keys the compaction ratio is far above the threshold, so even at the spill boundary the
+    // spill check correctly keeps aggregating: both runs spill and fall back to sort-based
+    // aggregation identically (no regression).
     runBenchmark("low-cardinality input, pass-through at the spill check") {
       val N = 16L << 20
       val benchmark = new Benchmark("adaptive partial agg, low card, spill", N, output = output)
