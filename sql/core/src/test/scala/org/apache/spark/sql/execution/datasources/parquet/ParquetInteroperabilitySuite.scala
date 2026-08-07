@@ -28,11 +28,11 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SessionQueryTest {
+class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedSparkSession {
   test("parquet files with different physical schemas but share the same logical schema") {
     import ParquetCompatibilityTest._
 
@@ -104,7 +104,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with Session
 
     Seq(false, true).foreach { legacyMode =>
       Seq(false, true).foreach { offheapEnabled =>
-        withConf(
+        withSQLConf(
             SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> legacyMode.toString,
             SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
           withTempPath { tableDir =>
@@ -182,7 +182,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with Session
 
       Seq(false, true).foreach { int96TimestampConversion =>
         withAllParquetReaders {
-          withConf(
+          withSQLConf(
               (SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key,
                 SQLConf.ParquetOutputTimestampType.INT96.toString),
               (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, int96TimestampConversion.toString())

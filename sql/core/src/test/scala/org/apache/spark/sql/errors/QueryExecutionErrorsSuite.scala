@@ -60,7 +60,7 @@ import org.apache.spark.sql.internal.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{
   ArrayType,
   BooleanType,
@@ -83,14 +83,14 @@ import org.apache.spark.util.Utils
 class QueryExecutionErrorsSuite
   extends ParquetTest
   with OrcTest
-  with SessionQueryTest
+  with SharedSparkSession
   with DataTypeErrorsBase {
 
   import testImplicits._
 
   test("CONVERSION_INVALID_INPUT: to_binary conversion function base64") {
     for (codegenMode <- Seq(CODEGEN_ONLY, NO_CODEGEN)) {
-      withConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode.toString) {
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode.toString) {
         val exception = intercept[SparkIllegalArgumentException] {
           Seq(("???")).toDF("a").selectExpr("to_binary(a, 'base64')").collect()
         }
@@ -108,7 +108,7 @@ class QueryExecutionErrorsSuite
 
   test("CONVERSION_INVALID_INPUT: to_binary conversion function hex") {
     for (codegenMode <- Seq(CODEGEN_ONLY, NO_CODEGEN)) {
-      withConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode.toString) {
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode.toString) {
         val exception = intercept[SparkIllegalArgumentException] {
           Seq(("???")).toDF("a").selectExpr("to_binary(a, 'hex')").collect()
         }
@@ -288,7 +288,7 @@ class QueryExecutionErrorsSuite
     "compatibility with Spark 2.4/3.2 in reading/writing dates") {
 
     // Fail to read ancient datetime values.
-    withConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
       val fileName = "before_1582_date_v2_4_5.snappy.parquet"
       val filePath = getResourceParquetFilePath("test-data/" + fileName)
       val e = intercept[SparkUpgradeException] {
@@ -305,7 +305,7 @@ class QueryExecutionErrorsSuite
     }
 
     // Fail to write ancient datetime values.
-    withConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
       withTempPath { dir =>
         val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
         val e = intercept[SparkException] {
@@ -342,7 +342,7 @@ class QueryExecutionErrorsSuite
   }
 
   test("UNSUPPORTED_FEATURE - SPARK-57455: can't read nanos timestamp as micros timestamp") {
-    withConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       withTempPath { file =>
         val df = spark.createDataFrame(
           spark.sparkContext.parallelize(Seq(Row(LocalDateTime.of(1970, 1, 1, 0, 0, 0, 1)))),
@@ -365,7 +365,7 @@ class QueryExecutionErrorsSuite
   }
 
   test("UNSUPPORTED_FEATURE - SPARK-57455: nanos timestamp mismatch nested in array is caught") {
-    withConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       withTempPath { file =>
         val df = spark.createDataFrame(
           spark.sparkContext.parallelize(
@@ -616,7 +616,7 @@ class QueryExecutionErrorsSuite
 
   test("CANNOT_RESTORE_PERMISSIONS_FOR_PATH: can't set permission") {
       withTable("t") {
-        withConf(
+        withSQLConf(
           "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
           "fs.file.impl.disable.cache" -> "true") {
           sql("CREATE TABLE t(c String) USING parquet")
@@ -848,7 +848,7 @@ class QueryExecutionErrorsSuite
   }
 
   test("BINARY_ARITHMETIC_OVERFLOW: byte plus byte result overflow") {
-    withConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkError(
         exception = intercept[SparkArithmeticException] {
           sql(s"select 127Y + 5Y").collect()
@@ -864,7 +864,7 @@ class QueryExecutionErrorsSuite
   }
 
   test("BINARY_ARITHMETIC_OVERFLOW: byte minus byte result overflow") {
-    withConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkError(
         exception = intercept[SparkArithmeticException] {
           sql(s"select -2Y - 127Y").collect()
@@ -880,7 +880,7 @@ class QueryExecutionErrorsSuite
   }
 
   test("BINARY_ARITHMETIC_OVERFLOW: byte multiply byte result overflow") {
-    withConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkError(
         exception = intercept[SparkArithmeticException] {
           sql(s"select 127Y * 5Y").collect()
@@ -968,7 +968,7 @@ class QueryExecutionErrorsSuite
 
   test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
     withTempPath { p =>
-      withConf(
+      withSQLConf(
         "spark.sql.streaming.checkpointFileManagerClass" ->
           classOf[FileSystemBasedCheckpointFileManager].getName,
         "fs.file.impl" -> classOf[FakeFileSystemNeverExists].getName,
@@ -1037,7 +1037,7 @@ class QueryExecutionErrorsSuite
         }
       }
 
-      withConf(
+      withSQLConf(
         "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
         "spark.sql.catalog.h2.url" -> url,
         "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
@@ -1073,7 +1073,7 @@ class QueryExecutionErrorsSuite
 
   test("CONCURRENT_QUERY: streaming query is resumed from many sessions") {
     failAfter(90 seconds) {
-      withConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "true") {
+      withSQLConf(SQLConf.STREAMING_STOP_ACTIVE_RUN_ON_RESTART.key -> "true") {
         withTempDir { dir =>
           val ds = spark.readStream.format("rate").load()
 

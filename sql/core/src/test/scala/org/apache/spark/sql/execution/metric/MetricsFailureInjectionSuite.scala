@@ -28,11 +28,11 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.adaptive.{AQETestHelper, DisableAdaptiveExecutionSuite}
 import org.apache.spark.sql.functions.{approx_count_distinct, collect_list, collect_set, count, lit, max, min, size, sort_array, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.QueryExecutionListener
 
 class MetricsFailureInjectionSuite
-  extends SessionQueryTest
+  extends SharedSparkSession
   with SQLMetricsTestUtils
   // Need to control AQE per-test to ensure expected plan shapes.
   with DisableAdaptiveExecutionSuite {
@@ -59,7 +59,7 @@ class MetricsFailureInjectionSuite
   for {
     useAQE <- BOOLEAN_DOMAIN
   } test(s"Two stage metrics AQE cancellation injection - useAQE=$useAQE") {
-    withConf(
+    withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> useAQE.toString) {
       val stage1Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 1 counter")
       val stage2Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 2 counter")
@@ -146,7 +146,7 @@ class MetricsFailureInjectionSuite
   for {
     useAQE <- BOOLEAN_DOMAIN
   } test(s"Three stage metrics AQE cancellation injection - useAQE=$useAQE") {
-    withConf(
+    withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> useAQE.toString) {
       val stage1Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 1 counter")
       val stage2Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 2 counter")
@@ -544,7 +544,7 @@ class MetricsFailureInjectionSuite
     withTable("primary_table", "secondary_table") {
       setUpTestTable("primary_table")
       setUpTestTable("secondary_table")
-      withConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
         withSparkContextConf(
             config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
           val stage1MetricsExpr = incrementMetrics(Seq(stage1Metric, stage1SLAMetric))
@@ -677,7 +677,7 @@ class MetricsFailureInjectionSuite
     withTable("primary_table", "secondary_table") {
       setUpTestTable("primary_table")
       setUpTestTable("secondary_table")
-      withConf(SQLConf.SHUFFLE_PARTITIONS.key -> "20") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "20") {
         withSparkContextConf(
             config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true",
             config.Tests.INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY.key -> "1",
@@ -748,7 +748,7 @@ class MetricsFailureInjectionSuite
     // the corrupted mapper, deterministically triggering the indeterminate-stage abort.
     withTable("test_table") {
       setUpTestTable("test_table")
-      withConf(SQLConf.SHUFFLE_PARTITIONS.key -> "20") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "20") {
         withSparkContextConf(
             config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true",
             config.Tests.INJECT_SHUFFLE_FETCH_FAILURES_RESULT_STAGE_DELAY.key -> "1",

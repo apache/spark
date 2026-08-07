@@ -31,13 +31,13 @@ import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupporte
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DecimalType.{ByteDecimal, IntDecimal, LongDecimal, ShortDecimal}
 
 class ParquetTypeWideningSuite
     extends ParquetTest
-    with SessionQueryTest
+    with SharedSparkSession
     with AdaptiveSparkPlanHelper {
 
   import testImplicits._
@@ -113,7 +113,7 @@ class ParquetTypeWideningSuite
     : DataFrame = {
     val repeatedValues = List.fill(if (dictionaryEnabled) 10 else 1)(values).flatten
     val df = repeatedValues.toDF("a").select(col("a").cast(dataType))
-    withConf(
+    withSQLConf(
       ParquetOutputFormat.ENABLE_DICTIONARY -> dictionaryEnabled.toString,
       SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> timestampRebaseMode.toString) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
@@ -272,7 +272,7 @@ class ParquetTypeWideningSuite
     outputTimestampType <- ParquetOutputTimestampType.values
   }
   test(s"unsupported parquet timestamp conversion $fromType ($outputTimestampType) -> $toType") {
-    withConf(
+    withSQLConf(
       SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outputTimestampType.toString,
       SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LegacyBehaviorPolicy.CORRECTED.toString
     ) {
@@ -338,7 +338,7 @@ class ParquetTypeWideningSuite
 
   test("parquet decimal type change Decimal(5, 2) -> Decimal(3, 2) overflows with parquet-mr") {
     withTempDir { dir =>
-      withConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         writeParquetFiles(
           dir,
           values = Seq("123.45", "999.99"),

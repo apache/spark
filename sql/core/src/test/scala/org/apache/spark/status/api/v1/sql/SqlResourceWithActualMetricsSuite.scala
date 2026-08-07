@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SQLExecutionUIData
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 
 case class Person(id: Int, name: String, age: Int)
 case class Salary(personId: Int, salary: Double)
@@ -42,7 +42,7 @@ case class Salary(personId: Int, salary: Double)
  * Sql Resource Public API Unit Tests running query and extracting the metrics.
  */
 class SqlResourceWithActualMetricsSuite
-  extends SessionQueryTest with SQLMetricsTestUtils {
+  extends SharedSparkSession with SQLMetricsTestUtils {
 
   import testImplicits._
 
@@ -59,7 +59,7 @@ class SqlResourceWithActualMetricsSuite
 
   test("Check Sql Rest Api Endpoints") {
     // Materalize result DataFrame
-    withConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val count = getDF().count()
       assert(count == 2, s"Expected Query Count is 2 but received: $count")
     }
@@ -344,7 +344,7 @@ class SqlResourceWithActualMetricsSuite
   }
 
   test("SPARK-56137: sqlList returns ISO date format in submissionTime") {
-    withConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       spark.sql("SELECT 'date_format_test'").collect()
     }
 
@@ -372,7 +372,7 @@ class SqlResourceWithActualMetricsSuite
       JsonMethods.parse(result).extract[Seq[ExecutionData]].size
     }
 
-    withConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       for (i <- 1 to 5) {
         spark.sql(s"SELECT $i AS limit_test").collect()
       }
@@ -389,7 +389,7 @@ class SqlResourceWithActualMetricsSuite
   }
 
   test("SPARK-56137: execution detail returns planDescription") {
-    withConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       spark.sql("SELECT 'plan_desc_test'").collect()
     }
 
@@ -421,7 +421,7 @@ class SqlResourceWithActualMetricsSuite
   }
 
   test("SPARK-56137: multiple query types appear in listing") {
-    withConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTable("spark_56137_multi") {
         // DDL
         spark.sql(

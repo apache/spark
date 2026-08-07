@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
 class DataSourceV2DataFrameSessionCatalogSuite
@@ -180,7 +180,7 @@ object InMemoryTableSessionCatalog {
 }
 
 private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalogBase[T]]
-  extends SessionQueryTest
+  extends SharedSparkSession
   with BeforeAndAfter { self: InsertIntoSQLOnlyTests =>
 
   protected def catalog(name: String): CatalogPlugin = {

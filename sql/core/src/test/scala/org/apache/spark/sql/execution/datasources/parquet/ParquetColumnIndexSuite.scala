@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ParquetColumnIndexSuite extends ParquetTest with SessionQueryTest {
+class ParquetColumnIndexSuite extends ParquetTest with SharedSparkSession {
   import testImplicits._
 
   private val actions: Seq[DataFrame => DataFrame] = Seq(

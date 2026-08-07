@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
 /**
  * End-to-end suite testing statistics collection and use on both entire table and columns.
  */
-class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SessionQueryTest {
+class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSparkSession {
   import testImplicits._
 
   test("estimates the size of a limit 0 on outer join") {
@@ -119,7 +119,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
 
       // There won't be histogram for empty column.
       Seq("true", "false").foreach { histogramEnabled =>
-        withConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
+        withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
           checkColStats(df, mutable.LinkedHashMap(expectedColStat))
         }
       }
@@ -197,7 +197,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
   }
 
   test("SPARK-33812: column stats round trip serialization with splitting histogram property") {
-    withConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key -> "10") {
+    withSQLConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key -> "10") {
       statsWithHgms.foreach { case (k, v) =>
         val roundtrip = CatalogColumnStat.fromMap("t", k, v.toMap(k))
         assert(roundtrip == Some(v))
@@ -212,7 +212,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
     checkColStats(df, stats)
 
     // test column stats with histograms
-    withConf(SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
+    withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
       checkColStats(df, statsWithHgms)
     }
   }
@@ -235,7 +235,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
 
     // There won't be histograms for null columns.
     Seq("true", "false").foreach { histogramEnabled =>
-      withConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
+      withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> histogramEnabled) {
         checkColStats(df, mutable.LinkedHashMap(expectedColStats: _*))
       }
     }
@@ -283,7 +283,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
     val table = "change_stats_set_location_table"
     val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier(table)))
     Seq(false, true).foreach { autoUpdate =>
-      withConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
           // analyze to get initial stats
@@ -322,7 +322,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
   test("change stats after insert command for datasource table") {
     val table = "change_stats_insert_datasource_table"
     Seq(false, true).foreach { autoUpdate =>
-      withConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
           // analyze to get initial stats
@@ -355,7 +355,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
   test("auto gather stats after insert command") {
     val table = "change_stats_insert_datasource_table"
     Seq(false, true).foreach { autoUpdate =>
-      withConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
           // insert into command
@@ -375,7 +375,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
   test("invalidation of tableRelationCache after inserts") {
     val table = "invalidate_catalog_cache_table"
     Seq(false, true).foreach { autoUpdate =>
-      withConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           spark.range(100).write.saveAsTable(table)
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
@@ -392,7 +392,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
   test("invalidation of tableRelationCache after alter table add partition") {
     val table = "invalidate_catalog_cache_table"
     Seq(false, true).foreach { autoUpdate =>
-      withConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTempDir { dir =>
           withTable(table) {
             val path = dir.getCanonicalPath
@@ -424,7 +424,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
   }
 
   test("Simple queries must be working, if CBO is turned on") {
-    withConf(SQLConf.CBO_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       withTable("TBL1", "TBL") {
         import org.apache.spark.sql.functions._
         val df = spark.range(1000L).select($"id",
@@ -728,7 +728,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
   test(s"CTAS should update statistics if ${SQLConf.AUTO_SIZE_UPDATE_ENABLED.key} is enabled") {
     val tableName = "spark_27694"
     Seq(false, true).foreach { updateEnabled =>
-      withConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> updateEnabled.toString) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> updateEnabled.toString) {
         withTable(tableName) {
           // Create a data source table using the result of a query.
           sql(s"CREATE TABLE $tableName USING parquet AS SELECT 'a', 'b'")
@@ -748,7 +748,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
       val tableName = "t1"
       val stagingDirName = ".test-staging-dir"
       val tableLocation = s"${tempDir.toURI}/$tableName"
-      withConf(
+      withSQLConf(
         SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true",
         "hive.exec.stagingdir" -> stagingDirName) {
         withTable("t1") {
@@ -781,7 +781,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
   Seq(true, false).foreach { caseSensitive =>
     test(s"SPARK-30903: Fail fast on duplicate columns when analyze columns " +
       s"- caseSensitive=$caseSensitive") {
-      withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val table = "test_table"
         withTable(table) {
           sql(s"CREATE TABLE $table (value string, name string) USING PARQUET")
@@ -799,7 +799,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
 
   test("SPARK-34119: Keep necessary stats after PruneFileSourcePartitions") {
     withTable("SPARK_34119") {
-      withConf(SQLConf.CBO_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
         sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
           "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
         sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
@@ -869,7 +869,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
   }
 
   test("SPARK-43383: Add rowCount statistics to LocalRelation") {
-    withConf("spark.sql.test.localRelationRowCount" -> "true") {
+    withSQLConf("spark.sql.test.localRelationRowCount" -> "true") {
       val optimizedPlan = spark.sql("select * from values(1),(2),(3),(4),(5),(6)")
         .queryExecution.optimizedPlan
       assert(optimizedPlan.isInstanceOf[LocalRelation])
@@ -918,7 +918,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Sessio
       rowCount = 2,
       size = Some(expectedSize))
 
-    withConf(SQLConf.CBO_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val df = classic.Dataset.ofRows(spark, statsPlan)
         // add some map-like operations which optimizer will optimize away, and make a divergence
         // for output between logical plan and optimized plan

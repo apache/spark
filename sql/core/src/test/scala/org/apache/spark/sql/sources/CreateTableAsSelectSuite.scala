@@ -24,10 +24,10 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf.BUCKETING_MAX_BUCKETS
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-class CreateTableAsSelectSuite extends DataSourceTest with SessionQueryTest {
+class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
   import testImplicits._
 
   private var path: File = null
@@ -248,7 +248,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SessionQueryTest {
 
     val maxNrBuckets: Int = 200000
     val catalog = spark.sessionState.catalog
-    withConf(BUCKETING_MAX_BUCKETS.key -> maxNrBuckets.toString) {
+    withSQLConf(BUCKETING_MAX_BUCKETS.key -> maxNrBuckets.toString) {
 
       // Within the new limit
       Seq(100001, maxNrBuckets).foreach(numBuckets => {

@@ -23,12 +23,12 @@ import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{st_asbinary, st_geogfromwkb, st_geomfromwkb, st_srid}
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{Geography, GeographyType, StructField, StructType}
 
 class ParquetGeoSuite
     extends ParquetCompatibilityTest
-    with SessionQueryTest {
+    with SharedSparkSession {
 
   import testImplicits._
 
@@ -141,7 +141,7 @@ class ParquetGeoSuite
     val repeatedValues = List.fill(10000)(wkbValues).flatten
 
     Seq(true, false).foreach { useDictionary =>
-      withConf(ParquetOutputFormat.ENABLE_DICTIONARY -> useDictionary.toString) {
+      withSQLConf(ParquetOutputFormat.ENABLE_DICTIONARY -> useDictionary.toString) {
         testReadWrite(repeatedValues)
       }
     }
@@ -161,7 +161,7 @@ class ParquetGeoSuite
     val df = spark.createDataFrame(rdd, schema)
 
     Seq(true, false).foreach { useDictionary =>
-      withConf(ParquetOutputFormat.ENABLE_DICTIONARY -> useDictionary.toString) {
+      withSQLConf(ParquetOutputFormat.ENABLE_DICTIONARY -> useDictionary.toString) {
         withTempDir { dir =>
           withAllParquetWriters {
             df.write.mode("overwrite").parquet(dir.getAbsolutePath)

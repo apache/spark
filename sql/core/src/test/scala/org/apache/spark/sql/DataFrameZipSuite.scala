@@ -20,10 +20,10 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.Rand
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.functions.{lit, rand, uniform}
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.MetadataBuilder
 
-class DataFrameZipSuite extends QueryTest with SessionQueryTest {
+class DataFrameZipSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("zip: select different columns from the same DataFrame") {

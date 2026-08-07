@@ -25,11 +25,11 @@ import org.apache.spark.sql.execution.{CoalescedPartitionSpec, CoalescedShuffleR
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.SessionQueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 
 /** Tests [[SQLLastAttemptMetric]] used by [[RDD]]s and [[Dataset]]s */
 class SQLLastAttemptMetricIntegrationSuite
-  extends SessionQueryTest
+  extends SharedSparkSession
   with SQLMetricsTestUtils {
   import testImplicits._
 
@@ -488,7 +488,7 @@ class SQLLastAttemptMetricIntegrationSuite
 
   test("ConvertToLocalRelation direct driver execution") {
     // Normally ConvertToLocalRelation is disabled in tests.
-    withConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
       val slam = SQLLastAttemptMetrics.createMetric(spark.sparkContext, "test SLAM")
       val df = Seq(1, 2, 3).toDF("a").filter(Column(incrementMetric(slam)))
 
@@ -533,7 +533,7 @@ class SQLLastAttemptMetricIntegrationSuite
 
   test("ConvertToLocalRelation manual optimizer triggering") {
     // Normally ConvertToLocalRelation is disabled in tests.
-    withConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
       val slam = SQLLastAttemptMetrics.createMetric(spark.sparkContext, "test SLAM")
       val df = Seq(1, 2, 3).toDF("a").filter(Column(incrementMetric(slam)))
       // Trigger the optimizer manually, which will trigger ConvertToLocalRelation
@@ -556,7 +556,7 @@ class SQLLastAttemptMetricIntegrationSuite
 
   test("ConvertToLocalRelation in explain") {
     // Normally ConvertToLocalRelation is disabled in tests.
-    withConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
       val slam = SQLLastAttemptMetrics.createMetric(spark.sparkContext, "test SLAM")
       val df = Seq(1, 2, 3).toDF("a").filter(Column(incrementMetric(slam)))
 
@@ -631,7 +631,7 @@ class SQLLastAttemptMetricIntegrationSuite
       .groupBy("key").count()
       .filter(stage2MetricExpr)
 
-    withConf(
+    withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2000") {
       df.collect()
@@ -661,7 +661,7 @@ class SQLLastAttemptMetricIntegrationSuite
   }
 
   test("WholeStageCodegenExec fallback to non-codegen") {
-    withConf(
+    withSQLConf(
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
       SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "1" // force fallback due to too large method
     ) {
