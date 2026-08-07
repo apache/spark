@@ -172,6 +172,14 @@ case class StatefulStreamlineAggregateExec(
       // Each output row from aggIter references the same underlying row.
       // It is the caller's responsibility to ensure that each row is consumed before the next
       // one is produced.
+      //
+      // flushDirtyWrites is aggIter's completion action, so it runs when aggIter is exhausted and
+      // BEFORE store.commit() in every mode below: Complete drains aggIter (line ~191) ahead of the
+      // commit iterator; Append drains it (~222) ahead of its own; Update chains it inside the
+      // outer CompletionIterator whose completion commits, and draining the outer drains aggIter
+      // first. This ordering is what lets flushDirtyWrites surface a state-write failure (see its
+      // rethrow) in time to fail the task before the batch commits -- a partial write can never be
+      // committed.
       var tmpRow: UnsafeRow = null
       val aggIter = CompletionIterator[UnsafeRow, Iterator[UnsafeRow]](
         baseIterator.map { row =>
@@ -278,12 +286,10 @@ case class StatefulStreamlineAggregateExec(
             incrementalEvictionIter.foreach { evictionIter =>
               allRemovalsTimeMs += timeTakenMs {
                 var numRemovalsCurrRecord = 0
-                // TODO(SC-173052): the evictionIter is a NextIterator, which means that
-                //  calling hasNext actually fetches the record and deletes it, which
-                //  increments the metrics. However, the side-effect of deletion should
-                //  only happen once next() is actually called. The mitigation for now
-                //  is to ensure the check that we haven't done more than the
-                //  incrementalCleanupFactor number of removals before calling hasNext.
+                // NOTE: EvictionIterator removes (and counts) a row inside hasNext, not next(), so
+                //  a bare hasNext already deletes and bumps the metrics. To stop at exactly
+                //  incrementalCleanupFactor removals per input we must re-check the count before
+                //  each hasNext rather than draining the iterator.
                 while (numRemovalsCurrRecord < incrementalCleanupFactor
                   && evictionIter.hasNext) {
                   // The removal happens inside of the iterator; in Update mode,

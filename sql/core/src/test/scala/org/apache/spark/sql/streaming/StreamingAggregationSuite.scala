@@ -1063,6 +1063,37 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
+  // Append mode is the one mode that drives the operator's eviction path: a windowed grouping key
+  // is emitted only once the watermark passes it, via EvictionIterator (which removes in hasNext).
+  // Mirrors the stateStoreSave Append test above so the streamline operator is held to the same
+  // watermark/eviction behaviour.
+  testWithAllStateVersions("streamline aggregation: append mode emits windows past the watermark",
+    streamlineEnabled) {
+    val inputData = MemoryStream[Int]
+
+    val aggWithWatermark = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(aggWithWatermark, Append)(
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
+      AddData(inputData, 3, 2, 1, 9),
+      // Nothing is emitted yet: no window has fallen fully below the watermark.
+      CheckLastBatch(),
+      AddData(inputData, 25), // Advance watermark to 15s; windows ending <= 15s are now evictable.
+      // Both closed windows are emitted once, past the watermark, and then evicted:
+      //   [0,5) has 1,2,3 -> count 3 ; [5,10) has 9 -> count 1.
+      CheckLastBatch((0, 3), (5, 1))
+    )
+    // Note: state-row *metrics* (e.g. updated rows) are not asserted here because the streamline
+    // operator writes state per input row rather than once per key per batch, so its counts
+    // legitimately differ from the micro-batch stateStoreSave operator. Output correctness -- what
+    // Append actually guarantees -- is covered by the CheckLastBatch assertions above.
+  }
+
   // The micro-batch aggregation operator (stateStoreSave) and the streamline operator share the
   // same StreamingAggregationStateManager and state format, so a checkpoint written by one can be
   // read by the other. The operator-name check in IncrementalExecution must therefore treat the
@@ -1094,10 +1125,11 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     }
   }
 
-  // Note: Append aggregation without a watermark is rejected at analysis time by
-  // UnsupportedOperationChecker (STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION), so the operator's
-  // own Append watermark check is a defensive internal invariant that a normal query never
-  // reaches -- there is no query shape that exercises it end to end, hence no test for it here.
+  // Note: the streamline operator's Append branch asserts a watermark is present, but Append
+  // aggregation WITHOUT a watermark is already rejected at analysis time by
+  // UnsupportedOperationChecker (STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION), so that assert is a
+  // defensive internal invariant no normal query reaches. The Append-WITH-watermark path is
+  // covered by the test above.
 
   @tailrec
   private def findStateSchemaNotCompatible(exc: Throwable):

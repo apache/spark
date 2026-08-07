@@ -71,9 +71,10 @@ object EvictionIterator {
       override def numRowsReadDuringEvictionSoFar: Long = rowsRead
       override def numRowsRemovedSoFar: Long = rowsRemoved
 
-      // The next row to evict, held so that hasNext can look ahead without removing it. The
-      // removal happens here rather than in next() because a caller may stop iterating early,
-      // and a row that has been reported as evicted must actually be gone from the store.
+      // The row hasNext has advanced to and already removed from the store, held so next() can
+      // return it. Removal happens in hasNext (not next()) so that a caller which stops iterating
+      // after hasNext -- without the matching next() -- still leaves the store consistent with the
+      // rows it was told are evicted; every row this iterator surfaces has already been removed.
       private var pending: Option[UnsafeRowPair] = None
 
       override def hasNext: Boolean = evictionPredicate match {

@@ -3762,11 +3762,12 @@ object SQLConf {
   val STREAMING_USE_STREAMLINE_AGGREGATOR =
     buildConf("spark.sql.streaming.useStreamlineAggregator")
       .internal()
-      .doc("When true, plan a streaming aggregation with the streamline aggregation operator, " +
-        "which merges each input row against state and emits immediately, instead of the " +
-        "microbatch operators that only emit once the batch ends. Real-Time Mode queries use " +
-        "the streamline operator regardless of this config; this exists so the operator can " +
-        "also be exercised under a microbatch trigger.")
+      .doc("Test/development only, not intended for production use. When true, plan a streaming " +
+        "aggregation with the streamline aggregation operator, which merges each input row " +
+        "against state and emits immediately, instead of the microbatch operators that only emit " +
+        "once the batch ends. Real-Time Mode queries use the streamline operator regardless of " +
+        "this config; this flag exists only so the operator can be exercised under an ordinary " +
+        "microbatch trigger in tests, and changes an aggregation's output timing when set.")
       .version("4.3.0")
       .booleanConf
       .createWithDefault(false)
@@ -3774,12 +3775,13 @@ object SQLConf {
   val STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR =
     buildConf("spark.sql.streaming.statefulOperator.incrementalCleanupFactor")
       .internal()
-      .doc("Specifies the number of records that are evicted from a stateful operator state " +
-        "store for every input record. When 0, no incremental cleanup is enabled, so all " +
-        "cleanup will happen at the end of the micro-batch. When k, k records are evicted for " +
-        "every input that is processed. If records remain in the state store at the end in " +
-        "the batch even after incremental cleanup, they will be synchronously removed before " +
-        "the batch completes.")
+      .doc("For a stateful operator that evicts by watermark, the number of eviction-eligible " +
+        "records to remove per input record processed, spreading eviction cost across the batch " +
+        "instead of paying it all at batch end. When 0, incremental cleanup is disabled and all " +
+        "eviction happens at batch end. When k, up to k eligible records are removed per input; " +
+        "any still-eligible records left over are removed at batch end. Only applies to modes " +
+        "that evict (e.g. Append/Update); has no effect in Complete mode, which never evicts. " +
+        "Currently read only by the streamline aggregation operator.")
       .version("4.3.0")
       .longConf
       .checkValue(_ >= 0, "The incremental cleanup factor must not be negative.")

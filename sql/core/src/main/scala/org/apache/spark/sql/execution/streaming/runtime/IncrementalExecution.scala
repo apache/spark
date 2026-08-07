@@ -604,7 +604,8 @@ class IncrementalExecution(
     }
 
     /**
-     * Returns true if the metadata of oldOpName is convertible to newOpName in one direction.
+     * Returns true if a checkpoint whose metadata records operator `oldOpName` may be reopened by a
+     * plan whose operator is `newOpName`, without tripping the operator-mismatch guard.
      *
      * A streaming aggregation may move between the micro-batch operator ([[StateStoreSaveExec]],
      * "stateStoreSave") and the streamline operator ([[StatefulStreamlineAggregateExec]]) in either
