@@ -2620,6 +2620,31 @@ class ColumnExpressionSuite extends SharedSparkSession {
       parameters = Map("errorMessage" -> "hello"))
   }
 
+  test("SPARK-58627: raise_error in a filter is not pushed through a join") {
+    withTempView("t1", "t2") {
+      Seq(1, 2, 3).toDF("a").createOrReplaceTempView("t1")
+      Seq(4, 5, 6).toDF("b").createOrReplaceTempView("t2")
+
+      // The join yields no rows, so the predicate is never evaluated and the query must not
+      // raise. Before SPARK-58627, RaiseError did not report throwable, so the predicate was
+      // pushed below the join and raise_error fired on the rows of t1.
+      checkAnswer(
+        spark.sql("SELECT * FROM t1 JOIN t2 ON t1.a = t2.b WHERE raise_error('boom') IS NULL"),
+        Seq.empty[Row])
+
+      // Control: the predicate is retained rather than dropped, so it still raises once the join
+      // actually produces rows to evaluate it on.
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.sql(
+            "SELECT * FROM t1 JOIN t2 ON t1.a = t2.b - 3 WHERE raise_error('boom') IS NULL")
+            .collect()
+        },
+        condition = "USER_RAISED_EXCEPTION",
+        parameters = Map("errorMessage" -> "boom"))
+    }
+  }
+
   test("SPARK-34677: negate/add/subtract year-month and day-time intervals") {
     import testImplicits._
     val df = Seq((Period.ofMonths(10), Duration.ofDays(10), Period.ofMonths(1), Duration.ofDays(1)))
