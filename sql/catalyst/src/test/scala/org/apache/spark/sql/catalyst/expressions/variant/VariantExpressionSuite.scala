@@ -1968,8 +1968,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(json == expected)
     }
 
-    // The single-argument constructor defaults `includeArrays` to true.
-    assert(new VariantStripNulls(Literal(parseJson("[1, null]"))).includeArrays == Literal(true))
+    // The optional `include_arrays` argument defaults to true in the function signature.
+    assert(VariantStripNullsExpressionBuilder.functionSignature.get.parameters.last.default
+      .contains(Literal.create(true, BooleanType)))
+
+    // include_arrays must be a constant; a non-foldable expression is rejected.
+    assert(VariantStripNulls(
+      Literal(parseJson("[1, null]")), BoundReference(0, BooleanType, nullable = true))
+      .checkInputDataTypes().isFailure)
 
     check("""{"a": 1, "b": null, "c": 3}""", """{"a":1,"c":3}""")
     check("[1, null, 3]", "[1,3]")
@@ -2011,7 +2017,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // SQL NULL variant input yields SQL NULL.
     checkEvaluation(
-      Cast(new VariantStripNulls(Literal.create(null, VariantType)), StringType), null)
+      Cast(VariantStripNulls(Literal.create(null, VariantType), Literal(true)), StringType),
+      null)
     // NULL `includeArrays` yields SQL NULL (the expression is null intolerant).
     checkEvaluation(
       Cast(

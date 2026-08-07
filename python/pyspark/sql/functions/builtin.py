@@ -23386,8 +23386,8 @@ def try_variant_array_append(
 @_try_remote_functions
 def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Column:
     """
-    Recursively removes null fields from variant objects and null elements from arrays, unless
-    `include_arrays` is False, in which case null elements in arrays are kept. Returns NULL if any
+    Recursively removes object fields and array elements whose value is a variant null, unless
+    `include_arrays` is False, in which case null array elements are kept. Returns NULL if any
     argument is NULL.
 
     .. versionadded:: 4.3.0
@@ -23417,6 +23417,10 @@ def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Colum
     [Row(r='{"a":1,"c":[1,null],"d":{"f":4}}')]
     >>> df.select(variant_strip_nulls(lit(None)).alias("r")).collect()
     [Row(r=None)]
+    >>> df2 = spark.createDataFrame([{'json': '{"a": null}'}, {'json': 'null'}])
+    >>> v2 = parse_json(df2.json)
+    >>> df2.select(to_json(variant_strip_nulls(v2)).alias("r")).collect()
+    [Row(r='{}'), Row(r='null')]
     """
     from pyspark.sql.classic.column import _to_java_column
 

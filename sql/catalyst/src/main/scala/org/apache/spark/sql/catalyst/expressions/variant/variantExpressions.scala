@@ -1650,45 +1650,32 @@ object VariantArrayAppendExpressionBuilder extends VariantArrayAppendExpressionB
 // scalastyle:on line.size.limit
 object TryVariantArrayAppendExpressionBuilder
     extends VariantArrayAppendExpressionBuilderBase(false)
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(v[, includeArrays]) - Recursively removes null fields from variant objects " +
-    "and null elements from arrays, unless `includeArrays` is false, in which case null " +
-    "elements in arrays are kept. Returns NULL if any argument is NULL.",
-  arguments = """
-    Arguments:
-      * v - A variant value to mutate.
-      * includeArrays - An optional boolean (default true).
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(parse_json('{"a": 1, "b": null, "c": 3}'));
-       {"a":1,"c":3}
-      > SELECT _FUNC_(parse_json('[1, null, 3]'));
-       [1,3]
-      > SELECT _FUNC_(parse_json('{"a": {"b": null, "c": [1, null]}}'));
-       {"a":{"c":[1]}}
-      > SELECT _FUNC_(parse_json('{"a": [1, null], "b": null}'), false);
-       {"a":[1,null]}
-      > SELECT _FUNC_(NULL);
-       NULL
-  """,
-  since = "4.3.0",
-  group = "variant_funcs"
-)
-// scalastyle:on line.size.limit
 case class VariantStripNulls(child: Expression, includeArrays: Expression)
     extends RuntimeReplaceable
     with ExpectsInputTypes
-    with BinaryLike[Expression] {
-
-  def this(child: Expression) = this(child, Literal(true))
+    with BinaryLike[Expression]
+    with QueryErrorsBase {
 
   override def left: Expression = child
   override def right: Expression = includeArrays
 
-  override def dataType: DataType = VariantType
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType, BooleanType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val result = super.checkInputDataTypes()
+    if (result.isFailure) {
+      result
+    } else if (!includeArrays.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("include_arrays"),
+          "inputType" -> toSQLType(includeArrays.dataType),
+          "inputExpr" -> toSQLExpr(includeArrays)))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
 
   override lazy val replacement: Expression = StaticInvoke(
     VariantExpressionEvalUtils.getClass,
@@ -1703,6 +1690,52 @@ case class VariantStripNulls(child: Expression, includeArrays: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): VariantStripNulls =
     copy(child = newLeft, includeArrays = newRight)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(v[, include_arrays]) - Recursively removes object fields and array elements " +
+    "whose value is a variant null, unless `include_arrays` is false, in which case null array " +
+    "elements are kept. Returns NULL if any argument is NULL.",
+  arguments = """
+    Arguments:
+      * v - A variant value to mutate.
+      * include_arrays - An optional boolean (default true). An expression that evaluates to a
+          boolean. Must be a constant.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('{"a": 1, "b": null, "c": 3}'));
+       {"a":1,"c":3}
+      > SELECT _FUNC_(parse_json('[1, null, 3]'));
+       [1,3]
+      > SELECT _FUNC_(parse_json('{"a": {"b": null, "c": [1, null]}}'));
+       {"a":{"c":[1]}}
+      > SELECT _FUNC_(parse_json('{"a": [1, null], "b": null}'), false);
+       {"a":[1,null]}
+      > SELECT _FUNC_(parse_json('{"a": null}'));
+       {}
+      > SELECT _FUNC_(parse_json('null'));
+       null
+      > SELECT _FUNC_(NULL);
+       NULL
+  """,
+  since = "4.3.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+object VariantStripNullsExpressionBuilder extends ExpressionBuilder {
+  override def functionSignature: Option[FunctionSignature] = {
+    val vArg = InputParameter("v")
+    val includeArraysArg =
+      InputParameter("include_arrays", Some(Literal.create(true, BooleanType)))
+    Some(FunctionSignature(Seq(vArg, includeArraysArg)))
+  }
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    assert(expressions.size == 2)
+    VariantStripNulls(expressions(0), expressions(1))
+  }
 }
 
 case class VariantExplode(child: Expression) extends UnaryExpression with Generator
