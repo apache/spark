@@ -472,7 +472,6 @@ object UnifiedMemoryManager extends Logging {
       if (conf.contains(IS_TESTING)) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
     val minSystemMemory = (reservedMemory * 1.5).ceil.toLong
     val checkDriverMemory = isDriver.isEmpty || isDriver.contains(true)
-    val checkExecutorMemory = isDriver.isEmpty || isDriver.contains(false)
     if (checkDriverMemory && systemMemory < minSystemMemory) {
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_DRIVER_MEMORY",
@@ -482,7 +481,7 @@ object UnifiedMemoryManager extends Logging {
           "config" -> config.DRIVER_MEMORY.key))
     }
     // SPARK-12759 Check executor memory to fail fast if memory is insufficient
-    if (checkExecutorMemory && conf.contains(config.EXECUTOR_MEMORY)) {
+    if (conf.contains(config.EXECUTOR_MEMORY)) {
       val executorMemory = conf.getSizeAsBytes(config.EXECUTOR_MEMORY.key)
       if (executorMemory < minSystemMemory) {
         throw new SparkIllegalArgumentException(
