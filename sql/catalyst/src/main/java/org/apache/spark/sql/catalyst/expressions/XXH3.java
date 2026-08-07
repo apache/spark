@@ -406,9 +406,10 @@ public final class XXH3 {
   };
 
   // Hex-writing siblings of the length-branch methods above: same arithmetic, but they encode
-  // the two lanes directly into the caller's hex buffer instead of returning a long[], so the
-  // hot hash128Hex path below allocates only that buffer. hash128 above is kept array-returning
-  // for callers that need the raw pair.
+  // the two lanes directly into the caller's hex buffer instead of returning a long[]. This
+  // avoids the result-pair array for these Into variants; hashLongAccumulate (>240 bytes,
+  // used by hashLong128Into below) still allocates its own accumulator. hash128 above is kept
+  // array-returning for callers that need the raw pair.
   private static void len1to3128Into(byte[] input, int len, long seed, byte[] hex) {
     int c1 = input[0] & 0xFF;
     int c2 = input[len >> 1] & 0xFF;
