@@ -72,4 +72,15 @@ class OptimizeJoinConditionSuite extends PlanTest {
       comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
     }
   }
+
+  test("SPARK-58384: preserve unrelated AND and OR nodes") {
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+    val condition = ($"a" === $"c") && (($"b" === $"d") || ($"a" === 1))
+    val originalQuery = x.join(y, Inner, Option(condition)).analyze.asInstanceOf[Join]
+
+    val optimized = OptimizeJoinCondition(originalQuery).asInstanceOf[Join]
+
+    assert(optimized.condition.get eq originalQuery.condition.get)
+  }
 }

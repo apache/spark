@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions.{And, EqualNullSafe, EqualTo, Expression, IsNull, Or, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
+import org.apache.spark.sql.catalyst.trees.TreePattern.{JOIN, OR}
 
 /**
  * Replaces `t1.id is null and t2.id is null or t1.id = t2.id` to `t1.id <=> t2.id`
@@ -35,19 +35,31 @@ object OptimizeJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   // Rewriting the pattern to EqualNullSafe maps NULL to FALSE, so only recurse through And/Or.
-  private def optimizeCondition(condition: Expression): Expression = condition match {
-    case Or(EqualTo(l, r), And(IsNull(c1), IsNull(c2)))
-      if (l.semanticEquals(c1) && r.semanticEquals(c2))
-        || (l.semanticEquals(c2) && r.semanticEquals(c1)) =>
-      EqualNullSafe(l, r)
-    case Or(And(IsNull(c1), IsNull(c2)), EqualTo(l, r))
-      if (l.semanticEquals(c1) && r.semanticEquals(c2))
-        || (l.semanticEquals(c2) && r.semanticEquals(c1)) =>
-      EqualNullSafe(l, r)
-    case And(left, right) =>
-      And(optimizeCondition(left), optimizeCondition(right))
-    case Or(left, right) =>
-      Or(optimizeCondition(left), optimizeCondition(right))
-    case other => other
+  private def optimizeCondition(condition: Expression): Expression = {
+    if (!condition.containsPattern(OR)) {
+      condition
+    } else {
+      condition match {
+        case Or(EqualTo(l, r), And(IsNull(c1), IsNull(c2)))
+          if (l.semanticEquals(c1) && r.semanticEquals(c2))
+            || (l.semanticEquals(c2) && r.semanticEquals(c1)) =>
+          EqualNullSafe(l, r)
+        case Or(And(IsNull(c1), IsNull(c2)), EqualTo(l, r))
+          if (l.semanticEquals(c1) && r.semanticEquals(c2))
+            || (l.semanticEquals(c2) && r.semanticEquals(c1)) =>
+          EqualNullSafe(l, r)
+        case and @ And(left, right) =>
+          val newLeft = optimizeCondition(left)
+          val newRight = optimizeCondition(right)
+          if (newLeft.fastEquals(left) && newRight.fastEquals(right)) and
+          else And(newLeft, newRight)
+        case or @ Or(left, right) =>
+          val newLeft = optimizeCondition(left)
+          val newRight = optimizeCondition(right)
+          if (newLeft.fastEquals(left) && newRight.fastEquals(right)) or
+          else Or(newLeft, newRight)
+        case other => other
+      }
+    }
   }
 }
