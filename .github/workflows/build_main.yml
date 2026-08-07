@@ -25,11 +25,30 @@ on:
     - '**'
 
 jobs:
+  count-commits:
+    name: Count commits
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+    outputs:
+      commit-count: ${{ steps.count.outputs.commit-count }}
+    steps:
+      - name: Check out the full branch history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Count commits on the pushed branch
+        id: count
+        run: echo "commit-count=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
   call-build-and-test:
     permissions:
       packages: write
     name: Run
-    # Skip pushes on apache/spark: post-merge CI on this integration/staging
-    # branch is disabled to save resources.
-    if: github.repository != 'apache/spark'
+    needs: count-commits
+    # GitHub Actions expressions do not support modulo. A non-negative decimal
+    # count is divisible by ten when it ends in 0.
+    if: >-
+      github.repository != 'apache/spark'
+      || endsWith(needs.count-commits.outputs.commit-count, '0')
     uses: ./.github/workflows/build_and_test.yml
