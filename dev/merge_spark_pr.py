@@ -1299,7 +1299,7 @@ COMPONENTS = (
     Component("DOC", ("DOCS", "DOCUMENTATION"), primary=True, jira_name="Documentation"),
     Component("DOCKER", primary=True, jira_name="Spark Docker"),
     Component("EC2", jira_name="EC2"),
-    Component("EXAMPLE", ("EXAMPLES",), jira_name="Examples"),
+    Component("EXAMPLES", ("EXAMPLE",), primary=True, jira_name="Examples"),
     Component("GRAPHX", primary=True, jira_name="GraphX"),
     Component("INFRA", ("PROJECT_INFRA",), primary=True, jira_name="Project Infra"),
     Component("IO", jira_name="Input/Output"),
