@@ -2237,7 +2237,9 @@ class SparkConnectClient(object):
         self._throw_if_invalid_tag(tag)
         if not hasattr(self.thread_local, "tags"):
             self.thread_local.tags = set()
-        self.thread_local.tags.remove(tag)
+        # Use discard, not remove: removing an absent tag is a documented no-op
+        # (see SparkSession.removeTag), matching the Classic behavior.
+        self.thread_local.tags.discard(tag)
 
     def get_tags(self) -> Set[str]:
         if not hasattr(self.thread_local, "tags"):
