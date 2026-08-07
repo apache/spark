@@ -206,6 +206,30 @@ if _have_hypothesis:
         (1, -_LONG_BOUND),
     )
 
+    # Triple edges for the chained-comparison tests. The eight NULL
+    # combinations are the point: a chain short-circuits, so whether a NULL
+    # operand's raise guard is reached depends on the earlier links. The
+    # ordering chains raise in pure Python on any NULL they reach (covered by
+    # ``_run``'s "both raised" equivalence), while ``x == y == z`` has a
+    # defined answer for every combination because Python's ``==`` never
+    # raises on None.
+    _LONG_TRIPLE_EDGES = (
+        (None, None, None),
+        (None, None, 0),
+        (None, 0, None),
+        (0, None, None),
+        (None, 0, 1),
+        (0, None, 1),
+        (0, 1, None),
+        (1, 0, None),
+        (0, 0, 0),
+        (0, 1, 2),
+        (2, 1, 0),
+        (1, 1, 1),
+        (_INT32_MIN, 0, _INT32_MAX),
+        (-_LONG_BOUND, 0, _LONG_BOUND),
+    )
+
     def _seed_examples(values, key="value"):
         """Stack one ``@example`` decorator per seed value."""
 
@@ -216,13 +240,19 @@ if _have_hypothesis:
 
         return wrapper
 
-    def _seed_pair_examples(pairs, keys=("x", "y")):
+    def _seed_tuple_examples(tuples, keys=("x", "y", "z")):
+        """Stack one ``@example`` decorator per seed tuple, zipped onto ``keys``."""
+
         def wrapper(method):
-            for v0, v1 in reversed(pairs):
-                method = example(**{keys[0]: v0, keys[1]: v1})(method)
+            for values in reversed(tuples):
+                method = example(**dict(zip(keys, values)))(method)
             return method
 
         return wrapper
+
+    def _seed_pair_examples(pairs, keys=("x", "y")):
+        """Two-argument ``_seed_tuple_examples``."""
+        return _seed_tuple_examples(pairs, keys)
 
 
 # ---- The UDF templates we exercise --------------------------------------
@@ -341,6 +371,73 @@ def eq_pair(x, y):
 def neq_pair(x, y):
     # Sister of ``eq_pair`` for ast.Compare(NotEq).
     return x != y
+
+
+def chained_bounds(x):
+    # Single-parameter chained comparison: ``ast.Compare`` with two ops, which
+    # Python evaluates as ``(0 < x) and (x < 10)`` with ``x`` evaluated once.
+    # No None guard, so a NULL input reaches the first link's raise guard --
+    # matching Python's TypeError -- and ``_run``'s "both raised" equivalence
+    # covers it.
+    return 0 < x < 10
+
+
+def chained_lt(x, y, z):
+    # Three-column ordering chain. The interesting rows are the ones where an
+    # earlier link is False and a later operand is NULL: Python short-circuits
+    # and returns False without ever comparing against the NULL, so the
+    # transpiled form must not raise there either.
+    return x < y < z
+
+
+def chained_ge(x, y, z):
+    # Reversed-direction chain, so the short-circuit fires on a different set
+    # of rows than ``chained_lt``.
+    return x >= y >= z
+
+
+def chained_eq(x, y, z):
+    # ``x == y == z`` -- equality never raises in Python, so every one of the
+    # eight NULL combinations has a defined boolean answer that the
+    # four-branch ``_lower_eq`` per link plus the short-circuit fold must
+    # reproduce exactly. This is the strongest NULL-semantics probe of the
+    # chained lowering.
+    return x == y == z
+
+
+def mixed_chain(x, y, z):
+    # Mixed operators in one chain (``ast.LtE`` then ``ast.Gt``), so the two
+    # links go through different lowering helpers.
+    return x <= y > z
+
+
+def in_literal(x):
+    # ``ast.Compare(In)`` over a constant tuple. Python's ``in`` is
+    # equality-based and never raises on a None probe (``None in (1, 2, 3)`` is
+    # False), unlike Spark's ``IN``, which returns NULL for a NULL probe.
+    return x in (1, 2, 3)
+
+
+def not_in_literal(x):
+    # Sister of ``in_literal`` for ast.Compare(NotIn); also exercises the
+    # negation, which is only exact because the ``in`` lowering never yields
+    # NULL.
+    return x not in (1, 2, 3)
+
+
+def in_with_none(x):
+    # A None element in the container: ``None in (1, None)`` is True in Python,
+    # while Spark's ``IN`` would return NULL for any non-matching probe if the
+    # NULL element were left in the list.
+    return x in (1, None)
+
+
+def in_and_compare(x, y):
+    # ``in`` as an ``and`` operand, so the container membership has to be
+    # recognized as a non-NULL boolean by the BoolOp gate. When the membership
+    # test is False, Python never evaluates ``y > 0``, so a NULL ``y`` must not
+    # raise.
+    return x in (1, 2) and y > 0
 
 
 # A lambda captured at module scope so ``inspect.getsource`` can read
@@ -465,6 +562,16 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             ]
         )
         return self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+
+    def _three_long_arg_df(self, x, y, z):
+        schema = StructType(
+            [
+                StructField("a", LongType(), nullable=True),
+                StructField("b", LongType(), nullable=True),
+                StructField("c", LongType(), nullable=True),
+            ]
+        )
+        return self.spark.createDataFrame([Row(a=x, b=y, c=z)], schema=schema)
 
     if _have_hypothesis:
 
@@ -663,6 +770,108 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             df = self._single_arg_df(value, LongType())
             transpiled, interpreted = self._run(lambda_plus_four, LongType(), df, "a")
             self.assertEqual(transpiled, interpreted, f"lambda_plus_four mismatch on {value!r}")
+
+        # ---- Chained comparisons ----------------------------------------
+        #
+        # Python's ``a OP b OP c`` short-circuits: when the first link is falsy
+        # the second is never evaluated, so a NULL operand it would have
+        # touched must not raise. ``_run`` catches the dangerous direction of a
+        # regression here -- if the transpiled form raises where interpreted
+        # Python does not, ``_run`` asserts on it. (The reverse direction,
+        # Python raising where the transpiled form returns a value, is
+        # tolerated by ``_run``, so it is pinned by explicit assertions in
+        # test_udf_transpile_unit.py instead.)
+
+        @_hyp_settings
+        @given(value=_long_strategy)
+        @_seed_examples(_LONG_EDGES)
+        def test_chained_bounds_matches_python(self, value):
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(chained_bounds, BooleanType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"chained_bounds mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy, z=_long_strategy)
+        @_seed_tuple_examples(_LONG_TRIPLE_EDGES)
+        def test_chained_lt_matches_python(self, x, y, z):
+            df = self._three_long_arg_df(x, y, z)
+            transpiled, interpreted = self._run(chained_lt, BooleanType(), df, "a", "b", "c")
+            self.assertEqual(
+                transpiled, interpreted, f"chained_lt mismatch on ({x!r}, {y!r}, {z!r})"
+            )
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy, z=_long_strategy)
+        @_seed_tuple_examples(_LONG_TRIPLE_EDGES)
+        def test_chained_ge_matches_python(self, x, y, z):
+            df = self._three_long_arg_df(x, y, z)
+            transpiled, interpreted = self._run(chained_ge, BooleanType(), df, "a", "b", "c")
+            self.assertEqual(
+                transpiled, interpreted, f"chained_ge mismatch on ({x!r}, {y!r}, {z!r})"
+            )
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy, z=_long_strategy)
+        @_seed_tuple_examples(_LONG_TRIPLE_EDGES)
+        def test_chained_eq_matches_python(self, x, y, z):
+            # Equality never raises in Python, so every NULL combination has a
+            # defined boolean answer on both sides -- no "both raised"
+            # escape hatch can mask a divergence here.
+            df = self._three_long_arg_df(x, y, z)
+            transpiled, interpreted = self._run(chained_eq, BooleanType(), df, "a", "b", "c")
+            self.assertEqual(
+                transpiled, interpreted, f"chained_eq mismatch on ({x!r}, {y!r}, {z!r})"
+            )
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy, z=_long_strategy)
+        @_seed_tuple_examples(_LONG_TRIPLE_EDGES)
+        def test_mixed_chain_matches_python(self, x, y, z):
+            df = self._three_long_arg_df(x, y, z)
+            transpiled, interpreted = self._run(mixed_chain, BooleanType(), df, "a", "b", "c")
+            self.assertEqual(
+                transpiled, interpreted, f"mixed_chain mismatch on ({x!r}, {y!r}, {z!r})"
+            )
+
+        # ---- `in` / `not in` ---------------------------------------------
+
+        @_hyp_settings
+        @given(value=_long_strategy)
+        @_seed_examples(_LONG_EDGES)
+        def test_in_literal_matches_python(self, value):
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(in_literal, BooleanType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"in_literal mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(value=_long_strategy)
+        @_seed_examples(_LONG_EDGES)
+        def test_not_in_literal_matches_python(self, value):
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(not_in_literal, BooleanType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"not_in_literal mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(value=_long_strategy)
+        @_seed_examples(_LONG_EDGES)
+        def test_in_with_none_matches_python(self, value):
+            # ``None in (1, None)`` is True in Python. The lowering answers the
+            # NULL-probe case with a literal and drops the NULL element from
+            # the emitted ``IN`` list, so this must agree for a NULL probe as
+            # well as for matching and non-matching values.
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(in_with_none, BooleanType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"in_with_none mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy)
+        @_seed_pair_examples(_BOOLEAN_PAIR_EDGES)
+        def test_in_and_compare_matches_python(self, x, y):
+            df = self._two_long_arg_df(x, y)
+            transpiled, interpreted = self._run(in_and_compare, BooleanType(), df, "a", "b")
+            self.assertEqual(
+                transpiled, interpreted, f"in_and_compare mismatch on (x={x!r}, y={y!r})"
+            )
 
 
 class UDFTranspileHypothesisGatingTests(unittest.TestCase):
