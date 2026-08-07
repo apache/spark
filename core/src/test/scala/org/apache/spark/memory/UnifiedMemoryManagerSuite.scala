@@ -19,7 +19,7 @@ package org.apache.spark.memory
 
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.storage.TestBlockId
@@ -269,26 +269,16 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set(TEST_RESERVED_MEMORY, reservedMemory)
       .set(EXECUTOR_MEMORY.key, (500L * 1024).toString)
 
-    val exception = intercept[IllegalArgumentException] {
+    val exception = intercept[SparkIllegalArgumentException] {
       UnifiedMemoryManager(conf, numCores = 1, isDriver = false)
     }
-    assert(exception.getMessage.contains("increase executor memory"))
-  }
-
-  test("SPARK-58513: driver validates executor memory") {
-    val systemMemory = 1024L * 1024
-    val reservedMemory = 300L * 1024
-    val memoryFraction = 0.8
-    val conf = new SparkConf()
-      .set(MEMORY_FRACTION, memoryFraction)
-      .set(TEST_MEMORY, systemMemory)
-      .set(TEST_RESERVED_MEMORY, reservedMemory)
-      .set(EXECUTOR_MEMORY.key, (reservedMemory / 2).toString)
-
-    val exception = intercept[IllegalArgumentException] {
-      UnifiedMemoryManager(conf, numCores = 1, isDriver = true)
-    }
-    assert(exception.getMessage.contains("increase executor memory"))
+    checkError(
+      exception,
+      condition = "INVALID_EXECUTOR_SYSTEM_MEMORY",
+      parameters = Map(
+        "systemMemory" -> systemMemory.toString,
+        "minSystemMemory" -> ((reservedMemory * 1.5).ceil.toLong).toString,
+        "config" -> EXECUTOR_MEMORY.key))
   }
 
   test("execution can evict cached blocks when there are multiple active tasks (SPARK-12155)") {

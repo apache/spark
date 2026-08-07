@@ -3962,6 +3962,13 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_EXECUTOR_SYSTEM_MEMORY" : {
+    "message" : [
+      "System memory <systemMemory> must be at least <minSystemMemory>.",
+      "Please increase heap size using the --executor-memory option or \"<config>\" in Spark configuration."
+    ],
+    "sqlState" : "F0000"
+  },
   "INVALID_EXPLODE_EMBEDDED_ARRAY_SCHEMA" : {
     "message" : [
       "User specified schema <schema> is invalid when the `explodeEmbeddedArray` option is enabled. The schema must either be a variant field, or a variant field plus a corrupt column field."

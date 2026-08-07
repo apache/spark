@@ -478,9 +478,9 @@ object UnifiedMemoryManager extends Logging {
             "config" -> config.DRIVER_MEMORY.key))
       } else {
         throw new SparkIllegalArgumentException(
-          errorClass = "INVALID_EXECUTOR_MEMORY",
+          errorClass = "INVALID_EXECUTOR_SYSTEM_MEMORY",
           messageParameters = Map(
-            "executorMemory" -> systemMemory.toString,
+            "systemMemory" -> systemMemory.toString,
             "minSystemMemory" -> minSystemMemory.toString,
             "config" -> config.EXECUTOR_MEMORY.key))
       }
