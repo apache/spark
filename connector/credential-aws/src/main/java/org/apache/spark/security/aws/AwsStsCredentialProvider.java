@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import com.google.common.annotations.VisibleForTesting;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
@@ -93,6 +94,13 @@ public class AwsStsCredentialProvider implements CredentialProvider {
    */
   private static final Pattern SESSION_NAME_INVALID_CHARS =
       Pattern.compile("[^a-zA-Z0-9_+=,.@\\-]");
+
+  /**
+   * Precompiled pattern for validating a configured STS session name.
+   * Must match {@code [\w+=,.@-]{2,64}} per AWS STS documentation.
+   */
+  private static final Pattern SESSION_NAME_VALID_PATTERN =
+      Pattern.compile("[\\w+=,.@\\-]{2,64}");
 
   /**
    * Immutable configuration holder that is safely published via the volatile
@@ -168,6 +176,11 @@ public class AwsStsCredentialProvider implements CredentialProvider {
     }
     if (roleSessionName != null && roleSessionName.isBlank()) {
       roleSessionName = null;
+    }
+    if (roleSessionName != null && !SESSION_NAME_VALID_PATTERN.matcher(roleSessionName).matches()) {
+      throw new IllegalArgumentException(
+          "Configuration key '" + CONF_SESSION_NAME + "' must match [\\w+=,.@-]{2,64}, got: "
+              + roleSessionName);
     }
     String regionStr = conf.get(CONF_REGION);
     if (regionStr != null) {
@@ -351,20 +364,29 @@ public class AwsStsCredentialProvider implements CredentialProvider {
       // Defensively strip any occurrence of the raw token from the STS error message
       // in case the service accidentally echoed it.
       String errorMsg = e.getMessage();
-      Throwable cause = e;
-      if (errorMsg != null && rawToken != null && errorMsg.contains(rawToken)) {
-        errorMsg = errorMsg.replace(rawToken, "[REDACTED]");
-        // The original exception's message contains the token -- do not pass it as
-        // the cause directly. Wrap with a sanitized SdkException preserving the
-        // deeper cause chain.
+      String redactedMsg = errorMsg;
+      if (redactedMsg != null && rawToken != null && redactedMsg.contains(rawToken)) {
+        redactedMsg = redactedMsg.replace(rawToken, "[REDACTED]");
+      }
+      // Walk the entire cause chain to check if the token leaked into any layer.
+      boolean tokenInAnyMessage = causeChainContainsToken(e, rawToken);
+      Throwable cause;
+      if (tokenInAnyMessage || (errorMsg != null && errorMsg.contains(rawToken))) {
+        // Drop the original cause chain entirely; replace with a sanitized wrapper.
         cause = SdkException.builder()
-            .message(errorMsg)
-            .cause(e.getCause())
+            .message(redactedMsg)
             .build();
+      } else {
+        cause = e;
       }
       throw new CredentialResolutionException(
           "Failed to assume role '" + cfg.roleArn + "' via AssumeRoleWithWebIdentity: "
-              + errorMsg, cause);
+              + redactedMsg, cause);
+    } catch (IllegalStateException e) {
+      // The SDK throws IllegalStateException when the client has been closed.
+      throw new CredentialResolutionException(
+          "Failed to assume role '" + cfg.roleArn + "' via AssumeRoleWithWebIdentity: "
+              + "the STS client has been closed", e);
     }
   }
 
@@ -375,6 +397,32 @@ public class AwsStsCredentialProvider implements CredentialProvider {
       return Duration.ofSeconds(cfg.durationSeconds);
     }
     return Duration.ofMinutes(15);
+  }
+
+  /**
+   * Walks the cause chain of the given throwable and checks whether the raw token
+   * appears in any layer's message. Used to decide whether the original exception
+   * chain is safe to preserve as a cause.
+   */
+  private static boolean causeChainContainsToken(Throwable root, String rawToken) {
+    if (rawToken == null) {
+      return false;
+    }
+    return causeChainStream(root)
+        .anyMatch(t -> t.getMessage() != null && t.getMessage().contains(rawToken));
+  }
+
+  /**
+   * Returns a sequential stream over the cause chain starting from {@code root}.
+   */
+  private static Stream<Throwable> causeChainStream(Throwable root) {
+    Stream.Builder<Throwable> builder = Stream.builder();
+    Throwable current = root;
+    while (current != null) {
+      builder.accept(current);
+      current = current.getCause();
+    }
+    return builder.build();
   }
 
   /**

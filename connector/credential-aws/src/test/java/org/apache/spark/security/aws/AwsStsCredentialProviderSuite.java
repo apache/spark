@@ -26,6 +26,7 @@ import java.util.ServiceLoader;
 import java.util.Set;
 
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -77,6 +78,17 @@ public class AwsStsCredentialProviderSuite {
       System.clearProperty("aws.region");
     } else {
       System.setProperty("aws.region", previousAwsRegion);
+    }
+  }
+
+  /** Suite-level field closed by tearDown to avoid resource leaks from real StsClients. */
+  private AwsStsCredentialProvider provider;
+
+  @AfterEach
+  void tearDown() {
+    if (provider != null) {
+      provider.close();
+      provider = null;
     }
   }
 
@@ -195,7 +207,7 @@ public class AwsStsCredentialProviderSuite {
     conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
     conf.put(AwsStsCredentialProvider.CONF_DURATION_SECONDS, "900");
 
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    provider = new AwsStsCredentialProvider();
     provider.init(conf);
 
     assertNotNull(provider.resolvedConfig());
@@ -208,7 +220,7 @@ public class AwsStsCredentialProviderSuite {
     conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
     conf.put(AwsStsCredentialProvider.CONF_DURATION_SECONDS, "43200");
 
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    provider = new AwsStsCredentialProvider();
     provider.init(conf);
 
     assertNotNull(provider.resolvedConfig());
@@ -220,7 +232,7 @@ public class AwsStsCredentialProviderSuite {
     Map<String, String> conf = new HashMap<>();
     conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
 
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    provider = new AwsStsCredentialProvider();
     provider.init(conf);
 
     IllegalStateException ex = assertThrows(IllegalStateException.class,
@@ -235,7 +247,7 @@ public class AwsStsCredentialProviderSuite {
     conf.put(AwsStsCredentialProvider.CONF_STS_ENDPOINT, "http://localhost:9000");
     conf.put(AwsStsCredentialProvider.CONF_REGION, "us-west-2");
 
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    provider = new AwsStsCredentialProvider();
     provider.init(conf);
 
     AwsStsCredentialProvider.ResolvedConfig cfg = provider.resolvedConfig();
@@ -251,7 +263,7 @@ public class AwsStsCredentialProviderSuite {
     conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
     conf.put(AwsStsCredentialProvider.CONF_STS_ENDPOINT, "http://localhost:9000");
 
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    provider = new AwsStsCredentialProvider();
     provider.init(conf);
 
     AwsStsCredentialProvider.ResolvedConfig cfg = provider.resolvedConfig();
@@ -265,7 +277,7 @@ public class AwsStsCredentialProviderSuite {
     Map<String, String> conf = new HashMap<>();
     conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
 
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    provider = new AwsStsCredentialProvider();
     provider.init(conf);
 
     AwsStsCredentialProvider.ResolvedConfig cfg = provider.resolvedConfig();
@@ -297,7 +309,7 @@ public class AwsStsCredentialProviderSuite {
     conf.put(AwsStsCredentialProvider.CONF_STS_ENDPOINT, "  http://localhost:9000  ");
     conf.put(AwsStsCredentialProvider.CONF_REGION, "  us-west-2  ");
 
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    provider = new AwsStsCredentialProvider();
     provider.init(conf);
 
     AwsStsCredentialProvider.ResolvedConfig cfg = provider.resolvedConfig();
@@ -318,7 +330,7 @@ public class AwsStsCredentialProviderSuite {
     conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "  my-session  ");
     conf.put(AwsStsCredentialProvider.CONF_STS_ENDPOINT, "http://localhost:9000");
 
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    provider = new AwsStsCredentialProvider();
     provider.init(conf);
 
     // Verify the stored config has the trimmed value
@@ -723,6 +735,137 @@ public class AwsStsCredentialProviderSuite {
     AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
     // Should not throw even when config is null
     provider.close();
+  }
+
+  // ========== Deep cause-chain token redaction (Item 1) ==========
+
+  @Test
+  public void testTokenInCauseChainIsRedacted() {
+    StsClient mockSts = mock(StsClient.class);
+    // Build a cause chain where the INNER cause contains the raw token,
+    // but the top-level message does NOT.
+    RuntimeException innerCause = new RuntimeException(
+        "Token validation failed: " + TEST_TOKEN);
+    StsException stsException = (StsException) StsException.builder()
+        .message("Access denied for role")
+        .cause(innerCause)
+        .build();
+    when(mockSts.assumeRoleWithWebIdentity(any(AssumeRoleWithWebIdentityRequest.class)))
+        .thenThrow(stsException);
+
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider(
+        mockSts, TEST_ROLE_ARN, "test-session", null);
+
+    UserContext user = new UserContext(TEST_PRINCIPAL, TEST_ISSUER, TEST_TOKEN,
+        Instant.now(), Instant.now().plusSeconds(300));
+
+    CredentialResolutionException ex = assertThrows(CredentialResolutionException.class,
+        () -> p.resolve(user, TEST_TARGET));
+
+    // Top-level message must not contain the raw token
+    assertFalse(ex.getMessage().contains(TEST_TOKEN),
+        "Raw token must not appear in top-level exception message");
+
+    // Walk the entire cause chain and assert the token is absent everywhere
+    Throwable current = ex.getCause();
+    while (current != null) {
+      if (current.getMessage() != null) {
+        assertFalse(current.getMessage().contains(TEST_TOKEN),
+            "Raw token must not appear in any cause message, but found in: "
+                + current.getClass().getSimpleName());
+      }
+      current = current.getCause();
+    }
+  }
+
+  // ========== Session name validation (Item 3) ==========
+
+  @Test
+  public void testInitWithValidCustomSessionName() {
+    Map<String, String> conf = new HashMap<>();
+    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "valid_session+=,.@-name");
+
+    provider = new AwsStsCredentialProvider();
+    provider.init(conf);
+
+    assertEquals("valid_session+=,.@-name", provider.resolvedConfig().roleSessionName);
+  }
+
+  @Test
+  public void testInitWithInvalidSessionNameContainingSpace() {
+    Map<String, String> conf = new HashMap<>();
+    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "bad session");
+
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        () -> p.init(conf));
+    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME),
+        "Error must name the config key");
+    assertTrue(ex.getMessage().contains("bad session"),
+        "Error must echo the bad value");
+  }
+
+  @Test
+  public void testInitWithInvalidSessionNameContainingQuestionMark() {
+    Map<String, String> conf = new HashMap<>();
+    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "bad?name");
+
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        () -> p.init(conf));
+    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME));
+  }
+
+  @Test
+  public void testInitWithSessionNameTooShort() {
+    Map<String, String> conf = new HashMap<>();
+    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "x");
+
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        () -> p.init(conf));
+    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME));
+    assertTrue(ex.getMessage().contains("x"));
+  }
+
+  @Test
+  public void testInitWithSessionNameTooLong() {
+    Map<String, String> conf = new HashMap<>();
+    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "a".repeat(65));
+
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        () -> p.init(conf));
+    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME));
+  }
+
+  // ========== resolve() after close() (Item 5) ==========
+
+  @Test
+  public void testResolveAfterCloseThrowsCredentialResolutionException() {
+    StsClient mockSts = mock(StsClient.class);
+    when(mockSts.assumeRoleWithWebIdentity(any(AssumeRoleWithWebIdentityRequest.class)))
+        .thenThrow(new IllegalStateException("client has been closed"));
+
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider(
+        mockSts, TEST_ROLE_ARN, "test-session", null);
+    p.close();
+
+    UserContext user = new UserContext(TEST_PRINCIPAL, TEST_ISSUER, TEST_TOKEN,
+        Instant.now(), Instant.now().plusSeconds(300));
+
+    CredentialResolutionException ex = assertThrows(CredentialResolutionException.class,
+        () -> p.resolve(user, TEST_TARGET));
+
+    assertTrue(ex.getMessage().contains("closed"),
+        "Message should indicate the client was closed");
+    assertFalse(ex.getMessage().contains(TEST_TOKEN),
+        "Raw token must never appear in exception messages");
   }
 
   // ========== Helpers ==========
