@@ -84,7 +84,11 @@ private class TestRequirementFailingProvider extends HadoopDelegationTokenProvid
 
   override def delegationTokensRequired(
       sparkConf: SparkConf, hadoopConf: Configuration): Boolean = {
-    throw new RuntimeException("Simulated provider requirement failure")
+    if (sparkConf.getBoolean(
+        "spark.security.credentials.test-requirement-failing.enabled", false)) {
+      throw new RuntimeException("Simulated provider requirement failure")
+    }
+    false
   }
 
   override def obtainDelegationTokens(
@@ -164,7 +168,9 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
   }
 
   test("provider requirement failure does not prevent other providers from running") {
-    val manager = new HadoopDelegationTokenManager(baseConf, hadoopConf, null)
+    val sparkConf = baseConf
+      .set("spark.security.credentials.test-requirement-failing.enabled", "true")
+    val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
 
     assert(manager.renewalEnabled)
 
@@ -179,6 +185,7 @@ class NonKerberosCredentialsSuite extends SparkFunSuite {
       .set("spark.security.credentials.test-direct.enabled", "false")
       .set("spark.security.credentials.test-failing.enabled", "false")
       .set("spark.security.credentials.test-noexpiry.enabled", "false")
+      .set("spark.security.credentials.test-requirement-failing.enabled", "true")
     val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
 
     assert(!manager.renewalEnabled)
