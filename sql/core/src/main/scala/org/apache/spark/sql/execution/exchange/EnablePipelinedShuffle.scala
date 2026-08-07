@@ -42,10 +42,8 @@ import org.apache.spark.sql.execution.SparkPlan
  */
 case class EnablePipelinedShuffle() extends Rule[SparkPlan] {
 
-  private val confKey = "spark.sql.pipelinedShuffle.enabled"
-
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (conf.getConfString(confKey, "false").toBoolean != true) return plan
+    if (!conf.pipelinedShuffleEnabled) return plan
     // Single-executor only, like v1's rule: the validated transport (the in-process channel
     // manager) requires producer and consumer in one JVM. (The pipelined machinery itself is
     // not local-only -- the RPC streaming transport is cross-executor -- but batch queries

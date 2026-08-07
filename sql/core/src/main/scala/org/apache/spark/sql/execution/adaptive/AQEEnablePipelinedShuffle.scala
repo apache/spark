@@ -59,10 +59,8 @@ import org.apache.spark.sql.execution.joins.ShuffledJoin
  */
 case class AQEEnablePipelinedShuffle() extends Rule[SparkPlan] {
 
-  private val confKey = "spark.sql.pipelinedShuffle.enabled"
-
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (conf.getConfString(confKey, "false").toBoolean != true) return plan
+    if (!conf.pipelinedShuffleEnabled) return plan
     // Single-executor only, like v1's AQE rule: the validated transport (the in-process
     // channel manager) requires producer and consumer in one JVM.
     if (plan.session == null || !plan.session.sparkContext.isLocal) return plan
