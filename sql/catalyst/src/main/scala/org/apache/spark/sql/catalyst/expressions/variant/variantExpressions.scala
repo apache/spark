@@ -1084,6 +1084,13 @@ case class VariantSet(
     val result = super.checkInputDataTypes()
     if (result.isFailure) {
       result
+    } else if (!createIfMissing.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("create_if_missing"),
+          "inputType" -> toSQLType(createIfMissing.dataType),
+          "inputExpr" -> toSQLExpr(createIfMissing)))
     } else if (value.dataType == NullType) {
       TypeCheckResult.TypeCheckSuccess
     } else if (!VariantGet.checkDataType(value.dataType, allowStructsAndMaps = false)) {
@@ -1219,7 +1226,7 @@ abstract class VariantSetExpressionBuilderBase(failOnError: Boolean) extends Exp
           path should start with `$` and is followed by one or more segments like `[123]`,
           `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
       * val - Any expression castable to variant.
-      * create_if_missing - An optional boolean (default true).
+      * create_if_missing - An optional boolean (default true). Must be a constant.
   """,
   examples = """
     Examples:
@@ -1260,7 +1267,7 @@ object VariantSetExpressionBuilder extends VariantSetExpressionBuilderBase(true)
           path should start with `$` and is followed by one or more segments like `[123]`,
           `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
       * val - Any expression castable to variant.
-      * create_if_missing - An optional boolean (default true).
+      * create_if_missing - An optional boolean (default true). Must be a constant.
   """,
   examples = """
     Examples:

@@ -486,6 +486,11 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     assert(intercept[AnalysisException] {
       sql("SELECT variant_set(parse_json('{}'), '$.a', named_struct('x', 1))")
     }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+
+    // A non-constant create_if_missing is rejected at analysis.
+    assert(intercept[AnalysisException] {
+      sql("SELECT variant_set(parse_json('{\"a\": 1}'), '$.a', 2, c) FROM VALUES (true) AS t(c)")
+    }.getCondition == "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT")
   }
 
   test("variant_set with dynamic arguments") {
