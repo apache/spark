@@ -142,7 +142,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // A partial aggregate is always present for the grouped queries these tests use.
     assert(partialAggs.nonEmpty, "expected a partial HashAggregateExec in the plan")
     val counters = AggCounters(
-      skipped = partialAggs.map(_.metrics("numBypassingRows").value).sum,
+      // The metric is only registered on aggregates the feature applies to; an aggregate without
+      // it bypassed nothing.
+      skipped = partialAggs.map(_.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)).sum,
       partialOutputRows = partialAggs.map(_.metrics("numOutputRows").value).sum,
       spillBytes = partialAggs.map(_.metrics("spillSize").value).sum,
       tasksFallBacked = partialAggs.map(_.metrics("numTasksFallBacked").value).sum)
@@ -162,7 +164,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     df.collect()
     val byKeyCount = collect(df.queryExecution.executedPlan) {
       case agg: HashAggregateExec if agg.aggregateExpressions.forall(_.mode == Partial) =>
-        agg.groupingExpressions.length -> agg.metrics("numBypassingRows").value
+        agg.groupingExpressions.length ->
+          agg.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)
     }.groupBy(_._1).map { case (n, pairs) => n -> pairs.map(_._2).sum }
     checkAgainstReference(df, build)
     byKeyCount
@@ -264,10 +267,13 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("results unchanged with nullable grouping keys") {
+    // Nulls are sparse enough (1 in 40) that the keys stay close to unique and the input really
+    // does bypass; a denser null key would lift the compaction ratio above the threshold and the
+    // test would never engage the feature.
     checkAdaptiveMatchesReference { () =>
       spark.range(0, 400, 1, 1)
         .select(
-          when($"id" % 4 === 0, lit(null)).otherwise($"id") as "k",
+          when($"id" % 40 === 0, lit(null)).otherwise($"id") as "k",
           $"id" as "v")
         .groupBy($"k")
         .agg(sum($"v") as "s", count(lit(1)) as "c")
@@ -489,6 +495,12 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   // heuristic guarding its *static* row sampling, not a correctness requirement. Our decision is
   // made at runtime from the observed compaction ratio, so we deliberately do not port that
   // exclusion. These tests assert results stay correct with the exclusion absent.
+  //
+  // The ROLLUP and CUBE cases below use two grouping columns, where the grand-total set keeps the
+  // compaction ratio high enough that they decline to bypass -- they cover the eligible-but-
+  // declining side. (Widening the rollup lowers the ratio: with five distinct columns the same
+  // shape does bypass.) The GROUPING SETS and multi-distinct tests, and `pass-through fires for
+  // high-cardinality input below an Expand`, cover an Expand that bypasses.
 
   test("results unchanged for ROLLUP (Expand below partial aggregate)") {
     checkAdaptiveMatchesReference { () =>
@@ -509,15 +521,18 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("results unchanged for GROUPING SETS (Expand below partial aggregate)") {
+    // No `()` grouping set, and both keys distinct, so every expanded row is a fresh key and the
+    // input genuinely bypasses. A grand-total set would collapse all rows into one group and lift
+    // the compaction ratio above the threshold (see the ROLLUP and CUBE tests below).
     withTempView("t") {
       spark.range(0, 400, 1, 1)
-        .select(($"id" % 180) as "k1", ($"id" % 6) as "k2", $"id" as "v")
+        .select($"id" as "k1", ($"id" + 1000) as "k2", $"id" as "v")
         .createOrReplaceTempView("t")
       checkAdaptiveMatchesReference { () =>
         spark.sql(
           """SELECT k1, k2, sum(v) AS s, count(1) AS c
             |FROM t
-            |GROUP BY k1, k2 GROUPING SETS ((k1, k2), (k1), ())""".stripMargin)
+            |GROUP BY k1, k2 GROUPING SETS ((k1, k2), (k1), (k2))""".stripMargin)
       }
     }
   }
@@ -539,6 +554,45 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     checkAdaptiveMatchesReference { () =>
       spark.range(0, 100, 1, 2).union(spark.range(100, 200, 1, 2)).groupBy("id").count()
     }
+  }
+
+  test("both execution paths agree on an order-sensitive aggregate") {
+    // Bypassing emits a group's streamed rows ahead of the ones its map still holds, so
+    // `first`/`last` see a different merge order than an unbypassed run. Whether that order is
+    // guaranteed is a separate question -- what must hold is that the generated and interpreted
+    // paths agree, or `spark.sql.codegen.wholeStage` would be observable in the result.
+    //
+    // Key -1 takes the first and last input rows; the rest are distinct, so the bypass fires early
+    // and leaves row 0 in the map while row 8 streams past it.
+    val query = () => spark.range(0, 9, 1, 1)
+      .select(
+        when($"id" === 0 || $"id" === 8, lit(-1L)).otherwise($"id") as "k",
+        $"id" as "v")
+      .groupBy($"k")
+      .agg(first($"v") as "f", last($"v") as "l")
+
+    val results = for {
+      wholeStage <- Seq(true, false)
+      twoLevelMap <- Seq(true, false)
+      forceSpill <- Seq(true, false)
+    } yield {
+      val spillConf = if (forceSpill) {
+        Seq("spark.sql.TungstenAggregate.testFallbackStartsAt" -> forceSpillFallback)
+      } else {
+        Nil
+      }
+      withSQLConf(
+        (Seq(
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "2") ++
+          spillConf ++ fixedPlanConfs): _*) {
+        query().collect().toSeq.sortBy(_.getLong(0))
+      }
+    }
+    assert(results.distinct.length == 1,
+      s"the execution paths disagree: ${results.map(_.mkString("[", ",", "]")).distinct}")
   }
 
   test("results unchanged below a generator that cannot yield mid-fan-out") {

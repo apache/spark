@@ -501,7 +501,15 @@ class TungstenAggregationIterator(
 
   override final def next(): UnsafeRow = {
     if (hasNext) {
-      val res = if (sortBased && sortedInputHasNewGroup) {
+      // Pass-through rows come first, matching the generated path, where a bypassed row is emitted
+      // from inside the build loop and the frozen maps are only drained afterwards. The two paths
+      // have to agree: otherwise `spark.sql.codegen.wholeStage` would be observable in the result
+      // of an order-sensitive aggregate such as `first`/`last`.
+      val res = if (passThroughHasNext) {
+        // Adaptive partial aggregation bypassed partial aggregation: emit the remaining input
+        // rows as single-row partial buffers.
+        nextPassThroughOutput()
+      } else if (sortBased && sortedInputHasNewGroup) {
         // Process the current group.
         processCurrentSortedGroup()
         // Generate output row for the current group.
@@ -510,8 +518,9 @@ class TungstenAggregationIterator(
         sortBasedAggregationBuffer.copyFrom(initialAggregationBuffer)
 
         outputRow
-      } else if (mapIteratorHasNext) {
-        // We did not fall back to sort-based aggregation.
+      } else {
+        // We did not fall back to sort-based aggregation; `hasNext` guarantees the map iterator
+        // has a row here.
         val result =
           generateOutput(
             aggregationBufferMapIterator.getKey,
@@ -524,17 +533,13 @@ class TungstenAggregationIterator(
         if (!mapIteratorHasNext) {
           // If there is no input from aggregationBufferMapIterator, we copy current result.
           val resultCopy = result.copy()
-          // Then, we free the map. Pass-through (if any) does not use the map.
+          // Then, we free the map. Pass-through, which runs before this, does not use the map.
           hashMap.free()
 
           resultCopy
         } else {
           result
         }
-      } else {
-        // Adaptive partial aggregation bypassed partial aggregation: emit the remaining input
-        // rows as single-row partial buffers.
-        nextPassThroughOutput()
       }
 
       numOutputRows += 1

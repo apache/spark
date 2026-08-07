@@ -72,9 +72,16 @@ case class HashAggregateExec(
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "avgHashProbe" ->
       SQLMetrics.createAverageMetric(sparkContext, "avg hash probes per key"),
-    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks"),
-    "numBypassingRows" ->
-      SQLMetrics.createMetric(sparkContext, "number of bypassing rows"))
+    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks")
+  ) ++ {
+    // Only the aggregates that can actually bypass report this, so the rest do not show a
+    // constant 0 in the SQL UI (see `UnionExec.metrics` for the same approach).
+    if (adaptivePartialAggEnabled) {
+      Map("numBypassingRows" -> SQLMetrics.createMetric(sparkContext, "number of bypassing rows"))
+    } else {
+      Map.empty[String, SQLMetric]
+    }
+  }
 
   // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
   // map and/or the sort-based aggregation once it has processed a given number of input rows.
@@ -96,7 +103,8 @@ case class HashAggregateExec(
     val avgHashProbe = longMetric("avgHashProbe")
     val aggTime = longMetric("aggTime")
     val numTasksFallBacked = longMetric("numTasksFallBacked")
-    val numBypassingRows = longMetric("numBypassingRows")
+    // Registered only when the feature applies, and only read from the pass-through path.
+    val numBypassingRows = if (adaptivePartialAggEnabled) longMetric("numBypassingRows") else null
 
     child.execute().mapPartitionsWithIndex { (partIndex, iter) =>
 
@@ -159,22 +167,30 @@ case class HashAggregateExec(
    *     supported by passing its incoming buffer through unchanged, but that is left for later.
    *   - grouping keys present: a global aggregation produces a single output row, so partial
    *     aggregation achieves the maximum reduction and must never be bypassed.
-   *   - DISTINCT aggregate functions are allowed: the intermediate `PartialMerge` phase of the
-   *     multi-phase distinct plan is not `Partial` mode (and requires a distribution), so it always
-   *     aggregates and de-duplicates, and the passed-through rows from the distinct `Partial` phase
+   *   - DISTINCT aggregate functions are allowed: the intermediate phase of the multi-phase
+   *     distinct plan mixes `PartialMerge` with `Partial`, so the mode check excludes it and it
+   *     always aggregates and de-duplicates. The rows reaching the distinct `Partial` phase
    *     therefore carry exactly one distinct value each.
+   *   - batch only: a streaming partial aggregate keeps state across batches, and it is built
+   *     with all-`Partial` modes and no required distribution, so it would otherwise qualify.
    */
   private val adaptivePartialAggEnabled: Boolean = {
     conf.adaptivePartialAggregationEnabled &&
       groupingExpressions.nonEmpty &&
-      // Only the pre-shuffle partial aggregation has a downstream `Final` to merge passed-through
-      // single-row buffers. `requiredChildDistributionExpressions` is `None` exactly for that
-      // pre-shuffle phase and `Some` for the `Final`/`Complete` phase. This check is what keeps a
-      // group-by-only aggregate (no aggregate functions, so an empty `aggregateExpressions`) from
-      // being admitted vacuously: `aggregateExpressions.forall(_.mode == Partial)` alone is true
-      // for the empty list, which would wrongly make the `Final` phase eligible as well.
-      requiredChildDistributionExpressions.isEmpty &&
-      aggregateExpressions.forall(a => a.mode == Partial)
+      // Streaming aggregation carries state across batches and its partial phase also has no
+      // required distribution, so keep this batch-only. The static sibling
+      // `spark.sql.execution.bypassPartialAggregation` likewise stays away from it.
+      !isStreaming &&
+      // Every aggregate function must be in `Partial` mode, so a downstream `Final` is there to
+      // merge the passed-through single-row buffers. This is also what excludes the intermediate
+      // phase of a DISTINCT plan, whose modes are `PartialMerge ++ Partial`.
+      aggregateExpressions.forall(a => a.mode == Partial) &&
+      // A group-by-only aggregate has no aggregate functions at all, so the `forall` above is
+      // vacuously true for both its phases. `requiredChildDistributionExpressions` tells them
+      // apart: the `Final` phase requires a distribution, the pre-shuffle phase does not. (It is
+      // not a general pre-shuffle test -- `AggUtils.planAggregateWithOneDistinct` leaves it `None`
+      // on an aggregate that sits after a shuffle -- but the mode check covers that case.)
+      requiredChildDistributionExpressions.isEmpty
   }
 
   // The number of rows between two compaction-ratio evaluations, and the ratio below which the
@@ -810,7 +826,15 @@ case class HashAggregateExec(
 
   // Blocking operators normally suppress the child's `shouldStop()` check because they buffer all
   // output. With adaptive partial aggregation, pass-through rows are appended to the output buffer
-  // while consuming child input, so the stop check must be re-enabled to keep the buffer bounded.
+  // while consuming child input, so the stop check is re-enabled to let the child yield between
+  // rows.
+  //
+  // This bounds the buffer only as far as the child honours it. A one-to-many child that does not
+  // check `shouldStop()` inside its fan-out -- `GenerateExec` emits `for (index ...) { consume }`
+  // and `while (iterator.hasNext()) { consume }` with no check -- appends every row produced from
+  // one input row before it can yield. Those rows used to accumulate in the spillable aggregation
+  // map; once pass-through is active they accumulate in `BufferedRowIterator.currentRows`, which
+  // is not spillable, so a very wide expansion trades spill I/O for heap.
   override def needStopCheck: Boolean = adaptivePartialAggEnabled
 
   // Blocking operators normally do not copy their result because every output row is drained (via
