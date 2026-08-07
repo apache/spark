@@ -394,29 +394,25 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
 }
 
 /**
- * A higher-order function whose result type is its input argument's type, because it returns a
- * subset or reordering of the input rather than the lambda's values. `filter`, `map_filter` and
- * `array_sort` are the members: the lambda is a predicate or comparator that selects or orders the
- * input elements, so the output collection has the same type as the input. The shared `dataType`
- * is provided here.
+ * A higher-order function whose result type is its argument's type, because it returns a subset or
+ * reordering of the input rather than the lambda's values. Members: `filter`, `map_filter`,
+ * `array_sort` (e.g. `filter(array<int>, ...) => array<int>`). Provides the shared `dataType`.
  *
- * This is the counterpart of [[ResultTypeFromFunction]], and the distinction is a genuine property
- * of the expression rather than of any particular evaluation: contrast `filter`, which keeps its
- * input's type, with `transform`, whose type follows the lambda.
+ * The counterpart is [[ResultTypeFromFunction]]; the split is a real property of the expression,
+ * not of any evaluation: `filter` keeps its input's type, `transform`'s type follows the lambda.
  */
 trait ResultTypeFromArgument extends SimpleHigherOrderFunction {
   override def dataType: DataType = argument.dataType
 }
 
 /**
- * A higher-order function whose result type is derived from its lambda's body rather than from its
- * input argument. `transform`, `transform_keys`, `transform_values`, `zip_with` and `map_zip_with`
- * build a collection of the lambda's values, and `aggregate` returns its `finish` lambda's value.
+ * A higher-order function whose result type follows its lambda, not its argument. Members:
+ * `transform`, `transform_keys`, `transform_values`, `zip_with`, `map_zip_with`, `aggregate`, and
+ * the predicates `exists` / `forall` (whose boolean lambda gives a boolean result).
  *
- * Each member computes its own `dataType` (an array of the element type, a map re-keyed or
- * re-valued, the fold's result type, ...), so this trait carries no shared implementation; it is a
- * marker that classifies the expression, the counterpart of [[ResultTypeFromArgument]]. Boolean
- * predicates (`exists`, `forall`) are a third case and are marked [[Predicate]] instead.
+ * Each member computes its own `dataType` (array of the element type, a re-keyed/re-valued map, the
+ * fold result, ...), so this is a marker with no shared implementation - the counterpart of
+ * [[ResultTypeFromArgument]].
  */
 trait ResultTypeFromFunction extends HigherOrderFunction
 
@@ -919,7 +915,7 @@ case class ArrayExists(
     argument: Expression,
     function: Expression,
     followThreeValuedLogic: Boolean)
-  extends ArrayBasedSimpleHigherOrderFunction with Predicate {
+  extends ArrayBasedSimpleHigherOrderFunction with Predicate with ResultTypeFromFunction {
 
   def this(argument: Expression, function: Expression) = {
     this(
@@ -1057,7 +1053,7 @@ object ArrayExists {
 case class ArrayForAll(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with Predicate {
+  extends ArrayBasedSimpleHigherOrderFunction with Predicate with ResultTypeFromFunction {
 
   override def nullable: Boolean =
       super.nullable || function.nullable

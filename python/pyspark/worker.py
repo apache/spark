@@ -2995,30 +2995,19 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         import pyarrow as pa
         import pyarrow.compute as pc
 
-        # Element-wise UDFs back Python UDFs used inside higher-order function lambdas (e.g.
-        # ``transform(arr, x -> plus_one(x))``). ExtractPythonUDFFromLambda rewrites such a
-        # lambda so the UDF is applied to the *whole array* outside the lambda; each argument
-        # therefore arrives as an ``array<T>`` column and each result must be an ``array<R>``
-        # of exactly the same shape (same length per row, same null rows) so that the
-        # higher-order function can zip results positionally beside the input elements.
-        #
-        # Rather than looping over rows in Python, flatten the list columns and evaluate the
-        # UDF once over the concatenated elements of the entire batch, then re-nest the
-        # results using the input's offsets. That makes the number of Python-level calls
-        # proportional to the number of *elements* in the batch with a single crossing of the
-        # Arrow boundary, instead of one crossing per row.
+        # Element-wise UDFs back higher-order lambdas like transform(arr, x -> udf(x)).
+        # ExtractPythonUDFFromLambda rewrites them so the UDF receives *all* array elements
+        # at once (as ``array<T>``) rather than per-element. Flatten once, evaluate once over
+        # the batch, then re-nest with input offsets. Example: array<int> -> udf -> array<int>.
 
-        # --- UDF preparation ---
+        # UDF preparation
         udf_infos = []
         for udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type in udfs:
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
                 udf_func, udf_args_offsets, udf_kwargs_offsets
             )
-            # The user's function is a scalar function: it returns one value per element, and its
-            # return type was pickled alongside it, so it arrives here unchanged. The plan-level
-            # type is `array<R>` (see ExtractPythonUDFFromLambda), but the conversion below is
-            # per element, so the element type is exactly this declared return type. An
-            # `array<R>`-returning UDF is not special-cased: it nests one level deeper.
+            # UDF returns one value per element; return type was pickled, unchanged.
+            # This is per-element, so element type equals the declared return type.
             element_return_type = udf_return_type
             udf_infos.append(
                 (
@@ -3038,11 +3027,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             )
         col_names = [f"_{i}" for i in range(len(udfs))]
 
-        # --- Input preparation ---
-        # Every argument arrives as a single-level ``array<T>`` aligned with the iterated array:
-        # the same length per row and the same null rows (ExtractPythonUDFFromLambda materializes
-        # even an outer column or a constant into such an array). So each column is flattened
-        # exactly once, and each element is converted with its array's element type.
+        # Input: every argument arrives as ``array<T>`` aligned with the iterated array.
+        # Flatten once per column; convert elements with the array's element type.
         input_fields = list(eval_conf.input_type)
         arrow_to_py_converters = [
             ArrowTableToRowsConversion._create_converter(
@@ -3064,10 +3050,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             for input_batch in data:
-                # --- Input: Arrow list columns -> flattened Python element lists ---
-                # ``flatten()`` drops the elements of null rows and honours slice offsets, so it
-                # is the authority on both the element values and their count. Each argument is a
-                # list column flattened once to the values its scalar UDF is called with.
+                # Flatten all array columns to element lists and convert to Python.
                 columns = []
                 for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters):
                     values = ArrowTableToRowsConversion._to_pylist(col.flatten())
@@ -3075,17 +3058,13 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         values = [conv(v) for v in values]
                     columns.append(values)
 
-                # The shape to re-nest results by. Every argument shares the same shape, so the
-                # first column defines it; the rewrite always passes at least one array argument.
+                # Extract shape (lengths per row, null mask) from first column.
                 shape = input_batch.column(0)
                 lengths = pc.list_value_length(shape).to_pylist()
                 total_elements = sum(n for n in lengths if n is not None)
 
-                # Dense offsets plus a validity mask that re-nest a flat list back to ``array<R>``.
-                # Null rows stay null: their elements were never evaluated, so they consume no
-                # offsets. (Encoding a null row as a null *offset* would be ambiguous, since one
-                # null offset also truncates the preceding row.) ``ListArray`` uses int32 offsets
-                # and ``LargeListArray`` int64, so the input's list width is preserved.
+                # Build offsets to re-nest flat list back to array<R> with input shape.
+                # Null rows stay null; they consume no offsets. Preserve int32/int64 width.
                 offsets = []
                 running = 0
                 for n in lengths:
@@ -3098,7 +3077,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 offsets_arr = pa.array(offsets, type=pa.int64() if is_large else pa.int32())
                 null_mask = pa.array([n is None for n in lengths], type=pa.bool_())
 
-                # --- Process: one pass over all elements of the batch ---
+                # Evaluate all UDFs once over the flattened batch.
                 output_arrays = []
                 for wrapped_func, offsets_meta, arrow_element_type, result_conv in udf_infos:
                     rows = (
@@ -3109,7 +3088,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     results = _evaluate_elementwise_udf(wrapped_func, rows)
                     verify_result_row_count(len(results), total_elements)
 
-                    # --- Output: Python -> Arrow, then re-nest to array<R> ---
+                    # Convert results and re-nest to array<R> using input offsets.
                     converted = (
                         [result_conv(r) for r in results] if result_conv is not None else results
                     )

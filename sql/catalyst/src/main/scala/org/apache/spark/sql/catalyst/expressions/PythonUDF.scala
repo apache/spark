@@ -68,51 +68,30 @@ object PythonUDF {
   }
 
   /**
-   * Whether every Python UDF inside `hof`'s lambdas can be lifted out by
-   * `ExtractPythonUDFFromLambda`. Used by `CheckAnalysis` to decide whether to reject the plan.
-   *
-   * A shape is rewritable when the UDF's inputs are values the higher-order function iterates, so
-   * that the UDF can be applied to all of them at once outside the lambda. The ten mapping
-   * functions that take a single lambda qualify, including a pairwise `array_sort` comparator
-   * (precomputed over the cross product of pairs). Three shapes do not:
-   *   - a UDF inside a *nested* higher-order function's lambda, e.g.
-   *     `transform(arr, i -> transform(i, x -> f(x)))`. The inner array `i` is the outer lambda's
-   *     variable, not a real column, so `f` cannot be lifted onto an array outside the lambda.
-   *     (A UDF in a nested function's *argument*, `transform(arr, x -> transform(udf(x), y -> y))`,
-   *     is fine: the inner lambda holds no UDF, and `udf(x)` is lifted onto `arr`.)
-   *   - any UDF in `aggregate` / `reduce`, whose `merge`/`finish` fold sequentially rather than
-   *     iterate, so the values the UDF sees are outputs of earlier steps rather than elements of
-   *     anything;
-   *   - a pandas UDF, which receives a `Series` rather than one value per call.
+   * Whether every Python UDF in `hof`'s lambdas can be lifted out by `ExtractPythonUDFFromLambda`.
+   * Used by `CheckAnalysis` to decide whether to reject the plan. Three shapes cannot be rewritten:
+   *   - a UDF in a *nested* lambda, `transform(arr, i -> transform(i, x -> f(x)))`: the inner array
+   *     `i` is not a real column. (A UDF in a nested *argument*, `transform(arr, x ->
+   *     transform(udf(x), y -> y))`, is fine - `udf(x)` lifts onto `arr`.)
+   *   - a UDF in `aggregate` / `reduce`: the fold is sequential, so it sees earlier steps' outputs;
+   *   - a pandas UDF: it takes a `Series`, not one value per call.
    */
   def canRewritePythonUDFInLambda(hof: HigherOrderFunction): Boolean = {
-    // Every Python UDF in the lambdas must itself be of a rewritable eval type. A pandas UDF,
-    // for instance, is never rewritable regardless of the enclosing function.
+    // A pandas UDF is never rewritable, regardless of the enclosing function.
     val allUDFsRewritable = hof.functions.forall { f =>
       f.collect { case udf: PythonUDF => udf }.forall(isElementwiseRewritableUDF)
     }
-    // A higher-order function that reads a free lambda variable (one bound by an enclosing lambda)
-    // is itself nested inside another lambda, so the array it iterates is not a real column and
-    // its UDF cannot be lifted. `transform(arr, i -> transform(i, x -> f(x)))` reaches this on the
-    // inner `transform`, whose argument `i` is the outer lambda's variable.
+    // Reading a free lambda variable means `hof` is itself nested in an enclosing lambda, so the
+    // array it iterates is not a real column (the nested case above).
     val iteratesRealColumns = !hasFreeLambdaVariable(hof)
-    // Every mapping higher-order function is handled by the rewrite, so rather than listing them,
-    // this checks the structural shape the rewrite assumes. A future higher-order function of a
-    // familiar shape is accepted automatically; `ExtractPythonUDFFromLambda` rewrites any such
-    // function generically from the `HigherOrderFunction` API.
     allUDFsRewritable && iteratesRealColumns && isRewritableShape(hof)
   }
 
   /**
-   * The structural assumption the generic rewrite makes: the function has exactly one lambda, whose
-   * parameters are plain lambda variables, and it iterates at least one array- or map-valued
-   * argument that the precomputed UDF results can be zipped alongside.
-   *
-   * `aggregate` / `reduce` fail this by construction: they have two lambdas (`merge` and `finish`),
-   * so a UDF anywhere in them is rejected. The fold is sequential and cannot be restated as a
-   * single element-wise UDF call over the array; see the class doc of
-   * `ExtractPythonUDFFromLambda`. Checking the shape rather than listing classes means a new
-   * higher-order function of a familiar shape needs no change here.
+   * The structural assumption the rewrite makes: one lambda with plain-variable parameters, over at
+   * least one array- or map-valued argument. `aggregate` / `reduce` fail this - they have two
+   * lambdas (`merge`, `finish`) - so a UDF in a fold is rejected. Checking the shape rather than
+   * listing classes means a new function of a familiar shape needs no change here.
    */
   private def isRewritableShape(hof: HigherOrderFunction): Boolean =
     hof.functions.length == 1 &&
@@ -122,25 +101,6 @@ object PythonUDF {
       hof.arguments.exists { a =>
         a.dataType.isInstanceOf[ArrayType] || a.dataType.isInstanceOf[MapType]
       }
-
-  /**
-   * Whether any Python UDF in an `array_sort` comparator receives both of the comparator's
-   * parameters in a single call, e.g. `(a, b) -> my_compare(a, b)`. Such a call cannot be reduced
-   * to a per-element key.
-   */
-  def comparatorTakesBothElements(function: Expression): Boolean = function match {
-    case LambdaFunction(body, Seq(left: NamedLambdaVariable, right: NamedLambdaVariable), _) =>
-      body.exists {
-        case udf: PythonUDF if isElementwiseRewritableUDF(udf) =>
-          def reads(id: ExprId) = udf.exists {
-            case v: NamedLambdaVariable => v.exprId == id
-            case _ => false
-          }
-          reads(left.exprId) && reads(right.exprId)
-        case _ => false
-      }
-    case _ => false
-  }
 
   /**
    * Whether `e` references a [[NamedLambdaVariable]] that it does not itself bind, i.e. one bound

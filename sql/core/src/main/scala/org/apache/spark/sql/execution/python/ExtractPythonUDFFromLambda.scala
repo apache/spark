@@ -25,78 +25,43 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
 
 /**
- * Rewrites scalar Python UDFs that appear inside the lambda of a higher-order function so that
- * they can be evaluated at all.
+ * Rewrites scalar Python UDFs inside a higher-order function's lambda so they can be evaluated.
  *
- * A `PythonUDF` is evaluated by a separate physical operator (`ArrowEvalPython`), which
- * [[ExtractPythonUDFs]] pulls out of the enclosing operator. A lambda's [[NamedLambdaVariable]]s
- * only exist while the higher-order function is iterating, so an extracted operator cannot see
- * them: the UDF can neither stay inside the lambda nor be lifted out by the existing extraction
- * rule. Historically `CheckAnalysis` therefore rejected this outright.
- *
- * The way out is to not evaluate the UDF per element inside the lambda. Instead the UDF is applied
- * once to the *whole array*, outside every lambda, and the lambda reads the precomputed result
- * positionally:
+ * A `PythonUDF` runs in a separate operator that [[ExtractPythonUDFs]] pulls out, but a lambda's
+ * [[NamedLambdaVariable]]s only exist while the function iterates, so the UDF can neither stay in
+ * the lambda nor be lifted out normally. Instead this rule applies the UDF once to the *whole
+ * array*, outside every lambda, and has the lambda read the result positionally:
  *
  * {{{
  *   -- before (rejected)
  *   transform(values, x -> plus_one(x))
  *
- *   -- after (legal: the PythonUDF is outside every LambdaFunction)
- *   transform(
- *     arrays_zip(values AS c0, plus_one_over_array(values) AS u0),
- *     s -> s.u0)
+ *   -- after (the PythonUDF is outside every lambda)
+ *   transform(arrays_zip(values AS c0, plus_one_over_array(values) AS u0), s -> s.u0)
  * }}}
  *
- * `plus_one_over_array` is the same user function, re-typed as `array<T> => array<R>` and run with
- * [[PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF]]. The JVM cannot rewrap a pickled Python function,
- * so the array-at-a-time behaviour lives in the Python worker: it flattens each incoming list
- * column one level, calls the user function once over the concatenated elements of the whole batch,
- * and re-nests the results with the input's offsets. This keeps one row in and one row out (no
- * `explode`, no shuffle), and crosses the Python boundary once per batch rather than once per row.
+ * `plus_one_over_array` is the same function re-typed as `array<T> => array<R>` and run with
+ * [[PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF]]. The array-at-a-time behaviour lives in the Python
+ * worker: it flattens each list column once, calls the function over all elements of the batch, and
+ * re-nests by the input's offsets - one row in, one row out, one Python round trip per batch.
  *
- * Every argument the lifted UDF receives is therefore a single-level `array<T>` aligned with the
- * iterated array - the same length per row and the same null rows - so the worker can flatten all
- * of them uniformly. An argument that does not depend on the element (an outer column or a
- * constant) is materialized into such an array with a native `transform` that repeats the value,
- * rather than being passed through as a scalar; that removes any per-argument shape metadata.
+ * Every lifted argument is a single-level `array<T>` aligned with the iterated array (an
+ * element-independent value is repeated into one with a native `transform`), so the worker flattens
+ * them uniformly with no per-argument metadata. With the result now an ordinary column, arithmetic,
+ * `when`, casts, the element index, multiple UDFs and nested calls `f(g(x))` all just work.
  *
- * Once the UDF result is an ordinary column, everything the lambda does around it is ordinary JVM
- * work, so arithmetic, `when`, casts, the element index, several UDFs in one lambda and nested UDF
- * *calls* (`f(g(x))`, lifted innermost-first within one carrier) all follow without special cases.
+ * Runs before [[ExtractPythonUDFs]]. Handles all ten single-lambda functions: `transform`,
+ * `filter`, `exists`, `forall`, `zip_with`, `array_sort`, and the four map functions (desugared to
+ * `map_keys`/`map_values` arrays and rebuilt with `map_from_arrays`). `array_sort` precomputes a
+ * per-element key, or, when one call takes both elements, the UDF over the cross product of pairs.
  *
- * This rule runs before [[ExtractPythonUDFs]], which then extracts the lifted UDF as a normal
- * top-level `PythonUDF` and needs no new physical operator.
- *
- * All ten mapping higher-order functions that take a single lambda are handled:
- *
- *  - `transform`, `exists`, `forall` return the lambda's own value, so the carrier replaces the
- *    argument directly;
- *  - `filter`'s lambda is a predicate, so the original elements are projected back out of the
- *    carrier afterwards;
- *  - `zip_with` zips both arrays into one carrier, which collapses it to the single-array form;
- *  - `array_sort` precomputes the UDF per element as a sort key for the JVM comparator to compare;
- *    when one call takes both elements it is precomputed over the cross product of pairs instead,
- *    which the comparator then indexes by position;
- *  - `transform_keys`, `transform_values`, `map_filter` and `map_zip_with` are desugared into the
- *    array case over `map_keys` / `map_values` and rebuilt with `map_from_arrays`.
- *
- * Shapes that genuinely cannot be rewritten are left untouched here and continue to be rejected by
- * `CheckAnalysis`:
- *
- *  - a UDF inside a *nested* higher-order function's lambda, e.g.
- *    `transform(arr, i -> transform(i, x -> f(x)))`. The inner array `i` is the outer lambda's
- *    variable, so it does not exist as a column outside the lambda and the UDF cannot be lifted
- *    onto a real array. (A UDF in a nested function's *argument*, `transform(arr, x ->
- *    transform(udf(x), y -> y))`, is fine: `udf(x)` is lifted onto `arr` like any other.)
- *  - a UDF anywhere in `aggregate` / `reduce`. The fold is sequential: `merge` runs on each element
- *    with the running accumulator, so its values are outputs of earlier steps rather than elements
- *    of a collection, and computing the final accumulator alternates Python and JVM work once per
- *    element, which no single UDF call can do. That is a limit of expression rewriting rather than
- *    of Spark: restating the fold as an iteration over the whole column with `UnionLoop` would
- *    work, but that is an operator-level restructuring, so it is left for a follow-up;
- *  - a pandas UDF: it receives a `Series` rather than one value per call, so the element-wise
- *    rewrite would change its meaning.
+ * `CheckAnalysis` still rejects what cannot be rewritten:
+ *  - a UDF in a *nested* lambda, `transform(arr, i -> transform(i, x -> f(x)))`: the inner array
+ *    `i` is not a real column. (A UDF in a nested *argument*, `transform(arr, x ->
+ *    transform(udf(x), y -> y))`, is fine - `udf(x)` lifts onto `arr`.)
+ *  - a UDF in `aggregate` / `reduce`: the fold is sequential, so the UDF sees earlier steps'
+ *    outputs, not array elements.
+ *  - a pandas UDF: it takes a `Series`, not one value per call.
  */
 object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 
@@ -126,81 +91,56 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
   }
 
   /**
-   * Where a higher-order function's result comes from, which is the one thing about its shape that
-   * cannot be derived from the generic [[HigherOrderFunction]] API.
-   *
-   * A rewritten function iterates a *carrier* - a struct of the original elements plus the
-   * precomputed UDF results - so a function whose result is built from its input elements has to
-   * project them back out afterwards, while one that returns its lambda's own value does not.
+   * Whether the result is built from the input elements (so the carrier must be unwrapped) rather
+   * than from the lambda's value. Read straight off the Catalyst result-type traits:
+   * `filter` / `array_sort` / `map_filter` keep the input's type ([[ResultTypeFromArgument]]);
+   * `transform` and friends follow the lambda ([[ResultTypeFromFunction]]).
    */
-  private sealed trait ResultShape
-  /** The result is the lambda's own value (`transform`, `exists`, `zip_with`, ...). */
-  private case object FromLambda extends ResultShape
-  /** The result is built from the input elements, so the carrier must be unwrapped (`filter`). */
-  private case object FromElements extends ResultShape
+  private def resultFromElements(hof: HigherOrderFunction): Boolean =
+    hof.isInstanceOf[ResultTypeFromArgument]
 
   /**
-   * Where a higher-order function's result comes from. This is read straight off the Catalyst
-   * classification traits ([[ResultTypeFromArgument]] / [[ResultTypeFromFunction]]), which every
-   * lambda-taking function carries: a function whose result type is its input's returns input
-   * elements (`filter`, `array_sort`, `map_filter`), and one whose result type follows its lambda
-   * returns the lambda's value. A boolean predicate (`exists`, `forall`) is neither, but the
-   * rewrite treats it as `FromLambda` since it iterates a carrier the same way; `None` here means a
-   * shape this rule does not handle.
+   * Whether one UDF call in an `array_sort` comparator takes both elements, e.g.
+   * `(a, b) -> udf(a, b)`. Such a call has no per-element key, so it is precomputed over the cross
+   * product of pairs rather than per element.
    */
-  private def resultShapeOf(hof: HigherOrderFunction): Option[ResultShape] = hof match {
-    case _: ResultTypeFromArgument => Some(FromElements)
-    case _: ResultTypeFromFunction => Some(FromLambda)
-    case _: Predicate => Some(FromLambda)
-    case _ => None
-  }
-
-  /**
-   * Whether `hof`'s lambda is a comparator, i.e. its two parameters are two elements of the same
-   * argument rather than one element of each of two arguments.
-   *
-   * This cannot be inferred from the parameter types: a comparator over `array<int>` and an indexed
-   * lambda over `array<int>` both have parameters `(Int, Int)`.
-   */
-  private def isComparatorShaped(hof: HigherOrderFunction): Boolean = hof match {
-    case _: ArraySort => true
+  private def comparatorTakesBothElements(function: Expression): Boolean = function match {
+    case LambdaFunction(body, Seq(left: NamedLambdaVariable, right: NamedLambdaVariable), _) =>
+      body.exists {
+        case udf: PythonUDF if isRewritableUDF(udf) =>
+          def reads(id: ExprId) = udf.exists {
+            case v: NamedLambdaVariable => v.exprId == id
+            case _ => false
+          }
+          reads(left.exprId) && reads(right.exprId)
+        case _ => false
+      }
     case _ => false
   }
 
   /**
-   * Rewrites a single higher-order function whose lambda contains a rewritable Python UDF.
-   *
-   * There is one generic path for every mapping function. It never names a concrete class: it reads
-   * the arguments, lambdas and parameter roles off the [[HigherOrderFunction]] API and rebuilds the
-   * node with `withNewChildren`, relying on the fact that a higher-order function's children are
-   * always its `arguments` followed by its `functions`.
+   * Rewrites one higher-order function whose lambda holds a rewritable Python UDF. The generic path
+   * never names a concrete class: it reads arguments, lambdas and parameter roles off the
+   * [[HigherOrderFunction]] API and rebuilds with `withNewChildren` (children are `arguments` then
+   * `functions`). Only a pairwise `array_sort` comparator needs a separate path.
    */
   private val rewrite: PartialFunction[Expression, Expression] = {
-    // A comparator whose UDF receives both elements in one call has no per-element key, so it takes
-    // the cross product rather than the ordinary element-wise rewrite.
     case sort @ ArraySort(_, function, _)
-        if liftableHof(sort) && PythonUDF.comparatorTakesBothElements(function) =>
+        if liftableHof(sort) && comparatorTakesBothElements(function) =>
       rewritePairwiseComparator(sort)
 
-    case hof: HigherOrderFunction if resultShapeOf(hof).isDefined && liftableHof(hof) =>
-      rewriteMapping(hof, resultShapeOf(hof).get)
+    // Every result-typed higher-order function is handled; anything else is left alone.
+    case hof: HigherOrderFunction
+        if liftableHof(hof) &&
+          (hof.isInstanceOf[ResultTypeFromArgument] || hof.isInstanceOf[ResultTypeFromFunction]) =>
+      rewriteMapping(hof)
   }
 
   /**
-   * Rewrites `array_sort(arr, (a, b) -> udf(a, b))`, where one UDF call receives both elements.
-   *
-   * There is no per-element key here, so nothing can be precomputed per element. What can be
-   * precomputed is the UDF over every ordered pair: an n x n matrix whose (i, j) entry is
-   * `udf(arr[i], arr[j])`. The comparator then reads its answer out of that matrix by the two
-   * elements' positions, so no Python call happens while sorting.
-   *
-   * The pairs are laid out as two flat arrays of n*n elements - each element repeated n times
-   * against the whole array repeated n times - and the UDF is applied to them **directly**, not
-   * inside a `zip_with`. That matters: wrapping it in another higher-order function would put the
-   * UDF back inside a lambda, which is exactly what this rule exists to undo.
-   *
-   * This costs O(n^2) Python calls where sorting needs only O(n log n) comparisons, and O(n^2)
-   * memory for the matrix. Returning a per-element sort key instead stays on the O(n) path.
+   * Rewrites `array_sort(arr, (a, b) -> udf(a, b))`, where one call takes both elements so there is
+   * no per-element key. Precomputes the UDF over every ordered pair - an n x n matrix with
+   * `udf(arr[i], arr[j])` at (i, j) - and the comparator reads it by the two elements' positions,
+   * so no Python runs while sorting. Costs O(n^2) calls and memory vs. O(n) for a per-element key.
    */
   private def rewritePairwiseComparator(sort: ArraySort): Expression = {
     val ArraySort(argument, function, allowNull) = sort
@@ -218,13 +158,9 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
       ArrayTransform(argument, LambdaFunction(ArrayRepeat(repeatVar, n), Seq(repeatVar))))
     val rights = Flatten(ArrayRepeat(argument, n))
 
-    // The UDF over all n*n pairs, applied outside every lambda. Any part of the comparator body
-    // around the UDF call is ordinary JVM work over the same flat arrays, so the body is rewritten
-    // with each element variable bound to its flat array. This is exactly the element-wise rewrite
-    // with the pair arrays standing in for the iterated arguments, so `buildCarrier` does the work:
-    // it lifts each UDF over the pairs and rewrites the body to read the results from a carrier.
-    // A `transform` over that carrier then evaluates whatever the comparator wrapped around the
-    // call - a cast, a `when`, arithmetic - once per pair, in the JVM.
+    // The UDF over all n*n pairs: this is just the element-wise rewrite with the pair arrays as the
+    // iterated arguments, so `buildCarrier` lifts the UDF and a `transform` runs the rest of the
+    // comparator body (cast, `when`, arithmetic) once per pair in the JVM.
     val pairLambda = LambdaFunction(body, Seq(leftVar, rightVar))
     val pairCarrier = buildCarrier(Seq(lefts, rights), pairLambda, Seq(leftVar, rightVar), None)
     val flatCells = ArrayTransform(
@@ -272,8 +208,9 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
    * matched to those arrays, the UDFs are lifted onto them, and the node is rebuilt around a
    * carrier that the single new lambda parameter reads.
    */
-  private def rewriteMapping(hof: HigherOrderFunction, shape: ResultShape): Expression = {
+  private def rewriteMapping(hof: HigherOrderFunction): Expression = {
     val lambda = hof.functions.head.asInstanceOf[LambdaFunction]
+    val fromElements = resultFromElements(hof)
 
     // Desugar maps into arrays. `map_zip_with` visits the union of both key sets and looks each map
     // up per key, which yields null for a key missing from one side - exactly its own semantics.
@@ -285,15 +222,16 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
         val map = hof.arguments.head
         val keys = MapKeys(map)
         val values = MapValues(map)
-        // `transform_keys` replaces the keys, `transform_values` the values, `map_filter` keeps
-        // whichever pairs survive. Which of those applies follows from the result type and shape.
-        val rebuild: Expression => Expression = shape match {
-          case FromElements => (kept: Expression) =>
+        // `map_filter` keeps whichever pairs survive; `transform_keys` replaces the keys and
+        // `transform_values` the values, told apart by whether the result key type is the lambda's.
+        val rebuild: Expression => Expression =
+          if (fromElements) { (kept: Expression) =>
             MapFromArrays(unwrapCarrier(kept, 0), unwrapCarrier(kept, 1))
-          case FromLambda if hof.dataType.asInstanceOf[MapType].keyType == lambda.dataType =>
+          } else if (hof.dataType.asInstanceOf[MapType].keyType == lambda.dataType) {
             (newKeys: Expression) => MapFromArrays(newKeys, values)
-          case FromLambda => (newValues: Expression) => MapFromArrays(keys, newValues)
-        }
+          } else {
+            (newValues: Expression) => MapFromArrays(keys, newValues)
+          }
         (Seq(keys, values), rebuild)
       } else {
         val Seq(left, right) = hof.arguments
@@ -307,16 +245,13 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
           (newValues: Expression) => MapFromArrays(keys, newValues))
       }
 
-    // Match the lambda's parameters to the arrays they iterate. Leading parameters correspond
-    // one-to-one with the arrays; a trailing extra parameter is the element index.
-    //
-    // A comparator is the one shape where that is not true: its two parameters are two elements of
-    // the *same* array. It cannot be told apart from an indexed lambda by parameter types alone
-    // (both are `(T, Int)` when `T` is `Int`), so it is identified by the function itself, which is
-    // exactly what the declarative shape table is for.
+    // Match lambda parameters to the arrays they iterate: leading ones map to the arrays, a
+    // trailing extra one is the element index. An `array_sort` comparator is the exception - its
+    // two parameters are two elements of the *same* array, indistinguishable from an indexed lambda
+    // by types alone (both `(T, Int)`), so it is recognized by class.
     val params = lambda.arguments.map(_.asInstanceOf[NamedLambdaVariable])
     val (elementVars, indexVar, alsoBind) =
-      if (isComparatorShaped(hof)) {
+      if (hof.isInstanceOf[ArraySort]) {
         (Seq(params.head), None, Seq(params.last))
       } else {
         (params.take(arrays.length), params.drop(arrays.length).headOption, Nil)
@@ -325,38 +260,29 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     val built = buildCarrier(arrays, lambda, elementVars, indexVar, alsoBind)
     val newLambda = LambdaFunction(built.body, built.boundVar +: built.extraBoundVars)
 
-    // Rebuild the node. The carrier collapses every argument into one, so a function that keeps its
-    // own semantics (`filter` keeps only some elements, `exists`/`forall`/`array_sort` are not
-    // mappings) is rebuilt generically with `withNewChildren` - a higher-order function's children
-    // are its arguments followed by its functions, so one carrier plus the rewritten lambda
-    // reconstructs any of them without naming the class. A function that is a plain mapping over
-    // however many arguments becomes a `transform` over the carrier.
+    // Rebuild the node over the single carrier. A single-array function keeps its own class (via
+    // `withNewChildren`, children being arguments then functions); a desugared map or a multi-array
+    // one becomes a `transform`, or an `ArrayFilter` when the carrier must survive the filtering so
+    // both key and value sides can be projected out.
     val keepsOwnNode = hof.arguments.length == 1 && !mapValued
     val iterated =
       if (keepsOwnNode) {
         hof.withNewChildren(IndexedSeq(built.carrier, newLambda)).asInstanceOf[Expression]
-      } else if (shape == FromElements) {
-        // A map-valued `filter`: the carrier must survive the filtering so both the keys and the
-        // values can be projected out of it afterwards.
+      } else if (fromElements) {
         ArrayFilter(built.carrier, newLambda)
       } else {
         ArrayTransform(built.carrier, newLambda)
       }
 
-    // `FromElements` means the result is the input elements rather than the lambda's value, so they
-    // are projected back out of the carrier. For a map that projection is `rebuildResult`'s job,
-    // since it knows which of the key/value sides to keep.
-    if (!mapValued && shape == FromElements) rebuildResult(unwrapCarrier(iterated, 0))
+    // A from-elements result (e.g. `filter`) is the input elements, so project them back out of the
+    // carrier; for a map `rebuildResult` knows which of the key/value sides to keep.
+    if (!mapValued && fromElements) rebuildResult(unwrapCarrier(iterated, 0))
     else rebuildResult(iterated)
   }
 
   /**
-   * True if `hof`'s lambda holds a UDF this rule can lift out.
-   *
-   * The UDF must belong to *this* lambda, not to a nested higher-order function inside it. A UDF in
-   * a nested lambda, `transform(arr, i -> transform(i, x -> udf(x)))`, reads the inner lambda's
-   * variable, so it cannot be lifted onto an array outside the lambda at all; `CheckAnalysis`
-   * rejects that shape before this rule runs, so it is simply never matched here.
+   * True if `hof`'s single lambda holds a UDF belonging to *this* lambda (not a nested function's
+   * lambda). A UDF in a nested lambda is rejected by `CheckAnalysis`, so it is never matched here.
    */
   private def liftableHof(hof: HigherOrderFunction): Boolean =
     hof.functions.length == 1 && (hof.functions.head match {
@@ -366,14 +292,10 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     })
 
   /**
-   * Whether `body` holds a rewritable UDF that belongs to *this* lambda rather than to a nested
-   * higher-order function's lambda.
-   *
-   * A nested function's own lambda is skipped: a UDF there reads that lambda's variable, a shape
-   * `CheckAnalysis` rejects. Its *arguments* are not skipped, because they are evaluated outside
-   * the nested lambda and so are part of this lambda's body: `transform(arr, x -> transform(udf(x),
-   * y -> y))` has `udf(x)` in the inner function's argument, so it is lifted onto `arr` like any
-   * other.
+   * Whether `body` holds a rewritable UDF belonging to *this* lambda. A nested function's lambda is
+   * skipped (its UDF reads that lambda's variable), but its *arguments* are not: in
+   * `transform(arr, x -> transform(udf(x), y -> y))`, `udf(x)` is in the inner argument and lifts
+   * onto `arr`.
    */
   private def hasDirectRewritableUDF(body: Expression): Boolean = body match {
     case e if isRewritableUDF(e) => true
@@ -381,43 +303,6 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     case e => e.children.exists(hasDirectRewritableUDF)
   }
 
-
-  /**
-   * Builds the carrier for `arguments` and hands the rewritten higher-order function to `rebuild`.
-   */
-  private def withCarrier(
-      arguments: Seq[Expression],
-      function: Expression)(
-      rebuild: (Expression, LambdaFunction) => Expression): Expression = {
-    val LambdaFunction(_, args, _) = function
-    // The lambda's leading parameters correspond one-to-one with the arguments; a trailing extra
-    // parameter is the element index (`transform`/`filter` with `(x, i) -> ...`).
-    val elementVars = args.take(arguments.length).map(_.asInstanceOf[NamedLambdaVariable])
-    val indexVar = args.drop(arguments.length).headOption.map(_.asInstanceOf[NamedLambdaVariable])
-    val built = buildCarrier(arguments, function, elementVars, indexVar)
-    rebuild(built.carrier, LambdaFunction(built.body, Seq(built.boundVar)))
-  }
-
-  /**
-   * Builds the carrier for `array_sort`'s comparator.
-   *
-   * A comparator's two parameters are two elements of the *same* array, so unlike every other
-   * shape they are not separate arguments: one carrier is built over the single array and both
-   * parameters are bound to it. Each side then reads the precomputed key of its own element, which
-   * is what makes the sort actually reorder rather than compare a value with itself.
-   */
-  private def withComparatorCarrier(
-      argument: Expression,
-      function: Expression)(
-      rebuild: (Expression, LambdaFunction) => Expression): Expression = {
-    val LambdaFunction(body, Seq(leftVar: NamedLambdaVariable, rightVar: NamedLambdaVariable), _) =
-      function
-    // Build the carrier as if the lambda took one element, using the left parameter. The right
-    // parameter is then bound to a second variable over the same carrier.
-    val built = buildCarrier(Seq(argument), function, Seq(leftVar), None, alsoBind = Seq(rightVar))
-    val rightBound = built.extraBoundVars.head
-    rebuild(built.carrier, LambdaFunction(built.body, Seq(built.boundVar, rightBound)))
-  }
 
   /** The pieces produced by [[buildCarrier]]. */
   private case class Carrier(
@@ -450,11 +335,10 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
     // `g` lifted before `f`, letting `f`'s array UDF consume `g`'s array result.
     val liftableUDFs = collectLiftableUDFs(body, lambdaExprIds)
 
-    // With more than one argument the arrays may be ragged (`zip_with` pads the shorter side with
-    // nulls, and `map_zip_with`'s per-key lookups can too). Flattening ragged arrays independently
-    // would yield different element counts and misalign them, so every argument is first projected
-    // out of one common zip. That pads them all to the same per-row length, which is what the
-    // positional rewrite requires.
+    // With more than one argument the arrays may be ragged (`zip_with` / `map_zip_with` pad with
+    // nulls), so flattening them independently would misalign the elements. Projecting each out of
+    // one common `arrays_zip` pads them to the same per-row length, which the positional rewrite
+    // requires.
     val alignedArguments =
       if (arguments.length > 1) {
         val names = arguments.indices.map(i => s"$CarrierElementPrefix$i")
@@ -483,11 +367,8 @@ object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 
     var arrayResults = Map.empty[Expression, Expression]
     val liftedArrays = liftableUDFs.map { udf =>
-      // Every argument is turned into an `array<T>` aligned with the iterated array, so the worker
-      // flattens each one exactly once. `overArray` maps a lambda variable to its array, computes
-      // an expression over the elements with a native `transform`, and broadcasts an
-      // element-independent value into an aligned array too - so there is no per-argument shape to
-      // track.
+      // `overArray` turns each argument into an `array<T>` aligned with the iterated array, so the
+      // worker flattens every one exactly once (no per-argument shape to track).
       val arrayArgs = udf.children.map { child =>
         overArray(child, alignedArguments.head, arrayOfVar, lambdaExprIds, arrayResults)
       }
