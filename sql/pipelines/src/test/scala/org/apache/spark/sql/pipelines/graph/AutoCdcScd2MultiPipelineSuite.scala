@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.pipelines.autocdc.ScdType
+import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -212,7 +212,13 @@ class AutoCdcScd2MultiPipelineSuite
       sourceDf = stream1.toDF().toDF("id", "name", "version"),
       keys = Seq("id"),
       sequencing = $"version",
-      scdType = ScdType.Type2)
+      scdType = ScdType.Type2,
+      // Both pipelines pin the tracked set to `name`, the one non-key column they share. Left to
+      // the default (selection-derived) tracking, pipeline #2's extra `age` would also widen the
+      // tracked set, which is rejected as TRACK_HISTORY_DRIFT (SPARK-58391); the axis under test
+      // here is the shared target's data-column evolution.
+      trackHistorySelection =
+        Option(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))))
     runPipeline(ctx1)
 
     // Sanity-check pipeline #1's state before schema evolution kicks in.
@@ -235,7 +241,9 @@ class AutoCdcScd2MultiPipelineSuite
       sourceDf = stream2.toDF().toDF("id", "name", "age", "version"),
       keys = Seq("id"),
       sequencing = $"version",
-      scdType = ScdType.Type2))
+      scdType = ScdType.Type2,
+      trackHistorySelection =
+        Option(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name"))))))
 
     checkAnswer(
       spark.table(s"$catalog.$namespace.shared_target"),

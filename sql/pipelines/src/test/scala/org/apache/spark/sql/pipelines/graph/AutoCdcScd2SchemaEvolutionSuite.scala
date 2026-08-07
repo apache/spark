@@ -31,10 +31,17 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Tests covering SCD Type 2 AutoCDC's interaction with non-key schema evolution across pipeline
  * runs. The SCD2 analog of [[AutoCdcScd1SchemaEvolutionSuite]]; documents the supported additive
  * cases (new top-level columns, a new field inside an array<struct> element, broadening column
- * selection) and the cases that fail loudly (incompatible type changes, case-only renames).
+ * selection) and the cases that fail loudly (incompatible type changes).
  *
  * Unlike SCD1, an SCD2 upsert to an existing key does not overwrite the row: it closes the prior
  * record and opens a new one, so evolution assertions carry the full interval history.
+ *
+ * The additive cases pin `trackHistorySelection` to the columns present in every run. Under default
+ * tracking the tracked set is derived from the selected non-key columns, so adding a column widens
+ * it -- rejected as `AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT` (SPARK-58391) because it would
+ * reinterpret already-reconciled history. Pinning keeps each additive test on the axis it names;
+ * the drift rejection itself has its own test here. This is an intended SCD2-vs-SCD1 divergence:
+ * the same additive evolution needs no full refresh under SCD1.
  *
  * Scope notes -- cases intentionally covered elsewhere rather than duplicated here:
  *   - The *narrowing* / dropped-column cases (a microbatch narrower than the already-evolved
@@ -201,7 +208,13 @@ class AutoCdcScd2SchemaEvolutionSuite
         sourceDf = projectedDf,
         keys = Seq("id"),
         sequencing = functions.col("version"),
-        scdType = ScdType.Type2)
+        scdType = ScdType.Type2,
+        // Pin the tracked set to the columns present in both runs. Under default tracking the set
+        // is selection-derived, so adding `email` would also widen it -- a change that reinterprets
+        // already-reconciled history and is rejected as TRACK_HISTORY_DRIFT (SPARK-58391). Pinning
+        // isolates the axis under test here: additive evolution of the target's data columns.
+        trackHistorySelection =
+          Option(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))))
     }
 
     // Run #1: source projects (id, name, version). Target schema is unchanged.
@@ -222,6 +235,65 @@ class AutoCdcScd2SchemaEvolutionSuite
         Row(1, "alice", 1L, 1L, null, scd2Meta(1L), null),
         Row(2, "bob", 2L, 2L, null, scd2Meta(2L), "b@x.com")
       )
+    )
+  }
+
+  test("adding a source column under default tracking is rejected as track-history drift") {
+    val session = spark
+    import session.implicits._
+
+    // The counterpart to the additive tests above, which pin `trackHistorySelection` precisely to
+    // avoid this: with default tracking the tracked set is derived from the selected non-key
+    // columns (see `Scd2BatchProcessor.computeTrackedHistoryColumns`), so adding `email` silently
+    // widens it from [name, version] to [name, email, version]. That reinterprets which transitions
+    // open a new historical record and cannot be applied to already-reconciled history, so
+    // SPARK-58391 rejects it rather than letting the second run write history under different rules
+    // than the first. This is an intended SCD2-vs-SCD1 divergence: for SCD1 the same additive
+    // evolution needs no full refresh.
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $scd2MetadataDdl)"
+    )
+
+    val stream = MemoryStream[(Int, String, Option[String], Long)]
+    def buildCtx(includeEmail: Boolean): TestGraphRegistrationContext = {
+      val sourceDf = stream.toDF().toDF("id", "name", "email", "version")
+      val projectedDf = if (includeEmail) sourceDf else sourceDf.drop("email")
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projectedDf,
+        keys = Seq("id"),
+        sequencing = functions.col("version"),
+        scdType = ScdType.Type2)
+    }
+
+    // Run #1 records the tracked set as [name] on the auxiliary table.
+    stream.addData((1, "alice", None, 1L))
+    runPipeline(buildCtx(includeEmail = false))
+
+    // Run #2 would track [email, name]; the recorded set no longer matches.
+    stream.addData((2, "bob", Some("b@x.com"), 2L))
+    val ex = intercept[RuntimeException] { runPipeline(buildCtx(includeEmail = true)) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "AUTOCDC_INVALID_STATE.TRACK_HISTORY_DRIFT",
+      parameters = Map(
+        "tableName" -> s"$catalog.$namespace.target",
+        // `version` is tracked too: only the keys and the reserved framework columns are excluded
+        // from the eligible set, and the sequencing column is neither.
+        "expectedTrackHistoryColumns" -> "name, email, version",
+        "recordedTrackHistoryColumns" -> "name, version"
+      )
+    )
+
+    // The rejection is a pre-write validation: the target still holds only run #1's row, and has
+    // not gained the `email` column.
+    val fieldNames = spark.table(s"$catalog.$namespace.target").schema.fieldNames.toSeq
+    assert(!fieldNames.contains("email"), s"target should not have gained `email`; got $fieldNames")
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.target"),
+      Seq(Row(1, "alice", 1L, 1L, null, scd2Meta(1L)))
     )
   }
 
@@ -246,7 +318,11 @@ class AutoCdcScd2SchemaEvolutionSuite
         sourceDf = projectedDf,
         keys = Seq("id"),
         sequencing = functions.col("version"),
-        scdType = ScdType.Type2)
+        scdType = ScdType.Type2,
+        // `name` is the only non-key data column and it is absent in run #1, so an empty tracked
+        // set is what keeps the set stable across the two runs (see the note in the preceding
+        // test). Every upsert then opens a new record on sequencing alone.
+        trackHistorySelection = Option(ColumnSelection.IncludeColumns(Seq.empty)))
     }
 
     // Run #1: target is (id, version, framework); aux mirrors it plus the marker.
@@ -355,7 +431,12 @@ class AutoCdcScd2SchemaEvolutionSuite
         keys = Seq("id"),
         sequencing = functions.col("version"),
         columnSelection = selection,
-        scdType = ScdType.Type2)
+        scdType = ScdType.Type2,
+        // Broadening `columnSelection` would also widen the default (selection-derived) tracked
+        // set, which is rejected as TRACK_HISTORY_DRIFT (SPARK-58391). Pin it to `name` -- selected
+        // in both runs -- so this test covers only the column-selection axis.
+        trackHistorySelection =
+          Option(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))))
 
     // Run #1: only (id, name, version) selected; `email` is dropped before the MERGE.
     stream.addData((1, "alice", "ignored", 1L))
@@ -380,23 +461,21 @@ class AutoCdcScd2SchemaEvolutionSuite
     )
   }
 
-  test("a source DF column whose name differs from the target only by case fails with " +
-    "COLUMN_ALREADY_EXISTS under case-insensitive resolution") {
+  test("a source DF column whose name differs from the target only by case folds onto the " +
+    "target column under case-insensitive resolution") {
     val session = spark
     import session.implicits._
 
-    // This pins current (buggy) behavior, tracked by SPARK-58517: DatasetManager's schema
-    // evolution ignores spark.sql.caseSensitive and merges case-sensitively, so a target `value`
-    // and a source `Value` are wrongly treated as distinct and the target is evolved to carry both
-    // columns -- a schema self-inconsistent under the (default) case-insensitive resolver. The
-    // failure then surfaces during microbatch reconciliation, not at table/aux creation:
-    // Scd2ForeachBatchHandler.reconcileMicrobatch reads that now-two-column target back and folds
-    // it into the affected-rows `unionByName`; ResolveUnion runs a case-insensitive
-    // duplicate-column check over the union's schema and reports COLUMN_ALREADY_EXISTS. SCD1 has no
-    // such reconcile union and instead surfaces AMBIGUOUS_REFERENCE deeper in the MERGE plan -- so
-    // the same user mistake maps to two different conditions across the SCD types. Once SPARK-58517
-    // is fixed the merge should be a no-op (source `Value` maps onto target `value`) and this test
-    // should be updated to assert success.
+    // SPARK-58517: schema evolution honors `spark.sql.caseSensitive`, so a source `Value` maps onto
+    // the target's existing `value` instead of evolving the target to carry both spellings. The
+    // target keeps its own spelling (the merge is left-biased) and no new column appears.
+    //
+    // Before that fix the merge ran case-sensitively and the target gained a second, case-differing
+    // column -- a schema self-inconsistent under the case-insensitive resolver. The breakage
+    // surfaced later, during microbatch reconciliation rather than at table creation:
+    // `Scd2ForeachBatchHandler.reconcileMicrobatch` read the two-column target back into its
+    // affected-rows `unionByName`, where `ResolveUnion`'s case-insensitive duplicate check reported
+    // COLUMN_ALREADY_EXISTS.
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       spark.sql(
         s"CREATE TABLE $catalog.$namespace.target " +
@@ -414,11 +493,16 @@ class AutoCdcScd2SchemaEvolutionSuite
         sequencing = functions.col("version"),
         scdType = ScdType.Type2)
 
-      val ex = intercept[RuntimeException] { runPipeline(ctx) }
-      checkErrorInPipelineFailure(
-        failure = ex,
-        condition = "COLUMN_ALREADY_EXISTS",
-        parameters = Map("columnName" -> "`value`")
+      runPipeline(ctx)
+
+      // A single `value` column, spelled as the target declared it -- not a second `Value`.
+      assert(
+        spark.table(s"$catalog.$namespace.target").schema.fieldNames.count(
+          _.equalsIgnoreCase("value")) === 1)
+      assert(spark.table(s"$catalog.$namespace.target").schema.fieldNames.contains("value"))
+      checkAnswer(
+        spark.table(s"$catalog.$namespace.target"),
+        Seq(Row(1, 1L, "alice", 1L, null, scd2Meta(1L)))
       )
     }
   }

@@ -387,7 +387,7 @@ class AutoCdcScd2AuxiliaryTableDurabilitySuite
         s"auxiliary table $auxName is missing the " +
         s"${AutoCdcAuxiliaryTable.keyColumnNamesProperty} property; got: ${rows.toSeq}"
       ))
-    AutoCdcAuxiliaryTable.parseKeyColumnNames(prop.getString(1))
+    AutoCdcAuxiliaryTable.parseColumnNames(prop.getString(1))
       .getOrElse(fail(
         s"auxiliary table $auxName has a malformed " +
         s"${AutoCdcAuxiliaryTable.keyColumnNamesProperty} property: '${prop.getString(1)}'"
