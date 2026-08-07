@@ -26,4 +26,9 @@ package org.apache.spark.sql
  */
 trait SparkSessionProvider {
   protected def spark: SparkSession
+
+  /**
+   * Shorthand for running a query using the [[SparkSession]]
+   */
+  protected def sql(query: String): DataFrame = spark.sql(query)
 }
