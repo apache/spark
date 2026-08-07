@@ -55,13 +55,13 @@ import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType}
  * `map_keys`/`map_values` arrays and rebuilt with `map_from_arrays`). `array_sort` precomputes a
  * per-element key, or, when one call takes both elements, the UDF over the cross product of pairs.
  *
- * `CheckAnalysis` still rejects what cannot be rewritten:
+ * `CheckAnalysis` still rejects what this rule does not handle:
  *  - a UDF in a *nested* lambda, `transform(arr, i -> transform(i, x -> f(x)))`: the inner array
  *    `i` is not a real column. (A UDF in a nested *argument*, `transform(arr, x ->
  *    transform(udf(x), y -> y))`, is fine - `udf(x)` lifts onto `arr`.)
  *  - a UDF in `aggregate` / `reduce`: the fold is sequential, so the UDF sees earlier steps'
  *    outputs, not array elements.
- *  - a pandas UDF: it takes a `Series`, not one value per call.
+ *  - a vectorized (scalar pandas / arrow) UDF, which is not supported.
  */
 object ExtractPythonUDFFromLambda extends Rule[LogicalPlan] {
 

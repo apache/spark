@@ -54,8 +54,8 @@ object PythonUDF {
    * Whether `e` is a Python UDF that can be lifted out of a higher-order function's lambda by
    * `ExtractPythonUDFFromLambda`, which applies it to the whole array outside the lambda.
    *
-   * Only the row-at-a-time eval types qualify. A pandas UDF receives a `Series` rather than one
-   * value per call, so the element-wise rewrite would change its meaning.
+   * Only the row-at-a-time eval types qualify, since the rule lifts a UDF that takes one value per
+   * call.
    *
    * This is shared with `CheckAnalysis` so that the shapes analysis accepts are exactly those the
    * optimizer rule can rewrite.
@@ -74,10 +74,11 @@ object PythonUDF {
    *     `i` is not a real column. (A UDF in a nested *argument*, `transform(arr, x ->
    *     transform(udf(x), y -> y))`, is fine - `udf(x)` lifts onto `arr`.)
    *   - a UDF in `aggregate` / `reduce`: the fold is sequential, so it sees earlier steps' outputs;
-   *   - a pandas UDF: it takes a `Series`, not one value per call.
+   *   - a vectorized (scalar pandas / arrow) UDF, which is not supported.
    */
   def canRewritePythonUDFInLambda(hof: HigherOrderFunction): Boolean = {
-    // A pandas UDF is never rewritable, regardless of the enclosing function.
+    // Only row-at-a-time eval types are supported; a vectorized UDF is not rewritable regardless
+    // of the enclosing function.
     val allUDFsRewritable = hof.functions.forall { f =>
       f.collect { case udf: PythonUDF => udf }.forall(isElementwiseRewritableUDF)
     }

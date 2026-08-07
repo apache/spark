@@ -464,8 +464,7 @@ class UDFInHigherOrderFunctionTestsMixin:
             self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
     def test_pandas_udf_in_lambda_still_fails(self):
-        # A pandas UDF receives a Series, not one value per call, so the element-wise rewrite
-        # is not valid for it.
+        # A vectorized (pandas) UDF in a lambda is not supported.
         import pandas as pd
         from pyspark.sql.functions import pandas_udf
 
