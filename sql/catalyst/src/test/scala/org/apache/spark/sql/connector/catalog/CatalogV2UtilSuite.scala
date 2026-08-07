@@ -122,14 +122,14 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(a.toString.contains("writePrivileges"))
   }
 
-  test("tableStateOptions projects declared keys case-insensitively") {
+  test("extractTableStateOptions projects declared keys case-insensitively") {
     val catalog = catalogWithStateOptions(java.util.Set.of("BrAnCh", "tag"))
     val options = new CaseInsensitiveStringMap(java.util.Map.of(
       "branch", "Main",
       "TAG", "Release",
       "split-size", "5"))
 
-    val stateOptions = CatalogV2Util.tableStateOptions(catalog, options)
+    val stateOptions = CatalogV2Util.extractTableStateOptions(catalog, options)
 
     assert(stateOptions.size() == 2)
     assert(stateOptions.get("BRANCH") == "Main")
@@ -137,13 +137,37 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(!stateOptions.containsKey("split-size"))
   }
 
-  test("tableStateOptions conservatively keeps all options for catalogs without capability") {
+  test("extractTableStateOptions compares option keys case-insensitively") {
+    val catalog = catalogWithStateOptions(java.util.Set.of("SnApShOt"))
+    val lowerCaseKey = CatalogV2Util.extractTableStateOptions(
+      catalog,
+      new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "main")))
+    val upperCaseKey = CatalogV2Util.extractTableStateOptions(
+      catalog,
+      new CaseInsensitiveStringMap(java.util.Map.of("SNAPSHOT", "main")))
+
+    assert(lowerCaseKey == upperCaseKey)
+  }
+
+  test("extractTableStateOptions compares option values case-sensitively") {
+    val catalog = catalogWithStateOptions(java.util.Set.of("snapshot"))
+    val lowerCaseValue = CatalogV2Util.extractTableStateOptions(
+      catalog,
+      new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "main")))
+    val upperCaseValue = CatalogV2Util.extractTableStateOptions(
+      catalog,
+      new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "MAIN")))
+
+    assert(lowerCaseValue != upperCaseValue)
+  }
+
+  test("extractTableStateOptions returns no options for catalogs without capability") {
     val catalog = mock(classOf[CatalogPlugin])
     val options = new CaseInsensitiveStringMap(
       java.util.Map.of("branch", "Main", "split-size", "5"))
 
-    val stateOptions = CatalogV2Util.tableStateOptions(catalog, options)
+    val stateOptions = CatalogV2Util.extractTableStateOptions(catalog, options)
 
-    assert(stateOptions eq options)
+    assert(stateOptions.isEmpty)
   }
 }

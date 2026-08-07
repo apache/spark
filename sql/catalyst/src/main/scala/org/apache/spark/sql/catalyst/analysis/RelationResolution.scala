@@ -315,18 +315,18 @@ class RelationResolution(
             // we don't share-cache views.
             val table: Option[Table] = relation.collect { case t: Table => t }
 
-            // Reuse a cached relation only when this read's options match: the lookup is by name
-            // and `Table.id`, so a differing-options read would otherwise get the cached read's
-            // `Table`.
+            // Reuse a cached relation only when its table identity and state options match. The
+            // returned relation still carries this read's complete option map.
             val sharedRelationCacheMatch = for {
               t <- table
               if pinnedTable.isEmpty && finalTimeTravelSpec.isEmpty &&
                 writePrivileges == null && !u.isStreaming
-              cached <- lookupSharedRelationCache(catalog, ident, t)
-              if cached.options == finalOptions
+              cached <- lookupSharedRelationCache(catalog, ident, t, finalOptions)
             } yield {
+              val updatedRelation = cached.copy(options = finalOptions)
+              updatedRelation.copyTagsFrom(cached)
               val nameParts = ident.toQualifiedNameParts(catalog)
-              val aliasedRelation = SubqueryAlias(nameParts, cached)
+              val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
               tableCache.update(tableKey, cached.table)
               relationCache.update(key, aliasedRelation)
               adaptCachedRelation(aliasedRelation, planId)
@@ -381,8 +381,10 @@ class RelationResolution(
   private def lookupSharedRelationCache(
       catalog: CatalogPlugin,
       ident: Identifier,
-      table: Table): Option[DataSourceV2Relation] = {
-    CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, conf)
+      table: Table,
+      options: CaseInsensitiveStringMap): Option[DataSourceV2Relation] = {
+    CatalogV2Util.lookupCachedRelation(
+      sharedRelationCache, catalog, ident, table, options, conf)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
@@ -526,7 +528,8 @@ class RelationResolution(
               lookupSharedRelationCache(
                 resolvedCatalog,
                 ref.identifier,
-                loadedTable).filter(_.options == ref.options)
+                loadedTable,
+                ref.options)
             } else {
               None
             }
@@ -617,7 +620,7 @@ class RelationResolution(
       catalog,
       ident,
       timeTravelSpec,
-      CatalogV2Util.tableStateOptions(catalog, options))
+      CatalogV2Util.extractTableStateOptions(catalog, options))
   }
 
   private def cloneWithPlanId(plan: LogicalPlan, planId: Option[Long]): LogicalPlan = {

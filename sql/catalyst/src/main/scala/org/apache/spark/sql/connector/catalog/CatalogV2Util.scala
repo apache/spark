@@ -482,13 +482,9 @@ private[sql] object CatalogV2Util {
     }
 
   /**
-   * Projects a complete read option map to the options that may select table state.
-   *
-   * Catalogs must explicitly opt in to projection. For all other catalogs, every option is kept
-   * so that reusing a concrete table cannot silently combine states the catalog considers
-   * different.
+   * Extracts the options that may select table state from a complete option map.
    */
-  def tableStateOptions(
+  def extractTableStateOptions(
       catalog: CatalogPlugin,
       options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = catalog match {
     case supports: SupportsTableStateOptions =>
@@ -501,7 +497,7 @@ private[sql] object CatalogV2Util {
       }.toMap
       new CaseInsensitiveStringMap(projected.asJava)
     case _ =>
-      options
+      CaseInsensitiveStringMap.empty()
   }
 
   def getTable(
@@ -557,25 +553,19 @@ private[sql] object CatalogV2Util {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
-  def isSameTable(
-      rel: DataSourceV2Relation,
-      catalog: CatalogPlugin,
-      ident: Identifier,
-      table: Table): Boolean = {
-    rel.catalog.contains(catalog) && rel.identifier.contains(ident) && rel.table.id == table.id
-  }
-
   def lookupCachedRelation(
       cache: RelationCache,
       catalog: CatalogPlugin,
       ident: Identifier,
       table: Table,
+      options: CaseInsensitiveStringMap,
       conf: SQLConf): Option[DataSourceV2Relation] = {
-    val nameParts = ident.toQualifiedNameParts(catalog)
-    val cached = cache.lookup(nameParts, conf.resolver)
-    cached.collect {
-      case r: DataSourceV2Relation if isSameTable(r, catalog, ident, table) => r
-    }
+    cache.lookup(
+      catalog,
+      ident,
+      Some(table.id),
+      extractTableStateOptions(catalog, options),
+      conf.resolver).collect { case r: DataSourceV2Relation => r }
   }
 
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {

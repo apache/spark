@@ -37,6 +37,7 @@ import org.apache.spark.sql.connector.catalog.{
   InMemoryRowLevelOperationTableCatalog,
   SupportsTableStateOptions,
   Table,
+  TableChange,
   TableWritePrivilege,
   TimeTravel}
 import org.apache.spark.sql.execution.CommandResultExec
@@ -582,37 +583,36 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("catalogs without state-option support load the table once per complete option bag") {
+  test("catalogs without state-option support share table state across option bags") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
       inMemoryCatalog.resetLoadTableCalls()
 
-      // The catalog does not classify its options, so Spark conservatively treats both complete
-      // option bags as different table states.
+      // The catalog does not classify its options, so none of them affect table state.
       val df = sql(s"SELECT a.id FROM $t1 WITH (`split-size` = 5) a " +
         s"JOIN $t1 WITH (`split-size` = 9) b ON a.id = b.id")
       df.queryExecution.analyzed
 
-      // Each distinct option bag reaches the catalog as its own loadTable call during analysis.
+      // The first reference loads the table and the second reuses that table state.
       val loadedOptions = inMemoryCatalog.loadTableCalls
         .map(_._2.get("split-size"))
         .filter(_ != null)
         .sorted
-      assert(loadedOptions === Seq("5", "9"),
-        s"expected one loadTable per distinct option bag, got: $loadedOptions")
+      assert(loadedOptions === Seq("5"),
+        s"expected the second option bag to reuse the loaded table state, got: $loadedOptions")
 
-      // The execution-time refresh also reloads once per option bag instead of sharing one Table
-      // across the two references.
+      // The execution-time refresh loads the first reference and reuses its table state for the
+      // second reference.
       inMemoryCatalog.resetLoadTableCalls()
       df.collect()
       val refreshedOptions = inMemoryCatalog.loadTableCalls
         .map(_._2.get("split-size"))
         .filter(_ != null)
         .sorted
-      assert(refreshedOptions === Seq("5", "9"),
-        s"expected refresh to load each distinct option bag, got: $refreshedOptions")
+      assert(refreshedOptions === Seq("5"),
+        s"expected refresh to share table state across option bags, got: $refreshedOptions")
 
       // Each scan also keeps its own option end-to-end (neither reference inherits the other's).
       val splitSizes = df.queryExecution.optimizedPlan.collect {
@@ -659,15 +659,22 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("shared relation cache and refresh preserve first-resolution-wins table state") {
+  test("shared relation cache selects by state and preserves each reference's full options") {
     withStateAwareTable { (stateCatalog, tableName) =>
       val cached = spark.read
         .option("snapshot", "s1")
         .option("split-size", "5")
         .table(tableName)
+      val otherStateCached = spark.read
+        .option("snapshot", "s2")
+        .option("split-size", "7")
+        .table(tableName)
       cached.cache()
+      otherStateCached.cache()
       try {
         cached.collect()
+        // Cache this relation last so it is searched first. An s1 lookup must scan past it.
+        otherStateCached.collect()
         val cachedTable = cached.queryExecution.analyzed.collectFirst {
           case r: DataSourceV2Relation => r.table
         }.getOrElse(fail("expected a cached v2 relation"))
@@ -685,6 +692,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         val cachedFirstRelations = relations(cachedFirst)
         assert(cachedFirstRelations.size == 2)
         assert(cachedFirstRelations.forall(_.table eq cachedTable))
+        assert(cachedFirstRelations.map(_.options.get("split-size")).sorted == Seq("5", "9"))
         assert(stateCatalog.loadTableCalls.count(_._2.get("snapshot") == "s1") == 1)
 
         stateCatalog.resetLoadTableCalls()
@@ -699,13 +707,93 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           s"WITH (`snapshot` = 's1', `split-size` = 5) b ON a.id = b.id")
         val uncachedFirstRelations = relations(uncachedFirst)
         assert(uncachedFirstRelations.size == 2)
-        assert(uncachedFirstRelations.head.table eq uncachedFirstRelations.last.table)
-        assert(uncachedFirstRelations.forall(_.table ne cachedTable))
+        assert(uncachedFirstRelations.forall(_.table eq cachedTable))
+        assert(uncachedFirstRelations.map(_.options.get("split-size")).sorted == Seq("5", "9"))
         assert(stateCatalog.loadTableCalls.count(_._2.get("snapshot") == "s1") == 1)
 
         stateCatalog.resetLoadTableCalls()
         assert(uncachedFirst.collect().map(_.getLong(0)).sorted.toSeq == Seq(1L, 2L))
-        assert(stateCatalog.loadTableCalls.count(_._2.get("snapshot") == "s1") == 1)
+        assert(stateCatalog.loadTableCalls.isEmpty,
+          s"shared relation cache pin should avoid refresh reloads, got: " +
+            stateCatalog.loadTableCalls)
+      } finally {
+        otherStateCached.unpersist()
+        cached.unpersist()
+      }
+    }
+  }
+
+  test("shared relation cache makes table selection independent of reference order") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      val ident = Identifier.of(Array("ns"), "table")
+      stateCatalog.alterTable(ident, TableChange.setProperty("version", "X"))
+
+      val cached = spark.read.option("split-size", "5").table(tableName)
+      cached.cache()
+      try {
+        cached.collect()
+        val versionX = cached.queryExecution.analyzed.collectFirst {
+          case r: DataSourceV2Relation => r.table
+        }.getOrElse(fail("expected a cached v2 relation"))
+        assert(versionX.properties().get("version") == "X")
+
+        // Simulate an external catalog update that does not invalidate Spark's relation cache.
+        val versionY = stateCatalog.alterTable(
+          ident,
+          TableChange.setProperty("version", "Y"))
+        assert(versionY.properties().get("version") == "Y")
+        assert(versionY.id == versionX.id)
+        assert(versionY ne versionX)
+
+        def relations(df: DataFrame): Seq[DataSourceV2Relation] = {
+          df.queryExecution.analyzed.collect {
+            case r: DataSourceV2Relation if r.options.containsKey("split-size") => r
+          }
+        }
+
+        val readA = spark.read.option("split-size", "5").table(tableName)
+        val readB = spark.read.option("split-size", "9").table(tableName)
+        assert(relations(readA).map(_.table) == Seq(versionX))
+        assert(relations(readB).map(_.table) == Seq(versionX))
+
+        val aThenB = sql(s"SELECT a.id FROM $tableName WITH (`split-size` = 5) a " +
+          s"JOIN $tableName WITH (`split-size` = 9) b ON a.id = b.id")
+        val bThenA = sql(s"SELECT a.id FROM $tableName WITH (`split-size` = 9) a " +
+          s"JOIN $tableName WITH (`split-size` = 5) b ON a.id = b.id")
+        assert(relations(aThenB).map(_.table) == Seq(versionX, versionX))
+        assert(relations(bThenA).map(_.table) == Seq(versionX, versionX))
+      } finally {
+        cached.unpersist()
+      }
+    }
+  }
+
+  test("shared relation cache rejects a different declared table state") {
+    withStateAwareTable { (stateCatalog, tableName) =>
+      val cached = spark.read
+        .option("snapshot", "s1")
+        .option("split-size", "5")
+        .table(tableName)
+      cached.cache()
+      try {
+        cached.collect()
+        val cachedTable = cached.queryExecution.analyzed.collectFirst {
+          case r: DataSourceV2Relation => r.table
+        }.getOrElse(fail("expected a cached v2 relation"))
+
+        stateCatalog.resetLoadTableCalls()
+        val differentState = spark.read
+          .option("snapshot", "s2")
+          .option("split-size", "5")
+          .table(tableName)
+        val relation = differentState.queryExecution.analyzed.collectFirst {
+          case r: DataSourceV2Relation => r
+        }.getOrElse(fail("expected a v2 relation"))
+
+        assert(relation.table ne cachedTable)
+        assert(relation.options.get("snapshot") == "s2")
+        assert(relation.options.get("split-size") == "5")
+        assert(stateCatalog.loadTableCalls.count(_._2.get("snapshot") == "s2") == 1)
       } finally {
         cached.unpersist()
       }
@@ -804,7 +892,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           java.util.Map.of("snapshot", "s1", "split-size", "9"))))
       val writeRef = V2TableReference.createForWriteTarget(original)
       var sharedRelationCacheLookups = 0
-      val sharedRelationCache: RelationCache = (_, _) => {
+      val sharedRelationCache: RelationCache = (_, _, _, _, _) => {
         sharedRelationCacheLookups += 1
         None
       }
@@ -880,7 +968,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           java.util.Map.of("snapshot", "s1", "split-size", "9"))),
         Seq("state_view"))
       var sharedRelationCacheLookups = 0
-      val sharedRelationCache: RelationCache = (_, _) => {
+      val sharedRelationCache: RelationCache = (_, _, _, _, _) => {
         sharedRelationCacheLookups += 1
         Some(cached)
       }
@@ -1027,7 +1115,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-58389: execution refresh does not reuse cached relation with different options") {
+  test("execution refresh reuses cached table state with different scan options") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -1038,18 +1126,19 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       try {
         assert(cached.count() === 2)
 
-        // Analysis correctly rejects the option-free shared relation cache entry. Reset after
-        // analysis to isolate the execution-time refresh, which must apply the same options check.
+        // This catalog declares no state options, so analysis and refresh may reuse the cached
+        // table while the relation keeps split-size=5 as its complete option bag.
         val df = spark.read.option("split-size", "5").table(t1).filter("id > 0")
-        df.queryExecution.analyzed
+        val analyzedRelation = df.queryExecution.analyzed.collectFirst {
+          case r: DataSourceV2Relation => r
+        }.getOrElse(fail("expected a v2 relation"))
+        assert(analyzedRelation.options.get("split-size") == "5")
         inMemoryCatalog.resetLoadTableCalls()
         df.collect()
 
-        val refreshLoads = inMemoryCatalog.loadTableCalls
-          .map(_._2.get("split-size"))
-          .filter(_ != null)
-        assert(refreshLoads === Seq("5"),
-          s"expected refresh to reject the option-free cache entry, got: $refreshLoads")
+        assert(inMemoryCatalog.loadTableCalls.isEmpty,
+          s"expected refresh to reuse the matching table state, got: " +
+            inMemoryCatalog.loadTableCalls)
       } finally {
         cached.unpersist()
       }
