@@ -22,7 +22,7 @@ import scala.io.Source
 import scala.util.Try
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator, SaveMode}
+import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, FastOperator, SaveMode, SparkSessionBuilder}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, UnsafeRow}
@@ -582,6 +582,31 @@ class QueryExecutionSuite extends SharedSparkSession {
       }
     } finally {
       spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("refreshPhaseEnabled defaults to true in Classic and false in Connect") {
+    // Not set: defaults to Classic, so the refresh phase is on.
+    assert(QueryExecution.refreshPhaseEnabledDefault(spark))
+    assert(spark.sessionState.executePlan(OneRowRelation()).refreshPhaseEnabled)
+
+    withSQLConf(SparkSessionBuilder.API_MODE_KEY -> SparkSessionBuilder.API_MODE_CONNECT) {
+      assert(!QueryExecution.refreshPhaseEnabledDefault(spark))
+      assert(!spark.sessionState.executePlan(OneRowRelation()).refreshPhaseEnabled)
+    }
+
+    withSQLConf(SparkSessionBuilder.API_MODE_KEY -> SparkSessionBuilder.API_MODE_CLASSIC) {
+      assert(QueryExecution.refreshPhaseEnabledDefault(spark))
+      assert(spark.sessionState.executePlan(OneRowRelation()).refreshPhaseEnabled)
+    }
+  }
+
+  test("refreshPhaseEnabled default is derived from spark.api.mode case-insensitively") {
+    withSQLConf(SparkSessionBuilder.API_MODE_KEY -> "CONNECT") {
+      assert(!QueryExecution.refreshPhaseEnabledDefault(spark))
+    }
+    withSQLConf(SparkSessionBuilder.API_MODE_KEY -> " Connect ") {
+      assert(!QueryExecution.refreshPhaseEnabledDefault(spark))
     }
   }
 
