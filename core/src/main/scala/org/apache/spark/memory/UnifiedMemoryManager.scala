@@ -447,7 +447,11 @@ object UnifiedMemoryManager extends Logging {
   }
 
   def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
-    val maxMemory = getMaxMemory(conf)
+    apply(conf, numCores, isDriver = true)
+  }
+
+  def apply(conf: SparkConf, numCores: Int, isDriver: Boolean): UnifiedMemoryManager = {
+    val maxMemory = getMaxMemory(conf, isDriver)
     new UnifiedMemoryManager(
       conf,
       maxHeapMemory = maxMemory,
@@ -459,18 +463,27 @@ object UnifiedMemoryManager extends Logging {
   /**
    * Return the total amount of memory shared between execution and storage, in bytes.
    */
-  private def getMaxMemory(conf: SparkConf): Long = {
+  private def getMaxMemory(conf: SparkConf, isDriver: Boolean): Long = {
     val systemMemory = conf.get(TEST_MEMORY)
     val reservedMemory = conf.getLong(TEST_RESERVED_MEMORY.key,
       if (conf.contains(IS_TESTING)) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
     val minSystemMemory = (reservedMemory * 1.5).ceil.toLong
     if (systemMemory < minSystemMemory) {
-      throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_DRIVER_MEMORY",
-        messageParameters = Map(
-          "systemMemory" -> systemMemory.toString,
-          "minSystemMemory" -> minSystemMemory.toString,
-          "config" -> config.DRIVER_MEMORY.key))
+      if (isDriver) {
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_DRIVER_MEMORY",
+          messageParameters = Map(
+            "systemMemory" -> systemMemory.toString,
+            "minSystemMemory" -> minSystemMemory.toString,
+            "config" -> config.DRIVER_MEMORY.key))
+      } else {
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_EXECUTOR_SYSTEM_MEMORY",
+          messageParameters = Map(
+            "systemMemory" -> systemMemory.toString,
+            "minSystemMemory" -> minSystemMemory.toString,
+            "config" -> config.EXECUTOR_MEMORY.key))
+      }
     }
     // SPARK-12759 Check executor memory to fail fast if memory is insufficient
     if (conf.contains(config.EXECUTOR_MEMORY)) {
