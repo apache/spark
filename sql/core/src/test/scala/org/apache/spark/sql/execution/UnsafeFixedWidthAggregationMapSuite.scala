@@ -32,7 +32,7 @@ import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -44,7 +44,7 @@ import org.apache.spark.unsafe.types.UTF8String
 class UnsafeFixedWidthAggregationMapSuite
   extends SparkFunSuite
   with Matchers
-  with SharedSparkSession {
+  with SessionQueryTest {
 
   import UnsafeFixedWidthAggregationMap._
 

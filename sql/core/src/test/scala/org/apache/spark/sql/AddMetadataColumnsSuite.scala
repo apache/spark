@@ -20,9 +20,9 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AddMetadataColumnsSuite extends SharedSparkSession {
+class AddMetadataColumnsSuite extends SessionQueryTest {
 
   test("Add only necessary metadata columns") {
     // For a query like:
@@ -60,7 +60,7 @@ class AddMetadataColumnsSuite extends SharedSparkSession {
         .head
         .exprId
 
-      withSQLConf(SQLConf.ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS.key -> "true") {
+      withConf(SQLConf.ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS.key -> "true") {
         // Inner project list shouldn't contain a reference to the right key.
         val analyzed = join.select(left("k")).queryExecution.analyzed
         analyzed match {
@@ -70,7 +70,7 @@ class AddMetadataColumnsSuite extends SharedSparkSession {
         }
       }
 
-      withSQLConf(SQLConf.ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS.key -> "false") {
+      withConf(SQLConf.ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS.key -> "false") {
         // Inner project list should contain a reference to the right key.
         val analyzed = join.select(left("k")).queryExecution.analyzed
         analyzed match {
@@ -133,7 +133,7 @@ class AddMetadataColumnsSuite extends SharedSparkSession {
         .head
         .exprId
 
-      withSQLConf(SQLConf.ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS.key -> "true") {
+      withConf(SQLConf.ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS.key -> "true") {
         // With conf on, no duplication of left key and no unnecessary right key.
         val analyzed = filter.select(left("k")).queryExecution.analyzed
         analyzed match {
@@ -147,7 +147,7 @@ class AddMetadataColumnsSuite extends SharedSparkSession {
         }
       }
 
-      withSQLConf(SQLConf.ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS.key -> "false") {
+      withConf(SQLConf.ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS.key -> "false") {
         // With conf off, duplication of left key and an unnecessary right key.
         val analyzed = filter.select(left("k")).queryExecution.analyzed
         analyzed match {

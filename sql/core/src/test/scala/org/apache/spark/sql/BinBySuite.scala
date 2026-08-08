@@ -22,9 +22,9 @@ import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class BinBySuite extends QueryTest with SharedSparkSession {
+class BinBySuite extends QueryTest with SessionQueryTest {
 
   private def tsAt(s: String, zone: ZoneId = ZoneOffset.UTC): Timestamp =
     Timestamp.from(LocalDateTime.parse(s.replace(' ', 'T')).atZone(zone).toInstant)
@@ -35,7 +35,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     overlapMicros.toDouble / totalMicros.toDouble
 
   test("BIN BY is rejected when the operator is disabled") {
-    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "false") {
+    withConf(SQLConf.BIN_BY_ENABLED.key -> "false") {
       // Disabled, BIN BY is rejected at analysis with UNSUPPORTED_FEATURE.BIN_BY. spark.sql eagerly
       // analyzes, so the query itself is inside the intercept.
       checkError(
@@ -54,7 +54,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   }
 
   test("BIN BY splits a range into proportional sub-rows") {
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val df = spark.sql(
@@ -73,7 +73,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   }
 
   test("BIN BY scales FLOAT and DOUBLE DISTRIBUTE columns in one clause") {
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val df = spark.sql(
@@ -93,7 +93,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   }
 
   test("BIN BY passes a single-bin range through with ratio 1.0") {
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val df = spark.sql(
@@ -110,7 +110,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   }
 
   test("BIN BY aligns to an origin later than the range") {
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       // ALIGN TO after the range exercises a negative bucket index (origin later than the range).
@@ -137,7 +137,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   }
 
   test("BIN BY replicates a nested struct passthrough column across a multi-bin split") {
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       // A nested struct passthrough must appear identically on every split sub-row.
@@ -159,7 +159,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
 
   test("BIN BY uses UTC arithmetic for a sub-day bin in a non-UTC session") {
     val la = ZoneId.of("America/Los_Angeles")
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       // Sub-day widths use UTC microsecond arithmetic, not the civil-time path the multi-day tests
@@ -181,7 +181,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
 
   test("BIN BY uses civil-time bin boundaries across a DST spring-forward") {
     val la = ZoneId.of("America/Los_Angeles")
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       // A 1-DAY bin spanning the 2024-03-10 spring-forward. Multi-day widths use civil-time
@@ -209,7 +209,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
 
   test("BIN BY uses civil-time bin boundaries across a DST fall-back") {
     val la = ZoneId.of("America/Los_Angeles")
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       // A 1-DAY bin spanning the 2024-11-03 fall-back: the 2024-11-03 bin is 25h wide (01:00 PDT
@@ -235,7 +235,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
 
   test("BIN BY uses civil-time boundaries for a compound multi-day width across DST") {
     val la = ZoneId.of("America/Los_Angeles")
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       // A 2-DAY bin across the 2024-11-03 fall-back: boundaries land two civil days apart, so the
@@ -261,7 +261,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
 
   test("BIN BY places multi-bin civil-time boundaries on the absolute grid across DST") {
     val la = ZoneId.of("America/Los_Angeles")
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       // Boundaries of a 36h width must lie on the grid bin_start(k) = ALIGN_TO + k * 36h. Across
@@ -293,7 +293,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
 
   test("BIN BY reports the same civil-time bin boundary regardless of where a row starts") {
     val la = ZoneId.of("America/Los_Angeles")
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       // Both rows span the bin starting 2024-03-12 00:00 LA: one walks into it from bin 0, the
@@ -319,7 +319,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   }
 
   test("BIN BY emits a zero-width bin at a whole-day zone skip") {
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Pacific/Apia") {
       // Apia skipped all of 2011-12-30 (UTC-11 -> UTC+13), so two grid boundaries land on the same
@@ -345,7 +345,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
 
   test("BIN BY places the zero-length range bin on the grid for a non-whole-day width") {
     val la = ZoneId.of("America/Los_Angeles")
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       // A zero-length range emits one ratio-1.0 row for its bin. Its bin's 36h step crosses the
@@ -365,7 +365,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   }
 
   test("BIN BY executes on NTZ inputs with the epoch default origin") {
-    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+    withConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
       val df = spark.sql(
         """SELECT bin_start, bin_end, bin_distribute_ratio, value
           |FROM VALUES
@@ -383,7 +383,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   test("BIN BY on NTZ inputs uses UTC arithmetic and ignores the session zone across DST") {
     // A multi-day NTZ bin over the LA spring-forward: NTZ ignores the session zone, so every day is
     // a full 24h (no DST shortening), unlike the LTZ civil-time path. Two 1-day bins split evenly.
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       val df = spark.sql(
@@ -401,7 +401,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   }
 
   test("BIN BY emits a single ratio-1.0 row for a zero-length range") {
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val df = spark.sql(
@@ -419,7 +419,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   }
 
   test("BIN BY raises BIN_BY_INVALID_RANGE for an inverted range") {
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val df = spark.sql(
@@ -441,7 +441,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   }
 
   test("BIN BY emits a NULL-range row with all computed columns NULL") {
-    withSQLConf(
+    withConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val df = spark.sql(

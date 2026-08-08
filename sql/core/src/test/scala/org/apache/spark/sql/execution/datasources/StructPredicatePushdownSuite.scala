@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{EqualTo => SourcesEqualTo, Filter => SourcesFilter}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 
 /**
@@ -38,7 +38,7 @@ import org.apache.spark.sql.types._
  * - Conf on/off behavior works correctly
  * - Results are identical with rule on vs off (parity)
  */
-class StructPredicatePushdownSuite extends QueryTest with SharedSparkSession {
+class StructPredicatePushdownSuite extends QueryTest with SessionQueryTest {
 
   private def getFileSourceScanDataFilters(df: DataFrame): Seq[Expression] = {
     val plan = df.queryExecution.executedPlan
@@ -202,7 +202,7 @@ class StructPredicatePushdownSuite extends QueryTest with SharedSparkSession {
       ).write.parquet(path.getAbsolutePath)
 
       // Set maxFields to 3 so a 5-field struct is not decomposed
-      withSQLConf(SQLConf.STRUCT_PREDICATE_DECOMPOSE_MAX_FIELDS.key -> "3") {
+      withConf(SQLConf.STRUCT_PREDICATE_DECOMPOSE_MAX_FIELDS.key -> "3") {
         val df = spark.read.parquet(path.getAbsolutePath)
           .where("s = named_struct('f1', 2, 'f2', 2, 'f3', 2, 'f4', 2, 'f5', 2)")
 
@@ -238,7 +238,7 @@ class StructPredicatePushdownSuite extends QueryTest with SharedSparkSession {
         "named_struct('a', cast(id as int), 'b', cast(id + 1 as int)) as s"
       ).write.parquet(path.getAbsolutePath)
 
-      withSQLConf(SQLConf.STRUCT_PREDICATE_DECOMPOSE_ENABLED.key -> "false") {
+      withConf(SQLConf.STRUCT_PREDICATE_DECOMPOSE_ENABLED.key -> "false") {
         val df = spark.read.parquet(path.getAbsolutePath)
           .where("s = named_struct('a', 5, 'b', 6)")
 
@@ -307,11 +307,11 @@ class StructPredicatePushdownSuite extends QueryTest with SharedSparkSession {
       )
 
       for (query <- queries) {
-        val resultOn = withSQLConf(
+        val resultOn = withConf(
           SQLConf.STRUCT_PREDICATE_DECOMPOSE_ENABLED.key -> "true") {
           spark.read.parquet(path.getAbsolutePath).where(query).collect()
         }
-        val resultOff = withSQLConf(
+        val resultOff = withConf(
           SQLConf.STRUCT_PREDICATE_DECOMPOSE_ENABLED.key -> "false") {
           spark.read.parquet(path.getAbsolutePath).where(query).collect()
         }
@@ -370,7 +370,7 @@ class StructPredicatePushdownSuite extends QueryTest with SharedSparkSession {
   test("field-level predicates are pushed on the DSv2 file-source path") {
     // Force parquet to resolve to the DSv2 reader (FileScanBuilder /
     // SupportsPushDownCatalystFilters) rather than the V1 FileSourceStrategy.
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+    withConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { path =>
         spark.range(10).selectExpr(
           "named_struct('a', cast(id as int), 'b', cast(id + 1 as int)) as s"
@@ -398,7 +398,7 @@ class StructPredicatePushdownSuite extends QueryTest with SharedSparkSession {
   }
 
   test("DSv2 parity: results identical with decomposition on vs off") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+    withConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { path =>
         val data = Seq(
           Row(Row(1, "a")), Row(Row(2, "b")), Row(Row(1, null)), Row(null), Row(Row(3, "a")))
@@ -416,11 +416,11 @@ class StructPredicatePushdownSuite extends QueryTest with SharedSparkSession {
           "s <=> named_struct('a', 1, 'b', 'a')")
 
         for (query <- queries) {
-          val resultOn = withSQLConf(
+          val resultOn = withConf(
             SQLConf.STRUCT_PREDICATE_DECOMPOSE_ENABLED.key -> "true") {
             spark.read.parquet(path.getAbsolutePath).where(query).collect()
           }
-          val resultOff = withSQLConf(
+          val resultOff = withConf(
             SQLConf.STRUCT_PREDICATE_DECOMPOSE_ENABLED.key -> "false") {
             spark.read.parquet(path.getAbsolutePath).where(query).collect()
           }

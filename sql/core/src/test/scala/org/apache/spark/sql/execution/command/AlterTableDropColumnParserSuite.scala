@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedFieldName, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.DropColumns
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AlterTableDropColumnParserSuite extends AnalysisTest with SharedSparkSession {
+class AlterTableDropColumnParserSuite extends AnalysisTest with SessionQueryTest {
 
   test("alter table: drop column") {
     comparePlans(

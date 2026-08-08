@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.AddPartitions
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AlterTableAddPartitionParserSuite extends AnalysisTest with SharedSparkSession {
+class AlterTableAddPartitionParserSuite extends AnalysisTest with SessionQueryTest {
   test("add partition if not exists") {
     val sql = """
       |ALTER TABLE a.b.c ADD IF NOT EXISTS PARTITION

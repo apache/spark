@@ -28,12 +28,12 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetTest, SparkShreddingUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
-class VariantShreddingSuite extends SharedSparkSession with ParquetTest {
+class VariantShreddingSuite extends SessionQueryTest with ParquetTest {
   def parseJson(s: String): VariantVal = {
     val v = VariantBuilder.parseJson(s, false)
     new VariantVal(v.getValue, v.getMetadata)
@@ -65,7 +65,7 @@ class VariantShreddingSuite extends SharedSparkSession with ParquetTest {
 
   def withPushConfigs(pushConfigs: Seq[Boolean] = Seq(true, false))(fn: => Unit): Unit = {
     for (push <- pushConfigs) {
-      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN.key -> push.toString) {
+      withConf(SQLConf.PUSH_VARIANT_INTO_SCAN.key -> push.toString) {
         fn
       }
     }
@@ -74,7 +74,7 @@ class VariantShreddingSuite extends SharedSparkSession with ParquetTest {
   def isPushEnabled: Boolean = SQLConf.get.getConf(SQLConf.PUSH_VARIANT_INTO_SCAN)
 
   def testWithTempPath(name: String)(block: File => Unit): Unit = test(name) {
-    withSQLConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED.key-> "true") {
+    withConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED.key-> "true") {
       withPushConfigs() {
         withTempPath { path =>
           block(path)
@@ -126,7 +126,7 @@ class VariantShreddingSuite extends SharedSparkSession with ParquetTest {
 
     writeRows(path, writeSchema(schema), row)
     for (tz <- Seq("Etc/UTC", "America/Los_Angeles")) {
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+      withConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
         val timestamp = if (tz == "Etc/UTC") {
           "1970-01-01 00:00:00.007+00:00"
         } else {
@@ -308,7 +308,7 @@ class VariantShreddingSuite extends SharedSparkSession with ParquetTest {
     checkExpr(path, "variant_get(v, '$[1].b[0]', 'int')", 7, null)
     // Validate timestamp-related casts uses the session time zone correctly.
     Seq("Etc/UTC", "America/Los_Angeles").foreach { tz =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+      withConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
         val expected = sql("select timestamp'1000-01-01', timestamp_ntz'1000-01-01'").head()
         checkAnswer(read(path).selectExpr("variant_get(v, '$[1].a', 'timestamp')",
           "variant_get(v, '$[1].a', 'timestamp_ntz')"), Seq(expected, Row(null, null)))

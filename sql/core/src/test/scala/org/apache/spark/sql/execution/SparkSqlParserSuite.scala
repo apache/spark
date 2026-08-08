@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.ArrayImplicits._
 
@@ -46,7 +46,7 @@ import org.apache.spark.util.ArrayImplicits._
  * See [[org.apache.spark.sql.catalyst.parser.PlanParserSuite]] for rules
  * defined in the Catalyst module.
  */
-class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
+class SparkSqlParserSuite extends AnalysisTest with SessionQueryTest {
   import org.apache.spark.sql.catalyst.dsl.expressions._
 
   override protected def sparkConf: SparkConf =
@@ -837,7 +837,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("CREATE TEMPORARY TABLE ... USING provider should be blocked under the flag") {
-    withSQLConf((SQLConf.BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER.key, "true")) {
+    withConf((SQLConf.BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER.key, "true")) {
       checkError(
         exception = intercept[ParseException](
           sql("CREATE TEMPORARY TABLE t (i int) USING parquet")
@@ -1037,7 +1037,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         ||> SELECT cate, SUM(val) OVER w
         |   WINDOW w AS (PARTITION BY cate ORDER BY val)
         |""".stripMargin)
-    withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "false") {
+    withConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "false") {
       val sql = s"TABLE t |> SELECT 1 AS X"
       checkError(
         exception = parseException(sql),
@@ -1065,16 +1065,16 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val initialSize = AbstractParser.getDFACacheNumStates
     val mediumQuery = s"select ${awfulQuery(2)} from range(10)"
 
-    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (10000).toString,
+    withConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (10000).toString,
         SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> 100.toString) {
-      withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> false.toString) {
+      withConf(SQLConf.MANAGE_PARSER_CACHES.key -> false.toString) {
         parser.parsePlan(mediumQuery)
       }
       val disabledSize = AbstractParser.getDFACacheNumStates
       // There should be no change to the state of the managed caches when not enabled
       assert(disabledSize == initialSize)
 
-      withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> true.toString) {
+      withConf(SQLConf.MANAGE_PARSER_CACHES.key -> true.toString) {
         parser.parsePlan(mediumQuery)
       }
       val enabledSize = AbstractParser.getDFACacheNumStates
@@ -1084,13 +1084,13 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("SPARK-47404: Always release Antlr cache when cache limit is 0") {
-    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (-1).toString) {
+    withConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (-1).toString) {
       parser.parsePlan("select id from range(10)")
     }
     val initialCacheSize = AbstractParser.getDFACacheNumStates
     assert(initialCacheSize > 0)
 
-    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> 0.toString) {
+    withConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> 0.toString) {
       parser.parsePlan("select id from range(10)")
     }
     val clearedCacheSize = AbstractParser.getDFACacheNumStates
@@ -1106,7 +1106,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val threshold = 10000
 
     // Fill the cache a little
-    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString) {
+    withConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString) {
       parser.parsePlan(smallQuery)
     }
     val smallQueryCacheSize = AbstractParser.getDFACacheNumStates
@@ -1114,14 +1114,14 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     assert(smallQueryCacheSize < threshold)
 
     // Parse a big query to fill the cache
-    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (-1).toString) {
+    withConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> (-1).toString) {
       parser.parsePlan(bigQuery)
     }
     val bigQueryCacheSize = AbstractParser.getDFACacheNumStates
     assert(bigQueryCacheSize > threshold)
 
     // Parse a small query to release the cache
-    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString) {
+    withConf(SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString) {
       parser.parsePlan(smallQuery)
     }
     val clearedCacheSize = AbstractParser.getDFACacheNumStates
@@ -1139,7 +1139,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val ratio = stateThreshold * AbstractParser.BYTES_PER_DFA_STATE * 100.0 / driverMemory
 
     // Fill the cache a little
-    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> ratio.toString) {
+    withConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> ratio.toString) {
       parser.parsePlan(smallQuery)
     }
     val smallQueryCacheSize = AbstractParser.getDFACacheNumStates
@@ -1147,14 +1147,14 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     assert(smallQueryCacheSize < stateThreshold)
 
     // Parse a big query to fill the cache
-    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> 100.toString) {
+    withConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> 100.toString) {
       parser.parsePlan(bigQuery)
     }
     val bigQueryCacheSize = AbstractParser.getDFACacheNumStates
     assert(bigQueryCacheSize > smallQueryCacheSize)
 
     // Parse a small query to release the cache
-    withSQLConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> ratio.toString) {
+    withConf(SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> ratio.toString) {
       parser.parsePlan(smallQuery)
     }
     val clearedCacheSize = AbstractParser.getDFACacheNumStates
@@ -1170,7 +1170,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     test(s"SPARK-47404: Antlr cache combined thresholds. States: $threshold, Ratio: $ratio") {
       // The cache should be flushed if either of the thresholds are exceeded.
       val bigQuery = s"select ${awfulQuery(8)} from range(10)"
-      withSQLConf(
+      withConf(
           SQLConf.PARSER_DFA_CACHE_FLUSH_THRESHOLD.key -> threshold.toString,
           SQLConf.PARSER_DFA_CACHE_FLUSH_RATIO.key -> ratio.toString) {
         parser.parsePlan(bigQuery)

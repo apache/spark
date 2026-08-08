@@ -24,12 +24,12 @@ import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 /**
  * Tests for [[org.apache.spark.sql.internal.SharedState]].
  */
-class SharedStateSuite extends SharedSparkSession {
+class SharedStateSuite extends SessionQueryTest {
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf

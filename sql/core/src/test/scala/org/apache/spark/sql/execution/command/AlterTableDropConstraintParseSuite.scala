@@ -20,9 +20,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.DropConstraint
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AlterTableDropConstraintParseSuite extends AnalysisTest with SharedSparkSession {
+class AlterTableDropConstraintParseSuite extends AnalysisTest with SessionQueryTest {
 
   test("Drop constraint") {
     val sql = "ALTER TABLE a.b.c DROP CONSTRAINT c1"

@@ -22,9 +22,9 @@ import java.nio.file.Path
 
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata, CommitMetadataBase, CommitMetadataV2, CommitMetadataV3, OffsetSeqLog, SinkMetadataInfo}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class CommitLogSuite extends SharedSparkSession {
+class CommitLogSuite extends SessionQueryTest {
 
   private def testCommitLogV2FilePath: Path = {
     getWorkspaceFilePath(
@@ -89,14 +89,14 @@ class CommitLogSuite extends SharedSparkSession {
   }
 
   test("Basic Commit Log V1 SerDe") {
-    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
+    withConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
       val testMetadataV1 = CommitMetadata(1)
       testSerde(testMetadataV1, testCommitLogV1FilePath)
     }
   }
 
   test("Basic Commit Log V2 SerDe - nonempty stateUniqueIds") {
-    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+    withConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
       val testStateUniqueIds: Map[Long, Array[Array[String]]] =
         Map(
           0L -> Array(Array("unique_id1", "unique_id2"), Array("unique_id3", "unique_id4")),
@@ -108,7 +108,7 @@ class CommitLogSuite extends SharedSparkSession {
   }
 
   test("Basic Commit Log V2 SerDe - empty stateUniqueIds") {
-    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+    withConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
       val testMetadataV2 = CommitMetadataV2(0, Some(Map[Long, Array[Array[String]]]()))
       testSerde(testMetadataV2, testCommitLogV2FilePathEmptyUniqueId)
     }
@@ -207,7 +207,7 @@ class CommitLogSuite extends SharedSparkSession {
   // deserialize successfully into a V1 [[CommitMetadata]] because the wire format version is now
   // discovered from the file header rather than enforced to match the conf.
   test("Cross-version V1 SerDe") {
-    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+    withConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
       val commitlogV1 = """v1
                           |{"nextBatchWatermarkMs":233}""".stripMargin
       val inputStream: ByteArrayInputStream =

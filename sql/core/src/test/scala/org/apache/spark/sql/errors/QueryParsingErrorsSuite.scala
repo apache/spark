@@ -21,11 +21,11 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 // Turn of the length check because most of the tests check entire error messages
 // scalastyle:off line.size.limit
-class QueryParsingErrorsSuite extends SharedSparkSession {
+class QueryParsingErrorsSuite extends SessionQueryTest {
 
   private def parseException(sqlText: String): SparkThrowable = {
     intercept[ParseException](sql(sqlText).collect())
@@ -75,7 +75,7 @@ class QueryParsingErrorsSuite extends SharedSparkSession {
   }
 
   test("NAMED_PARAMETER_SUPPORT_DISABLED: named arguments not turned on") {
-    withSQLConf("spark.sql.allowNamedFunctionArguments" -> "false") {
+    withConf("spark.sql.allowNamedFunctionArguments" -> "false") {
       checkError(
         exception = parseException("SELECT explode(arr => array(10, 20))"),
         condition = "NAMED_PARAMETER_SUPPORT_DISABLED",

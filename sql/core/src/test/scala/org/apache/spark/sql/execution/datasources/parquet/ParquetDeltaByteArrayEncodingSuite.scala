@@ -22,14 +22,14 @@ import org.apache.parquet.column.values.deltastrings.DeltaByteArrayWriter
 
 import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{DataType, GeographyType, GeometryType, IntegerType, StringType}
 
 /**
  * Read tests for vectorized Delta byte array  reader.
  * Translated from * org.apache.parquet.column.values.delta.TestDeltaByteArray
  */
-class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with SharedSparkSession {
+class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with SessionQueryTest {
   val values: Array[String] = Array("parquet-mr", "parquet", "parquet-format");
   val randvalues: Array[String] = Utils.getRandomStringSamples(10000, 32)
 

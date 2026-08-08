@@ -26,11 +26,11 @@ import org.apache.spark.SparkConf
 import org.apache.spark.security.SecurityConfigurationLock
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.jdbc.JdbcConnectionProvider
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 class ConnectionProviderSuite
   extends ConnectionProviderSuiteBase
-  with SharedSparkSession
+  with SessionQueryTest
   with MockitoSugar {
 
   test("All built-in providers must be loaded") {
@@ -212,7 +212,7 @@ class ConnectionProviderSuite
   }
 }
 
-class DisallowedConnectionProviderSuite extends SharedSparkSession {
+class DisallowedConnectionProviderSuite extends SessionQueryTest {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(

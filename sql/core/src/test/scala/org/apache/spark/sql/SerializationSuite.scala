@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class SerializationSuite extends SharedSparkSession {
+class SerializationSuite extends SessionQueryTest {
 
   test("[SPARK-5235] SQLContext should be serializable") {
     val spark = SparkSession.builder().getOrCreate()

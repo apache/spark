@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution.streaming.state
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.util.Utils
 
-class RocksDBLineageSuite extends SharedSparkSession {
+class RocksDBLineageSuite extends SessionQueryTest {
   private def newDB(root: String, enableCheckpointIds: Boolean): RocksDB = {
     val conf = RocksDBConf().copy(enableChangelogCheckpointing = true)
     new RocksDB(

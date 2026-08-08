@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{
 import org.apache.spark.sql.connector.catalog.{
   ChangelogProperties, Column, Identifier, InMemoryChangelogCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.LongType
 
 /**
@@ -44,7 +44,7 @@ import org.apache.spark.sql.types.LongType
  *     -> [Project (update relabel)]
  *     -> Project (drop helper columns)
  */
-class ResolveChangelogTableStreamingPostProcessingSuite extends SharedSparkSession {
+class ResolveChangelogTableStreamingPostProcessingSuite extends SessionQueryTest {
 
   private val catalogName = "cdc_streaming_pp"
   private val testTableName = "events"

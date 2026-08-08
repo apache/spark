@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.CreateNamespace
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class CreateNamespaceParserSuite extends AnalysisTest with SharedSparkSession {
+class CreateNamespaceParserSuite extends AnalysisTest with SessionQueryTest {
 
   private def parseException(sqlText: String): SparkThrowable = {
     intercept[ParseException](sql(sqlText).collect())

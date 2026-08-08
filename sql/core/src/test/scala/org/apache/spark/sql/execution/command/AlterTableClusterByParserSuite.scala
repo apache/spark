@@ -21,9 +21,9 @@ import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.AlterTableClusterBy
 import org.apache.spark.sql.connector.expressions.FieldReference
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AlterTableClusterByParserSuite extends AnalysisTest with SharedSparkSession {
+class AlterTableClusterByParserSuite extends AnalysisTest with SessionQueryTest {
 
   test("alter table cluster by") {
     comparePlans(

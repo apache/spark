@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedFieldName, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.RenameColumn
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AlterTableRenameColumnParserSuite extends AnalysisTest with SharedSparkSession {
+class AlterTableRenameColumnParserSuite extends AnalysisTest with SessionQueryTest {
 
   test("alter table: rename column") {
     comparePlans(

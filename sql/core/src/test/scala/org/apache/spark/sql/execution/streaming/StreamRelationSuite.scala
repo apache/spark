@@ -30,11 +30,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.Unassigned
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
+class StreamRelationSuite extends SessionQueryTest with AnalysisTest {
 
   override protected def getAnalyzer: Analyzer = {
     val catalog = new SessionCatalog(

@@ -25,9 +25,9 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.deploy.history.{Utils => HsUtils}
 import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class StreamingQueryHistorySuite extends SharedSparkSession with BeforeAndAfter {
+class StreamingQueryHistorySuite extends SessionQueryTest with BeforeAndAfter {
 
   test("support streaming query events") {
     val logDir = Thread.currentThread().getContextClassLoader.getResource("spark-events").toString

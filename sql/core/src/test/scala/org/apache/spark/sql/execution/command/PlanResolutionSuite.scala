@@ -45,12 +45,12 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
-class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
+class PlanResolutionSuite extends SessionQueryTest with AnalysisTest {
   private def parsePlan(statement: String) = spark.sessionState.sqlParser.parsePlan(statement)
 
   private val v1Format = classOf[SimpleScanSource].getName
@@ -1365,7 +1365,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         assert(isByName)
       case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
     }
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+    withConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       val dynamicOverwriteParsed = parseAndResolve(overwriteSql)
       dynamicOverwriteParsed match {
         case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _, _) =>
@@ -1424,7 +1424,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
   }
 
   test("INSERT INTO REPLACE ON is blocked when feature flag is disabled") {
-    withSQLConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED.key -> "false") {
+    withConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED.key -> "false") {
       val ex = intercept[ParseException] {
         parseAndResolve(
           "INSERT INTO testcat.tab AS t REPLACE ON t.i = 1 SELECT * FROM v2Table")
@@ -1434,7 +1434,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
   }
 
   test("INSERT INTO REPLACE USING is blocked when feature flag is disabled") {
-    withSQLConf(SQLConf.INSERT_INTO_REPLACE_USING_ENABLED.key -> "false") {
+    withConf(SQLConf.INSERT_INTO_REPLACE_USING_ENABLED.key -> "false") {
       val ex = intercept[ParseException] {
         parseAndResolve(
           "INSERT INTO testcat.tab AS t REPLACE USING (i) SELECT * FROM v2Table")
@@ -1444,7 +1444,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
   }
 
   test("INSERT INTO BY NAME REPLACE ON is blocked when feature flag is disabled") {
-    withSQLConf(SQLConf.INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED.key -> "false") {
+    withConf(SQLConf.INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED.key -> "false") {
       val ex = intercept[ParseException] {
         parseAndResolve(
           "INSERT INTO testcat.tab AS t BY NAME REPLACE ON t.i = 1 SELECT * FROM v2Table")
@@ -1454,7 +1454,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
   }
 
   test("INSERT INTO BY NAME REPLACE USING is blocked when feature flag is disabled") {
-    withSQLConf(SQLConf.INSERT_INTO_REPLACE_USING_BY_NAME_ENABLED.key -> "false") {
+    withConf(SQLConf.INSERT_INTO_REPLACE_USING_BY_NAME_ENABLED.key -> "false") {
       val ex = intercept[ParseException] {
         parseAndResolve(
           "INSERT INTO testcat.tab AS t BY NAME REPLACE USING (i) SELECT * FROM v2Table")
@@ -1637,7 +1637,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
   test("alter table: alter column case sensitivity for v1 table") {
     val tblName = "v1Table"
     Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      withConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val sql = s"ALTER TABLE $tblName ALTER COLUMN I COMMENT 'new comment'"
         if (caseSensitive) {
           checkError(

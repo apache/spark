@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
 /** These tests exercise passing constant but non-literal OPTIONS lists, and folding them. */
-class TableOptionsConstantFoldingSuite extends SharedSparkSession {
+class TableOptionsConstantFoldingSuite extends SessionQueryTest {
   val prefix = "create table t (col int) using json options "
 
   /** Helper method to create a table with a OPTIONS list and then check the resulting value. */
@@ -44,7 +44,7 @@ class TableOptionsConstantFoldingSuite extends SharedSparkSession {
     checkOption("null", null)
     checkOption("cast('11 23:4:0' as interval day to second)",
       "INTERVAL '11 23:04:00' DAY TO SECOND")
-    withSQLConf(SQLConf.LEGACY_EVAL_CURRENT_TIME.key -> "true") {
+    withConf(SQLConf.LEGACY_EVAL_CURRENT_TIME.key -> "true") {
       checkOption("date_diff(current_date(), current_date())", "0")
     }
     checkOption("date_sub(date'2022-02-02', 1)", "2022-02-01")
@@ -55,7 +55,7 @@ class TableOptionsConstantFoldingSuite extends SharedSparkSession {
     // too narrow to contain the result of the cast.
     val cannotBeRepresented = "round(cast(2.25 as decimal(3, 3)), 1)"
     Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+      withConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         if (ansiEnabled) {
           val exception = intercept[AnalysisException](sql(s"$prefix ('k' = $cannotBeRepresented)"))
           assert(exception.cause.exists(_.getMessage.contains(

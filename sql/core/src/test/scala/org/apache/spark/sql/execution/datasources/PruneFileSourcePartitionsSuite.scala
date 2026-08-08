@@ -31,10 +31,10 @@ import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 import org.apache.spark.sql.types.StructType
 
-class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with SharedSparkSession {
+class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with SessionQueryTest {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -99,7 +99,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
 
   test("SPARK-26576 Broadcast hint not applied to partitioned table") {
     withTable("tbl") {
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
         val df = spark.table("tbl")
         val qe = df.join(broadcast(df), "p").queryExecution
@@ -110,7 +110,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
 
   test("SPARK-35985 push filters for empty read schema") {
     // Force datasource v2 for parquet
-    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
+    withConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
       withTempPath { dir =>
         spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
             .write.partitionBy("p").parquet(dir.getCanonicalPath)
@@ -125,7 +125,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
 
   test("SPARK-38357: data + partition filters with OR") {
     // Force datasource v2 for parquet
-    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
+    withConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
       withTempPath { dir =>
         spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
           .write.partitionBy("p").parquet(dir.getCanonicalPath)
@@ -147,7 +147,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
 
   test("SPARK-40565: don't push down non-deterministic filters for V2 file sources") {
     // Force datasource v2 for parquet
-    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
+    withConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
       withTempPath { dir =>
         spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
           .write.partitionBy("p").parquet(dir.getCanonicalPath)

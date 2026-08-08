@@ -20,16 +20,16 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.analysis.UnresolvedOrdinal
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends SharedSparkSession {
+class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends SessionQueryTest {
 
   test("Group by ordinal - SQL") {
     val correctSqlText = "SELECT col1, max(col2) FROM VALUES(1,2),(1,3),(2,4) GROUP BY 1"
     val groupByPosOutOfRangeSqlText =
       "SELECT col1, max(col2) FROM VALUES(1,2),(1,3),(2,4) GROUP BY -1"
 
-    withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "true") {
+    withConf(SQLConf.GROUP_BY_ORDINAL.key -> "true") {
       val query = sql(correctSqlText)
       val parsedPlan = query.queryExecution.logical
       val analyzedPlan = query.queryExecution.analyzed
@@ -52,7 +52,7 @@ class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends SharedSparkSession {
       )
     }
 
-    withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
+    withConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
       val parsedPlan = spark.sessionState.sqlParser.parsePlan(correctSqlText)
 
       assert(parsedPlan.expressions.collect {
@@ -71,7 +71,7 @@ class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends SharedSparkSession {
     val correctSqlText = "SELECT col1 FROM VALUES(2,1),(1,2) ORDER BY 1"
     val orderByPosOutOfRangeSqlText = "SELECT col1 FROM VALUES(2,1),(1,2) ORDER BY -1"
 
-    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "true") {
+    withConf(SQLConf.ORDER_BY_ORDINAL.key -> "true") {
       val query = sql(correctSqlText)
       val parsedPlan = query.queryExecution.logical
       val analyzedPlan = query.queryExecution.analyzed
@@ -94,7 +94,7 @@ class ReplaceIntegerLiteralsWithOrdinalsSqlSuite extends SharedSparkSession {
       )
     }
 
-    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {
+    withConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {
       val query = sql(correctSqlText)
       val parsedPlan = query.queryExecution.logical
       val analyzedPlan = query.queryExecution.analyzed

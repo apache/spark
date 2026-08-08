@@ -22,9 +22,9 @@ import org.apache.spark.SparkNoSuchElementException
 import org.apache.spark.sql.SparkSessionExtensions
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.SessionQueryTest
 
-class AnalysisConfOverrideSuite extends SharedSparkSession {
+class AnalysisConfOverrideSuite extends SessionQueryTest {
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
@@ -47,7 +47,7 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
     test(testName) {
       val key = "spark.sql.catalog.x.y"
       val value = "true"
-      withSQLConf(key -> value) {
+      withConf(key -> value) {
         f(key, value)
       }
     }
@@ -127,7 +127,7 @@ class AnalysisConfOverrideSuite extends SharedSparkSession {
       spark.sql("CREATE TABLE test_table AS SELECT id as a FROM range(10)")
       spark.sql("CREATE TABLE test_table2 AS SELECT id as a, (id + 1) as b FROM range(10)")
       // turn the flag off to maintain former behavior
-      withSQLConf("spark.sql.analyzer.sqlFunctionResolution.applyConfOverrides" -> "false") {
+      withConf("spark.sql.analyzer.sqlFunctionResolution.applyConfOverrides" -> "false") {
         withUserDefinedFunction("f1" -> true, "f2" -> false, "f3" -> false) {
           spark.sql(
             """CREATE OR REPLACE TEMPORARY FUNCTION f1() RETURNS TABLE (a bigint)
