@@ -1637,20 +1637,34 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkSet("""{"a": 1}""", "$.a", Literal.create(null, NullType), null)
 
     Seq(true, false).foreach { failOnError =>
-      val dynamic = VariantSet(
+      val dynamicCreate = VariantSet(
         Literal(parseJson("""{"a": 1}""")),
         BoundReference(0, StringType, nullable = true),
         Literal(2),
-        BoundReference(1, BooleanType, nullable = true),
+        Literal(true),
         failOnError)
       checkEvaluation(
-        ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+        ResolveTimeZone.resolveTimeZones(Cast(dynamicCreate, StringType)),
         """{"a":1,"b":2}""",
-        InternalRow(UTF8String.fromString("$.b"), true))
+        InternalRow(UTF8String.fromString("$.b")))
+      val dynamicNoCreate = VariantSet(
+        Literal(parseJson("""{"a": 1}""")),
+        BoundReference(0, StringType, nullable = true),
+        Literal(2),
+        Literal(false),
+        failOnError)
       checkEvaluation(
-        ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+        ResolveTimeZone.resolveTimeZones(Cast(dynamicNoCreate, StringType)),
         """{"a":1}""",
-        InternalRow(UTF8String.fromString("$.b"), false))
+        InternalRow(UTF8String.fromString("$.b")))
+    }
+
+    // create_if_missing must be a constant, for both variant_set and try_variant_set.
+    Seq(true, false).foreach { failOnError =>
+      assert(VariantSet(
+        Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2),
+        BoundReference(0, BooleanType, nullable = true), failOnError)
+        .checkInputDataTypes().isFailure)
     }
 
     // Recoverable errors: `variant_set` throws; `try_variant_set` returns NULL. Every shape of
