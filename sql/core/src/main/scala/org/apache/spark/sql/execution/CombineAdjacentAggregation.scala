@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final, Partial}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateMode, Complete, Final, Partial, PartialMerge}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -49,13 +49,10 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
     }
 
     plan.transformDown {
-      case finalAgg @ HashAggregateExec(_, _, _, _, _, _, _, _, partialAgg: HashAggregateExec)
-          if isPartialAgg(partialAgg, finalAgg) =>
-        finalAgg.copy(
-          groupingExpressions = partialAgg.groupingExpressions,
-          aggregateExpressions = partialAgg.aggregateExpressions.map(_.copy(mode = Complete)),
-          initialInputBufferOffset = 0,
-          child = partialAgg.child)
+      case finalAgg @ HashAggregateExec(_, _, _, _, _, _, _, _, partialAgg: HashAggregateExec) =>
+        combinedMode(partialAgg, finalAgg)
+          .map(combineHashAggregates(partialAgg, finalAgg, _))
+          .getOrElse(finalAgg)
 
       case finalAgg @ SortAggregateExec(_, _, _, _, _, _, _, _, partialAgg: SortAggregateExec)
           if isPartialAgg(partialAgg, finalAgg) =>
@@ -76,6 +73,43 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
     }
   }
 
+  private def combineHashAggregates(
+      partialAgg: HashAggregateExec,
+      finalAgg: HashAggregateExec,
+      mode: AggregateMode): HashAggregateExec = {
+    val aggregateExpressions = mode match {
+      case Complete => partialAgg.aggregateExpressions.map(_.copy(mode = Complete))
+      case Final => finalAgg.aggregateExpressions
+      case other => throw new IllegalArgumentException(s"Unexpected aggregate mode: $other")
+    }
+    finalAgg.copy(
+      requiredChildDistributionExpressions = partialAgg.requiredChildDistributionExpressions,
+      isStreaming = partialAgg.isStreaming,
+      numShufflePartitions = partialAgg.numShufflePartitions,
+      groupingExpressions = partialAgg.groupingExpressions,
+      aggregateExpressions = aggregateExpressions,
+      initialInputBufferOffset = if (mode == Complete) 0 else finalAgg.initialInputBufferOffset,
+      child = partialAgg.child)
+  }
+
+  private def combinedMode(
+      partialAgg: HashAggregateExec,
+      finalAgg: HashAggregateExec): Option[AggregateMode] = {
+    if (!isCompatibleAggregates(partialAgg, finalAgg)) {
+      None
+    } else if (partialAgg.outputSet != finalAgg.usedInputs) {
+      None
+    } else if (partialAgg.aggregateExpressions.forall(_.mode == Partial)) {
+      Some(Complete)
+    } else if (partialAgg.aggregateExpressions.forall(_.mode == PartialMerge) &&
+        partialAgg.aggregateExpressions.forall(_.filter.isEmpty) &&
+        finalAgg.aggregateExpressions.forall(_.filter.isEmpty)) {
+      Some(Final)
+    } else {
+      None
+    }
+  }
+
   /**
    * Check if `partialAgg` is the partial aggregate of `finalAgg`.
    */
@@ -83,7 +117,13 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
       partialAgg: BaseAggregateExec,
       finalAgg: BaseAggregateExec): Boolean = {
     partialAgg.aggregateExpressions.forall(_.mode == Partial) &&
-      finalAgg.aggregateExpressions.forall(_.mode == Final) &&
+      isCompatibleAggregates(partialAgg, finalAgg)
+  }
+
+  private def isCompatibleAggregates(
+      partialAgg: BaseAggregateExec,
+      finalAgg: BaseAggregateExec): Boolean = {
+    finalAgg.aggregateExpressions.forall(_.mode == Final) &&
       partialAgg.groupingExpressions.map(_.canonicalized) ==
         finalAgg.groupingExpressions.map(_.canonicalized) &&
       finalAgg.logicalLink.isDefined &&

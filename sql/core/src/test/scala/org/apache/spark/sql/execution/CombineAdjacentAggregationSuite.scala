@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final}
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final, PartialMerge}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -188,6 +189,54 @@ class CombineAdjacentAggregationSuite extends QueryTest
           |FROM (SELECT /*+ repartition(k1, k2) */ * FROM t) GROUP BY k1, k2""".stripMargin,
         numAggWithDisabled = 2,
         numAggWithEnabled = 1)
+    }
+  }
+
+  test("Combine adjacent partial merge and final hash aggregates") {
+    withTempView("t") {
+      spark.range(20).selectExpr("id % 3 as k", "id % 7 as v").createOrReplaceTempView("t")
+      val query = "SELECT k, count(*) FROM (SELECT /*+ repartition(k) */ * FROM t) GROUP BY k"
+      val finalAgg = withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        collect(sql(query).queryExecution.executedPlan) {
+          case agg: HashAggregateExec if agg.child.isInstanceOf[HashAggregateExec] => agg
+        }.head
+      }
+      val partialAgg = finalAgg.child.asInstanceOf[HashAggregateExec]
+      val partialMergeAgg = partialAgg.copy(
+        requiredChildDistributionExpressions = Some(partialAgg.groupingExpressions),
+        isStreaming = true,
+        numShufflePartitions = Some(5),
+        aggregateExpressions = partialAgg.aggregateExpressions.map(_.copy(mode = PartialMerge)))
+      partialMergeAgg.copyTagsFrom(partialAgg)
+      val finalOverPartialMerge = finalAgg.copy(child = partialMergeAgg)
+      finalOverPartialMerge.copyTagsFrom(finalAgg)
+
+      val combined = CombineAdjacentAggregation(finalOverPartialMerge)
+        .asInstanceOf[HashAggregateExec]
+      assert(combined.aggregateExpressions.forall(_.mode == Final))
+      assert(combined.requiredChildDistributionExpressions ==
+        partialMergeAgg.requiredChildDistributionExpressions)
+      assert(combined.isStreaming == partialMergeAgg.isStreaming)
+      assert(combined.numShufflePartitions == partialMergeAgg.numShufflePartitions)
+      assert(combined.groupingExpressions == partialMergeAgg.groupingExpressions)
+      assert(combined.aggregateAttributes == finalAgg.aggregateAttributes)
+      assert(combined.resultExpressions == finalAgg.resultExpressions)
+      assert(combined.initialInputBufferOffset == finalAgg.initialInputBufferOffset)
+      assert(combined.child == partialMergeAgg.child)
+
+      val filteredPartialMerge = partialMergeAgg.copy(
+        aggregateExpressions = partialMergeAgg.aggregateExpressions.zipWithIndex.map {
+          case (agg, 0) => agg.copy(filter = Some(Literal.TrueLiteral))
+          case (agg, _) => agg
+        })
+      filteredPartialMerge.copyTagsFrom(partialAgg)
+      val finalOverFilteredPartialMerge = finalAgg.copy(child = filteredPartialMerge)
+      finalOverFilteredPartialMerge.copyTagsFrom(finalAgg)
+      assert(collect(CombineAdjacentAggregation(finalOverFilteredPartialMerge)) {
+        case agg: HashAggregateExec => agg
+      }.size == 2)
     }
   }
 
