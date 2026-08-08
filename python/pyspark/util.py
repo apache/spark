@@ -90,6 +90,7 @@ if typing.TYPE_CHECKING:
     )
     from pyspark.sql._typing import (
         SQLArrowBatchedUDFType,
+        SQLArrowElementwiseUDFType,
         SQLArrowTableUDFType,
         SQLBatchedUDFType,
         SQLTableUDFType,
