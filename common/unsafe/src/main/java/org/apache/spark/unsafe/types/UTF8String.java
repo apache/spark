@@ -1289,7 +1289,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     int charCount = 0;
-    int charsToSkip, byteIdx;
+    int byteIdx;
+    // `charsToSkip` is a long because negating `start` overflows for Integer.MIN_VALUE.
+    long charsToSkip;
     if (start > 0) {
       byteIdx = 0; // position in byte
       charsToSkip = start - 1; // skip character count
@@ -1300,7 +1302,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } else {
       // For negative start, skip |start| characters from the end to position
       // byteIdx at the starting byte of the first character to compare.
-      charsToSkip = -start;
+      charsToSkip = -(long) start;
       byteIdx = numBytes;
       while (byteIdx > 0 && charCount < charsToSkip) {
         byteIdx = prevCharStart(byteIdx);
@@ -1452,11 +1454,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     } else {
       int idx = numBytes - delim.numBytes + 1;
-      count = -count;
-      while (count > 0) {
+      // `remaining` is a long because negating `count` overflows for Integer.MIN_VALUE.
+      long remaining = -(long) count;
+      while (remaining > 0) {
         idx = rfind(delim, idx - 1);
         if (idx >= 0) {
-          count --;
+          remaining --;
         } else {
           // can not find enough delim
           return this;
