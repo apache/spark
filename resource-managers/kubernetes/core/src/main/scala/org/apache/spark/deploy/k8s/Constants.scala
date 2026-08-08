@@ -108,6 +108,10 @@ object Constants {
   val DEFAULT_PVC_ACCESS_MODE = "ReadWriteOncePod"
   val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
   val CONNECT_GRPC_BINDING_PORT = "spark.connect.grpc.binding.port"
+
+  // Suffix for the dedicated Spark Web UI Service.
+  val DRIVER_UI_SVC_POSTFIX = "-ui-svc"
+
   val EXIT_EXCEPTION_ANNOTATION = "spark.exit-exception"
   val POD_DELETION_COST = "controller.kubernetes.io/pod-deletion-cost"
 

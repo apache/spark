@@ -1590,6 +1590,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     K8s IP Family Policy for Driver Service. Valid values are
     <code>SingleStack</code>, <code>PreferDualStack</code>, and <code>RequireDualStack</code>.
+    The driver UI Service reuses this setting to keep the same IP family.
   </td>
   <td>3.4.0</td>
 </tr>
@@ -1599,6 +1600,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     A list of IP families for K8s Driver Service. Valid values are
     <code>IPv4</code> and <code>IPv6</code>.
+    The driver UI Service reuses this setting to keep the same IP family.
   </td>
   <td>3.4.0</td>
 </tr>
@@ -1610,6 +1612,29 @@ See the [configuration page](configuration.html) for information on Spark config
     is not ready, so executors can resolve the driver service during startup when a readiness
     probe is configured on the driver pod. When enabled, the driver pod readiness wait before
     executor allocation is skipped as well.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.ui.service.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    If true, Spark will create a dedicated Kubernetes Service for the Spark driver Web UI.
+    When enabled, after the driver Web UI starts, Spark will patch the Service's
+    <code>targetPort</code> to match the actual bound UI port, which allows using
+    <code>spark.ui.port=0</code> (random port). Requires the driver's ServiceAccount to have
+    the <code>patch</code> verb on <code>services</code>.
+    This setting only applies to <code>cluster</code> deploy mode.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.ui.service.type</code></td>
+  <td><code>ClusterIP</code></td>
+  <td>
+    K8s Service type for the dedicated Spark driver Web UI Service (only applies when
+    <code>spark.kubernetes.driver.ui.service.enabled=true</code>). Supported values are
+    <code>ClusterIP</code>, <code>NodePort</code>, and <code>LoadBalancer</code>.
   </td>
   <td>4.3.0</td>
 </tr>
