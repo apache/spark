@@ -169,6 +169,10 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
             self.connect.read.table(self.tbl_name).describe(["id", "name"]).toPandas(),
             self.spark.read.table(self.tbl_name).describe(["id", "name"]).toPandas(),
         )
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name).describe(("id", "name")).toPandas(),
+            self.spark.read.table(self.tbl_name).describe(("id", "name")).toPandas(),
+        )
 
     def test_stat_cov(self):
         # SPARK-41067: Test the stat.cov method
