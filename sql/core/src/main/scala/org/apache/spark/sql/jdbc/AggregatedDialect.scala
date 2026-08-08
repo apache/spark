@@ -19,6 +19,9 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, SQLException}
 
+import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 
@@ -91,5 +94,50 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
 
   override def beforeFetch(connection: Connection, options: JDBCOptions): Unit = {
     dialects.head.beforeFetch(connection, options)
+  }
+
+  override def compileValue(value: Any): Any = dialects.head.compileValue(value)
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    dialects.flatMap(_.compileExpression(expr)).headOption
+  }
+
+  override def isSupportedFunction(funcName: String): Boolean = {
+    dialects.exists(_.isSupportedFunction(funcName))
+  }
+
+  override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder = {
+    dialects.head.getJdbcSQLQueryBuilder(options)
+  }
+
+  override def supportsLimit: Boolean = dialects.head.supportsLimit
+
+  override def supportsOffset: Boolean = dialects.head.supportsOffset
+
+  override def supportsHint: Boolean = dialects.head.supportsHint
+
+  override def supportsJoin: Boolean = dialects.head.supportsJoin
+
+  override def getLimitClause(limit: Integer): String = dialects.head.getLimitClause(limit)
+
+  override def getOffsetClause(offset: Integer): String = dialects.head.getOffsetClause(offset)
+
+  override def classifyException(
+      e: Throwable,
+      condition: String,
+      messageParameters: Map[String, String],
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
+    dialects.head.classifyException(e, condition, messageParameters, description, isRuntime)
+  }
+
+  override def renameTable(oldTable: String, newTable: String): String = {
+    dialects.head.renameTable(oldTable, newTable)
+  }
+
+  override def functions: Seq[(String, UnboundFunction)] = dialects.head.functions
+
+  override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+    dialects.head.createConnectionFactory(options)
   }
 }
