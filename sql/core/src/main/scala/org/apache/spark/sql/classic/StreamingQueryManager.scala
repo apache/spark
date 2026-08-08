@@ -226,7 +226,7 @@ class StreamingQueryManager private[sql] (
 
     if (invalidReasons.nonEmpty) {
       throw new SparkIllegalArgumentException(
-        errorClass = "STREAMING_REAL_TIME_MODE.CONFIGURATION_NOT_SUPPORTED",
+        errorClass = "STREAMING_REAL_TIME_MODE.SQL_CONFIGURATION_NOT_SUPPORTED",
         messageParameters = Map(
           "invalidReasons" -> invalidReasons.zipWithIndex.map {
             case ((confName, req), index) => s"${index + 1}. $confName must be $req"

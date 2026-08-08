@@ -715,7 +715,7 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
           StartStream()
         )
       }
-      checkError(e, condition = "STREAMING_REAL_TIME_MODE.CONFIGURATION_NOT_SUPPORTED",
+      checkError(e, condition = "STREAMING_REAL_TIME_MODE.SQL_CONFIGURATION_NOT_SUPPORTED",
         parameters = e.getMessageParameters.asScala.toMap)
     }
   }
