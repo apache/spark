@@ -256,4 +256,8 @@ object InvalidInputErrors {
     InvalidPlanInput(
       "CONNECT_INVALID_PLAN.CANNOT_FIND_CACHED_LOCAL_RELATION",
       Map("hash" -> hash))
+
+  // (SPARK-51705) A Python UDF referenced a broadcast id that is not registered on this session.
+  def broadcastNotFound(id: Long): InvalidPlanInput =
+    InvalidPlanInput("CONNECT_INVALID_PLAN.BROADCAST_NOT_FOUND", Map("id" -> id.toString))
 }

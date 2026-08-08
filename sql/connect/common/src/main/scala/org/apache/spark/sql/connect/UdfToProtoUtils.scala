@@ -107,6 +107,12 @@ private[sql] object UdfToProtoUtils {
           .setAggregate(true)
         f.givenName.foreach(invokeUdf.setFunctionName)
     }
+    // (SPARK-51705) Drain the ids of any ConnectBroadcast captured by this closure into
+    // ScalarScalaUDF.broadcast_ids. This must run after toUdfPacketBytes above, because serializing
+    // the closure is what triggers ConnectBroadcast.writeReplace (and thus the id capture). Mirrors
+    // the Python side, where PythonUDF.to_plan drains a threading.local registry into
+    // `python_udf.broadcast_ids` right after CloudPickleSerializer().dumps(...).
+    ConnectBroadcastCapture.drain().foreach(id => protoUdf.addBroadcastIds(id))
     invokeUdf.build()
   }
 }

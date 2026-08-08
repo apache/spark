@@ -1826,6 +1826,7 @@ class PythonUDF(google.protobuf.message.Message):
     COMMAND_FIELD_NUMBER: builtins.int
     PYTHON_VER_FIELD_NUMBER: builtins.int
     ADDITIONAL_INCLUDES_FIELD_NUMBER: builtins.int
+    BROADCAST_IDS_FIELD_NUMBER: builtins.int
     @property
     def output_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) Output type of the Python UDF"""
@@ -1840,6 +1841,15 @@ class PythonUDF(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Additional includes for the Python UDF."""
+    @property
+    def broadcast_ids(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """(Optional) (SPARK-51705) Server-assigned ids of broadcast variables referenced by this UDF.
+        Resolved by SparkConnectPlanner against the per-session SessionHolder broadcasts registry
+        into SimplePythonFunction.broadcastVars. The ids are the driver-side Broadcast ids returned
+        by CreateBroadcastResult (which the executor/worker also key on), not opaque handles.
+        """
     def __init__(
         self,
         *,
@@ -1848,6 +1858,7 @@ class PythonUDF(google.protobuf.message.Message):
         command: builtins.bytes = ...,
         python_ver: builtins.str = ...,
         additional_includes: collections.abc.Iterable[builtins.str] | None = ...,
+        broadcast_ids: collections.abc.Iterable[builtins.int] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["output_type", b"output_type"]
@@ -1857,6 +1868,8 @@ class PythonUDF(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "additional_includes",
             b"additional_includes",
+            "broadcast_ids",
+            b"broadcast_ids",
             "command",
             b"command",
             "eval_type",
@@ -1878,6 +1891,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     OUTPUTTYPE_FIELD_NUMBER: builtins.int
     NULLABLE_FIELD_NUMBER: builtins.int
     AGGREGATE_FIELD_NUMBER: builtins.int
+    BROADCAST_IDS_FIELD_NUMBER: builtins.int
     payload: builtins.bytes
     """(Required) Serialized JVM object containing UDF definition, input encoders and output encoder"""
     @property
@@ -1894,6 +1908,17 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     """(Required) True if the UDF can return null value"""
     aggregate: builtins.bool
     """(Required) Indicate if the UDF is an aggregate function"""
+    @property
+    def broadcast_ids(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """(Optional) (SPARK-51705) Server-assigned ids of broadcast variables captured by this UDF's
+        closure. The captured broadcasts serialize as id-only tokens (ConnectBroadcast.writeReplace);
+        this out-of-band id list lets SparkConnectPlanner bind the per-session SessionHolder broadcast
+        registry (via a thread-local) before deserializing the payload, so ConnectBroadcastRef
+        .readResolve can swap each id for the real driver-side Broadcast[T]. An id that is unknown to
+        this session fails loudly with BROADCAST_NOT_FOUND.
+        """
     def __init__(
         self,
         *,
@@ -1903,6 +1928,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         outputType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         nullable: builtins.bool = ...,
         aggregate: builtins.bool = ...,
+        broadcast_ids: collections.abc.Iterable[builtins.int] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["outputType", b"outputType"]
@@ -1912,6 +1938,8 @@ class ScalarScalaUDF(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "broadcast_ids",
+            b"broadcast_ids",
             "inputTypes",
             b"inputTypes",
             "nullable",

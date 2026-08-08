@@ -56,6 +56,33 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+class _BroadcastValueType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _BroadcastValueTypeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_BroadcastValueType.ValueType],
+    builtins.type,
+):  # noqa: F821
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    BROADCAST_VALUE_TYPE_UNSPECIFIED: _BroadcastValueType.ValueType  # 0
+    """Unset -> treated as PYTHON for backward compatibility."""
+    BROADCAST_VALUE_TYPE_PYTHON: _BroadcastValueType.ValueType  # 1
+    """Wrap the staged bytes as a PythonBroadcast file; the Python worker reads it. Broadcast[PythonBroadcast]."""
+    BROADCAST_VALUE_TYPE_JVM: _BroadcastValueType.ValueType  # 2
+    """Java-deserialize the bytes into a JVM value T and sc.broadcast(T). Broadcast[T] for Scala UDFs."""
+
+class BroadcastValueType(_BroadcastValueType, metaclass=_BroadcastValueTypeEnumTypeWrapper):
+    """(SPARK-51705) Discriminates how CreateBroadcastCommand materializes the broadcast value."""
+
+BROADCAST_VALUE_TYPE_UNSPECIFIED: BroadcastValueType.ValueType  # 0
+"""Unset -> treated as PYTHON for backward compatibility."""
+BROADCAST_VALUE_TYPE_PYTHON: BroadcastValueType.ValueType  # 1
+"""Wrap the staged bytes as a PythonBroadcast file; the Python worker reads it. Broadcast[PythonBroadcast]."""
+BROADCAST_VALUE_TYPE_JVM: BroadcastValueType.ValueType  # 2
+"""Java-deserialize the bytes into a JVM value T and sc.broadcast(T). Broadcast[T] for Scala UDFs."""
+global___BroadcastValueType = BroadcastValueType
+
 class _StreamingQueryEventType:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
@@ -110,6 +137,8 @@ class Command(google.protobuf.message.Message):
     ML_COMMAND_FIELD_NUMBER: builtins.int
     EXECUTE_EXTERNAL_COMMAND_FIELD_NUMBER: builtins.int
     PIPELINE_COMMAND_FIELD_NUMBER: builtins.int
+    CREATE_BROADCAST_COMMAND_FIELD_NUMBER: builtins.int
+    UNPERSIST_BROADCAST_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -158,6 +187,10 @@ class Command(google.protobuf.message.Message):
     @property
     def pipeline_command(self) -> pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand: ...
     @property
+    def create_broadcast_command(self) -> global___CreateBroadcastCommand: ...
+    @property
+    def unpersist_broadcast_command(self) -> global___UnpersistBroadcastCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -189,6 +222,8 @@ class Command(google.protobuf.message.Message):
         ml_command: pyspark.sql.connect.proto.ml_pb2.MlCommand | None = ...,
         execute_external_command: global___ExecuteExternalCommand | None = ...,
         pipeline_command: pyspark.sql.connect.proto.pipelines_pb2.PipelineCommand | None = ...,
+        create_broadcast_command: global___CreateBroadcastCommand | None = ...,
+        unpersist_broadcast_command: global___UnpersistBroadcastCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -198,6 +233,8 @@ class Command(google.protobuf.message.Message):
             b"checkpoint_command",
             "command_type",
             b"command_type",
+            "create_broadcast_command",
+            b"create_broadcast_command",
             "create_dataframe_view",
             b"create_dataframe_view",
             "create_resource_profile_command",
@@ -230,6 +267,8 @@ class Command(google.protobuf.message.Message):
             b"streaming_query_listener_bus_command",
             "streaming_query_manager_command",
             b"streaming_query_manager_command",
+            "unpersist_broadcast_command",
+            b"unpersist_broadcast_command",
             "write_operation",
             b"write_operation",
             "write_operation_v2",
@@ -245,6 +284,8 @@ class Command(google.protobuf.message.Message):
             b"checkpoint_command",
             "command_type",
             b"command_type",
+            "create_broadcast_command",
+            b"create_broadcast_command",
             "create_dataframe_view",
             b"create_dataframe_view",
             "create_resource_profile_command",
@@ -277,6 +318,8 @@ class Command(google.protobuf.message.Message):
             b"streaming_query_listener_bus_command",
             "streaming_query_manager_command",
             b"streaming_query_manager_command",
+            "unpersist_broadcast_command",
+            b"unpersist_broadcast_command",
             "write_operation",
             b"write_operation",
             "write_operation_v2",
@@ -308,12 +351,87 @@ class Command(google.protobuf.message.Message):
             "ml_command",
             "execute_external_command",
             "pipeline_command",
+            "create_broadcast_command",
+            "unpersist_broadcast_command",
             "extension",
         ]
         | None
     ): ...
 
 global___Command = Command
+
+class CreateBroadcastCommand(google.protobuf.message.Message):
+    """(SPARK-51705) Create a broadcast variable from an already-uploaded cache/<sha256> artifact.
+    The client uploads cloudpickle(value) through the existing cache artifact channel and then
+    sends this command with the returned hash. The server materializes a PythonBroadcast on the
+    live driver SparkContext and returns a CreateBroadcastResult with the driver-side broadcast id.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ARTIFACT_HASH_FIELD_NUMBER: builtins.int
+    SIZE_BYTES_FIELD_NUMBER: builtins.int
+    VALUE_TYPE_FIELD_NUMBER: builtins.int
+    artifact_hash: builtins.str
+    """(Required) sha256 hash of the previously-uploaded value bytes in the cache/ artifact channel.
+    For PYTHON the bytes are cloudpickle(value); for JVM they are SparkSerDeUtils.serialize(value).
+    """
+    size_bytes: builtins.int
+    """(Optional) Uncompressed byte size, used to enforce the BROADCAST_VALUE_TOO_LARGE quota."""
+    value_type: global___BroadcastValueType.ValueType
+    """(Optional) (SPARK-51705) How the server should materialize the value from the uploaded bytes.
+    Defaults to PYTHON when unset for backward compatibility with the Python-only v1.
+    """
+    def __init__(
+        self,
+        *,
+        artifact_hash: builtins.str = ...,
+        size_bytes: builtins.int = ...,
+        value_type: global___BroadcastValueType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "artifact_hash",
+            b"artifact_hash",
+            "size_bytes",
+            b"size_bytes",
+            "value_type",
+            b"value_type",
+        ],
+    ) -> None: ...
+
+global___CreateBroadcastCommand = CreateBroadcastCommand
+
+class UnpersistBroadcastCommand(google.protobuf.message.Message):
+    """(SPARK-51705) Release a broadcast variable created over Spark Connect."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    BROADCAST_ID_FIELD_NUMBER: builtins.int
+    BLOCKING_FIELD_NUMBER: builtins.int
+    DESTROY_FIELD_NUMBER: builtins.int
+    broadcast_id: builtins.int
+    """(Required) The driver-side broadcast id returned by CreateBroadcastResult."""
+    blocking: builtins.bool
+    """(Optional) Whether to block until unpersisting has completed."""
+    destroy: builtins.bool
+    """(Optional) Whether to destroy (not just unpersist) all data and metadata of the broadcast."""
+    def __init__(
+        self,
+        *,
+        broadcast_id: builtins.int = ...,
+        blocking: builtins.bool = ...,
+        destroy: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "blocking", b"blocking", "broadcast_id", b"broadcast_id", "destroy", b"destroy"
+        ],
+    ) -> None: ...
+
+global___UnpersistBroadcastCommand = UnpersistBroadcastCommand
 
 class SqlCommand(google.protobuf.message.Message):
     """A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.
