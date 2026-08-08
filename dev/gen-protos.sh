@@ -116,7 +116,7 @@ for f in `find gen/proto/python -name "*.py*"`; do
   rm $f.bak
 done
 
-ruff format --config $SPARK_HOME/pyproject.toml gen/proto/python
+python3 -m ruff format --config $SPARK_HOME/pyproject.toml gen/proto/python
 
 # Last step copy the result files to the destination module.
 for f in `find gen/proto/python -name "*.py*"`; do
