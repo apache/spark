@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.time.{Duration, Period}
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. REPLACE COLUMNS` command that
@@ -49,6 +49,27 @@ trait AlterTableReplaceColumnsSuiteBase extends QueryTest with DDLCommandTestUti
         sql(s"SELECT new_ym, new_dt, new_data FROM $t"),
         Seq(
           Row(Period.ofYears(3), Duration.ofMinutes(4), 5)))
+    }
+  }
+
+  test("rejects column types unsupported by the data source") {
+    val formats = Seq("CSV", "JSON", "ORC")
+    val types = Seq("GEOGRAPHY(4326)", "GEOMETRY(0)")
+    formats.foreach { format =>
+      types.foreach { typeName =>
+        withNamespaceAndTable("ns", "tbl") { t =>
+          sql(s"CREATE TABLE $t (c1 INT) USING $format")
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ALTER TABLE $t REPLACE COLUMNS (g $typeName)")
+            },
+            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+            parameters = Map(
+              "columnName" -> "`g`",
+              "columnType" -> s""""$typeName"""",
+              "format" -> format))
+        }
+      }
     }
   }
 }
