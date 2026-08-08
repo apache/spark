@@ -95,6 +95,14 @@ class TestMemoryManager(conf: SparkConf)
     true
   }
 
+  override def acquireStorageMemory(
+      self: ManagedConsumer,
+      numBytes: Long,
+      memoryMode: MemoryMode): Boolean = {
+    require(numBytes >= 0)
+    true
+  }
+
   override def releaseStorageMemory(numBytes: Long, memoryMode: MemoryMode): Unit = {
     require(numBytes >= 0)
   }

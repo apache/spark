@@ -627,4 +627,449 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       UnifiedMemoryManager.clearUnmanagedMemoryUsers()
     }
   }
+
+  // -- ManagedConsumer (push-mode SPI, sibling of SPARK-53001 pull-mode UnmanagedMemoryConsumer)
+
+  /**
+   * Mock that DOES NOT call [[MemoryManager.releaseStorageMemory]] in shrink. Useful only
+   * for registry-level tests where shrink() is never actually invoked.
+   */
+  private class MockManagedConsumer(
+      bytesHeld: Long,
+      instanceKey: String = "instance-1",
+      mode: MemoryMode = MemoryMode.ON_HEAP,
+      bytesThrowsOnGet: Boolean = false,
+      bytesReturnsNegative: Boolean = false) extends ManagedConsumer {
+    override val name: String = s"MockManagedConsumer:$instanceKey"
+    override def memoryMode: MemoryMode = mode
+    override def getShrinkableMemoryBytes: Long = {
+      if (bytesThrowsOnGet) {
+        throw new RuntimeException("boom from getShrinkableMemoryBytes")
+      } else if (bytesReturnsNegative) {
+        -7L
+      } else {
+        bytesHeld
+      }
+    }
+    override def shrink(numBytes: Long): Long = 0L
+  }
+
+  /**
+   * Mock that does NOT touch the storage pool itself: it merely tracks its own held-bytes
+   * counter and returns the would-be-released value from `shrink`. The framework
+   * ([[MemoryManager.shrinkExternal]]) is responsible for calling `pool.releaseMemory` on
+   * the returned value -- these tests validate that invariant end-to-end. Each instance
+   * acquires `initialBytes` via [[MemoryManager.acquireStorageMemory]] at construction so
+   * the pool has bytes to charge releases against.
+   */
+  private class MockShrinker(
+      mm: MemoryManager,
+      initialBytes: Long,
+      mode: MemoryMode,
+      instanceKey: String,
+      shrinkBehavior: Long => Long = identity,
+      throwOnShrink: Option[() => Nothing] = None,
+      shrinkDelayMs: Long = 0L) extends ManagedConsumer {
+    @volatile private var heldBytes: Long = 0L
+    @volatile var shrinkCallCount: Int = 0
+
+    override val name: String = s"MockShrinker:$instanceKey"
+    override def memoryMode: MemoryMode = mode
+    override def getShrinkableMemoryBytes: Long = heldBytes
+
+    if (initialBytes > 0L) {
+      require(mm.acquireStorageMemory(this, initialBytes, mode),
+        s"test setup failed: could not reserve $initialBytes for $instanceKey")
+      heldBytes = initialBytes
+    }
+
+    def currentHeldBytes: Long = heldBytes
+
+    override def shrink(numBytes: Long): Long = {
+      shrinkCallCount += 1
+      if (shrinkDelayMs > 0) Thread.sleep(shrinkDelayMs)
+      throwOnShrink.foreach(t => t())
+      val candidate = math.min(numBytes, heldBytes)
+      val toRelease = shrinkBehavior(candidate)
+      if (toRelease > 0) {
+        heldBytes -= toRelease
+      }
+      toRelease
+    }
+  }
+
+  override def afterEach(): Unit = {
+    try super.afterEach()
+    finally UnifiedMemoryManager.clearManagedConsumers()
+  }
+
+  // -- Registry-level tests
+
+  test("registerManagedConsumer / unregisterManagedConsumer round-trip") {
+    val c1 = new MockManagedConsumer(100L, "k1")
+    val c2 = new MockManagedConsumer(200L, "k2")
+    UnifiedMemoryManager.registerManagedConsumer(c1)
+    UnifiedMemoryManager.registerManagedConsumer(c2)
+    assert(UnifiedMemoryManager.getShrinkableConsumers(MemoryMode.ON_HEAP).size === 2)
+
+    UnifiedMemoryManager.unregisterManagedConsumer(c1)
+    val remaining = UnifiedMemoryManager.getShrinkableConsumers(MemoryMode.ON_HEAP).toSeq
+    assert(remaining.size === 1 && (remaining.head eq c2))
+
+    UnifiedMemoryManager.unregisterManagedConsumer(c2)
+    assert(UnifiedMemoryManager.getShrinkableConsumers(MemoryMode.ON_HEAP).isEmpty)
+  }
+
+  test("registerManagedConsumer is idempotent for the same instance (name dedup)") {
+    val c1 = new MockManagedConsumer(100L, "shared-key")
+    UnifiedMemoryManager.registerManagedConsumer(c1)
+    // Re-registering the *same* instance is idempotent.
+    UnifiedMemoryManager.registerManagedConsumer(c1)
+    assert(UnifiedMemoryManager.getShrinkableConsumers(MemoryMode.ON_HEAP).size === 1)
+  }
+
+  test("registerManagedConsumer tracks distinct instances under distinct names") {
+    val a = new MockManagedConsumer(100L, "a")
+    val b = new MockManagedConsumer(200L, "b")
+    UnifiedMemoryManager.registerManagedConsumer(a)
+    UnifiedMemoryManager.registerManagedConsumer(b)
+    val all = UnifiedMemoryManager.getShrinkableConsumers(MemoryMode.ON_HEAP).toSeq
+    assert(all.size === 2)
+    assert(all.exists(_ eq a) && all.exists(_ eq b))
+  }
+
+  test("registerManagedConsumer rejects a different instance reusing the same name") {
+    val a = new MockManagedConsumer(100L, "dup")
+    val b = new MockManagedConsumer(200L, "dup")
+    UnifiedMemoryManager.registerManagedConsumer(a)
+    val ex = intercept[IllegalArgumentException] {
+      UnifiedMemoryManager.registerManagedConsumer(b)
+    }
+    assert(ex.getMessage.contains("'MockManagedConsumer:dup'"))
+    // Existing registration is preserved; the rejected instance is not in the registry.
+    val all = UnifiedMemoryManager.getShrinkableConsumers(MemoryMode.ON_HEAP).toSeq
+    assert(all.size === 1 && (all.head eq a))
+  }
+
+  test("registerManagedConsumer rejects null and empty name") {
+    intercept[IllegalArgumentException] {
+      UnifiedMemoryManager.registerManagedConsumer(null)
+    }
+    val anonymous = new ManagedConsumer {
+      override val name: String = ""
+      override def memoryMode: MemoryMode = MemoryMode.ON_HEAP
+      override def getShrinkableMemoryBytes: Long = 0L
+      override def shrink(numBytes: Long): Long = 0L
+    }
+    intercept[IllegalArgumentException] {
+      UnifiedMemoryManager.registerManagedConsumer(anonymous)
+    }
+  }
+
+  test("unregisterManagedConsumer with a stale name-collider is a safe no-op") {
+    val a = new MockManagedConsumer(100L, "name-collision")
+    val b = new MockManagedConsumer(200L, "name-collision")
+    UnifiedMemoryManager.registerManagedConsumer(a)
+    // Try to unregister 'b' (same name, different instance). Must NOT remove 'a'.
+    UnifiedMemoryManager.unregisterManagedConsumer(b)
+    val all = UnifiedMemoryManager.getShrinkableConsumers(MemoryMode.ON_HEAP).toSeq
+    assert(all.size === 1 && (all.head eq a))
+  }
+
+  test("getShrinkableConsumers filters by memoryMode and sorts DESC, skipping zeros") {
+    val small = new MockManagedConsumer(100L, "small", MemoryMode.ON_HEAP)
+    val big = new MockManagedConsumer(500L, "big", MemoryMode.ON_HEAP)
+    val medium = new MockManagedConsumer(300L, "medium", MemoryMode.ON_HEAP)
+    val zero = new MockManagedConsumer(0L, "zero", MemoryMode.ON_HEAP)
+    val offHeap = new MockManagedConsumer(900L, "off-heap", MemoryMode.OFF_HEAP)
+    Seq(small, big, medium, zero, offHeap).foreach(
+      UnifiedMemoryManager.registerManagedConsumer)
+
+    val onHeap = UnifiedMemoryManager.getShrinkableConsumers(MemoryMode.ON_HEAP).toSeq
+    assert(onHeap === Seq(big, medium, small))
+    val offHeapOnly = UnifiedMemoryManager.getShrinkableConsumers(MemoryMode.OFF_HEAP).toSeq
+    assert(offHeapOnly === Seq(offHeap))
+  }
+
+  test("getShrinkableConsumers defensively coerces throwing or negative size to 0") {
+    val good = new MockManagedConsumer(100L, "good")
+    val throwing = new MockManagedConsumer(0L, "throws", bytesThrowsOnGet = true)
+    val negative = new MockManagedConsumer(0L, "negative", bytesReturnsNegative = true)
+    Seq(good, throwing, negative).foreach(UnifiedMemoryManager.registerManagedConsumer)
+    assert(UnifiedMemoryManager.getShrinkableConsumers(MemoryMode.ON_HEAP).toSeq === Seq(good))
+  }
+
+  // -- acquireStorageMemory(self: ManagedConsumer, ...) tests
+
+  /** Probe consumer used only to provide a `self` reference for self-exclusion in tests
+   *  that exercise the consumer-overload of `acquireStorageMemory` without needing a
+   *  registered shrink candidate. */
+  private def newProbeConsumer(key: String, mode: MemoryMode = MemoryMode.ON_HEAP)
+    : ManagedConsumer = new ManagedConsumer {
+    override val name: String = s"Probe:$key"
+    override val memoryMode: MemoryMode = mode
+    override def getShrinkableMemoryBytes: Long = 0L
+    override def shrink(numBytes: Long): Long = 0L
+  }
+
+  test("acquireStorageMemory(self) grants and books bytes into the storage pool") {
+    val maxMemory = 1000L
+    val (mm, _) = makeThings(maxMemory)
+    val external = newProbeConsumer("external")
+
+    assert(mm.storageMemoryUsed === 0L)
+    assert(mm.acquireStorageMemory(external, 600L, MemoryMode.ON_HEAP))
+    assert(mm.storageMemoryUsed === 600L)
+    mm.releaseStorageMemory(600L, MemoryMode.ON_HEAP)
+    assert(mm.storageMemoryUsed === 0L)
+  }
+
+  test("acquireStorageMemory(self) fails fast when request exceeds effective max") {
+    val maxMemory = 1000L
+    val (mm, _) = makeThings(maxMemory)
+    assert(!mm.acquireStorageMemory(newProbeConsumer("x"), maxMemory + 1, MemoryMode.ON_HEAP))
+    assert(mm.storageMemoryUsed === 0L)
+  }
+
+  test("acquireStorageMemory(self) can borrow free execution memory") {
+    val maxMemory = 1000L
+    val (mm, _) = makeThings(maxMemory)
+    // Storage region is 0.5 * 1000 = 500; a 700-byte request must borrow 200 from execution.
+    assert(mm.acquireStorageMemory(newProbeConsumer("x"), 700L, MemoryMode.ON_HEAP))
+    assert(mm.storageMemoryUsed === 700L)
+  }
+
+  // -- shrinkExternal orchestration via the storage acquire path
+
+  test("default-off: registered consumers are not consulted on storage acquire") {
+    val (mm, _) = makeThings(1000L)
+    // Feature is OFF by default.
+    val c = new MockShrinker(mm, 400L, MemoryMode.ON_HEAP, "ignored",
+      throwOnShrink = Some(() => throw new IllegalStateException(
+        "consumer must not be consulted when MANAGED_CONSUMER_ENABLED is false")))
+    UnifiedMemoryManager.registerManagedConsumer(c)
+    // Request a tiny block that fits without eviction.
+    assert(mm.acquireStorageMemory(dummyBlock, 100L, MemoryMode.ON_HEAP))
+    assert(c.shrinkCallCount === 0)
+  }
+
+  private def makeMM(maxMemory: Long, enabled: Boolean): (UnifiedMemoryManager, MemoryStore) = {
+    val conf = new SparkConf()
+      .set(MEMORY_FRACTION, 1.0)
+      .set(TEST_MEMORY, maxMemory)
+      .set(MEMORY_OFFHEAP_ENABLED, false)
+      .set(MEMORY_STORAGE_FRACTION, storageFraction)
+      .set(MANAGED_CONSUMER_ENABLED, enabled)
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
+    val ms = makeMemoryStore(mm)
+    (mm, ms)
+  }
+
+  test("enabled: external consumer shrinks for storage acquire deficit") {
+    val (mm, _) = makeMM(1000L, enabled = true)
+    val c = new MockShrinker(mm, 600L, MemoryMode.ON_HEAP, "ext")
+    UnifiedMemoryManager.registerManagedConsumer(c)
+    // Storage used = 600 (c), free = 400. Request another 300 -> needs 0 shrink (fits in free).
+    assert(mm.acquireStorageMemory(dummyBlock, 300L, MemoryMode.ON_HEAP))
+    assert(c.shrinkCallCount === 0, "no shrink: deficit is 0 after fits in free")
+
+    // Request 200 more -> total request would be 200, free is 100 now, deficit 100 -> shrink.
+    assert(mm.acquireStorageMemory(dummyBlock, 200L, MemoryMode.ON_HEAP))
+    assert(c.shrinkCallCount === 1)
+    assert(c.currentHeldBytes === 500L)
+  }
+
+  test("enabled: largest consumer is consulted first, smaller skipped once deficit met") {
+    val (mm, _) = makeMM(2000L, enabled = true)
+    val small = new MockShrinker(mm, 100L, MemoryMode.ON_HEAP, "small")
+    val big = new MockShrinker(mm, 800L, MemoryMode.ON_HEAP, "big")
+    val medium = new MockShrinker(mm, 300L, MemoryMode.ON_HEAP, "medium")
+    Seq(small, big, medium).foreach(UnifiedMemoryManager.registerManagedConsumer)
+    // storageMemoryUsed = 1200, free in storage pool = max(2000*0.5 - used_in_region, 0).
+    // Acquire 1000 bytes (with borrow from execution): triggers shrink for any residual deficit.
+    assert(mm.acquireStorageMemory(dummyBlock, 1000L, MemoryMode.ON_HEAP))
+    assert(big.shrinkCallCount === 1, "biggest consumer consulted first")
+    assert(medium.shrinkCallCount === 0, "medium not needed (big already covered the deficit)")
+    assert(small.shrinkCallCount === 0)
+  }
+
+  test("enabled: shrink() RuntimeException is swallowed; treated as 0 release") {
+    val (mm, _) = makeMM(1000L, enabled = true)
+    val bomb = new MockShrinker(mm, 400L, MemoryMode.ON_HEAP, "bomb",
+      throwOnShrink = Some(() => throw new RuntimeException("boom")))
+    val backup = new MockShrinker(mm, 400L, MemoryMode.ON_HEAP, "backup")
+    Seq(bomb, backup).foreach(UnifiedMemoryManager.registerManagedConsumer)
+    // Used 800; request 300 -> storage free = 200 (after borrow if any), deficit ~100.
+    // bomb is bigger and called first; throws, caught, treated as 0; backup picks up.
+    assert(mm.acquireStorageMemory(dummyBlock, 300L, MemoryMode.ON_HEAP))
+    assert(bomb.shrinkCallCount === 1)
+    assert(backup.shrinkCallCount === 1, "next consumer must be consulted after a thrown shrink")
+  }
+
+  test("enabled: shrink() returning negative triggers IllegalArgumentException") {
+    val (mm, _) = makeMM(1000L, enabled = true)
+    val c = new MockShrinker(mm, 800L, MemoryMode.ON_HEAP, "bad",
+      shrinkBehavior = _ => -1L)
+    UnifiedMemoryManager.registerManagedConsumer(c)
+    intercept[IllegalArgumentException] {
+      mm.acquireStorageMemory(dummyBlock, 400L, MemoryMode.ON_HEAP)
+    }
+  }
+
+  test("enabled: framework owns pool accounting; shrink return value drives the loop") {
+    val (mm, _) = makeMM(1000L, enabled = true)
+    // The MockShrinker no longer touches the pool itself; only the framework calls
+    // pool.releaseMemory(). This test verifies the pool actually grows by the
+    // consumer-reported release.
+    val c = new MockShrinker(mm, 500L, MemoryMode.ON_HEAP, "framework-owned")
+    UnifiedMemoryManager.registerManagedConsumer(c)
+    // storageMemoryUsed = 500 after c.acquire. Request 200 more -> storage free = 500
+    // (after borrow), already covers; no shrink needed.
+    val usedBefore = mm.storageMemoryUsed
+    assert(mm.acquireStorageMemory(dummyBlock, 200L, MemoryMode.ON_HEAP))
+    assert(c.shrinkCallCount === 0, "no shrink expected when free covers the request")
+    assert(mm.storageMemoryUsed === usedBefore + 200L)
+
+    // Now request 400 -> needs 100 from external. shrink returns 100; framework deducts 100.
+    assert(mm.acquireStorageMemory(dummyBlock, 400L, MemoryMode.ON_HEAP))
+    assert(c.shrinkCallCount === 1)
+    assert(c.currentHeldBytes === 400L,
+      "MockShrinker.heldBytes must track its own view; framework released 100 from pool")
+    assert(mm.storageMemoryUsed === usedBefore + 200L + 400L - 100L,
+      "framework must deduct exactly shrink()'s return value from storageMemoryUsed")
+  }
+
+  test("enabled: self-exclusion skips the caller's own consumer") {
+    val (mm, _) = makeMM(1000L, enabled = true)
+    val self = new MockShrinker(mm, 400L, MemoryMode.ON_HEAP, "self")
+    val other = new MockShrinker(mm, 400L, MemoryMode.ON_HEAP, "other")
+    Seq(self, other).foreach(UnifiedMemoryManager.registerManagedConsumer)
+    // self passes its own reference to acquire; self must NOT be asked to shrink.
+    assert(mm.acquireStorageMemory(self, 300L, MemoryMode.ON_HEAP))
+    assert(self.shrinkCallCount === 0, "caller must be excluded from its own shrink candidates")
+    assert(other.shrinkCallCount === 1, "the other consumer must be consulted")
+  }
+
+  test("enabled: consumers of a different MemoryMode are not consulted") {
+    val (mm, _) = makeMM(1000L, enabled = true)
+    val onHeap = new MockShrinker(mm, 400L, MemoryMode.ON_HEAP, "on-heap")
+    val offHeap = new MockShrinker(mm, 0L, MemoryMode.OFF_HEAP, "off-heap",
+      throwOnShrink = Some(() => throw new IllegalStateException(
+        "OFF_HEAP consumer must not be called for an ON_HEAP acquire")))
+    Seq(onHeap, offHeap).foreach(UnifiedMemoryManager.registerManagedConsumer)
+    assert(mm.acquireStorageMemory(dummyBlock, 700L, MemoryMode.ON_HEAP))
+    assert(offHeap.shrinkCallCount === 0)
+  }
+
+  // -- shrinkExternal orchestration via the execution reclaim path
+
+  test("enabled: maybeGrowExecutionPool shrinks externals for the reclaim deficit") {
+    val (mm, _) = makeMM(1000L, enabled = true)
+    // Acquire 700 via external; storage region=500, so 200 is borrowed from execution.
+    val c = new MockShrinker(mm, 700L, MemoryMode.ON_HEAP, "ext")
+    UnifiedMemoryManager.registerManagedConsumer(c)
+    // executionPool.memoryFree = 300, storagePool.memoryFree = 0, storagePool.poolSize = 700.
+    // Acquire 800 execution -> extra = 800 - 300 = 500.
+    //   memoryReclaimable = max(memoryFree=0, poolSize-region = 700-500 = 200) = 200.
+    //   target = min(500, 200) = 200. shrinkNeeded = max(0, 200-0) = 200.
+    //   c.shrink(200) releases 200 -> execution grants 300 + 200 = 500.
+    assert(mm.acquireExecutionMemory(800L, 0L, MemoryMode.ON_HEAP) === 500L)
+    assert(c.shrinkCallCount === 1)
+    assert(c.currentHeldBytes === 500L)
+  }
+
+  test("enabled: storage region protection preserved with external shrink (pre-shrink cap)") {
+    val (mm, _) = makeMM(1000L, enabled = true)
+    // Externals together hold 700: region=500, borrowed=200. Only 200 should be reclaimable
+    // by execution even though externals collectively hold more (the rest is in the
+    // protected storage region).
+    val a = new MockShrinker(mm, 400L, MemoryMode.ON_HEAP, "a")
+    val b = new MockShrinker(mm, 300L, MemoryMode.ON_HEAP, "b")
+    Seq(a, b).foreach(UnifiedMemoryManager.registerManagedConsumer)
+    assert(mm.acquireExecutionMemory(1000L, 0L, MemoryMode.ON_HEAP) === 500L,
+      "execution-free (300) + reclaim cap from borrowed-portion (200) = 500")
+    val totalReleased = (400L - a.currentHeldBytes) + (300L - b.currentHeldBytes)
+    assert(totalReleased <= 200L,
+      s"storage region protection violated: externals released $totalReleased bytes > 200 cap")
+  }
+
+  test("enabled: maybeGrowExecutionPool skips shrink when memoryFree alone covers target") {
+    val (mm, _) = makeMM(1000L, enabled = true)
+    val c = new MockShrinker(mm, 100L, MemoryMode.ON_HEAP, "ext-small",
+      throwOnShrink = Some(() => throw new IllegalStateException(
+        "must not be called when memoryFree already covers the reclaim target")))
+    UnifiedMemoryManager.registerManagedConsumer(c)
+    // Used 100; pool size grew (storage borrowed by external acquire). memoryFree = 400.
+    // Execution acquire 200 -> all from execution-free; no reclaim needed.
+    assert(mm.acquireExecutionMemory(200L, 0L, MemoryMode.ON_HEAP) === 200L)
+    assert(c.shrinkCallCount === 0)
+  }
+
+  // -- Argument validation on acquireStorageMemory(self, ...)
+
+  test("acquireStorageMemory(self) rejects null self with IllegalArgumentException") {
+    val (mm, _) = makeThings(1000L)
+    intercept[IllegalArgumentException] {
+      mm.acquireStorageMemory(null.asInstanceOf[ManagedConsumer], 100L, MemoryMode.ON_HEAP)
+    }
+  }
+
+  test("acquireStorageMemory(self) rejects mismatched memoryMode with IllegalArgumentException") {
+    val (mm, _) = makeThings(1000L)
+    val onHeap = newProbeConsumer("on", MemoryMode.ON_HEAP)
+    intercept[IllegalArgumentException] {
+      mm.acquireStorageMemory(onHeap, 100L, MemoryMode.OFF_HEAP)
+    }
+  }
+
+  test("acquireStorageMemory(self) rejects negative numBytes with IllegalArgumentException") {
+    val (mm, _) = makeThings(1000L)
+    intercept[IllegalArgumentException] {
+      mm.acquireStorageMemory(newProbeConsumer("p"), -1L, MemoryMode.ON_HEAP)
+    }
+  }
+
+  // -- Cross-SPI mutual-exclusion guard (warn, not enforce)
+
+  test("registering the same object as both Managed and Unmanaged logs a WARN") {
+    class Both(uniqueName: String) extends ManagedConsumer with UnmanagedMemoryConsumer {
+      override val name: String = uniqueName
+      override def memoryMode: MemoryMode = MemoryMode.ON_HEAP
+      override def getShrinkableMemoryBytes: Long = 0L
+      override def shrink(numBytes: Long): Long = 0L
+      override def unmanagedMemoryConsumerId: UnmanagedMemoryConsumerId =
+        UnmanagedMemoryConsumerId("TEST", uniqueName)
+      override def getMemBytesUsed: Long = 0L
+    }
+
+    val both = new Both("cross-spi-1")
+    val appender = new LogAppender("cross-SPI warn", maxEvents = 100)
+    try {
+      // Register order 1: managed first, then unmanaged -> warning from unmanaged register.
+      UnifiedMemoryManager.registerManagedConsumer(both)
+      withLogAppender(appender) {
+        UnifiedMemoryManager.registerUnmanagedMemoryConsumer(both)
+      }
+      assert(appender.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+        "registered as BOTH ManagedConsumer and UnmanagedMemoryConsumer")))
+    } finally {
+      UnifiedMemoryManager.unregisterUnmanagedMemoryConsumer(both)
+      UnifiedMemoryManager.unregisterManagedConsumer(both)
+    }
+
+    val both2 = new Both("cross-spi-2")
+    val appender2 = new LogAppender("cross-SPI warn reverse", maxEvents = 100)
+    try {
+      // Register order 2: unmanaged first, then managed -> warning from managed register.
+      UnifiedMemoryManager.registerUnmanagedMemoryConsumer(both2)
+      withLogAppender(appender2) {
+        UnifiedMemoryManager.registerManagedConsumer(both2)
+      }
+      assert(appender2.loggingEvents.exists(_.getMessage.getFormattedMessage.contains(
+        "registered as BOTH ManagedConsumer and UnmanagedMemoryConsumer")))
+    } finally {
+      UnifiedMemoryManager.unregisterUnmanagedMemoryConsumer(both2)
+      UnifiedMemoryManager.unregisterManagedConsumer(both2)
+    }
+  }
 }
