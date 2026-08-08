@@ -1659,6 +1659,60 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
     }
   }
 
+  test("SPARK-58594: union partitioning - PartitioningCollection of keyed partitionings") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
+      withTable("testcat.ns.k1", "testcat.ns.k2") {
+        sql("CREATE TABLE testcat.ns.k1 (id bigint, data string) PARTITIONED BY (id)")
+        sql("INSERT INTO testcat.ns.k1 VALUES (1, 'a1'), (2, 'a2')")
+        sql("CREATE TABLE testcat.ns.k2 (id bigint, data string) PARTITIONED BY (id)")
+        sql("INSERT INTO testcat.ns.k2 VALUES (2, 'b2'), (3, 'b3')")
+
+        // Each child selects `id` twice, so its `ProjectExec` reports one `KeyedPartitioning` per
+        // alias inside a `PartitioningCollection` instead of a single `KeyedPartitioning`.
+        def unionDF: DataFrame = sql(
+          """SELECT id, id AS k, data FROM testcat.ns.k1
+            |UNION ALL
+            |SELECT id, id AS k, data FROM testcat.ns.k2
+            |""".stripMargin)
+
+        val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          unionDF.collect()
+        }
+
+        Seq(true, false).foreach { enabled =>
+          withSQLConf(
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+              SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+            val union = unionDF
+            val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+            assert(unionExec.size == 1)
+            assert(
+              unionExec.head.children.forall(_.outputPartitioning.isInstanceOf[
+                PartitioningCollection]),
+              "each child should report a PartitioningCollection of KeyedPartitionings")
+
+            val partitioning = unionExec.head.outputPartitioning
+            if (enabled) {
+              // Both children offer `identity(k)` and `identity(id)`, so the union merges the two
+              // collections member-wise and keeps both alternatives.
+              val collection = partitioning.asInstanceOf[PartitioningCollection]
+              assert(collection.partitionings.forall(_.isInstanceOf[KeyedPartitioning]),
+                s"expected a collection of KeyedPartitionings but got $partitioning")
+              assert(collection.partitionings.size == 2,
+                "one merged KeyedPartitioning per alias the children agree on")
+              // The merged keys are the concatenation of the children's keys: [1, 2] ++ [2, 3].
+              assert(collection.numPartitions == 4)
+            } else {
+              assert(partitioning.isInstanceOf[UnknownPartitioning])
+            }
+
+            checkAnswer(union, correctResult)
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-58317: union partitioning - PartitioningCollection child intersects to single") {
     withSQLConf(
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
