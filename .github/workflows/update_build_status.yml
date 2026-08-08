@@ -46,6 +46,23 @@ jobs:
             // See https://docs.github.com/en/graphql/reference/enums#mergestatestatus
             const maybeReady = ['behind', 'clean', 'draft', 'has_hooks', 'unknown', 'unstable'];
 
+            // A fork workflow-run lookup can fail transiently (server errors, network drops, or
+            // REST rate limiting, which GitHub returns as 403 with rate-limit headers or 429).
+            // These should be retried on a later scheduled pass rather than reported to the
+            // contributor as a broken fork. Any other failure (e.g. a 404 for a missing
+            // build_main.yml) is treated as permanent.
+            // https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
+            const isTransientError = (e) => {
+              if (!e.status) return true;
+              if (e.status >= 500 || e.status == 429) return true;
+              if (e.status == 403) {
+                const headers = (e.response && e.response.headers) || {};
+                return !!headers['retry-after'] || headers['x-ratelimit-remaining'] === '0'
+                  || /rate limit/i.test(e.message || '');
+              }
+              return false;
+            };
+
             // Iterate open PRs
             for await (const prs of github.paginate.iterator(endpoint,params)) {
               // Each page
@@ -68,8 +85,15 @@ jobs:
                     }
                   )
 
-                  // Iterator GitHub Checks in the PR
+                  // Track whether any Build check exists. notify_test_workflow.yml creates it
+                  // once per push; if that job never completed (e.g. cancelled while starved of
+                  // an ASF runner) the check is missing and we backfill it after the loop. An
+                  // action_required check counts as present (author must fix their fork).
+                  let anyBuildCheck = false
                   for await (const cr of checkRuns) {
+                    if (cr.name == 'Build') {
+                      anyBuildCheck = true
+                    }
                     if (cr.name == 'Build' && cr.conclusion != "action_required") {
                       // text contains parameters to make request in JSON. A Build check
                       // created by something other than notify_test_workflow.yml (an older
@@ -124,6 +148,116 @@ jobs:
                       }
 
                       break
+                    }
+                  }
+
+                  // No Build check: notify_test_workflow.yml never created one. Recreate it
+                  // here, mirroring notify. Skip if the head repo was deleted.
+                  if (!anyBuildCheck && pr.head.repo) {
+                    const forkOwner = pr.head.repo.owner.login
+                    const forkRepo = pr.head.repo.name
+                    // Look up the fork's build_main.yml runs for the head commit. Filter by
+                    // head_sha so stale runs from earlier commits on the branch cannot drive the
+                    // decision (the scheduled updater always sees the settled head SHA). Re-poll
+                    // a few times: the run is often not yet registered right after a push, and we
+                    // must not create the sticky action_required check below over registration
+                    // lag. A transient lookup error (5xx, network, rate limit) aborts to a later
+                    // scheduled pass; any other error is treated as a permanent "no runs".
+                    let forkRuns
+                    let transient = false
+                    for (let attempt = 0; attempt < 3; attempt++) {
+                      try {
+                        const runs = await github.request(
+                          'GET /repos/{owner}/{repo}/actions/workflows/{id}/runs',
+                          {
+                            owner: forkOwner,
+                            repo: forkRepo,
+                            id: 'build_main.yml',
+                            head_sha: pr.head.sha
+                          }
+                        )
+                        forkRuns = runs.data.workflow_runs
+                      } catch (error) {
+                        console.error(error)
+                        if (isTransientError(error)) {
+                          transient = true
+                          break
+                        }
+                        forkRuns = []
+                      }
+                      if (forkRuns.length > 0) {
+                        break
+                      }
+                      if (attempt < 2) {
+                        await new Promise(resolve => setTimeout(resolve, 3000))
+                      }
+                    }
+                    if (transient) {
+                      console.log('  Fork run lookup failed transiently; will retry next pass')
+                      continue
+                    }
+                    const matched_run = (forkRuns || [])[0]
+                    if (matched_run) {
+                      // A run exists for this head commit; point the check at it and let the
+                      // next pass sync its status.
+                      const actions_url = 'https://github.com/' + forkOwner + '/' + forkRepo
+                        + '/actions/runs/' + matched_run.id
+                      console.log('  Backfilling missing Build check -> ' + actions_url)
+                      await github.rest.checks.create({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        name: 'Build',
+                        head_sha: pr.head.sha,
+                        status: 'queued',
+                        output: {
+                          title: 'Test results',
+                          summary: '[See test results](' + actions_url + ')\n\n'
+                            + 'If the tests fail for reasons unrelated to this pull request, '
+                            + 'please rerun the workflow in your forked repository.\n'
+                            + 'If the failures are related to this pull request, '
+                            + 'please investigate them and push follow-up changes.',
+                          text: JSON.stringify({
+                            owner: forkOwner,
+                            repo: forkRepo,
+                            run_id: matched_run.id
+                          })
+                        },
+                        details_url: actions_url
+                      })
+                    } else {
+                      // No run for this head commit after re-polling (empty result, permanent
+                      // lookup failure, or build_main.yml missing): Actions is disabled, the
+                      // branch is on an old master, or the commit never triggered a run. Mirror
+                      // notify's action_required check so the PR carries a required status
+                      // telling the contributor how to fix it.
+                      console.log('  No forked run for head SHA; creating action_required check')
+                      await github.rest.checks.create({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        name: 'Build',
+                        head_sha: pr.head.sha,
+                        status: 'completed',
+                        conclusion: 'action_required',
+                        output: {
+                          title: 'Workflow run detection failed',
+                          summary: `
+            Unable to detect the workflow run for testing the changes in your PR.
+
+            1. If you did not enable GitHub Actions in your forked repository, please enable it by clicking the button as shown in the image below. See also [Managing Github Actions Settings for a repository](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository) for more details.
+            2. It is possible your branch is based on the old \`master\` branch in Apache Spark, please sync your branch to the latest master branch. For example as below:
+                \`\`\`bash
+                git fetch upstream
+                git rebase upstream/master
+                git push origin YOUR_BRANCH --force
+                \`\`\``,
+                          images: [
+                            {
+                              alt: 'enabling workflows button',
+                              image_url: 'https://raw.githubusercontent.com/apache/spark/master/.github/workflows/images/workflow-enable-button.png'
+                            }
+                          ]
+                        }
+                      })
                     }
                   }
                 }
