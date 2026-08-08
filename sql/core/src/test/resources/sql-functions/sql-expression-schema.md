@@ -462,6 +462,8 @@
 | org.apache.spark.sql.catalyst.expressions.WindowTime | window_time | SELECT a, window.start as start, window.end as end, window_time(window), cnt FROM (SELECT a, window, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, window(b, '5 minutes') ORDER BY a, window.start) | struct<a:string,start:timestamp,end:timestamp,window_time(window):timestamp,cnt:bigint> |
 | org.apache.spark.sql.catalyst.expressions.XmlToStructs | from_xml | SELECT from_xml('<p><a>1</a><b>0.8</b></p>', 'a INT, b DOUBLE') | struct<from_xml(<p><a>1</a><b>0.8</b></p>):struct<a:int,b:double>> |
 | org.apache.spark.sql.catalyst.expressions.XxHash64 | xxhash64 | SELECT xxhash64('Spark', array(123), 2) | struct<xxhash64(Spark, array(123), 2):bigint> |
+| org.apache.spark.sql.catalyst.expressions.Xxh3128 | xxh3_128 | SELECT xxh3_128('Spark') | struct<xxh3_128(Spark):string> |
+| org.apache.spark.sql.catalyst.expressions.Xxh364 | xxh3_64 | SELECT xxh3_64('Spark') | struct<xxh3_64(Spark):bigint> |
 | org.apache.spark.sql.catalyst.expressions.Year | year | SELECT year('2016-07-30') | struct<year(2016-07-30):int> |
 | org.apache.spark.sql.catalyst.expressions.ZeroIfNull | zeroifnull | SELECT zeroifnull(NULL) | struct<zeroifnull(NULL):int> |
 | org.apache.spark.sql.catalyst.expressions.ZipWith | zip_with | SELECT zip_with(array(1, 2, 3), array('a', 'b', 'c'), (x, y) -> (y, x)) | struct<zip_with(array(1, 2, 3), array(a, b, c), lambdafunction(named_struct(y, namedlambdavariable(), x, namedlambdavariable()), namedlambdavariable(), namedlambdavariable())):array<struct<y:string,x:int>>> |

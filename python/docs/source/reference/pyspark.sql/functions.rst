@@ -351,6 +351,8 @@ Hash Functions
     sha
     sha1
     sha2
+    xxh3_128
+    xxh3_64
     xxhash64
 
 

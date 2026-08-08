@@ -1711,6 +1711,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.crc32(fn.col("g").cast("binary"))
   }
 
+  functionTest("xxh3_64") {
+    fn.xxh3_64(fn.col("g").cast("binary"))
+  }
+
+  functionTest("xxh3_128") {
+    fn.xxh3_128(fn.col("g").cast("binary"))
+  }
+
   functionTest("hash") {
     fn.hash(fn.col("b"), fn.col("id"))
   }
