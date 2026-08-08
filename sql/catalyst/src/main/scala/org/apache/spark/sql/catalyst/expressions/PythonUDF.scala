@@ -36,6 +36,10 @@ object PythonUDF {
   private[this] val SCALAR_TYPES = Set(
     PythonEvalType.SQL_BATCHED_UDF,
     PythonEvalType.SQL_ARROW_BATCHED_UDF,
+    // Element-wise UDFs are row-shaped from the plan's point of view: one array column in, one
+    // array column out per row. They are extracted by `ExtractPythonUDFs` like any other scalar
+    // UDF; only the Python worker treats them element-wise.
+    PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
     PythonEvalType.SQL_SCALAR_ARROW_UDF,
@@ -44,6 +48,73 @@ object PythonUDF {
 
   def isScalarPythonUDF(e: Expression): Boolean = {
     e.isInstanceOf[PythonUDF] && SCALAR_TYPES.contains(e.asInstanceOf[PythonUDF].evalType)
+  }
+
+  /**
+   * Whether `e` is a Python UDF that can be lifted out of a higher-order function's lambda by
+   * `ExtractPythonUDFFromLambda`, which applies it to the whole array outside the lambda.
+   *
+   * Only the row-at-a-time eval types qualify, since the rule lifts a UDF that takes one value per
+   * call.
+   *
+   * This is shared with `CheckAnalysis` so that the shapes analysis accepts are exactly those the
+   * optimizer rule can rewrite.
+   */
+  def isElementwiseRewritableUDF(e: Expression): Boolean = e match {
+    case udf: PythonUDF =>
+      udf.evalType == PythonEvalType.SQL_BATCHED_UDF ||
+        udf.evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF
+    case _ => false
+  }
+
+  /**
+   * Whether every Python UDF in `hof`'s lambdas can be lifted out by `ExtractPythonUDFFromLambda`.
+   * Used by `CheckAnalysis` to decide whether to reject the plan. Three shapes cannot be rewritten:
+   *   - a UDF in a *nested* lambda, `transform(arr, i -> transform(i, x -> f(x)))`: the inner array
+   *     `i` is not a real column. (A UDF in a nested *argument*, `transform(arr, x ->
+   *     transform(udf(x), y -> y))`, is fine - `udf(x)` lifts onto `arr`.)
+   *   - a UDF in `aggregate` / `reduce`: the fold is sequential, so it sees earlier steps' outputs;
+   *   - a vectorized (scalar pandas / arrow) UDF, which is not supported.
+   */
+  def canRewritePythonUDFInLambda(hof: HigherOrderFunction): Boolean = {
+    // Only row-at-a-time eval types are supported; a vectorized UDF is not rewritable regardless
+    // of the enclosing function.
+    val allUDFsRewritable = hof.functions.forall { f =>
+      f.collect { case udf: PythonUDF => udf }.forall(isElementwiseRewritableUDF)
+    }
+    // Reading a free lambda variable means `hof` is itself nested in an enclosing lambda, so the
+    // array it iterates is not a real column (the nested case above).
+    val iteratesRealColumns = !hasFreeLambdaVariable(hof)
+    allUDFsRewritable && iteratesRealColumns && isRewritableShape(hof)
+  }
+
+  /**
+   * The structural assumption the rewrite makes: one lambda with plain-variable parameters, over at
+   * least one array- or map-valued argument. `aggregate` / `reduce` fail this - they have two
+   * lambdas (`merge`, `finish`) - so a UDF in a fold is rejected. Checking the shape rather than
+   * listing classes means a new function of a familiar shape needs no change here.
+   */
+  private def isRewritableShape(hof: HigherOrderFunction): Boolean =
+    hof.functions.length == 1 &&
+      hof.functions.head.isInstanceOf[LambdaFunction] &&
+      hof.functions.head.asInstanceOf[LambdaFunction].arguments
+        .forall(_.isInstanceOf[NamedLambdaVariable]) &&
+      hof.arguments.exists { a =>
+        a.dataType.isInstanceOf[ArrayType] || a.dataType.isInstanceOf[MapType]
+      }
+
+  /**
+   * Whether `e` references a [[NamedLambdaVariable]] that it does not itself bind, i.e. one bound
+   * by an enclosing lambda. Such an expression cannot be evaluated outside that lambda.
+   */
+  private def hasFreeLambdaVariable(e: Expression): Boolean = {
+    def check(expr: Expression, bound: Set[ExprId]): Boolean = expr match {
+      case LambdaFunction(function, arguments, _) =>
+        check(function, bound ++ arguments.map(_.exprId))
+      case v: NamedLambdaVariable => !bound.contains(v.exprId)
+      case other => other.children.exists(check(_, bound))
+    }
+    check(e, Set.empty)
   }
 
   def isWindowPandasUDF(e: PythonFuncExpression): Boolean = {

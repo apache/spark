@@ -8678,7 +8678,8 @@
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
         "message" : [
-          "Lambda function with Python UDF <funcName> in a higher order function."
+          "Cannot evaluate the Python UDF <funcName> inside the lambda of a higher-order function.",
+          "This placement is not supported. Rewrite the query so the UDF is applied outside the lambda."
         ]
       },
       "LAMBDA_FUNCTION_WITH_SQL_UDF" : {
