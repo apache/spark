@@ -860,10 +860,13 @@ class PlanMerger(
 
   // Compares two reported partitioning expression lists. A TransformExpression must be compared by
   // transform semantics -- `isSameFunction`, i.e. the connector's `canonicalName` and bucket count
-  // -- and NOT by the BoundFunction instance it holds: V2ExpressionUtils binds the function afresh
-  // on every derivation and a connector is free to return a new BoundFunction each time, so
-  // `canonicalized ==` would call two identical `bucket(4, id)` reports different, and no
-  // transform-partitioned source would ever pass the checks below. `isSameFunction` is the same
+  // -- and NOT by the BoundFunction instance it holds. V2ExpressionUtils binds the function afresh
+  // on every derivation, and while `canonicalName` is a documented obligation (its default returns
+  // a random UUID precisely to force an override), `equals` on BoundFunction is not required
+  // anywhere. So for a connector that meets only the documented contract, `canonicalized ==` calls
+  // two identical `bucket(4, id)` reports different and declines the merge. Connectors that do
+  // define `equals` semantically are unaffected -- Iceberg's `BaseScalarFunction` compares on
+  // `canonicalName` -- but that is a courtesy we should not depend on. `isSameFunction` is the same
   // notion a storage-partitioned join uses to compare its two sides, but only that part of it is
   // borrowed: `KeyedShuffleSpec.isExpressionCompatible` matches any two leaves (it recovers the
   // positions separately), ignores transform children and honours
