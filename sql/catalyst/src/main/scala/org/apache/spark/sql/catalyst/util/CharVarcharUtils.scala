@@ -262,6 +262,68 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     }.getOrElse(attr)
   }
 
+  def trimTrailingSpacesForScan(attr: Attribute): Expression = {
+    getRawType(attr.metadata).map { rawType =>
+      trimTrailingSpacesForChar(attr, rawType)
+    }.getOrElse(attr)
+  }
+
+  private def trimTrailingSpacesForChar(expr: Expression, dt: DataType): Expression = dt match {
+    case _: CharType =>
+      StringTrimRight(expr)
+
+    case StructType(fields) =>
+      val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
+        Seq(Literal(f.name), trimTrailingSpacesForChar(
+          GetStructField(expr, i, Some(f.name)), f.dataType))
+      }.toImmutableArraySeq)
+      if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
+        expr
+      } else if (expr.nullable) {
+        If(IsNull(expr), Literal(null, struct.dataType), struct)
+      } else {
+        struct
+      }
+
+    case ArrayType(et, containsNull) =>
+      val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
+      val funcBody = trimTrailingSpacesForChar(param, et)
+      if (funcBody.fastEquals(param)) {
+        expr
+      } else {
+        ArrayTransform(expr, LambdaFunction(funcBody, Seq(param)))
+      }
+
+    case MapType(kt, vt, valueContainsNull) =>
+      val keys = MapKeys(expr)
+      val newKeys = {
+        val param = NamedLambdaVariable("x", replaceCharVarcharWithString(kt), nullable = false)
+        val funcBody = trimTrailingSpacesForChar(param, kt)
+        if (funcBody.fastEquals(param)) {
+          keys
+        } else {
+          ArrayTransform(keys, LambdaFunction(funcBody, Seq(param)))
+        }
+      }
+      val values = MapValues(expr)
+      val newValues = {
+        val param = NamedLambdaVariable("x", replaceCharVarcharWithString(vt), valueContainsNull)
+        val funcBody = trimTrailingSpacesForChar(param, vt)
+        if (funcBody.fastEquals(param)) {
+          values
+        } else {
+          ArrayTransform(values, LambdaFunction(funcBody, Seq(param)))
+        }
+      }
+      if (newKeys.fastEquals(keys) && newValues.fastEquals(values)) {
+        expr
+      } else {
+        MapFromArrays(newKeys, newValues)
+      }
+
+    case _ => expr
+  }
+
   /**
    * Return expressions to apply char type padding for the string comparison between the given
    * attributes. When comparing two char type columns/fields, we need to pad the shorter one to
