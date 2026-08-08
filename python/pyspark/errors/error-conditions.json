@@ -645,6 +645,11 @@
       "Value for `<arg_name>` must be greater than or equal to 0, got '<arg_value>'."
     ]
   },
+  "NOT_ENOUGH_ARGS": {
+    "message": [
+      "Function `<func_name>` requires at least <min_num_args> argument(s)."
+    ]
+  },
   "NOT_EXPECTED_TYPE": {
     "message": [
       "Argument `<arg_name>` should be <expected_type>, got <arg_type>."
