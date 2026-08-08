@@ -18,6 +18,8 @@ SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read 
 
 Spark Connect protocol is defined in proto files under `sql/connect/common/src/main/protobuf/`. Read the README there before modifying proto definitions.
 
+When adding members to an existing class or object, keep related kinds of code in sections rather than inserting into the middle of another section. A common layout is fields and constructors first, then the public/override API, then private helpers; in a test suite, tests together and helpers after them. Prefer appending to the matching section, or following the file's existing sectioning -- the common failure mode is inserting a new member next to its first use and splitting the surrounding section. Do not reorganize existing members unless the change requires it.
+
 Avoid introducing non-ASCII characters in code or comments. String literals may contain non-ASCII when the content requires it (error messages, test data, etc.). Identifiers are ASCII by convention. The common failure mode is typographic characters (em-dash, smart quotes, ellipsis, non-breaking space) sneaking into comments; scalastyle flags some of these. Spot-check before committing: `grep -rn -P "[^\x00-\x7F]" <files>`.
 
 Keep source lines within 100 characters — the linters enforce this for Scala, Java, and Python, and LLMs commonly overrun it in comments and long expressions. A quick scan of just the changed files catches most cases in seconds, far cheaper than a CI round trip:
