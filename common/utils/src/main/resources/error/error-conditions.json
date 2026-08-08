@@ -6967,6 +6967,12 @@
     ],
     "sqlState" : "42614"
   },
+  "REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS" : {
+    "message" : [
+      "Connector <connector> mixes in `SupportsColumnUpdates` but its `requiredDataAttributes()` and `scanOnlyDataAttributes()` do not cover every partition column: <missingColumns>. Spark does not implicitly add partition columns to the narrow scan; a connector that needs them for partitioning resolution or write-side clustering must declare them in one of the two methods."
+    ],
+    "sqlState" : "42000"
+  },
   "REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS" : {
     "message" : [
       "Connector <connector> mixes in `SupportsColumnUpdates` but its `requiredDataAttributes()` does not cover every column being updated. Missing columns: <missingColumns>. Connectors must include every column reported by `RowLevelOperationInfo.updatedColumns()` in `requiredDataAttributes()`."
@@ -7261,6 +7267,12 @@
       "Error while calling spill() on <consumerToSpill> : <message>"
     ],
     "sqlState" : "82003"
+  },
+  "SPLIT_UPDATE_ROW_ID_NOT_DECLARED" : {
+    "message" : [
+      "Data source <connector> represents UPDATE as delete + insert but its `requiredDataAttributes()` does not include row ID column(s) <rowIds>. The REINSERT payload is projected down to `requiredDataAttributes()`, so an undeclared row ID column leaves the reinserted row with no identity for the connector to place it by. Include the row ID column(s) in `requiredDataAttributes()`."
+    ],
+    "sqlState" : "42000"
   },
   "SPLIT_UPDATE_ROW_ID_REASSIGNMENT" : {
     "message" : [

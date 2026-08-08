@@ -91,6 +91,8 @@ class InMemoryRowLevelOperationTable private (
   private final val COLUMN_UPDATE_EMPTY_REQ_ATTRS = "column-update-empty-req-attrs"
   private final val COLUMN_UPDATE_SCAN_ONLY = "column-update-scan-only"
   private final val COLUMN_UPDATE_OVERLAP = "column-update-overlap"
+  private final val COLUMN_UPDATE_MISSING_PARTITION = "column-update-missing-partition"
+  private final val COLUMN_UPDATE_SPLIT_MISSING_ROW_ID = "column-update-split-missing-row-id"
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -160,10 +162,16 @@ class InMemoryRowLevelOperationTable private (
       () => new PartitionBasedColumnUpdateOperation(info.command, info.updatedColumns().toSeq)
     } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT, "false") == "true") {
       () => new DeltaBasedColumnUpdateSplitOperation(info.command, info.updatedColumns().toSeq)
+    } else if (properties.getOrDefault(COLUMN_UPDATE_SPLIT_MISSING_ROW_ID, "false") == "true") {
+      () => new DeltaBasedColumnUpdateSplitMissingRowIdOperation(
+        info.command, info.updatedColumns().toSeq)
     } else if (properties.getOrDefault(COLUMN_UPDATE_SCAN_ONLY, "false") == "true") {
       () => new DeltaBasedColumnUpdateScanOnlyOperation(info.command, info.updatedColumns().toSeq)
     } else if (properties.getOrDefault(COLUMN_UPDATE_OVERLAP, "false") == "true") {
       () => new DeltaBasedColumnUpdateOverlapOperation(info.command, info.updatedColumns().toSeq)
+    } else if (properties.getOrDefault(COLUMN_UPDATE_MISSING_PARTITION, "false") == "true") {
+      () => new DeltaBasedColumnUpdateMissingPartitionOperation(
+        info.command, info.updatedColumns().toSeq)
     } else if (properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true") {
       () => DeltaBasedOperation(info.command, info.options)
     } else {
@@ -444,6 +452,15 @@ class InMemoryRowLevelOperationTable private (
     override def scanOnlyDataAttributes(): Array[NamedReference] = Array(DEP_COLUMN_REF)
   }
 
+  // Test-only: declares `dep` (the partition column) in neither `requiredDataAttributes()` nor
+  // `scanOnlyDataAttributes()`, to exercise the guard that rejects an undeclared partition column.
+  class DeltaBasedColumnUpdateMissingPartitionOperation(
+      command: Command,
+      updatedCols: Seq[NamedReference] = Nil)
+      extends DeltaBasedColumnUpdateOperation(command, updatedCols) {
+    override def scanOnlyDataAttributes(): Array[NamedReference] = Array.empty
+  }
+
   class DeltaBasedColumnUpdateSplitOperation(
       command: Command,
       updatedCols: Seq[NamedReference] = Nil)
@@ -526,6 +543,15 @@ class InMemoryRowLevelOperationTable private (
           }
       }
     }
+  }
+
+  // Test-only: a split-update fixture whose requiredDataAttributes() excludes the row-ID
+  // column, to exercise the guard that rejects an undeclared row ID for the REINSERT path.
+  class DeltaBasedColumnUpdateSplitMissingRowIdOperation(
+      command: Command,
+      updatedCols: Seq[NamedReference] = Nil)
+      extends DeltaBasedColumnUpdateSplitOperation(command, updatedCols) {
+    override def requiredDataAttributes(): Array[NamedReference] = updatedCols.toArray
   }
 
   class PartitionBasedColumnUpdateOperation(
