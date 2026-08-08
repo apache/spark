@@ -17,19 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-private[sql] trait RelationCache {
-  def lookup(
-      catalog: CatalogPlugin,
-      ident: Identifier,
-      tableId: Option[String],
-      stateOptions: CaseInsensitiveStringMap,
-      resolver: Resolver): Option[LogicalPlan]
-}
-
-private[sql] object RelationCache {
-  val empty: RelationCache = (_, _, _, _, _) => None
-}
+/**
+ * Key for the per-query table-state cache in [[AnalysisContext]].
+ *
+ * Unlike [[RelationCacheKey]], this key contains only options declared to affect table state. This
+ * lets references retain different scan options while sharing one concrete table state.
+ */
+private[sql] case class TableCacheKey(
+    catalog: CatalogPlugin,
+    identifier: Identifier,
+    timeTravelSpec: Option[TimeTravelSpec],
+    stateOptions: CaseInsensitiveStringMap)

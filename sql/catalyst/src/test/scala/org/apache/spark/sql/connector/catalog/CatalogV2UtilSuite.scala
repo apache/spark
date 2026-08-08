@@ -28,6 +28,14 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CatalogV2UtilSuite extends SparkFunSuite {
 
+  private def catalogWithStateOptions(keys: java.util.Set[String]): SupportsTableStateOptions = {
+    new SupportsTableStateOptions {
+      override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+      override def name(): String = "state-options"
+      override def tableStateOptionKeys(): java.util.Set[String] = keys
+    }
+  }
+
   // CatalogV2Util.getTable routes through the options-aware TableCatalog.loadTable, whose default
   // implementation dispatches to the existing overloads. Stub only that method to run the real
   // default so the dispatch is exercised; the leaf overloads stay as plain mock methods (returning
@@ -112,6 +120,55 @@ class CatalogV2UtilSuite extends SparkFunSuite {
     assert(a != c)
     assert(a.toString.contains("timeTravel"))
     assert(a.toString.contains("writePrivileges"))
+  }
+
+  test("extractTableStateOptions projects declared keys case-insensitively") {
+    val catalog = catalogWithStateOptions(java.util.Set.of("BrAnCh", "tag"))
+    val options = new CaseInsensitiveStringMap(java.util.Map.of(
+      "branch", "Main",
+      "TAG", "Release",
+      "split-size", "5"))
+
+    val stateOptions = CatalogV2Util.extractTableStateOptions(catalog, options)
+
+    assert(stateOptions.size() == 2)
+    assert(stateOptions.get("BRANCH") == "Main")
+    assert(stateOptions.get("tag") == "Release")
+    assert(!stateOptions.containsKey("split-size"))
+  }
+
+  test("extractTableStateOptions compares option keys case-insensitively") {
+    val catalog = catalogWithStateOptions(java.util.Set.of("SnApShOt"))
+    val lowerCaseKey = CatalogV2Util.extractTableStateOptions(
+      catalog,
+      new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "main")))
+    val upperCaseKey = CatalogV2Util.extractTableStateOptions(
+      catalog,
+      new CaseInsensitiveStringMap(java.util.Map.of("SNAPSHOT", "main")))
+
+    assert(lowerCaseKey == upperCaseKey)
+  }
+
+  test("extractTableStateOptions compares option values case-sensitively") {
+    val catalog = catalogWithStateOptions(java.util.Set.of("snapshot"))
+    val lowerCaseValue = CatalogV2Util.extractTableStateOptions(
+      catalog,
+      new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "main")))
+    val upperCaseValue = CatalogV2Util.extractTableStateOptions(
+      catalog,
+      new CaseInsensitiveStringMap(java.util.Map.of("snapshot", "MAIN")))
+
+    assert(lowerCaseValue != upperCaseValue)
+  }
+
+  test("extractTableStateOptions returns no options for catalogs without capability") {
+    val catalog = mock(classOf[CatalogPlugin])
+    val options = new CaseInsensitiveStringMap(
+      java.util.Map.of("branch", "Main", "split-size", "5"))
+
+    val stateOptions = CatalogV2Util.extractTableStateOptions(catalog, options)
+
+    assert(stateOptions.isEmpty)
   }
 
   test("viewInfoBuilderFrom preserves the dependency list") {
