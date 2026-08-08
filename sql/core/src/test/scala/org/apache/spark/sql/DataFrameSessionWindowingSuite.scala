@@ -595,4 +595,69 @@ class DataFrameSessionWindowingSuite extends SharedSparkSession {
       )
     }
   }
+
+  test("SPARK-57829: Support TimestampNTZNanos type in expression SessionWindow") {
+    val schema = new StructType()
+      .add("time", TimestampNTZNanosType(9))
+      .add("value", IntegerType)
+      .add("id", StringType)
+    val data = Seq(
+      Row(LocalDateTime.parse("2016-03-27T19:39:30"), 1, "a"),
+      Row(LocalDateTime.parse("2016-03-27T19:39:25"), 2, "a"))
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    val aggDF =
+      df.groupBy(session_window($"time", "10 seconds"))
+        .agg(count("*").as("counts"))
+        .orderBy($"session_window.start".asc)
+        .select($"session_window.start".cast("string"),
+          $"session_window.end".cast("string"), $"counts")
+
+    val aggregate = aggDF.queryExecution.analyzed.children(0).children(0)
+    assert(aggregate.isInstanceOf[Aggregate])
+
+    val timeWindow = aggregate.asInstanceOf[Aggregate].groupingExpressions(0)
+    assert(timeWindow.isInstanceOf[AttributeReference])
+
+    val attributeReference = timeWindow.asInstanceOf[AttributeReference]
+    assert(attributeReference.name == "session_window")
+
+    val expectedSchema = StructType(
+      Seq(StructField("start", TimestampNTZNanosType(9)),
+        StructField("end", TimestampNTZNanosType(9))))
+    assert(attributeReference.dataType == expectedSchema)
+
+    checkAnswer(aggDF, Seq(Row("2016-03-27 19:39:25", "2016-03-27 19:39:40", 2)))
+  }
+
+  test("SPARK-57829: Support TimestampLTZNanos type in expression SessionWindow") {
+    import java.time.Instant
+    withSQLConf("spark.sql.session.timeZone" -> "UTC") {
+      val schema = new StructType()
+        .add("time", TimestampLTZNanosType(9))
+        .add("value", IntegerType)
+      val data = Seq(
+        Row(Instant.parse("2016-03-27T19:39:30Z"), 1),
+        Row(Instant.parse("2016-03-27T19:39:25Z"), 2))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+      val aggDF =
+        df.groupBy(session_window($"time", "10 seconds"))
+          .agg(count("*").as("counts"))
+          .orderBy($"session_window.start".asc)
+
+      // Verify the session window struct has the expected nanos type
+      val sessionWindowField = aggDF.schema.find(_.name == "session_window").get
+      val expectedType = StructType(Seq(
+        StructField("start", TimestampLTZNanosType(9)),
+        StructField("end", TimestampLTZNanosType(9))))
+      assert(sessionWindowField.dataType == expectedType)
+
+      // Value-level assertion: verify LTZ session merging arithmetic
+      checkAnswer(
+        aggDF.select($"session_window.start".cast("string"),
+          $"session_window.end".cast("string"), $"counts"),
+        Seq(Row("2016-03-27 19:39:25", "2016-03-27 19:39:40", 2)))
+    }
+  }
 }

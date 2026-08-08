@@ -768,4 +768,138 @@ class DataFrameTimeWindowingSuite extends SharedSparkSession {
       )
     }
   }
+
+  test("SPARK-57829: Support TimestampNTZNanos type in expression TimeWindow") {
+    import java.time.LocalDateTime
+    val schema = new StructType()
+      .add("time", TimestampNTZNanosType(9))
+      .add("value", IntegerType)
+      .add("id", StringType)
+    val data = Seq(
+      Row(LocalDateTime.parse("2016-03-27T19:39:30"), 1, "a"),
+      Row(LocalDateTime.parse("2016-03-27T19:39:25"), 2, "a"))
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    val logicalPlan =
+      df.groupBy(window($"time", "10 seconds", "10 seconds", "-5 seconds"))
+        .agg(count("*").as("counts"))
+        .orderBy($"window.start".asc)
+        .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts")
+    val aggregate = logicalPlan.queryExecution.analyzed.children(0).children(0)
+    assert(aggregate.isInstanceOf[Aggregate])
+    val timeWindow = aggregate.asInstanceOf[Aggregate].groupingExpressions(0)
+    assert(timeWindow.isInstanceOf[AttributeReference])
+    val attributeReference = timeWindow.asInstanceOf[AttributeReference]
+    assert(attributeReference.name == "window")
+    val expectedType = StructType(Seq(
+      StructField("start", TimestampNTZNanosType(9)),
+      StructField("end", TimestampNTZNanosType(9))))
+    assert(attributeReference.dataType == expectedType)
+
+    checkAnswer(logicalPlan, Seq(
+      Row("2016-03-27 19:39:25", "2016-03-27 19:39:35", 2)))
+  }
+
+  test("SPARK-57829: Support TimestampLTZNanos type in expression TimeWindow") {
+    import java.time.Instant
+    withSQLConf("spark.sql.session.timeZone" -> "UTC") {
+      val schema = new StructType()
+        .add("time", TimestampLTZNanosType(9))
+        .add("value", IntegerType)
+      val data = Seq(
+        Row(Instant.parse("2016-03-27T19:39:30Z"), 1),
+        Row(Instant.parse("2016-03-27T19:39:25Z"), 2))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+      val logicalPlan =
+        df.groupBy(window($"time", "10 seconds"))
+          .agg(count("*").as("counts"))
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts")
+
+      val aggregate = logicalPlan.queryExecution.analyzed.children(0).children(0)
+      assert(aggregate.isInstanceOf[Aggregate])
+      val timeWindow = aggregate.asInstanceOf[Aggregate].groupingExpressions(0)
+      assert(timeWindow.isInstanceOf[AttributeReference])
+      val expectedType = StructType(Seq(
+        StructField("start", TimestampLTZNanosType(9)),
+        StructField("end", TimestampLTZNanosType(9))))
+      assert(timeWindow.asInstanceOf[AttributeReference].dataType == expectedType)
+
+      // Value-level assertion: verify LTZ time-window arithmetic
+      checkAnswer(logicalPlan, Seq(
+        Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", 1),
+        Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1)))
+    }
+  }
+
+  test("SPARK-57829: Nanosecond-precision window boundaries preserve sub-microsecond precision") {
+    import java.time.LocalDateTime
+    // Use a timestamp with sub-microsecond digits: 19:39:30.000000123
+    val schema = new StructType()
+      .add("time", TimestampNTZNanosType(9))
+      .add("value", IntegerType)
+    val data = Seq(
+      Row(LocalDateTime.parse("2016-03-27T19:39:30.000000123"), 1),
+      Row(LocalDateTime.parse("2016-03-27T19:39:35.000000456"), 2))
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // 10-second tumbling window: boundaries at :30 and :40
+    val result = df.groupBy(window($"time", "10 seconds"))
+      .agg(count("*").as("counts"))
+      .orderBy($"window.start".asc)
+      .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts")
+
+    checkAnswer(result, Seq(
+      Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 2)))
+  }
+
+  test("SPARK-57829: window_time with nanosecond-precision timestamps") {
+    import java.time.LocalDateTime
+    val schema = new StructType()
+      .add("time", TimestampNTZNanosType(9))
+    val data = Seq(
+      Row(LocalDateTime.parse("2016-03-27T19:38:18")),
+      Row(LocalDateTime.parse("2016-03-27T19:39:25")))
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // window_time should return window.end - 1 nanosecond (not 1 microsecond)
+    checkAnswer(
+      df.select(window($"time", "10 seconds").as("window"))
+        .select(
+          $"window.end".cast("string"),
+          window_time($"window").cast("string")
+        ),
+      Seq(
+        // end = :20, window_time = :19.999999999 (minus 1 nanosecond)
+        Row("2016-03-27 19:38:20", "2016-03-27 19:38:19.999999999"),
+        Row("2016-03-27 19:39:30", "2016-03-27 19:39:29.999999999")
+      )
+    )
+  }
+
+  test("SPARK-57829: sliding window with nanosecond-precision NTZ") {
+    import java.time.LocalDateTime
+    val schema = new StructType()
+      .add("time", TimestampNTZNanosType(9))
+      .add("value", IntegerType)
+    val data = Seq(
+      Row(LocalDateTime.parse("2016-03-27T19:39:34"), 1),
+      Row(LocalDateTime.parse("2016-03-27T19:39:56"), 2),
+      Row(LocalDateTime.parse("2016-03-27T19:39:27"), 4))
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    val result = df.select(window($"time", "10 seconds", "5 seconds"), $"value")
+      .orderBy($"window.start".asc, $"value".desc)
+      .select($"window.start".cast("string"), $"window.end".cast("string"), $"value")
+
+    checkAnswer(result, Seq(
+      Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", 4),
+      Row("2016-03-27 19:39:25", "2016-03-27 19:39:35", 4),
+      Row("2016-03-27 19:39:25", "2016-03-27 19:39:35", 1),
+      Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1),
+      Row("2016-03-27 19:39:50", "2016-03-27 19:40:00", 2),
+      Row("2016-03-27 19:39:55", "2016-03-27 19:40:05", 2)
+    ))
+  }
 }

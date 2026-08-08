@@ -200,17 +200,34 @@ class MergingSessionsIterator(
     firstRowInNextGroup = currentRow.copy()
   }
 
+  // Detect whether the session struct uses nanosecond-precision timestamps. If so, session
+  // start/end must be read as TimestampNanosVal and converted to epoch-nanos Long for comparison.
+  private[this] val sessionIsNanos: Boolean =
+    SessionNanosHelper.isSessionNanos(sessionExpression)
+
   private def getSessionStart(sessionStruct: UnsafeRow): Long = {
-    sessionStruct.getLong(0)
+    if (sessionIsNanos) {
+      SessionNanosHelper.getSessionStartNanos(sessionStruct)
+    } else {
+      sessionStruct.getLong(0)
+    }
   }
 
   private def getSessionEnd(sessionStruct: UnsafeRow): Long = {
-    sessionStruct.getLong(1)
+    if (sessionIsNanos) {
+      SessionNanosHelper.getSessionEndNanos(sessionStruct)
+    } else {
+      sessionStruct.getLong(1)
+    }
   }
 
   private def expandEndOfCurrentSession(sessionEnd: Long): Unit = {
     if (sessionEnd > getSessionEnd(currentSession)) {
-      currentSession.setLong(1, sessionEnd)
+      if (sessionIsNanos) {
+        SessionNanosHelper.setSessionEnd(currentSession, sessionEnd, sessionExpression)
+      } else {
+        currentSession.setLong(1, sessionEnd)
+      }
     }
   }
 
