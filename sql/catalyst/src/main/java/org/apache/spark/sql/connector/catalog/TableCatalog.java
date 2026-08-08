@@ -201,7 +201,7 @@ public interface TableCatalog extends CatalogPlugin {
    * <p>
    * The default implementation ignores {@code options} and delegates to the existing
    * {@code loadTable} overloads based on {@code context}. Catalogs that want to receive the user
-   * options while reading a table must override this method.
+   * options while loading a table for a read or write must override this method.
    * <p>
    * An override replaces that dispatch and must honor {@code context} itself: apply the time
    * travel in {@link TableContext#timeTravel()}, and authorize the requested
@@ -210,8 +210,8 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param ident a table identifier
    * @param context the parsed load parameters (time travel, write privileges)
-   * @param options all options passed to the read, including any keys that are also parsed into
-   *                {@code context}
+   * @param options all options passed to the table load, including any keys that are also parsed
+   *                into {@code context}
    * @return the table's metadata
    * @throws NoSuchTableException If the table doesn't exist
    *
@@ -323,7 +323,9 @@ public interface TableCatalog extends CatalogPlugin {
    * @param ident a table identifier
    * @param tableInfo information about the table
    * @return metadata for the new table. This can be null if getting the metadata for the new table
-   *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
+   *         is expensive. Spark will call
+   *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} if needed
+   *         (e.g. CTAS), forwarding the write options and required privileges.
    *
    * @throws TableAlreadyExistsException If a table already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported

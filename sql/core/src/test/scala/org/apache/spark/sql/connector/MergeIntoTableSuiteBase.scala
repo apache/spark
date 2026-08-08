@@ -2866,13 +2866,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       // DataSourceV2Relation, the RowLevelOperationInfo, and the write builder's LogicalWriteInfo
       checkRowLevelOperationOptions(
         sql(
-          s"""MERGE INTO $tableNameAsString t WITH (`write.split-size` = 10)
+          s"""MERGE INTO $tableNameAsString t WITH
+             |  (`load-option` = 'load-value', `write-option` = 'write-value')
              |USING $sourceNameAsString s
              |ON t.pk = s.pk
              |WHEN MATCHED THEN UPDATE SET t.salary = s.salary
              |WHEN NOT MATCHED THEN INSERT *
              |""".stripMargin),
-        "write.split-size" -> "10")
+        "load-option" -> "load-value",
+        "write-option" -> "write-value")
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -3016,7 +3018,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       // write from the target's options at a different site than the row-level rewrite path.
       val executedPlan = executeAndKeepPlan {
         sql(
-          s"""MERGE INTO $tableNameAsString t WITH (`write.split-size` = 10)
+          s"""MERGE INTO $tableNameAsString t WITH
+             |  (`load-option` = 'load-value', `write-option` = 'write-value')
              |USING $sourceNameAsString s
              |ON t.pk = s.pk
              |WHEN NOT MATCHED THEN INSERT *
@@ -3026,7 +3029,11 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         case e: InsertOnlyMergeExec => e.write
       }.getOrElse(fail("expected an InsertOnlyMergeExec in the executed plan"))
       val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
-      assert(append.info.options.get("write.split-size") === "10")
+      assert(append.info.options.get("load-option") === "load-value")
+      assert(append.info.options.get("write-option") === "write-value")
+      assertLastTransactionWriteLoadOptions(
+        "load-option" -> "load-value",
+        "write-option" -> "write-value")
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),

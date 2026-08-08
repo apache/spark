@@ -507,7 +507,15 @@ class RelationResolution(
    */
   private def loadRelation(ref: V2TableReference): LogicalPlan = {
     val resolvedCatalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
-    val table = resolvedCatalog.loadTable(ref.identifier)
+    val table = ref.context match {
+      case V2TableReference.WriteTargetContext =>
+        // WriteTargetContext is currently used by transactional streaming writes and does not
+        // retain required write privileges. Keep the legacy load unchanged; options and
+        // privileges must be handled together in a follow-up.
+        resolvedCatalog.loadTable(ref.identifier)
+      case _ =>
+        CatalogV2Util.getTable(resolvedCatalog, ref.identifier, options = ref.options)
+    }
     V2TableReferenceUtils.validateLoadedTable(table, ref)
     DataSourceV2Relation(
       table = table,
