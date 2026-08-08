@@ -307,6 +307,9 @@ case class CurrentBatchTimestamp(
       case _: TimestampNTZType =>
         Literal(convertTz(timestampUs, ZoneOffset.UTC, zoneId), TimestampNTZType)
       case _: DateType => Literal(microsToDays(timestampUs, zoneId), DateType)
+      case t: TimeType =>
+        val nanosOfDay = instantToNanosOfDay(microsToInstant(timestampUs), zoneId)
+        Literal(truncateTimeToPrecision(nanosOfDay, t.precision), t)
     }
   }
 }

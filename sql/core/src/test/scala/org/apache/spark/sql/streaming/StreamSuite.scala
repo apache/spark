@@ -32,7 +32,8 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, TaskContext, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
-import org.apache.spark.sql.{AnalysisException, Encoders, Row, SQLContext, TestStrategy}
+import org.apache.spark.sql.{AnalysisException, Column, Encoders, Row, SQLContext, TestStrategy}
+import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -1266,6 +1267,80 @@ class StreamSuite extends StreamTest {
         lastTimestamp = assertBatchOutputAndUpdateLastTimestamp(rows, lastTimestamp, currentDate, 2)
       }
     )
+  }
+
+  private def zone: ZoneId = ZoneId.of(spark.sessionState.conf.sessionLocalTimeZone)
+  Seq[(Column, Long => Any)](
+    (current_timestamp(), batchMs => new java.sql.Timestamp(batchMs)),
+    (now(), batchMs => new java.sql.Timestamp(batchMs)),
+    (current_date(),
+      batchMs => java.sql.Date.valueOf(java.time.Instant.ofEpochMilli(batchMs)
+        .atZone(zone).toLocalDate)),
+    (current_time(),
+      batchMs => java.time.Instant.ofEpochMilli(batchMs).atZone(zone).toLocalTime)
+  ).foreach { case (column, expected) =>
+    test(s"SPARK-58309 $column is anchored to the batch timestamp in streaming queries") {
+      val input = MemoryStream[Int]
+      val df = input.toDS().select(column)
+      val clock = new StreamManualClock
+
+      testStream(df)(
+        StartStream(Trigger.ProcessingTime("10 seconds"), triggerClock = clock),
+        AddData(input, 1),
+        AdvanceManualClock(10 * 1000),
+        CheckLastBatch { rows: Seq[Row] =>
+          assert(rows.map(_.get(0)) === Seq(expected(10 * 1000L)))
+        },
+        AddData(input, 2),
+        AdvanceManualClock(10 * 1000),
+        CheckLastBatch { rows: Seq[Row] =>
+          assert(rows.map(_.get(0)) === Seq(expected(20 * 1000L)))
+        },
+        // Purge batch 1's commit so restart reruns it. The rerun must reproduce the batch's
+        // persisted timestamp (20s), not the advanced wall clock (80s).
+        StopStream,
+        AssertOnQuery { q =>
+          q.sink.asInstanceOf[MemorySink].clear()
+          q.commitLog.purge(2)
+          clock.advance(60 * 1000L)
+          true
+        },
+        StartStream(Trigger.ProcessingTime("10 seconds"), triggerClock = clock),
+        CheckLastBatch { rows: Seq[Row] =>
+          assert(rows.map(_.get(0)) === Seq(expected(20 * 1000L)))
+        }
+      )
+    }
+  }
+
+  // now() and current_time() are the two expressions SPARK-58309 started anchoring, so only
+  // they are affected by the conf. The rest were already anchored before it.
+  Seq(
+    ("now()", now(), true),
+    ("current_time()", current_time(), true),
+    ("current_timestamp()", current_timestamp(), false),
+    ("current_date()", current_date(), false),
+    ("localtimestamp()", localtimestamp(), false)
+  ).foreach { case (name, column, affectedByConf) =>
+    test(s"SPARK-58309 anchoring $name to the batch timestamp can be disabled by conf") {
+      withSQLConf(SQLConf.STREAMING_ANCHOR_NOW_AND_CURRENT_TIME.key -> "false") {
+        val input = MemoryStream[Int]
+        val df = input.toDS().select(column)
+
+        testStream(df)(
+          AddData(input, 1),
+          ProcessAllAvailable(),
+          AssertOnQuery { q =>
+            // With the conf off, now() and current_time() are left for the optimizer to fold
+            // against the wall clock, so no CurrentBatchTimestamp is planted for them.
+            val anchored = q.lastExecution.logical.exists(
+              _.expressions.exists(_.exists(_.isInstanceOf[CurrentBatchTimestamp])))
+            assert(anchored === !affectedByConf)
+            true
+          }
+        )
+      }
+    }
   }
 
   // ProcessingTime trigger generates MicroBatchExecution, and ContinuousTrigger starts a
