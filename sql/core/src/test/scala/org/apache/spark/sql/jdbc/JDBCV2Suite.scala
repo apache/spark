@@ -26,6 +26,7 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrL
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
@@ -36,7 +37,7 @@ import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCRDD}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
+import org.apache.spark.sql.execution.datasources.v2.{AppendDataExecV1, DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
 import org.apache.spark.sql.internal.SQLConf
@@ -3173,5 +3174,21 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     )
 
     assertResult(expectedMetadata) { jdbcRdd.getDatabaseMetadata }
+  }
+
+  test("SPARK-57471: data size metric on catalog write") {
+    withTable("h2.test.write_metric") {
+      sql("CREATE TABLE h2.test.write_metric AS SELECT * FROM h2.test.people")
+      val qes = withQueryExecutionsCaptured(spark) {
+        sql("SELECT 1 AS ID, 'hello' AS NAME").writeTo("h2.test.write_metric").append()
+      }
+      val writePlans = qes.map(_.executedPlan).filter {
+        case _: AppendDataExecV1 => true
+        case _ => false
+      }
+      assert(writePlans.size === 1, s"Expected 1 AppendDataExecV1, got: ${qes.map(_.executedPlan)}")
+      val dataBytes = writePlans.head.metrics("dataSizeBytes").value
+      assert(dataBytes > 0, "write data size should be > 0")
+    }
   }
 }

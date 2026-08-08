@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.{DecimalPrecisionTypeCoercion, Res
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
@@ -47,7 +47,8 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDialect}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.{NextIterator, TaskInterruptListener}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.{LongAccumulator, NextIterator, TaskInterruptListener}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -359,17 +360,143 @@ object JdbcUtils extends Logging with SQLConfHelper {
     internalRows.map(fromRow)
   }
 
+  /**
+   * Returns the byte size of an ArrayData, iterating elements, skipping nulls,
+   * and recursing into nested arrays. Used by the read-path sizers.
+   */
+  private def sizeArrayData(arr: ArrayData, elementType: DataType): Long = {
+    var s = 0L
+    var j = 0
+    while (j < arr.numElements()) {
+      if (!arr.isNullAt(j)) {
+        elementType match {
+          case _: StringType => s += arr.getUTF8String(j).numBytes()
+          case BinaryType => s += arr.getBinary(j).length
+          case nested: ArrayType => s += sizeArrayData(arr.getArray(j), nested.elementType)
+          case dt => s += dt.defaultSize
+        }
+      }
+      j += 1
+    }
+    s
+  }
+
+  /**
+   * Returns the byte size of a Seq (external Row representation of an array), iterating
+   * elements, skipping nulls, and recursing into nested arrays. Used by the write-path sizer.
+   */
+  private def sizeSeqElements(seq: Seq[Any], elementType: DataType): Long = {
+    var s = 0L
+    seq.foreach { e =>
+      if (e != null) {
+        elementType match {
+          case _: StringType =>
+            s += UTF8String.fromString(e.asInstanceOf[String]).numBytes()
+          case BinaryType =>
+            s += e.asInstanceOf[Array[Byte]].length
+          case nested: ArrayType =>
+            s += sizeSeqElements(e.asInstanceOf[Seq[Any]], nested.elementType)
+          case dt =>
+            s += dt.defaultSize
+        }
+      }
+    }
+    s
+  }
+
+  /**
+   * Builds an array of per-column sizing functions for InternalRow. Each function returns the
+   * byte size contribution of that column (0 for nulls). Variable-length types (String, Binary)
+   * use actual value size; fixed-width types use defaultSize.
+   *
+   * Shared by the read-path decode loop (columnSizers) and measureInternalRowSize to avoid
+   * duplicated sizing logic.
+   */
+  private[jdbc] def buildInternalRowSizers(schema: StructType): Array[InternalRow => Long] = {
+    schema.fields.zipWithIndex.map { case (field, idx) =>
+      field.dataType match {
+        case _: StringType => (row: InternalRow) =>
+          if (row.isNullAt(idx)) 0L else row.getUTF8String(idx).numBytes()
+        case BinaryType => (row: InternalRow) =>
+          if (row.isNullAt(idx)) 0L else row.getBinary(idx).length.toLong
+        case at: ArrayType => (row: InternalRow) =>
+          if (row.isNullAt(idx)) 0L
+          else {
+            val arr = row.getArray(idx)
+            sizeArrayData(arr, at.elementType)
+          }
+        case dt => (row: InternalRow) =>
+          if (row.isNullAt(idx)) 0L else dt.defaultSize.toLong
+      }
+    }
+  }
+
+  /**
+   * Measures the size in bytes of a row given its schema. For variable-length types
+   * (String, Binary), uses actual value size; for fixed-width types, uses defaultSize.
+   * Null fields contribute 0 bytes.
+   *
+   * NOTE: This method builds a fresh sizers array on every call and is NOT intended for
+   * hot-path use. The read path uses pre-computed `columnSizers` for efficiency.
+   * This standalone variant exists primarily for unit testing.
+   */
+  private[jdbc] def measureInternalRowSize(row: InternalRow, schema: StructType): Long = {
+    val sizers = buildInternalRowSizers(schema)
+    var size = 0L
+    var i = 0
+    while (i < sizers.length) {
+      size += sizers(i)(row)
+      i += 1
+    }
+    size
+  }
+
+  /**
+   * Measures the size in bytes of an external Row given its schema. For variable-length types
+   * (String, Binary), uses actual value size; for fixed-width types, uses defaultSize.
+   * Null fields contribute 0 bytes.
+   *
+   * Used on the write path: strings measured via UTF8String.fromString(s).numBytes()
+   * (actual UTF-8 byte length). The read-side counterpart (measureInternalRowSize) also
+   * uses UTF8String.numBytes().
+   */
+  private[jdbc] def measureRowSize(row: Row, schema: StructType): Long = {
+    var size = 0L
+    var i = 0
+    while (i < schema.length) {
+      if (!row.isNullAt(i)) {
+        schema.fields(i).dataType match {
+          case _: StringType =>
+            size += UTF8String.fromString(row.getString(i)).numBytes()
+          case BinaryType =>
+            size += row.getAs[Array[Byte]](i).length
+          case at: ArrayType =>
+            val seq = row.getSeq[Any](i)
+            size += sizeSeqElements(seq, at.elementType)
+          case dt =>
+            size += dt.defaultSize
+        }
+      }
+      i += 1
+    }
+    size
+  }
+
   private[spark] def resultSetToSparkInternalRows(
       resultSet: ResultSet,
       dialect: JdbcDialect,
       schema: StructType,
       inputMetrics: InputMetrics,
-      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None): Iterator[InternalRow] = {
+      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None,
+      dataSizeMetric: Option[SQLMetric] = None): Iterator[InternalRow] = {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
       private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema)
       private[this] val mutableRow =
         new SpecificInternalRow(schema.fields.map(x => x.dataType).toImmutableArraySeq)
+      // Pre-compute per-column sizing functions for single-pass measurement.
+      private[this] val columnSizers: Array[InternalRow => Long] =
+        JdbcUtils.buildInternalRowSizers(schema)
 
       override protected def close(): Unit = {
         try {
@@ -383,11 +510,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
         if (rs.next()) {
           inputMetrics.incRecordsRead(1)
           var i = 0
+          var rowSize = 0L
+          val measureSize = dataSizeMetric.isDefined
           while (i < getters.length) {
             getters(i).apply(rs, mutableRow, i)
             if (rs.wasNull) mutableRow.setNullAt(i)
+            // Accumulate actual decoded size within the same per-column pass.
+            if (measureSize) rowSize += columnSizers(i)(mutableRow)
             i = i + 1
           }
+          dataSizeMetric.foreach(_.add(rowSize))
           mutableRow
         } else {
           finished = true
@@ -587,11 +719,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * are used.
    *
    * Note that this method records task output metrics. It assumes the method is
-   * running in a task. For now, we only records the number of rows being written
-   * because there's no good way to measure the total bytes being written. Only
-   * effective outputs are taken into account: for example, metric will not be updated
-   * if it supports transaction and transaction is rolled back, but metric will be
-   * updated even with error if it doesn't support transaction, as there're dirty outputs.
+   * running in a task. Records both the number of rows being written and the
+   * total bytes written (based on actual Spark-side row size measurement).
+   * The recordsWritten metric (internal task output metric, countFailedValues=true)
+   * is updated even with error if the database does not support transactions, as
+   * there are dirty outputs. The byte-size metric rides on a plain accumulator
+   * (countFailedValues=false) that is dropped from failed tasks, so it is reported
+   * only for successful tasks.
    */
   def savePartition(
       table: String,
@@ -601,7 +735,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       batchSize: Int,
       dialect: JdbcDialect,
       isolationLevel: Int,
-      options: JDBCOptions): Unit = {
+      options: JDBCOptions,
+      bytesAccumulator: Option[LongAccumulator] = None): Unit = {
 
     if (iterator.isEmpty) {
       return
@@ -690,6 +825,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
           stmt.addBatch()
           rowCount += 1
           totalRowCount += 1
+          bytesAccumulator.foreach { acc =>
+            try {
+              acc.add(measureRowSize(row, rddSchema))
+            } catch {
+              case NonFatal(_) => // measurement error must never abort a write
+            }
+          }
           if (rowCount % batchSize == 0) {
             // Hot spot for native blocking reads; TaskInterruptListener (registered after
             // opening the connection in this method) closes conn to unblock. JDBC 4.0 section 9.6:
@@ -860,7 +1002,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       df: DataFrame,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      options: JdbcOptionsInWrite): Unit = {
+      options: JdbcOptionsInWrite,
+      bytesAccumulator: Option[LongAccumulator] = None): Unit = {
     val url = options.url
     val table = options.table
     val dialect = JdbcDialects.get(url)
@@ -876,7 +1019,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case _ => df
     }
     repartitionedDF.foreachPartition { iterator => savePartition(
-      table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
+      table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options,
+      bytesAccumulator)
     }
   }
 

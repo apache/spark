@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.execution.datasources.jdbc.{JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -35,6 +36,9 @@ case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) ext
   }
 
   override def build(): V1Write = new V1Write {
+    // Accumulator to collect actual bytes written across all partitions.
+    @transient private lazy val bytesAccumulator = SparkSession.active.sparkContext.longAccumulator
+
     override def toInsertableRelation: InsertableRelation = (data: DataFrame, _: Boolean) => {
       // TODO (SPARK-32595): do truncate and append atomically.
       if (isTruncate) {
@@ -42,7 +46,30 @@ case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) ext
         val conn = dialect.createConnectionFactory(options)(-1)
         JdbcUtils.truncateTable(conn, options)
       }
-      JdbcUtils.saveTable(data, Some(schema), SQLConf.get.caseSensitiveAnalysis, options)
+      JdbcUtils.saveTable(
+        data, Some(schema), SQLConf.get.caseSensitiveAnalysis, options, Some(bytesAccumulator))
+    }
+
+    override def supportedCustomMetrics(): Array[CustomMetric] = {
+      Array(new JDBCDataSizeMetric)
+    }
+
+    override def reportDriverMetrics(): Array[CustomTaskMetric] = {
+      Array(new CustomTaskMetric {
+        override def name(): String = JDBCDataSizeMetric.NAME
+        override def value(): Long = bytesAccumulator.value
+      })
     }
   }
+}
+
+/** CustomMetric declaration for JDBC write data size. */
+class JDBCDataSizeMetric extends CustomSumMetric {
+  override def name(): String = JDBCDataSizeMetric.NAME
+  override def description(): String =
+    "Actual decoded row size written (strings measured by UTF-8 byte length)"
+}
+
+object JDBCDataSizeMetric {
+  val NAME = "dataSizeBytes"
 }
