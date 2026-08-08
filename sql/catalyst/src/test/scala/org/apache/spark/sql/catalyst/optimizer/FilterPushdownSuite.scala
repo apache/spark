@@ -251,6 +251,39 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
+  test("SPARK-54419: avoid expanding expensive alias chains that stay above projects") {
+    object StressOptimize extends RuleExecutor[LogicalPlan] {
+      val batches =
+        Batch("Filter Pushdown", FixedPoint(100),
+          CombineFilters,
+          PushPredicateThroughNonJoin,
+          BooleanSimplification,
+          PushPredicateThroughJoin,
+          CollapseProject) :: Nil
+    }
+
+    def expensivePredicate(input: Expression): PythonUDF = PythonUDF("pythonUDF", null,
+      BooleanType, Seq(input), PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+
+    var plan: LogicalPlan = LocalRelation(attrE)
+    (1 to 30).foreach { _ =>
+      val currentAttr = plan.output.head
+      plan = Project(
+        Seq(Alias(CaseWhen(Seq(expensivePredicate(currentAttr) -> currentAttr), Some(currentAttr)),
+          currentAttr.name)()),
+        plan)
+    }
+
+    val originalQuery = Filter(expensivePredicate(plan.output.head), plan).analyze
+    val optimized = StressOptimize.execute(originalQuery)
+
+    optimized match {
+      case Filter(_: Expression, _: Project) =>
+      case other =>
+        fail(s"Expected expensive filter to stay above the projection chain, but got:\n$other")
+    }
+  }
+
   // Combined case 1, 2, and 3 filter pushdown
   test("SPARK-47672: Case 1, 2, and 3 make sure we leave up and push down correctly.") {
     val originalQuery = testStringRelation
