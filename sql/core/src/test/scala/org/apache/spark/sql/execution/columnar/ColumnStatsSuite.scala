@@ -36,6 +36,34 @@ class ColumnStatsSuite extends SparkFunSuite {
   testTimestampNanosColumnStats(TIMESTAMP_NTZ_NANOS, Array(null, null, 0))
   testTimestampNanosColumnStats(TIMESTAMP_LTZ_NANOS, Array(null, null, 0))
 
+  test("floating-point column stats treat NaN as the upper bound") {
+    val floatStats = new FloatColumnStats
+    floatStats.gatherNullStats()
+    floatStats.gatherValueStats(Float.NaN)
+    assert(floatStats.collectedStatistics(0).asInstanceOf[Float].isNaN)
+    assert(floatStats.collectedStatistics(1).asInstanceOf[Float].isNaN)
+    Seq(1.5f, 0.0f).foreach(floatStats.gatherValueStats)
+    assert(floatStats.collectedStatistics(0) === 0.0f)
+    assert(floatStats.collectedStatistics(1).asInstanceOf[Float].isNaN)
+    val reversedFloatStats = new FloatColumnStats
+    Seq(0.0f, Float.NaN).foreach(reversedFloatStats.gatherValueStats)
+    assert(reversedFloatStats.collectedStatistics(0) === 0.0f)
+    assert(reversedFloatStats.collectedStatistics(1).asInstanceOf[Float].isNaN)
+
+    val doubleStats = new DoubleColumnStats
+    doubleStats.gatherNullStats()
+    doubleStats.gatherValueStats(Double.NaN)
+    assert(doubleStats.collectedStatistics(0).asInstanceOf[Double].isNaN)
+    assert(doubleStats.collectedStatistics(1).asInstanceOf[Double].isNaN)
+    Seq(1.5d, 0.0d).foreach(doubleStats.gatherValueStats)
+    assert(doubleStats.collectedStatistics(0) === 0.0d)
+    assert(doubleStats.collectedStatistics(1).asInstanceOf[Double].isNaN)
+    val reversedDoubleStats = new DoubleColumnStats
+    Seq(0.0d, Double.NaN).foreach(reversedDoubleStats.gatherValueStats)
+    assert(reversedDoubleStats.collectedStatistics(0) === 0.0d)
+    assert(reversedDoubleStats.collectedStatistics(1).asInstanceOf[Double].isNaN)
+  }
+
   def testColumnStats[T <: PhysicalDataType, U <: ColumnStats](
       columnStatsClass: Class[U],
       columnType: NativeColumnType[T],
