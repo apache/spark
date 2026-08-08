@@ -125,7 +125,9 @@ class SparkThrowableSuite extends SparkFunSuite {
       errorClassesJson.openStream(), new TypeReference[Map[String, String]]() {})
     val errorStates = mapper.readValue(
       errorStatesJson.openStream(), new TypeReference[Map[String, ErrorStateInfo]]() {})
-    val errorConditionStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState).toSet
+    val errorConditionStates = errorReader.errorInfoMap.values.toSeq.flatMap { i =>
+      i.sqlState ++ i.subClass.getOrElse(Map.empty).values.flatMap(_.sqlState)
+    }.toSet
     assert(Set("22012", "22003", "42601").subsetOf(errorStates.keySet))
     assert(errorClasses.keySet.filter(!_.matches("[A-Z0-9]{2}")).isEmpty)
     assert(errorStates.keySet.filter(!_.matches("[A-Z0-9]{5}")).isEmpty)
@@ -629,6 +631,68 @@ class SparkThrowableSuite extends SparkFunSuite {
             Seq("Subclass migration message with <param3>."),
             Some(new MitigationConfig("config.key2", "config.value2")))))
     }
+  }
+
+  test("sub-condition SQLSTATE overrides the main condition's SQLSTATE") {
+    withTempDir { dir =>
+      val json = new File(dir, "errors.json")
+      Files.writeString(
+        json.toPath,
+        """
+          |{
+          |  "TEST_MAIN_STATE": {
+          |    "message": [
+          |      "Main message."
+          |    ],
+          |    "sqlState": "42000",
+          |    "subClass": {
+          |      "SUB_WITHOUT_STATE": {
+          |        "message": [
+          |          "Sub-condition without its own SQLSTATE."
+          |        ]
+          |      },
+          |      "SUB_WITH_STATE": {
+          |        "message": [
+          |          "Sub-condition with its own SQLSTATE."
+          |        ],
+          |        "sqlState": "08003"
+          |      }
+          |    }
+          |  }
+          |}
+          |""".stripMargin,
+        StandardCharsets.UTF_8)
+
+      val reader =
+        new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL, json.toURI.toURL))
+      // A sub-condition with its own SQLSTATE overrides the main condition's.
+      assert(reader.getSqlState("TEST_MAIN_STATE.SUB_WITH_STATE") == "08003")
+      // A sub-condition without its own SQLSTATE inherits the main condition's.
+      assert(reader.getSqlState("TEST_MAIN_STATE.SUB_WITHOUT_STATE") == "42000")
+      assert(reader.getSqlState("TEST_MAIN_STATE") == "42000")
+      // Degenerate inputs keep the pre-existing non-throwing behavior: anything that is not
+      // a known "MAIN.SUB" pair resolves to the main condition's SQLSTATE, or null.
+      assert(reader.getSqlState("TEST_MAIN_STATE.NON_EXISTENT_SUB") == "42000")
+      assert(reader.getSqlState("TEST_MAIN_STATE.SUB_WITH_STATE.EXTRA") == "42000")
+      assert(reader.getSqlState("NON_EXISTENT") == null)
+      assert(reader.getSqlState(null) == null)
+    }
+  }
+
+  test("INVALID_HANDLE session sub-conditions carry SQLSTATE 08003") {
+    val sessionSubConditions = Seq("SESSION_CHANGED", "SESSION_CLOSED", "SESSION_NOT_FOUND")
+    sessionSubConditions.foreach { sub =>
+      assert(errorReader.getSqlState(s"INVALID_HANDLE.$sub") == "08003", sub)
+    }
+    // Every other sub-condition concerns a single operation on a healthy session and keeps
+    // the condition's SQLSTATE.
+    val otherSubConditions =
+      errorReader.errorInfoMap("INVALID_HANDLE").subClass.get.keys.toSeq.diff(sessionSubConditions)
+    assert(otherSubConditions.nonEmpty)
+    otherSubConditions.foreach { sub =>
+      assert(errorReader.getSqlState(s"INVALID_HANDLE.$sub") == "HY000", sub)
+    }
+    assert(errorReader.getSqlState("INVALID_HANDLE") == "HY000")
   }
 
   test("detect unused message parameters") {
