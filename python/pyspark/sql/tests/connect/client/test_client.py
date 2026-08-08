@@ -113,16 +113,23 @@ if should_test_connect:
             self.release_calls = 0
             self.release_until_calls = 0
             self.attach_calls = 0
+            # Metadata recorded per call (each entry is the list passed as metadata=)
+            self.execute_metadata = []
+            self.attach_metadata = []
+            self.release_metadata = []
 
         def ExecutePlan(self, *args, **kwargs):
             self.execute_calls += 1
+            self.execute_metadata.append(list(kwargs.get("metadata", [])))
             return self._execute_ops
 
         def ReattachExecute(self, *args, **kwargs):
             self.attach_calls += 1
+            self.attach_metadata.append(list(kwargs.get("metadata", [])))
             return self._attach_ops
 
         def ReleaseExecute(self, req: proto.ReleaseExecuteRequest, *args, **kwargs):
+            self.release_metadata.append(list(kwargs.get("metadata", [])))
             if req.HasField("release_all"):
                 self.release_calls += 1
             elif req.HasField("release_until"):
@@ -1230,6 +1237,42 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             self.assertEqual(err.getGrpcStatusCode(), expected_status_code)
             self.assertEqual(err.getErrorClass(), expected_error_class)
             self.assertEqual(err.getSqlState(), expected_sql_state)
+
+    def test_generator_metadata_preserved_across_rpcs(self):
+        # A single-use generator passed as metadata must not be exhausted before
+        # ReattachExecute and ReleaseExecute calls; list() in __init__ prevents this.
+        expected_header = ("x-auth-token", "secret")
+
+        def non_fatal():
+            raise TestException("Non Fatal", grpc.StatusCode.UNAVAILABLE)
+
+        stub = self._stub_with(
+            [self.response, non_fatal], [self.response, self.finished]
+        )
+        metadata_gen = (x for x in [expected_header])
+
+        ite = ExecutePlanResponseReattachableIterator(
+            self.request, stub, self.retrying, metadata_gen
+        )
+        for _ in ite:
+            pass
+
+        def check():
+            self.assertEqual(1, stub.attach_calls)
+            self.assertEqual(1, stub.release_calls)
+            # All three RPC types must receive the header. If list(metadata) on
+            # line 114 runs before ExecutePlan (which it does), but ExecutePlan
+            # still uses the raw `metadata` parameter instead of self._metadata,
+            # then passing a generator would leave execute_metadata[0] empty.
+            self.assertEqual(1, len(stub.execute_metadata))
+            self.assertIn(expected_header, stub.execute_metadata[0])
+            self.assertEqual(1, len(stub.attach_metadata))
+            self.assertIn(expected_header, stub.attach_metadata[0])
+            self.assertGreater(len(stub.release_metadata), 0)
+            for meta in stub.release_metadata:
+                self.assertIn(expected_header, meta)
+
+        eventually(timeout=1, catch_assertions=True)(check)()
 
 
 if __name__ == "__main__":

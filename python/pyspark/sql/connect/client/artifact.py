@@ -168,7 +168,7 @@ class ArtifactManager:
         user_id: Optional[str],
         session_id: str,
         channel: grpc.Channel,
-        metadata: Iterable[Tuple[str, str]],
+        metadata: List[Tuple[str, str]],
         add_artifacts_timeout: Optional[float] = None,
         artifact_status_timeout: Optional[float] = None,
     ):
@@ -177,7 +177,7 @@ class ArtifactManager:
             self._user_context.user_id = user_id
         self._stub = grpc_lib.SparkConnectServiceStub(channel)
         self._session_id = session_id
-        self._metadata = metadata
+        self._metadata: List[Tuple[str, str]] = list(metadata)
         self._add_artifacts_timeout = add_artifacts_timeout
         self._artifact_status_timeout = artifact_status_timeout
 
