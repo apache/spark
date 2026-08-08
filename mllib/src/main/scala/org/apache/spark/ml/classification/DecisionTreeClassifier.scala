@@ -190,6 +190,8 @@ class DecisionTreeClassificationModel private[ml] (
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
 
+  assignLeafIndices()
+
   /**
    * Construct a decision tree classification model.
    *
