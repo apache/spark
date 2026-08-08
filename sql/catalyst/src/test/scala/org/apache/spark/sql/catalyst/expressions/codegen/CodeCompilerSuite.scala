@@ -428,6 +428,70 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
 
   // Compile `dyn.DynHelper` into a fresh temp dir using the system Java compiler, so
   // the class exists only under that dir (never on java.class.path).
+  test("reflection that raises a LinkageError does not route the unit or escape") {
+    // A partial or shaded jar can leave a class loadable while its enclosing class is not.
+    // `getCanonicalName` and `getEnclosingClass` both throw NoClassDefFoundError then, and
+    // `NonFatal` does not cover a LinkageError, so an escaping Error would bypass the
+    // codegen fallbacks. The token cannot be evaluated, which is no evidence that narrowing
+    // it is unsafe, so the unit must stay on the configured backend rather than gain a
+    // permanent Janino arm.
+    val dir = compileLinkageFixture()
+    // Drop the enclosing class, keeping the anonymous one that references it.
+    assert(new File(dir, "lnk/Holder$Mid.class").delete(), "fixture setup: enclosing class")
+    val loader = new DirClassLoader(dir, getClass.getClassLoader)
+    val anon = loader.loadClass("lnk.Holder$Mid$1")
+    // Precondition: the reflective calls the predicate makes really do throw here.
+    intercept[LinkageError](anon.getCanonicalName)
+    intercept[LinkageError](anon.getEnclosingClass)
+
+    val body = s"${anon.getName} v = (${anon.getName}) references[0];"
+    val prev = Thread.currentThread().getContextClassLoader
+    try {
+      Thread.currentThread().setContextClassLoader(loader)
+      assert(!JdkCodeCompiler.referencesUnnarrowableClass(body),
+        "an unevaluable token must not route the unit to Janino")
+      withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+        assert(CodeCompiler.active(newCodeAndComment(body)) eq JdkCodeCompiler)
+      }
+      // The rewrite degrades to the binary name instead of propagating the Error.
+      assert(JdkCodeCompiler.rewriteInnerClassRefs(body, loader) === body)
+    } finally {
+      Thread.currentThread().setContextClassLoader(prev)
+    }
+  }
+
+  /**
+   * Compile `lnk.Holder`, whose nested `Mid` holds an anonymous `Runnable`. Deleting
+   * `Holder$Mid.class` afterwards leaves `Holder$Mid$1` loadable but makes reflection over
+   * its enclosing class throw, which is the partial-jar shape the guards have to survive.
+   */
+  private def compileLinkageFixture(): File = {
+    val dir = Utils.createTempDir()
+    val src =
+      """package lnk;
+        |public class Holder {
+        |  public static class Mid {
+        |    public static Object make() { return new Runnable() { public void run() {} }; }
+        |  }
+        |}
+        |""".stripMargin
+    val compiler = ToolProvider.getSystemJavaCompiler
+    val fm = compiler.getStandardFileManager(null, null, null)
+    try {
+      fm.setLocation(StandardLocation.CLASS_OUTPUT, Collections.singletonList(dir))
+      val srcFile = new SimpleJavaFileObject(
+          URI.create("string:///lnk/Holder.java"), JavaFileObject.Kind.SOURCE) {
+        override def getCharContent(ignoreEncodingErrors: Boolean): CharSequence = src
+      }
+      assert(
+        compiler.getTask(null, fm, null, null, null, Collections.singletonList(srcFile)).call(),
+        "failed to compile lnk.Holder fixture")
+    } finally {
+      fm.close()
+    }
+    dir
+  }
+
   private def compileDynHelper(): File = {
     val dir = Utils.createTempDir()
     val src =
@@ -726,6 +790,165 @@ class CodeCompilerSuite extends SparkFunSuite with SQLHelper {
     assert(generated.generate(Array[Any](anon)) === "v")
   }
 
+  // ---------------- unnarrowable anonymous/local classes ----------------
+
+  test("containsDollarDigit gates the scan on names Java cannot spell") {
+    // The `$`-digit gate must admit every unnameable shape and reject the nameable `$`
+    // forms the rewrite handles, or the scan either misses a class or runs needlessly.
+    for (name <- Seq("Outer$1", "Outer$1Local", "Outer$$anon$1", "Outer$1$Inner",
+        "a.b.Outer$$anon$12")) {
+      assert(JdkCodeCompiler.containsDollarDigit(name), s"expected $name to be gated in")
+    }
+    for (name <- Seq("", "$", "a$", "java.util.Map$Entry", "Foo$", "Model$SaveLoad$Leaf",
+        "scala.Function1$mcII$sp", "scala.collection.immutable.$colon$colon",
+        "pkg.package$Inner", "$line21.$read$$iw$T")) {
+      assert(!JdkCodeCompiler.containsDollarDigit(name), s"expected $name to be gated out")
+    }
+  }
+
+  test("referencesUnnarrowableClass: false when the supertype offers every member") {
+    // The shapes codegen actually produces: the anonymous or local class only overrides
+    // methods the supertype already declares, so narrowing the reference loses nothing.
+    // `specializedPrimitiveOverride` is the boxing case - scalac specializes the override to
+    // `apply(int)` while the bridge that reaches it takes `Object`.
+    val anonSubclass = new java.util.HashMap[String, String]() { put("k", "v") }
+    val anonInterface = new java.util.Comparator[String] {
+      override def compare(a: String, b: String): Int = a.compareTo(b)
+    }
+    val narrowable = Seq[Any](anonSubclass, anonInterface, CodeCompilerSuite.plainLocal,
+      CodeCompilerSuite.specializedPrimitiveOverride)
+    for (o <- narrowable) {
+      val cls = o.getClass
+      // Guard the fixture's own precondition: a nameable class would pass the assertion
+      // below for the wrong reason.
+      assert(cls.getCanonicalName == null, s"expected an unnameable class, got: ${cls.getName}")
+      val name = cls.getName
+      assert(!JdkCodeCompiler.referencesUnnarrowableClass(s"$name v = ($name) references[0];"),
+        s"expected $name to be narrowable")
+    }
+  }
+
+  test("referencesUnnarrowableClass: true when narrowing would lose access") {
+    // An extra public method, public fields inherited from a second interface, a member on
+    // a second interface, an overload that shadows nothing, a local class with an extra
+    // method, and a bridged override sharing its name and arity with an unrelated overload:
+    // each puts something out of reach of the nearest nameable supertype.
+    val unnarrowable = Seq[Any](
+      CodeCompilerSuite.anonWithExtraMethod,
+      CodeCompilerSuite.anonWithPublicFields,
+      CodeCompilerSuite.anonWithSecondInterface,
+      CodeCompilerSuite.anonWithOverload,
+      CodeCompilerSuite.localWithExtraMethod,
+      CodeCompilerSuite.anonWithBridgeAndPrimitiveOverload,
+      CodeCompilerSuite.anonWithBridgeAndReferenceOverload)
+    for (o <- unnarrowable) {
+      val cls = o.getClass
+      assert(cls.getCanonicalName == null, s"expected an unnameable class, got: ${cls.getName}")
+      val name = cls.getName
+      assert(JdkCodeCompiler.referencesUnnarrowableClass(s"$name v = ($name) references[0];"),
+        s"expected $name to be rejected")
+    }
+  }
+
+  test("referencesUnnarrowableClass: a bridge covers only the method it forwards to") {
+    // Guards the fixture shapes behind the two bridge tests: both classes carry a genuine
+    // bridge for the generic override, so a check that excused the whole name/arity group
+    // would let the unrelated overload ride along on it.
+    for (o <- Seq[Any](CodeCompilerSuite.anonWithBridgeAndPrimitiveOverload,
+        CodeCompilerSuite.anonWithBridgeAndReferenceOverload)) {
+      val compares = o.getClass.getMethods.filter(_.getName == "compare")
+      assert(compares.exists(_.isBridge), "fixture precondition: expected a bridge method")
+      assert(compares.count(m => !m.isBridge && m.getParameterCount == 2) === 2,
+        "fixture precondition: expected the override and the overload to share name and arity")
+    }
+  }
+
+  test("referencesUnnarrowableClass: true when the supertype itself cannot be named") {
+    // Members line up here, but the nearest nameable supertype is a private nested class
+    // (scala.collection.mutable.HashSet$HashSetIterator), so javac could not write the
+    // narrowed cast at all.
+    val cls = scala.collection.mutable.HashSet("a").iterator.getClass
+    assert(cls.getCanonicalName == null, s"expected an unnameable class, got: ${cls.getName}")
+    val name = cls.getName
+    assert(JdkCodeCompiler.referencesUnnarrowableClass(s"$name v = ($name) references[0];"),
+      s"expected $name to be rejected for an unnameable supertype")
+  }
+
+  test("rewriteInnerClassRefs: narrows a class nested inside a local class") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // A named class declared inside a local class is neither anonymous nor local, but Java
+    // cannot name it either: its canonical name is null and the binary name is not a legal
+    // type reference. It must be narrowed to its nameable supertype, not emitted verbatim.
+    val cls = CodeCompilerSuite.memberOfLocalClass.getClass
+    assert(!cls.isAnonymousClass && !cls.isLocalClass && cls.isMemberClass,
+      s"expected a member class of a local class, got: ${cls.getName}")
+    assert(cls.getCanonicalName == null, s"expected no canonical name for ${cls.getName}")
+    val name = cls.getName
+    assert(rewrite(s"$name v = ($name) references[0];") ===
+      "java.util.ArrayList v = (java.util.ArrayList) references[0];")
+  }
+
+  test("active(code) routes an unnarrowable class reference to Janino") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    val narrowableName = (new java.util.HashMap[String, String]() { put("k", "v") })
+      .getClass.getName
+    val unnarrowableName = CodeCompilerSuite.anonWithExtraMethod.getClass.getName
+    withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+      assert(CodeCompiler.active(newCodeAndComment(s"$narrowableName v;")) eq JdkCodeCompiler)
+      assert(CodeCompiler.active(newCodeAndComment(s"$unnarrowableName v;")) eq JaninoCodeCompiler)
+    }
+    withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "janino") {
+      assert(CodeCompiler.active(newCodeAndComment(s"$unnarrowableName v;")) eq JaninoCodeCompiler)
+    }
+  }
+
+  test("JDK backend cannot compile a member access that narrowing drops") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // Both halves of the routing decision: javac rejects the rewritten unit (the reference
+    // narrows to java.util.HashMap, which has no `extra()`), and `active` therefore hands
+    // the unit to Janino, which compiles it and produces the right answer.
+    val anon = CodeCompilerSuite.anonWithExtraMethod
+    val anonName = anon.getClass.getName
+    val code = newCodeAndComment(
+      s"""
+         |public java.lang.Object generate(Object[] references) {
+         |  $anonName m = ($anonName) references[0];
+         |  return m.extra();
+         |}
+       """.stripMargin)
+    intercept[CompileException] {
+      JdkCodeCompiler.compile(code)
+    }
+    withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+      assert(CodeCompiler.active(code) eq JaninoCodeCompiler)
+      val (generated, _) = CodeGenerator.compile(code)
+      assert(generated.generate(Array[Any](anon)) === "extra")
+    }
+  }
+
+  test("JDK backend compiles a call that narrowing preserves through a bridge") {
+    assume(JdkCodeCompiler.isAvailable, "javax.tools.JavaCompiler not available")
+    // The counterpart to the test above: an override of a generic method erases narrower
+    // than the interface declares, but the compiler-emitted bridge keeps dispatch correct,
+    // so this must stay on the JDK backend rather than being routed away.
+    val anon = new java.util.Comparator[String] {
+      override def compare(a: String, b: String): Int = a.compareTo(b)
+    }
+    val anonName = anon.getClass.getName
+    val code = newCodeAndComment(
+      s"""
+         |public java.lang.Object generate(Object[] references) {
+         |  $anonName c = ($anonName) references[0];
+         |  return Integer.valueOf(c.compare("a", "b"));
+         |}
+       """.stripMargin)
+    withSQLConf(SQLConf.CODEGEN_COMPILER.key -> "jdk") {
+      assert(CodeCompiler.active(code) eq JdkCodeCompiler)
+    }
+    val (generated, _) = JdkCodeCompiler.compile(code)
+    assert(generated.generate(Array[Any](anon)) === -1)
+  }
+
   // ---------------- Function1 apply(Object) bridge ----------------
 
   test("stripFunction1ApplyBridges removes the bridge but keeps apply(InternalRow)") {
@@ -833,5 +1056,89 @@ object CodeCompilerSuite {
   // reflection-based rewrite must preserve verbatim.
   object SaveLoadV1 {
     case class Leaf(x: Int)
+  }
+
+  private[codegen] trait Greeter {
+    def hello(): String
+  }
+
+  private[codegen] abstract class Converter {
+    def convert(o: Any): String = "base"
+  }
+
+  // Anonymous and local classes for the narrowing-soundness tests. They are held in vals
+  // rather than built inline in the tests because scalac keeps an anonymous class's extra
+  // members `public` only when the binding's type is inferred as the refined type; giving
+  // the val an explicit type, or passing the expression as `Any`, makes them private.
+  val anonWithExtraMethod = new java.util.HashMap[String, String]() {
+    def extra(): String = "extra"
+  }
+
+  // Mixing in a Java constants interface is what actually yields public FIELDS: a Scala
+  // `val` compiles to a private field plus an accessor, which only exercises the method
+  // check. ObjectStreamConstants contributes 30 public static final fields and no method
+  // beyond Comparator's, so this isolates the field clause of `canNarrowSafely`.
+  val anonWithPublicFields = new java.util.Comparator[String] with java.io.ObjectStreamConstants {
+    override def compare(a: String, b: String): Int = a.compareTo(b)
+  }
+
+  val anonWithSecondInterface = new java.util.Comparator[String] with Greeter {
+    override def compare(a: String, b: String): Int = a.compareTo(b)
+    override def hello(): String = "hi"
+  }
+
+  // An OVERLOAD, not an override: `convert(String)` does not implement `convert(Any)`, so
+  // no bridge is emitted. Narrowing would silently bind the call to the supertype's method.
+  val anonWithOverload = new Converter {
+    def convert(s: String): String = "anon"
+  }
+
+  // A bridged generic override alongside an unrelated overload of the same name and arity.
+  // `compare(String, String)` is reached through a `compare(Object, Object)` bridge, but
+  // `compare(Int, Int)` has no bridge of its own: after narrowing to `Comparator`, an
+  // integer call would bind to `compare(Object, Object)` and land in the String-casting
+  // bridge instead of the overload.
+  val anonWithBridgeAndPrimitiveOverload = new java.util.Comparator[String] {
+    override def compare(a: String, b: String): Int = a.compareTo(b)
+    def compare(a: Int, b: Int): Int = a - b
+  }
+
+  // The same collision with a reference-typed overload. Boxing-blind parameter matching
+  // would accept this one, since the bridge's `Object` parameters do accept `Integer`.
+  val anonWithBridgeAndReferenceOverload = new java.util.Comparator[String] {
+    override def compare(a: String, b: String): Int = a.compareTo(b)
+    def compare(a: Integer, b: Integer): Int = a - b
+  }
+
+  // Sound counterpart of the two above, and the reason bridge matching treats boxing as
+  // equivalence: scalac specializes this override to `apply(int)`, which is reached through
+  // an `apply(Object)` bridge. Requiring the bridge parameter to accept the override's
+  // parameter without boxing would reject it, since `Object` is not assignable from `int`.
+  val specializedPrimitiveOverride = new scala.runtime.AbstractFunction1[Int, Boolean] {
+    def apply(i: Int): Boolean = i > 0
+  }
+
+  val plainLocal: java.util.ArrayList[String] = {
+    class PlainLocal extends java.util.ArrayList[String]
+    new PlainLocal
+  }
+
+  val localWithExtraMethod = {
+    class LocalWithExtra extends java.util.ArrayList[String] {
+      def extra(): String = "extra"
+    }
+    new LocalWithExtra
+  }
+
+  // A named class declared inside a local class: neither anonymous nor local itself
+  // (`isMemberClass` is true), yet Java cannot name it either. Its supertype offers every
+  // member, so only the canonical-name test keeps it from being narrowed to a binary name
+  // javac would reject.
+  val memberOfLocalClass: Any = {
+    class Holder {
+      class Inner extends java.util.ArrayList[String]
+      def make(): Any = new Inner
+    }
+    new Holder().make()
   }
 }
