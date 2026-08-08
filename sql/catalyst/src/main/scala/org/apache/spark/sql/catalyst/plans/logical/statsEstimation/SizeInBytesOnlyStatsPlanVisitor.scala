@@ -27,6 +27,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
  */
 object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
+  private def cappedStats(sizeInBytes: BigInt): Statistics =
+    Statistics(sizeInBytes = sizeInBytes.min(EstimationUtils.MAX_SIZE_IN_BYTES))
+
   /**
    * A default, commonly used estimation for unary nodes. We assume the input row number is the
    * same as the output row number, and compute sizes based on the column types.
@@ -45,7 +48,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     }
 
     // Don't propagate rowCount and attributeStats, since they are not estimated here.
-    Statistics(sizeInBytes = sizeInBytes)
+    cappedStats(sizeInBytes)
   }
 
   /**
@@ -55,7 +58,12 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def default(p: LogicalPlan): Statistics = p match {
     case p: LeafNode => p.computeStats()
     case _: LogicalPlan =>
-      Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).filter(_ > 0L).product)
+      // Bound each child's size before the product so the intermediate `BigInt` cannot explode.
+      val sizeInBytes = p.children
+        .map(_.stats.sizeInBytes.min(EstimationUtils.MAX_SIZE_IN_BYTES))
+        .filter(_ > 0L)
+        .product
+      cappedStats(sizeInBytes)
   }
 
   override def visitAggregate(p: Aggregate): Statistics = {
@@ -74,7 +82,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitExpand(p: Expand): Statistics = {
     val sizeInBytes = visitUnaryNode(p).sizeInBytes * p.projections.length
-    Statistics(sizeInBytes = sizeInBytes)
+    cappedStats(sizeInBytes)
   }
 
   override def visitFilter(p: Filter): Statistics = visitUnaryNode(p)
