@@ -87,6 +87,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     if (supportsColumnUpdate) {
       validateUpdatedColumnsSubset(operationTable.operation, assignments, connectorDataAttrs)
       validateNoOverlap(operationTable.operation, connectorDataAttrs, scanOnlyDataAttrs)
+      validatePartitionAttrsDeclared(
+        operationTable.operation, relation, connectorDataAttrs, scanOnlyDataAttrs)
     }
 
     // construct a read relation and include all required metadata columns
@@ -134,6 +136,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     if (supportsColumnUpdate) {
       validateUpdatedColumnsSubset(operationTable.operation, assignments, connectorDataAttrs)
       validateNoOverlap(operationTable.operation, connectorDataAttrs, scanOnlyDataAttrs)
+      validatePartitionAttrsDeclared(
+        operationTable.operation, relation, connectorDataAttrs, scanOnlyDataAttrs)
     }
 
     // construct a read relation and include all required metadata columns
@@ -266,6 +270,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     if (supportsColumnUpdate) {
       validateUpdatedColumnsSubset(operation, assignments, connectorDataAttrs)
       validateNoOverlap(operation, connectorDataAttrs, scanOnlyDataAttrs)
+      validatePartitionAttrsDeclared(operation, relation, connectorDataAttrs, scanOnlyDataAttrs)
     }
 
 
@@ -274,6 +279,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     if (supportsColumnUpdate && operation.representUpdateAsDeleteAndInsert) {
       validateNoRowIdReassignment(operation, assignments, rowIdAttrs)
+      validateRowIdDeclared(operation, connectorDataAttrs, rowIdAttrs)
     }
 
     val narrowDataAttrs = if (supportsColumnUpdate) {
@@ -536,6 +542,31 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   }
 
   /**
+   * Enforces that every partition-source column is declared in either `requiredDataAttributes()`
+   * or `scanOnlyDataAttributes()`. Spark no longer adds partition refs to the narrow scan
+   * implicitly, so a connector that needs them for partitioning resolution or write-side
+   * clustering must declare them in one of the two methods.
+   */
+  private def validatePartitionAttrsDeclared(
+      operation: RowLevelOperation,
+      relation: DataSourceV2Relation,
+      connectorDataAttrs: Seq[AttributeReference],
+      scanOnlyDataAttrs: Seq[AttributeReference]): Unit = {
+    val partitionRefNames = relation.table.partitioning().toImmutableArraySeq
+      .flatMap(_.references.toImmutableArraySeq)
+      .map(_.fieldNames.head)
+      .toSet
+    val declared = AttributeSet(connectorDataAttrs ++ scanOnlyDataAttrs)
+    val undeclared = relation.output
+      .filter(a => partitionRefNames.exists(name => conf.resolver(name, a.name)))
+      .filterNot(declared.contains).map(_.name)
+    if (undeclared.nonEmpty) {
+      throw QueryCompilationErrors.requiredDataAttributesMissingPartitionColumnsError(
+        operation.getClass.getName, undeclared)
+    }
+  }
+
+  /**
    * For connectors that opt into narrow column updates AND represent UPDATE as delete + insert,
    * reject reassignment of any row-ID column as the REINSERT path has no row-ID channel to
    * reconstruct columns outside `requiredDataAttributes()`.
@@ -553,6 +584,25 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     if (reassigned.nonEmpty) {
       throw QueryCompilationErrors.splitUpdateRowIdReassignmentError(
         operation.getClass.getName, reassigned)
+    }
+  }
+
+  /**
+   * For connectors that opt into narrow column updates AND represent UPDATE as delete + insert,
+   * requires every row-ID column to be declared in `requiredDataAttributes()`. The REINSERT
+   * payload is narrow and only contains `requiredDataAttributes()`, so an undeclared row-ID column
+   * would leave the reinserted row with no identity for the connector to place it by.
+   */
+  private def validateRowIdDeclared(
+      operation: RowLevelOperation,
+      connectorDataAttrs: Seq[AttributeReference],
+      rowIdAttrs: Seq[Attribute]): Unit = {
+    val declaredIds = connectorDataAttrs.map(_.exprId).toSet
+    val undeclared = rowIdAttrs.filterNot(a => declaredIds.contains(a.exprId))
+      .map(_.name).distinct
+    if (undeclared.nonEmpty) {
+      throw QueryCompilationErrors.splitUpdateRowIdNotDeclaredError(
+        operation.getClass.getName, undeclared)
     }
   }
 }

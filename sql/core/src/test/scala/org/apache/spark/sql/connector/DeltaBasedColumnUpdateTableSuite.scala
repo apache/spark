@@ -482,6 +482,40 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       s"expected SPLIT_UPDATE_ROW_ID_REASSIGNMENT but got: ${ex.getCondition}")
   }
 
+  test("column-update split: undeclared row-ID column on narrow write is rejected") {
+    // The connector's requiredDataAttributes() excludes `pk` (the row ID). The REINSERT
+    // payload for the split-update path is projected down to requiredDataAttributes(), so
+    // without `pk` there the reinserted row would have no identity for the connector to
+    // place it by. This must be rejected at analysis time, not discovered at write time.
+    createAndInitTableSplitMissingRowId("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    val ex = intercept[org.apache.spark.sql.AnalysisException] {
+      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'")
+    }
+    assert(ex.getCondition == "SPLIT_UPDATE_ROW_ID_NOT_DECLARED",
+      s"expected SPLIT_UPDATE_ROW_ID_NOT_DECLARED but got: ${ex.getCondition}")
+    assert(ex.getMessage.contains("pk"),
+      s"error message must name the undeclared row ID column `pk`: ${ex.getMessage}")
+  }
+
+  private def createAndInitTableSplitMissingRowId(
+      schemaString: String, jsonData: String): Unit = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("column-update-split-missing-row-id", "true")
+    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
+    val transforms = Array[Transform](identity(reference(Seq("dep"))))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(columns)
+      .withPartitions(transforms)
+      .withProperties(props)
+      .build()
+    catalog.createTable(ident, tableInfo)
+    append(schemaString, jsonData)
+  }
+
   private def createAndInitTableScanOnly(schemaString: String, jsonData: String): Unit = {
     val props = new java.util.HashMap[String, String]()
     props.put("column-update-scan-only", "true")
@@ -535,6 +569,33 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
   private def createAndInitTableOverlap(schemaString: String, jsonData: String): Unit = {
     val props = new java.util.HashMap[String, String]()
     props.put("column-update-overlap", "true")
+    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
+    val transforms = Array[Transform](identity(reference(Seq("dep"))))
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(columns)
+      .withPartitions(transforms)
+      .withProperties(props)
+      .build()
+    catalog.createTable(ident, tableInfo)
+    append(schemaString, jsonData)
+  }
+
+  test("column-update: undeclared partition column on narrow write is rejected") {
+    createAndInitTableMissingPartition("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }""".stripMargin)
+
+    val ex = intercept[org.apache.spark.sql.AnalysisException] {
+      sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
+    }
+    assert(ex.getCondition == "REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS",
+      s"expected REQUIRED_DATA_ATTRIBUTES_MISSING_PARTITION_COLUMNS but got: ${ex.getCondition}")
+    assert(ex.getMessage.contains("dep"),
+      s"error message must name the undeclared partition column `dep`: ${ex.getMessage}")
+  }
+
+  private def createAndInitTableMissingPartition(schemaString: String, jsonData: String): Unit = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("column-update-missing-partition", "true")
     val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
     val transforms = Array[Transform](identity(reference(Seq("dep"))))
     val tableInfo = new TableInfo.Builder()
