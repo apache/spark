@@ -35,3 +35,5 @@ jobs:
       github.repository == 'apache/spark'
       || github.ref != 'refs/heads/master'
     uses: ./.github/workflows/build_and_test.yml
+    with:
+      jobs: '{"pyspark": "true"}'
