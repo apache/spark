@@ -1,0 +1,56 @@
+================================================================================================
+high-cardinality input, no-spill pass-through (Tier 1)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+adaptive partial agg, high card, no spill:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+codegen = true, adaptive = F                        4094           4126          45          2.0         488.0       1.0X
+codegen = true, adaptive = T                        2402           2424          32          3.5         286.3       1.7X
+codegen = false, adaptive = F                       4989           4994           6          1.7         594.8       0.8X
+codegen = false, adaptive = T                       3183           3193          13          2.6         379.5       1.3X
+
+
+================================================================================================
+low-cardinality input, no-spill pass-through (Tier 1)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+adaptive partial agg, low card, no spill:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+codegen = true, adaptive = F                        287            299          11         58.4          17.1       1.0X
+codegen = true, adaptive = T                        282            290           5         59.4          16.8       1.0X
+codegen = false, adaptive = F                      1328           1329           2         12.6          79.2       0.2X
+codegen = false, adaptive = T                      1342           1350          12         12.5          80.0       0.2X
+
+
+================================================================================================
+high-cardinality input, on-spill pass-through (Tier 2)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+adaptive partial agg, high card, spill:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+codegen = true, adaptive = F                       8850           8911          87          0.9        1055.0       1.0X
+codegen = true, adaptive = T                       4448           4570         173          1.9         530.3       2.0X
+codegen = false, adaptive = F                      9261           9357         136          0.9        1104.0       1.0X
+codegen = false, adaptive = T                      5276           5355         112          1.6         629.0       1.7X
+
+
+================================================================================================
+low-cardinality input, on-spill pass-through (Tier 2)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+adaptive partial agg, low card, spill:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+codegen = true, adaptive = F                        789            806          16         21.3          47.0       1.0X
+codegen = true, adaptive = T                        813            835          28         20.6          48.5       1.0X
+codegen = false, adaptive = F                      1351           1425         104         12.4          80.5       0.6X
+codegen = false, adaptive = T                      1346           1350           6         12.5          80.2       0.6X
+
+

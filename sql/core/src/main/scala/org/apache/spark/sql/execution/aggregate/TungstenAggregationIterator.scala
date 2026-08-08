@@ -95,7 +95,11 @@ class TungstenAggregationIterator(
     peakMemory: SQLMetric,
     spillSize: SQLMetric,
     avgHashProbe: SQLMetric,
-    numTasksFallBacked: SQLMetric)
+    numTasksFallBacked: SQLMetric,
+    numBypassingRows: SQLMetric,
+    adaptivePartialAggEnabled: Boolean,
+    adaptiveMinRows: Long,
+    adaptiveMinCompaction: Double)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -179,6 +183,20 @@ class TungstenAggregationIterator(
   // hashMap. If there is not enough memory, it will multiple hash-maps, spilling
   // after each becomes full then using sort to merge these spills, finally do sort
   // based aggregation.
+  //
+  // When adaptive partial aggregation is enabled (`adaptivePartialAggEnabled`), the processing may
+  // stop early and switch to pass-through mode: the remaining input rows are not added to the map
+  // but are instead emitted as single-row partial buffers by the output stage (see
+  // `nextPassThroughOutput`). One predicate decides both check points -- the aggregation is
+  // ineffective when `processedRows < distinctKeys * minCompaction`, i.e. it does not collapse
+  // `minCompaction` rows into one key:
+  //   - periodically, every `minRows` processed rows;
+  //   - when the map is about to spill, in which case the spill is skipped entirely and the row
+  //     that could not be inserted becomes the first pass-through row.
+  // A spill starts a new in-memory map epoch: the row counters restart so that epoch is judged on
+  // its own rows, which lets an input whose cardinality only turns unfavorable later still be
+  // passed through. Pass-through may therefore coexist with earlier spills; the output stage
+  // drains the sort-based (or map) output first and streams the remaining rows afterwards.
   private def processInputs(fallbackStartsAt: (Int, Int)): Unit = {
     if (groupingExpressions.isEmpty) {
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
@@ -191,7 +209,19 @@ class TungstenAggregationIterator(
       }
     } else {
       var i = 0
-      while (inputIter.hasNext) {
+      var processedRows = 0L
+      val minRows = adaptiveMinRows
+      // The processed-row count at which the compaction ratio is evaluated next. It advances by
+      // `minRows` after every check, and restarts after a spill so the new in-memory map epoch is
+      // judged on its own rows. `minRows = 0` disables the periodic check: the count is only ever
+      // compared after being incremented past 0, so it never matches and only the spill check
+      // below remains.
+      var nextCheckRow = minRows
+      // The partial aggregation is ineffective when it does not collapse `minCompaction` rows into
+      // one key. There is no fast map on this path, so the map's keys are all the operator holds.
+      def ineffective(): Boolean =
+        processedRows < hashMap.getNumKeys().toDouble * adaptiveMinCompaction
+      while (inputIter.hasNext && !passThrough) {
         val newInput = inputIter.next()
         val groupingKey = groupingProjection.apply(newInput)
         var buffer: UnsafeRow = null
@@ -199,21 +229,47 @@ class TungstenAggregationIterator(
           buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
         }
         if (buffer == null) {
-          val sorter = hashMap.destructAndCreateExternalSorter()
-          if (externalSorter == null) {
-            externalSorter = sorter
+          // The map is full and would normally spill. Adaptive partial aggregation may instead
+          // bypass: keep the in-memory map as-is, pass this row and all remaining rows through,
+          // and skip the spill entirely.
+          if (adaptivePartialAggEnabled && processedRows > 0 && ineffective()) {
+            passThrough = true
+            // `newInput` could not be inserted; stash a copy as the first pass-through row so it
+            // is not lost when we drain the rest of `inputIter`.
+            pendingPassThroughRow = newInput.copy()
           } else {
-            externalSorter.merge(sorter)
-          }
-          i = 0
-          buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
-          if (buffer == null) {
-            // failed to allocate the first page
-            throw QueryExecutionErrors.aggregateOutOfMemoryError()
+            val sorter = hashMap.destructAndCreateExternalSorter()
+            if (externalSorter == null) {
+              externalSorter = sorter
+            } else {
+              externalSorter.merge(sorter)
+            }
+            i = 0
+            // The map starts a new in-memory epoch, so the counters restart and the ratio of that
+            // epoch alone decides whether the remaining rows are passed through.
+            processedRows = 0L
+            nextCheckRow = minRows
+            buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
+            if (buffer == null) {
+              // failed to allocate the first page
+              throw QueryExecutionErrors.aggregateOutOfMemoryError()
+            }
           }
         }
-        processRow(buffer, newInput)
-        i += 1
+        if (!passThrough) {
+          processRow(buffer, newInput)
+          i += 1
+          processedRows += 1
+          // Periodic check: if the aggregation is not collapsing enough rows, bypass it for the
+          // rest of the input.
+          if (adaptivePartialAggEnabled && processedRows == nextCheckRow) {
+            if (ineffective()) {
+              passThrough = true
+            } else {
+              nextCheckRow += minRows
+            }
+          }
+        }
       }
 
       if (externalSorter != null) {
@@ -355,6 +411,47 @@ class TungstenAggregationIterator(
   }
 
   ///////////////////////////////////////////////////////////////////////////
+  // Part 5b: Methods and fields used by adaptive partial aggregation pass-through.
+  ///////////////////////////////////////////////////////////////////////////
+
+  // Indicates that partial aggregation has been bypassed and the remaining input rows should be
+  // passed through as single-row partial buffers. Set in `processInputs` by either check point.
+  // It may coexist with earlier spills, so the output order is: sort-based (or map) output first,
+  // then the pass-through rows.
+  private[this] var passThrough: Boolean = false
+
+  // The row that could not be inserted at the spill check. It is stashed here (as
+  // a copy) so it becomes the first pass-through row rather than being lost.
+  private[this] var pendingPassThroughRow: InternalRow = null
+
+  // A reused aggregation buffer for building single-row partial buffers during pass-through. It is
+  // re-initialized from `initialAggregationBuffer` for every passed-through row.
+  private[this] lazy val passThroughAggregationBuffer: UnsafeRow = createNewAggregationBuffer()
+
+  // Whether there are remaining pass-through rows to emit.
+  private def passThroughHasNext: Boolean =
+    passThrough && (pendingPassThroughRow != null || inputIter.hasNext)
+
+  // Emits the next input row as a single-row partial aggregation buffer, i.e. a group of size one.
+  // The output (grouping key ++ buffer) is a valid partial buffer that the downstream Final
+  // aggregation merges, so the result is identical to running partial aggregation on this row.
+  private def nextPassThroughOutput(): UnsafeRow = {
+    val row = if (pendingPassThroughRow != null) {
+      val stashed = pendingPassThroughRow
+      pendingPassThroughRow = null
+      stashed
+    } else {
+      inputIter.next()
+    }
+    val groupingKey = groupingProjection.apply(row)
+    // Reset the buffer to initial values, then update it with this single row.
+    passThroughAggregationBuffer.copyFrom(initialAggregationBuffer)
+    processRow(passThroughAggregationBuffer, row)
+    numBypassingRows += 1
+    generateOutput(groupingKey, passThroughAggregationBuffer)
+  }
+
+  ///////////////////////////////////////////////////////////////////////////
   // Part 6: Loads input rows and setup aggregationBufferMapIterator if we
   //         have not switched to sort-based aggregation.
   ///////////////////////////////////////////////////////////////////////////
@@ -398,12 +495,21 @@ class TungstenAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   override final def hasNext: Boolean = {
-    (sortBased && sortedInputHasNewGroup) || (!sortBased && mapIteratorHasNext)
+    (sortBased && sortedInputHasNewGroup) || (!sortBased && mapIteratorHasNext) ||
+      passThroughHasNext
   }
 
   override final def next(): UnsafeRow = {
     if (hasNext) {
-      val res = if (sortBased) {
+      // Pass-through rows come first, matching the generated path, where a bypassed row is emitted
+      // from inside the build loop and the frozen maps are only drained afterwards. The two paths
+      // have to agree: otherwise `spark.sql.codegen.wholeStage` would be observable in the result
+      // of an order-sensitive aggregate such as `first`/`last`.
+      val res = if (passThroughHasNext) {
+        // Adaptive partial aggregation bypassed partial aggregation: emit the remaining input
+        // rows as single-row partial buffers.
+        nextPassThroughOutput()
+      } else if (sortBased && sortedInputHasNewGroup) {
         // Process the current group.
         processCurrentSortedGroup()
         // Generate output row for the current group.
@@ -413,7 +519,8 @@ class TungstenAggregationIterator(
 
         outputRow
       } else {
-        // We did not fall back to sort-based aggregation.
+        // We did not fall back to sort-based aggregation; `hasNext` guarantees the map iterator
+        // has a row here.
         val result =
           generateOutput(
             aggregationBufferMapIterator.getKey,
@@ -426,7 +533,7 @@ class TungstenAggregationIterator(
         if (!mapIteratorHasNext) {
           // If there is no input from aggregationBufferMapIterator, we copy current result.
           val resultCopy = result.copy()
-          // Then, we free the map.
+          // Then, we free the map. Pass-through, which runs before this, does not use the map.
           hashMap.free()
 
           resultCopy
