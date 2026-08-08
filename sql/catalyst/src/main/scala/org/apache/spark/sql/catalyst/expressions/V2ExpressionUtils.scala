@@ -60,6 +60,27 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     refs.map(ref => resolveRef[T](ref, plan))
   }
 
+  // resolve metadata-rooted row IDs by logical name to avoid collisions with data columns
+  def resolveRowIdRef(ref: NamedReference, plan: LogicalPlan): NamedExpression = {
+    val parts = ref.fieldNames.toImmutableArraySeq
+    plan.getMetadataAttributeByNameOpt(parts.head) match {
+      case Some(struct) if parts.length == 1 =>
+        struct
+      case Some(struct) =>
+        val extracted = parts.tail.foldLeft(struct: Expression) { (base, field) =>
+          ExtractValue.applyOrNull(base, Literal(field), conf.resolver)
+        }
+        Alias(extracted, parts.last)()
+      case None =>
+        resolveRef[NamedExpression](ref, plan)
+    }
+  }
+
+  def resolveRowIdRefs(
+      refs: Seq[NamedReference], plan: LogicalPlan): Seq[NamedExpression] = {
+    refs.map(ref => resolveRowIdRef(ref, plan))
+  }
+
   /**
    * Resolves [[NamedReference]]s against the given output and returns them as an [[AttributeSet]].
    */

@@ -77,8 +77,14 @@ class InMemoryRowLevelOperationTable private (
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
   private final val SUPPORTS_DELTAS = "supports-deltas"
   private final val SPLIT_UPDATES = "split-updates"
+  private final val NESTED_ROW_ID = "nested-row-id"
+  // row id is nested.index, whose leaf collides with the `index` metadata column
+  private final val NESTED_METADATA_NAME_ROW_ID = "nested-metadata-name-row-id"
   private final val NO_METADATA = "no-metadata"
   private final val noMetadata = properties.getOrDefault(NO_METADATA, "false") == "true"
+  private final val nestedRowId = properties.getOrDefault(NESTED_ROW_ID, "false") == "true"
+  private final val nestedMetadataNameRowId =
+    properties.getOrDefault(NESTED_METADATA_NAME_ROW_ID, "false") == "true"
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -204,6 +210,8 @@ class InMemoryRowLevelOperationTable private (
   case class DeltaBasedOperation(command: Command, options: CaseInsensitiveStringMap)
     extends RowLevelOperation with SupportsDelta with RowLevelOperationWithOptions {
     private final val PK_COLUMN_REF = FieldReference("pk")
+    private final val NESTED_PK_COLUMN_REF = FieldReference(Seq("nested", "pk"))
+    private final val NESTED_INDEX_COLUMN_REF = FieldReference(Seq("nested", "index"))
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
       if (noMetadata) {
@@ -213,7 +221,13 @@ class InMemoryRowLevelOperationTable private (
       }
     }
 
-    override def rowId(): Array[NamedReference] = Array(PK_COLUMN_REF)
+    override def rowId(): Array[NamedReference] = if (nestedMetadataNameRowId) {
+      Array(NESTED_INDEX_COLUMN_REF)
+    } else if (nestedRowId) {
+      Array(NESTED_PK_COLUMN_REF)
+    } else {
+      Array(PK_COLUMN_REF)
+    }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new InMemoryScanBuilder(schema, options)
@@ -260,7 +274,19 @@ class InMemoryRowLevelOperationTable private (
 
     override protected def doCommit(messages: Array[WriterCommitMessage]): Unit = {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
-      withDeletes(newData)
+      // delete rows using the configured row ID
+      val tableSchema = schema()
+      val rowId: InternalRow => Int = if (nestedRowId || nestedMetadataNameRowId) {
+        val field = if (nestedMetadataNameRowId) "index" else "pk"
+        val nestedOrdinal = tableSchema.fieldIndex("nested")
+        val nestedType = tableSchema(nestedOrdinal).dataType.asInstanceOf[StructType]
+        val fieldOrdinal = nestedType.fieldIndex(field)
+        row => row.getStruct(nestedOrdinal, nestedType.length).getInt(fieldOrdinal)
+      } else {
+        val pkOrdinal = tableSchema.fieldIndex("pk")
+        row => row.getInt(pkOrdinal)
+      }
+      withDeletes(newData, rowId)
       withData(newData, columns())
       lastWriteLog = newData.flatMap(buffer => buffer.log).toIndexedSeq
     }

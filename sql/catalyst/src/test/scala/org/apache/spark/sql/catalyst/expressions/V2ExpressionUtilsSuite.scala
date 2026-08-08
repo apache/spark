@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
 import org.apache.spark.sql.connector.expressions._
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructType}
 
 class V2ExpressionUtilsSuite extends SparkFunSuite {
 
@@ -36,5 +37,25 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
         LocalRelation.apply(AttributeReference("a", StringType)()))
     }
     assert(exc.message.contains("v2Fun(a) ASC NULLS FIRST is not currently supported"))
+  }
+
+  test("resolveRowIdRef resolves a metadata-rooted ref past a colliding data column") {
+    // simulate a metadata column renamed after colliding with a user `_metadata` column
+    val userColumn = AttributeReference("_metadata", IntegerType)()
+    val metadataStruct = AttributeReference(
+      "__metadata",
+      new StructType().add("row_index", IntegerType),
+      nullable = false,
+      metadata = new MetadataBuilder().putString(METADATA_COL_ATTR_KEY, "_metadata").build())()
+    val dataColumn = AttributeReference("id", IntegerType)()
+    val plan = LocalRelation(Seq(userColumn, metadataStruct, dataColumn))
+
+    val metadataRowId = V2ExpressionUtils.resolveRowIdRef(
+      FieldReference(Seq("_metadata", "row_index")), plan)
+    assert(metadataRowId.references.contains(metadataStruct))
+    assert(!metadataRowId.references.contains(userColumn))
+
+    val dataRowId = V2ExpressionUtils.resolveRowIdRef(FieldReference("id"), plan)
+    assert(dataRowId == dataColumn)
   }
 }
