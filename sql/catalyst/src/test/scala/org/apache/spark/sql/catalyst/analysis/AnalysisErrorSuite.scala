@@ -200,12 +200,12 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
-          UnspecifiedFrame)).as("window")),
+          SpecifiedWindowFrame(RowFrame, CurrentRow, CurrentRow))).as("window")),
     condition = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
     messageParameters = Map("windowExpr" ->
       s"""
          |"count(DISTINCT b) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST
-         | RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)"
+         | ROWS BETWEEN CURRENT ROW AND CURRENT ROW)"
          |""".stripMargin.replaceAll("\n", "")))
 
   test("distinct function") {

@@ -47,6 +47,7 @@ SELECT grp, listagg(DISTINCT col) WITHIN GROUP (ORDER BY col) FROM VALUES (1, 'a
 WITH t(col) AS (SELECT listagg(DISTINCT col1, X'2C') WITHIN GROUP (ORDER BY col1) FROM (VALUES (X'DEAD'), (X'BEEF'), (X'DEAD'), (X'CAFE'))) SELECT len(col), regexp_count(hex(col), hex(X'DEAD')), regexp_count(hex(col), hex(X'BEEF')), regexp_count(hex(col), hex(X'CAFE')) FROM t;
 WITH t(col) AS (SELECT listagg(DISTINCT col1, X'7C') WITHIN GROUP (ORDER BY col1) FROM (VALUES (X'BB'), (X'AA'), (NULL), (X'BB'))) SELECT len(col), regexp_count(hex(col), hex(X'AA')), regexp_count(hex(col), hex(X'BB')) FROM t;
 SELECT grp, hex(listagg(DISTINCT col, X'2C') WITHIN GROUP (ORDER BY col)) FROM VALUES (1, X'AA'), (1, X'BB'), (1, X'AA'), (2, X'CC'), (2, X'CC') AS t(grp, col) GROUP BY grp;
+SELECT listagg(DISTINCT col1) OVER (ORDER BY col1) FROM df;
 
 -- Error cases
 SELECT listagg(c1) FROM (VALUES (ARRAY('a', 'b'))) AS t(c1);
@@ -55,7 +56,6 @@ SELECT listagg(col2, col1) FROM df GROUP BY col1;
 SELECT listagg(col1) OVER (ORDER BY col1) FROM df;
 SELECT listagg(col1) WITHIN GROUP (ORDER BY col1) OVER (ORDER BY col1) FROM df;
 SELECT string_agg(col1) WITHIN GROUP (ORDER BY col1) OVER (ORDER BY col1) FROM df;
-SELECT listagg(DISTINCT col1) OVER (ORDER BY col1) FROM df;
 SELECT listagg(DISTINCT col1) WITHIN GROUP (ORDER BY col2) FROM df;
 SELECT listagg(DISTINCT col1) WITHIN GROUP (ORDER BY col1, col2) FROM df;
 SELECT listagg(DISTINCT col, ',') WITHIN GROUP (ORDER BY col) FROM VALUES (cast(1.1 as double)), (cast(2.2 as double)), (cast(2.2 as double)), (cast(3.3 as double)) AS t(col);
