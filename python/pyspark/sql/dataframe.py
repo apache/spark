@@ -1206,6 +1206,8 @@ class DataFrame:
         :class:`DataFrame`
             Hinted DataFrame
 
+        .. note:: See also `Hints <https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-hints.html>`_
+
         Examples
         --------
         >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
@@ -6432,7 +6434,7 @@ class DataFrame:
 
         Returns
         -------
-        :class:`MergeIntoWriter`
+        :class:`~pyspark.sql.merge.MergeIntoWriter`
             MergeIntoWriter to use further to specify how to merge the source DataFrame
             into the target table.
 
@@ -6482,7 +6484,7 @@ class DataFrame:
 
         See Also
         --------
-        pyspark.pandas.frame.DataFrame.to_spark
+        pyspark.pandas.DataFrame.to_spark
 
         Examples
         --------

@@ -40,7 +40,7 @@ class TableValuedFunction:
         numPartitions: Optional[int] = None,
     ) -> DataFrame:
         """
-        Create a :class:`DataFrame` with single :class:`pyspark.sql.types.LongType` column named
+        Create a :class:`~pyspark.sql.DataFrame` with single :class:`pyspark.sql.types.LongType` column named
         ``id``, containing elements in a range from ``start`` to ``end`` (exclusive) with
         step value ``step``.
 
@@ -59,7 +59,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         Examples
         --------
@@ -87,7 +87,7 @@ class TableValuedFunction:
 
     def explode(self, collection: Column) -> DataFrame:
         """
-        Returns a :class:`DataFrame` containing a new row for each element
+        Returns a :class:`~pyspark.sql.DataFrame` containing a new row for each element
         in the given array or map.
         Uses the default column name `col` for elements in the array and
         `key` and `value` for elements in the map unless specified otherwise.
@@ -101,7 +101,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         See Also
         --------
@@ -170,7 +170,7 @@ class TableValuedFunction:
 
     def explode_outer(self, collection: Column) -> DataFrame:
         """
-        Returns a :class:`DataFrame` containing a new row for each element with position
+        Returns a :class:`~pyspark.sql.DataFrame` containing a new row for each element with position
         in the given array or map.
         Unlike explode, if the array/map is null or empty then null is produced.
         Uses the default column name `col` for elements in the array and
@@ -185,7 +185,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         See Also
         --------
@@ -238,7 +238,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         See Also
         --------
@@ -301,7 +301,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         See Also
         --------
@@ -344,7 +344,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         See Also
         --------
@@ -380,7 +380,7 @@ class TableValuedFunction:
 
     def posexplode(self, collection: Column) -> DataFrame:
         """
-        Returns a :class:`DataFrame` containing a new row for each element with position
+        Returns a :class:`~pyspark.sql.DataFrame` containing a new row for each element with position
         in the given array or map.
         Uses the default column name `pos` for position, and `col` for elements in the
         array and `key` and `value` for elements in the map unless specified otherwise.
@@ -394,7 +394,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         See Also
         --------
@@ -422,7 +422,7 @@ class TableValuedFunction:
 
     def posexplode_outer(self, collection: Column) -> DataFrame:
         """
-        Returns a :class:`DataFrame` containing a new row for each element with position
+        Returns a :class:`~pyspark.sql.DataFrame` containing a new row for each element with position
         in the given array or map.
         Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
         Uses the default column name `pos` for position, and `col` for elements in the
@@ -437,7 +437,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         See Also
         --------
@@ -490,7 +490,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         See Also
         --------
@@ -525,7 +525,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         Examples
         --------
@@ -546,7 +546,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         Examples
         --------
@@ -574,7 +574,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         Examples
         --------
@@ -639,7 +639,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         Examples
         --------
@@ -681,7 +681,7 @@ class TableValuedFunction:
 
         Returns
         -------
-        :class:`DataFrame`
+        :class:`~pyspark.sql.DataFrame`
 
         Examples
         --------

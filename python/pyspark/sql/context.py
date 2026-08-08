@@ -397,7 +397,7 @@ class SQLContext:
         verifySchema: bool = True,
     ) -> DataFrame:
         """
-        Creates a :class:`DataFrame` from an :class:`RDD`, a list, a :class:`pandas.DataFrame`, or
+        Creates a :class:`DataFrame` from an :class:`~pyspark.RDD`, a list, a :class:`pandas.DataFrame`, or
         a :class:`pyarrow.Table`.
 
         When ``schema`` is a list of column names, the type of each column
@@ -407,10 +407,10 @@ class SQLContext:
         from ``data``, which should be an RDD of :class:`Row`,
         or :class:`namedtuple`, or :class:`dict`.
 
-        When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string it must match
+        When ``schema`` is :class:`~pyspark.sql.types.DataType` or a datatype string it must match
         the real data, or an exception will be thrown at runtime. If the given schema is not
-        :class:`pyspark.sql.types.StructType`, it will be wrapped into a
-        :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value",
+        :class:`~pyspark.sql.types.StructType`, it will be wrapped into a
+        :class:`~pyspark.sql.types.StructType` as its only field, and the field name will be "value",
         each record will also be wrapped into a tuple, which can be converted to row later.
 
         If schema inference is needed, ``samplingRatio`` is used to determine the ratio of
@@ -419,10 +419,10 @@ class SQLContext:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 2.0.0
-           The ``schema`` parameter can be a :class:`pyspark.sql.types.DataType` or a
+           The ``schema`` parameter can be a :class:`~pyspark.sql.types.DataType` or a
            datatype string after 2.0.
-           If it's not a :class:`pyspark.sql.types.StructType`, it will be wrapped into a
-           :class:`pyspark.sql.types.StructType` and each record will also be wrapped into a tuple.
+           If it's not a :class:`~pyspark.sql.types.StructType`, it will be wrapped into a
+           :class:`~pyspark.sql.types.StructType` and each record will also be wrapped into a tuple.
 
         .. versionchanged:: 2.1.0
            Added verifySchema.
@@ -432,14 +432,14 @@ class SQLContext:
 
         Parameters
         ----------
-        data : :class:`RDD` or iterable
+        data : :class:`~pyspark.RDD` or iterable
             an RDD of any kind of SQL data representation (:class:`Row`,
             :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`,
             :class:`pandas.DataFrame`, or :class:`pyarrow.Table`.
-        schema : :class:`pyspark.sql.types.DataType`, str or list, optional
-            a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
+        schema : :class:`~pyspark.sql.types.DataType`, str or list, optional
+            a :class:`~pyspark.sql.types.DataType` or a datatype string or a list of
             column names, default is None.  The data type string format equals to
-            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
+            :class:`~pyspark.sql.types.DataType.simpleString`, except that top level struct type can
             omit the ``struct<>``.
         samplingRatio : float, optional
             the sample ratio of rows used for inferring
