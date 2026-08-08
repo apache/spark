@@ -2475,6 +2475,12 @@
     ],
     "sqlState" : "42815"
   },
+  "EMPTY_COLLECTION_NOT_ALLOWED" : {
+    "message" : [
+      "empty collection"
+    ],
+    "sqlState" : "0A000"
+  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
@@ -11411,11 +11417,6 @@
   "_LEGACY_ERROR_TEMP_3013" : {
     "message" : [
       "Can only zip RDDs with same number of elements in each partition"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3014" : {
-    "message" : [
-      "empty collection"
     ]
   },
   "_LEGACY_ERROR_TEMP_3015" : {
