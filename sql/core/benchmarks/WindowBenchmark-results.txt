@@ -3,12 +3,13 @@ Section A - MIN (non-invertible)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 MIN sliding window, W=1001, 256K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MIN naive (current, baseline)                      4014           4035          17          0.1       15313.6       1.0X
-MIN segtree (default)                               392            407          16          0.7        1496.8      10.2X
-MIN segtree (blockSize=256)                        2199           2214          12          0.1        8388.4       1.8X
+MIN naive (current, baseline)                      4024           4041          15          0.1       15349.9       1.0X
+MIN segtree (default)                               385            405          12          0.7        1469.8      10.4X
+MIN segtree (blockSize=256)                        2350           2358           5          0.1        8965.1       1.7X
+MIN monotonic deque (new)                           116            122          10          2.3         440.9      34.8X
 
 
 ================================================================================================
@@ -16,12 +17,13 @@ Section A - MAX (non-invertible)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 MAX sliding window, W=1001, 256K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MAX naive (current, baseline)                      4244           4266          21          0.1       16190.5       1.0X
-MAX segtree (default)                               367            373           4          0.7        1401.2      11.6X
-MAX segtree (blockSize=256)                        2231           2238          12          0.1        8510.3       1.9X
+MAX naive (current, baseline)                      4414           4426          16          0.1       16838.4       1.0X
+MAX segtree (default)                               409            421           9          0.6        1558.5      10.8X
+MAX segtree (blockSize=256)                        2350           2362          21          0.1        8965.6       1.9X
+MAX monotonic deque (new)                           109            115           7          2.4         415.0      40.6X
 
 
 ================================================================================================
@@ -29,12 +31,12 @@ Section A - SUM (Spark has no inverse; full recompute)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 SUM sliding window, W=1001, 256K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive (current, baseline)                      4111           4131          30          0.1       15683.8       1.0X
-SUM segtree (default)                               358            365           8          0.7        1364.2      11.5X
-SUM segtree (blockSize=256)                        2228           2245          12          0.1        8498.3       1.8X
+SUM naive (current, baseline)                      4195           4239          87          0.1       16003.1       1.0X
+SUM segtree (default)                               382            384           2          0.7        1455.3      11.0X
+SUM segtree (blockSize=256)                        2344           2358          11          0.1        8939.8       1.8X
 
 
 ================================================================================================
@@ -42,12 +44,12 @@ Section A - COUNT
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 COUNT sliding window, W=1001, 256K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-COUNT naive (current, baseline)                    3663           3690          22          0.1       13974.5       1.0X
-COUNT segtree (default)                             325            335           9          0.8        1238.6      11.3X
-COUNT segtree (blockSize=256)                      2161           2165           6          0.1        8242.5       1.7X
+COUNT naive (current, baseline)                    3793           3820          37          0.1       14468.3       1.0X
+COUNT segtree (default)                             343            353          14          0.8        1307.2      11.1X
+COUNT segtree (blockSize=256)                      2301           2310           7          0.1        8777.8       1.6X
 
 
 ================================================================================================
@@ -55,12 +57,12 @@ Section A - AVG (multi-buffer)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 AVG sliding window, W=1001, 192K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-AVG naive (current, baseline)                      4441           4463          19          0.0       22588.2       1.0X
-AVG segtree (default)                               337            340           4          0.6        1713.3      13.2X
-AVG segtree (blockSize=256)                        1398           1415          14          0.1        7111.1       3.2X
+AVG naive (current, baseline)                      4853           4867          11          0.0       24685.6       1.0X
+AVG segtree (default)                               347            351           5          0.6        1764.2      14.0X
+AVG segtree (blockSize=256)                        1480           1490          11          0.1        7525.9       3.3X
 
 
 ================================================================================================
@@ -68,12 +70,12 @@ Section A - STDDEV_SAMP (multi-buffer, stress)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 STDDEV_SAMP sliding window, W=1001, 2M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-STDDEV_SAMP naive (current, baseline)                        102720         102801          91          0.0       51360.1       1.0X
-STDDEV_SAMP segtree (default)                                  6107           6132          35          0.3        3053.4      16.8X
-STDDEV_SAMP segtree (blockSize=256)                          113831         113863          29          0.0       56915.6       0.9X
+STDDEV_SAMP naive (current, baseline)                         93930          94004          65          0.0       46965.0       1.0X
+STDDEV_SAMP segtree (default)                                  6079           6127          64          0.3        3039.4      15.5X
+STDDEV_SAMP segtree (blockSize=256)                          119939         120538         870          0.0       59969.4       0.8X
 
 
 ================================================================================================
@@ -81,11 +83,11 @@ Section B - W=10 scaling (stress: Pareto loss zone)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 SUM scaling, W=11, 2M rows (stress):      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive W=11                                      959            964           4          2.1         479.6       1.0X
-SUM segtree (default) W=11                         1926           1933           9          1.0         963.2       0.5X
+SUM naive W=11                                      932            938           7          2.1         466.0       1.0X
+SUM segtree (default) W=11                         2007           2018          14          1.0        1003.3       0.5X
 
 
 ================================================================================================
@@ -93,11 +95,11 @@ Section B - W=50 scaling (stress: Pareto loss zone)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 SUM scaling, W=51, 2M rows (stress):      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive W=51                                     2226           2242          27          0.9        1113.0       1.0X
-SUM segtree (default) W=51                         2193           2203          12          0.9        1096.5       1.0X
+SUM naive W=51                                     2229           2248          23          0.9        1114.6       1.0X
+SUM segtree (default) W=51                         2282           2298          17          0.9        1141.0       1.0X
 
 
 ================================================================================================
@@ -105,11 +107,11 @@ Section B - W=201 scaling
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 SUM scaling, W=201, 1M rows:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive W=201                                    3466           3556         187          0.3        3466.0       1.0X
-SUM segtree (default) W=201                        1224           1232           7          0.8        1224.1       2.8X
+SUM naive W=201                                    3545           3563          18          0.3        3545.3       1.0X
+SUM segtree (default) W=201                        1289           1304          10          0.8        1289.3       2.7X
 
 
 ================================================================================================
@@ -117,12 +119,12 @@ Section B - W=4001 scaling (stress, + bs=256 cross-block)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 SUM scaling, W=4001, 2M rows (stress):    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive W=4001                                 125108         125307         192          0.0       62553.9       1.0X
-SUM segtree (default) W=4001                       3308           3320          21          0.6        1653.9      37.8X
-SUM segtree (blockSize=256) W=4001               110622         111593        1667          0.0       55311.1       1.1X
+SUM naive W=4001                                 127772         127823          46          0.0       63886.1       1.0X
+SUM segtree (default) W=4001                       3428           3532         174          0.6        1713.9      37.3X
+SUM segtree (blockSize=256) W=4001               116806         116911          91          0.0       58403.2       1.1X
 
 
 ================================================================================================
@@ -130,11 +132,11 @@ Section F - spill regression guard (String, stress)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 MAX String spill guard, W=1001, 1M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------
-MAX naive (String)                                        59293          59370          67          0.0       59292.7       1.0X
-MAX segtree default (String)                               2796           2808          16          0.4        2796.2      21.2X
+MAX naive (String)                                        50895          50921          39          0.0       50895.3       1.0X
+MAX segtree default (String)                               2731           2740           9          0.4        2730.8      18.6X
 
 
 ================================================================================================
@@ -142,10 +144,10 @@ Section C - N-sweep small (stress)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 SUM N-sweep (segtree-only), W=1001, 2M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-SUM segtree (default) N=2M                                     2804           2815          16          0.7        1402.1       1.0X
+SUM segtree (default) N=2M                                     2916           2934          23          0.7        1458.1       1.0X
 
 
 ================================================================================================
@@ -153,10 +155,10 @@ Section C - N-sweep mid (stress)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 SUM N-sweep (segtree-only), W=1001, 8M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-SUM segtree (default) N=8M                                    13613          13648          32          0.6        1701.6       1.0X
+SUM segtree (default) N=8M                                    14217          14288          63          0.6        1777.2       1.0X
 
 
 ================================================================================================
@@ -164,9 +166,129 @@ Section C - N-sweep large (stress)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 SUM N-sweep (segtree-only), W=1001, 16M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------
-SUM segtree (default) N=16M                                    33919          33948          49          0.5        2119.9       1.0X
+SUM segtree (default) N=16M                                    35566          35607          36          0.4        2222.9       1.0X
+
+
+================================================================================================
+Section G - MIN Monotonic Deque vs Segment Tree (Worst-Case: Increasing)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+MIN sliding window (Increasing), W=100001, 2M rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+MIN segtree (Increasing)                                     3938           3956          12          0.5        1968.9       1.0X
+MIN monotonic deque (Increasing)                              595            607          12          3.4         297.7       6.6X
+
+
+================================================================================================
+Section G - MIN Monotonic Deque vs Segment Tree (Best-Case: Decreasing)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+MIN sliding window (Decreasing), W=100001, 2M rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+MIN segtree (Decreasing)                                     3934           3973          25          0.5        1967.0       1.0X
+MIN monotonic deque (Decreasing)                              586            592           7          3.4         292.9       6.7X
+
+
+================================================================================================
+Section G - MIN Monotonic Deque vs Segment Tree (Random)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+MIN sliding window (Random), W=100001, 2M rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+MIN segtree (Random)                                     4030           4033           4          0.5        2015.2       1.0X
+MIN monotonic deque (Random)                              625            642          15          3.2         312.6       6.4X
+
+
+================================================================================================
+Section H - MIN W=1 scaling (2M rows)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+MIN sliding window, W=1, 2M rows:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+MIN naive (current, baseline) [H W=1]               602            617          23          3.3         301.2       1.0X
+MIN segtree (default) [H W=1]                      1575           1587          10          1.3         787.6       0.4X
+MIN segtree (blockSize=256) [H W=1]               58079          58108          25          0.0       29039.7       0.0X
+MIN monotonic deque (new) [H W=1]                   610            620          11          3.3         304.8       1.0X
+
+
+================================================================================================
+Section H - MAX W=1 scaling (2M rows)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+MAX sliding window, W=1, 2M rows:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+MAX naive (current, baseline) [H W=1]               598            600           2          3.3         298.9       1.0X
+MAX segtree (default) [H W=1]                      1567           1620          66          1.3         783.4       0.4X
+MAX segtree (blockSize=256) [H W=1]               57947          58503         840          0.0       28973.4       0.0X
+MAX monotonic deque (new) [H W=1]                   613            617           4          3.3         306.5       1.0X
+
+
+================================================================================================
+Section H - MIN W=3 scaling (2M rows)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+MIN sliding window, W=3, 2M rows:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+MIN naive (current, baseline) [H W=3]               674            681           5          3.0         337.1       1.0X
+MIN segtree (default) [H W=3]                      1692           1700           8          1.2         846.2       0.4X
+MIN segtree (blockSize=256) [H W=3]               58206          58527         511          0.0       29103.0       0.0X
+MIN monotonic deque (new) [H W=3]                   614            615           1          3.3         307.1       1.1X
+
+
+================================================================================================
+Section H - MAX W=3 scaling (2M rows)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+MAX sliding window, W=3, 2M rows:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+MAX naive (current, baseline) [H W=3]               686            691           7          2.9         343.1       1.0X
+MAX segtree (default) [H W=3]                      1693           1694           1          1.2         846.5       0.4X
+MAX segtree (blockSize=256) [H W=3]               58174          59151        1623          0.0       29086.8       0.0X
+MAX monotonic deque (new) [H W=3]                   625            632           7          3.2         312.3       1.1X
+
+
+================================================================================================
+Section H - MIN W=11 scaling (stress, 2M rows)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+MIN sliding window, W=11, 2M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+MIN naive (current, baseline) [H W=11]                997           1008          19          2.0         498.4       1.0X
+MIN segtree (default) [H W=11]                       2101           2109           8          1.0        1050.7       0.5X
+MIN segtree (blockSize=256) [H W=11]                58588          58597           8          0.0       29294.2       0.0X
+MIN monotonic deque (new) [H W=11]                    620            640          20          3.2         309.9       1.6X
+
+
+================================================================================================
+Section H - MAX W=11 scaling (stress, 2M rows)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+MAX sliding window, W=11, 2M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+MAX naive (current, baseline) [H W=11]                994           1007          12          2.0         497.2       1.0X
+MAX segtree (default) [H W=11]                       2092           2120          47          1.0        1046.0       0.5X
+MAX segtree (blockSize=256) [H W=11]                58598          58657          60          0.0       29298.8       0.0X
+MAX monotonic deque (new) [H W=11]                    623            628           5          3.2         311.4       1.6X
 
 

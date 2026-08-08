@@ -4713,6 +4713,15 @@ object SQLConf {
         "The threshold of window group limit must be -1, 0 or positive integer.")
       .createWithDefault(1000)
 
+  val WINDOW_MONOTONIC_DEQUE_ENABLED =
+    buildConf("spark.sql.window.monotonicDeque.enabled")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("Use O(N) monotonic deque for sliding window MIN/MAX. It replaces the O(N * W) " +
+        "naive loop and O(N log W) segment tree with an optimized ring-buffer deque.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
@@ -9128,6 +9137,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def windowExecBufferSpillSizeThreshold: Long = getConf(WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD)
 
   def windowGroupLimitThreshold: Int = getConf(WINDOW_GROUP_LIMIT_THRESHOLD)
+
+  def windowMonotonicDequeEnabled: Boolean = getConf(WINDOW_MONOTONIC_DEQUE_ENABLED)
 
   def windowSegmentTreeEnabled: Boolean = getConf(WINDOW_SEGMENT_TREE_ENABLED)
 
